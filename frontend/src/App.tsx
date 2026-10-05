@@ -88,18 +88,14 @@ export function App() {
         .then(([lib, r, p, saved]) => {
           const g = lib.games;
           setWarnings(lib.warnings);
-          // Keep session-only additions and edited settings across rescans;
-          // on startup, settings come from disk.
+          // Keep edited settings across rescans; on startup, settings come
+          // from disk. Sideloaded games arrive from the backend now.
           setGames((prev) => {
             const edited = new Map(prev.map((x) => [x.id, x.settings]));
-            const custom = prev.filter((x) => x.store === 'custom');
-            return [
-              ...custom,
-              ...g.map((x) => {
-                const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
-                return s ? { ...x, settings: s } : x;
-              }),
-            ];
+            return g.map((x) => {
+              const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
+              return s ? { ...x, settings: s } : x;
+            });
           });
           setRunners(r);
           setPlugins(p);
@@ -209,12 +205,7 @@ export function App() {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
     setSettingsFor(null);
-    // Sideloaded games aren't saved yet, so neither are their settings.
-    if (!g || g.store === 'custom') {
-      notify('Settings saved for this session');
-      if (g) log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
-      return;
-    }
+    if (!g) return;
     Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
         notify('Settings saved');
@@ -276,38 +267,15 @@ export function App() {
   };
 
   const addGame = (title: string, executable: string) => {
-    const game: Game = {
-      id: 'custom_' + Date.now(),
-      source: 'custom',
-      store: 'custom',
-      store_app_id: 'custom',
-      title,
-      cover_url: '',
-      banner_url: '',
-      install_dir: '',
-      executable,
-      is_installed: true,
-      settings: {
-        runner_id: 'auto',
-        wine_prefix: '',
-        launch_arguments: '',
-        env_vars: {},
-        use_gamemode: true,
-        use_mangohud: false,
-        use_gamescope: false,
-        gamescope_w: 1920,
-        gamescope_h: 1080,
-        gamescope_r: 144,
-        gamescope_args: '',
-        eac_runtime: false,
-        battleye_runtime: false,
-        working_dir: '',
-      },
-    };
-    setGames((prev) => [game, ...prev]);
-    setAddOpen(false);
-    notify(`Added "${title}" (session only)`);
-    log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: 'session only' });
+    Effect.runPromise(LauncherApi.addCustomGame(title, executable))
+      .then((game) => {
+        // Sideloaded games lead the library, like before, with their saved settings.
+        setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
+        setAddOpen(false);
+        notify(`Added "${title}"`);
+        log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
+      })
+      .catch((err) => notify(errMsg(err), 'err'));
   };
 
   const installedGames = useMemo(() => games.filter((g) => g.is_installed), [games]);

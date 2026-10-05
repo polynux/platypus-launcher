@@ -44,7 +44,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   const isSteamClient = game.store === 'steam' && !game.executable;
-  const sideloaded = game.store === 'custom';
+  // A native Linux build runs without Proton: no runner and no Proton-only
+  // settings to pick.
+  const native = !!game.native;
   const current = { ...draft, env_vars: parseEnv(envText) };
   const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, envText]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -97,6 +99,15 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
 
       <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <div className="min-w-0 space-y-6">
+          {native && (
+            <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
+              <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
+                This game ships a native Linux build from the store. It runs directly, without Proton —
+                runner, DX layer and Proton flags don't apply.
+              </p>
+            </div>
+          )}
+          {!native && (
           <div>
             <MonoLabel className="mb-2">runner</MonoLabel>
             <div role="radiogroup" aria-label="Runner" className="space-y-2">
@@ -121,7 +132,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               {runners.length === 0 && <p className="text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
             </div>
           </div>
+          )}
 
+          {!native && (
           <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
             <div><MonoLabel className="mb-1.5">dx layer</MonoLabel><SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} /></div>
             <div><MonoLabel className="mb-1.5">sync</MonoLabel><SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} /></div>
@@ -129,6 +142,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
             <div><MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel><SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} /></div>
           </div>
+          )}
 
           <div>
             <MonoLabel className="mb-2">pipeline</MonoLabel>
@@ -136,8 +150,12 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               {([
                 ['use_gamemode', 'gamemode', 'Wrap with gamemoderun'],
                 ['use_gamescope', 'gamescope', 'Run inside a gamescope session'],
-                ['eac_runtime', 'eac runtime', 'Bind the Proton EasyAntiCheat runtime'],
-                ['battleye_runtime', 'battleye runtime', 'Bind the Proton BattlEye runtime'],
+                ...(!native
+                  ? ([
+                      ['eac_runtime', 'eac runtime', 'Bind the Proton EasyAntiCheat runtime'],
+                      ['battleye_runtime', 'battleye runtime', 'Bind the Proton BattlEye runtime'],
+                    ] as const)
+                  : []),
               ] as const).map(([k, label, title]) => (
                 <button key={k} title={title} aria-pressed={!!draft[k]} onClick={() => set(k, !draft[k])} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', draft[k] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
                   <span className="font-mono text-[10.5px] font-bold text-white/85">{label}</span>
@@ -168,6 +186,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
         </div>
 
         <div className="min-w-0 space-y-5">
+          {!native && (
           <div>
             <MonoLabel className="mb-2">proton flags</MonoLabel>
             <div className="space-y-1.5">
@@ -188,6 +207,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               })}
             </div>
           </div>
+          )}
 
           <div>
             <MonoLabel className="mb-2">winetricks <span className="normal-case tracking-normal text-white/35">· saved, not applied yet</span></MonoLabel>
@@ -220,10 +240,10 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
 
           <div className="flex gap-2.5">
             <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
-            <button onClick={() => onSave(current)} title={sideloaded ? "Applies this session: sideloaded games aren't saved yet" : undefined} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
+            <button onClick={() => onSave(current)} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
           </div>
           <div className="font-mono text-[9px] leading-relaxed text-white/40">
-            {sideloaded ? 'applies this session' : 'saved for next launch'} · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
+            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
           </div>
         </div>
       </div>

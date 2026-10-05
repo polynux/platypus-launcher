@@ -250,6 +250,18 @@ plugin path (old milestones 3 and 4) came before data plugins.
 
 ## Changes during implementation
 
+- **Small gaps left by milestone 2** (fixed on `feat/plugins-gaps`):
+  - `game.details` gives plugin games real game-page metadata (summary,
+    screenshots, genres, developers, publishers, release date, a better hero
+    image, and store-level achievements when the plugin has them). Plugins
+    without metadata just don't implement it; Hydra then shows the library
+    entry only, as before.
+  - `library.list` takes a `native` flag: a plugin game with a Linux build
+    launches without the Proton pipeline, and its game page and settings show
+    no runner, DX layer, sync mode or Proton flags.
+  - Games added by hand (sideloaded executables) persist in settings.json
+    (`AddCustomGame`/`RemoveCustomGame`) instead of living for one session.
+
 - **Games are keyed by source, not store type.** `Game.Source` is `steam`, `custom` or a
   plugin id; `Game.Store` is only the storefront for display. Plugin game ids are
   `p.<plugin>.<game>`. This leaves room for steam-standalone next to built-in Steam.

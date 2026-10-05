@@ -77,6 +77,9 @@ type Game struct {
 	Installable     bool   `json:"installable,omitempty"`    // Hydra can install it through the plugin
 	Note            string `json:"note,omitempty"`           // e.g. "Needs the EA app"
 	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Hydra lets the plugin launch from
+	// Native marks plugin games with a Linux build: they run without Proton,
+	// so the runner pick and Proton-only settings don't apply to them.
+	Native bool `json:"native,omitempty"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -176,6 +179,7 @@ type GameDetails struct {
 	Developers   []string      `json:"developers"`
 	Publishers   []string      `json:"publishers"`
 	ReleaseDate  string        `json:"release_date"`
+	HeroURL      string        `json:"hero_url,omitempty"` // wide art, when the store has better than the library entry's
 	Achievements *Achievements `json:"achievements"`
 }
 

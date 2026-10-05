@@ -207,7 +207,7 @@ export function LibraryView(p: LibraryProps) {
             <Panel className="bg-white/[0.04]">
               <h2 className="mb-3 text-[14px] font-bold">Recently added</h2>
               {recentlyAdded.length === 0 ? (
-                <p className="text-[12px] leading-relaxed text-white/50">Store install dates aren't tracked yet. Games you sideload this session appear here.</p>
+                <p className="text-[12px] leading-relaxed text-white/50">Store install dates aren't tracked yet. Games you sideload appear here.</p>
               ) : (
                 <RecentList games={recentlyAdded} onOpenGame={p.onOpenGame} />
               )}

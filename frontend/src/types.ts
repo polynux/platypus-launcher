@@ -76,6 +76,8 @@ export interface GameDetails {
   developers: string[] | null;
   publishers: string[] | null;
   release_date: string;
+  /** Wide art from the store's metadata, when better than the library entry's. */
+  hero_url?: string;
   achievements: Achievements | null;
 }
 
@@ -123,6 +125,8 @@ export interface Game {
   note?: string;
   /** Installed outside the folders Hydra lets its plugin launch from. */
   outside_folder?: boolean;
+  /** Linux build: runs without Proton, so runner and Proton-only settings don't apply. */
+  native?: boolean;
 }
 
 export interface SourceWarning {

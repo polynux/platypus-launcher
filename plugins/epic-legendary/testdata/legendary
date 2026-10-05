@@ -16,7 +16,16 @@ GOOD_CODE = "abcdef0123456789abcdef0123456789"
 CATALOG = [
     {"app_name": "Goose", "app_title": "Untitled Goose Game", "latest": "1.0", "platforms": ["Windows"],
      "meta": {"keyImages": [{"type": "DieselGameBoxTall", "url": "https://cdn1.epicgames.com/goose-tall.jpg"},
-                            {"type": "DieselGameBox", "url": "https://cdn1.epicgames.com/goose-wide.jpg"}]}},
+                            {"type": "DieselGameBox", "url": "https://cdn1.epicgames.com/goose-wide.jpg"},
+                            {"type": "Screenshot", "url": "https://cdn1.epicgames.com/goose-shot1.jpg"}],
+               "description": "A troublesome goose.\nLonger text.",
+               "categories": [{"value": "Comedy"}], "developer": [{"value": "House House"}],
+               "publisher": [{"value": "Panic"}], "releaseDate": "2019-09-20T00:00:00Z"},
+     "achievements": {"achievement_set": {"achievements_count": 2,
+                                          "achievements": [{"id": "prank", "displayName": "First prank", "description": "Be a goose.",
+                                                            "icons": [{"url": "https://cdn1.epicgames.com/prank.png"}]},
+                                                           {"id": "honk", "displayName": "Honk", "description": "Honk.",
+                                                            "icons": [{"url": "https://cdn1.epicgames.com/honk.png"}]}]}}},
     {"app_name": "Pre", "app_title": "Preinstalled", "latest": "1.1", "platforms": ["Windows"], "meta": {}},
     {"app_name": "GooseDLC", "app_title": "Goose DLC", "latest": "1.0", "platforms": ["Windows"],
      "meta": {"mainGameItem": {"id": "x"}}},
@@ -74,7 +83,7 @@ def main():
         for g in CATALOG:
             out.append({"metadata": g["meta"], "app_name": g["app_name"], "app_title": g["app_title"],
                         "asset_infos": {p: {"app_name": g["app_name"], "build_version": g["latest"]} for p in g["platforms"]},
-                        "base_urls": [], "sidecar": None, "achievements": None, "dlcs": []})
+                        "base_urls": [], "sidecar": None, "achievements": g.get("achievements"), "dlcs": []})
         print(json.dumps(out))
     elif cmd == "list-installed":
         print(json.dumps([dict(v, app_name=k) for k, v in st["installed"].items()]))

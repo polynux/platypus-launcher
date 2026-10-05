@@ -160,6 +160,57 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 	return runner.ScanProtonVersions()
 }
 
+// customGames returns the games the user added by hand, saved in settings.json.
+func (a *App) customGames() []types.Game {
+	out := []types.Game{}
+	for _, g := range a.settings.CustomGames() {
+		g := types.Game{
+			ID:          g.ID,
+			Source:      types.SourceCustom,
+			Store:       types.StoreCustom,
+			StoreAppID:  types.SourceCustom,
+			Title:       g.Title,
+			InstallDir:  filepath.Dir(g.Executable),
+			Executable:  g.Executable,
+			IsInstalled: true,
+			Settings:    types.GameSettings{UseGameMode: true},
+		}
+		// Saved per-game settings win over the defaults.
+		if saved, ok := a.settings.GameSettings()[g.ID]; ok {
+			if data, err := json.Marshal(saved); err == nil {
+				_ = json.Unmarshal(data, &g.Settings)
+			}
+		}
+		out = append(out, g)
+	}
+	return out
+}
+
+// AddCustomGame saves a game the user added by hand: title plus the path of
+// its executable. It shows up in the library from then on.
+func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
+	g, err := a.settings.AddCustomGame(title, executable)
+	if err != nil {
+		return types.Game{}, err
+	}
+	return types.Game{
+		ID:          g.ID,
+		Source:      types.SourceCustom,
+		Store:       types.StoreCustom,
+		StoreAppID:  types.SourceCustom,
+		Title:       g.Title,
+		InstallDir:  filepath.Dir(g.Executable),
+		Executable:  g.Executable,
+		IsInstalled: true,
+		Settings:    types.GameSettings{UseGameMode: true},
+	}, nil
+}
+
+// RemoveCustomGame forgets a hand-added game; its files stay on disk.
+func (a *App) RemoveCustomGame(id string) error {
+	return a.settings.RemoveCustomGame(id)
+}
+
 // GetLibrary lists every source and returns the merged library. Steam failing
 // fails the scan, as before; a plugin failing (logged out, crashed) only adds
 // a warning, so one broken plugin can't hide the rest of the library.
@@ -192,6 +243,7 @@ func (a *App) GetLibrary() (types.Library, error) {
 		}
 		lib.Games = append(lib.Games, results[i]...)
 	}
+	lib.Games = append(lib.Games, a.customGames()...)
 	return lib, nil
 }
 

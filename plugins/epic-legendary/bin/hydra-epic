@@ -197,6 +197,42 @@ def library_list(_params):
     return {"games": games}
 
 
+def game_details(params):
+    """Game page metadata from Epic's catalogue entry, which library.list
+    already carries. Epic's achievements are per user, and legendary's offline
+    status has no progress, so they are only listed when the catalogue has
+    them ("achievements" in list --json)."""
+    app = params["id"]
+    owned = legendary_json("list", "--json", timeout=600)
+    g = next((g for g in owned if g.get("app_name") == app), None)
+    if not g:
+        raise RPCError(f"{app} is not in your Epic library")
+    meta = g.get("metadata") or {}
+    out = {
+        "summary": ((meta.get("description") or "").split("\n")[0]).strip(),
+        "genres": [c.get("value", "") for c in meta.get("categories") or [] if c.get("value")][:4],
+        "developers": [d.get("value", "") for d in meta.get("developer") or [] if d.get("value")],
+        "publishers": [p.get("value", "") for p in meta.get("publisher") or [] if p.get("value")],
+        "releaseDate": (meta.get("releaseDate") or "")[:10],
+        "heroUrl": key_image(meta, "DieselGameBox", "OfferImageWide"),
+    }
+    screenshots = [i["url"] for i in meta.get("keyImages") or []
+                   if i.get("type") in ("Screenshot", "DieselGameBoxMedia") and i.get("url")]
+    if screenshots:
+        out["screenshots"] = screenshots[:6]
+    ach = g.get("achievements") or {}
+    entries = (ach.get("achievement_set") or {}).get("achievements") or []
+    if ach and entries:
+        out["achievements"] = {
+            "total": (ach.get("achievement_set") or {}).get("achievements_count", len(entries)),
+            "list": [{"id": e.get("id", ""), "name": e.get("displayName", ""),
+                      "description": e.get("description", ""),
+                      "icon": ((e.get("icons") or [{}])[0].get("url") or "")}
+                     for e in entries[:10]],
+        }
+    return out
+
+
 def add_installed(entry, ig, latest):
     if not ig:
         return
@@ -346,6 +382,7 @@ METHODS = {
     "auth.complete": auth_complete,
     "auth.logout": auth_logout,
     "library.list": library_list,
+    "game.details": game_details,
     "game.installSize": install_size,
     "game.install": lambda p: start_job(p, "install"),
     "game.update": lambda p: start_job(p, "update"),

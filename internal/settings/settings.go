@@ -35,6 +35,18 @@ type file struct {
 	// doesn't model (sync mode, winetricks, …) survive a restart.
 	Games   map[string]map[string]any `json:"games,omitempty"`
 	Plugins map[string]PluginState    `json:"plugins,omitempty"`
+	// Games the user added by hand (sideloaded executables), with their
+	// per-game settings in Games like every other game's.
+	CustomGames []CustomGame `json:"custom_games,omitempty"`
+}
+
+// CustomGame is a game the user added by hand: an executable on disk. Hydra
+// runs it through the same runner pipeline as any other game.
+type CustomGame struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Executable string `json:"executable"` // absolute path
+	AddedAt    int64  `json:"added_at"`   // unix ms
 }
 
 // Store is the settings file, loaded once and written through on every change.
@@ -164,6 +176,76 @@ func (s *Store) SetGameSettings(gameID string, settings map[string]any) error {
 		return err
 	}
 	return nil
+}
+
+// CustomGames returns the games added by hand, oldest first.
+func (s *Store) CustomGames() []CustomGame {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]CustomGame{}, s.data.CustomGames...)
+}
+
+// AddCustomGame saves a hand-added game and returns it. The executable must
+// exist, be a regular file and be absolute.
+func (s *Store) AddCustomGame(title, executable string) (CustomGame, error) {
+	title = strings.TrimSpace(title)
+	executable = strings.TrimSpace(executable)
+	if title == "" {
+		return CustomGame{}, errors.New("the game needs a title")
+	}
+	if !filepath.IsAbs(executable) {
+		return CustomGame{}, fmt.Errorf("executable must be an absolute path, got %q", executable)
+	}
+	real, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return CustomGame{}, fmt.Errorf("executable: %w", err)
+	}
+	st, err := os.Stat(real)
+	if err != nil {
+		return CustomGame{}, fmt.Errorf("executable: %w", err)
+	}
+	if !st.Mode().IsRegular() {
+		return CustomGame{}, fmt.Errorf("%s is not a file", executable)
+	}
+	executable = real
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, g := range s.data.CustomGames {
+		if g.Executable == executable {
+			return CustomGame{}, fmt.Errorf("%s is already in your library as %q", executable, g.Title)
+		}
+	}
+	g := CustomGame{
+		ID:         fmt.Sprintf("custom-%d", time.Now().UnixNano()),
+		Title:      title,
+		Executable: executable,
+		AddedAt:    time.Now().UnixMilli(),
+	}
+	s.data.CustomGames = append(s.data.CustomGames, g)
+	if err := s.save(); err != nil {
+		s.data.CustomGames = s.data.CustomGames[:len(s.data.CustomGames)-1]
+		return CustomGame{}, err
+	}
+	return g, nil
+}
+
+// RemoveCustomGame forgets a hand-added game; its files stay on disk.
+func (s *Store) RemoveCustomGame(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, g := range s.data.CustomGames {
+		if g.ID == id {
+			prev := s.data.CustomGames
+			s.data.CustomGames = append(s.data.CustomGames[:i], s.data.CustomGames[i+1:]...)
+			if err := s.save(); err != nil {
+				s.data.CustomGames = prev
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown game %q", id)
 }
 
 // PluginState returns what the user decided for a plugin; ok is false if the

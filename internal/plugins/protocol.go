@@ -20,9 +20,12 @@ type LibraryGame struct {
 	// plugin (third-party launcher, no Windows/Linux build); Note says why.
 	Installable bool   `json:"installable"`
 	Note        string `json:"note,omitempty"`
-	CoverURL    string `json:"coverUrl,omitempty"`  // portrait
-	HeroURL     string `json:"heroUrl,omitempty"`   // wide background
-	BannerURL   string `json:"bannerUrl,omitempty"` // wide card
+	// Native marks games with a Linux build: Hydra runs them directly, with
+	// no Proton runner and none of the Proton-only settings.
+	Native    bool   `json:"native,omitempty"`
+	CoverURL  string `json:"coverUrl,omitempty"`  // portrait
+	HeroURL   string `json:"heroUrl,omitempty"`   // wide background
+	BannerURL string `json:"bannerUrl,omitempty"` // wide card
 }
 
 type LibraryList struct {
@@ -54,6 +57,37 @@ type LaunchSpec struct {
 // (/proc/<pid>/cmdline) contains every string in Cmdline.
 type FindSpec struct {
 	Cmdline []string `json:"cmdline"`
+}
+
+// GameDetails answers game.details: the game page's metadata. A plugin
+// without that data returns an empty struct, like Steam stores without a
+// metadata source.
+type GameDetails struct {
+	Summary      string        `json:"summary,omitempty"`
+	Screenshots  []string      `json:"screenshots,omitempty"` // http(s) URLs
+	Genres       []string      `json:"genres,omitempty"`
+	Developers   []string      `json:"developers,omitempty"`
+	Publishers   []string      `json:"publishers,omitempty"`
+	ReleaseDate  string        `json:"releaseDate,omitempty"`
+	HeroURL      string        `json:"heroUrl,omitempty"` // wide background
+	Achievements *Achievements `json:"achievements,omitempty"`
+}
+
+// Achievements in game.details are store-level: what the store shows about
+// the game. Whether the user unlocked one is the plugin's business; Hydra
+// shows the list as "highlighted by the store".
+type Achievements struct {
+	Total int           `json:"total"`
+	List  []Achievement `json:"list"`
+}
+
+// Achievement is one achievement as the store describes it.
+type Achievement struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description,omitempty"`
+	Icon          string  `json:"icon,omitempty"` // http(s) URL
+	GlobalPercent float64 `json:"globalPercent,omitempty"`
 }
 
 type InstallSize struct {

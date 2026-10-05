@@ -78,3 +78,61 @@ func TestCorruptFileIsMovedAside(t *testing.T) {
 		t.Errorf("corrupt file not kept: %v", entries)
 	}
 }
+
+func TestCustomGames(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s, _ := Open(path)
+
+	if _, err := s.AddCustomGame("My Game", "game.exe"); err == nil {
+		t.Error("relative path accepted")
+	}
+	missing := filepath.Join(home, "nope.bin")
+	if _, err := s.AddCustomGame("My Game", missing); err == nil {
+		t.Error("missing executable accepted")
+	}
+	exe := filepath.Join(home, "game", "start.sh")
+	os.MkdirAll(filepath.Dir(exe), 0o755)
+	os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+	g, err := s.AddCustomGame("  My Game ", exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Title != "My Game" || g.Executable != exe || g.ID == "" {
+		t.Fatalf("added: %+v", g)
+	}
+	if _, err := s.AddCustomGame("Again", exe); err == nil {
+		t.Error("duplicate executable accepted")
+	}
+	// A symlink to the same file is the same game.
+	link := filepath.Join(home, "game", "link.sh")
+	os.Symlink(exe, link)
+	if _, err := s.AddCustomGame("Link", link); err == nil {
+		t.Error("symlink duplicate accepted")
+	}
+
+	if err := s.SetGameSettings(g.ID, map[string]any{"runner_id": "auto"}); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := s.CustomGames()
+	if len(list) != 1 || list[0].ID != g.ID || list[0].Title != "My Game" {
+		t.Fatalf("after reopen: %+v", list)
+	}
+	if s.GameSettings()[g.ID]["runner_id"] != "auto" {
+		t.Error("custom game's settings not kept")
+	}
+	if err := s.RemoveCustomGame(g.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.CustomGames()) != 0 {
+		t.Error("not removed")
+	}
+	if err := s.RemoveCustomGame("nope"); err == nil {
+		t.Error("unknown id removed")
+	}
+}

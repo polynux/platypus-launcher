@@ -173,8 +173,29 @@ func TestEchoLibraryNeedsLogin(t *testing.T) {
 		t.Fatalf("library: %d games, %v", len(lib), err)
 	}
 	tiny := e.game(t, "tiny")
-	if tiny.ID != "p.echo.tiny" || tiny.Source != "echo" || tiny.Store != "echo" || tiny.IsInstalled || !tiny.Installable {
+	if tiny.ID != "p.echo.tiny" || tiny.Source != "echo" || tiny.Store != "echo" || tiny.IsInstalled || !tiny.Installable || !tiny.Native {
 		t.Fatalf("tiny: %+v", tiny)
+	}
+	if e.game(t, "client").Native {
+		t.Error("client game wrongly marked native")
+	}
+}
+
+func TestEchoDetails(t *testing.T) {
+	e := newEchoEnv(t)
+	e.login(t)
+	d, err := e.store.Details(e.ctx(t), e.game(t, "tiny"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Summary == "" || len(d.Genres) != 1 || d.ReleaseDate != "2024-01-01" ||
+		d.Achievements == nil || d.Achievements.Total != 2 || d.Achievements.Unlocked != -1 || len(d.Achievements.List) != 2 {
+		t.Fatalf("details: %+v", d)
+	}
+	// A game the plugin has no metadata for shows the library entry only.
+	d, err = e.store.Details(e.ctx(t), e.game(t, "slow"))
+	if err != nil || d.Summary != "" || d.Achievements != nil {
+		t.Fatalf("empty details: %+v, %v", d, err)
 	}
 	if esc := e.game(t, "escape"); !esc.IsInstalled || !esc.OutsideFolder || esc.Installable {
 		t.Fatalf("escape: %+v", esc)

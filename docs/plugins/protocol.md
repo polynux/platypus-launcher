@@ -64,6 +64,7 @@ for people. Use code `-32001` when the user has to log in first.
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
+| `game.details` | `{ id }` | `GameDetails` |
 | `game.installSize` | `{ id }` | `{ downloadBytes, diskBytes }` |
 | `game.install` | `{ id, installDir, jobId }` | `{}` once started |
 | `game.update` | `{ id, installDir, jobId }` | `{}` once started |
@@ -83,12 +84,36 @@ Credentials stay with the plugin or the tool it wraps; Hydra never stores them.
   "installed": true, "installPath": "/home/u/Games/epic/UntitledGooseGame",
   "installable": true, "note": "shown on the game page, e.g. why it can't be installed",
   "version": "1.0", "updateAvailable": false, "sizeBytes": 12582912,
+  "native": false,
   "coverUrl": "https://…", "heroUrl": "https://…", "bannerUrl": "https://…"
 }
 ```
 
+Set `native` when the game ships a Linux build: Hydra then launches it
+directly, with no Proton runner and without the Proton-only settings (DX layer,
+sync mode, Proton flags), on its game page too.
+
 Hydra keys plugin games as `p.<plugin id>.<game id>`. List every owned game; the
 Library shows the uninstalled ones under "owned".
+
+`GameDetails` is the game page's metadata, fetched on demand. Stores without a
+metadata source just don't implement the method; Hydra then shows the library
+entry's art and title only.
+
+```json
+{
+  "summary": "A troublesome goose.",
+  "screenshots": ["https://…"], "genres": ["Comedy"],
+  "developers": ["House House"], "publishers": ["Panic"],
+  "releaseDate": "2019-09-20", "heroUrl": "https://…",
+  "achievements": { "total": 12, "list": [{ "id": "prank", "name": "First prank", "icon": "https://…", "globalPercent": 84.1 }] }
+}
+```
+
+Every URL must be http(s); Hydra drops others. `achievements` describes what
+the store shows about the game — if the plugin can't see the user's progress,
+leave it out rather than guess. Keep `list` short (a highlight, say 10) and let
+`total` carry the real count; Hydra notes the truncation.
 
 ## Jobs
 

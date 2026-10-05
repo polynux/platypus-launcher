@@ -19,7 +19,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">Add game</h2>
-        <p className="mt-1 text-[12.5px] text-white/50">Sideload a Windows executable. Kept for this session only, until custom games are saved by the backend.</p>
+        <p className="mt-1 text-[12.5px] text-white/50">Sideload a game by its executable path. It's saved to your library and runs through Hydra's runner pipeline.</p>
         <label className="mt-5 block">
           <MonoLabel className="mb-1.5">title</MonoLabel>
           <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My Game" className={inputClass} />

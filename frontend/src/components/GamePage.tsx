@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
@@ -7,6 +7,19 @@ import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from '
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
+
+/** Wide art for the hero banner: the details' hero first, then the library
+ *  entry's images. Kept per game id alongside the details cache. */
+function useHero(game: Game, details: GameDetails | null): string[] {
+  const hero = details?.hero_url;
+  return useMemo(() => {
+    const list = [];
+    if (hero) list.push(hero);
+    return [...list, ...heroImages(game)];
+    // Only recompute when the game or its fetched hero changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id, hero]);
+}
 
 interface GamePageProps {
   game: Game;
@@ -34,11 +47,13 @@ const detailsCache = new Map<string, GameDetails>();
 function useDetails(game: Game) {
   const [details, setDetails] = useState<GameDetails | null>(() => detailsCache.get(game.id) ?? null);
   const [error, setError] = useState<string | null>(null);
+  // Steam and store plugins both have metadata; sideloaded games have none.
+  const hasSource = game.source === 'steam' || isPluginGame(game);
   useEffect(() => {
     const cached = detailsCache.get(game.id);
     setDetails(cached ?? null);
     setError(null);
-    if (cached || game.source !== 'steam') return;
+    if (cached || !hasSource) return;
     let live = true;
     Effect.runPromise(LauncherApi.getGameDetails(game))
       .then((d) => {
@@ -50,13 +65,14 @@ function useDetails(game: Game) {
     // Refetch only when the game changes, not on settings edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.id]);
-  return { details, error, loading: !details && !error && game.source === 'steam' };
+  return { details, error, loading: !details && !error && hasSource };
 }
 
 export function GamePage(p: GamePageProps) {
   const { game, runners, activity, session, tweaks } = p;
   const [shot, setShot] = useState(0);
   const { details, error, loading } = useDetails(game);
+  const hero = useHero(game, details);
   useEffect(() => setShot(0), [game.id]);
 
   const s = normalizeSettings(game.settings);
@@ -76,11 +92,13 @@ export function GamePage(p: GamePageProps) {
   const facts: [string, string][] = [
     [
       'Runner',
-      viaSteam
-        ? 'chosen in Steam'
-        : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? `auto · ${autoRunner?.name ?? 'none installed'}` : `${s.runner_id} (missing)`),
+      game.native
+        ? 'none · native Linux build'
+        : viaSteam
+          ? 'chosen in Steam'
+          : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? `auto · ${autoRunner?.name ?? 'none installed'}` : `${s.runner_id} (missing)`),
     ],
-    ['DX layer', s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
+    ['DX layer', game.native ? 'not used' : s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
     ['Wrappers', [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || 'none'],
     ['Launch via', viaSteam ? 'Steam client' : plugin ? `Hydra · ${plugin.name}` : 'Hydra'],
   ];
@@ -95,6 +113,7 @@ export function GamePage(p: GamePageProps) {
   const about = [
     details?.genres?.length ? details.genres.slice(0, 3).join(' · ') : null,
     details?.developers?.length ? details.developers.join(', ') : null,
+    details?.publishers?.length ? details.publishers.join(', ') : null,
     details?.release_date || null,
   ].filter(Boolean) as string[];
 
@@ -105,7 +124,7 @@ export function GamePage(p: GamePageProps) {
       </button>
 
       <section className="relative mb-6 mt-4 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
-        <Cover src={heroImages(game)} title={game.title} className="h-[280px] w-full" />
+        <Cover src={hero} title={game.title} className="h-[280px] w-full" />
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.98) 10%, rgba(19,15,10,.35) 62%, rgba(19,15,10,.25) 100%)' }} />
         <div className="absolute bottom-6 left-8 right-8 flex items-end justify-between gap-6">
           <div className="min-w-0">
@@ -257,12 +276,21 @@ export function GamePage(p: GamePageProps) {
           )}
 
           {tweaks.length > 0 && game.is_installed && (
-            <TweaksPanel game={game} tweaks={tweaks} viaSteam={viaSteam} onChange={p.onChangeSettings} onOpenSettings={p.onOpenSettings} />
+            <TweaksPanel
+              game={game}
+              // Proton-only env tweaks do nothing for a native build.
+              tweaks={game.native ? tweaks.filter((t) => !Object.keys(t.env ?? {}).some((k) => /^(PROTON_|WINE_)/.test(k))) : tweaks}
+              viaSteam={viaSteam}
+              onChange={p.onChangeSettings}
+              onOpenSettings={p.onOpenSettings}
+            />
           )}
         </aside>
       </div>
 
-      {ach && ach.total > 0 && <AchievementsSection ach={ach} />}
+      {ach && ach.total > 0 && (
+        <AchievementsSection ach={ach} known={ach.unlocked >= 0} viaSteam={game.source === 'steam'} />
+      )}
 
       {events.length > 0 && (
         <section className="pb-10">
@@ -449,8 +477,15 @@ function TweaksPanel({
   );
 }
 
-function AchievementsSection({ ach }: { ach: NonNullable<GameDetails['achievements']> }) {
-  const known = ach.unlocked >= 0;
+function AchievementsSection({
+  ach,
+  known,
+  viaSteam,
+}: {
+  ach: NonNullable<GameDetails['achievements']>;
+  known: boolean;
+  viaSteam: boolean;
+}) {
   const pct = known ? Math.round((ach.unlocked / ach.total) * 100) : 0;
   return (
     <section className="pb-8">
@@ -466,7 +501,9 @@ function AchievementsSection({ ach }: { ach: NonNullable<GameDetails['achievemen
         </div>
       ) : (
         <p className="mb-4 text-[11.5px] text-white/45">
-          Your progress isn't cached yet. Open this game once in Steam's library and it shows up here.
+          {viaSteam
+            ? "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here."
+            : 'The store lists these achievements; your progress there isn\'t available to Hydra.'}
         </p>
       )}
       <div className="ach-grid">
@@ -476,7 +513,7 @@ function AchievementsSection({ ach }: { ach: NonNullable<GameDetails['achievemen
       </div>
       {ach.list.length < ach.total && (
         <p className="mt-3 font-mono text-[10px] text-white/35">
-          showing {ach.list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the Steam store'}
+          showing {ach.list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
         </p>
       )}
     </section>

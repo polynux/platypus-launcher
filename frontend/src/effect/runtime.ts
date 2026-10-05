@@ -85,6 +85,11 @@ export const LauncherApi = {
   // Hardware-based tweaks offered for every game.
   getTweaks: () => call<Tweak[]>('GetTweaks', async () => (await App.GetTweaks()) ?? []),
 
+  // Games the user added by hand, persisted in settings.json.
+  addCustomGame: (title: string, executable: string) =>
+    call<Game>('AddCustomGame', () => App.AddCustomGame(title, executable)),
+  removeCustomGame: (id: string) => call<void>('RemoveCustomGame', () => App.RemoveCustomGame(id)),
+
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 
   // Empty path resets to the default (~/Games). Rejects relative paths and files.

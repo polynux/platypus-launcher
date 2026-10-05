@@ -206,6 +206,7 @@ export namespace types {
 	    installable?: boolean;
 	    note?: string;
 	    outside_folder?: boolean;
+	    native?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -234,6 +235,7 @@ export namespace types {
 	        this.installable = source["installable"];
 	        this.note = source["note"];
 	        this.outside_folder = source["outside_folder"];
+	        this.native = source["native"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -261,6 +263,7 @@ export namespace types {
 	    developers: string[];
 	    publishers: string[];
 	    release_date: string;
+	    hero_url?: string;
 	    achievements?: Achievements;
 	
 	    static createFrom(source: any = {}) {
@@ -275,6 +278,7 @@ export namespace types {
 	        this.developers = source["developers"];
 	        this.publishers = source["publishers"];
 	        this.release_date = source["release_date"];
+	        this.hero_url = source["hero_url"];
 	        this.achievements = this.convertValues(source["achievements"], Achievements);
 	    }
 	

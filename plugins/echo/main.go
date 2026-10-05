@@ -56,10 +56,11 @@ type game struct {
 	note     string
 	external string // always installed here, outside Hydra's folder
 	client   bool
+	details  bool // answers game.details with store metadata
 }
 
 var games = map[string]game{
-	"tiny":   {title: "Echo Tiny", size: 3 << 20, steps: 10, stepMs: 100, native: true},
+	"tiny":   {title: "Echo Tiny", size: 3 << 20, steps: 10, stepMs: 100, native: true, details: true},
 	"slow":   {title: "Echo Slow", size: 40 << 20, steps: 100, stepMs: 200, native: true},
 	"huge":   {title: "Echo Huge", size: 32 << 50, steps: 10, stepMs: 100, native: true},
 	"flaky":  {title: "Echo Flaky", size: 8 << 20, steps: 20, stepMs: 100, native: true, note: "The plugin crashes once while installing this."},
@@ -223,6 +224,28 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 
 	case "library.list":
 		return library()
+	case "game.details":
+		g, ok := games[p.ID]
+		if !ok {
+			return nil, fmt.Errorf("unknown game %q", p.ID)
+		}
+		if !g.details {
+			return nil, &rpcError{Code: -32601, Message: "method not found: game.details"}
+		}
+		return map[string]any{
+			"summary":     "A tiny fake game from the Echo test store, shown on its game page.",
+			"genres":      []string{"Test"},
+			"developers":  []string{"Echo Software"},
+			"publishers":  []string{"Echo Software"},
+			"releaseDate": "2024-01-01",
+			"achievements": map[string]any{
+				"total": 2,
+				"list": []map[string]any{
+					{"id": "installed", "name": "Get installed", "description": "Install the game.", "globalPercent": 100},
+					{"id": "played", "name": "Play it", "description": "Start the game once.", "globalPercent": 84.1},
+				},
+			},
+		}, nil
 	case "game.installSize":
 		g, ok := games[p.ID]
 		if !ok {
@@ -272,7 +295,7 @@ func library() (any, error) {
 		}
 		e := map[string]any{
 			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client,
-			"version": "1.0", "note": g.note,
+			"version": "1.0", "note": g.note, "native": g.native,
 		}
 		if g.size > 0 {
 			e["sizeBytes"] = g.size

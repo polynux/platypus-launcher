@@ -134,7 +134,7 @@ export function Dashboard({ games, runners, activity, dismissedHero, onDismissHe
           <Panel as="section" className="bg-white/[0.04]">
             <h2 className="mb-2.5 text-[14px] font-bold">Recently added</h2>
             {recentlyAdded.length === 0 ? (
-              <p className="text-[12px] leading-relaxed text-white/50">Store install dates aren't tracked yet. Games you sideload this session appear here.</p>
+              <p className="text-[12px] leading-relaxed text-white/50">Store install dates aren't tracked yet. Games you sideload appear here.</p>
             ) : (
               <RecentList games={recentlyAdded} onOpenGame={onOpenGame} />
             )}
@@ -169,7 +169,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
             <Cover src={g.cover_url} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-white/40">{storeLabel(g.store)} · this session</div>
+              <div className="font-mono text-[9px] uppercase tracking-wider text-white/40">{storeLabel(g.store)}</div>
             </div>
           </button>
         </li>

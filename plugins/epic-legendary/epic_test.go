@@ -217,6 +217,8 @@ func TestEpicLibrary(t *testing.T) {
 	e := setup(t)
 	login(t, e)
 	lib := e.library(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	if _, dlc := lib["GooseDLC"]; dlc || len(lib) != 3 {
 		t.Fatalf("library: %+v", lib)
 	}
@@ -225,10 +227,27 @@ func TestEpicLibrary(t *testing.T) {
 		goose.CoverURL != "https://cdn1.epicgames.com/goose-tall.jpg" || goose.HeroURL == "" {
 		t.Fatalf("goose: %+v", goose)
 	}
+	d, err := e.store.Details(ctx, goose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Summary != "A troublesome goose." || len(d.Screenshots) != 1 || d.ReleaseDate != "2019-09-20" || d.HeroURL == "" ||
+		len(d.Genres) != 1 || d.Genres[0] != "Comedy" || len(d.Developers) != 1 || d.Developers[0] != "House House" {
+		t.Fatalf("details: %+v", d)
+	}
+	if d.Achievements == nil || d.Achievements.Total != 2 || d.Achievements.Unlocked != -1 || len(d.Achievements.List) != 2 ||
+		d.Achievements.List[0].Name != "First prank" || d.Achievements.List[0].Icon != "https://cdn1.epicgames.com/prank.png" {
+		t.Fatalf("achievements: %+v", d.Achievements)
+	}
+	// A catalogue entry without achievements metadata shows none.
+	pre := lib["Pre"]
+	d, err = e.store.Details(ctx, pre)
+	if err != nil || d.Achievements != nil || d.Summary != "" {
+		t.Fatalf("pre details: %+v, %v", d, err)
+	}
 	if ea := lib["Origin"]; ea.Installable || !strings.Contains(ea.Note, "Origin") {
 		t.Fatalf("EA game: %+v", ea)
 	}
-	pre := lib["Pre"]
 	if !pre.IsInstalled || !pre.UpdateAvailable || !pre.OutsideFolder || pre.Version != "1.0" {
 		t.Fatalf("pre: %+v", pre)
 	}
