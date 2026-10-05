@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
-import type { Game, ProtonVersion, PluginInfo } from '../types';
+import type { Game, GameFixInfo, ProtonVersion, PluginInfo } from '../types';
+import { toBackendGame } from '../lib/settings';
 import {
   GetGames,
   GetProtonVersions,
@@ -7,6 +8,7 @@ import {
   ListPlugins,
   TogglePlugin,
   PreviewLaunchCommand,
+  GetGameFix,
 } from '../../wailsjs/go/main/App';
 
 // Wails injects window.go bindings into the webview at runtime.
@@ -87,7 +89,7 @@ export const LauncherApi = {
     Effect.tryPromise({
       try: async () => {
         if (!window.go?.main?.App) throw wailsUnavailable('LaunchGame');
-        return (await LaunchGame(game as never)) as string;
+        return (await LaunchGame(toBackendGame(game) as never)) as string;
       },
       catch: (err) => (err instanceof Error ? err : new Error(String(err))),
     }),
@@ -96,8 +98,19 @@ export const LauncherApi = {
     Effect.tryPromise({
       try: async () => {
         if (!window.go?.main?.App) throw wailsUnavailable('PreviewLaunchCommand');
-        const res = (await PreviewLaunchCommand(game as never)) as string | Record<string, string>;
+        const res = (await PreviewLaunchCommand(toBackendGame(game) as never)) as string | Record<string, string>;
         return typeof res === 'string' ? res : JSON.stringify(res);
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  // Curated fix first, then ProtonDB summary. Resolves null when neither has data.
+  getGameFix: (game: Game): Effect.Effect<GameFixInfo | null, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('GetGameFix');
+        const fix = (await GetGameFix(game.store_app_id, game.title)) as unknown as GameFixInfo | null;
+        return fix && (fix.tier || fix.description) ? fix : null;
       },
       catch: (err) => (err instanceof Error ? err : new Error(String(err))),
     }),

@@ -1,49 +1,66 @@
+/* Fonts are bundled from @fontsource (latin subset) — no network fetch at runtime. */
+@import "@fontsource/hanken-grotesk/latin-400.css";
+@import "@fontsource/hanken-grotesk/latin-600.css";
+@import "@fontsource/hanken-grotesk/latin-700.css";
+@import "@fontsource/hanken-grotesk/latin-800.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Hanken Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-ground: #130f0a;
+  --color-raised: #191410;
+  --color-accent: #fbbf24;
+  --color-accent-strong: #fcd34d;
+  --color-on-accent: #130f0a;
+  --color-ok: #34d399;
+  --color-attention: #fb923c;
+  --color-info: #7dd3fc;
+  --color-dl: #a78bfa;
+  --color-text: #ece6da;
+  --color-text-body: #a8a29e;
+  --color-text-faint: #78716c;
+
+  --animate-modal-in: modal-in 150ms ease-out;
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+}
+
 @layer base {
-  :root {
-    --hydra-bg: #121417;
-    --hydra-panel: #16181b;
-    --hydra-plate: #1d2024;
-    --hydra-raise: #232327;
-    --hydra-line: #2a2d31;
-    --hydra-line-strong: #3a3f45;
-    --hydra-text: #e8e6e3;
-    --hydra-text-dim: #9aa0a6;
-    --hydra-text-faint: #767c82;
-    --hydra-accent: #ffb000;
-    --hydra-ok: #7dd48a;
-    --hydra-err: #e05d5d;
+  html,
+  body,
+  #root {
+    height: 100%;
   }
 
   body {
-    background: var(--hydra-bg);
-    color: var(--hydra-text);
-    font-family: "Source Sans 3", system-ui, -apple-system, sans-serif;
-    font-feature-settings: "tnum" 1;
+    background-color: var(--color-ground);
+    color: var(--color-text);
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     user-select: none;
-    overflow-x: hidden;
+    overflow: hidden;
   }
 
   ::selection {
-    background: rgba(255, 176, 0, 0.28);
+    background: rgba(251, 191, 36, 0.3);
     color: #fff;
-  }
-
-  input {
-    caret-color: var(--hydra-accent);
   }
 
   input,
   textarea {
     user-select: text;
+    caret-color: var(--color-accent);
   }
 
-  /* Instrument scrollbars: square, hairline, graphite */
   * {
     scrollbar-width: thin;
-    scrollbar-color: #3a3f45 transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -53,20 +70,21 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2e3238;
+    background: rgba(255, 255, 255, 0.1);
     border: 2px solid transparent;
+    border-radius: 999px;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3a3f45;
+    background: rgba(255, 255, 255, 0.18);
     border: 2px solid transparent;
     background-clip: padding-box;
   }
 
-  /* Keyboard focus: amber instrument bracket, not a purple ring */
+  /* Keyboard focus: amber ring */
   :focus-visible {
-    outline: 1px solid var(--hydra-accent);
-    outline-offset: 1px;
+    outline: 2px solid rgba(252, 211, 77, 0.8);
+    outline-offset: 2px;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -80,8 +98,41 @@
   }
 }
 
-@layer utilities {
-  .hydra-scroll {
-    scrollbar-gutter: stable;
-  }
+/* Radial wash. Applied to the non-scrolling root, so no background-attachment
+   is needed (WebKitGTK handles `fixed` unreliably). */
+.app-wash {
+  background-color: var(--color-ground);
+  background-image:
+    radial-gradient(1100px 620px at 14% -8%, rgba(150, 96, 58, 0.46), transparent 58%),
+    radial-gradient(880px 520px at 90% 10%, rgba(86, 62, 128, 0.44), transparent 54%),
+    radial-gradient(760px 460px at 52% 108%, rgba(30, 78, 96, 0.36), transparent 56%);
+}
+.app-wash-game {
+  background-color: var(--color-ground);
+  background-image:
+    radial-gradient(1000px 560px at 88% -10%, rgba(86, 62, 128, 0.46), transparent 56%),
+    radial-gradient(900px 520px at 6% -10%, rgba(150, 96, 58, 0.22), transparent 56%);
+}
+
+/* Static grids (avoid arbitrary-value flakiness). */
+.ach-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 220px));
+}
+.cover-grid {
+  display: grid;
+  gap: 0.875rem;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.cover-grid-sm {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

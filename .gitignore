@@ -29,3 +29,6 @@ design-lab/dist/
 
 # Impeccable working state
 .impeccable/
+
+# Tooling scratch
+.playwright-mcp/

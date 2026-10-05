@@ -1,184 +1,117 @@
 import React from 'react';
-import {
-  Gamepad2,
-  Puzzle,
-  FolderPlus,
-  Compass,
-  Cpu,
-  Wrench,
-} from 'lucide-react';
-import type { StoreType } from '../types';
+import { Search } from 'lucide-react';
+import { cx, clock } from './ui';
+import type { StoreType, View } from '../types';
+
+type NavKey = 'dashboard' | 'library' | 'activity' | 'fixes' | 'runners' | 'plugins';
 
 interface SidebarProps {
-  currentTab: 'library' | 'plugins' | 'system' | 'fixes';
-  setCurrentTab: (tab: 'library' | 'plugins' | 'system' | 'fixes') => void;
-  selectedStore: StoreType | 'all';
-  setSelectedStore: (store: StoreType | 'all') => void;
+  view: View;
+  onNavigate: (v: View) => void;
+  search: string;
+  onSearch: (q: string) => void;
   storeCounts: Record<string, number>;
-  onAddCustomGame: () => void;
-  sessionPid: number | null;
+  onPickSource: (s: StoreType) => void;
   gameCount: number;
+  fixCount: number;
+  runnerCount: number;
+  lastScan: number | null;
+  sessionPid: number | null;
 }
 
-const NAV_ITEMS = [
-  { id: 'library', label: 'Library', icon: Gamepad2 },
-  { id: 'fixes', label: 'Fixes & Tweaks', icon: Wrench },
-  { id: 'plugins', label: 'Source Plugins', icon: Puzzle },
-  { id: 'system', label: 'Runners & Proton', icon: Cpu },
-] as const;
-
-const SOURCES: Array<{ id: StoreType; label: string }> = [
-  { id: 'steam', label: 'Steam' },
-  { id: 'epic', label: 'Epic Games' },
-  { id: 'gog', label: 'GOG Galaxy' },
-  { id: 'custom', label: 'Sideloaded' },
+const SOURCES: { key: StoreType; label: string }[] = [
+  { key: 'steam', label: 'Steam' },
+  { key: 'gog', label: 'GOG' },
+  { key: 'epic', label: 'Epic' },
+  { key: 'custom', label: 'Sideloaded' },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({
-  currentTab,
-  setCurrentTab,
-  selectedStore,
-  setSelectedStore,
-  storeCounts,
-  onAddCustomGame,
-  sessionPid,
-  gameCount,
-}) => {
+export function Sidebar(p: SidebarProps) {
+  const active: NavKey = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
+
+  const nav: { key: NavKey; label: string; count?: number }[] = [
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'library', label: 'Library', count: p.gameCount },
+    { key: 'activity', label: 'Activity' },
+    { key: 'fixes', label: 'Fixes', count: p.fixCount || undefined },
+    { key: 'runners', label: 'Runners', count: p.runnerCount || undefined },
+    { key: 'plugins', label: 'Plugins' },
+  ];
+
   return (
-    <aside
-      className="w-60 flex-shrink-0 flex flex-col h-screen select-none bg-[#16181b] border-r border-[#2a2d31]"
-    >
-      {/* Wordmark */}
-      <div className="px-4 pt-4 pb-3 border-b border-[#2a2d31] relative overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-0 opacity-[0.05] pointer-events-none"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(0deg, #ffb000 0px, #ffb000 1px, transparent 1px, transparent 3px)',
-          }}
-        />
-        <div className="relative flex items-center gap-2.5">
-          <span className="w-2.5 h-2.5 bg-[#ffb000]" style={{ boxShadow: '0 0 6px rgba(255,176,0,.5)' }} />
-          <h1
-            className="font-mono font-bold text-[15px] tracking-[0.18em] text-[#e8e6e3]"
-            style={{ fontFamily: 'Hack, monospace' }}
-          >
-            HYDRA
-          </h1>
-          <span className="font-mono text-[9px] text-[#8a8f94] tracking-wider border border-[#33373c] px-1 py-px">
-            LINUX
-          </span>
+    <aside className="flex h-full w-56 flex-none flex-col border-r border-white/[0.06] bg-black/25 p-4">
+      <div className="mb-5 flex items-center gap-2.5 px-1.5">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">H</span>
+        <div>
+          <div className="text-[15px] font-extrabold tracking-tight">Hydra</div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/40">game hub</div>
         </div>
-        <p className="relative font-mono text-[10px] text-[#8a8f94] tracking-wide mt-1">
-          launch control · linux
-        </p>
       </div>
 
-      {/* Navigation */}
-      <nav className="px-2 pt-3 flex-none">
-        <ul className="space-y-px">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
-            const active = currentTab === id;
-            return (
-              <li key={id}>
-                <button
-                  onClick={() => setCurrentTab(id)}
-                  className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] border-l-2 transition-colors ${
-                    active
-                      ? 'border-[#ffb000] bg-[#1f2226] text-[#f2f1ee]'
-                      : 'border-transparent text-[#9aa0a6] hover:text-[#d7d5d1] hover:bg-[#1c1f22]'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 flex-none" strokeWidth={1.75} />
-                  <span className="flex-1 text-left">{label}</span>
-                  {id === 'library' && (
-                    <span className="font-mono text-[10px] text-[#8a8f94]">
-                      {String(gameCount).padStart(3, '0')}
-                    </span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      <label className="relative mb-4 block">
+        <span className="sr-only">Search library</span>
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+        <input
+          type="search"
+          value={p.search}
+          onChange={(e) => {
+            p.onSearch(e.target.value);
+            if (p.view.name !== 'library') p.onNavigate({ name: 'library' });
+          }}
+          placeholder="Search…"
+          className="w-full rounded-xl bg-white/[0.06] py-2.5 pl-8.5 pr-3 text-[12px] text-white placeholder-white/35 outline-none ring-amber-300/50 focus:ring-1"
+        />
+      </label>
+
+      <nav aria-label="Main">
+        {nav.map((n) => (
+          <button
+            key={n.key}
+            onClick={() => p.onNavigate({ name: n.key } as View)}
+            aria-current={active === n.key ? 'page' : undefined}
+            className={cx(
+              'mb-0.5 flex w-full items-center justify-between rounded-xl px-3 py-2 text-[12.5px] font-semibold transition',
+              active === n.key ? 'bg-amber-300/12 text-amber-200' : 'text-white/55 hover:bg-white/[0.05] hover:text-white'
+            )}
+          >
+            <span>{n.label}</span>
+            {n.count != null && <span className="rounded-full bg-white/[0.07] px-2 font-mono text-[9.5px] tabular-nums">{n.count}</span>}
+          </button>
+        ))}
       </nav>
 
-      {/* Store filter */}
-      {currentTab === 'library' && (
-        <div className="px-2 pt-4 pb-2 border-t border-[#2a2d31] mt-3 overflow-y-auto flex-1 min-h-0">
-          <div className="px-3 mb-1.5 font-mono text-[10px] tracking-[0.14em] text-[#767c82] uppercase">
-            Sources
-          </div>
-          <ul className="space-y-px">
-            <li>
-              <button
-                onClick={() => setSelectedStore('all')}
-                className={`w-full flex items-center justify-between px-3 py-1 text-[12px] transition-colors ${
-                  selectedStore === 'all'
-                    ? 'text-[#f2f1ee] bg-[#1f2226]'
-                    : 'text-[#9aa0a6] hover:text-[#d7d5d1] hover:bg-[#1c1f22]'
-                }`}
-              >
-                <span>All sources</span>
-                <span className="font-mono text-[10px] text-[#8a8f94]">{String(storeCounts['all'] || 0).padStart(3, '0')}</span>
-              </button>
-            </li>
-            {SOURCES.map(({ id, label }) => (
-              <li key={id}>
-                <button
-                  onClick={() => setSelectedStore(id)}
-                  className={`w-full flex items-center justify-between px-3 py-1 text-[12px] transition-colors ${
-                    selectedStore === id
-                      ? 'text-[#f2f1ee] bg-[#1f2226]'
-                      : 'text-[#9aa0a6] hover:text-[#d7d5d1] hover:bg-[#1c1f22]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className={`w-1 h-2.5 flex-none ${
-                        selectedStore === id ? 'bg-[#ffb000]' : 'bg-[#3a3f45]'
-                      }`}
-                    />
-                    {label}
-                  </span>
-                  <span className="font-mono text-[10px] text-[#8a8f94]">{String(storeCounts[id] || 0).padStart(3, '0')}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-
+      <div className="px-2 pb-1.5 pt-4 font-mono text-[9px] uppercase tracking-[0.18em] text-white/40">sources</div>
+      {SOURCES.filter((s) => s.key !== 'custom' || p.storeCounts.custom).map((s) => {
+        const count = p.storeCounts[s.key] ?? 0;
+        return (
           <button
-            onClick={onAddCustomGame}
-            className="mt-3 w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[#9aa0a6] border border-[#2e3238] hover:border-[#ffb000]/60 hover:text-[#e8e6e3] bg-[#1a1c1f] transition-colors"
+            key={s.key}
+            onClick={() => p.onPickSource(s.key)}
+            className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] text-white/55 transition hover:bg-white/[0.04] hover:text-white"
           >
-            <FolderPlus className="w-3.5 h-3.5" strokeWidth={1.75} />
-            Sideload a game
+            <span className="flex items-center gap-2">
+              <span className={cx('h-1.5 w-1.5 rounded-full', count ? 'bg-amber-300/60' : 'bg-white/15')} />
+              {s.label}
+            </span>
+            <span className="font-mono text-[9.5px] tabular-nums text-white/40">{count || '—'}</span>
           </button>
+        );
+      })}
+
+      {/* Pinned footer: fixed content, never grows (friends panel omitted until presence is real). */}
+      <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
+        {p.sessionPid !== null && (
+          <div className="flex items-center gap-2 rounded-xl bg-emerald-400/[0.08] px-3 py-2 ring-1 ring-emerald-300/25">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="font-mono text-[9.5px] uppercase tracking-wider text-emerald-200">
+              in session{p.sessionPid > 0 ? ` · pid ${p.sessionPid}` : ''}
+            </span>
+          </div>
+        )}
+        <div className="px-1.5 font-mono text-[9px] text-white/35">
+          hydra v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
-      )}
-
-      <div className="flex-1 min-h-0" />
-
-      {/* Session status line */}
-      <div
-        className={`mx-2 mb-2 px-3 py-2 border font-mono text-[10px] flex items-center justify-between ${
-          sessionPid
-            ? 'border-[#ffb000]/50 bg-[#ffb000]/[0.07] text-[#ffb000]'
-            : 'border-[#2a2d31] bg-[#1a1c1f] text-[#767c82]'
-        }`}
-      >
-        <span className="flex items-center gap-2">
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              sessionPid ? 'bg-[#ffb000]' : 'bg-[#4a9a5f]'
-            }`}
-            style={sessionPid ? { boxShadow: '0 0 5px rgba(255,176,0,.6)' } : undefined}
-          />
-          {sessionPid ? 'IN SESSION' : 'IDLE'}
-        </span>
-        <span>{sessionPid ? `PID ${sessionPid}` : `v0.1 · x86_64`}</span>
       </div>
     </aside>
   );
-};
+}

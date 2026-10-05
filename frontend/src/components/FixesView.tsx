@@ -1,111 +1,66 @@
 import React, { useState } from 'react';
-import { Search, Wrench, Zap, ExternalLink } from 'lucide-react';
 import type { Game } from '../types';
+import { Cover, EmptyState, TierBadge, TweakDot, cx } from './ui';
+import { attentionReason, needsAttention, storeLabel } from '../lib/games';
 
-interface FixesViewProps {
-  games: Game[];
-  onOpenSettings: (game: Game) => void;
-}
+type Filter = 'attention' | 'all';
 
-export const FixesView: React.FC<FixesViewProps> = ({ games, onOpenSettings }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredGames = games.filter((g) =>
-    g.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
+  const [filter, setFilter] = useState<Filter>('attention');
+  const withData = games.filter((g) => g.fix_info);
+  const shown = filter === 'attention' ? withData.filter(needsAttention) : withData;
 
   return (
-    <div className="px-8 py-6 max-w-6xl mx-auto space-y-5 animate-in fade-in duration-150">
-      <div className="flex items-center justify-between border-b border-[#2a2d31] pb-3 mb-1">
+    <div className="p-7">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-[15px] font-bold tracking-[0.14em] text-[#f2f1ee] uppercase flex items-center gap-2.5" style={{ fontFamily: 'Hack, monospace' }}>
-            <Wrench className="w-4 h-4 text-[#ffb000]" strokeWidth={1.75} />
-            <span>Fixes &amp; Tweaks</span>
-          </h2>
-          <p className="text-[13px] text-[#9aa0a6] mt-1">
-            Automated recipes, DLL overrides, and winetricks workarounds sourced from ProtonDB and Lutris.
+          <h1 className="text-[23px] font-extrabold tracking-tight">Fixes</h1>
+          <p className="mt-0.5 max-w-xl text-[12.5px] text-white/50">
+            Curated recipes (Lutris, community) and ProtonDB ratings for your library. {withData.length} of {games.length} titles have data.
           </p>
         </div>
-
-        {/* Search */}
-        <div className="relative w-72">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[#767c82]" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search game fixes..."
-            className="w-full bg-[#1d2024] border border-[#2e3238] rounded-[3px] pl-8 pr-3 py-1.5 text-[13px] text-[#e8e6e3] placeholder-[#767c82] focus:outline-none focus:border-[#ffb000]/70 font-mono"
-          />
+        <div role="radiogroup" aria-label="Filter" className="flex rounded-xl bg-white/[0.05] p-1">
+          {([['attention', 'needs attention'], ['all', 'all rated']] as const).map(([v, l]) => (
+            <button key={v} role="radio" aria-checked={filter === v} onClick={() => setFilter(v)} className={cx('rounded-lg px-3.5 py-1.5 text-[12px] font-bold transition', filter === v ? 'bg-white/12 text-white' : 'text-white/45 hover:text-white/80')}>
+              {l}
+            </button>
+          ))}
         </div>
-      </div>
+      </header>
 
-      {/* Fix Cards */}
-      <div className="space-y-4">
-        {filteredGames.map((game) => (
-          <div
-            key={game.id}
-            className="p-4 bg-[#16181b] border border-[#2e3238] hover:border-[#3a3f45] transition-colors flex items-start justify-between gap-6"
-          >
-            <div className="flex gap-4">
-              <img
-                src={game.cover_url}
-                alt={game.title}
-                className="w-20 h-28 object-cover border border-[#2e3238] flex-shrink-0"
-              />
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <h3 className="text-[15px] font-semibold text-[#f2f1ee]" style={{ fontFamily: '"Source Sans 3", system-ui, sans-serif' }}>{game.title}</h3>
-                  <span className="font-mono text-[9px] uppercase tracking-[0.12em] px-1.5 py-0.5 bg-[#1d2024] text-[#c9cdd1] border border-[#3a3f45] rounded-[3px]">
-                    {game.store}
-                  </span>
-                  {game.fix_info?.tier && (
-                    <span className="font-mono text-[9px] uppercase tracking-[0.1em] px-1.5 py-0.5 bg-[#7dd48a]/10 text-[#7dd48a] border border-[#7dd48a]/40 rounded-[3px]">
-                      Tier: {game.fix_info.tier}
-                    </span>
+      {shown.length === 0 ? (
+        <EmptyState label={withData.length ? 'all clear' : 'no fix data yet'}>
+          {withData.length
+            ? 'No titles need attention. Switch to "all rated" to browse ProtonDB tiers.'
+            : 'Compatibility data loads in the background after a scan. ProtonDB needs a network connection.'}
+        </EmptyState>
+      ) : (
+        <div className="space-y-3">
+          {shown.map((g) => {
+            const f = g.fix_info!;
+            return (
+              <button key={g.id} onClick={() => onOpenGame(g.id)} className="flex w-full gap-4 rounded-2xl bg-white/[0.045] p-4 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40">
+                <Cover src={g.cover_url} title={g.title} className="h-24 w-16 flex-none rounded-xl ring-1 ring-white/10" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {needsAttention(g) && <TweakDot />}
+                    <span className="truncate text-[14px] font-bold">{g.title}</span>
+                    <TierBadge tier={f.tier} />
+                    <span className="font-mono text-[9px] uppercase tracking-wider text-white/40">{storeLabel(g.store)} · {f.source}</span>
+                  </div>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{needsAttention(g) ? attentionReason(g) : f.description}</p>
+                  {(f.winetricks?.length || f.dll_overrides) && (
+                    <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[10px]">
+                      {f.winetricks?.map((t) => <span key={t} className="rounded-lg bg-sky-300/10 px-2 py-0.5 text-sky-200">{t}</span>)}
+                      {f.dll_overrides && Object.entries(f.dll_overrides).map(([k, v]) => <span key={k} className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-white/60">{k}={v}</span>)}
+                    </div>
                   )}
                 </div>
-
-                <p className="text-xs text-[#9aa0a6] leading-relaxed max-w-2xl">
-                  {game.fix_info?.description || 'Compatible out of the box with standard Proton/Wine compatibility layer.'}
-                </p>
-
-                {game.fix_info?.winetricks && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <span className="font-mono text-[9px] text-[#767c82] uppercase tracking-[0.12em]">Winetricks verbs:</span>
-                    {game.fix_info.winetricks.map((trick) => (
-                      <span key={trick} className="font-mono text-[10px] px-1.5 py-0.5 bg-[#1d2024] border border-[#3a3f45] text-[#e8e6e3] rounded-[3px]">
-                        {trick}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col items-end gap-2 flex-shrink-0">
-              <button
-                onClick={() => onOpenSettings(game)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1d2024] hover:border-[#ffb000]/70 hover:text-[#ffb000] text-[11px] font-medium text-[#e8e6e3] border border-[#3a3f45] transition-colors rounded-[3px] font-mono"
-              >
-                <Zap className="w-3 h-3 text-[#ffb000]" />
-                <span>Configure Fix</span>
               </button>
-              {game.store === 'steam' && (
-                <a
-                  href={`https://www.protondb.com/app/${game.store_app_id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1 font-mono text-[10px] text-[#7dd48a] hover:underline"
-                >
-                  <span>View on ProtonDB</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-};
+}

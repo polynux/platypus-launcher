@@ -9,6 +9,11 @@ export interface ProtonVersion {
   is_default: boolean;
 }
 
+export type SyncMode = 'default' | 'esync' | 'fsync' | 'ntsync' | 'off';
+export type DxLayer = 'dxvk' | 'wined3d';
+export type Upscaler = 'native' | 'fsr1' | 'integer';
+export type HudPreset = 'off' | 'fps only' | 'minimal' | 'full';
+
 export interface GameSettings {
   runner_id: string;
   wine_prefix: string;
@@ -24,15 +29,42 @@ export interface GameSettings {
   eac_runtime: boolean;
   battleye_runtime: boolean;
   working_dir: string;
+  // Frontend-side Proton controls (DESIGN §5). The backend has no fields for
+  // these yet; they are folded into env_vars before preview/launch
+  // (see lib/settings.ts), so the Go side receives real, honest env vars.
+  proton_flags?: string[];
+  sync_mode?: SyncMode;
+  dx_layer?: DxLayer;
+  upscaler?: Upscaler;
+  mangohud_preset?: HudPreset;
+  shader_cache?: 'on' | 'off';
+  winetricks?: string[];
 }
+
+export type Tier = 'platinum' | 'gold' | 'silver' | 'bronze' | 'borked';
 
 export interface GameFixInfo {
   source: string;
-  tier: string; // 'platinum' | 'gold' | 'silver' | 'bronze' | 'borked'
+  tier: string;
   description: string;
   winetricks?: string[];
   dll_overrides?: Record<string, string>;
   launch_args?: string;
+}
+
+export interface Achievement {
+  name: string;
+  desc?: string;
+  unlocked: boolean;
+  date?: string;
+  rarity?: string;
+}
+
+export interface Achievements {
+  total: number;
+  unlockedCount: number;
+  score: number;
+  list: Achievement[];
 }
 
 export interface Game {
@@ -47,6 +79,13 @@ export interface Game {
   is_installed: boolean;
   settings: GameSettings;
   fix_info?: GameFixInfo;
+  // Target-schema fields (DESIGN §5). Not provided by the backend yet; every
+  // UI section that depends on them hides when they are absent.
+  last_played?: string | null;
+  playtime_hours?: number;
+  size_on_disk?: string;
+  achievements?: Achievements | null;
+  screenshots?: string[] | null;
 }
 
 export interface PluginInfo {
@@ -58,3 +97,23 @@ export interface PluginInfo {
   enabled: boolean;
   store: string;
 }
+
+export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak';
+
+export interface ActivityEvent {
+  id: number;
+  ts: number; // epoch ms
+  type: ActivityType;
+  game?: string;
+  detail: string;
+  meta?: string;
+}
+
+export type View =
+  | { name: 'dashboard' }
+  | { name: 'library' }
+  | { name: 'game'; id: string; from: 'dashboard' | 'library' | 'fixes' }
+  | { name: 'activity' }
+  | { name: 'fixes' }
+  | { name: 'runners' }
+  | { name: 'plugins' };

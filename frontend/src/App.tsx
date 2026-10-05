@@ -1,119 +1,167 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, Search, Copy, Check, Terminal, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';
-import { GameCard } from './components/GameCard';
-import { GameModal } from './components/GameModal';
+import { Dashboard } from './components/Dashboard';
+import { LibraryView, type LibraryMode } from './components/LibraryView';
+import { GamePage } from './components/GamePage';
+import { SettingsModal } from './components/SettingsModal';
+import { AddGameModal } from './components/AddGameModal';
+import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
+import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi } from './effect/runtime';
-import type { Game, ProtonVersion, PluginInfo, StoreType } from './types';
+import { needsAttention } from './lib/games';
+import type { ActivityEvent, Game, GameSettings, PluginInfo, ProtonVersion, StoreType, View } from './types';
 
-type NotificationKind = 'ok' | 'err' | 'busy';
-interface Notice { msg: string; kind: NotificationKind; }
+type NoticeKind = 'ok' | 'err' | 'busy';
+interface Notice { msg: string; kind: NoticeKind }
 
-const NOTIF_STYLE: Record<NotificationKind, string> = {
-  ok: 'border-[#7dd48a]/60 text-[#cfe8d3]',
-  err: 'border-[#e05d5d]/60 text-[#f0c9c9]',
-  busy: 'border-[#ffb000]/60 text-[#ffdf9e]',
+const NOTICE_STYLE: Record<NoticeKind, string> = {
+  ok: 'border-emerald-300/50 text-emerald-100',
+  err: 'border-red-400/50 text-red-100',
+  busy: 'border-amber-300/50 text-amber-100',
 };
+const NOTICE_DOT: Record<NoticeKind, string> = { ok: 'bg-emerald-400', err: 'bg-red-400', busy: 'bg-amber-300' };
 
-const DOT_STYLE: Record<NotificationKind, string> = {
-  ok: 'bg-[#7dd48a]',
-  err: 'bg-[#e05d5d]',
-  busy: 'bg-[#ffb000]',
-};
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function App() {
   const [games, setGames] = useState<Game[]>([]);
-  const [protonVersions, setProtonVersions] = useState<ProtonVersion[]>([]);
+  const [runners, setRunners] = useState<ProtonVersion[]>([]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastScan, setLastScan] = useState<number | null>(null);
+  const [scanning, setScanning] = useState(false);
 
-  const [currentTab, setCurrentTab] = useState<'library' | 'plugins' | 'system' | 'fixes'>('library');
-  const [selectedStore, setSelectedStore] = useState<StoreType | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [view, setView] = useState<View>({ name: 'dashboard' });
+  const [search, setSearch] = useState('');
+  const [source, setSource] = useState<StoreType | 'all'>('all');
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
 
-  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [notification, setNotification] = useState<Notice | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [sessionPid, setSessionPid] = useState<number | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [scanPending, setScanPending] = useState(false);
+  const [dismissedHero, setDismissedHero] = useState<string | null>(null);
 
-  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showNotification = useCallback((msg: string, kind: NotificationKind = 'ok') => {
-    setNotification({ msg, kind });
-    if (notificationTimer.current) clearTimeout(notificationTimer.current);
-    notificationTimer.current = setTimeout(() => setNotification(null), 3500);
-  }, []);
-  useEffect(() => () => {
-    if (notificationTimer.current) clearTimeout(notificationTimer.current);
+  // Activity is real session events only (scans, launches, setting changes).
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const eventId = useRef(0);
+  const log = useCallback((e: Omit<ActivityEvent, 'id' | 'ts'>) => {
+    setActivity((prev) => [{ ...e, id: ++eventId.current, ts: Date.now() }, ...prev].slice(0, 200));
   }, []);
 
-  const loadData = useCallback(() => {
-    const program = Effect.all([
-      LauncherApi.getGames(),
-      LauncherApi.getProtonVersions(),
-      LauncherApi.getPlugins(),
-    ]);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notify = useCallback((msg: string, kind: NoticeKind = 'ok') => {
+    setNotice({ msg, kind });
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 3500);
+  }, []);
+  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
-    Effect.runPromise(program).then(([loadedGames, loadedProtons, loadedPlugins]) => {
-      setGames(loadedGames);
-      setProtonVersions(loadedProtons);
-      setPlugins(loadedPlugins);
-      setLoadError(null);
-    }).catch((err) => {
-      console.error(err);
-      const msg = err instanceof Error ? err.message : String(err);
-      setLoadError(msg);
-      showNotification(msg.slice(0, 90), 'err');
-    });
-  }, [showNotification]);
+  const main = useRef<HTMLElement>(null);
+  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
 
+  const loadData = useCallback(
+    (reason: 'startup' | 'rescan') => {
+      setScanning(true);
+      const program = Effect.all([LauncherApi.getGames(), LauncherApi.getProtonVersions(), LauncherApi.getPlugins()]);
+      return Effect.runPromise(program)
+        .then(([g, r, p]) => {
+          // Keep session-only additions and edited settings across rescans.
+          setGames((prev) => {
+            const edited = new Map(prev.map((x) => [x.id, x.settings]));
+            const custom = prev.filter((x) => x.store === 'custom');
+            return [...custom, ...g.map((x) => (edited.has(x.id) ? { ...x, settings: edited.get(x.id)! } : x))];
+          });
+          setRunners(r);
+          setPlugins(p);
+          setLoadError(null);
+          setLastScan(Date.now());
+          const stores = new Set(g.map((x) => x.store)).size;
+          log({ type: 'update', detail: `Library scan · ${g.length} titles`, meta: `${stores} source${stores === 1 ? '' : 's'} · ${r.length} runners` });
+          if (reason === 'rescan') notify('Library rescanned');
+        })
+        .catch((err) => {
+          const msg = errMsg(err);
+          setLoadError(msg);
+          notify(msg.slice(0, 90), 'err');
+        })
+        .finally(() => {
+          setLoaded(true);
+          setScanning(false);
+        });
+    },
+    [log, notify]
+  );
+
+  // StrictMode mounts effects twice in dev; scan only once on startup.
+  const started = useRef(false);
   useEffect(() => {
-    loadData();
+    if (started.current) return;
+    started.current = true;
+    loadData('startup');
   }, [loadData]);
 
-  const handleLaunchGame = (game: Game) => {
+  // Enrich with fix/tier data (curated first, then ProtonDB) in the background.
+  // Each game is fetched at most once per session.
+  const fixFetched = useRef(new Set<string>());
+  useEffect(() => {
+    const todo = games.filter((g) => !g.fix_info && g.store !== 'custom' && !fixFetched.current.has(g.id));
+    if (todo.length === 0) return;
+    todo.forEach((g) => fixFetched.current.add(g.id));
+    const program = Effect.forEach(
+      todo,
+      (g) => LauncherApi.getGameFix(g).pipe(Effect.map((fix) => [g.id, fix] as const), Effect.orElseSucceed(() => [g.id, null] as const)),
+      { concurrency: 6 }
+    );
+    Effect.runPromise(program).then((results) => {
+      const found = new Map(results.filter(([, f]) => f).map(([id, f]) => [id, f!]));
+      if (found.size === 0) return;
+      setGames((prev) => prev.map((g) => (found.has(g.id) && !g.fix_info ? { ...g, fix_info: found.get(g.id) } : g)));
+      const curated = [...found.values()].filter((f) => f.source !== 'protondb').length;
+      log({ type: 'fix', detail: `Compatibility data for ${found.size} titles`, meta: curated ? `${curated} curated fixes` : 'protondb' });
+    });
+  }, [games, log]);
+
+  const launch = (game: Game) => {
     if (launchingId) return;
     setLaunchingId(game.id);
     Effect.runPromise(LauncherApi.launchGame(game))
-      .then((res: string) => {
-        showNotification(res || `Launching ${game.title}`, 'busy');
-        const pidMatch = res?.match(/PID (\d+)/);
-        if (pidMatch) {
-          setSessionPid(parseInt(pidMatch[1], 10));
-        } else {
-          setSessionPid(-1); // in session, pid unknown
-        }
+      .then((res) => {
+        notify(res || `Launching ${game.title}`, 'busy');
+        const pid = res?.match(/PID (\d+)/);
+        setSessionPid(pid ? parseInt(pid[1], 10) : -1);
+        log({ type: 'session', game: game.title, detail: `Launched ${game.title}`, meta: pid ? `pid ${pid[1]}` : undefined });
       })
-      .catch((err: unknown) => showNotification(err instanceof Error ? err.message : String(err), 'err'))
+      .catch((err) => notify(errMsg(err), 'err'))
       .finally(() => setLaunchingId(null));
   };
 
-  const handleTogglePlugin = (id: string, enabled: boolean) => {
+  const saveSettings = (id: string, settings: GameSettings) => {
+    const g = games.find((x) => x.id === id);
+    setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
+    setSettingsFor(null);
+    notify('Settings saved for this session');
+    if (g) log({ type: 'tweak', game: g.title, detail: `Launcher settings changed · ${g.title}`, meta: 'session only' });
+  };
+
+  const togglePlugin = (id: string, enabled: boolean) => {
     const program = Effect.gen(function* () {
       yield* LauncherApi.togglePlugin(id, enabled);
       return yield* LauncherApi.getPlugins();
     });
-
-    Effect.runPromise(program).then((updated: PluginInfo[]) => {
-      setPlugins(updated);
-      showNotification('Plugin updated');
-    }).catch((err: unknown) => {
-      showNotification(`Plugin toggle failed: ${err instanceof Error ? err.message : String(err)}`, 'err');
-    });
+    Effect.runPromise(program)
+      .then((p) => { setPlugins(p); notify('Plugin updated'); })
+      .catch((err) => notify(`Plugin toggle failed: ${errMsg(err)}`, 'err'));
   };
 
-  const handleAddCustomGame = () => {
-    const title = prompt('Game title:');
-    if (!title) return;
-    const exe = prompt('Executable path (e.g. /home/.../game.exe):') || '';
-
-    const newGame: Game = {
+  const addGame = (title: string, executable: string) => {
+    const game: Game = {
       id: 'custom_' + Date.now(),
       store: 'custom',
       store_app_id: 'custom',
@@ -121,10 +169,10 @@ export function App() {
       cover_url: '',
       banner_url: '',
       install_dir: '',
-      executable: exe,
+      executable,
       is_installed: true,
       settings: {
-        runner_id: protonVersions[0]?.id || 'auto',
+        runner_id: runners[0]?.id ?? 'auto',
         wine_prefix: '',
         launch_arguments: '',
         env_vars: {},
@@ -140,209 +188,139 @@ export function App() {
         working_dir: '',
       },
     };
-
-    setGames([newGame, ...games]);
-    showNotification(`Sideloaded "${title}" (session only)`);
+    setGames((prev) => [game, ...prev]);
+    setAddOpen(false);
+    notify(`Added "${title}" (session only)`);
+    log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: 'session only' });
   };
 
-  const handleCopyCommand = (game: Game, e: React.MouseEvent) => {
-    e.stopPropagation();
-    Effect.runPromise(LauncherApi.previewCommand(game))
-      .then((cmd) => navigator.clipboard.writeText(cmd))
-      .then(() => {
-        setCopiedId(game.id);
-        setTimeout(() => setCopiedId(null), 1500);
-        showNotification('Launch command copied');
-      })
-      .catch((err: unknown) => showNotification(err instanceof Error ? err.message : String(err), 'err'));
-  };
+  const storeCounts = useMemo(
+    () => games.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
+    [games]
+  );
 
-  const storeCounts = games.reduce((acc, g) => {
-    acc['all'] = (acc['all'] || 0) + 1;
-    acc[g.store] = (acc[g.store] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const openGame = (id: string) =>
+    setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
 
-  const filteredGames = games.filter((g) => {
-    const matchesStore = selectedStore === 'all' || g.store === selectedStore;
-    const matchesSearch = g.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStore && matchesSearch;
-  });
+  const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
+  const settingsGame = settingsFor ? games.find((g) => g.id === settingsFor) : undefined;
 
-  const handleRescan = () => {
-    setScanPending(true);
-    setTimeout(() => {
-      loadData();
-      setScanPending(false);
-      showNotification('Library rescanned');
-    }, 400);
+  const renderView = () => {
+    if (!loaded) {
+      return <div className="p-7 font-mono text-[11px] uppercase tracking-widest text-white/40">scanning library…</div>;
+    }
+    if (loadError && games.length === 0 && (view.name === 'dashboard' || view.name === 'library')) {
+      return (
+        <div className="p-7">
+          <EmptyState
+            label="backend unreachable"
+            action={<button onClick={() => loadData('rescan')} className={cx(btnPrimary, 'px-4 py-2 text-[12.5px]')}>Retry</button>}
+          >
+            {loadError}
+          </EmptyState>
+        </div>
+      );
+    }
+    switch (view.name) {
+      case 'dashboard':
+        return (
+          <Dashboard
+            games={games}
+            runners={runners}
+            activity={activity}
+            dismissedHero={dismissedHero}
+            onDismissHero={setDismissedHero}
+            onOpenGame={openGame}
+            onNavigate={setView}
+          />
+        );
+      case 'library':
+        return (
+          <LibraryView
+            games={games}
+            runners={runners}
+            activity={activity}
+            search={search}
+            onSearch={setSearch}
+            source={source}
+            onSource={setSource}
+            mode={libraryMode}
+            onMode={setLibraryMode}
+            lastScan={lastScan}
+            onOpenGame={openGame}
+            onAddGame={() => setAddOpen(true)}
+            onNavigate={setView}
+          />
+        );
+      case 'game':
+        return currentGame ? (
+          <GamePage
+            game={currentGame}
+            runners={runners}
+            activity={activity}
+            backLabel={view.from}
+            onBack={() => setView({ name: view.from } as View)}
+            onPlay={() => launch(currentGame)}
+            launching={launchingId === currentGame.id}
+            onOpenSettings={() => setSettingsFor(currentGame.id)}
+          />
+        ) : (
+          <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>
+        );
+      case 'activity':
+        return <ActivityView events={activity} />;
+      case 'fixes':
+        return <FixesView games={games} onOpenGame={openGame} />;
+      case 'runners':
+        return <SystemView runners={runners} onRefresh={() => loadData('rescan')} scanning={scanning} />;
+      case 'plugins':
+        return <PluginsView plugins={plugins} onToggle={togglePlugin} onRefresh={() => loadData('rescan')} />;
+    }
   };
 
   return (
-    <div
-      className="flex h-screen text-[#e8e6e3] overflow-hidden select-none bg-[#121417]"
-      style={{ fontFamily: '"Source Sans 3", system-ui, sans-serif' }}
-    >
+    <div className={cx('flex h-screen overflow-hidden text-[#ece6da]', view.name === 'game' ? 'app-wash-game' : 'app-wash')}>
       <Sidebar
-        currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
-        selectedStore={selectedStore}
-        setSelectedStore={setSelectedStore}
+        view={view}
+        onNavigate={setView}
+        search={search}
+        onSearch={setSearch}
         storeCounts={storeCounts}
-        onAddCustomGame={handleAddCustomGame}
-        sessionPid={sessionPid}
+        onPickSource={(s) => { setSource(s); setView({ name: 'library' }); }}
         gameCount={games.length}
+        fixCount={games.filter(needsAttention).length}
+        runnerCount={runners.length}
+        lastScan={lastScan}
+        sessionPid={sessionPid}
       />
 
-      {/* Main column */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#121417]">
-        {/* Instrument header */}
-        <header className="h-14 flex-none border-b border-[#2a2d31] bg-[#16181b] px-5 flex items-center justify-between gap-6">
-          <div className="relative w-[26rem] max-w-[36vw]">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#767c82]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="filter library…"
-              className="w-full bg-[#1d2024] border border-[#2e3238] rounded-[3px] pl-8 pr-3 py-1.5 text-[13px] text-[#e8e6e3] placeholder-[#767c82] focus:outline-none focus:border-[#ffb000]/70 transition-colors"
-              style={{ fontFamily: 'Hack, monospace' }}
-            />
-          </div>
-
-          <div className="flex items-center gap-3 font-mono text-[10px] text-[#767c82] tracking-[0.1em]" style={{ fontFamily: 'Hack, monospace' }}>
-            <span className="hidden lg:flex items-center gap-1.5">
-              <Terminal className="w-3.5 h-3.5" />
-              {protonVersions.length} RUNNERS
-            </span>
-            <button
-              onClick={handleRescan}
-              disabled={scanPending}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-[#c9cdd1] bg-[#1d2024] border border-[#2e3238] hover:border-[#ffb000]/70 hover:text-[#ffb000] transition-colors disabled:opacity-50 disabled:cursor-wait rounded-[3px]"
-            >
-              {scanPending
-                ? <Loader2 className="w-3 h-3 animate-spin" />
-                : <RefreshCw className="w-3 h-3" strokeWidth={1.75} />}
-              {scanPending ? 'SCANNING' : 'RESCAN'}
-            </button>
-          </div>
-        </header>
-
-        {/* Tab content */}
-        <div className="flex-1 overflow-y-auto hydra-scroll">
-          {currentTab === 'library' && (
-            <div className="px-6 py-5">
-              <header className="flex items-baseline justify-between mb-4 border-b border-[#2a2d31] pb-3">
-                <h2
-                  className="text-[15px] font-bold tracking-[0.14em] text-[#f2f1ee] uppercase"
-                  style={{ fontFamily: 'Hack, monospace' }}
-                >
-                  {selectedStore === 'all' ? 'Library' : selectedStore}
-                  <span className="text-[#ffb000] ml-3 font-normal">
-                    {String(filteredGames.length).padStart(3, '0')}
-                  </span>
-                </h2>
-                <p className="font-mono text-[10px] text-[#767c82] tracking-wide" style={{ fontFamily: 'Hack, monospace' }}>
-                  {searchQuery ? `filtered · "${searchQuery}"` : 'all installed titles · linux ready'}
-                </p>
-              </header>
-
-              {loadError ? (
-                <div className="mt-16 mx-auto max-w-md text-center border border-[#e05d5d]/40 bg-[#e05d5d]/5 px-6 py-8">
-                  <p className="font-mono text-[11px] tracking-widest text-[#e05d5d] uppercase" style={{ fontFamily: 'Hack, monospace' }}>backend unreachable</p>
-                  <p className="text-[13px] text-[#c9cdd1] mt-3 leading-relaxed">{loadError}</p>
-                  <button
-                    onClick={loadData}
-                    className="mt-5 px-4 py-1.5 font-mono text-[11px] text-[#ffb000] border border-[#ffb000]/50 hover:bg-[#ffb000] hover:text-[#101214] transition-colors"
-                  >
-                    RETRY
-                  </button>
-                </div>
-              ) : filteredGames.length === 0 ? (
-                <div className="mt-16 mx-auto max-w-md text-center border border-[#2e3238] bg-[#16181b] px-6 py-10">
-                  <p className="font-mono text-[11px] tracking-widest text-[#767c82] uppercase" style={{ fontFamily: 'Hack, monospace' }}>no titles found</p>
-                  <p className="text-[13px] text-[#9aa0a6] mt-3">Adjust the filter, or rescan your library sources.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5">
-                  {filteredGames.map((game) => (
-                    <GameCard
-                      key={game.id}
-                      game={game}
-                      onSelect={(g) => {
-                        setSelectedGame(g);
-                        setIsSettingsOpen(true);
-                      }}
-                      onOpenSettings={(g) => {
-                        setSelectedGame(g);
-                        setIsSettingsOpen(true);
-                      }}
-                      onQuickLaunch={handleLaunchGame}
-                      copiedId={copiedId}
-                      onCopyCommand={handleCopyCommand}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {currentTab === 'fixes' && (
-            <FixesView
-              games={games}
-              onOpenSettings={(g) => {
-                setSelectedGame(g);
-                setIsSettingsOpen(true);
-              }}
-            />
-          )}
-
-          {currentTab === 'plugins' && (
-            <PluginsView
-              plugins={plugins}
-              onToggle={handleTogglePlugin}
-              onRefresh={loadData}
-            />
-          )}
-
-          {currentTab === 'system' && (
-            <SystemView
-              runners={protonVersions}
-              onRefresh={loadData}
-            />
-          )}
-        </div>
+      <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
+        {renderView()}
       </main>
 
-      {/* Game config modal */}
-      {isSettingsOpen && selectedGame && (
-        <GameModal
-          game={selectedGame}
-          protonVersions={protonVersions}
-          onClose={() => {
-            setIsSettingsOpen(false);
-            setSelectedGame(null);
-          }}
-          onSave={(updated) => {
-            setGames(games.map((g) => (g.id === updated.id ? updated : g)));
-            showNotification(`Updated ${updated.title} settings`);
-          }}
-          onLaunch={(updated) => {
-            handleLaunchGame(updated);
-            setIsSettingsOpen(false);
-          }}
+      {settingsGame && (
+        <SettingsModal
+          game={settingsGame}
+          runners={runners}
+          onClose={() => setSettingsFor(null)}
+          onSave={(s) => saveSettings(settingsGame.id, s)}
+          onCopied={() => notify('Copied to clipboard')}
         />
       )}
 
-      {/* Notification toast — instrument readout */}
-      {notification && (
+      {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
+
+      {notice && (
         <div
-          className={`fixed bottom-4 right-4 z-50 px-3 py-2 bg-[#16181b] border rounded-[3px] font-mono text-[11px] flex items-center gap-2.5 max-w-md ${NOTIF_STYLE[notification.kind]}`}
-          style={{ fontFamily: 'Hack, monospace', boxShadow: '0 6px 18px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35)' }}
           role="status"
+          className={cx(
+            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-xl border bg-[#191410] px-3 py-2 font-mono text-[11px]',
+            NOTICE_STYLE[notice.kind]
+          )}
+          style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}
         >
-          <span className={`w-1.5 h-1.5 flex-none rounded-full ${DOT_STYLE[notification.kind]}`} />
-          <span className="truncate">{notification.msg}</span>
+          <span className={cx('h-1.5 w-1.5 flex-none rounded-full', NOTICE_DOT[notice.kind])} />
+          <span className="truncate">{notice.msg}</span>
         </div>
       )}
     </div>
