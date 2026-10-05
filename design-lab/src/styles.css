@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; }
+  body { margin: 0; }
+  ::selection { background: rgba(0,0,0,.12); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      transition-duration: .01ms !important;
+    }
+  }
+}

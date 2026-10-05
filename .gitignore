@@ -22,3 +22,10 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# Design lab
+design-lab/node_modules/
+design-lab/dist/
+
+# Impeccable working state
+.impeccable/
