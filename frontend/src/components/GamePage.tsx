@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Loader2, Play, Settings2, Trophy } from 'lucide-react';
-import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, ProtonVersion, SessionEvent, Tweak } from '../types';
+import { ArrowLeft, Download, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
+import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from './ui';
-import { attentionReason, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
+import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 
@@ -20,6 +20,12 @@ interface GamePageProps {
   tweaks: Tweak[];
   onChangeSettings: (s: GameSettings, what: string) => void;
   onOpenSettings: () => void;
+  plugin?: StorePlugin; // plugin games only
+  job?: Job; // the game's active job, or its last failed one
+  onJob: (kind: JobKind) => void;
+  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onAllowFolder: (folder: string) => void;
+  onNavigate: (v: View) => void;
 }
 
 // Store metadata doesn't change during a session; keep it across navigations.
@@ -32,7 +38,7 @@ function useDetails(game: Game) {
     const cached = detailsCache.get(game.id);
     setDetails(cached ?? null);
     setError(null);
-    if (cached || game.store !== 'steam') return;
+    if (cached || game.source !== 'steam') return;
     let live = true;
     Effect.runPromise(LauncherApi.getGameDetails(game))
       .then((d) => {
@@ -44,7 +50,7 @@ function useDetails(game: Game) {
     // Refetch only when the game changes, not on settings edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.id]);
-  return { details, error, loading: !details && !error && game.store === 'steam' };
+  return { details, error, loading: !details && !error && game.source === 'steam' };
 }
 
 export function GamePage(p: GamePageProps) {
@@ -56,7 +62,10 @@ export function GamePage(p: GamePageProps) {
   const s = normalizeSettings(game.settings);
   const autoRunner = runners.find((r) => r.is_default);
   const runner = runners.find((r) => r.id === s.runner_id || r.name === s.runner_id);
-  const viaSteam = game.store === 'steam' && !game.executable;
+  const viaSteam = game.source === 'steam' && !game.executable;
+  const plugin = p.plugin;
+  const job = p.job;
+  const active = job && (job.state === 'queued' || job.state === 'running');
   const fix = game.fix_info;
   const shots = details?.screenshots ?? [];
   const ach = details?.achievements;
@@ -73,7 +82,7 @@ export function GamePage(p: GamePageProps) {
     ],
     ['DX layer', s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
     ['Wrappers', [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || 'none'],
-    ['Launch via', viaSteam ? 'Steam client' : 'Hydra'],
+    ['Launch via', viaSteam ? 'Steam client' : plugin ? `Hydra · ${plugin.name}` : 'Hydra'],
   ];
   const compat = fix
     ? needsAttention(game) ? attentionReason(game) : fix.description
@@ -103,7 +112,11 @@ export function GamePage(p: GamePageProps) {
             <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.14em]">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
               <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{storeLabel(game.store)}</span>
-              {game.size_on_disk && <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{game.size_on_disk}</span>}
+              {(formatBytes(game.size_bytes) || game.size_on_disk) && (
+                <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{formatBytes(game.size_bytes) || game.size_on_disk}</span>
+              )}
+              {!game.is_installed && <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/55">not installed</span>}
+              {game.update_available && <span className="rounded-lg bg-sky-400/15 px-2.5 py-1 text-sky-200 ring-1 ring-sky-300/30">update available</span>}
             </div>
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
@@ -114,9 +127,12 @@ export function GamePage(p: GamePageProps) {
                 {last && <div>last played {last}</div>}
               </div>
             )}
+            {!game.is_installed ? (
+              <InstallButton game={game} job={job} onInstall={() => p.onJob('install')} onCancel={(id) => p.onJobAction('cancel', id)} />
+            ) : (
             <button
               onClick={p.onPlay}
-              disabled={busy}
+              disabled={busy || game.outside_folder}
               title={session?.message}
               className={cx(
                 'flex items-center gap-2 rounded-2xl px-8 py-3.5 text-[15px] font-extrabold transition disabled:cursor-default',
@@ -134,9 +150,38 @@ export function GamePage(p: GamePageProps) {
               )}
               {playLabel}
             </button>
+            )}
           </div>
         </div>
       </section>
+
+      {game.is_installed && game.outside_folder && plugin && (
+        <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-5 py-4 ring-1 ring-amber-300/25">
+          <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
+            <p className="font-bold text-amber-200">Installed outside {plugin.name}'s folder</p>
+            <p>
+              Hydra only launches {plugin.name} games from <span className="font-mono text-[11px]">{plugin.install_folder}</span> or folders you allow.
+              This one is in <span className="font-mono text-[11px] text-white/90">{game.install_dir}</span>, probably from before Hydra managed it.
+            </p>
+          </div>
+          <button onClick={() => p.onAllowFolder(game.install_dir)} className={cx(btnNeutral, 'flex flex-none items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
+            <FolderCheck className="h-4 w-4" /> Allow this folder
+          </button>
+        </div>
+      )}
+
+      {!game.is_installed && !active && (game.note || (plugin && game.installable)) && (
+        <div className="mb-6 rounded-2xl bg-white/[0.04] px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-white/[0.07]">
+          {game.note && <p>{game.note}</p>}
+          {plugin && game.installable && (
+            <p className="font-mono text-[10.5px] text-white/45">
+              installs into {plugin.install_folder} ·{' '}
+              <button onClick={() => p.onNavigate({ name: 'plugins' })} className="underline decoration-white/25 underline-offset-2 hover:text-white/80">change</button>
+            </p>
+          )}
+          {job?.state === 'failed' && <p className="mt-1 font-mono text-[10.5px] text-red-300">last attempt failed: {job.error}</p>}
+        </div>
+      )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <div className="min-w-0 space-y-5">
@@ -195,7 +240,7 @@ export function GamePage(p: GamePageProps) {
             <button onClick={p.onOpenSettings} className={cx(btnNeutral, 'mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.1] px-5 py-2.5 text-[13px]')}>
               <Settings2 className="h-4 w-4" /> Launcher settings
             </button>
-            {game.store === 'steam' && (
+            {game.source === 'steam' && (
               <a
                 href={`https://www.protondb.com/app/${game.store_app_id}`}
                 target="_blank"
@@ -207,7 +252,11 @@ export function GamePage(p: GamePageProps) {
             )}
           </Panel>
 
-          {tweaks.length > 0 && (
+          {isPluginGame(game) && game.is_installed && plugin && (
+            <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} />
+          )}
+
+          {tweaks.length > 0 && game.is_installed && (
             <TweaksPanel game={game} tweaks={tweaks} viaSteam={viaSteam} onChange={p.onChangeSettings} onOpenSettings={p.onOpenSettings} />
           )}
         </aside>
@@ -222,6 +271,116 @@ export function GamePage(p: GamePageProps) {
         </section>
       )}
     </div>
+  );
+}
+
+function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => void }) {
+  const pct = job.percent >= 0 ? Math.round(job.percent) : null;
+  const what = job.state === 'queued' ? 'queued' : job.phase || job.kind;
+  return (
+    <div className="w-72 rounded-2xl bg-black/55 px-4 py-3 ring-1 ring-white/10 backdrop-blur">
+      <div className="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider">
+        <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
+        <button onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 text-white/50 transition hover:text-white">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-white/15" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+        <div className={cx('h-full rounded-full bg-amber-300 transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+      </div>
+      {job.state === 'running' && job.total > 0 && (
+        <div className="mt-1.5 font-mono text-[9.5px] tabular-nums text-white/45">
+          {formatBytes(job.bytes) || '0 B'} of {formatBytes(job.total)}
+          {job.speed > 0 && ` · ${formatBytes(job.speed)}/s`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InstallButton({ game, job, onInstall, onCancel }: { game: Game; job?: Job; onInstall: () => void; onCancel: (id: string) => void }) {
+  if (job && (job.state === 'queued' || job.state === 'running')) return <JobProgress job={job} onCancel={onCancel} />;
+  if (!game.installable) {
+    return (
+      <span className="rounded-2xl bg-white/[0.08] px-6 py-3.5 text-[13px] font-bold text-white/55" title={game.note}>
+        Can't install here
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={onInstall}
+      className="flex items-center gap-2 rounded-2xl bg-amber-300 px-8 py-3.5 text-[15px] font-extrabold text-[#130f0a] shadow-[0_12px_30px_rgba(252,211,77,.25)] transition hover:bg-amber-200"
+    >
+      <Download className="h-4 w-4" strokeWidth={3} />
+      {job?.state === 'failed' ? 'Retry install' : 'Install'}
+    </button>
+  );
+}
+
+/** Where a plugin game lives and what can be done with it. */
+function ManagePanel({
+  game,
+  plugin,
+  job,
+  onJob,
+  onJobAction,
+}: {
+  game: Game;
+  plugin: StorePlugin;
+  job?: Job;
+  onJob: (kind: JobKind) => void;
+  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  useEffect(() => setConfirm(false), [game.id]);
+  const active = job && (job.state === 'queued' || job.state === 'running');
+  return (
+    <Panel className="bg-white/[0.05]">
+      <h2 className="mb-2 text-[15px] font-bold">Installation</h2>
+      <div className="space-y-2 font-mono text-[10.5px]">
+        {[
+          ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
+          ['Folder', game.install_dir || '—'],
+          ['Version', game.version || '—'],
+          ['Size', formatBytes(game.size_bytes) || '—'],
+        ].map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
+            <span className="text-white/45">{k}</span>
+            <span className="truncate text-right text-white/85 select-text" title={v}>{v}</span>
+          </div>
+        ))}
+      </div>
+      {active ? (
+        <div className="mt-4"><JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} /></div>
+      ) : (
+        <div className="mt-4 flex gap-2">
+          {game.update_available && (
+            <button onClick={() => onJob('update')} className={cx(btnNeutral, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] text-sky-100')}>
+              <RefreshCw className="h-3.5 w-3.5" /> Update
+            </button>
+          )}
+          {plugin.capabilities.includes('install') && (
+            <button
+              onClick={() => (confirm ? (setConfirm(false), onJob('uninstall')) : setConfirm(true))}
+              onBlur={() => setConfirm(false)}
+              className={cx(
+                'flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[12.5px] font-bold transition',
+                confirm ? 'bg-red-500/80 text-white hover:bg-red-500' : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.1]'
+              )}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> {confirm ? 'Delete game files?' : 'Uninstall'}
+            </button>
+          )}
+        </div>
+      )}
+      {job?.state === 'failed' && !active && (
+        <p className="mt-2 font-mono text-[10px] text-red-300">
+          {job.kind} failed: {job.error}{' '}
+          <button onClick={() => onJobAction('retry', job.id)} className="underline underline-offset-2 hover:text-red-200">retry</button>
+        </p>
+      )}
+    </Panel>
   );
 }
 

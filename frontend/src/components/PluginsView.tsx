@@ -1,59 +1,402 @@
-import React from 'react';
-import { RefreshCw } from 'lucide-react';
-import type { PluginInfo } from '../types';
-import { EmptyState, MonoLabel, Panel, TogglePill, btnNeutral, cx } from './ui';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Effect } from 'effect';
+import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
+import { LauncherApi } from '../effect/runtime';
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { Modal } from './Modal';
+import { EmptyState, MonoLabel, Panel, btnNeutral, btnPrimary, cx } from './ui';
+
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface PluginsViewProps {
-  plugins: PluginInfo[];
-  onToggle: (id: string, enabled: boolean) => void;
-  onRefresh: () => void;
+  plugins: StorePlugin[];
+  warnings: SourceWarning[];
+  onPlugins: (p: StorePlugin[]) => void;
+  /** Approval, login and folder changes change what the library lists. */
+  onLibraryChanged: () => void;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 }
 
-export function PluginsView({ plugins, onToggle, onRefresh }: PluginsViewProps) {
+const STATUS: Record<PluginStatus, { label: string; style: string }> = {
+  ready: { label: 'approved', style: 'bg-emerald-400/10 text-emerald-300' },
+  unapproved: { label: 'needs approval', style: 'bg-amber-300/15 text-amber-200 ring-1 ring-amber-300/40' },
+  changed: { label: 'changed · re-approve', style: 'bg-orange-400/15 text-orange-200 ring-1 ring-orange-300/40' },
+  disabled: { label: 'disabled', style: 'bg-white/[0.06] text-white/45' },
+  'missing-requirements': { label: 'missing a tool', style: 'bg-orange-400/15 text-orange-200 ring-1 ring-orange-300/40' },
+  invalid: { label: 'invalid', style: 'bg-red-500/15 text-red-300' },
+};
+
+const BUILT_IN = [
+  { name: 'Steam', what: 'Reads your local Steam libraries and launches games through the Steam client.' },
+  { name: 'ProtonDB', what: 'Compatibility ratings and community notes for Steam games.' },
+];
+
+const hasAuth = (p: StorePlugin) => p.capabilities.includes('auth');
+
+export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
+  const [auth, setAuth] = useState<Record<string, AuthStatus | { error: string }>>({});
+  const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
+  const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const refresh = useCallback(
+    (rescan = false) =>
+      Effect.runPromise(rescan ? LauncherApi.rescanPlugins() : LauncherApi.listPlugins())
+        .then(onPlugins)
+        .catch((e) => onNotify(errMsg(e), 'err')),
+    [onPlugins, onNotify]
+  );
+
+  // Login state of every approved plugin with a login. Asking starts the plugin.
+  const readyIds = plugins.filter((p) => p.status === 'ready' && hasAuth(p)).map((p) => p.id).join(',');
+  useEffect(() => {
+    for (const id of readyIds ? readyIds.split(',') : []) {
+      Effect.runPromise(LauncherApi.authStatus(id))
+        .then((s) => setAuth((a) => ({ ...a, [id]: s })))
+        .catch((e) => setAuth((a) => ({ ...a, [id]: { error: errMsg(e) } })));
+    }
+  }, [readyIds]);
+
+  const act = (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => {
+    setBusy(id + what);
+    Effect.runPromise(program)
+      .then(() => {
+        onNotify(done);
+        return refresh().then(onLibraryChanged);
+      })
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(null));
+  };
+
+  const logout = (p: StorePlugin) =>
+    act(
+      p.id,
+      'logout',
+      LauncherApi.logout(p.id).pipe(Effect.tap((s: AuthStatus) => Effect.sync(() => setAuth((a) => ({ ...a, [p.id]: s }))))),
+      `Logged out of ${p.name}`
+    );
+
+  const chooseFolder = (p: StorePlugin) =>
+    Effect.runPromise(LauncherApi.choosePluginInstallFolder(p.id))
+      .then((path) => path && act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, path), `${p.name} installs into ${path}`))
+      .catch((e) => onNotify(errMsg(e), 'err'));
+
   return (
     <div className="p-7">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Plugins</h1>
           <p className="mt-0.5 max-w-xl text-[12.5px] text-white/50">
-            Store connectors and fix sources. Toggles are remembered for this session but don't change scanning yet.
+            Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Hydra only runs the ones you approve.
           </p>
         </div>
-        <button onClick={onRefresh} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
-          <RefreshCw className="h-3.5 w-3.5" /> Reload
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(errMsg(e), 'err'))} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
+            <FolderOpen className="h-3.5 w-3.5" /> Plugins folder
+          </button>
+          <button onClick={() => refresh(true).then(onLibraryChanged)} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
+            <RefreshCw className="h-3.5 w-3.5" /> Rescan
+          </button>
+        </div>
       </header>
 
+      <MonoLabel className="mb-3">store plugins</MonoLabel>
       {plugins.length === 0 ? (
-        <EmptyState label="no plugins">No plugins are registered.</EmptyState>
+        <EmptyState label="no store plugins">
+          Put a plugin folder in ~/.local/share/hydra/plugins and rescan. From Hydra's source: plugins/install.sh epic-legendary.
+        </EmptyState>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {plugins.map((p) => (
-            <Panel key={p.id} className="flex flex-col justify-between gap-4">
-              <div>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-[14px] font-bold">{p.name}</h3>
-                    <p className="font-mono text-[9.5px] text-white/45">v{p.version} · {p.author} · {p.store}</p>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {plugins.map((p) => {
+            const st = STATUS[p.status] ?? STATUS.invalid;
+            const a = auth[p.id];
+            const warning = warnings.find((w) => w.source === p.id);
+            return (
+              <Panel key={p.id} className="flex flex-col gap-4">
+                <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
+                      <p className="font-mono text-[9.5px] text-white/45">
+                        v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
+                      </p>
+                    </div>
+                    <span className={cx('flex-none rounded-md px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em]', st.style)}>{st.label}</span>
                   </div>
-                  <span className={cx('rounded-md px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em]', p.enabled ? 'bg-emerald-400/10 text-emerald-300' : 'bg-white/[0.06] text-white/45')}>
-                    {p.enabled ? 'enabled' : 'disabled'}
-                  </span>
+                  {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
+                  {p.problem && p.status !== 'missing-requirements' && (
+                    <p className={cx('mt-2 font-mono text-[10.5px]', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
+                  )}
                 </div>
-                <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>
-              </div>
-              <button
-                onClick={() => onToggle(p.id, !p.enabled)}
-                aria-pressed={p.enabled}
-                className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', p.enabled ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}
-              >
-                <MonoLabel className="text-white/70">{p.enabled ? 'disable plugin' : 'enable plugin'}</MonoLabel>
-                <TogglePill on={p.enabled} />
-              </button>
-            </Panel>
-          ))}
+
+                {p.missing.length > 0 && (
+                  <div className="rounded-xl bg-orange-400/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
+                    <MonoLabel className="mb-1.5 text-orange-200/80">install first</MonoLabel>
+                    {p.missing.map((r) => (
+                      <div key={r.bin} className="font-mono text-[11px] text-white/80">
+                        <span className="text-orange-200">{r.bin}</span>
+                        {r.hint && <> · <span className="select-text">{r.hint}</span></>}
+                      </div>
+                    ))}
+                    <p className="mt-1.5 text-[11px] text-white/45">Then rescan.</p>
+                  </div>
+                )}
+
+                {p.status === 'ready' && hasAuth(p) && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3.5 py-2.5">
+                    <span className="min-w-0 truncate text-[12px] text-white/70">
+                      {!a ? (
+                        <span className="flex items-center gap-2 text-white/45"><Loader2 className="h-3 w-3 animate-spin" /> checking login…</span>
+                      ) : 'error' in a ? (
+                        <span className="font-mono text-[10.5px] text-red-300">{a.error}</span>
+                      ) : a.loggedIn ? (
+                        <>Logged in{a.user ? <> as <span className="font-bold text-white/90">{a.user}</span></> : ''}</>
+                      ) : (
+                        <span className="text-amber-200">Logged out{warning?.needs_auth ? ': its games are hidden' : ''}</span>
+                      )}
+                    </span>
+                    {a && !('error' in a) && a.loggedIn ? (
+                      <button onClick={() => logout(p)} disabled={busy === p.id + 'logout'} className={cx(btnNeutral, 'flex flex-none items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+                        <LogOut className="h-3 w-3" /> Log out
+                      </button>
+                    ) : (
+                      <button onClick={() => setLoggingIn(p)} className={cx(btnPrimary, 'flex flex-none items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+                        <LogIn className="h-3 w-3" /> Log in
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {p.capabilities.includes('install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
+                  <div className="space-y-1 font-mono text-[10.5px]">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-white/45">installs into</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
+                        <button onClick={() => chooseFolder(p)} className="flex-none text-white/40 underline-offset-2 hover:text-white/80 hover:underline">change</button>
+                        {p.install_folder !== p.default_install_folder && (
+                          <button onClick={() => act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), `${p.name} installs into the Games folder again`)} className="flex-none text-white/40 underline-offset-2 hover:text-white/80 hover:underline">
+                            reset
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                    {p.extra_folders.map((f) => (
+                      <div key={f} className="flex justify-between gap-3">
+                        <span className="text-white/45">also allowed</span>
+                        <span className="truncate text-white/60 select-text" title={f}>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-auto flex gap-2">
+                  {(p.status === 'unapproved' || p.status === 'changed') && (
+                    <button onClick={() => setReviewing(p)} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px]')}>
+                      <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? 'Review and re-approve' : 'Review and approve'}
+                    </button>
+                  )}
+                  {(p.status === 'ready' || p.status === 'missing-requirements') && (
+                    <button
+                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), `${p.name} disabled`)}
+                      disabled={busy === p.id + 'toggle'}
+                      className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}
+                    >
+                      Disable
+                    </button>
+                  )}
+                  {p.status === 'disabled' && (
+                    <button
+                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), `${p.name} enabled`)}
+                      disabled={busy === p.id + 'toggle'}
+                      className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}
+                    >
+                      Enable
+                    </button>
+                  )}
+                </div>
+              </Panel>
+            );
+          })}
         </div>
       )}
+
+      <MonoLabel className="mb-3 mt-8">built in</MonoLabel>
+      <div className="grid gap-2 xl:grid-cols-2">
+        {BUILT_IN.map((b) => (
+          <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold">{b.name}</div>
+              <div className="text-[12px] text-white/50">{b.what}</div>
+            </div>
+            <span className="flex-none rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/45">built in</span>
+          </div>
+        ))}
+      </div>
+
+      {reviewing && (
+        <ApproveModal
+          plugin={reviewing}
+          onClose={() => setReviewing(null)}
+          onApprove={() => {
+            const p = reviewing;
+            setReviewing(null);
+            act(p.id, 'approve', LauncherApi.approvePlugin(p.id), `${p.name} approved`);
+          }}
+        />
+      )}
+      {loggingIn && (
+        <AuthModal
+          plugin={loggingIn}
+          onClose={() => setLoggingIn(null)}
+          onDone={(s) => {
+            const p = loggingIn;
+            setLoggingIn(null);
+            setAuth((a) => ({ ...a, [p.id]: s }));
+            onNotify(`Logged in to ${p.name}${s.user ? ` as ${s.user}` : ''}`);
+            onLibraryChanged();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ManifestRow({ label, items, empty }: { label: string; items: string[]; empty: string }) {
+  return (
+    <div className="flex gap-4 border-t border-white/[0.05] pt-2">
+      <span className="w-24 flex-none text-white/45">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-white/85 select-text">{items.length ? items.join(', ') : <span className="text-white/40">{empty}</span>}</span>
+    </div>
+  );
+}
+
+/** Shows what the plugin runs and declares before the user trusts it. */
+function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
+  return (
+    <Modal label={`Approve ${p.name}`} onClose={onClose} className="max-w-xl">
+      <div>
+        <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? `Re-approve ${p.name}` : `Approve ${p.name}`}</h2>
+        <p className="mt-1 font-mono text-[10px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
+        {p.status === 'changed' && (
+          <p className="mt-3 rounded-xl bg-orange-400/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
+            Its program changed since you approved it. If you didn't update it yourself, don't approve it.
+          </p>
+        )}
+
+        <div className="mt-4 space-y-2 font-mono text-[10.5px]">
+          <ManifestRow label="runs" items={[`${p.dir}/${p.exec}`]} empty="" />
+          <ManifestRow label="sha-256" items={[p.hash]} empty="" />
+          <ManifestRow label="can" items={p.capabilities} empty="nothing declared" />
+          <ManifestRow label="network" items={p.network} empty="no hosts declared" />
+          <ManifestRow label="reads" items={p.read} empty="no paths declared" />
+          <ManifestRow label="writes" items={p.write} empty="no paths declared" />
+          <ManifestRow
+            label="needs"
+            items={p.requires.map((r) => `${r.bin}${p.missing.some((m) => m.bin === r.bin) ? ' (missing)' : ''}`)}
+            empty="no other tools"
+          />
+          <ManifestRow label="installs into" items={[p.install_folder]} empty="" />
+        </div>
+
+        <div className="mt-4 flex gap-3 rounded-xl bg-white/[0.04] px-3.5 py-3 text-[11.5px] leading-relaxed text-white/60">
+          <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300/80" />
+          <p>
+            A store plugin runs with your user's permissions. The hosts and paths above are what it declares; Hydra doesn't enforce them yet. Hydra does check
+            every game it launches is inside the plugin's install folder. Approve plugins you trust.
+          </p>
+        </div>
+
+        <div className="mt-5 flex gap-2.5">
+          <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
+          <button onClick={onApprove} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Approve and enable</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const inputClass =
+  'w-full rounded-xl bg-white/[0.06] px-3.5 py-2.5 font-mono text-[11.5px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
+
+/** auth.begin → open the store's page and/or fill in fields → auth.complete. */
+function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: () => void; onDone: (s: AuthStatus) => void }) {
+  const [prompt, setPrompt] = useState<AuthPrompt | null>(null);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.authBegin(plugin.id))
+      .then(setPrompt)
+      .catch((e) => setError(errMsg(e)));
+  }, [plugin.id]);
+
+  const submit = () => {
+    setSubmitting(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.authComplete(plugin.id, values))
+      .then((s) => (s.loggedIn ? onDone(s) : setError('The store says you are still logged out.')))
+      .catch((e) => setError(errMsg(e)))
+      .finally(() => setSubmitting(false));
+  };
+
+  const filled = prompt?.fields.every((f) => (values[f.id] ?? '').trim()) ?? false;
+
+  return (
+    <Modal label={`Log in to ${plugin.name}`} onClose={onClose} className="max-w-lg">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (filled && !submitting) submit();
+        }}
+      >
+        <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
+        <p className="mt-1 text-[11.5px] text-white/45">Your login stays with {plugin.name}'s own tool; Hydra doesn't store it.</p>
+        {!prompt && !error && (
+          <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-white/45"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
+        )}
+        {prompt && (
+          <div className="mt-4 space-y-4">
+            {prompt.url && (
+              <div>
+                <MonoLabel className="mb-1.5">1 · log in on the store's page</MonoLabel>
+                <button type="button" onClick={() => BrowserOpenURL(prompt.url!)} className={cx(btnNeutral, 'flex w-full items-center justify-center gap-2 py-2.5 text-[12.5px]')}>
+                  <ExternalLink className="h-3.5 w-3.5" /> Open login page
+                </button>
+                <p className="mt-1.5 break-all font-mono text-[9.5px] text-white/35 select-text">{prompt.url}</p>
+              </div>
+            )}
+            {prompt.instructions && <p className="text-[12px] leading-relaxed text-white/65">{prompt.instructions}</p>}
+            <div className="space-y-3">
+              {prompt.url && <MonoLabel>2 · paste what the page shows</MonoLabel>}
+              {prompt.fields.map((f, i) => (
+                <label key={f.id} className="block">
+                  <span className="mb-1 block text-[12px] font-semibold text-white/75">{f.label}</span>
+                  <input
+                    autoFocus={i === 0 && !prompt.url}
+                    type={f.secret ? 'password' : 'text'}
+                    value={values[f.id] ?? ''}
+                    onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+                    placeholder={f.placeholder}
+                    spellCheck={false}
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {error && <p role="alert" className="mt-3 font-mono text-[10.5px] text-red-300">{error}</p>}
+        <div className="mt-5 flex gap-2.5">
+          <button type="button" onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
+          <button type="submit" disabled={!filled || submitting} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] disabled:cursor-default')}>
+            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Log in
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

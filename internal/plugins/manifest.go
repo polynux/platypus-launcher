@@ -62,7 +62,7 @@ type Requirement struct {
 }
 
 // Permissions are declared now and enforced by the bubblewrap sandbox later
-// (milestone 8). Until then they are shown to the user before approval.
+// (plan milestone 7). Until then they are shown to the user before approval.
 type Permissions struct {
 	Network []string `json:"network"`
 	Read    []string `json:"read"`
@@ -114,7 +114,7 @@ func (m Manifest) validate() error {
 	if !storeRe.MatchString(m.Store) {
 		bad("store %q must be lowercase letters, digits or '-'", m.Store)
 	}
-	// Data plugins without an executable arrive in milestone 2.
+	// Data plugins without an executable arrive in plan milestone 3.
 	if m.Exec == "" {
 		bad("exec is required")
 	} else if !filepath.IsLocal(m.Exec) {

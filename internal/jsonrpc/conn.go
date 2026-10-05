@@ -37,8 +37,13 @@ type Error struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+// Error is the other side's message, which users see; the code is for
+// errors.As.
 func (e *Error) Error() string {
-	return fmt.Sprintf("jsonrpc error %d: %s", e.Code, e.Message)
+	if e.Message == "" {
+		return fmt.Sprintf("error %d", e.Code)
+	}
+	return e.Message
 }
 
 // message covers requests, notifications and responses.

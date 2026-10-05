@@ -1,4 +1,5 @@
-export type StoreType = 'steam' | 'epic' | 'gog' | 'ubisoft' | 'custom';
+// Storefronts Hydra knows by name; store plugins may report others.
+export type StoreType = 'steam' | 'epic' | 'gog' | 'ubisoft' | 'custom' | (string & {});
 
 export interface ProtonVersion {
   id: string;
@@ -98,6 +99,8 @@ export interface SessionEvent {
 
 export interface Game {
   id: string;
+  /** Where the game comes from: 'steam', 'custom' or a store plugin id. */
+  source: string;
   store: StoreType;
   store_app_id: string;
   title: string;
@@ -112,16 +115,98 @@ export interface Game {
   last_played_at?: number; // unix seconds, from Steam's localconfig.vdf
   playtime_minutes?: number;
   size_on_disk?: string;
+  size_bytes?: number;
+  version?: string;
+  // Plugin games only.
+  update_available?: boolean;
+  installable?: boolean;
+  note?: string;
+  /** Installed outside the folders Hydra lets its plugin launch from. */
+  outside_folder?: boolean;
 }
 
-export interface PluginInfo {
+export interface SourceWarning {
+  source: string;
+  message: string;
+  needs_auth?: boolean;
+}
+
+export interface Library {
+  games: Game[];
+  warnings: SourceWarning[];
+}
+
+export type PluginStatus = 'ready' | 'invalid' | 'unapproved' | 'changed' | 'disabled' | 'missing-requirements';
+
+export interface PluginRequirement {
+  bin: string;
+  hint: string;
+}
+
+/** A store plugin found in ~/.local/share/hydra/plugins. */
+export interface StorePlugin {
   id: string;
   name: string;
-  author: string;
   version: string;
+  author: string;
   description: string;
-  enabled: boolean;
   store: string;
+  status: PluginStatus;
+  problem?: string;
+  missing: PluginRequirement[];
+  requires: PluginRequirement[];
+  capabilities: string[];
+  dir: string;
+  exec: string;
+  hash: string;
+  network: string[];
+  read: string[];
+  write: string[];
+  running: boolean;
+  install_folder: string;
+  default_install_folder: string;
+  extra_folders: string[];
+}
+
+export interface AuthStatus {
+  loggedIn: boolean;
+  user?: string;
+}
+
+export interface AuthField {
+  id: string;
+  label: string;
+  secret?: boolean;
+  placeholder?: string;
+}
+
+export interface AuthPrompt {
+  url?: string;
+  instructions?: string;
+  fields: AuthField[];
+}
+
+export type JobKind = 'install' | 'update' | 'uninstall';
+export type JobState = 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+
+export interface Job {
+  id: string;
+  kind: JobKind;
+  source: string;
+  game_id: string;
+  store_game_id: string;
+  title: string;
+  state: JobState;
+  install_dir?: string;
+  phase?: string;
+  bytes: number;
+  total: number;
+  speed: number; // bytes per second
+  percent: number; // -1 when unknown
+  error?: string;
+  attempts: number;
+  created_at: number;
+  updated_at: number;
 }
 
 /** Hydra-wide settings, persisted in ~/.local/share/hydra/settings.json. */
@@ -149,4 +234,5 @@ export type View =
   | { name: 'fixes' }
   | { name: 'runners' }
   | { name: 'plugins' }
+  | { name: 'downloads' }
   | { name: 'settings' };

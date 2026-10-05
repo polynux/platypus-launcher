@@ -1,6 +1,9 @@
 # Plan: store plugins and launcher-free installs
 
-Status: decisions taken (see end). Milestone 1 (plumbing) implemented on `feat/plugins-plumbing`.
+Status: decisions taken (see end). Milestones 1 (plumbing, `feat/plugins-plumbing`) and
+2 (store plugins end to end, `feat/plugins-e2e`) implemented. The protocol as built is in
+[docs/plugins/protocol.md](../plugins/protocol.md); "Changes during implementation" below
+lists where it differs from this plan.
 
 ## Goal
 
@@ -84,6 +87,8 @@ one code path for all stores.
 
 ### Protocol (api 1)
 
+As first planned; the reference is now [docs/plugins/protocol.md](../plugins/protocol.md).
+
 Hydra → plugin requests:
 
 | Method               | Returns                                                     |
@@ -108,8 +113,9 @@ and session tracking (`internal/session`).
 
 ### Core changes
 
-- `internal/stores`: a `Store` interface (`Library`, `Install`, `LaunchSpec`, …) with
-  two implementations: built-in Steam, and an `rpcStore` adapter around a plugin process.
+- `internal/stores`: a `Store` interface (`Library`, `Details`, `Launch`) with two
+  implementations: built-in Steam, and `stores.Plugin` around a plugin process. Installs
+  go through `internal/jobs`, not the interface.
 - `internal/plugins`: discovery (scan the plugins dir, validate manifests), process
   lifecycle (start on demand, restart with backoff, kill on shutdown), the JSON-RPC
   client, and `requires` checks.
@@ -221,20 +227,54 @@ it.
 
 ## Milestones
 
-1. **Plumbing**: `Store` interface with Steam behind it, persisted settings, Games
-   folder setting, plugin discovery, manifest validation and hash pinning, JSON-RPC
-   client, a tiny `echo` test plugin. No user-visible change beyond the setting.
-2. **Data plugins**: schema, loader, and moving the built-in curated fixes and tweaks
-   to that format. Quick win, and validates the trust-free path.
-3. **Epic via legendary**: auth, owned library, launching games legendary installed.
-   First real store plugin.
-4. **Installs**: job queue, progress events, Install/Uninstall UI, Downloads view,
-   free-space check, launch-spec validation.
-5. **GOG via gogdl**, then Amazon via nile. They should need no core changes; if they
+Reordered after milestone 1: plugins had no visible effect yet, so the whole store
+plugin path (old milestones 3 and 4) came before data plugins.
+
+1. **Plumbing** (done): `Store` interface with Steam behind it, persisted settings,
+   Games folder setting, plugin discovery, manifest validation and hash pinning,
+   JSON-RPC client, a tiny `echo` test plugin.
+2. **Store plugins end to end** (done): Plugins view with approval (manifest shown
+   first), enable/disable, login; plugin libraries merged into Library and Dashboard
+   with an installed/owned filter; launch-spec validation and session tracking for
+   plugin games; job queue with progress, cancel, free-space check and resume;
+   Install/Uninstall/Update on the game page; Downloads view; Epic via legendary as
+   the first real plugin.
+3. **Data plugins**: schema, loader, and moving the built-in curated fixes and tweaks
+   to that format. Validates the trust-free path.
+4. **GOG via gogdl**, then Amazon via nile. They should need no core changes; if they
    do, fix the protocol before calling api 1 stable.
-6. **Plugin authoring**: protocol reference, `hydra-plugin` scaffold, conformance test.
-7. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
-8. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
+5. **Plugin authoring**: the protocol reference exists; add a `hydra-plugin` scaffold
+   and a conformance test.
+6. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
+7. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
+
+## Changes during implementation
+
+- **Games are keyed by source, not store type.** `Game.Source` is `steam`, `custom` or a
+  plugin id; `Game.Store` is only the storefront for display. Plugin game ids are
+  `p.<plugin>.<game>`. This leaves room for steam-standalone next to built-in Steam.
+- **Store-client launches say how to find the game.** `game.launchSpec` with
+  `delegate: "store-client"` must return `command` (a tool from `requires`) and
+  `find.cmdline`, the strings that identify the game's process. Without that,
+  sessions can't be tracked. Steam itself uses the same mechanism internally.
+- **Hydra allocates job ids** and passes them to `game.install`/`update`/`uninstall`,
+  so a job keeps its id across plugin restarts and resumes. Added
+  `game.installSize` for the free-space check, and `auth.logout`.
+- **Auth prompts are uniform**: `auth.begin` returns an optional URL and always a list
+  of fields; the URL flow is "open the page, paste the code".
+- **Launch previews**: `game.launchSpec` takes `preview`, so the settings dialog's live
+  command preview doesn't fetch tokens; specs can list `redact` prefixes so tokens
+  stay out of previews and launch logs.
+- **Games installed before Hydra**: legendary may already have games outside Hydra's
+  folder. The launch check refuses them until the user allows that game's folder
+  (system folders and the home folder itself can't be allowed).
+- **Plugins get `HYDRA_PLUGIN_DATA`**, a private folder for their own state.
+- **Crash handling**: the plugin restarts lazily (next call, with backoff), but a
+  crash during a job requeues the job at once, which restarts the plugin.
+- **The placeholder plugin catalog is gone.** The Plugins view shows discovered
+  plugins and labels Steam and ProtonDB as built in.
+- **Updating a plugin means replacing the file** (rename over it). Overwriting a
+  running executable fails on Linux, and the new hash needs approval anyway.
 
 ## Decisions
 

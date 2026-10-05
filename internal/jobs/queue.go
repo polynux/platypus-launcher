@@ -521,10 +521,16 @@ func freeSpace(path string) (uint64, error) {
 	}
 }
 
+// human formats bytes in decimal units, like the UI and file managers.
 func human(b int64) string {
-	const gib = 1 << 30
-	if b >= gib {
-		return fmt.Sprintf("%.1f GiB", float64(b)/gib)
+	units := []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
+	v, i := float64(b), 0
+	for v >= 1000 && i < len(units)-1 {
+		v /= 1000
+		i++
 	}
-	return fmt.Sprintf("%.0f MiB", float64(b)/(1<<20))
+	if i == 0 || v >= 100 {
+		return fmt.Sprintf("%.0f %s", v, units[i])
+	}
+	return fmt.Sprintf("%.1f %s", v, units[i])
 }

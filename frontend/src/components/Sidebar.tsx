@@ -1,9 +1,10 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 import { cx, clock } from './ui';
+import { storeLabel } from '../lib/games';
 import type { SessionEvent, StoreType, View } from '../types';
 
-type NavKey = 'dashboard' | 'library' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'settings';
+type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'settings';
 
 interface SidebarProps {
   view: View;
@@ -13,6 +14,8 @@ interface SidebarProps {
   storeCounts: Record<string, number>;
   onPickSource: (s: StoreType) => void;
   gameCount: number;
+  downloadCount: number;
+  authNeeded: boolean; // a plugin waits for approval or login
   fixCount: number;
   runnerCount: number;
   lastScan: number | null;
@@ -23,19 +26,19 @@ const SOURCES: { key: StoreType; label: string }[] = [
   { key: 'steam', label: 'Steam' },
   { key: 'gog', label: 'GOG' },
   { key: 'epic', label: 'Epic' },
-  { key: 'custom', label: 'Sideloaded' },
 ];
 
 export function Sidebar(p: SidebarProps) {
   const active: NavKey = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
 
-  const nav: { key: NavKey; label: string; count?: number }[] = [
+  const nav: { key: NavKey; label: string; count?: number; dot?: boolean }[] = [
     { key: 'dashboard', label: 'Dashboard' },
     { key: 'library', label: 'Library', count: p.gameCount },
+    { key: 'downloads', label: 'Downloads', count: p.downloadCount || undefined },
     { key: 'activity', label: 'Activity' },
     { key: 'fixes', label: 'Fixes', count: p.fixCount || undefined },
     { key: 'runners', label: 'Runners', count: p.runnerCount || undefined },
-    { key: 'plugins', label: 'Plugins' },
+    { key: 'plugins', label: 'Plugins', dot: p.authNeeded },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -77,12 +80,20 @@ export function Sidebar(p: SidebarProps) {
           >
             <span>{n.label}</span>
             {n.count != null && <span className="rounded-full bg-white/[0.07] px-2 font-mono text-[9.5px] tabular-nums">{n.count}</span>}
+            {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label="needs attention" />}
           </button>
         ))}
       </nav>
 
       <div className="px-2 pb-1.5 pt-4 font-mono text-[9px] uppercase tracking-[0.18em] text-white/40">sources</div>
-      {SOURCES.filter((s) => s.key !== 'custom' || p.storeCounts.custom).map((s) => {
+      {[
+        ...SOURCES,
+        // Stores that only plugins provide, then sideloaded games.
+        ...Object.keys(p.storeCounts)
+          .filter((k) => k !== 'custom' && !SOURCES.some((s) => s.key === k))
+          .map((k) => ({ key: k, label: storeLabel(k) })),
+        ...(p.storeCounts.custom ? [{ key: 'custom', label: 'Sideloaded' }] : []),
+      ].map((s) => {
         const count = p.storeCounts[s.key] ?? 0;
         return (
           <button

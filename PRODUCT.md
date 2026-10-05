@@ -35,7 +35,8 @@ Linux desktop (WebKitGTK webview inside Wails), dark rooms, desktop sessions (Wa
 - Plugin registry: in-memory defaults; toggling has no runtime effect yet (known placeholder)
 - Custom game addition is currently local-state only (no backend persistence binding yet)
 - Per-game settings and the Games folder persist in ~/.local/share/hydra/settings.json (sideloaded games and their settings are still session-only)
-- Store plugins: discovery, manifest validation, hash pinning and a JSON-RPC client exist; nothing calls a plugin yet and the Plugins view still shows the static list
+- Store plugins (docs/plugins/protocol.md): approve, enable/disable and log in from the Plugins view; their games merge into the library (installed/owned); install, update, uninstall through a resumable download queue; launches validated and run through Hydra's runner pipeline
+- Epic via legendary (plugins/epic-legendary) is the first real store plugin; legendary is required, not bundled
 
 ## Brand Commitments
 

@@ -1,22 +1,21 @@
 import { Effect } from 'effect';
-import type { Game, GameDetails, GameFixInfo, GameSettings, LauncherSettings, ProtonVersion, PluginInfo, SessionEvent, Tweak } from '../types';
+import type {
+  AuthPrompt,
+  AuthStatus,
+  Game,
+  GameDetails,
+  GameFixInfo,
+  GameSettings,
+  Job,
+  LauncherSettings,
+  Library,
+  ProtonVersion,
+  SessionEvent,
+  StorePlugin,
+  Tweak,
+} from '../types';
 import { toBackendGame } from '../lib/settings';
-import {
-  GetGames,
-  GetProtonVersions,
-  LaunchGame,
-  ListPlugins,
-  TogglePlugin,
-  PreviewLaunchCommand,
-  GetGameFix,
-  GetGameDetails,
-  GetTweaks,
-  GetLauncherSettings,
-  SetGamesFolder,
-  ChooseGamesFolder,
-  GetGameSettings,
-  SaveGameSettings,
-} from '../../wailsjs/go/main/App';
+import * as App from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Wails injects window.go bindings into the webview at runtime.
@@ -43,157 +42,96 @@ function wailsUnavailable(op: string): Error {
   );
 }
 
+/** One bound Go call as an Effect. Go errors reject the Wails promise. */
+function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error> {
+  return Effect.tryPromise({
+    try: async () => {
+      if (!window.go?.main?.App) throw wailsUnavailable(op);
+      return (await fn()) as T;
+    },
+    catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  });
+}
+
+// Games cross to Go with their structured settings folded into env_vars.
+const backend = (g: Game) => toBackendGame(g) as never;
+
 export const LauncherApi = {
-  getGames: (): Effect.Effect<Game[], Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetGames');
-        // Go returns ([]types.Game, error): on error, Wails rejects the promise.
-        const games = await GetGames();
-        if (!Array.isArray(games)) {
-          throw new Error('GetGames returned unexpected payload');
-        }
-        return games as unknown as Game[];
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  // Every source merged; plugin failures arrive as warnings, not errors.
+  getLibrary: () =>
+    call<Library>('GetLibrary', async () => {
+      const lib = (await App.GetLibrary()) as unknown as Library;
+      if (!lib || !Array.isArray(lib.games)) throw new Error('GetLibrary returned unexpected payload');
+      return { games: lib.games, warnings: lib.warnings ?? [] };
     }),
 
-  getProtonVersions: (): Effect.Effect<ProtonVersion[], Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetProtonVersions');
-        const runners = await GetProtonVersions();
-        if (!Array.isArray(runners)) {
-          throw new Error('GetProtonVersions returned unexpected payload');
-        }
-        return runners as unknown as ProtonVersion[];
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  getProtonVersions: () => call<ProtonVersion[]>('GetProtonVersions', async () => (await App.GetProtonVersions()) ?? []),
 
-  getPlugins: (): Effect.Effect<PluginInfo[], Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('ListPlugins');
-        const plugins = await ListPlugins();
-        if (!Array.isArray(plugins)) {
-          throw new Error('ListPlugins returned unexpected payload');
-        }
-        return plugins as unknown as PluginInfo[];
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
 
-  togglePlugin: (id: string, enabled: boolean): Effect.Effect<boolean, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('TogglePlugin');
-        return await TogglePlugin(id, enabled);
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  previewCommand: (game: Game) => call<string>('PreviewLaunchCommand', () => App.PreviewLaunchCommand(backend(game))),
 
-  launchGame: (game: Game): Effect.Effect<string, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('LaunchGame');
-        return (await LaunchGame(toBackendGame(game) as never)) as string;
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
-
-  previewCommand: (game: Game): Effect.Effect<string, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('PreviewLaunchCommand');
-        const res = (await PreviewLaunchCommand(toBackendGame(game) as never)) as string | Record<string, string>;
-        return typeof res === 'string' ? res : JSON.stringify(res);
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
-
-  // Curated fix first, then ProtonDB summary. Resolves null when neither has data.
-  getGameFix: (game: Game): Effect.Effect<GameFixInfo | null, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetGameFix');
-        const fix = (await GetGameFix(game.store_app_id, game.title)) as unknown as GameFixInfo | null;
-        return fix && (fix.tier || fix.description) ? fix : null;
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+  // Curated fix first, then ProtonDB summary (Steam ids only). Resolves null
+  // when neither has data.
+  getGameFix: (game: Game) =>
+    call<GameFixInfo | null>('GetGameFix', async () => {
+      const fix = (await App.GetGameFix(game.source === 'steam' ? game.store_app_id : '', game.title)) as unknown as GameFixInfo | null;
+      return fix && (fix.tier || fix.description) ? fix : null;
     }),
 
   // Summary, screenshots and achievements for the game page (Steam only).
-  getGameDetails: (game: Game): Effect.Effect<GameDetails, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetGameDetails');
-        return (await GetGameDetails(toBackendGame(game) as never)) as unknown as GameDetails;
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  getGameDetails: (game: Game) => call<GameDetails>('GetGameDetails', () => App.GetGameDetails(backend(game))),
 
   // Hardware-based tweaks offered for every game.
-  getTweaks: (): Effect.Effect<Tweak[], Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetTweaks');
-        return ((await GetTweaks()) ?? []) as unknown as Tweak[];
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  getTweaks: () => call<Tweak[]>('GetTweaks', async () => (await App.GetTweaks()) ?? []),
 
-  getLauncherSettings: (): Effect.Effect<LauncherSettings, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetLauncherSettings');
-        return (await GetLauncherSettings()) as LauncherSettings;
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 
   // Empty path resets to the default (~/Games). Rejects relative paths and files.
-  setGamesFolder: (path: string): Effect.Effect<LauncherSettings, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('SetGamesFolder');
-        return (await SetGamesFolder(path)) as LauncherSettings;
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  setGamesFolder: (path: string) => call<LauncherSettings>('SetGamesFolder', () => App.SetGamesFolder(path)),
 
   // Native folder picker. Resolves '' when the user cancels.
-  chooseGamesFolder: (): Effect.Effect<string, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('ChooseGamesFolder');
-        return await ChooseGamesFolder();
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  chooseGamesFolder: () => call<string>('ChooseGamesFolder', () => App.ChooseGamesFolder()),
 
   // Saved per-game settings, keyed by game id, exactly as saveGameSettings stored them.
-  getGameSettings: (): Effect.Effect<Record<string, GameSettings>, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('GetGameSettings');
-        return ((await GetGameSettings()) ?? {}) as unknown as Record<string, GameSettings>;
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  getGameSettings: () => call<Record<string, GameSettings>>('GetGameSettings', async () => (await App.GetGameSettings()) ?? {}),
 
-  saveGameSettings: (id: string, settings: GameSettings): Effect.Effect<void, Error> =>
-    Effect.tryPromise({
-      try: async () => {
-        if (!window.go?.main?.App) throw wailsUnavailable('SaveGameSettings');
-        await SaveGameSettings(id, settings as unknown as Record<string, unknown>);
-      },
-      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
-    }),
+  saveGameSettings: (id: string, settings: GameSettings) =>
+    call<void>('SaveGameSettings', () => App.SaveGameSettings(id, settings as unknown as Record<string, unknown>)),
+
+  // Store plugins.
+  listPlugins: () => call<StorePlugin[]>('ListStorePlugins', async () => (await App.ListStorePlugins()) ?? []),
+  rescanPlugins: () => call<StorePlugin[]>('RescanPlugins', async () => (await App.RescanPlugins()) ?? []),
+  approvePlugin: (id: string) => call<void>('ApprovePlugin', () => App.ApprovePlugin(id)),
+  setPluginEnabled: (id: string, enabled: boolean) => call<void>('SetPluginEnabled', () => App.SetPluginEnabled(id, enabled)),
+  openPluginsFolder: () => call<void>('OpenPluginsFolder', () => App.OpenPluginsFolder()),
+  setPluginInstallFolder: (id: string, path: string) => call<void>('SetPluginInstallFolder', () => App.SetPluginInstallFolder(id, path)),
+  choosePluginInstallFolder: (id: string) => call<string>('ChoosePluginInstallFolder', () => App.ChoosePluginInstallFolder(id)),
+  allowGameFolder: (pluginId: string, path: string) => call<void>('AllowGameFolder', () => App.AllowGameFolder(pluginId, path)),
+
+  authStatus: (id: string) => call<AuthStatus>('PluginAuthStatus', () => App.PluginAuthStatus(id)),
+  authBegin: (id: string) => call<AuthPrompt>('PluginAuthBegin', () => App.PluginAuthBegin(id)),
+  authComplete: (id: string, fields: Record<string, string>) => call<AuthStatus>('PluginAuthComplete', () => App.PluginAuthComplete(id, fields)),
+  logout: (id: string) => call<AuthStatus>('PluginLogout', () => App.PluginLogout(id)),
+
+  // Install queue.
+  listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),
+  installGame: (game: Game) => call<Job>('InstallGame', () => App.InstallGame(backend(game))),
+  updateGame: (game: Game) => call<Job>('UpdateGame', () => App.UpdateGame(backend(game))),
+  uninstallGame: (game: Game) => call<Job>('UninstallGame', () => App.UninstallGame(backend(game))),
+  cancelJob: (id: string) => call<void>('CancelJob', () => App.CancelJob(id)),
+  retryJob: (id: string) => call<void>('RetryJob', () => App.RetryJob(id)),
+  clearFinishedJobs: () => call<void>('ClearFinishedJobs', () => App.ClearFinishedJobs()),
 };
 
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */
 export function onSession(cb: (e: SessionEvent) => void): () => void {
   if (!window.go?.main?.App) return () => {};
   return EventsOn('session', cb);
+}
+
+/** Subscribe to the install queue; every event carries the whole list. */
+export function onJobs(cb: (jobs: Job[]) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('jobs', cb);
 }

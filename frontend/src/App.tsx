@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
-import { LibraryView, type LibraryMode } from './components/LibraryView';
+import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage } from './components/GamePage';
 import { SettingsModal } from './components/SettingsModal';
 import { AddGameModal } from './components/AddGameModal';
@@ -11,10 +11,11 @@ import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
+import { DownloadsView } from './components/DownloadsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
-import { LauncherApi, onSession } from './effect/runtime';
+import { LauncherApi, onJobs, onSession } from './effect/runtime';
 import { needsAttention } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, PluginInfo, ProtonVersion, SessionEvent, StoreType, Tweak, View } from './types';
+import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind }
@@ -31,7 +32,10 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
-  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [plugins, setPlugins] = useState<StorePlugin[]>([]);
+  // Sources that failed to list (a logged-out plugin) on the last scan.
+  const [warnings, setWarnings] = useState<SourceWarning[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastScan, setLastScan] = useState<number | null>(null);
@@ -41,6 +45,7 @@ export function App() {
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<StoreType | 'all'>('all');
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
+  const [ownership, setOwnership] = useState<Ownership>('installed');
 
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -73,14 +78,16 @@ export function App() {
     (reason: 'startup' | 'rescan') => {
       setScanning(true);
       const program = Effect.all([
-        LauncherApi.getGames(),
+        LauncherApi.getLibrary(),
         LauncherApi.getProtonVersions(),
-        LauncherApi.getPlugins(),
+        LauncherApi.listPlugins(),
         // Unreadable saved settings shouldn't block the library.
         LauncherApi.getGameSettings().pipe(Effect.orElseSucceed(() => ({}) as Record<string, GameSettings>)),
       ]);
       return Effect.runPromise(program)
-        .then(([g, r, p, saved]) => {
+        .then(([lib, r, p, saved]) => {
+          const g = lib.games;
+          setWarnings(lib.warnings);
           // Keep session-only additions and edited settings across rescans;
           // on startup, settings come from disk.
           setGames((prev) => {
@@ -98,8 +105,14 @@ export function App() {
           setPlugins(p);
           setLoadError(null);
           setLastScan(Date.now());
-          const stores = new Set(g.map((x) => x.store)).size;
-          log({ type: 'update', detail: `Library scan · ${g.length} titles`, meta: `${stores} source${stores === 1 ? '' : 's'} · ${r.length} runners` });
+          const sources = new Set(g.map((x) => x.source)).size;
+          const installed = g.filter((x) => x.is_installed).length;
+          log({
+            type: 'update',
+            detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
+            meta: `${sources} source${sources === 1 ? '' : 's'} · ${r.length} runners`,
+          });
+          for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message.slice(0, 80) });
           if (reason === 'rescan') notify('Library rescanned');
         })
         .catch((err) => {
@@ -131,7 +144,7 @@ export function App() {
   // Each game is fetched at most once per session.
   const fixFetched = useRef(new Set<string>());
   useEffect(() => {
-    const todo = games.filter((g) => !g.fix_info && g.store !== 'custom' && !fixFetched.current.has(g.id));
+    const todo = games.filter((g) => g.is_installed && !g.fix_info && g.store !== 'custom' && !fixFetched.current.has(g.id));
     if (todo.length === 0) return;
     todo.forEach((g) => fixFetched.current.add(g.id));
     const program = Effect.forEach(
@@ -213,19 +226,59 @@ export function App() {
       });
   };
 
-  const togglePlugin = (id: string, enabled: boolean) => {
-    const program = Effect.gen(function* () {
-      yield* LauncherApi.togglePlugin(id, enabled);
-      return yield* LauncherApi.getPlugins();
-    });
-    Effect.runPromise(program)
-      .then((p) => { setPlugins(p); notify('Plugin updated'); })
-      .catch((err) => notify(`Plugin toggle failed: ${errMsg(err)}`, 'err'));
+  // The install queue. A finished install or uninstall changes the library,
+  // so it triggers a rescan.
+  const jobStates = useRef(new Map<string, string>());
+  const loadRef = useRef(loadData);
+  loadRef.current = loadData;
+  useEffect(() => {
+    const apply = (list: Job[], initial = false) => {
+      setJobs(list);
+      let rescan = false;
+      for (const j of list) {
+        const prev = jobStates.current.get(j.id);
+        jobStates.current.set(j.id, j.state);
+        if (initial || prev === j.state) continue;
+        const verb = j.kind === 'uninstall' ? 'Uninstalled' : j.kind === 'update' ? 'Updated' : 'Installed';
+        if (j.state === 'done') {
+          rescan = true;
+          notify(`${verb} ${j.title}`);
+          log({ type: 'download', game: j.title, detail: `${verb} ${j.title}`, meta: j.source });
+        } else if (j.state === 'failed') {
+          notify(`${j.title}: ${j.error ?? `${j.kind} failed`}`.slice(0, 120), 'err');
+          log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error?.slice(0, 80) });
+        }
+      }
+      if (rescan) loadRef.current('rescan');
+    };
+    Effect.runPromise(LauncherApi.listJobs()).then((l) => apply(l, true)).catch(() => {});
+    return onJobs((l) => apply(l));
+  }, [log, notify]);
+
+  const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
+    const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
+    Effect.runPromise(op(game))
+      .then(() => notify(`${kind === 'install' ? 'Install' : kind === 'update' ? 'Update' : 'Uninstall'} of ${game.title} queued`, 'busy'))
+      .catch((err) => notify(errMsg(err), 'err'));
+  };
+
+  const jobAction = (action: 'cancel' | 'retry', id: string) => {
+    Effect.runPromise(action === 'cancel' ? LauncherApi.cancelJob(id) : LauncherApi.retryJob(id)).catch((err) => notify(errMsg(err), 'err'));
+  };
+
+  const allowFolder = (game: Game, folder: string) => {
+    Effect.runPromise(LauncherApi.allowGameFolder(game.source, folder))
+      .then(() => {
+        notify(`Games in ${folder} can be launched now`);
+        loadData('rescan');
+      })
+      .catch((err) => notify(errMsg(err), 'err'));
   };
 
   const addGame = (title: string, executable: string) => {
     const game: Game = {
       id: 'custom_' + Date.now(),
+      source: 'custom',
       store: 'custom',
       store_app_id: 'custom',
       title,
@@ -257,10 +310,13 @@ export function App() {
     log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: 'session only' });
   };
 
+  const installedGames = useMemo(() => games.filter((g) => g.is_installed), [games]);
   const storeCounts = useMemo(
-    () => games.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
-    [games]
+    () => installedGames.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
+    [installedGames]
   );
+  const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
+  const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const openGame = (id: string) =>
     setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
@@ -288,7 +344,7 @@ export function App() {
       case 'dashboard':
         return (
           <Dashboard
-            games={games}
+            games={installedGames}
             runners={runners}
             activity={activity}
             dismissedHero={dismissedHero}
@@ -309,6 +365,11 @@ export function App() {
             onSource={setSource}
             mode={libraryMode}
             onMode={setLibraryMode}
+            ownership={ownership}
+            onOwnership={setOwnership}
+            warnings={warnings}
+            plugins={plugins}
+            jobs={activeJobs}
             lastScan={lastScan}
             onOpenGame={openGame}
             onAddGame={() => setAddOpen(true)}
@@ -329,6 +390,12 @@ export function App() {
             tweaks={tweaks}
             onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
             onOpenSettings={() => setSettingsFor(currentGame.id)}
+            plugin={plugins.find((x) => x.id === currentGame.source)}
+            job={jobFor(currentGame.id)}
+            onJob={(kind) => runJob(kind, currentGame)}
+            onJobAction={jobAction}
+            onAllowFolder={(folder) => allowFolder(currentGame, folder)}
+            onNavigate={setView}
           />
         ) : (
           <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>
@@ -340,7 +407,24 @@ export function App() {
       case 'runners':
         return <SystemView runners={runners} onRefresh={() => loadData('rescan')} scanning={scanning} />;
       case 'plugins':
-        return <PluginsView plugins={plugins} onToggle={togglePlugin} onRefresh={() => loadData('rescan')} />;
+        return (
+          <PluginsView
+            plugins={plugins}
+            warnings={warnings}
+            onPlugins={setPlugins}
+            onLibraryChanged={() => loadData('rescan')}
+            onNotify={notify}
+          />
+        );
+      case 'downloads':
+        return (
+          <DownloadsView
+            jobs={jobs}
+            onAction={jobAction}
+            onClear={() => Effect.runPromise(LauncherApi.clearFinishedJobs()).catch((err) => notify(errMsg(err), 'err'))}
+            onOpenGame={(id) => games.some((g) => g.id === id) && openGame(id)}
+          />
+        );
       case 'settings':
         return <LauncherSettingsView onNotify={notify} />;
     }
@@ -355,7 +439,9 @@ export function App() {
         onSearch={setSearch}
         storeCounts={storeCounts}
         onPickSource={(s) => { setSource(s); setView({ name: 'library' }); }}
-        gameCount={games.length}
+        gameCount={installedGames.length}
+        downloadCount={activeJobs.length}
+        authNeeded={warnings.some((w) => w.needs_auth) || plugins.some((x) => x.status === 'unapproved' || x.status === 'changed')}
         fixCount={games.filter(needsAttention).length}
         runnerCount={runners.length}
         lastScan={lastScan}

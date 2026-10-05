@@ -58,6 +58,72 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class AuthField {
+	    id: string;
+	    label: string;
+	    secret?: boolean;
+	    placeholder?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AuthField(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.secret = source["secret"];
+	        this.placeholder = source["placeholder"];
+	    }
+	}
+	export class AuthPrompt {
+	    url?: string;
+	    instructions?: string;
+	    fields: AuthField[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AuthPrompt(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.instructions = source["instructions"];
+	        this.fields = this.convertValues(source["fields"], AuthField);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AuthStatus {
+	    loggedIn: boolean;
+	    user?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AuthStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.loggedIn = source["loggedIn"];
+	        this.user = source["user"];
+	    }
+	}
 	export class GameFixInfo {
 	    source: string;
 	    tier: string;
@@ -120,6 +186,7 @@ export namespace types {
 	}
 	export class Game {
 	    id: string;
+	    source: string;
 	    store: string;
 	    store_app_id: string;
 	    title: string;
@@ -133,6 +200,12 @@ export namespace types {
 	    fix_info?: GameFixInfo;
 	    last_played_at?: number;
 	    playtime_minutes?: number;
+	    size_bytes?: number;
+	    version?: string;
+	    update_available?: boolean;
+	    installable?: boolean;
+	    note?: string;
+	    outside_folder?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -141,6 +214,7 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.source = source["source"];
 	        this.store = source["store"];
 	        this.store_app_id = source["store_app_id"];
 	        this.title = source["title"];
@@ -154,6 +228,12 @@ export namespace types {
 	        this.fix_info = this.convertValues(source["fix_info"], GameFixInfo);
 	        this.last_played_at = source["last_played_at"];
 	        this.playtime_minutes = source["playtime_minutes"];
+	        this.size_bytes = source["size_bytes"];
+	        this.version = source["version"];
+	        this.update_available = source["update_available"];
+	        this.installable = source["installable"];
+	        this.note = source["note"];
+	        this.outside_folder = source["outside_folder"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -218,6 +298,50 @@ export namespace types {
 	}
 	
 	
+	export class Job {
+	    id: string;
+	    kind: string;
+	    source: string;
+	    game_id: string;
+	    store_game_id: string;
+	    title: string;
+	    state: string;
+	    install_dir?: string;
+	    phase?: string;
+	    bytes: number;
+	    total: number;
+	    speed: number;
+	    percent: number;
+	    error?: string;
+	    attempts: number;
+	    created_at: number;
+	    updated_at: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Job(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.source = source["source"];
+	        this.game_id = source["game_id"];
+	        this.store_game_id = source["store_game_id"];
+	        this.title = source["title"];
+	        this.state = source["state"];
+	        this.install_dir = source["install_dir"];
+	        this.phase = source["phase"];
+	        this.bytes = source["bytes"];
+	        this.total = source["total"];
+	        this.speed = source["speed"];
+	        this.percent = source["percent"];
+	        this.error = source["error"];
+	        this.attempts = source["attempts"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	}
 	export class LauncherSettings {
 	    games_folder: string;
 	    default_games_folder: string;
@@ -232,28 +356,66 @@ export namespace types {
 	        this.default_games_folder = source["default_games_folder"];
 	    }
 	}
-	export class PluginInfo {
-	    id: string;
-	    name: string;
-	    author: string;
-	    version: string;
-	    description: string;
-	    enabled: boolean;
-	    store: string;
+	export class SourceWarning {
+	    source: string;
+	    message: string;
+	    needs_auth?: boolean;
 	
 	    static createFrom(source: any = {}) {
-	        return new PluginInfo(source);
+	        return new SourceWarning(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.author = source["author"];
-	        this.version = source["version"];
-	        this.description = source["description"];
-	        this.enabled = source["enabled"];
-	        this.store = source["store"];
+	        this.source = source["source"];
+	        this.message = source["message"];
+	        this.needs_auth = source["needs_auth"];
+	    }
+	}
+	export class Library {
+	    games: Game[];
+	    warnings: SourceWarning[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Library(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.games = this.convertValues(source["games"], Game);
+	        this.warnings = this.convertValues(source["warnings"], SourceWarning);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PluginRequirement {
+	    bin: string;
+	    hint: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PluginRequirement(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.bin = source["bin"];
+	        this.hint = source["hint"];
 	    }
 	}
 	export class ProtonVersion {
@@ -277,6 +439,77 @@ export namespace types {
 	        this.is_custom = source["is_custom"];
 	        this.is_default = source["is_default"];
 	    }
+	}
+	
+	export class StorePlugin {
+	    id: string;
+	    name: string;
+	    version: string;
+	    author: string;
+	    description: string;
+	    store: string;
+	    status: string;
+	    problem?: string;
+	    missing: PluginRequirement[];
+	    requires: PluginRequirement[];
+	    capabilities: string[];
+	    dir: string;
+	    exec: string;
+	    hash: string;
+	    network: string[];
+	    read: string[];
+	    write: string[];
+	    running: boolean;
+	    install_folder: string;
+	    default_install_folder: string;
+	    extra_folders: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new StorePlugin(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.version = source["version"];
+	        this.author = source["author"];
+	        this.description = source["description"];
+	        this.store = source["store"];
+	        this.status = source["status"];
+	        this.problem = source["problem"];
+	        this.missing = this.convertValues(source["missing"], PluginRequirement);
+	        this.requires = this.convertValues(source["requires"], PluginRequirement);
+	        this.capabilities = source["capabilities"];
+	        this.dir = source["dir"];
+	        this.exec = source["exec"];
+	        this.hash = source["hash"];
+	        this.network = source["network"];
+	        this.read = source["read"];
+	        this.write = source["write"];
+	        this.running = source["running"];
+	        this.install_folder = source["install_folder"];
+	        this.default_install_folder = source["default_install_folder"];
+	        this.extra_folders = source["extra_folders"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Tweak {
 	    id: string;

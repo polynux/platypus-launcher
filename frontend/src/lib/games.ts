@@ -28,7 +28,25 @@ export function heroImages(g: Game): string[] {
 }
 
 export function storeLabel(s: string): string {
-  return { steam: 'Steam', gog: 'GOG', epic: 'Epic', ubisoft: 'Ubisoft', custom: 'Sideloaded' }[s] ?? s;
+  return { steam: 'Steam', gog: 'GOG', epic: 'Epic', ubisoft: 'Ubisoft', custom: 'Sideloaded' }[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** 1.4 GB, 820 MB: decimal units, like file managers on Linux. */
+export function formatBytes(n?: number): string {
+  if (!n || n <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let i = 0;
+  let v = n;
+  while (v >= 1000 && i < units.length - 1) {
+    v /= 1000;
+    i++;
+  }
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+}
+
+/** Whether the game comes from a store plugin. */
+export function isPluginGame(g: Game): boolean {
+  return g.source !== 'steam' && g.source !== 'custom' && g.source !== '';
 }
 
 export function greeting(d = new Date()): string {
