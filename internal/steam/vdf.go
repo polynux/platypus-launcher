@@ -13,26 +13,11 @@ import (
 // ScanSteamLibrary scans local Steam library folders and installed ACF manifests.
 func ScanSteamLibrary() ([]types.Game, error) {
 	var games []types.Game
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return games, err
-	}
-
-	steamPaths := []string{
-		filepath.Join(home, ".local/share/Steam"),
-		filepath.Join(home, ".steam/steam"),
-	}
-
-	var steamRoot string
-	for _, p := range steamPaths {
-		if _, err := os.Stat(p); err == nil {
-			steamRoot = p
-			break
-		}
-	}
+	steamRoot := Root()
 	if steamRoot == "" {
 		return games, nil
 	}
+	stats := ReadPlayStats(ActiveUserDir(steamRoot))
 
 	// Find library folders
 	libraryFolders := []string{steamRoot}
@@ -74,6 +59,11 @@ func ScanSteamLibrary() ([]types.Game, error) {
 
 			if !seenAppIDs[game.StoreAppID] {
 				seenAppIDs[game.StoreAppID] = true
+				applyArt(&game, steamRoot)
+				if st, ok := stats[game.StoreAppID]; ok {
+					game.LastPlayed = st.LastPlayed
+					game.PlaytimeMin = st.PlaytimeMinute
+				}
 				games = append(games, game)
 			}
 		}
@@ -113,21 +103,15 @@ func parseAcfFile(path string, steamapps string) (types.Game, error) {
 
 	fullInstallDir := filepath.Join(steamapps, "common", installDir)
 
-	// Official Steam Grid CDN URLs
-	coverURL := "https://steamcdn-a.akamaihd.net/steam/apps/" + appID + "/library_600x900_2x.jpg"
-	bannerURL := "https://steamcdn-a.akamaihd.net/steam/apps/" + appID + "/header.jpg"
-
 	return types.Game{
 		ID:          "steam_" + appID,
 		Store:       types.StoreSteam,
 		StoreAppID:  appID,
 		Title:       name,
-		CoverURL:    coverURL,
-		BannerURL:   bannerURL,
 		InstallDir:  fullInstallDir,
 		IsInstalled: true,
 		Settings: types.GameSettings{
-			RunnerID:    "auto",
+			RunnerID:    "",
 			UseGameMode: true,
 			UseMangoHud: false,
 		},
@@ -149,4 +133,24 @@ func isSystemApp(appID, title string) bool {
 		return true
 	}
 	return false
+}
+
+// ArtURLPrefix is the asset-server route that serves Steam's local library
+// cache (see main.go). Paths after it are relative to appcache/librarycache.
+const ArtURLPrefix = "/hydra-art/steam/"
+
+const cdn = "https://steamcdn-a.akamaihd.net/steam/apps/"
+
+// applyArt prefers the art the Steam client already downloaded: newer titles
+// only have hashed CDN URLs, so the fixed CDN paths 404 for them.
+func applyArt(g *types.Game, root string) {
+	pick := func(fallback string, names ...string) string {
+		if rel := ArtPath(root, g.StoreAppID, names...); rel != "" {
+			return ArtURLPrefix + filepath.ToSlash(rel)
+		}
+		return fallback
+	}
+	g.CoverURL = pick(cdn+g.StoreAppID+"/library_600x900_2x.jpg", "library_600x900_2x.jpg", "library_600x900.jpg", "library_capsule.jpg")
+	g.BannerURL = pick(cdn+g.StoreAppID+"/header.jpg", "header.jpg", "library_header.jpg")
+	g.HeroURL = pick(cdn+g.StoreAppID+"/library_hero.jpg", "library_hero.jpg")
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import type { ActivityEvent, Game, ProtonVersion, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TweakDot, TIER_TEXT, btnNeutral, btnPrimary, cardClass, cx } from './ui';
-import { attentionReason, greeting, heroImages, needsAttention, storeLabel } from '../lib/games';
+import { attentionReason, byRecent, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 
 interface DashboardProps {
@@ -19,12 +19,8 @@ export function Dashboard({ games, runners, activity, dismissedHero, onDismissHe
   const waiting = games.filter(needsAttention);
   const hero = waiting.find((g) => g.id !== dismissedHero);
 
-  // "Continue playing" needs last-played data, which the backend doesn't provide
-  // yet. Until then, sort by last_played when present, otherwise keep scan order.
-  const continueGames = [...games]
-    .sort((a, b) => (b.last_played ?? '').localeCompare(a.last_played ?? ''))
-    .slice(0, 8);
-  const hasPlayData = games.some((g) => g.last_played);
+  const continueGames = [...games].sort(byRecent).slice(0, 8);
+  const hasPlayData = games.some((g) => g.last_played_at);
   const recentlyAdded = games.filter((g) => g.store === 'custom').slice(0, 5);
   const ready = games.filter((g) => g.is_installed).length;
 
@@ -93,7 +89,7 @@ export function Dashboard({ games, runners, activity, dismissedHero, onDismissHe
                 <div className="px-3 py-2.5">
                   <div className="truncate text-[12px] font-bold">{g.title}</div>
                   <div className="font-mono text-[9px] uppercase tracking-wider text-white/40">
-                    {g.playtime_hours != null ? `${g.playtime_hours}h · ` : ''}
+                    {hoursPlayed(g) != null ? `${hoursPlayed(g)}h · ` : ''}
                     {runnerShort(g.settings.runner_id, runners)}
                   </div>
                 </div>

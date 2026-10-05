@@ -4,7 +4,7 @@ import type { ActivityEvent, Game, ProtonVersion, StoreType, View } from '../typ
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
 import { Cover, EmptyState, Panel, TweakDot, TIER_DOT, TIER_TEXT, btnPrimary, cardClass, clock, cx } from './ui';
-import { heroImages, needsAttention, storeLabel } from '../lib/games';
+import { byRecent, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 
 export type LibraryMode = 'cards' | 'table';
@@ -53,9 +53,9 @@ function Segmented<T extends string>({ value, options, onChange, label, mono }: 
 export function LibraryView(p: LibraryProps) {
   const q = p.search.trim().toLowerCase();
   const filtered = p.games.filter((g) => (p.source === 'all' || g.store === p.source) && g.title.toLowerCase().includes(q));
-  const played = filtered.filter((g) => g.last_played).slice(0, 3);
+  const played = filtered.filter((g) => g.last_played_at).sort(byRecent).slice(0, 3);
   const rest = filtered.filter((g) => !played.includes(g));
-  const maxHours = Math.max(1, ...p.games.map((g) => g.playtime_hours ?? 0));
+  const maxHours = Math.max(1, ...p.games.map((g) => hoursPlayed(g) ?? 0));
   const recentlyAdded = p.games.filter((g) => g.store === 'custom').slice(0, 6);
 
   return (
@@ -104,12 +104,12 @@ export function LibraryView(p: LibraryProps) {
                         <span className={cx('font-mono text-[9px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-white/45')}>{g.fix_info?.tier}</span>
                       </div>
                       <div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-white/50">
-                        {g.playtime_hours != null && <><span>{g.playtime_hours}h</span><span>·</span></>}
-                        <span>{g.last_played}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
+                        {hoursPlayed(g) != null && <><span>{hoursPlayed(g)}h</span><span>·</span></>}
+                        <span>{lastPlayedLabel(g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
                       </div>
-                      {g.playtime_hours != null && (
+                      {hoursPlayed(g) != null && (
                         <div className="mt-2.5 h-1 rounded-full bg-white/[0.14]">
-                          <div className="h-full rounded-full bg-amber-300/80" style={{ width: `${Math.min(100, (g.playtime_hours / maxHours) * 100)}%` }} />
+                          <div className="h-full rounded-full bg-amber-300/80" style={{ width: `${Math.min(100, (hoursPlayed(g)! / maxHours) * 100)}%` }} />
                         </div>
                       )}
                     </div>
@@ -134,7 +134,7 @@ export function LibraryView(p: LibraryProps) {
                   <div className="px-2.5 py-2">
                     <div className="truncate text-[11.5px] font-bold">{g.title}</div>
                     <div className="truncate font-mono text-[9px] uppercase tracking-wider text-white/40">
-                      {[g.playtime_hours != null && `${g.playtime_hours}h`, g.last_played, storeLabel(g.store)].filter(Boolean).join(' · ')}
+                      {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store)].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                 </button>
@@ -176,9 +176,9 @@ export function LibraryView(p: LibraryProps) {
                   </span>
                   <span className={cx('font-mono text-[10px]', TIER_TEXT[tier ?? ''] ?? 'text-white/40')}>{tier ?? '—'}</span>
                   <span className="truncate font-mono text-[10px] text-white/45">{runnerShort(g.settings.runner_id, p.runners)}</span>
-                  <span className="text-right font-mono text-[10.5px] tabular-nums text-white/55">{g.playtime_hours ?? '—'}</span>
+                  <span className="text-right font-mono text-[10.5px] tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
                   <span className="text-right font-mono text-[10px] text-white/45">{g.size_on_disk ?? '—'}</span>
-                  <span className="text-right font-mono text-[10px] text-white/45">{g.last_played ?? '—'}</span>
+                  <span className="text-right font-mono text-[10px] text-white/45">{lastPlayedLabel(g) ?? '—'}</span>
                 </button>
               );
             })}

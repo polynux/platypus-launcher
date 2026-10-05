@@ -53,18 +53,47 @@ export interface GameFixInfo {
 }
 
 export interface Achievement {
+  id: string;
   name: string;
-  desc?: string;
+  description: string;
+  icon: string;
   unlocked: boolean;
-  date?: string;
-  rarity?: string;
+  unlocked_at: number; // unix seconds, 0 when locked or unknown
+  global_percent: number;
 }
 
 export interface Achievements {
   total: number;
-  unlockedCount: number;
-  score: number;
-  list: Achievement[];
+  unlocked: number; // -1 when the user's progress isn't cached locally
+  list: Achievement[]; // may be a subset of total
+}
+
+export interface GameDetails {
+  summary: string;
+  screenshots: string[] | null;
+  genres: string[] | null;
+  developers: string[] | null;
+  publishers: string[] | null;
+  release_date: string;
+  achievements: Achievements | null;
+}
+
+export interface Tweak {
+  id: string;
+  title: string;
+  reason: string;
+  kind: 'recommended' | 'troubleshoot';
+  env?: Record<string, string>;
+  wrappers?: string[];
+}
+
+export type SessionState = 'starting' | 'running' | 'stopped' | 'failed';
+
+export interface SessionEvent {
+  game_id: string;
+  state: SessionState;
+  pid?: number;
+  message?: string;
 }
 
 export interface Game {
@@ -74,18 +103,15 @@ export interface Game {
   title: string;
   cover_url: string;
   banner_url: string;
+  hero_url?: string;
   install_dir: string;
   executable: string;
   is_installed: boolean;
   settings: GameSettings;
   fix_info?: GameFixInfo;
-  // Target-schema fields (DESIGN §5). Not provided by the backend yet; every
-  // UI section that depends on them hides when they are absent.
-  last_played?: string | null;
-  playtime_hours?: number;
+  last_played_at?: number; // unix seconds, from Steam's localconfig.vdf
+  playtime_minutes?: number;
   size_on_disk?: string;
-  achievements?: Achievements | null;
-  screenshots?: string[] | null;
 }
 
 export interface PluginInfo {

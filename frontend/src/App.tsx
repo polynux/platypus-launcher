@@ -11,9 +11,9 @@ import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
-import { LauncherApi } from './effect/runtime';
+import { LauncherApi, onSession } from './effect/runtime';
 import { needsAttention } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, PluginInfo, ProtonVersion, StoreType, View } from './types';
+import type { ActivityEvent, Game, GameSettings, PluginInfo, ProtonVersion, SessionEvent, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind }
@@ -44,7 +44,9 @@ export function App() {
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
-  const [sessionPid, setSessionPid] = useState<number | null>(null);
+  // Games Hydra launched that are starting or running, keyed by game id.
+  const [sessions, setSessions] = useState<Record<string, SessionEvent>>({});
+  const [tweaks, setTweaks] = useState<Tweak[]>([]);
   const [dismissedHero, setDismissedHero] = useState<string | null>(null);
 
   // Activity is real session events only (scans, launches, setting changes).
@@ -102,6 +104,10 @@ export function App() {
   // StrictMode mounts effects twice in dev; scan only once on startup.
   const started = useRef(false);
   useEffect(() => {
+    Effect.runPromise(LauncherApi.getTweaks()).then(setTweaks).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (started.current) return;
     started.current = true;
     loadData('startup');
@@ -129,25 +135,55 @@ export function App() {
   }, [games, log]);
 
   const launch = (game: Game) => {
-    if (launchingId) return;
+    if (launchingId || sessions[game.id]) return;
     setLaunchingId(game.id);
     Effect.runPromise(LauncherApi.launchGame(game))
-      .then((res) => {
-        notify(res || `Launching ${game.title}`, 'busy');
-        const pid = res?.match(/PID (\d+)/);
-        setSessionPid(pid ? parseInt(pid[1], 10) : -1);
-        log({ type: 'session', game: game.title, detail: `Launched ${game.title}`, meta: pid ? `pid ${pid[1]}` : undefined });
-      })
+      .then((res) => notify(res || `Launching ${game.title}`, 'busy'))
       .catch((err) => notify(errMsg(err), 'err'))
       .finally(() => setLaunchingId(null));
   };
 
-  const saveSettings = (id: string, settings: GameSettings) => {
+  // Real session state comes from the backend: for Steam games it watches the
+  // game process under Steam's reaper, not the short-lived `steam` command.
+  const gamesRef = useRef(games);
+  gamesRef.current = games;
+  const sessionStart = useRef<Record<string, number>>({});
+  useEffect(
+    () =>
+      onSession((e) => {
+        const title = gamesRef.current.find((g) => g.id === e.game_id)?.title ?? e.game_id;
+        if (e.state === 'starting' || e.state === 'running') {
+          setSessions((prev) => ({ ...prev, [e.game_id]: e }));
+          if (e.state === 'running') {
+            sessionStart.current[e.game_id] = Date.now();
+            notify(`${title} is running`);
+            log({ type: 'session', game: title, detail: `Started ${title}`, meta: e.pid ? `pid ${e.pid}` : undefined });
+          }
+          return;
+        }
+        setSessions((prev) => {
+          const { [e.game_id]: _, ...rest } = prev;
+          return rest;
+        });
+        if (e.state === 'failed') {
+          notify(`${title}: ${e.message ?? 'launch failed'}`, 'err');
+          log({ type: 'session', game: title, detail: `${title} failed to start`, meta: e.message?.slice(0, 80) });
+        } else {
+          const started = sessionStart.current[e.game_id];
+          delete sessionStart.current[e.game_id];
+          const mins = started ? Math.round((Date.now() - started) / 60000) : 0;
+          log({ type: 'session', game: title, detail: `Stopped ${title}`, meta: started ? `${mins} min session` : undefined });
+        }
+      }),
+    [log, notify]
+  );
+
+  const saveSettings = (id: string, settings: GameSettings, what = 'Launcher settings changed') => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
     setSettingsFor(null);
     notify('Settings saved for this session');
-    if (g) log({ type: 'tweak', game: g.title, detail: `Launcher settings changed · ${g.title}`, meta: 'session only' });
+    if (g) log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
   };
 
   const togglePlugin = (id: string, enabled: boolean) => {
@@ -172,7 +208,7 @@ export function App() {
       executable,
       is_installed: true,
       settings: {
-        runner_id: runners[0]?.id ?? 'auto',
+        runner_id: 'auto',
         wine_prefix: '',
         launch_arguments: '',
         env_vars: {},
@@ -262,6 +298,9 @@ export function App() {
             onBack={() => setView({ name: view.from } as View)}
             onPlay={() => launch(currentGame)}
             launching={launchingId === currentGame.id}
+            session={sessions[currentGame.id]}
+            tweaks={tweaks}
+            onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
             onOpenSettings={() => setSettingsFor(currentGame.id)}
           />
         ) : (
@@ -291,7 +330,7 @@ export function App() {
         fixCount={games.filter(needsAttention).length}
         runnerCount={runners.length}
         lastScan={lastScan}
-        sessionPid={sessionPid}
+        sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">

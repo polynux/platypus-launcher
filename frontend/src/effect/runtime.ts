@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import type { Game, GameFixInfo, ProtonVersion, PluginInfo } from '../types';
+import type { Game, GameDetails, GameFixInfo, ProtonVersion, PluginInfo, SessionEvent, Tweak } from '../types';
 import { toBackendGame } from '../lib/settings';
 import {
   GetGames,
@@ -9,7 +9,10 @@ import {
   TogglePlugin,
   PreviewLaunchCommand,
   GetGameFix,
+  GetGameDetails,
+  GetTweaks,
 } from '../../wailsjs/go/main/App';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 // Wails injects window.go bindings into the webview at runtime.
 declare global {
@@ -114,4 +117,30 @@ export const LauncherApi = {
       },
       catch: (err) => (err instanceof Error ? err : new Error(String(err))),
     }),
+
+  // Summary, screenshots and achievements for the game page (Steam only).
+  getGameDetails: (game: Game): Effect.Effect<GameDetails, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('GetGameDetails');
+        return (await GetGameDetails(toBackendGame(game) as never)) as unknown as GameDetails;
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  // Hardware-based tweaks offered for every game.
+  getTweaks: (): Effect.Effect<Tweak[], Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('GetTweaks');
+        return ((await GetTweaks()) ?? []) as unknown as Tweak[];
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
 };
+
+/** Subscribe to launched-game state changes. Returns the unsubscribe function. */
+export function onSession(cb: (e: SessionEvent) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('session', cb);
+}

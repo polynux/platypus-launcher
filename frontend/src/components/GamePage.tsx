@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Loader2, Play, Settings2 } from 'lucide-react';
-import type { ActivityEvent, Game, ProtonVersion } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Effect } from 'effect';
+import { ArrowLeft, Loader2, Play, Settings2, Trophy } from 'lucide-react';
+import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, ProtonVersion, SessionEvent, Tweak } from '../types';
 import { ActivityFeed } from './ActivityFeed';
-import { Cover, MonoLabel, Panel, TierBadge, btnNeutral, cx } from './ui';
-import { attentionReason, heroImages, needsAttention, storeLabel } from '../lib/games';
-import { normalizeSettings } from '../lib/settings';
+import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from './ui';
+import { attentionReason, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
+import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
+import { LauncherApi } from '../effect/runtime';
 
 interface GamePageProps {
   game: Game;
@@ -14,34 +16,83 @@ interface GamePageProps {
   onBack: () => void;
   onPlay: () => void;
   launching: boolean;
+  session?: SessionEvent;
+  tweaks: Tweak[];
+  onChangeSettings: (s: GameSettings, what: string) => void;
   onOpenSettings: () => void;
 }
 
-export function GamePage({ game, runners, activity, backLabel, onBack, onPlay, launching, onOpenSettings }: GamePageProps) {
+// Store metadata doesn't change during a session; keep it across navigations.
+const detailsCache = new Map<string, GameDetails>();
+
+function useDetails(game: Game) {
+  const [details, setDetails] = useState<GameDetails | null>(() => detailsCache.get(game.id) ?? null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const cached = detailsCache.get(game.id);
+    setDetails(cached ?? null);
+    setError(null);
+    if (cached || game.store !== 'steam') return;
+    let live = true;
+    Effect.runPromise(LauncherApi.getGameDetails(game))
+      .then((d) => {
+        detailsCache.set(game.id, d);
+        if (live) setDetails(d);
+      })
+      .catch((e) => live && setError(e instanceof Error ? e.message : String(e)));
+    return () => { live = false; };
+    // Refetch only when the game changes, not on settings edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+  return { details, error, loading: !details && !error && game.store === 'steam' };
+}
+
+export function GamePage(p: GamePageProps) {
+  const { game, runners, activity, session, tweaks } = p;
   const [shot, setShot] = useState(0);
+  const { details, error, loading } = useDetails(game);
+  useEffect(() => setShot(0), [game.id]);
+
   const s = normalizeSettings(game.settings);
+  const autoRunner = runners.find((r) => r.is_default);
   const runner = runners.find((r) => r.id === s.runner_id || r.name === s.runner_id);
+  const viaSteam = game.store === 'steam' && !game.executable;
   const fix = game.fix_info;
-  const shots = game.screenshots ?? [];
-  const ach = game.achievements;
+  const shots = details?.screenshots ?? [];
+  const ach = details?.achievements;
   const events = activity.filter((e) => e.game === game.title).slice(0, 6);
+  const hours = hoursPlayed(game);
+  const last = lastPlayedLabel(game);
 
   const facts: [string, string][] = [
-    ['Runner', runner?.name ?? (s.runner_id === 'auto' || !s.runner_id ? 'auto (first available)' : `${s.runner_id} (missing)`)],
+    [
+      'Runner',
+      viaSteam
+        ? 'chosen in Steam'
+        : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? `auto · ${autoRunner?.name ?? 'none installed'}` : `${s.runner_id} (missing)`),
+    ],
     ['DX layer', s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
     ['Wrappers', [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || 'none'],
-    ['Launch via', game.store === 'steam' && !game.executable ? 'Steam client' : 'Hydra'],
+    ['Launch via', viaSteam ? 'Steam client' : 'Hydra'],
   ];
-  if (game.playtime_hours != null) facts.push(['Played', `${game.playtime_hours}h`]);
-
-  const summary = fix
+  const compat = fix
     ? needsAttention(game) ? attentionReason(game) : fix.description
-    : 'No compatibility reports loaded for this title yet. It runs with the default Proton setup.';
+    : 'No compatibility reports loaded for this title yet.';
+
+  const state = session?.state;
+  const busy = p.launching || state === 'starting' || state === 'running';
+  const playLabel = state === 'running' ? 'Playing' : state === 'starting' ? 'Starting' : p.launching ? 'Launching' : 'Play';
+
+  const about = [
+    details?.genres?.length ? details.genres.slice(0, 3).join(' · ') : null,
+    details?.developers?.length ? details.developers.join(', ') : null,
+    details?.release_date || null,
+  ].filter(Boolean) as string[];
 
   return (
     <div className="px-10 py-6">
-      <button onClick={onBack} className="flex items-center gap-1.5 rounded text-[12px] font-semibold text-white/50 transition hover:text-white">
-        <ArrowLeft className="h-3.5 w-3.5" /> {backLabel}
+      <button onClick={p.onBack} className="flex items-center gap-1.5 rounded text-[12px] font-semibold text-white/50 transition hover:text-white">
+        <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
       </button>
 
       <section className="relative mb-6 mt-4 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
@@ -57,50 +108,79 @@ export function GamePage({ game, runners, activity, backLabel, onBack, onPlay, l
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
           <div className="flex flex-none items-center gap-4">
-            {(game.playtime_hours != null || game.last_played) && (
+            {(hours != null || last) && (
               <div className="text-right font-mono text-[10px] leading-relaxed text-white/50">
-                {game.playtime_hours != null && <div>{game.playtime_hours}h logged</div>}
-                {game.last_played && <div>last {game.last_played}</div>}
+                {hours != null && <div>{hours}h logged</div>}
+                {last && <div>last played {last}</div>}
               </div>
             )}
             <button
-              onClick={onPlay}
-              disabled={launching}
-              className="flex items-center gap-2 rounded-2xl bg-amber-300 px-8 py-3.5 text-[15px] font-extrabold text-[#130f0a] shadow-[0_12px_30px_rgba(252,211,77,.25)] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-70"
+              onClick={p.onPlay}
+              disabled={busy}
+              title={session?.message}
+              className={cx(
+                'flex items-center gap-2 rounded-2xl px-8 py-3.5 text-[15px] font-extrabold transition disabled:cursor-default',
+                state === 'running'
+                  ? 'bg-emerald-400 text-[#0b1a12] shadow-[0_12px_30px_rgba(52,211,153,.25)]'
+                  : 'bg-amber-300 text-[#130f0a] shadow-[0_12px_30px_rgba(252,211,77,.25)] hover:bg-amber-200 disabled:opacity-80'
+              )}
             >
-              {launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
-              {launching ? 'Launching' : 'Play'}
+              {state === 'running' ? (
+                <span className="h-2.5 w-2.5 rounded-full bg-[#0b1a12]" />
+              ) : busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 fill-current" />
+              )}
+              {playLabel}
             </button>
           </div>
         </div>
       </section>
 
-      <div className={cx('mb-6 grid gap-5', shots.length > 0 && 'lg:grid-cols-[1.6fr_1fr]')}>
-        {shots.length > 0 && (
-          <div className="min-w-0 space-y-3">
-            <div className="overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
-              <img key={shot} src={shots[shot]} alt={`${game.title} screenshot ${shot + 1}`} className="aspect-video w-full object-cover" />
+      <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+        <div className="min-w-0 space-y-5">
+          {shots.length > 0 && (
+            <div className="space-y-3">
+              <div className="overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
+                <img key={shot} src={shots[shot]} alt={`${game.title} screenshot ${shot + 1}`} className="aspect-video w-full object-cover" />
+              </div>
+              <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1">
+                {shots.map((src, i) => (
+                  <button
+                    key={src}
+                    onClick={() => setShot(i)}
+                    aria-label={`Show screenshot ${i + 1}`}
+                    aria-pressed={i === shot}
+                    className={cx('aspect-video w-[150px] flex-none overflow-hidden rounded-xl transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
+                  >
+                    <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1">
-              {shots.map((src, i) => (
-                <button
-                  key={src}
-                  onClick={() => setShot(i)}
-                  aria-label={`Show screenshot ${i + 1}`}
-                  aria-pressed={i === shot}
-                  className={cx('aspect-video w-[150px] flex-none overflow-hidden rounded-xl transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
-                >
-                  <img src={src} alt="" className="h-full w-full object-cover" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+          )}
 
-        <aside className={cx('space-y-5', shots.length === 0 && 'grid gap-5 space-y-0 lg:grid-cols-[1.6fr_1fr]')}>
           <Panel className="bg-white/[0.05]">
-            <h2 className="mb-2 text-[15px] font-bold">Summary</h2>
-            <p className="text-[13px] leading-relaxed text-white/65">{summary}</p>
+            <h2 className="mb-2 text-[15px] font-bold">About</h2>
+            {loading ? (
+              <div className="space-y-2">
+                <div className="h-3 w-full animate-pulse rounded bg-white/[0.06]" />
+                <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.06]" />
+              </div>
+            ) : details?.summary ? (
+              <p className="text-[13px] leading-relaxed text-white/70">{details.summary}</p>
+            ) : (
+              <p className="text-[13px] text-white/45">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
+            )}
+            {about.length > 0 && <p className="mt-3 font-mono text-[10.5px] text-white/45">{about.join('  ·  ')}</p>}
+          </Panel>
+        </div>
+
+        <aside className="min-w-0 space-y-5">
+          <Panel className="bg-white/[0.05]">
+            <h2 className="mb-2 text-[15px] font-bold">Compatibility</h2>
+            <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
             {fix?.winetricks && fix.winetricks.length > 0 && (
               <p className="mt-2 font-mono text-[10.5px] text-sky-200/80">recipe: winetricks {fix.winetricks.join(' ')}</p>
             )}
@@ -112,9 +192,7 @@ export function GamePage({ game, runners, activity, backLabel, onBack, onPlay, l
                 </div>
               ))}
             </div>
-          </Panel>
-          <div className="space-y-3">
-            <button onClick={onOpenSettings} className={cx(btnNeutral, 'flex w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.1] px-5 py-3 text-[13px]')}>
+            <button onClick={p.onOpenSettings} className={cx(btnNeutral, 'mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.1] px-5 py-2.5 text-[13px]')}>
               <Settings2 className="h-4 w-4" /> Launcher settings
             </button>
             {game.store === 'steam' && (
@@ -122,35 +200,20 @@ export function GamePage({ game, runners, activity, backLabel, onBack, onPlay, l
                 href={`https://www.protondb.com/app/${game.store_app_id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="block text-center font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:text-white/80"
+                className="mt-3 block text-center font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:text-white/80"
               >
                 protondb reports ↗
               </a>
             )}
-          </div>
+          </Panel>
+
+          {tweaks.length > 0 && (
+            <TweaksPanel game={game} tweaks={tweaks} viaSteam={viaSteam} onChange={p.onChangeSettings} onOpenSettings={p.onOpenSettings} />
+          )}
         </aside>
       </div>
 
-      {ach && ach.total > 0 && (
-        <section className="pb-8">
-          <div className="mb-3.5 flex items-baseline justify-between">
-            <h2 className="text-[16px] font-bold tracking-tight">Achievements</h2>
-            <span className="font-mono text-[11px] tabular-nums text-white/45">{ach.unlockedCount}/{ach.total} · {ach.score}%</span>
-          </div>
-          <div className="mb-4 h-1.5 rounded-full bg-white/[0.08]">
-            <div className="h-full rounded-full bg-amber-300" style={{ width: `${ach.score}%` }} />
-          </div>
-          <div className="ach-grid">
-            {ach.list.map((a) => (
-              <div key={a.name} title={a.desc} className={cx('rounded-2xl p-3.5 ring-1', a.unlocked ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'opacity-40 ring-white/[0.06]')}>
-                <div className={cx('grid h-10 w-10 place-items-center rounded-xl text-[15px]', a.unlocked ? 'bg-amber-300/15 ring-1 ring-amber-300/40' : 'bg-white/[0.05]')}>★</div>
-                <div className="mt-2 truncate text-[12px] font-bold">{a.name}</div>
-                <div className="font-mono text-[9px] text-white/40">{a.unlocked ? a.date : a.rarity}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {ach && ach.total > 0 && <AchievementsSection ach={ach} />}
 
       {events.length > 0 && (
         <section className="pb-10">
@@ -158,6 +221,128 @@ export function GamePage({ game, runners, activity, backLabel, onBack, onPlay, l
           <ActivityFeed events={events} />
         </section>
       )}
+    </div>
+  );
+}
+
+function TweaksPanel({
+  game,
+  tweaks,
+  viaSteam,
+  onChange,
+  onOpenSettings,
+}: {
+  game: Game;
+  tweaks: Tweak[];
+  viaSteam: boolean;
+  onChange: (s: GameSettings, what: string) => void;
+  onOpenSettings: () => void;
+}) {
+  const groups: [string, Tweak[]][] = [
+    ['recommended', tweaks.filter((t) => t.kind === 'recommended')],
+    ['if something breaks', tweaks.filter((t) => t.kind === 'troubleshoot')],
+  ];
+  return (
+    <Panel className="bg-white/[0.05]">
+      <h2 className="text-[15px] font-bold">Suggested tweaks</h2>
+      <p className="mt-1 text-[11.5px] leading-relaxed text-white/45">
+        Based on this machine, not the game's rating: a platinum game can still need them on your GPU.
+        {viaSteam && (
+          <>
+            {' '}Steam applies these only through the game's{' '}
+            <button onClick={onOpenSettings} className="underline decoration-white/30 underline-offset-2 hover:text-white/80">launch options</button>.
+          </>
+        )}
+      </p>
+      {groups.map(([label, list]) =>
+        list.length === 0 ? null : (
+          <div key={label} className="mt-3">
+            <MonoLabel className="mb-1.5">{label}</MonoLabel>
+            <div className="space-y-1.5">
+              {list.map((t) => {
+                const on = tweakApplied(game.settings, t);
+                return (
+                  <button
+                    key={t.id}
+                    role="switch"
+                    aria-checked={on}
+                    onClick={() => onChange(setTweak(game.settings, t, !on), `${on ? 'Removed' : 'Applied'} "${t.title}"`)}
+                    className={cx('flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ring-1 transition', on ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06] hover:bg-white/[0.04]')}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[12.5px] font-semibold text-white/90">{t.title}</span>
+                      <span className="block text-[11px] leading-snug text-white/50">{t.reason}</span>
+                      {t.env && Object.keys(t.env).length > 0 && (
+                        <span className="mt-1 block truncate font-mono text-[9.5px] text-sky-200/60">
+                          {Object.entries(t.env).map(([k, v]) => `${k}=${v}`).join(' ')}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex flex-none pt-0.5"><TogglePill on={on} /></span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )
+      )}
+    </Panel>
+  );
+}
+
+function AchievementsSection({ ach }: { ach: NonNullable<GameDetails['achievements']> }) {
+  const known = ach.unlocked >= 0;
+  const pct = known ? Math.round((ach.unlocked / ach.total) * 100) : 0;
+  return (
+    <section className="pb-8">
+      <div className="mb-3.5 flex items-baseline justify-between">
+        <h2 className="text-[16px] font-bold tracking-tight">Achievements</h2>
+        <span className="font-mono text-[11px] tabular-nums text-white/45">
+          {known ? `${ach.unlocked}/${ach.total} · ${pct}%` : `${ach.total} total`}
+        </span>
+      </div>
+      {known ? (
+        <div className="mb-4 h-1.5 rounded-full bg-white/[0.08]">
+          <div className="h-full rounded-full bg-amber-300" style={{ width: `${pct}%` }} />
+        </div>
+      ) : (
+        <p className="mb-4 text-[11.5px] text-white/45">
+          Your progress isn't cached yet. Open this game once in Steam's library and it shows up here.
+        </p>
+      )}
+      <div className="ach-grid">
+        {ach.list.map((a) => (
+          <AchievementCard key={a.id || a.name} a={a} known={known} />
+        ))}
+      </div>
+      {ach.list.length < ach.total && (
+        <p className="mt-3 font-mono text-[10px] text-white/35">
+          showing {ach.list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the Steam store'}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function AchievementCard({ a, known }: { a: Achievement; known: boolean }) {
+  const dim = known && !a.unlocked;
+  const meta = a.unlocked && a.unlocked_at
+    ? new Date(a.unlocked_at * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+    : a.global_percent
+      ? `${a.global_percent.toFixed(1)}% of players`
+      : '';
+  return (
+    <div title={a.description} className={cx('flex gap-3 rounded-2xl p-3 ring-1', a.unlocked ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06]')}>
+      {a.icon ? (
+        <img src={a.icon} alt="" loading="lazy" className={cx('h-11 w-11 flex-none rounded-lg', dim && 'opacity-40 grayscale')} />
+      ) : (
+        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-white/[0.05]"><Trophy className="h-4 w-4 text-white/40" /></span>
+      )}
+      <div className={cx('min-w-0', dim && 'opacity-60')}>
+        <div className="truncate text-[12px] font-bold">{a.name}</div>
+        {a.description && <div className="line-clamp-2 text-[10.5px] leading-snug text-white/50">{a.description}</div>}
+        {meta && <div className="mt-0.5 font-mono text-[9px] text-white/40">{meta}</div>}
+      </div>
     </div>
   );
 }

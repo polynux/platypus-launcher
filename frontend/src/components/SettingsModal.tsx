@@ -63,6 +63,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const tricks = draft.winetricks ?? [];
   const runnerOptions: ProtonVersion[] = runners;
   const selectedRunner = draft.runner_id;
+  const autoPick = runners.find((r) => r.is_default);
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
@@ -98,7 +99,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           <div>
             <MonoLabel className="mb-2">runner</MonoLabel>
             <div role="radiogroup" aria-label="Runner" className="space-y-2">
-              {[{ id: 'auto', name: 'Automatic', path: 'first detected runner', is_system: false, is_custom: false, is_default: false } as ProtonVersion, ...runnerOptions].map((r) => {
+              {[{ id: 'auto', name: 'Automatic', path: autoPick ? `uses ${autoPick.name} · newest GE-Proton, then Experimental` : 'no runner installed', is_system: false, is_custom: false, is_default: false } as ProtonVersion, ...runnerOptions].map((r) => {
                 const on = selectedRunner === r.id || (r.id === 'auto' && !selectedRunner);
                 return (
                   <button

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search } from 'lucide-react';
 import { cx, clock } from './ui';
-import type { StoreType, View } from '../types';
+import type { SessionEvent, StoreType, View } from '../types';
 
 type NavKey = 'dashboard' | 'library' | 'activity' | 'fixes' | 'runners' | 'plugins';
 
@@ -16,7 +16,7 @@ interface SidebarProps {
   fixCount: number;
   runnerCount: number;
   lastScan: number | null;
-  sessionPid: number | null;
+  sessions: (SessionEvent & { title: string })[];
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -100,14 +100,24 @@ export function Sidebar(p: SidebarProps) {
 
       {/* Pinned footer: fixed content, never grows (friends panel omitted until presence is real). */}
       <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
-        {p.sessionPid !== null && (
-          <div className="flex items-center gap-2 rounded-xl bg-emerald-400/[0.08] px-3 py-2 ring-1 ring-emerald-300/25">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="font-mono text-[9.5px] uppercase tracking-wider text-emerald-200">
-              in session{p.sessionPid > 0 ? ` · pid ${p.sessionPid}` : ''}
-            </span>
-          </div>
-        )}
+        {p.sessions.map((e) => {
+          const running = e.state === 'running';
+          return (
+            <div
+              key={e.game_id}
+              title={e.message}
+              className={cx('flex items-center gap-2 rounded-xl px-3 py-2 ring-1', running ? 'bg-emerald-400/[0.08] ring-emerald-300/25' : 'bg-amber-300/[0.07] ring-amber-300/25')}
+            >
+              <span className={cx('h-2 w-2 flex-none rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-amber-300')} />
+              <span className="min-w-0 flex-1">
+                <span className={cx('block font-mono text-[9px] uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
+                  {running ? 'playing' : 'starting'}
+                </span>
+                <span className="block truncate text-[11.5px] font-semibold text-white/85">{e.title}</span>
+              </span>
+            </div>
+          );
+        })}
         <div className="px-1.5 font-mono text-[9px] text-white/35">
           hydra v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>

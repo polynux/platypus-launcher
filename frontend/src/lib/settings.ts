@@ -1,4 +1,4 @@
-import type { Game, GameSettings, HudPreset, SyncMode, DxLayer, Upscaler } from '../types';
+import type { Game, GameSettings, HudPreset, SyncMode, DxLayer, Tweak, Upscaler } from '../types';
 
 // Proton flags the modal exposes. Each one is a real Proton env var toggled to 1.
 export const PROTON_FLAGS: { key: string; desc: string }[] = [
@@ -134,4 +134,39 @@ export function runnerShort(runnerId: string, runners: { id: string; name: strin
   if (!runnerId || runnerId === 'auto') return 'auto';
   const r = runners.find((x) => x.id === runnerId || x.name === runnerId);
   return (r?.name ?? runnerId).split(' ')[0];
+}
+
+/** Whether every env var and wrapper of a tweak is already in the settings. */
+export function tweakApplied(s: GameSettings, t: Tweak): boolean {
+  const env = toBackendGame({ settings: s } as Game).settings.env_vars;
+  const n = normalizeSettings(s);
+  const envOk = Object.entries(t.env ?? {}).every(([k, v]) => env[k] === v);
+  const wrapOk = (t.wrappers ?? []).every((w) => (w === 'gamemode' ? n.use_gamemode : w === 'mangohud' ? n.mangohud_preset !== 'off' : false));
+  return envOk && wrapOk;
+}
+
+/** Turn a tweak on or off. Env is folded flat, edited, then re-normalized so
+ *  managed keys (PROTON_USE_NTSYNC → sync_mode, etc.) land in their fields. */
+export function setTweak(s: GameSettings, t: Tweak, on: boolean): GameSettings {
+  const flat = toBackendGame({ settings: s } as Game).settings;
+  const env = { ...flat.env_vars };
+  for (const [k, v] of Object.entries(t.env ?? {})) {
+    if (on) env[k] = v;
+    else delete env[k];
+  }
+  let next: GameSettings = {
+    ...flat,
+    env_vars: env,
+    proton_flags: undefined,
+    sync_mode: undefined,
+    dx_layer: undefined,
+    upscaler: undefined,
+    mangohud_preset: undefined,
+    shader_cache: undefined,
+  };
+  for (const w of t.wrappers ?? []) {
+    if (w === 'gamemode') next = { ...next, use_gamemode: on };
+    if (w === 'mangohud') next = { ...next, use_mangohud: on };
+  }
+  return normalizeSettings(next);
 }

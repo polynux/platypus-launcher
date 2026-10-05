@@ -52,11 +52,14 @@ type Game struct {
 	Title       string       `json:"title"`
 	CoverURL    string       `json:"cover_url"`
 	BannerURL   string       `json:"banner_url"`
+	HeroURL     string       `json:"hero_url"`
 	InstallDir  string       `json:"install_dir"`
 	Executable  string       `json:"executable"`
 	IsInstalled bool         `json:"is_installed"`
 	Settings    GameSettings `json:"settings"`
 	FixInfo     *GameFixInfo `json:"fix_info,omitempty"`
+	LastPlayed  int64        `json:"last_played_at,omitempty"` // unix seconds
+	PlaytimeMin int          `json:"playtime_minutes,omitempty"`
 }
 
 type PluginInfo struct {
@@ -67,4 +70,53 @@ type PluginInfo struct {
 	Description string `json:"description"`
 	Enabled     bool   `json:"enabled"`
 	Store       string `json:"store"`
+}
+
+// Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when
+// the Steam client has cached the user's progress locally.
+type Achievement struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	Icon          string  `json:"icon"`
+	Unlocked      bool    `json:"unlocked"`
+	UnlockedAt    int64   `json:"unlocked_at"`    // unix seconds, 0 if locked/unknown
+	GlobalPercent float64 `json:"global_percent"` // share of all players who have it
+}
+
+type Achievements struct {
+	Total    int           `json:"total"`
+	Unlocked int           `json:"unlocked"` // -1 when progress is unknown
+	List     []Achievement `json:"list"`     // may be a subset of Total
+}
+
+// GameDetails is the on-demand data shown on the game page.
+type GameDetails struct {
+	Summary      string        `json:"summary"`
+	Screenshots  []string      `json:"screenshots"`
+	Genres       []string      `json:"genres"`
+	Developers   []string      `json:"developers"`
+	Publishers   []string      `json:"publishers"`
+	ReleaseDate  string        `json:"release_date"`
+	Achievements *Achievements `json:"achievements"`
+}
+
+// Tweak is a launch setting Hydra suggests for every game, based on the
+// detected hardware and session, independent of the ProtonDB tier.
+type Tweak struct {
+	ID       string            `json:"id"`
+	Title    string            `json:"title"`
+	Reason   string            `json:"reason"`
+	Kind     string            `json:"kind"` // "recommended" | "troubleshoot"
+	Env      map[string]string `json:"env"`
+	Wrappers []string          `json:"wrappers,omitempty"` // "gamemode", "mangohud"
+}
+
+// SessionEvent is emitted on the "session" Wails event when a launched game
+// changes state.
+type SessionEvent struct {
+	GameID  string `json:"game_id"`
+	State   string `json:"state"` // "starting" | "running" | "stopped" | "failed"
+	PID     int    `json:"pid,omitempty"`
+	Message string `json:"message,omitempty"`
 }

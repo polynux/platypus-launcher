@@ -3,15 +3,21 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
 	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/runner"
+	"hydra-launcher/internal/session"
 	"hydra-launcher/internal/steam"
 	"hydra-launcher/internal/types"
+
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -19,9 +25,11 @@ type App struct {
 	ctx           context.Context
 	pluginManager *plugins.Manager
 	fixesService  *fixes.Service
+	store         *steam.StoreClient
+	sessions      *session.Tracker
 
-	mu         sync.Mutex
-	pendingCmd *exec.Cmd
+	tweaksOnce sync.Once
+	tweaks     []types.Tweak
 }
 
 // NewApp creates a new App application struct
@@ -29,24 +37,24 @@ func NewApp() *App {
 	return &App{
 		pluginManager: plugins.NewManager(),
 		fixesService:  fixes.NewService(),
+		store:         steam.NewStoreClient(),
 	}
 }
 
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.sessions = session.NewTracker(func(e types.SessionEvent) {
+		wruntime.EventsEmit(ctx, "session", e)
+	})
+}
 
-	// Reap launched game processes so they don't linger, and stop the
-	// most recent game when the app (and its lifecycle context) shuts down.
-	go func() {
-		<-ctx.Done()
-		a.mu.Lock()
-		cmd := a.pendingCmd
-		a.mu.Unlock()
-		if cmd != nil && cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
-	}()
+// shutdown stops games Hydra started directly. Steam-launched games belong to
+// the Steam client and keep running.
+func (a *App) shutdown(ctx context.Context) {
+	if a.sessions != nil {
+		a.sessions.StopAll()
+	}
 }
 
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
@@ -79,48 +87,73 @@ func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
 	return nil
 }
 
-// selectRunner resolves the configured runner for a game, falling back to the
-// first available runner only when nothing matches and only for runners that
-// exist on the system.
-func selectRunner(game types.Game) (types.ProtonVersion, bool) {
+// GetGameDetails returns summary, screenshots and achievements for the game
+// page. Only Steam titles have a metadata source for now.
+func (a *App) GetGameDetails(game types.Game) (*types.GameDetails, error) {
+	if game.Store != types.StoreSteam || game.StoreAppID == "" {
+		return &types.GameDetails{}, nil
+	}
+	return a.store.Details(steam.Root(), game.StoreAppID)
+}
+
+// GetTweaks returns hardware-based tweaks offered for every game.
+func (a *App) GetTweaks() []types.Tweak {
+	a.tweaksOnce.Do(func() { a.tweaks = fixes.SuggestTweaks(fixes.DetectSystem()) })
+	return a.tweaks
+}
+
+// selectRunner resolves the game's runner; "auto" or empty picks the best
+// installed one (see runner.PickAuto).
+func selectRunner(game types.Game) (types.ProtonVersion, error) {
 	runners := runner.ScanProtonVersions()
-	for _, r := range runners {
-		if r.ID == game.Settings.RunnerID || r.Name == game.Settings.RunnerID {
-			return r, true
-		}
+	if r, ok := runner.Resolve(game.Settings.RunnerID, runners); ok {
+		return r, nil
 	}
-	// Only fall back if the game never had a runner configured.
-	if game.Settings.RunnerID == "" && len(runners) > 0 {
-		return runners[0], true
+	if runner.IsAuto(game.Settings.RunnerID) {
+		return types.ProtonVersion{}, fmt.Errorf("no Proton or Wine runner installed")
 	}
-	return types.ProtonVersion{}, false
+	return types.ProtonVersion{}, fmt.Errorf("runner %q is not installed", game.Settings.RunnerID)
+}
+
+func launchCommand(game types.Game) ([]string, map[string]string, error) {
+	if runner.IsSteamClientLaunch(game) {
+		return runner.SteamCommand(game), map[string]string{}, nil
+	}
+	r, err := selectRunner(game)
+	if err != nil {
+		return nil, nil, err
+	}
+	return runner.BuildLaunchCommand(game, r)
 }
 
 // PreviewLaunchCommand returns the exact command line that will be used.
 func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
-	selectedRunner, ok := selectRunner(game)
-	if !ok {
-		return "", fmt.Errorf("runner %q not found", game.Settings.RunnerID)
-	}
-	cmdArgs, _, err := runner.BuildLaunchCommand(game, selectedRunner)
+	cmdArgs, env, err := launchCommand(game)
 	if err != nil {
 		return "", err
 	}
-	return strings.Join(cmdArgs, " "), nil
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys)+len(cmdArgs))
+	for _, k := range keys {
+		parts = append(parts, k+"="+env[k])
+	}
+	return strings.Join(append(parts, cmdArgs...), " "), nil
 }
 
-// LaunchGame executes the game command asynchronously.
+// LaunchGame starts the game. Progress (running, stopped, failed) arrives on
+// the "session" event; the returned string is only a status line.
 func (a *App) LaunchGame(game types.Game) (string, error) {
-	selectedRunner, ok := selectRunner(game)
-	if !ok {
-		return "", fmt.Errorf("runner %q not found", game.Settings.RunnerID)
+	if a.sessions.Running(game.ID) {
+		return "", fmt.Errorf("%s is already running", game.Title)
 	}
-
-	cmdArgs, env, err := runner.BuildLaunchCommand(game, selectedRunner)
+	cmdArgs, env, err := launchCommand(game)
 	if err != nil {
 		return "", err
 	}
-	// Filter empty argv entries (e.g. a missing executable must abort, not exec "").
 	filtered := make([]string, 0, len(cmdArgs))
 	for _, arg := range cmdArgs {
 		if strings.TrimSpace(arg) != "" {
@@ -132,29 +165,32 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	}
 
 	cmd := exec.Command(filtered[0], filtered[1:]...)
+	cmd.Env = os.Environ()
 	for k, v := range env {
-		cmd.Env = append(cmd.Environ(), fmt.Sprintf("%s=%s", k, v))
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	if game.Settings.WorkingDir != "" {
+		cmd.Dir = game.Settings.WorkingDir
+	} else if game.Executable != "" {
+		cmd.Dir = filepath.Dir(game.Executable)
 	}
 
-	if err := cmd.Start(); err != nil {
+	if runner.IsSteamClientLaunch(game) {
+		// With Steam running, the command forwards the request and exits; if
+		// not, it becomes the client and keeps running. Either way, follow the
+		// game itself through Steam's reaper process, not this PID.
+		if err := cmd.Start(); err != nil {
+			return "", fmt.Errorf("steam client: %w", err)
+		}
+		go func() { _ = cmd.Wait() }()
+		a.sessions.WatchSteam(game.ID, game.StoreAppID)
+		return "Asked Steam to start " + game.Title, nil
+	}
+	pid, err := a.sessions.StartDirect(game.ID, cmd)
+	if err != nil {
 		return "", err
 	}
-
-	// Track the pending process: reap it on exit to avoid zombies, and keep a
-	// handle so shutdown can stop it.
-	a.mu.Lock()
-	a.pendingCmd = cmd
-	a.mu.Unlock()
-	go func() {
-		_ = cmd.Wait()
-		a.mu.Lock()
-		if a.pendingCmd == cmd {
-			a.pendingCmd = nil
-		}
-		a.mu.Unlock()
-	}()
-
-	return fmt.Sprintf("Game launched with PID %d", cmd.Process.Pid), nil
+	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
 }
 
 // ListPlugins returns installed plugins.
