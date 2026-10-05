@@ -1,0 +1,21 @@
+{
+  "id": "gog-gogdl",
+  "name": "GOG (gogdl)",
+  "version": "0.1.0",
+  "author": "Hydra",
+  "description": "Your GOG library through gogdl: install and launch DRM-free games you own, no GOG Galaxy needed.",
+  "api": 1,
+  "store": "gog",
+  "exec": "bin/hydra-gog",
+  "capabilities": ["library", "install", "launch", "auth"],
+  "requires": [
+    { "bin": "gogdl", "hint": "Heroic's GOG downloader: github.com/Heroic-Games-Launcher/heroic-gogdl (pip install gogdl)" },
+    { "bin": "python3", "hint": "install python3 from your distribution" }
+  ],
+  "install_dir": "gog",
+  "permissions": {
+    "network": ["*.gog.com"],
+    "read": [],
+    "write": []
+  }
+}

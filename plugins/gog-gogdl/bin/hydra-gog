@@ -1,0 +1,532 @@
+#!/usr/bin/env python3
+"""Hydra store plugin for GOG, wrapping gogdl.
+
+Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+over stdin/stdout, one object per line. Everything store-specific is done by
+the `gogdl` CLI (Heroic's downloader, Heroic-Games-Launcher/heroic-gogdl),
+which keeps the user's tokens in its own auth file; this plugin only passes it
+paths and a one-time authorization code, and never stores credentials.
+
+GOG games are DRM-free: gogdl downloads offline installers and unpacks them,
+and the games run without any GOG client. Hydra runs them through its own
+runner pipeline.
+
+gogdl notes that shape this plugin:
+  - `--auth-config-path` picks where tokens live; the plugin points it into
+    $HYDRA_PLUGIN_DATA so Hydra's sandbox rules hold.
+  - `auth --code <code>` exchanges a code from the OAuth login page.
+  - `auth` (no arguments) prints the stored credentials as JSON, which is how
+    login state is checked without network.
+  - Library listing needs GOG's web API, which gogdl doesn't expose directly;
+    the plugin calls GOG's gamesdb endpoint with gogdl's credentials itself.
+  - `info` prints the download and disk size; `download` installs; progress
+    lines come on stdout/stderr and are parsed into job.progress.
+"""
+
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+
+API = 1
+CODE_AUTH_REQUIRED = -32001
+# GOG's login page for Hydra's client id (gogdl's own OAuth client). The page
+# redirects to embed.gog.com/on_login_success?... with the code in the query.
+LOGIN_URL = ("https://auth.gog.com/auth?client_id=46899977096215655&response_type=code"
+             "&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient")
+
+out_lock = threading.Lock()
+jobs_lock = threading.Lock()
+jobs = {}  # jobId -> {"proc": Popen, "canceled": bool}
+
+MIB = 1024 * 1024
+# gogdl download progress: "Progress: 42.13% (123.45/292.88 MiB) @ 5.61 MiB/s"
+PROGRESS_RE = re.compile(r"Progress:\s*([\d.]+)%\s*\(([\d.]+)/([\d.]+)\s*MiB\)(?:\s*@\s*([\d.]+)\s*MiB/s)?")
+
+
+class RPCError(Exception):
+    def __init__(self, message, code=-32000):
+        super().__init__(message)
+        self.code = code
+
+
+def send(msg):
+    msg["jsonrpc"] = "2.0"
+    line = json.dumps(msg, separators=(",", ":"))
+    with out_lock:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+
+def notify(method, params):
+    send({"method": method, "params": params})
+
+
+def log(level, message):
+    notify("log", {"level": level, "message": message})
+
+
+def auth_file():
+    """Where gogdl keeps its tokens: the plugin's private data folder."""
+    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    os.makedirs(data, exist_ok=True)
+    return os.path.join(data, "gogdl-auth.json")
+
+
+def gogdl(*args, timeout=300):
+    """Runs gogdl and returns (exit code, stdout, stderr)."""
+    try:
+        p = subprocess.run(["gogdl", "--auth-config-path", auth_file(), *args],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        raise RPCError("gogdl is not installed (pip install gogdl)")
+    except subprocess.TimeoutExpired:
+        raise RPCError(f"gogdl {args[0]} timed out")
+    return p.returncode, p.stdout, p.stderr
+
+
+def tail(text, n=3):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return " · ".join(lines[-n:]) if lines else "no output"
+
+
+def credentials():
+    """The stored credentials, or None. `gogdl auth` prints them without
+    touching the network when they are present."""
+    code, out, _ = gogdl("auth", timeout=60)
+    if code != 0:
+        return None
+    try:
+        creds = json.loads(out)
+    except ValueError:
+        return None
+    if not isinstance(creds, dict) or "access_token" not in creds:
+        return None
+    return creds
+
+
+def api_get(url, token):
+    # Test hook: tests point this at a file with the response, so nothing
+    # reaches the network. Not set in normal runs.
+    hook = os.environ.get("HYDRA_GOG_API_FILE")
+    if hook:
+        with open(hook) as f:
+            return json.load(f)
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
+                                               "User-Agent": "gogdl (Hydra Launcher)"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode())
+
+
+# --- auth ---------------------------------------------------------------
+
+def auth_status(_params=None):
+    creds = credentials()
+    if not creds:
+        return {"loggedIn": False}
+    user = ""
+    try:
+        me = api_get("https://embed.gog.com/userData.json", creds["access_token"])
+        user = me.get("username") or ""
+    except Exception:
+        pass  # expired token or network trouble: still logged in, name unknown
+    return {"loggedIn": True, "user": user} if user else {"loggedIn": True}
+
+
+def auth_begin(_params):
+    return {
+        "url": LOGIN_URL,
+        "instructions": "Log in to GOG in your browser. You land on a page that "
+                        "doesn't load (on_login_success): copy its full address and paste "
+                        "it here, or just the code=... value from it.",
+        "fields": [{"id": "code", "label": "code or page address", "placeholder": "embed.gog.com/on_login_success?…code=…", "secret": True}],
+    }
+
+
+def extract_code(text):
+    text = (text or "").strip()
+    if text.startswith("{"):  # the whole JSON query string pasted by mistake
+        try:
+            text = json.loads(text).get("code", "")
+        except ValueError:
+            pass
+    m = re.search(r"[?&]code=([^&\s]+)", text)
+    if m:
+        return m.group(1)
+    return text.strip('"')
+
+
+def auth_complete(params):
+    code = extract_code(((params or {}).get("fields") or {}).get("code"))
+    if not re.fullmatch(r"[A-Za-z0-9._-]{5,512}", code or ""):
+        raise RPCError("that doesn't look like the address of the login page; "
+                       "copy the whole address including the code= part")
+    rc, out, err = gogdl("auth", "--code", code, timeout=120)
+    if rc != 0 or not credentials():
+        raise RPCError(f"login failed: {tail(err)}")
+    return auth_status()
+
+
+def auth_logout(_params):
+    try:
+        os.remove(auth_file())
+    except FileNotFoundError:
+        pass
+    return {"loggedIn": False}
+
+
+# --- library ------------------------------------------------------------
+
+def game_details_meta(app_id, token):
+    """The store's product data: art and description for the game page."""
+    try:
+        return api_get(f"https://www.gog.com/games/ajax/filtered?search={app_id}", token)
+    except Exception:
+        return {}
+
+
+def library_list(_params):
+    creds = credentials()
+    if not creds:
+        raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
+    token = creds["access_token"]
+    try:
+        me = api_get("https://embed.gog.com/userData.json", token)
+    except Exception as e:
+        raise RPCError(f"GOG API is unreachable: {e}")
+    games = me.get("ownedGames") or me.get("games") or []
+    installed = installed_games()
+    out = []
+    for g in games:
+        app = str(g.get("id") or "")
+        if not app or g.get("is_game") is False:
+            continue
+        title = g.get("title") or app
+        entry = {
+            "id": app,
+            "title": title,
+            "installed": app in installed,
+            "installable": True,
+            "coverUrl": f"https://images.gog.com/{g.get('image', '')}.jpg" if g.get("image") else "",
+            "heroUrl": f"https://images.gog.com/{g.get('image', '')}_scaled_1366x768.jpg" if g.get("image") else "",
+            "bannerUrl": f"https://images.gog.com/{g.get('image', '')}_product_card_v2_mobile_slider_639_2.jpg" if g.get("image") else "",
+        }
+        # ownedGames marks in-store titles; movie extras aren't installable.
+        if g.get("category") == "movie" or g.get("url", "").startswith("/movie/"):
+            entry["installable"] = False
+            entry["note"] = "This is a movie or extra, not a game."
+        if app in installed:
+            add_installed(entry, installed[app])
+        out.append(entry)
+    for app, ig in installed.items():  # installed but missing from the owned list
+        if not any(e["id"] == app for e in out):
+            entry = {"id": app, "title": ig.get("title") or app, "installable": False}
+            add_installed(entry, ig)
+            out.append(entry)
+    return {"games": out}
+
+
+def installed_games():
+    """gogdl doesn't list installs, so the plugin scans its own state file."""
+    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    try:
+        with open(os.path.join(data, "installed.json")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_installed(state):
+    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    os.makedirs(data, exist_ok=True)
+    with open(os.path.join(data, "installed.json"), "w") as f:
+        json.dump(state, f)
+
+
+def add_installed(entry, ig):
+    entry["installed"] = True
+    entry["installPath"] = ig.get("path", "")
+    entry["version"] = ig.get("version", "")
+    entry["platform"] = ig.get("platform", "windows")
+    entry["native"] = entry.get("platform") == "linux"
+    entry["executable"] = ig.get("executable", "")
+
+
+def install_size(params):
+    app, platform = params["id"], platform_of(params["id"])
+    code, out, err = gogdl("info", app, "--platform", platform, timeout=600)
+    if code != 0:
+        if "not logged in" in err.lower() or "auth" in err.lower():
+            raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
+        raise RPCError(f"gogdl info failed: {tail(err)}")
+    try:
+        data = json.loads(out)
+    except ValueError:
+        raise RPCError(f"gogdl info printed no JSON: {tail(err)}")
+    return {"downloadBytes": int(data.get("download_size") or 0),
+            "diskBytes": int(data.get("disk_size") or 0)}
+
+
+def platform_of(app):
+    ig = installed_games().get(app)
+    return (ig or {}).get("platform", "linux")
+
+
+# --- jobs ---------------------------------------------------------------
+
+def start_job(params, kind):
+    app, job_id = params["id"], params["jobId"]
+    if kind == "uninstall":
+        ig = installed_games().get(app)
+        if not ig:
+            raise RPCError(f"{app} is not installed")
+        threading.Thread(target=follow_uninstall, args=(job_id, app), daemon=True).start()
+        return {}
+    path = params.get("installDir") or ""
+    if not os.path.isabs(path):
+        raise RPCError("installDir is missing or relative; Hydra always sends one")
+    if kind == "update" and app in installed_games():
+        cmd = ["update", app, "--path", path]
+    else:
+        cmd = ["download", app, "--path", path]
+    cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
+    try:
+        proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1)
+    except FileNotFoundError:
+        raise RPCError("gogdl is not installed (pip install gogdl)")
+    with jobs_lock:
+        jobs[job_id] = {"proc": proc, "canceled": False, "id": app, "path": path}
+    threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
+    return {}
+
+
+def follow_job(job_id, kind, proc):
+    state = {"jobId": job_id, "phase": "downloading", "percent": 0}
+    for line in proc.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        m = PROGRESS_RE.search(line)
+        if m:
+            state["percent"] = float(m.group(1))
+            state["bytes"] = int(float(m.group(2)) * MIB)
+            state["total"] = int(float(m.group(3)) * MIB)
+            if m.group(4):
+                state["speed"] = float(m.group(4)) * MIB
+            notify("job.progress", dict(state))
+    rc = proc.wait()
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        return
+    if rc != 0:
+        notify("job.failed", {"jobId": job_id, "error": f"gogdl exited with {rc}"})
+        return
+    record_install(job, kind)
+    notify("job.done", {"jobId": job_id})
+
+
+def record_install(job, kind):
+    """Remember the install so launches and updates can find it. gogdl imports
+    don't exist here, so the plugin keeps its own index of what it installed."""
+    app, path = job.get("id"), job.get("path")
+    if not app or not path:
+        return
+    state = installed_games()
+    game_dir = os.path.join(path, app)
+    # gogdl puts the game directly in the path for windows/linux installers
+    if not os.path.isdir(game_dir):
+        game_dir = path
+    exe = find_executable(game_dir)
+    state[app] = {
+        "path": game_dir,
+        "platform": platform_of(app),
+        "version": "",
+        "executable": exe,
+        "title": job.get("title", ""),
+    }
+    save_installed(state)
+
+
+def find_executable(game_dir):
+    """The start script or binary gogdl unpacked: start.sh, *.sh, then Mojos."""
+    for name in ("start.sh",):
+        p = os.path.join(game_dir, name)
+        if os.path.isfile(p):
+            return p
+    try:
+        for root, _dirs, files in os.walk(game_dir):
+            for f in files:
+                if f.endswith(".sh") and os.access(os.path.join(root, f), os.X_OK):
+                    return os.path.join(root, f)
+    except OSError:
+        pass
+    return ""
+
+
+def follow_uninstall(job_id, app):
+    time.sleep(0.2)
+    state = installed_games()
+    ig = state.pop(app, None)
+    if ig and ig.get("path") and os.path.isdir(ig["path"]):
+        import shutil
+        shutil.rmtree(ig["path"], ignore_errors=True)
+    save_installed(state)
+    notify("job.done", {"jobId": job_id})
+
+
+def stop_proc(proc, grace=15):
+    try:
+        proc.send_signal(signal.SIGINT)
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
+def job_cancel(params):
+    with jobs_lock:
+        job = jobs.get(params.get("jobId"))
+        if job:
+            job["canceled"] = True
+    if job:
+        threading.Thread(target=stop_proc, args=(job["proc"],), daemon=True).start()
+    return {}
+
+
+# --- launch -------------------------------------------------------------
+
+def launch_spec(params):
+    app = params["id"]
+    ig = installed_games().get(app)
+    if not ig:
+        raise RPCError(f"{app} is not installed")
+    path, exe = ig.get("path") or "", ig.get("executable") or ""
+    if not exe or not os.path.isfile(exe):
+        exe = find_executable(path)
+    if not exe:
+        raise RPCError(f"couldn't find a start script for {app} in {path or 'the install folder'}")
+    native = ig.get("platform") == "linux"
+    # Windows installers run their exe directly through Proton; Linux installers
+    # run the start script. GOG scripts take care of their own working dir.
+    return {
+        "exe": exe,
+        "args": [],
+        "cwd": os.path.dirname(exe),
+        "env": {},
+        "needsWine": not native,
+        "native": native,
+    }
+
+
+# --- dispatch -----------------------------------------------------------
+
+def initialize(params):
+    return {"name": "GOG (gogdl)", "version": "0.1.0", "api": API,
+            "capabilities": ["library", "install", "launch", "auth"], "missing": []}
+
+
+def game_details(params):
+    """Art and description from GOG's public store data, no login needed."""
+    app = params["id"]
+    try:
+        data = api_get(f"https://www.gog.com/games/ajax/filtered?search={app}", "")
+    except Exception:
+        return {}
+    if isinstance(data, dict) and data.get("_test"):
+        data = data["_test"]  # test hook: file carries the whole response
+    try:
+        products = data.get("products") or []
+        exact = next((p for p in products if str(p.get("id")) == app), None)
+        if not exact:
+            return {}
+        card = (exact.get("galleryImages") or [])
+        out = {
+            "summary": (exact.get("description") or "").strip()[:2000],
+            "genres": [g.strip() for g in (exact.get("genres") or []) if g][:4],
+        }
+        if card:
+            shots = []
+            for c in card[:6]:
+                u = c.get("formattedUrl") or ""
+                if not u:
+                    continue
+                # GOG's template URL is relative (//images.gog.com/…) and its
+                # placeholder picks the screenshot size.
+                if u.startswith("//"):
+                    u = "https:" + u
+                shots.append(u.format(formattedType=".1920x1080.jpg"))
+            if shots:
+                out["screenshots"] = shots
+        return out
+    except Exception:
+        return {}
+
+
+METHODS = {
+    "initialize": initialize,
+    "auth.status": auth_status,
+    "auth.begin": auth_begin,
+    "auth.complete": auth_complete,
+    "auth.logout": auth_logout,
+    "library.list": library_list,
+    "game.details": game_details,
+    "game.installSize": install_size,
+    "game.install": lambda p: start_job(p, "install"),
+    "game.update": lambda p: start_job(p, "update"),
+    "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "job.cancel": job_cancel,
+    "game.launchSpec": launch_spec,
+}
+
+
+def handle(msg):
+    fn = METHODS.get(msg.get("method"))
+    resp = {"id": msg["id"]}
+    if fn is None:
+        resp["error"] = {"code": -32601, "message": f"method not found: {msg.get('method')}"}
+    else:
+        try:
+            result = fn(msg.get("params") or {})
+            resp["result"] = result if result is not None else {}
+        except RPCError as e:
+            resp["error"] = {"code": e.code, "message": str(e)}
+        except (KeyError, TypeError) as e:
+            resp["error"] = {"code": -32602, "message": f"invalid params: {e}"}
+        except Exception as e:  # report, never crash the plugin
+            resp["error"] = {"code": -32000, "message": f"{type(e).__name__}: {e}"}
+    send(resp)
+
+
+def main():
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError as e:
+            send({"error": {"code": -32700, "message": str(e)}})
+            continue
+        if "id" not in msg:
+            continue  # notifications need no answer
+        # Library listing and logins can take seconds; keep reading so
+        # job.cancel stays responsive.
+        threading.Thread(target=handle, args=(msg,), daemon=True).start()
+    # stdin closed: Hydra is shutting down. Interrupted installs resume later.
+    with jobs_lock:
+        procs = [j["proc"] for j in jobs.values()]
+    for p in procs:
+        stop_proc(p, grace=5)
+
+
+if __name__ == "__main__":
+    main()

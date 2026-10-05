@@ -243,8 +243,8 @@ plugin path (old milestones 3 and 4) came before data plugins.
 3. **Data plugins** (done, `feat/plugins-data`): schema, loader, and moving the
    built-in curated fixes and tweaks to that format (`internal/dataplug/builtin`,
    embedded and read through the same loader). Validates the trust-free path.
-4. **GOG via gogdl**, then Amazon via nile. They should need no core changes; if they
-   do, fix the protocol before calling api 1 stable.
+4. **GOG via gogdl** (done, `feat/plugins-gog`), then Amazon via nile. They should
+   need no core changes; if they do, fix the protocol before calling api 1 stable.
 5. **Plugin authoring**: the protocol reference exists; add a `hydra-plugin` scaffold
    and a conformance test.
 6. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
@@ -252,6 +252,13 @@ plugin path (old milestones 3 and 4) came before data plugins.
 
 ## Changes during implementation
 
+- **GOG (milestone 4).** `gog-gogdl` wraps Heroic's gogdl the way
+  `epic-legendary` wraps legendary; no core changes were needed, and the
+  protocol additions of the gaps commit (`game.details`, `native`) are enough:
+  GOG Linux installers report `native` and launch their start script without
+  Proton. The plugin keeps its own installed.json in `HYDRA_PLUGIN_DATA`
+  because gogdl has no "list installed" command. Tested against a fake gogdl
+  only (testdata/gogdl), like epic-legendary.
 - **Data plugins (milestone 3).** A manifest with `"kind": "data"` and no `exec`
   declares JSON-only content (`docs/plugins/data-plugins.md`); discovery marks it
   ready once the files validate, with no approval. The built-in curated fixes

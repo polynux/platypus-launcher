@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""A fake gogdl for the plugin's tests. It mimics the output formats of the
+real CLI (auth credentials JSON, info JSON, the download progress line)
+without touching the network. State lives in $FAKE_GOGDL_STATE; every call is
+appended to $FAKE_GOGDL_STATE.calls."""
+
+import json
+import os
+import sys
+import time
+
+STATE = os.environ["FAKE_GOGDL_STATE"]
+GOOD_CODE = "Xa1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+
+
+def load():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"account": None, "installed": {}}
+
+
+def save(st):
+    with open(STATE, "w") as f:
+        json.dump(st, f)
+
+
+def err(msg, code=1):
+    print(f"[cli] ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def main():
+    argv = sys.argv[1:]
+    # strip the plugin's global flags
+    if "--auth-config-path" in argv:
+        i = argv.index("--auth-config-path")
+        auth_path = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    else:
+        auth_path = "/fake/gogdl-auth.json"
+    with open(STATE + ".calls", "a") as f:
+        f.write(" ".join(argv) + "\n")
+    st = load()
+    cmd, rest = argv[0], argv[1:]
+
+    if cmd == "auth":
+        if "--code" in rest:
+            code = rest[rest.index("--code") + 1]
+            if code != GOOD_CODE:
+                print(json.dumps({"error": True}))
+                return
+            st["account"] = {"access_token": "tok123", "refresh_token": "r", "expires_in": 3600, "loginTime": time.time()}
+            save(st)
+            print(json.dumps(st["account"]))
+            return
+        creds = st.get("account")
+        print(json.dumps(creds) if creds else json.dumps(None))
+    elif cmd == "info":
+        print(json.dumps({"download_size": 8 * 1024 * 1024, "disk_size": 12 * 1024 * 1024}))
+    elif cmd in ("download", "update"):
+        path = rest[rest.index("--path") + 1]
+        game_dir = os.path.join(path, st.get("install_subdir", "SuperGame"))
+        os.makedirs(game_dir, exist_ok=True)
+        for pct, mib, speed in ((25.0, 2.0, 4.2), (50.0, 4.0, 4.5), (100.0, 8.0, 4.8)):
+            time.sleep(0.1)
+            print(f"Progress: {pct}% ({mib:.2f}/8.00 MiB) @ {speed:.2f} MiB/s", flush=True)
+        script = os.path.join(game_dir, "start.sh")
+        with open(script, "w") as f:
+            f.write("#!/bin/sh\necho \"gog game $*\"\n")
+        os.chmod(script, 0o755)
+        st.setdefault("paths", {})[st.get("install_id", "1234")] = game_dir
+        save(st)
+        print("[cli] INFO: Download complete", file=sys.stderr)
+    else:
+        err(f"fake gogdl doesn't know {cmd}")
+
+
+if __name__ == "__main__":
+    main()
