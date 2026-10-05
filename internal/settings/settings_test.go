@@ -24,7 +24,7 @@ func TestPersistsAcrossOpen(t *testing.T) {
 	if err := s.SetGameSettings("steam_620", map[string]any{"runner_id": "auto", "sync_mode": "ntsync"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPluginTrust("echo", PluginTrust{Hash: "abc", Enabled: true}); err != nil {
+	if err := s.SetPluginState("echo", PluginState{Hash: "abc", Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -38,7 +38,7 @@ func TestPersistsAcrossOpen(t *testing.T) {
 	if got := s.GameSettings()["steam_620"]["sync_mode"]; got != "ntsync" {
 		t.Errorf("sync_mode = %v", got)
 	}
-	if tr, ok := s.PluginTrust("echo"); !ok || tr.Hash != "abc" || !tr.Enabled {
+	if tr, ok := s.PluginState("echo"); !ok || tr.Hash != "abc" || !tr.Enabled {
 		t.Errorf("plugin trust = %+v, %v", tr, ok)
 	}
 }

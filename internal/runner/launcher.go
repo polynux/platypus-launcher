@@ -10,11 +10,29 @@ import (
 	"hydra-launcher/internal/types"
 )
 
-// BuildLaunchCommand constructs, for games Hydra starts itself (see
-// steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
+// Target is what the pipeline runs: the game's own executable, or what a
+// store plugin's launch spec asked for.
+type Target struct {
+	Exe    string
+	Args   []string          // before the user's launch arguments
+	Env    map[string]string // below Hydra's and the user's env
+	Native bool              // a Linux binary: no runner, no prefix
+}
+
+// BuildLaunchCommand runs the game's configured executable through the
+// pipeline (see BuildCommand).
 func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, map[string]string, error) {
+	return BuildCommand(game, runner, Target{Exe: game.Executable})
+}
+
+// BuildCommand constructs, for games Hydra starts itself (see
+// steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
+func BuildCommand(game types.Game, runner types.ProtonVersion, target Target) ([]string, map[string]string, error) {
 	var cmdArgs []string
 	env := make(map[string]string)
+	for k, v := range target.Env {
+		env[k] = v
+	}
 
 	// 1. Inherit or set environment variables
 	home, err := os.UserHomeDir()
@@ -26,9 +44,11 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, 
 		prefixPath = filepath.Join(home, ".local/share/hydra/prefixes", game.ID)
 	}
 
-	env["WINEPREFIX"] = prefixPath
-	env["STEAM_COMPAT_DATA_PATH"] = prefixPath
-	env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = filepath.Join(home, ".local/share/Steam")
+	if !target.Native {
+		env["WINEPREFIX"] = prefixPath
+		env["STEAM_COMPAT_DATA_PATH"] = prefixPath
+		env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = filepath.Join(home, ".local/share/Steam")
+	}
 
 	// Anti-cheat runtime bindings
 	if game.Settings.EACRuntime {
@@ -82,7 +102,7 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, 
 	}
 
 	// 3. Runner invocation (Proton vs Wine vs Native)
-	if runner.Path != "" {
+	if runner.Path != "" && !target.Native {
 		if strings.HasSuffix(runner.Path, "proton") {
 			cmdArgs = append(cmdArgs, runner.Path, "run")
 		} else {
@@ -91,10 +111,11 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, 
 	}
 
 	// 4. Executable target
-	if game.Executable == "" {
+	if target.Exe == "" {
 		return nil, nil, fmt.Errorf("game %q has no executable configured", game.Title)
 	}
-	cmdArgs = append(cmdArgs, game.Executable)
+	cmdArgs = append(cmdArgs, target.Exe)
+	cmdArgs = append(cmdArgs, target.Args...)
 
 	// 5. Game launch arguments
 	if game.Settings.LaunchArguments != "" {

@@ -45,8 +45,18 @@ type GameFixInfo struct {
 	LaunchArgs   string            `json:"launch_args"`   // Recommended launch options
 }
 
+// Sources that aren't store plugins. Any other Game.Source is a plugin id.
+const (
+	SourceSteam  = "steam"
+	SourceCustom = "custom"
+)
+
 type Game struct {
-	ID          string       `json:"id"`
+	ID string `json:"id"`
+	// Source is where the game comes from: "steam", "custom" or a store
+	// plugin id. Store is the storefront for display, and several sources may
+	// share one (a plugin can serve Steam games too).
+	Source      string       `json:"source"`
 	Store       StoreType    `json:"store"`
 	StoreAppID  string       `json:"store_app_id"`
 	Title       string       `json:"title"`
@@ -60,16 +70,78 @@ type Game struct {
 	FixInfo     *GameFixInfo `json:"fix_info,omitempty"`
 	LastPlayed  int64        `json:"last_played_at,omitempty"` // unix seconds
 	PlaytimeMin int          `json:"playtime_minutes,omitempty"`
+	SizeBytes   int64        `json:"size_bytes,omitempty"` // installed size, if known
+	Version     string       `json:"version,omitempty"`
+	// Plugin games only.
+	UpdateAvailable bool   `json:"update_available,omitempty"`
+	Installable     bool   `json:"installable,omitempty"`    // Hydra can install it through the plugin
+	Note            string `json:"note,omitempty"`           // e.g. "Needs the EA app"
+	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Hydra lets the plugin launch from
 }
 
-type PluginInfo struct {
+// Library is the merged library. A source that fails to list (a plugin that
+// is logged out or crashed) adds a warning instead of failing the scan.
+type Library struct {
+	Games    []Game          `json:"games"`
+	Warnings []SourceWarning `json:"warnings"`
+}
+
+type SourceWarning struct {
+	Source    string `json:"source"`
+	Message   string `json:"message"`
+	NeedsAuth bool   `json:"needs_auth,omitempty"`
+}
+
+// StorePlugin is a discovered store plugin as the Plugins view shows it.
+type StorePlugin struct {
+	ID           string              `json:"id"`
+	Name         string              `json:"name"`
+	Version      string              `json:"version"`
+	Author       string              `json:"author"`
+	Description  string              `json:"description"`
+	Store        string              `json:"store"`
+	Status       string              `json:"status"` // see plugins.Status
+	Problem      string              `json:"problem,omitempty"`
+	Missing      []PluginRequirement `json:"missing"`
+	Requires     []PluginRequirement `json:"requires"`
+	Capabilities []string            `json:"capabilities"`
+	Dir          string              `json:"dir"`
+	Exec         string              `json:"exec"`
+	Hash         string              `json:"hash"`
+	Network      []string            `json:"network"`
+	Read         []string            `json:"read"`
+	Write        []string            `json:"write"`
+	Running      bool                `json:"running"`
+	// Where its games install: the Games folder subfolder, or the user's override.
+	InstallFolder        string   `json:"install_folder"`
+	DefaultInstallFolder string   `json:"default_install_folder"`
+	ExtraFolders         []string `json:"extra_folders"` // other folders the user allowed launching from
+}
+
+type PluginRequirement struct {
+	Bin  string `json:"bin"`
+	Hint string `json:"hint"`
+}
+
+// AuthStatus is a plugin's login state.
+type AuthStatus struct {
+	LoggedIn bool   `json:"loggedIn"`
+	User     string `json:"user,omitempty"`
+}
+
+// AuthPrompt is what the login dialog shows: a page to open, if any, then the
+// fields to fill in.
+type AuthPrompt struct {
+	URL          string      `json:"url,omitempty"`
+	Instructions string      `json:"instructions,omitempty"`
+	Fields       []AuthField `json:"fields"`
+}
+
+type AuthField struct {
 	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Author      string `json:"author"`
-	Version     string `json:"version"`
-	Description string `json:"description"`
-	Enabled     bool   `json:"enabled"`
-	Store       string `json:"store"`
+	Label       string `json:"label"`
+	Secret      bool   `json:"secret,omitempty"`
+	Placeholder string `json:"placeholder,omitempty"`
 }
 
 // LauncherSettings are Hydra-wide settings, persisted in settings.json.
@@ -125,4 +197,25 @@ type SessionEvent struct {
 	State   string `json:"state"` // "starting" | "running" | "stopped" | "failed"
 	PID     int    `json:"pid,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+// Job is an install, update or uninstall run by a store plugin.
+type Job struct {
+	ID          string  `json:"id"`
+	Kind        string  `json:"kind"` // "install" | "update" | "uninstall"
+	Source      string  `json:"source"`
+	GameID      string  `json:"game_id"`       // Hydra's game id
+	StoreGameID string  `json:"store_game_id"` // the plugin's game id
+	Title       string  `json:"title"`
+	State       string  `json:"state"` // "queued" | "running" | "done" | "failed" | "canceled"
+	InstallDir  string  `json:"install_dir,omitempty"`
+	Phase       string  `json:"phase,omitempty"`
+	Bytes       int64   `json:"bytes"`
+	Total       int64   `json:"total"`
+	Speed       float64 `json:"speed"`   // bytes per second
+	Percent     float64 `json:"percent"` // 0-100, -1 when unknown
+	Error       string  `json:"error,omitempty"`
+	Attempts    int     `json:"attempts"`
+	CreatedAt   int64   `json:"created_at"` // unix ms
+	UpdatedAt   int64   `json:"updated_at"`
 }

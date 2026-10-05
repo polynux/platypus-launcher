@@ -14,6 +14,9 @@ import (
 	"hydra-launcher/internal/jsonrpc"
 )
 
+// ErrExited is returned for calls the plugin never answered because it exited.
+var ErrExited = errors.New("exited")
+
 // Lifecycle timings. Tests shorten them.
 type timings struct {
 	backoffBase time.Duration // wait before the first restart after a crash
@@ -52,6 +55,8 @@ type process struct {
 	hash    string       // pinned at approval
 	verify  func() error // re-checks the pinned hash before every start
 	logPath string
+	dataDir string      // HYDRA_PLUGIN_DATA
+	onExit  func(error) // unexpected exits only
 	notify  jsonrpc.NotifyFunc
 	t       timings
 
@@ -78,7 +83,7 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 	}
 	err = conn.Call(ctx, method, params, result)
 	if errors.Is(err, jsonrpc.ErrClosed) {
-		return fmt.Errorf("plugin %s exited during %s", p.id, method)
+		return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
 	}
 	return err
 }
@@ -166,7 +171,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 	}
 	cmd := exec.Command(p.exec)
 	cmd.Dir = p.dir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("HYDRA_PLUGIN_API=%d", APIVersion))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("HYDRA_PLUGIN_API=%d", APIVersion), "HYDRA_PLUGIN_DATA="+p.dataDir)
 	cmd.Stdin = inR
 	cmd.Stdout = outW
 	var logFile *os.File
@@ -216,6 +221,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 			logFile.Close()
 		}
 		p.mu.Lock()
+		crashed := false
 		if p.cmd == cmd {
 			p.cmd, p.conn, p.stdin, p.info = nil, nil, nil, nil
 			if p.initErr != nil {
@@ -229,10 +235,14 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 					p.crashes = 0
 				}
 				p.recordCrash(waitErr)
+				crashed = true
 			}
 		}
 		p.mu.Unlock()
 		close(exited)
+		if crashed && p.onExit != nil {
+			p.onExit(waitErr)
+		}
 	}()
 	return conn, nil
 }

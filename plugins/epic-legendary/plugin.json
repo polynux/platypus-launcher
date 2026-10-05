@@ -1,0 +1,21 @@
+{
+  "id": "epic-legendary",
+  "name": "Epic Games (legendary)",
+  "version": "0.1.0",
+  "author": "Hydra",
+  "description": "Your Epic Games library through legendary: log in, install, update and launch owned games without the Epic launcher.",
+  "api": 1,
+  "store": "epic",
+  "exec": "bin/hydra-epic",
+  "capabilities": ["library", "install", "launch", "auth"],
+  "requires": [
+    { "bin": "legendary", "hint": "pipx install legendary-gl" },
+    { "bin": "python3", "hint": "install python3 from your distribution" }
+  ],
+  "install_dir": "epic",
+  "permissions": {
+    "network": ["*.epicgames.com", "*.epicgames.dev", "*.unrealengine.com", "legendary.gl"],
+    "read": ["~/.config/legendary"],
+    "write": ["~/.config/legendary"]
+  }
+}

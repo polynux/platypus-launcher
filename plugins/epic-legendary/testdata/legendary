@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""A fake legendary for the plugin's tests. It mimics the output formats of
+the real CLI (legendary/cli.py: list/list-installed/info/launch --json, the
+DLManager progress log lines) without touching the network. State lives in
+$FAKE_LEGENDARY_STATE; every call is appended to $FAKE_LEGENDARY_STATE.calls."""
+
+import json
+import os
+import shutil
+import sys
+import time
+
+STATE = os.environ["FAKE_LEGENDARY_STATE"]
+GOOD_CODE = "abcdef0123456789abcdef0123456789"
+
+CATALOG = [
+    {"app_name": "Goose", "app_title": "Untitled Goose Game", "latest": "1.0", "platforms": ["Windows"],
+     "meta": {"keyImages": [{"type": "DieselGameBoxTall", "url": "https://cdn1.epicgames.com/goose-tall.jpg"},
+                            {"type": "DieselGameBox", "url": "https://cdn1.epicgames.com/goose-wide.jpg"}]}},
+    {"app_name": "Pre", "app_title": "Preinstalled", "latest": "1.1", "platforms": ["Windows"], "meta": {}},
+    {"app_name": "GooseDLC", "app_title": "Goose DLC", "latest": "1.0", "platforms": ["Windows"],
+     "meta": {"mainGameItem": {"id": "x"}}},
+    {"app_name": "Origin", "app_title": "An EA Game", "latest": "", "platforms": [],
+     "meta": {"customAttributes": {"ThirdPartyManagedApp": {"type": "STRING", "value": "Origin"}}}},
+]
+
+
+def load():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"account": None, "installed": {}}
+
+
+def save(st):
+    with open(STATE, "w") as f:
+        json.dump(st, f)
+
+
+def err(msg, code=1):
+    print(f"[cli] ERROR: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def main():
+    args = [a for a in sys.argv[1:] if a not in ("-y", "--yes")]
+    with open(STATE + ".calls", "a") as f:
+        f.write(" ".join(args) + "\n")
+    st = load()
+    cmd, rest = args[0], args[1:]
+
+    if cmd == "status":
+        print(json.dumps({"account": st["account"] or "<not logged in>", "games_available": len(CATALOG),
+                          "games_installed": len(st["installed"]), "egl_sync_enabled": False,
+                          "config_directory": "/fake/.config/legendary"}))
+    elif cmd == "auth":
+        if "--delete" in rest:
+            st["account"] = None
+            save(st)
+            print("[cli] INFO: User data deleted.", file=sys.stderr)
+            return
+        code = rest[rest.index("--code") + 1]
+        if code != GOOD_CODE:
+            print("[cli] ERROR: Login attempt failed, please see log for details.", file=sys.stderr)
+            return  # the real CLI exits 0 here too
+        st["account"] = "EpicUser"
+        save(st)
+        print('[cli] INFO: Successfully logged in as "EpicUser"', file=sys.stderr)
+    elif cmd == "list":
+        if not st["account"]:
+            err("Login failed, cannot continue!")
+        out = []
+        for g in CATALOG:
+            out.append({"metadata": g["meta"], "app_name": g["app_name"], "app_title": g["app_title"],
+                        "asset_infos": {p: {"app_name": g["app_name"], "build_version": g["latest"]} for p in g["platforms"]},
+                        "base_urls": [], "sidecar": None, "achievements": None, "dlcs": []})
+        print(json.dumps(out))
+    elif cmd == "list-installed":
+        print(json.dumps([dict(v, app_name=k) for k, v in st["installed"].items()]))
+    elif cmd == "info":
+        print(json.dumps({"game": {}, "install": {}, "manifest": {"disk_size": 12 * 1024 * 1024, "download_size": 10 * 1024 * 1024}}))
+    elif cmd == "install":
+        app = rest[0]
+        update = "--update-only" in rest
+        if update:
+            if app not in st["installed"]:
+                err(f'Update requested for "{app}", but app not installed!')
+            st["installed"][app]["version"] = next(g["latest"] for g in CATALOG if g["app_name"] == app)
+            save(st)
+            print("[cli] INFO: Finished installation process in 0.10 seconds.", file=sys.stderr)
+            return
+        base = rest[rest.index("--base-path") + 1]
+        game = next(g for g in CATALOG if g["app_name"] == app)
+        print(f"[cli] INFO: Install size: 12.00 MiB", file=sys.stderr, flush=True)
+        print(f"[cli] INFO: Download size: 10.00 MiB (Compression savings: 16.7%)", file=sys.stderr, flush=True)
+        for i, mib in enumerate((2.5, 5.0, 10.0), 1):
+            time.sleep(0.1)
+            pct = mib * 10
+            print(f"[DLManager] INFO: = Progress: {pct:.02f}% ({i}/3), Running for 00:00:0{i}, ETA: 00:00:01", file=sys.stderr, flush=True)
+            print(f"[DLManager] INFO:  - Downloaded: {mib:.02f} MiB, Written: {mib:.02f} MiB", file=sys.stderr, flush=True)
+            print(f"[DLManager] INFO:  + Download\t- 25.00 MiB/s (raw) / 30.00 MiB/s (decompressed)", file=sys.stderr, flush=True)
+        path = os.path.join(base, game["app_title"].replace(" ", ""))
+        os.makedirs(os.path.join(path, "Binaries"), exist_ok=True)
+        open(os.path.join(path, "Binaries", "Game.exe"), "wb").write(b"MZ")
+        st["installed"][app] = {"install_path": path, "title": game["app_title"], "version": game["latest"],
+                                "platform": "Windows", "install_size": 12 * 1024 * 1024, "is_dlc": False,
+                                "executable": "Binaries\\Game.exe", "can_run_offline": True}
+        save(st)
+        print("[cli] INFO: Finished installation process in 0.30 seconds.", file=sys.stderr)
+    elif cmd == "uninstall":
+        app = rest[0]
+        ig = st["installed"].pop(app, None)
+        if not ig:
+            err(f'Game "{app}" is not installed')
+        shutil.rmtree(ig["install_path"], ignore_errors=True)
+        save(st)
+    elif cmd == "launch":
+        app = rest[0]
+        ig = st["installed"].get(app)
+        if not ig:
+            err(f"Game {app} is not currently installed!")
+        offline = "--offline" in rest
+        latest = next(g["latest"] for g in CATALOG if g["app_name"] == app)
+        if "--skip-version-check" not in rest and latest != ig["version"]:
+            err("Game is out of date, please update or launch with update check skipping!")
+        token = "" if offline else "exchange0123456789"
+        print(json.dumps({
+            "game_parameters": ["-SaveToUserDir"],
+            "game_executable": ig["executable"].replace("\\", "/"),
+            "game_directory": ig["install_path"],
+            "egl_parameters": ["-AUTH_LOGIN=unused", f"-AUTH_PASSWORD={token}", "-AUTH_TYPE=exchangecode",
+                               f"-epicapp={app}", "-epicenv=Prod", "-EpicPortal", "-epicusername=EpicUser",
+                               "-epicuserid=0123", "-epiclocale=en", "-epicsandboxid=ns"],
+            "launch_command": ["wine"],
+            "working_directory": os.path.join(ig["install_path"], "Binaries"),
+            "user_parameters": [],
+            "environment": {"WINEPREFIX": "/home/u/.wine", "DXVK_HUD": "fps"},
+            "pre_launch_command": "",
+            "pre_launch_wait": False,
+        }))
+    else:
+        err(f"fake legendary doesn't know {cmd}")
+
+
+if __name__ == "__main__":
+    main()

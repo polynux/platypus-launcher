@@ -1,22 +1,35 @@
-// Package stores is the one code path the core uses for every game source.
-// Steam is built in; store plugins get an adapter behind the same interface in
-// a later milestone (see docs/plans/launcher-plugins.md).
+// Package stores is the one code path the core uses for every game source:
+// the built-in Steam store, and an adapter around each approved store plugin.
 package stores
 
-import "hydra-launcher/internal/types"
+import (
+	"context"
+	"time"
+
+	"hydra-launcher/internal/types"
+)
 
 // Store is a game source: it lists the library, provides game page metadata
 // and says how a game is launched.
 type Store interface {
-	ID() types.StoreType
-	// Library returns the store's games, installed ones only for now.
-	Library() ([]types.Game, error)
+	// ID is the source id games carry in Game.Source.
+	ID() string
+	// Library returns the source's games, installed or only owned.
+	Library(ctx context.Context) ([]types.Game, error)
 	// Details returns summary, screenshots and achievements for the game page.
 	// A store without a metadata source returns empty details.
-	Details(game types.Game) (*types.GameDetails, error)
-	// ClientLaunch returns how the store's own client starts the game, or nil
-	// when Hydra starts it itself through the runner pipeline.
-	ClientLaunch(game types.Game) *ClientLaunch
+	Details(ctx context.Context, game types.Game) (*types.GameDetails, error)
+	// Launch says how to start the game. nil means Hydra runs the game's own
+	// Executable through the runner pipeline (Steam executable overrides).
+	// preview asks for the command only: the store must not fetch launch
+	// tokens or check for updates.
+	Launch(ctx context.Context, game types.Game, preview bool) (*Launch, error)
+}
+
+// Launch is exactly one of Client or Direct.
+type Launch struct {
+	Client *ClientLaunch
+	Direct *DirectLaunch
 }
 
 // ClientLaunch is a launch handed over to a store client.
@@ -30,25 +43,47 @@ type ClientLaunch struct {
 	// Find returns the PID of the running game, or 0. Sessions are followed
 	// through it.
 	Find func() int
+	// StartTimeout is how long the client gets to start the game; 0 is the
+	// session default.
+	StartTimeout time.Duration
 }
 
-// Registry holds the enabled stores in scan order.
+// DirectLaunch is a validated plugin launch spec Hydra runs itself.
+type DirectLaunch struct {
+	Exe       string
+	Args      []string
+	Dir       string
+	Env       map[string]string
+	NeedsWine bool
+	// Redact lists argument prefixes whose values are hidden in previews and logs.
+	Redact []string
+}
+
+// Registry holds the built-in stores plus the plugin stores available right
+// now (approved, enabled, with the library capability).
 type Registry struct {
-	stores []Store
+	builtin []Store
+	dynamic func() []Store
 }
 
-func NewRegistry(stores ...Store) *Registry {
-	return &Registry{stores: stores}
+func NewRegistry(dynamic func() []Store, builtin ...Store) *Registry {
+	return &Registry{builtin: builtin, dynamic: dynamic}
 }
 
+// All returns every store, built-in ones first.
 func (r *Registry) All() []Store {
-	return r.stores
+	out := append([]Store{}, r.builtin...)
+	if r.dynamic != nil {
+		out = append(out, r.dynamic()...)
+	}
+	return out
 }
 
-// Get returns the store a game belongs to. Custom (sideloaded) games have none.
-func (r *Registry) Get(id types.StoreType) (Store, bool) {
-	for _, s := range r.stores {
-		if s.ID() == id {
+// Get returns the store a game comes from (Game.Source). Sideloaded games
+// have none.
+func (r *Registry) Get(source string) (Store, bool) {
+	for _, s := range r.All() {
+		if s.ID() == source {
 			return s, true
 		}
 	}

@@ -23,7 +23,7 @@ var (
 	echoErr  error
 )
 
-// buildEcho compiles testdata/echo once per test run.
+// buildEcho compiles plugins/echo once per test run.
 func buildEcho(t *testing.T) string {
 	t.Helper()
 	echoOnce.Do(func() {
@@ -33,7 +33,7 @@ func buildEcho(t *testing.T) string {
 			return
 		}
 		echoBin = filepath.Join(dir, "hydra-echo")
-		out, err := exec.Command("go", "build", "-o", echoBin, "./testdata/echo").CombinedOutput()
+		out, err := exec.Command("go", "build", "-o", echoBin, "hydra-launcher/plugins/echo").CombinedOutput()
 		if err != nil {
 			echoErr = errors.New(string(out))
 		}
@@ -59,7 +59,7 @@ func install(t *testing.T, pluginsDir string, edit func(m map[string]any)) strin
 	if err := os.WriteFile(filepath.Join(dir, "bin/hydra-echo"), bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile("testdata/echo/plugin.json")
+	raw, err := os.ReadFile("../../plugins/echo/plugin.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	e := &env{plugins: filepath.Join(root, "plugins"), logs: filepath.Join(root, "logs")}
-	e.m = NewManager(e.plugins, e.logs, trust, nil)
+	e.m = NewManager(Options{Dir: e.plugins, LogDir: e.logs, DataDir: filepath.Join(root, "data"), Settings: trust})
 	e.m.t = timings{
 		backoffBase: 20 * time.Millisecond,
 		backoffMax:  100 * time.Millisecond,
@@ -184,7 +184,7 @@ func TestEchoInitialize(t *testing.T) {
 		t.Fatalf("echo = %v", got)
 	}
 
-	err = e.m.Call(ctx(t), "echo", "game.install", nil, nil)
+	err = e.m.Call(ctx(t), "echo", "no.such.method", nil, nil)
 	var rpcErr *jsonrpc.Error
 	if !errors.As(err, &rpcErr) || rpcErr.Code != jsonrpc.CodeMethodNotFound {
 		t.Fatalf("unknown method: %v", err)
@@ -413,5 +413,30 @@ func TestInstallPath(t *testing.T) {
 	m.InstallDir = "epic"
 	if got := m.InstallPath("/home/u/Games"); got != "/home/u/Games/epic" {
 		t.Errorf("install_dir: %s", got)
+	}
+}
+
+func TestAllowFolder(t *testing.T) {
+	e := newEnv(t)
+	e.ready(t)
+	home, _ := os.UserHomeDir()
+	for _, bad := range []string{"/", "/usr/bin", "/etc", home, "relative"} {
+		if err := e.m.AllowFolder("echo", bad); err == nil {
+			t.Errorf("%s allowed", bad)
+		}
+	}
+	games := filepath.Join(t.TempDir(), "Heroic")
+	if err := e.m.AllowFolder("echo", games); err != nil {
+		t.Fatal(err)
+	}
+	got := e.m.Folders("echo", "/home/u/Games")
+	if len(got) != 2 || got[0] != "/home/u/Games/echo" || got[1] != games {
+		t.Fatalf("folders = %v", got)
+	}
+	if err := e.m.SetInstallFolder("echo", "/mnt/disk/epic"); err != nil {
+		t.Fatal(err)
+	}
+	if f, def := e.m.InstallFolder("echo", "/home/u/Games"); f != "/mnt/disk/epic" || def != "/home/u/Games/echo" {
+		t.Fatalf("override: %s, %s", f, def)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"hydra-launcher/internal/settings"
@@ -42,11 +43,25 @@ type Plugin struct {
 // NotifyFunc receives notifications other than `log` from a running plugin.
 type NotifyFunc func(pluginID, method string, params json.RawMessage)
 
+// Options configure a Manager.
+type Options struct {
+	Dir      string          // plugins folder, one subfolder per plugin
+	LogDir   string          // stderr and `log` notifications: LogDir/plugin-<id>.log
+	DataDir  string          // private data: DataDir/<id>, passed as HYDRA_PLUGIN_DATA
+	Settings *settings.Store // approvals and per-plugin folders
+	OnNotify NotifyFunc
+	// OnExit is called when a plugin exits without being asked to (crash),
+	// so work in flight can be restarted.
+	OnExit func(pluginID string, err error)
+}
+
 type Manager struct {
 	dir      string
 	logDir   string
+	dataDir  string
 	trust    *settings.Store
 	onNotify NotifyFunc
+	onExit   func(string, error)
 	lookPath func(string) (string, error)
 	t        timings
 
@@ -56,14 +71,15 @@ type Manager struct {
 	closed  bool
 }
 
-// NewManager manages plugins in dir. Approvals live in trust; stderr and `log`
-// notifications go to logDir/plugin-<id>.log.
-func NewManager(dir, logDir string, trust *settings.Store, onNotify NotifyFunc) *Manager {
+// NewManager manages the plugins in o.Dir. Call Discover before use.
+func NewManager(o Options) *Manager {
 	return &Manager{
-		dir:      dir,
-		logDir:   logDir,
-		trust:    trust,
-		onNotify: onNotify,
+		dir:      o.Dir,
+		logDir:   o.LogDir,
+		dataDir:  o.DataDir,
+		trust:    o.Settings,
+		onNotify: o.OnNotify,
+		onExit:   o.OnExit,
 		lookPath: exec.LookPath,
 		t:        defaultTimings,
 		plugins:  map[string]*Plugin{},
@@ -126,7 +142,7 @@ func (m *Manager) inspect(dir string) *Plugin {
 	}
 	p.Missing = man.MissingRequirements(m.lookPath)
 
-	trust, ok := m.trust.PluginTrust(man.ID)
+	trust, ok := m.trust.PluginState(man.ID)
 	switch {
 	case !ok:
 		p.Status = StatusUnapproved
@@ -169,7 +185,9 @@ func (m *Manager) Approve(id string) error {
 	if p.Status == StatusInvalid {
 		return fmt.Errorf("plugin %s is invalid: %s", id, p.Problem)
 	}
-	if err := m.trust.SetPluginTrust(id, settings.PluginTrust{Hash: p.Hash, Enabled: true}); err != nil {
+	state, _ := m.trust.PluginState(id) // keeps folder choices across re-approval
+	state.Hash, state.Enabled = p.Hash, true
+	if err := m.trust.SetPluginState(id, state); err != nil {
 		return err
 	}
 	_, err := m.Discover()
@@ -179,7 +197,7 @@ func (m *Manager) Approve(id string) error {
 // SetEnabled turns an approved plugin on or off. A plugin whose executable
 // changed must be approved again instead.
 func (m *Manager) SetEnabled(id string, enabled bool) error {
-	trust, ok := m.trust.PluginTrust(id)
+	trust, ok := m.trust.PluginState(id)
 	if !ok {
 		return fmt.Errorf("plugin %s was never approved", id)
 	}
@@ -190,7 +208,7 @@ func (m *Manager) SetEnabled(id string, enabled bool) error {
 		return fmt.Errorf("plugin %s changed since approval; approve it again", id)
 	}
 	trust.Enabled = enabled
-	if err := m.trust.SetPluginTrust(id, trust); err != nil {
+	if err := m.trust.SetPluginState(id, trust); err != nil {
 		return err
 	}
 	_, err := m.Discover()
@@ -259,8 +277,21 @@ func (m *Manager) process(id string) (*process, error) {
 	if m.onNotify != nil {
 		next = func(method string, params json.RawMessage) { m.onNotify(id, method, params) }
 	}
+	dataDir := ""
+	if m.dataDir != "" {
+		dataDir = filepath.Join(m.dataDir, id)
+		if err := os.MkdirAll(dataDir, 0o700); err != nil {
+			return nil, err
+		}
+	}
+	var onExit func(error)
+	if m.onExit != nil {
+		onExit = func(err error) { m.onExit(id, err) }
+	}
 	pinned := p.Hash
 	proc := &process{
+		dataDir: dataDir,
+		onExit:  onExit,
 		id:      id,
 		dir:     p.Dir,
 		exec:    execPath,
@@ -282,6 +313,97 @@ func (m *Manager) process(id string) (*process, error) {
 	}
 	m.procs[id] = proc
 	return proc, nil
+}
+
+// Plugin returns one plugin from the last Discover.
+func (m *Manager) Plugin(id string) (Plugin, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.plugins[id]
+	if !ok {
+		return Plugin{}, false
+	}
+	return *p, true
+}
+
+// InstallFolder is where the plugin installs games: the user's override, or
+// <gamesFolder>/<install_dir>. It also returns the default.
+func (m *Manager) InstallFolder(id, gamesFolder string) (folder, def string) {
+	p, _ := m.Plugin(id)
+	def = p.Manifest.InstallPath(gamesFolder)
+	if st, ok := m.trust.PluginState(id); ok && st.InstallDir != "" {
+		return st.InstallDir, def
+	}
+	return def, def
+}
+
+// SetInstallFolder overrides the plugin's install folder; "" restores the default.
+func (m *Manager) SetInstallFolder(id, path string) error {
+	if path != "" && !filepath.IsAbs(path) {
+		return fmt.Errorf("install folder must be an absolute path, got %q", path)
+	}
+	st, ok := m.trust.PluginState(id)
+	if !ok {
+		return fmt.Errorf("plugin %s was never approved", id)
+	}
+	if path != "" {
+		path = filepath.Clean(path)
+	}
+	st.InstallDir = path
+	return m.trust.SetPluginState(id, st)
+}
+
+// AllowFolder lets the plugin's games launch from an extra folder, for games
+// its CLI installed before Hydra managed it.
+func (m *Manager) AllowFolder(id, path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("folder must be an absolute path, got %q", path)
+	}
+	st, ok := m.trust.PluginState(id)
+	if !ok {
+		return fmt.Errorf("plugin %s was never approved", id)
+	}
+	path = filepath.Clean(path)
+	if err := checkAllowable(path); err != nil {
+		return err
+	}
+	for _, f := range st.Folders {
+		if f == path {
+			return nil
+		}
+	}
+	st.Folders = append(st.Folders, path)
+	return m.trust.SetPluginState(id, st)
+}
+
+// systemDirs can't be allowed as game folders: launching "games" from there
+// would let a plugin run any system binary.
+var systemDirs = []string{"/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"}
+
+func checkAllowable(path string) error {
+	if path == "/" {
+		return errors.New("refusing to allow the whole filesystem")
+	}
+	if home, err := os.UserHomeDir(); err == nil && path == filepath.Clean(home) {
+		return errors.New("refusing to allow your whole home folder; pick the game's folder")
+	}
+	for _, d := range systemDirs {
+		if path == d || strings.HasPrefix(path, d+"/") {
+			return fmt.Errorf("refusing to allow system folder %s", path)
+		}
+	}
+	return nil
+}
+
+// Folders are the folders the plugin's games may be launched from: its
+// install folder first, then the ones the user allowed.
+func (m *Manager) Folders(id, gamesFolder string) []string {
+	folder, _ := m.InstallFolder(id, gamesFolder)
+	out := []string{folder}
+	if st, ok := m.trust.PluginState(id); ok {
+		out = append(out, st.Folders...)
+	}
+	return out
 }
 
 // Running reports the PID of a running plugin, or 0.

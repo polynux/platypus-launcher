@@ -78,12 +78,15 @@ func (t *Tracker) StopAll() {
 // WatchClient follows a game started through a store's own client (Steam).
 // client names it in messages; find returns the game's PID, or 0 while it
 // isn't running.
-func (t *Tracker) WatchClient(gameID, client string, find func() int) {
+func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration) {
+	if startTimeout <= 0 {
+		startTimeout = clientStartTimeout
+	}
 	t.set(gameID, nil)
 	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: "Waiting for " + client + " to start the game"})
 	go func() {
 		defer t.clear(gameID)
-		deadline := time.Now().Add(clientStartTimeout)
+		deadline := time.Now().Add(startTimeout)
 		pid := 0
 		for pid == 0 {
 			if pid = find(); pid != 0 {
@@ -105,11 +108,12 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int) {
 
 // StartDirect runs cmd and follows it until exit. Output goes to a per-game
 // log file under ~/.local/share/hydra/logs so failed launches can be diagnosed.
-func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd) (int, error) {
+// shown is the command line written to the log, with secrets redacted.
+func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, error) {
 	tail := &tailBuffer{}
 	log, logPath, logErr := openLog(gameID)
 	if logErr == nil {
-		fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), strings.Join(cmd.Args, " "))
+		fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
 		cmd.Stdout = io.MultiWriter(log, tail)
 	} else {
 		cmd.Stdout = tail
@@ -174,23 +178,36 @@ func (b *tailBuffer) String() string {
 
 // FindSteamGame returns the PID of Steam's reaper for appID, or 0.
 func FindSteamGame(appID string) int {
-	marker := []byte("AppId=" + appID + "\x00")
+	return FindByCmdline("SteamLaunch", "AppId="+appID+"\x00")
+}
+
+// FindByCmdline returns the PID of a process whose command line contains
+// every part, or 0. Arguments in /proc/<pid>/cmdline are NUL-separated.
+func FindByCmdline(parts ...string) int {
+	if len(parts) == 0 {
+		return 0
+	}
+	self := os.Getpid()
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return 0
 	}
+next:
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
+		if err != nil || pid == self {
 			continue
 		}
 		cmdline, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
-		if err != nil || !bytes.Contains(cmdline, []byte("SteamLaunch")) {
+		if err != nil {
 			continue
 		}
-		if bytes.Contains(cmdline, marker) {
-			return pid
+		for _, p := range parts {
+			if !bytes.Contains(cmdline, []byte(p)) {
+				continue next
+			}
 		}
+		return pid
 	}
 	return 0
 }

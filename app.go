@@ -2,15 +2,21 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"hydra-launcher/internal/fixes"
+	"hydra-launcher/internal/jobs"
+	"hydra-launcher/internal/jsonrpc"
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/runner"
 	"hydra-launcher/internal/session"
@@ -21,12 +27,20 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// How long a store plugin gets for library.list (legendary refreshes its
+// catalogue over the network) and for a launch spec.
+const (
+	libraryTimeout = 2 * time.Minute
+	launchTimeout  = time.Minute
+)
+
 // App struct
 type App struct {
 	ctx          context.Context
-	catalog      *plugins.Catalog
+	stop         context.CancelFunc
 	plugins      *plugins.Manager
 	settings     *settings.Store
+	jobs         *jobs.Queue
 	fixesService *fixes.Service
 	stores       *stores.Registry
 	sessions     *session.Tracker
@@ -37,11 +51,9 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{
-		catalog:      plugins.NewCatalog(),
-		fixesService: fixes.NewService(),
-		stores:       stores.NewRegistry(stores.NewSteam()),
-	}
+	a := &App{fixesService: fixes.NewService()}
+	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
+	return a
 }
 
 // startup is called when the app starts.
@@ -61,9 +73,26 @@ func (a *App) startup(ctx context.Context) {
 		wruntime.LogErrorf(ctx, "settings: %v", err)
 	}
 
-	// Store plugins are discovered here but only start when something calls
-	// them; nothing does until the Epic plugin (milestone 3).
-	a.plugins = plugins.NewManager(filepath.Join(dataDir, "plugins"), filepath.Join(dataDir, "logs"), a.settings, nil)
+	a.jobs, err = jobs.Open(filepath.Join(dataDir, "jobs.json"), jobBackend{a}, func(list []types.Job) {
+		wruntime.EventsEmit(ctx, "jobs", list)
+	})
+	if err != nil {
+		wruntime.LogErrorf(ctx, "jobs: %v", err)
+	}
+
+	// Store plugins start on demand: when the library is listed, on login,
+	// or when an interrupted install resumes.
+	a.plugins = plugins.NewManager(plugins.Options{
+		Dir:      filepath.Join(dataDir, "plugins"),
+		LogDir:   filepath.Join(dataDir, "logs"),
+		DataDir:  filepath.Join(dataDir, "plugin-data"),
+		Settings: a.settings,
+		OnNotify: a.pluginNotify,
+		OnExit: func(id string, err error) {
+			wruntime.LogWarningf(ctx, "plugin %s exited: %v", id, err)
+			a.jobs.PluginExited(id, err)
+		},
+	})
 	found, err := a.plugins.Discover()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "plugins: %v", err)
@@ -75,11 +104,19 @@ func (a *App) startup(ctx context.Context) {
 		}
 		wruntime.LogInfo(ctx, msg)
 	}
+
+	runCtx, stop := context.WithCancel(ctx)
+	a.stop = stop
+	go a.jobs.Run(runCtx)
 }
 
 // shutdown stops games Hydra started directly and every store plugin.
-// Steam-launched games belong to the Steam client and keep running.
+// Steam-launched games belong to the Steam client and keep running. Running
+// installs stay "running" in jobs.json and resume on the next start.
 func (a *App) shutdown(ctx context.Context) {
+	if a.stop != nil {
+		a.stop()
+	}
 	if a.sessions != nil {
 		a.sessions.StopAll()
 	}
@@ -88,22 +125,74 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
+// pluginNotify routes plugin notifications: job updates to the queue.
+func (a *App) pluginNotify(id, method string, params json.RawMessage) {
+	if !strings.HasPrefix(method, "job.") {
+		return
+	}
+	var u plugins.JobUpdate
+	if err := json.Unmarshal(params, &u); err != nil {
+		return
+	}
+	a.jobs.Notify(id, method, u)
+}
+
+// pluginStores are the approved, enabled plugins that provide a library.
+func (a *App) pluginStores() []stores.Store {
+	if a.plugins == nil {
+		return nil
+	}
+	var out []stores.Store
+	for _, p := range a.plugins.Plugins() {
+		if p.Status != plugins.StatusReady || !slices.Contains(p.Manifest.Capabilities, "library") {
+			continue
+		}
+		id := p.Manifest.ID
+		out = append(out, stores.NewPlugin(a.plugins, p, func() []string {
+			return a.plugins.Folders(id, a.settings.GamesFolder())
+		}))
+	}
+	return out
+}
+
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
 func (a *App) GetProtonVersions() []types.ProtonVersion {
 	return runner.ScanProtonVersions()
 }
 
-// GetGames scans every store and returns the unified library.
-func (a *App) GetGames() ([]types.Game, error) {
-	var allGames []types.Game
-	for _, s := range a.stores.All() {
-		games, err := s.Library()
-		if err != nil {
-			return nil, fmt.Errorf("%s library scan failed: %w", s.ID(), err)
-		}
-		allGames = append(allGames, games...)
+// GetLibrary lists every source and returns the merged library. Steam failing
+// fails the scan, as before; a plugin failing (logged out, crashed) only adds
+// a warning, so one broken plugin can't hide the rest of the library.
+func (a *App) GetLibrary() (types.Library, error) {
+	all := a.stores.All()
+	results := make([][]types.Game, len(all))
+	errs := make([]error, len(all))
+	var wg sync.WaitGroup
+	for i, s := range all {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
+			defer cancel()
+			results[i], errs[i] = s.Library(ctx)
+		}()
 	}
-	return allGames, nil
+	wg.Wait()
+
+	lib := types.Library{Games: []types.Game{}, Warnings: []types.SourceWarning{}}
+	for i, s := range all {
+		if errs[i] != nil {
+			if s.ID() == types.SourceSteam {
+				return types.Library{}, fmt.Errorf("%s library scan failed: %w", s.ID(), errs[i])
+			}
+			var rpcErr *jsonrpc.Error
+			needsAuth := errors.As(errs[i], &rpcErr) && rpcErr.Code == plugins.CodeAuthRequired
+			lib.Warnings = append(lib.Warnings, types.SourceWarning{Source: s.ID(), Message: errs[i].Error(), NeedsAuth: needsAuth})
+			continue
+		}
+		lib.Games = append(lib.Games, results[i]...)
+	}
+	return lib, nil
 }
 
 // GetGameFix fetches live ProtonDB or curated Lutris fix data for a game.
@@ -120,11 +209,21 @@ func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
 // GetGameDetails returns summary, screenshots and achievements for the game
 // page. Sideloaded games have no metadata source.
 func (a *App) GetGameDetails(game types.Game) (*types.GameDetails, error) {
-	s, ok := a.stores.Get(game.Store)
+	s, ok := a.stores.Get(sourceOf(game))
 	if !ok {
 		return &types.GameDetails{}, nil
 	}
-	return s.Details(game)
+	ctx, cancel := context.WithTimeout(a.ctx, launchTimeout)
+	defer cancel()
+	return s.Details(ctx, game)
+}
+
+// sourceOf tolerates games from before Game.Source existed.
+func sourceOf(game types.Game) string {
+	if game.Source == "" && game.Store == types.StoreSteam {
+		return types.SourceSteam
+	}
+	return game.Source
 }
 
 // GetTweaks returns hardware-based tweaks offered for every game.
@@ -146,42 +245,90 @@ func selectRunner(game types.Game) (types.ProtonVersion, error) {
 	return types.ProtonVersion{}, fmt.Errorf("runner %q is not installed", game.Settings.RunnerID)
 }
 
-// clientLaunch returns the store-client launch for the game, or nil when Hydra
-// starts the game itself.
-func (a *App) clientLaunch(game types.Game) *stores.ClientLaunch {
-	if s, ok := a.stores.Get(game.Store); ok {
-		return s.ClientLaunch(game)
-	}
-	return nil
+// prepared is a launch ready to run.
+type prepared struct {
+	args   []string
+	env    map[string]string
+	dir    string
+	client *stores.ClientLaunch // set when a store client starts the game
+	redact []string             // argument prefixes hidden in previews and logs
 }
 
-func (a *App) launchCommand(game types.Game) ([]string, map[string]string, error) {
-	if cl := a.clientLaunch(game); cl != nil {
-		return cl.Command, map[string]string{}, nil
+// prepareLaunch asks the game's store how to launch it and builds the command.
+// preview must not cost the store anything (no launch tokens).
+func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
+	var launch *stores.Launch
+	if s, ok := a.stores.Get(sourceOf(game)); ok {
+		ctx, cancel := context.WithTimeout(a.ctx, launchTimeout)
+		defer cancel()
+		l, err := s.Launch(ctx, game, preview)
+		if err != nil {
+			return nil, err
+		}
+		launch = l
+	} else if game.Source != "" && game.Source != types.SourceCustom {
+		return nil, fmt.Errorf("%s comes from %s, which isn't approved and enabled", game.Title, game.Source)
 	}
+
+	switch {
+	case launch != nil && launch.Client != nil:
+		return &prepared{args: launch.Client.Command, env: map[string]string{}, client: launch.Client}, nil
+	case launch != nil && launch.Direct != nil:
+		d := launch.Direct
+		var r types.ProtonVersion
+		if d.NeedsWine {
+			var err error
+			if r, err = selectRunner(game); err != nil {
+				return nil, err
+			}
+		}
+		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine})
+		if err != nil {
+			return nil, err
+		}
+		dir := d.Dir
+		if game.Settings.WorkingDir != "" {
+			dir = game.Settings.WorkingDir
+		}
+		return &prepared{args: args, env: env, dir: dir, redact: d.Redact}, nil
+	}
+
 	r, err := selectRunner(game)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return runner.BuildLaunchCommand(game, r)
+	args, env, err := runner.BuildLaunchCommand(game, r)
+	if err != nil {
+		return nil, err
+	}
+	dir := game.Settings.WorkingDir
+	if dir == "" && game.Executable != "" {
+		dir = filepath.Dir(game.Executable)
+	}
+	return &prepared{args: args, env: env, dir: dir}, nil
+}
+
+// shown is the command line with env, redacted for previews and logs.
+func (p *prepared) shown() string {
+	keys := make([]string, 0, len(p.env))
+	for k := range p.env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys)+len(p.args))
+	for _, k := range keys {
+		parts = append(parts, k+"="+p.env[k])
+	}
+	return strings.Join(append(parts, stores.RedactArgs(p.args, p.redact)...), " ")
 }
 
 // PreviewLaunchCommand returns the exact command line that will be used.
 func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
-	cmdArgs, env, err := a.launchCommand(game)
+	p, err := a.prepareLaunch(game, true)
 	if err != nil {
 		return "", err
 	}
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	parts := make([]string, 0, len(keys)+len(cmdArgs))
-	for _, k := range keys {
-		parts = append(parts, k+"="+env[k])
-	}
-	return strings.Join(append(parts, cmdArgs...), " "), nil
+	return p.shown(), nil
 }
 
 // LaunchGame starts the game. Progress (running, stopped, failed) arrives on
@@ -190,12 +337,12 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	if a.sessions.Running(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
 	}
-	cmdArgs, env, err := a.launchCommand(game)
+	p, err := a.prepareLaunch(game, false)
 	if err != nil {
 		return "", err
 	}
-	filtered := make([]string, 0, len(cmdArgs))
-	for _, arg := range cmdArgs {
+	filtered := make([]string, 0, len(p.args))
+	for _, arg := range p.args {
 		if strings.TrimSpace(arg) != "" {
 			filtered = append(filtered, arg)
 		}
@@ -206,16 +353,12 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 
 	cmd := exec.Command(filtered[0], filtered[1:]...)
 	cmd.Env = os.Environ()
-	for k, v := range env {
+	for k, v := range p.env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
-	if game.Settings.WorkingDir != "" {
-		cmd.Dir = game.Settings.WorkingDir
-	} else if game.Executable != "" {
-		cmd.Dir = filepath.Dir(game.Executable)
-	}
+	cmd.Dir = p.dir
 
-	if cl := a.clientLaunch(game); cl != nil {
+	if cl := p.client; cl != nil {
 		// With the client running, the command forwards the request and
 		// exits; if not, it becomes the client and keeps running. Either way,
 		// follow the game itself (Steam: its reaper process), not this PID.
@@ -223,24 +366,14 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 			return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 		}
 		go func() { _ = cmd.Wait() }()
-		a.sessions.WatchClient(game.ID, cl.Client, cl.Find)
+		a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout)
 		return "Asked " + cl.Client + " to start " + game.Title, nil
 	}
-	pid, err := a.sessions.StartDirect(game.ID, cmd)
+	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown())
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
-}
-
-// ListPlugins returns the Plugins view's entries (still the static catalog).
-func (a *App) ListPlugins() []types.PluginInfo {
-	return a.catalog.ListPlugins()
-}
-
-// TogglePlugin toggles a plugin state.
-func (a *App) TogglePlugin(id string, enabled bool) bool {
-	return a.catalog.TogglePlugin(id, enabled)
 }
 
 func (a *App) launcherSettings() types.LauncherSettings {
@@ -267,12 +400,15 @@ func (a *App) SetGamesFolder(path string) (types.LauncherSettings, error) {
 // ChooseGamesFolder opens a folder picker at the current Games folder.
 // Returns "" if the user cancels.
 func (a *App) ChooseGamesFolder() (string, error) {
-	start := a.settings.GamesFolder()
+	return a.chooseFolder("Games folder", a.settings.GamesFolder())
+}
+
+func (a *App) chooseFolder(title, start string) (string, error) {
 	if _, err := os.Stat(start); err != nil {
 		start, _ = os.UserHomeDir()
 	}
 	return wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
-		Title:                "Games folder",
+		Title:                title,
 		DefaultDirectory:     start,
 		CanCreateDirectories: true,
 	})

@@ -15,12 +15,17 @@ import (
 
 const fileVersion = 1
 
-// PluginTrust is what the user approved for a store plugin. Hash pins the
+// PluginState is what the user decided for a store plugin. Hash pins the
 // plugin's executable: if it changes, the plugin stays disabled until the user
 // approves it again.
-type PluginTrust struct {
+type PluginState struct {
 	Hash    string `json:"hash"`
 	Enabled bool   `json:"enabled"`
+	// InstallDir overrides <Games folder>/<install_dir> (absolute path).
+	InstallDir string `json:"install_dir,omitempty"`
+	// Folders are other folders the user allowed this plugin's games to be
+	// launched from (games its CLI installed before Hydra).
+	Folders []string `json:"folders,omitempty"`
 }
 
 type file struct {
@@ -29,7 +34,7 @@ type file struct {
 	// Per-game settings exactly as the UI saved them, so fields the backend
 	// doesn't model (sync mode, winetricks, …) survive a restart.
 	Games   map[string]map[string]any `json:"games,omitempty"`
-	Plugins map[string]PluginTrust    `json:"plugins,omitempty"`
+	Plugins map[string]PluginState    `json:"plugins,omitempty"`
 }
 
 // Store is the settings file, loaded once and written through on every change.
@@ -161,20 +166,20 @@ func (s *Store) SetGameSettings(gameID string, settings map[string]any) error {
 	return nil
 }
 
-// PluginTrust returns what the user approved for a plugin; ok is false if the
+// PluginState returns what the user decided for a plugin; ok is false if the
 // plugin was never approved.
-func (s *Store) PluginTrust(id string) (PluginTrust, bool) {
+func (s *Store) PluginState(id string) (PluginState, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.data.Plugins[id]
 	return t, ok
 }
 
-func (s *Store) SetPluginTrust(id string, t PluginTrust) error {
+func (s *Store) SetPluginState(id string, t PluginState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.data.Plugins == nil {
-		s.data.Plugins = map[string]PluginTrust{}
+		s.data.Plugins = map[string]PluginState{}
 	}
 	prev, had := s.data.Plugins[id]
 	s.data.Plugins[id] = t

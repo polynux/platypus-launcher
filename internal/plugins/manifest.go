@@ -28,6 +28,9 @@ var knownCapabilities = map[string]bool{
 	"cloud-saves": true,
 }
 
+// Game sources that aren't plugins.
+var reservedIDs = map[string]bool{"steam": true, "custom": true}
+
 var (
 	idRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	storeRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
@@ -38,6 +41,8 @@ type Manifest struct {
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Version      string        `json:"version"`
+	Author       string        `json:"author"`
+	Description  string        `json:"description"`
 	API          int           `json:"api"`
 	Store        string        `json:"store"`
 	Exec         string        `json:"exec"`
@@ -93,6 +98,9 @@ func (m Manifest) validate() error {
 
 	if !idRe.MatchString(m.ID) {
 		bad("id %q must be lowercase letters, digits, '.', '_' or '-'", m.ID)
+	}
+	if reservedIDs[m.ID] {
+		bad("id %q is reserved for a built-in source", m.ID)
 	}
 	if strings.TrimSpace(m.Name) == "" {
 		bad("name is required")

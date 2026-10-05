@@ -105,6 +105,7 @@ func parseAcfFile(path string, steamapps string) (types.Game, error) {
 
 	return types.Game{
 		ID:          "steam_" + appID,
+		Source:      types.SourceSteam,
 		Store:       types.StoreSteam,
 		StoreAppID:  appID,
 		Title:       name,
