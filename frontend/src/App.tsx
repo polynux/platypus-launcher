@@ -10,6 +10,7 @@ import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
+import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi, onSession } from './effect/runtime';
 import { needsAttention } from './lib/games';
@@ -71,14 +72,27 @@ export function App() {
   const loadData = useCallback(
     (reason: 'startup' | 'rescan') => {
       setScanning(true);
-      const program = Effect.all([LauncherApi.getGames(), LauncherApi.getProtonVersions(), LauncherApi.getPlugins()]);
+      const program = Effect.all([
+        LauncherApi.getGames(),
+        LauncherApi.getProtonVersions(),
+        LauncherApi.getPlugins(),
+        // Unreadable saved settings shouldn't block the library.
+        LauncherApi.getGameSettings().pipe(Effect.orElseSucceed(() => ({}) as Record<string, GameSettings>)),
+      ]);
       return Effect.runPromise(program)
-        .then(([g, r, p]) => {
-          // Keep session-only additions and edited settings across rescans.
+        .then(([g, r, p, saved]) => {
+          // Keep session-only additions and edited settings across rescans;
+          // on startup, settings come from disk.
           setGames((prev) => {
             const edited = new Map(prev.map((x) => [x.id, x.settings]));
             const custom = prev.filter((x) => x.store === 'custom');
-            return [...custom, ...g.map((x) => (edited.has(x.id) ? { ...x, settings: edited.get(x.id)! } : x))];
+            return [
+              ...custom,
+              ...g.map((x) => {
+                const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
+                return s ? { ...x, settings: s } : x;
+              }),
+            ];
           });
           setRunners(r);
           setPlugins(p);
@@ -182,8 +196,21 @@ export function App() {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
     setSettingsFor(null);
-    notify('Settings saved for this session');
-    if (g) log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
+    // Sideloaded games aren't saved yet, so neither are their settings.
+    if (!g || g.store === 'custom') {
+      notify('Settings saved for this session');
+      if (g) log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
+      return;
+    }
+    Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
+      .then(() => {
+        notify('Settings saved');
+        log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}` });
+      })
+      .catch((err) => {
+        notify(`Not saved to disk, applies this session: ${errMsg(err)}`, 'err');
+        log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
+      });
   };
 
   const togglePlugin = (id: string, enabled: boolean) => {
@@ -314,6 +341,8 @@ export function App() {
         return <SystemView runners={runners} onRefresh={() => loadData('rescan')} scanning={scanning} />;
       case 'plugins':
         return <PluginsView plugins={plugins} onToggle={togglePlugin} onRefresh={() => loadData('rescan')} />;
+      case 'settings':
+        return <LauncherSettingsView onNotify={notify} />;
     }
   };
 

@@ -23,9 +23,10 @@ import (
 
 const (
 	pollEvery = 2 * time.Second
-	// How long Steam gets to start the game (shader pre-caching and updates
-	// can take a while) before we report that nothing happened.
-	steamStartTimeout = 3 * time.Minute
+	// How long a store client gets to start the game (Steam's shader
+	// pre-caching and updates can take a while) before we report that nothing
+	// happened.
+	clientStartTimeout = 3 * time.Minute
 	// A direct launch that exits faster than this is reported as a failure.
 	quickExit = 5 * time.Second
 )
@@ -35,7 +36,7 @@ type Emit func(types.SessionEvent)
 type Tracker struct {
 	emit   Emit
 	mu     sync.Mutex
-	active map[string]*exec.Cmd // gameID → direct-launch process (nil for Steam)
+	active map[string]*exec.Cmd // gameID → direct-launch process (nil for store-client launches)
 }
 
 func NewTracker(emit Emit) *Tracker {
@@ -74,26 +75,28 @@ func (t *Tracker) StopAll() {
 	}
 }
 
-// WatchSteam follows a game started through the Steam client.
-func (t *Tracker) WatchSteam(gameID, appID string) {
+// WatchClient follows a game started through a store's own client (Steam).
+// client names it in messages; find returns the game's PID, or 0 while it
+// isn't running.
+func (t *Tracker) WatchClient(gameID, client string, find func() int) {
 	t.set(gameID, nil)
-	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: "Waiting for Steam to start the game"})
+	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: "Waiting for " + client + " to start the game"})
 	go func() {
 		defer t.clear(gameID)
-		deadline := time.Now().Add(steamStartTimeout)
+		deadline := time.Now().Add(clientStartTimeout)
 		pid := 0
 		for pid == 0 {
-			if pid = FindSteamGame(appID); pid != 0 {
+			if pid = find(); pid != 0 {
 				break
 			}
 			if time.Now().After(deadline) {
-				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: "Steam never started the game. Check the Steam window for an update, a prompt or an error."})
+				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: client + " never started the game. Check the " + client + " window for an update, a prompt or an error."})
 				return
 			}
 			time.Sleep(pollEvery)
 		}
 		t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
-		for FindSteamGame(appID) != 0 {
+		for find() != 0 {
 			time.Sleep(pollEvery)
 		}
 		t.emit(types.SessionEvent{GameID: gameID, State: "stopped"})

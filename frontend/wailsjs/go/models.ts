@@ -218,6 +218,20 @@ export namespace types {
 	}
 	
 	
+	export class LauncherSettings {
+	    games_folder: string;
+	    default_games_folder: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LauncherSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.games_folder = source["games_folder"];
+	        this.default_games_folder = source["default_games_folder"];
+	    }
+	}
 	export class PluginInfo {
 	    id: string;
 	    name: string;

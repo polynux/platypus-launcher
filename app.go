@@ -14,7 +14,8 @@ import (
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/runner"
 	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/steam"
+	"hydra-launcher/internal/settings"
+	"hydra-launcher/internal/stores"
 	"hydra-launcher/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -22,11 +23,13 @@ import (
 
 // App struct
 type App struct {
-	ctx           context.Context
-	pluginManager *plugins.Manager
-	fixesService  *fixes.Service
-	store         *steam.StoreClient
-	sessions      *session.Tracker
+	ctx          context.Context
+	catalog      *plugins.Catalog
+	plugins      *plugins.Manager
+	settings     *settings.Store
+	fixesService *fixes.Service
+	stores       *stores.Registry
+	sessions     *session.Tracker
 
 	tweaksOnce sync.Once
 	tweaks     []types.Tweak
@@ -35,9 +38,9 @@ type App struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
-		pluginManager: plugins.NewManager(),
-		fixesService:  fixes.NewService(),
-		store:         steam.NewStoreClient(),
+		catalog:      plugins.NewCatalog(),
+		fixesService: fixes.NewService(),
+		stores:       stores.NewRegistry(stores.NewSteam()),
 	}
 }
 
@@ -47,13 +50,41 @@ func (a *App) startup(ctx context.Context) {
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
 		wruntime.EventsEmit(ctx, "session", e)
 	})
+
+	dataDir, err := settings.DataDir()
+	if err != nil {
+		wruntime.LogErrorf(ctx, "settings: %v", err)
+	}
+	a.settings, err = settings.Open(filepath.Join(dataDir, "settings.json"))
+	if err != nil {
+		// Open still returns usable defaults.
+		wruntime.LogErrorf(ctx, "settings: %v", err)
+	}
+
+	// Store plugins are discovered here but only start when something calls
+	// them; nothing does until the Epic plugin (milestone 3).
+	a.plugins = plugins.NewManager(filepath.Join(dataDir, "plugins"), filepath.Join(dataDir, "logs"), a.settings, nil)
+	found, err := a.plugins.Discover()
+	if err != nil {
+		wruntime.LogErrorf(ctx, "plugins: %v", err)
+	}
+	for _, p := range found {
+		msg := fmt.Sprintf("plugin %s: %s", p.Manifest.ID, p.Status)
+		if p.Problem != "" {
+			msg += " (" + p.Problem + ")"
+		}
+		wruntime.LogInfo(ctx, msg)
+	}
 }
 
-// shutdown stops games Hydra started directly. Steam-launched games belong to
-// the Steam client and keep running.
+// shutdown stops games Hydra started directly and every store plugin.
+// Steam-launched games belong to the Steam client and keep running.
 func (a *App) shutdown(ctx context.Context) {
 	if a.sessions != nil {
 		a.sessions.StopAll()
+	}
+	if a.plugins != nil {
+		a.plugins.Shutdown()
 	}
 }
 
@@ -62,17 +93,16 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 	return runner.ScanProtonVersions()
 }
 
-// GetGames scans all configured sources (Steam, Custom, etc.) and returns the unified library.
+// GetGames scans every store and returns the unified library.
 func (a *App) GetGames() ([]types.Game, error) {
 	var allGames []types.Game
-
-	// Scan Steam library if enabled
-	steamGames, err := steam.ScanSteamLibrary()
-	if err != nil {
-		return nil, fmt.Errorf("steam library scan failed: %w", err)
+	for _, s := range a.stores.All() {
+		games, err := s.Library()
+		if err != nil {
+			return nil, fmt.Errorf("%s library scan failed: %w", s.ID(), err)
+		}
+		allGames = append(allGames, games...)
 	}
-	allGames = append(allGames, steamGames...)
-
 	return allGames, nil
 }
 
@@ -88,12 +118,13 @@ func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
 }
 
 // GetGameDetails returns summary, screenshots and achievements for the game
-// page. Only Steam titles have a metadata source for now.
+// page. Sideloaded games have no metadata source.
 func (a *App) GetGameDetails(game types.Game) (*types.GameDetails, error) {
-	if game.Store != types.StoreSteam || game.StoreAppID == "" {
+	s, ok := a.stores.Get(game.Store)
+	if !ok {
 		return &types.GameDetails{}, nil
 	}
-	return a.store.Details(steam.Root(), game.StoreAppID)
+	return s.Details(game)
 }
 
 // GetTweaks returns hardware-based tweaks offered for every game.
@@ -115,9 +146,18 @@ func selectRunner(game types.Game) (types.ProtonVersion, error) {
 	return types.ProtonVersion{}, fmt.Errorf("runner %q is not installed", game.Settings.RunnerID)
 }
 
-func launchCommand(game types.Game) ([]string, map[string]string, error) {
-	if runner.IsSteamClientLaunch(game) {
-		return runner.SteamCommand(game), map[string]string{}, nil
+// clientLaunch returns the store-client launch for the game, or nil when Hydra
+// starts the game itself.
+func (a *App) clientLaunch(game types.Game) *stores.ClientLaunch {
+	if s, ok := a.stores.Get(game.Store); ok {
+		return s.ClientLaunch(game)
+	}
+	return nil
+}
+
+func (a *App) launchCommand(game types.Game) ([]string, map[string]string, error) {
+	if cl := a.clientLaunch(game); cl != nil {
+		return cl.Command, map[string]string{}, nil
 	}
 	r, err := selectRunner(game)
 	if err != nil {
@@ -128,7 +168,7 @@ func launchCommand(game types.Game) ([]string, map[string]string, error) {
 
 // PreviewLaunchCommand returns the exact command line that will be used.
 func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
-	cmdArgs, env, err := launchCommand(game)
+	cmdArgs, env, err := a.launchCommand(game)
 	if err != nil {
 		return "", err
 	}
@@ -150,7 +190,7 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	if a.sessions.Running(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
 	}
-	cmdArgs, env, err := launchCommand(game)
+	cmdArgs, env, err := a.launchCommand(game)
 	if err != nil {
 		return "", err
 	}
@@ -175,16 +215,16 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 		cmd.Dir = filepath.Dir(game.Executable)
 	}
 
-	if runner.IsSteamClientLaunch(game) {
-		// With Steam running, the command forwards the request and exits; if
-		// not, it becomes the client and keeps running. Either way, follow the
-		// game itself through Steam's reaper process, not this PID.
+	if cl := a.clientLaunch(game); cl != nil {
+		// With the client running, the command forwards the request and
+		// exits; if not, it becomes the client and keeps running. Either way,
+		// follow the game itself (Steam: its reaper process), not this PID.
 		if err := cmd.Start(); err != nil {
-			return "", fmt.Errorf("steam client: %w", err)
+			return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 		}
 		go func() { _ = cmd.Wait() }()
-		a.sessions.WatchSteam(game.ID, game.StoreAppID)
-		return "Asked Steam to start " + game.Title, nil
+		a.sessions.WatchClient(game.ID, cl.Client, cl.Find)
+		return "Asked " + cl.Client + " to start " + game.Title, nil
 	}
 	pid, err := a.sessions.StartDirect(game.ID, cmd)
 	if err != nil {
@@ -193,12 +233,57 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
 }
 
-// ListPlugins returns installed plugins.
+// ListPlugins returns the Plugins view's entries (still the static catalog).
 func (a *App) ListPlugins() []types.PluginInfo {
-	return a.pluginManager.ListPlugins()
+	return a.catalog.ListPlugins()
 }
 
 // TogglePlugin toggles a plugin state.
 func (a *App) TogglePlugin(id string, enabled bool) bool {
-	return a.pluginManager.TogglePlugin(id, enabled)
+	return a.catalog.TogglePlugin(id, enabled)
+}
+
+func (a *App) launcherSettings() types.LauncherSettings {
+	return types.LauncherSettings{
+		GamesFolder:        a.settings.GamesFolder(),
+		DefaultGamesFolder: settings.DefaultGamesFolder(),
+	}
+}
+
+// GetLauncherSettings returns Hydra-wide settings.
+func (a *App) GetLauncherSettings() types.LauncherSettings {
+	return a.launcherSettings()
+}
+
+// SetGamesFolder saves the base folder store plugins install into. An empty
+// path resets it to ~/Games.
+func (a *App) SetGamesFolder(path string) (types.LauncherSettings, error) {
+	if _, err := a.settings.SetGamesFolder(path); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
+// ChooseGamesFolder opens a folder picker at the current Games folder.
+// Returns "" if the user cancels.
+func (a *App) ChooseGamesFolder() (string, error) {
+	start := a.settings.GamesFolder()
+	if _, err := os.Stat(start); err != nil {
+		start, _ = os.UserHomeDir()
+	}
+	return wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:                "Games folder",
+		DefaultDirectory:     start,
+		CanCreateDirectories: true,
+	})
+}
+
+// GetGameSettings returns every saved per-game settings object by game ID.
+func (a *App) GetGameSettings() map[string]map[string]any {
+	return a.settings.GameSettings()
+}
+
+// SaveGameSettings persists one game's settings as the UI holds them.
+func (a *App) SaveGameSettings(gameID string, gameSettings map[string]any) error {
+	return a.settings.SetGameSettings(gameID, gameSettings)
 }

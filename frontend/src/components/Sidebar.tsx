@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { cx, clock } from './ui';
 import type { SessionEvent, StoreType, View } from '../types';
 
-type NavKey = 'dashboard' | 'library' | 'activity' | 'fixes' | 'runners' | 'plugins';
+type NavKey = 'dashboard' | 'library' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'settings';
 
 interface SidebarProps {
   view: View;
@@ -36,6 +36,7 @@ export function Sidebar(p: SidebarProps) {
     { key: 'fixes', label: 'Fixes', count: p.fixCount || undefined },
     { key: 'runners', label: 'Runners', count: p.runnerCount || undefined },
     { key: 'plugins', label: 'Plugins' },
+    { key: 'settings', label: 'Settings' },
   ];
 
   return (

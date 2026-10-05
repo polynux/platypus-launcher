@@ -124,6 +124,12 @@ export interface PluginInfo {
   store: string;
 }
 
+/** Hydra-wide settings, persisted in ~/.local/share/hydra/settings.json. */
+export interface LauncherSettings {
+  games_folder: string;
+  default_games_folder: string;
+}
+
 export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak';
 
 export interface ActivityEvent {
@@ -142,4 +148,5 @@ export type View =
   | { name: 'activity' }
   | { name: 'fixes' }
   | { name: 'runners' }
-  | { name: 'plugins' };
+  | { name: 'plugins' }
+  | { name: 'settings' };

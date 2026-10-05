@@ -1,6 +1,6 @@
 # Plan: store plugins and launcher-free installs
 
-Status: decisions taken (see end), nothing implemented. Branch `plan/launcher-plugins`.
+Status: decisions taken (see end). Milestone 1 (plumbing) implemented on `feat/plugins-plumbing`.
 
 ## Goal
 

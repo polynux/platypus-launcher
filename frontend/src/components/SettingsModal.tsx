@@ -44,6 +44,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
   const isSteamClient = game.store === 'steam' && !game.executable;
+  const sideloaded = game.store === 'custom';
   const current = { ...draft, env_vars: parseEnv(envText) };
   const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, envText]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -219,10 +220,10 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
 
           <div className="flex gap-2.5">
             <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
-            <button onClick={() => onSave(current)} title="Applies this session — per-game settings aren't saved to disk yet" className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
+            <button onClick={() => onSave(current)} title={sideloaded ? "Applies this session: sideloaded games aren't saved yet" : undefined} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
           </div>
           <div className="font-mono text-[9px] leading-relaxed text-white/40">
-            applies this session · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
+            {sideloaded ? 'applies this session' : 'saved for next launch'} · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
           </div>
         </div>
       </div>

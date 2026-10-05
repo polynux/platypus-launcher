@@ -72,6 +72,12 @@ type PluginInfo struct {
 	Store       string `json:"store"`
 }
 
+// LauncherSettings are Hydra-wide settings, persisted in settings.json.
+type LauncherSettings struct {
+	GamesFolder        string `json:"games_folder"` // store plugins install into <GamesFolder>/<plugin>
+	DefaultGamesFolder string `json:"default_games_folder"`
+}
+
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when
 // the Steam client has cached the user's progress locally.
 type Achievement struct {

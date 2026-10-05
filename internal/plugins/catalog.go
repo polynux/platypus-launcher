@@ -6,13 +6,15 @@ import (
 	"hydra-launcher/internal/types"
 )
 
-type Manager struct {
+// Catalog is the static list the Plugins view shows until store plugins are
+// wired to the UI (milestone 3). Toggles are remembered for the session only.
+type Catalog struct {
 	mu      sync.RWMutex
 	plugins []types.PluginInfo
 }
 
-func NewManager() *Manager {
-	return &Manager{
+func NewCatalog() *Catalog {
+	return &Catalog{
 		plugins: []types.PluginInfo{
 			{
 				ID:          "store-steam",
@@ -72,7 +74,7 @@ func NewManager() *Manager {
 	}
 }
 
-func (m *Manager) ListPlugins() []types.PluginInfo {
+func (m *Catalog) ListPlugins() []types.PluginInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	// Return a copy so callers can't mutate manager state outside the lock.
@@ -81,7 +83,7 @@ func (m *Manager) ListPlugins() []types.PluginInfo {
 	return out
 }
 
-func (m *Manager) TogglePlugin(id string, enabled bool) bool {
+func (m *Catalog) TogglePlugin(id string, enabled bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := range m.plugins {

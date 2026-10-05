@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import type { Game, GameDetails, GameFixInfo, ProtonVersion, PluginInfo, SessionEvent, Tweak } from '../types';
+import type { Game, GameDetails, GameFixInfo, GameSettings, LauncherSettings, ProtonVersion, PluginInfo, SessionEvent, Tweak } from '../types';
 import { toBackendGame } from '../lib/settings';
 import {
   GetGames,
@@ -11,6 +11,11 @@ import {
   GetGameFix,
   GetGameDetails,
   GetTweaks,
+  GetLauncherSettings,
+  SetGamesFolder,
+  ChooseGamesFolder,
+  GetGameSettings,
+  SaveGameSettings,
 } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
@@ -134,6 +139,54 @@ export const LauncherApi = {
       try: async () => {
         if (!window.go?.main?.App) throw wailsUnavailable('GetTweaks');
         return ((await GetTweaks()) ?? []) as unknown as Tweak[];
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  getLauncherSettings: (): Effect.Effect<LauncherSettings, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('GetLauncherSettings');
+        return (await GetLauncherSettings()) as LauncherSettings;
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  // Empty path resets to the default (~/Games). Rejects relative paths and files.
+  setGamesFolder: (path: string): Effect.Effect<LauncherSettings, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('SetGamesFolder');
+        return (await SetGamesFolder(path)) as LauncherSettings;
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  // Native folder picker. Resolves '' when the user cancels.
+  chooseGamesFolder: (): Effect.Effect<string, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('ChooseGamesFolder');
+        return await ChooseGamesFolder();
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  // Saved per-game settings, keyed by game id, exactly as saveGameSettings stored them.
+  getGameSettings: (): Effect.Effect<Record<string, GameSettings>, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('GetGameSettings');
+        return ((await GetGameSettings()) ?? {}) as unknown as Record<string, GameSettings>;
+      },
+      catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+    }),
+
+  saveGameSettings: (id: string, settings: GameSettings): Effect.Effect<void, Error> =>
+    Effect.tryPromise({
+      try: async () => {
+        if (!window.go?.main?.App) throw wailsUnavailable('SaveGameSettings');
+        await SaveGameSettings(id, settings as unknown as Record<string, unknown>);
       },
       catch: (err) => (err instanceof Error ? err : new Error(String(err))),
     }),
