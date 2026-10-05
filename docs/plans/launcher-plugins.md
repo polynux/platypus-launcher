@@ -1,6 +1,6 @@
 # Plan: store plugins and launcher-free installs
 
-Status: proposal, nothing implemented. Branch `plan/launcher-plugins`.
+Status: decisions taken (see end), nothing implemented. Branch `plan/launcher-plugins`.
 
 ## Goal
 
@@ -53,9 +53,18 @@ JSON-RPC 2.0 over stdin/stdout (one JSON object per line), the same model as LSP
   "store": "epic",
   "exec": "bin/hydra-epic",
   "capabilities": ["library", "install", "launch", "auth", "cloud-saves"],
-  "requires": [{ "bin": "legendary", "hint": "pipx install legendary-gl" }]
+  "requires": [{ "bin": "legendary", "hint": "pipx install legendary-gl" }],
+  "install_dir": "epic",
+  "permissions": {
+    "network": ["*.epicgames.com", "*.epicgames.dev"],
+    "read": ["~/.config/legendary"],
+    "write": ["~/.config/legendary"]
+  }
 }
 ```
+
+`install_dir` is optional: relative to Hydra's base games folder, or absolute if the
+user overrides it per plugin (see Install folders).
 
 Why this over the alternatives:
 
@@ -120,29 +129,121 @@ and session tracking (`internal/session`).
 - Game page: Install button with size and target folder, then progress.
 - A Downloads view (the design's sidebar has room) with the queue, speed, pause/cancel.
 
+## Plugin kinds and what third parties can do
+
+Two kinds of plugin, because most useful extensions don't need code at all:
+
+**Data plugins** (no executable): fix recipes, tweak packs, runner download sources,
+art sources. A JSON file validated against a schema. They can't run anything, so they
+are safe to share freely and need no trust prompt. Hydra applies them through the
+same paths as its built-in fixes and tweaks.
+
+**Store plugins** (executable, the protocol above): library, auth, install, launch
+spec. Third-party store plugins get exactly the same protocol as first-party ones;
+an ecosystem where outsiders get a weaker API isn't worth building.
+
+### Realistic security scope for third-party store plugins
+
+A store plugin is arbitrary code running as the user. We can't make that fully safe,
+and pretending otherwise is worse than saying so. What we can enforce, in order of
+cost:
+
+1. **Protocol boundary** (v1, cheap). Plugins never execute anything through Hydra:
+   they return a launch *spec*, and Hydra checks it. The executable and working dir
+   must be inside that plugin's install folder, env keys are filtered against a
+   denylist (`LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, …), and the spec is shown in the
+   launch command preview. Plugins can't see other plugins' data or settings.
+2. **Explicit install, no surprises** (v1). Only from a local folder or a git URL the
+   user pastes. Before enabling, Hydra shows the manifest: what it runs, declared
+   network hosts and paths, required tools. The executable's hash is pinned; if it
+   changes, the plugin is disabled until the user re-approves. No auto-update.
+3. **Sandbox with bubblewrap** (v2, Linux-native, what Flatpak uses). Run the plugin
+   under `bwrap` with the filesystem reduced to: its own folder, its install folder,
+   the paths it declared in `permissions.read`/`write`, and a private `/tmp`. Declared
+   permissions become enforced permissions. Network stays allowed: bwrap can only
+   cut it entirely, and every store plugin needs it. Host filtering would need a
+   proxy, so it isn't planned.
+4. **Not in scope**: auditing plugin code, a signed central store, sandboxing the
+   *games* plugins download. Games run with the same trust as anything the user
+   installs, same as Heroic or Lutris.
+
+Plugins also can't inject UI. Hydra renders everything from protocol data (library
+entries, auth forms, progress), so a plugin can't spoof Hydra's own dialogs.
+
+## Install folders
+
+- Hydra setting **Games folder**, default `~/Games`, configurable in the launcher
+  settings.
+- Each store plugin installs into `<Games folder>/<install_dir>` (`install_dir` from
+  the manifest, defaulting to the plugin id), e.g. `~/Games/epic/`.
+- The user can override the folder per plugin in the Plugins view, including an
+  absolute path on another disk. Hydra passes the resolved folder to the plugin in
+  `game.install`; plugins never pick paths themselves. That keeps the launch-spec
+  check from point 1 simple: everything must live under the folder Hydra handed out.
+- Before a job starts, Hydra checks free space against the size the plugin reports.
+
+## Steam without the Steam client: a separate plugin
+
+Built-in Steam support stays as it is: scan the client's libraries, launch through the
+client. A separate plugin, **steam-standalone**, handles installing and launching
+without the Steam client UI.
+
+**Install / update**: DepotDownloader (needs `dotnet`, required, not bundled). Logs in
+with the user's account and Steam Guard, lists owned apps, downloads their depots
+into `<Games folder>/steam/`. Updates are a diff against the installed manifest.
+
+**Launch** comes in three cases, detected per game:
+
+1. **No Steamworks dependency** (no `steam_api*.dll` / `libsteam_api.so`): launch
+   directly with Hydra's runner pipeline. Fully launcher-free.
+2. **Uses Steamworks, works without a client**: many games only call
+   `SteamAPI_Init` for achievements or overlay and continue if it fails. We launch
+   directly and set `SteamAppId`/`SteamGameId` so the game doesn't relaunch itself
+   through Steam.
+3. **Requires the client** (`SteamAPI_Init` failure is fatal, or Steam's DRM wrapper):
+   Hydra starts the Steam client hidden (`steam -silent`) and launches the game
+   *outside* Steam's library, with the same env. The game talks to the running client
+   for licence and achievements, so the user never sees Steam, but it's running.
+
+Detecting 2 vs 3 can't be done reliably by inspection. The plugin tries direct, and if
+the game exits within a few seconds with the Steamworks init error in its log, it
+marks the game "needs client" and uses mode 3 from then on. Community data plugins
+can pre-seed that flag.
+
+Out of scope: Steam API emulators (replacing `steam_api.dll` with a stub such as
+Goldberg). That circumvents Steam's licence check, the same category as DRM bypass,
+and isn't something we'll ship or document even for owned games.
+
+Why a separate plugin: it needs its own auth flow (Steam Guard), its own library
+source (owned, not just installed), a download engine and per-game launch-mode state.
+None of that belongs in the scanner, and users happy with the Steam client never need
+it.
+
 ## Milestones
 
-1. **Plumbing**: `Store` interface, Steam behind it, persisted settings, plugin
-   discovery and JSON-RPC client, plus a tiny `echo` test plugin. No user-visible change.
-2. **Epic via legendary**: auth, owned library, launch of games already installed by
-   legendary. First real third-party plugin.
-3. **Installs**: job queue, progress events, Install/Uninstall UI, Downloads view.
-4. **GOG via gogdl**, then Amazon via nile: should need no core changes. If they do,
-   fix the protocol before calling it stable.
-5. **Plugin authoring**: protocol reference, `hydra-plugin` scaffold, and a conformance
-   test that runs a plugin through every method.
-6. Optional: Steam installs via DepotDownloader.
+1. **Plumbing**: `Store` interface with Steam behind it, persisted settings, Games
+   folder setting, plugin discovery, manifest validation and hash pinning, JSON-RPC
+   client, a tiny `echo` test plugin. No user-visible change beyond the setting.
+2. **Data plugins**: schema, loader, and moving the built-in curated fixes and tweaks
+   to that format. Quick win, and validates the trust-free path.
+3. **Epic via legendary**: auth, owned library, launching games legendary installed.
+   First real store plugin.
+4. **Installs**: job queue, progress events, Install/Uninstall UI, Downloads view,
+   free-space check, launch-spec validation.
+5. **GOG via gogdl**, then Amazon via nile. They should need no core changes; if they
+   do, fix the protocol before calling api 1 stable.
+6. **Plugin authoring**: protocol reference, `hydra-plugin` scaffold, conformance test.
+7. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
+8. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
 
-## Open decisions
+## Decisions
 
-1. **Bundle or require the CLIs?** Recommendation: require them (`requires` with an
-   install hint) for v1, and bundle later once we have a release pipeline. Bundling
-   Python tools (legendary) means shipping a Python runtime.
-2. **Plugin trust.** A plugin is an arbitrary executable. Recommendation: install only
-   from a local folder or a curated index for now, show the manifest and requirements
-   before enabling, no auto-update.
-3. **Steam installs.** DepotDownloader works, but Steam-only games still need the client
-   running to start. Worth it only for people without Steam installed. Recommendation:
-   last milestone, optional.
-4. **Where games install.** Recommendation: one library root per plugin, default
-   `~/Games/<store>/`, configurable in Settings.
+1. **CLIs are required, not bundled.** Manifests list them in `requires` with an install
+   hint; the Plugins view shows what's missing and the command to install it.
+2. **Third-party scope**: same protocol as first party; data plugins need no trust;
+   store plugins get explicit install, hash pinning and launch-spec validation in v1,
+   and a bubblewrap sandbox in v2 (see above).
+3. **Steam without the client**: a separate `steam-standalone` plugin with
+   DepotDownloader and three launch modes, last in line because it's the most involved.
+4. **Install folders**: a base Games folder in Hydra's settings, a per-plugin subfolder
+   by default, and a per-plugin override.
