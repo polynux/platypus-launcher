@@ -416,6 +416,63 @@ func TestInstallPath(t *testing.T) {
 	}
 }
 
+// writeDataPlugin creates a data plugin folder with the given files.
+func writeDataPlugin(t *testing.T, pluginsDir string, manifest string, files map[string]string) {
+	t.Helper()
+	dir := filepath.Join(pluginsDir, "community-fixes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ManifestFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+const dataManifest = `{
+  "id": "community-fixes", "name": "Community fixes", "version": "1.0.0",
+  "api": 1, "kind": "data", "data": ["fixes.json"]
+}`
+
+func TestDataPluginNeedsNoApproval(t *testing.T) {
+	e := newEnv(t)
+	install(t, e.plugins, nil) // a store plugin alongside, to keep discovery busy
+	writeDataPlugin(t, e.plugins, dataManifest, map[string]string{
+		"fixes.json": `{"fixes":[{"title":"A Game","source":"community","tier":"gold","description":"Needs this fix."}]}`,
+	})
+	p := e.discover(t)["community-fixes"]
+	if p.Status != StatusReady || p.Data == nil || len(p.Data.Fixes) != 1 {
+		t.Fatalf("data plugin: %+v", p)
+	}
+	if p.Hash != "" || len(p.Missing) != 0 {
+		t.Fatalf("data plugin has approval machinery: %+v", p)
+	}
+	if err := e.m.Approve("community-fixes"); err == nil {
+		t.Fatal("data plugin approved")
+	}
+	if err := e.m.SetEnabled("community-fixes", false); err == nil {
+		t.Fatal("data plugin disabled")
+	}
+	if err := e.m.Call(ctx(t), "community-fixes", "echo", nil, nil); err == nil {
+		t.Fatal("called a data plugin like a store plugin")
+	}
+}
+
+func TestDataPluginInvalidData(t *testing.T) {
+	e := newEnv(t)
+	writeDataPlugin(t, e.plugins, dataManifest, map[string]string{
+		"fixes.json": `{"fixes":[{"title":"A Game","source":"community","tier":"mega","description":"x"}]}`,
+	})
+	p := e.discover(t)["community-fixes"]
+	if p.Status != StatusInvalid || !strings.Contains(p.Problem, "tier") {
+		t.Fatalf("bad data accepted: %+v", p)
+	}
+}
+
 func TestAllowFolder(t *testing.T) {
 	e := newEnv(t)
 	e.ready(t)

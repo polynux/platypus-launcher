@@ -102,13 +102,13 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       </header>
 
       <MonoLabel className="mb-3">store plugins</MonoLabel>
-      {plugins.length === 0 ? (
+      {plugins.filter((p) => p.kind === 'store').length === 0 ? (
         <EmptyState label="no store plugins">
           Put a plugin folder in ~/.local/share/hydra/plugins and rescan. From Hydra's source: plugins/install.sh epic-legendary.
         </EmptyState>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
-          {plugins.map((p) => {
+          {plugins.filter((p) => p.kind === 'store').map((p) => {
             const st = STATUS[p.status] ?? STATUS.invalid;
             const a = auth[p.id];
             const warning = warnings.find((w) => w.source === p.id);
@@ -220,6 +220,44 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
             );
           })}
         </div>
+      )}
+
+      {plugins.some((p) => p.kind === 'data') && (
+        <>
+          <MonoLabel className="mb-3 mt-8">data plugins · no code, always on</MonoLabel>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {plugins
+              .filter((p) => p.kind === 'data')
+              .map((p) => {
+                const st = STATUS[p.status] ?? STATUS.invalid;
+                return (
+                  <Panel key={p.id} className="flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
+                        <p className="font-mono text-[9.5px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+                      </div>
+                      <span
+                        className={cx(
+                          'flex-none rounded-md px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em]',
+                          p.status === 'ready' ? 'bg-white/[0.06] text-white/45' : st.style
+                        )}
+                      >
+                        {p.status === 'ready' ? 'data' : st.label}
+                      </span>
+                    </div>
+                    {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
+                    {p.problem && <p className="font-mono text-[10.5px] text-red-300">{p.problem}</p>}
+                    {p.status === 'ready' && (
+                      <p className="mt-auto text-[11px] text-white/45">
+                        JSON only — fix recipes and tweaks. It can't run anything, so Hydra applies it without asking.
+                      </p>
+                    )}
+                  </Panel>
+                );
+              })}
+          </div>
+        </>
       )}
 
       <MonoLabel className="mb-3 mt-8">built in</MonoLabel>

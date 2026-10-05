@@ -9,6 +9,10 @@ The protocol is still a draft: it can change until GOG and Amazon plugins work
 without core changes (plan milestone 4). Working examples: `plugins/echo` (Go, a
 fake store) and `plugins/epic-legendary` (Python, wraps legendary).
 
+Plugins with no executable — fix recipes and tweak packs — use the same folder
+layout with `"kind": "data"` and need no approval; see
+[data-plugins.md](data-plugins.md).
+
 ## Manifest
 
 ```json

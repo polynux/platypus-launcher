@@ -1,0 +1,81 @@
+{
+  "tweaks": [
+    {
+      "id": "nvidia-nvapi",
+      "kind": "recommended",
+      "title": "Enable NVAPI",
+      "reason": "NVIDIA GPU detected. Exposes NVAPI so DLSS, Reflex and some vendor checks work.",
+      "when": { "gpu": ["nvidia"] },
+      "env": { "PROTON_ENABLE_NVAPI": "1" }
+    },
+    {
+      "id": "nvidia-shader-cache",
+      "kind": "recommended",
+      "title": "Keep the NVIDIA shader cache",
+      "reason": "Stops the driver from pruning its cache, which causes stutter on every launch of large games.",
+      "when": { "gpu": ["nvidia"] },
+      "env": { "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP": "1" }
+    },
+    {
+      "id": "nvidia-hide",
+      "kind": "troubleshoot",
+      "title": "Report the GPU as AMD",
+      "reason": "For games that refuse to start or crash on NVIDIA-specific code paths.",
+      "when": { "gpu": ["nvidia"] },
+      "env": { "PROTON_HIDE_NVIDIA_GPU": "1" }
+    },
+    {
+      "id": "amd-fsr",
+      "kind": "troubleshoot",
+      "title": "FSR 1 upscaling",
+      "reason": "AMD GPU detected. Upscales from a lower fullscreen resolution in older games (GE-Proton only).",
+      "when": { "gpu": ["amd"] },
+      "env": { "WINE_FULLSCREEN_FSR": "1" }
+    },
+    {
+      "id": "ntsync",
+      "kind": "recommended",
+      "title": "Use ntsync",
+      "reason": "/dev/ntsync is available. Kernel-level Windows sync primitives, faster and more correct than fsync.",
+      "when": { "ntsync": true },
+      "env": { "PROTON_USE_NTSYNC": "1" }
+    },
+    {
+      "id": "gamemode",
+      "kind": "recommended",
+      "title": "Run with GameMode",
+      "reason": "Feral GameMode is installed. Sets the CPU governor to performance while playing.",
+      "when": { "gamemode": true },
+      "wrappers": ["gamemode"]
+    },
+    {
+      "id": "wayland",
+      "kind": "troubleshoot",
+      "title": "Native Wayland",
+      "reason": "Wayland session detected. Bypasses XWayland: better frame pacing and HDR, but some games misbehave (Proton 10+/GE).",
+      "when": { "wayland": true },
+      "env": { "PROTON_ENABLE_WAYLAND": "1" }
+    },
+    {
+      "id": "no-d3d12",
+      "kind": "troubleshoot",
+      "title": "Force D3D11",
+      "reason": "For crashes at startup in games with a D3D11 fallback.",
+      "env": { "PROTON_NO_D3D12": "1" }
+    },
+    {
+      "id": "wined3d",
+      "kind": "troubleshoot",
+      "title": "Use WineD3D instead of DXVK",
+      "reason": "For old D3D8/9 games with rendering glitches under DXVK. Slower.",
+      "env": { "PROTON_USE_WINED3D": "1" }
+    },
+    {
+      "id": "log",
+      "kind": "troubleshoot",
+      "title": "Write a Proton log",
+      "reason": "Saves $HOME/steam-<appid>.log, needed for any bug report.",
+      "env": { "PROTON_LOG": "1" }
+    }
+  ]
+}

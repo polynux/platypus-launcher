@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/jobs"
 	"hydra-launcher/internal/jsonrpc"
@@ -44,6 +45,8 @@ type App struct {
 	fixesService *fixes.Service
 	stores       *stores.Registry
 	sessions     *session.Tracker
+	// data holds the built-in fixes and tweaks plus every valid data plugin's.
+	data *dataplug.Registry
 
 	tweaksOnce sync.Once
 	tweaks     []types.Tweak
@@ -51,7 +54,7 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	a := &App{fixesService: fixes.NewService()}
+	a := &App{fixesService: fixes.NewService(), data: dataplug.NewRegistry()}
 	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
 	return a
 }
@@ -103,7 +106,13 @@ func (a *App) startup(ctx context.Context) {
 			msg += " (" + p.Problem + ")"
 		}
 		wruntime.LogInfo(ctx, msg)
+		if p.Data != nil {
+			a.data.Add(p.Data)
+		}
 	}
+	// The built-in fixes and tweaks are data plugin files too, applied through
+	// the same registry.
+	a.data.Add(dataplug.Builtin())
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
@@ -247,9 +256,10 @@ func (a *App) GetLibrary() (types.Library, error) {
 	return lib, nil
 }
 
-// GetGameFix fetches live ProtonDB or curated Lutris fix data for a game.
+// GetGameFix returns the curated fix from data plugins, or a live ProtonDB
+// summary for a game without one.
 func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
-	if fix := a.fixesService.GetCuratedFix(title); fix != nil {
+	if fix := a.data.Fix(title, storeAppID); fix != nil {
 		return fix
 	}
 	if fix, err := a.fixesService.FetchProtonDBFix(storeAppID); err == nil {
@@ -278,9 +288,10 @@ func sourceOf(game types.Game) string {
 	return game.Source
 }
 
-// GetTweaks returns hardware-based tweaks offered for every game.
+// GetTweaks returns hardware-based tweaks offered for every game, from the
+// built-in data plugin and any user-installed ones.
 func (a *App) GetTweaks() []types.Tweak {
-	a.tweaksOnce.Do(func() { a.tweaks = fixes.SuggestTweaks(fixes.DetectSystem()) })
+	a.tweaksOnce.Do(func() { a.tweaks = a.data.Tweaks(dataplug.DetectSystem()) })
 	return a.tweaks
 }
 

@@ -147,7 +147,8 @@ export interface PluginRequirement {
   hint: string;
 }
 
-/** A store plugin found in ~/.local/share/hydra/plugins. */
+/** A store plugin found in ~/.local/share/hydra/plugins. Kind "data" is a
+ *  JSON-only plugin (fixes, tweaks): no code, no approval, always on. */
 export interface StorePlugin {
   id: string;
   name: string;
@@ -155,6 +156,7 @@ export interface StorePlugin {
   author: string;
   description: string;
   store: string;
+  kind: 'store' | 'data';
   status: PluginStatus;
   problem?: string;
   missing: PluginRequirement[];

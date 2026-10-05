@@ -28,6 +28,14 @@ var knownCapabilities = map[string]bool{
 	"cloud-saves": true,
 }
 
+// Plugin kinds. "store" is the default: an executable Hydra talks to over
+// JSON-RPC. "data" is JSON only — fix recipes and tweak packs — and needs no
+// approval because it can't run anything.
+const (
+	KindStore = "store"
+	KindData  = "data"
+)
+
 // Game sources that aren't plugins.
 var reservedIDs = map[string]bool{"steam": true, "custom": true}
 
@@ -38,14 +46,18 @@ var (
 
 // Manifest is a plugin's plugin.json.
 type Manifest struct {
-	ID           string        `json:"id"`
-	Name         string        `json:"name"`
-	Version      string        `json:"version"`
-	Author       string        `json:"author"`
-	Description  string        `json:"description"`
-	API          int           `json:"api"`
-	Store        string        `json:"store"`
-	Exec         string        `json:"exec"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Author      string `json:"author"`
+	Description string `json:"description"`
+	API         int    `json:"api"`
+	Store       string `json:"store"`
+	Exec        string `json:"exec"`
+	// Kind is "store" (default) or "data". A data plugin has no exec and
+	// lists its JSON files in Data.
+	Kind         string        `json:"kind"`
+	Data         []string      `json:"data"`
 	Capabilities []string      `json:"capabilities"`
 	Requires     []Requirement `json:"requires"`
 	// InstallDir is the plugin's subfolder of the Games folder; empty means
@@ -86,11 +98,17 @@ func LoadManifest(dir string) (Manifest, error) {
 	if m.ID != filepath.Base(dir) {
 		return m, fmt.Errorf("id %q doesn't match folder name %q", m.ID, filepath.Base(dir))
 	}
+	if m.Kind == KindData {
+		return m, nil // the data files are read by Discover
+	}
 	if _, err := m.ExecPath(dir); err != nil {
 		return m, err
 	}
 	return m, nil
 }
+
+// IsData reports whether the manifest describes a data plugin.
+func (m Manifest) IsData() bool { return m.Kind == KindData }
 
 func (m Manifest) validate() error {
 	var errs []error
@@ -111,14 +129,43 @@ func (m Manifest) validate() error {
 	if m.API != APIVersion {
 		bad("api %d is not supported (Hydra speaks api %d)", m.API, APIVersion)
 	}
-	if !storeRe.MatchString(m.Store) {
+	if !m.IsData() && !storeRe.MatchString(m.Store) {
 		bad("store %q must be lowercase letters, digits or '-'", m.Store)
 	}
-	// Data plugins without an executable arrive in plan milestone 3.
-	if m.Exec == "" {
-		bad("exec is required")
-	} else if !filepath.IsLocal(m.Exec) {
-		bad("exec %q must be a path inside the plugin folder", m.Exec)
+	kind := m.Kind
+	if kind == "" {
+		kind = KindStore
+	}
+	switch kind {
+	case KindStore:
+		if m.Exec == "" {
+			bad("exec is required")
+		} else if !filepath.IsLocal(m.Exec) {
+			bad("exec %q must be a path inside the plugin folder", m.Exec)
+		}
+		if len(m.Data) > 0 {
+			bad("data files belong to a data plugin (kind \"data\")")
+		}
+	case KindData:
+		if m.Exec != "" {
+			bad("a data plugin has no exec")
+		}
+		if m.Store != "" {
+			bad("a data plugin has no store")
+		}
+		if len(m.Capabilities) > 0 {
+			bad("a data plugin has no capabilities; it can't run anything")
+		}
+		if len(m.Requires) > 0 {
+			bad("a data plugin needs no tools; it can't run anything")
+		}
+		for _, f := range m.Data {
+			if !filepath.IsLocal(f) {
+				bad("data file %q must be a path inside the plugin folder", f)
+			}
+		}
+	default:
+		bad("kind %q must be %q or %q", m.Kind, KindStore, KindData)
 	}
 	for _, c := range m.Capabilities {
 		if !knownCapabilities[c] {

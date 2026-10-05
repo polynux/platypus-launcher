@@ -18,6 +18,10 @@ const authTimeout = time.Minute
 
 func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 	m := p.Manifest
+	kind := m.Kind
+	if kind == "" {
+		kind = plugins.KindStore
+	}
 	folder, def := a.plugins.InstallFolder(m.ID, a.settings.GamesFolder())
 	extra := a.plugins.Folders(m.ID, a.settings.GamesFolder())[1:]
 	reqs := func(rs []plugins.Requirement) []types.PluginRequirement {
@@ -40,6 +44,7 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		Author:               m.Author,
 		Description:          m.Description,
 		Store:                m.Store,
+		Kind:                 kind,
 		Status:               string(p.Status),
 		Problem:              p.Problem,
 		Missing:              reqs(p.Missing),

@@ -95,7 +95,8 @@ type SourceWarning struct {
 	NeedsAuth bool   `json:"needs_auth,omitempty"`
 }
 
-// StorePlugin is a discovered store plugin as the Plugins view shows it.
+// StorePlugin is a discovered plugin as the Plugins view shows it. Kind is
+// "store" (a program, needs approval) or "data" (JSON only, always on).
 type StorePlugin struct {
 	ID           string              `json:"id"`
 	Name         string              `json:"name"`
@@ -103,6 +104,7 @@ type StorePlugin struct {
 	Author       string              `json:"author"`
 	Description  string              `json:"description"`
 	Store        string              `json:"store"`
+	Kind         string              `json:"kind,omitempty"`
 	Status       string              `json:"status"` // see plugins.Status
 	Problem      string              `json:"problem,omitempty"`
 	Missing      []PluginRequirement `json:"missing"`

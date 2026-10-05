@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/settings"
 )
 
@@ -38,6 +39,9 @@ type Plugin struct {
 	Status   Status        `json:"status"`
 	Problem  string        `json:"problem,omitempty"`
 	Missing  []Requirement `json:"missing,omitempty"`
+	// Data is a data plugin's content, loaded at discovery. Store plugins
+	// have none.
+	Data *dataplug.Data `json:"-"`
 }
 
 // NotifyFunc receives notifications other than `log` from a running plugin.
@@ -124,7 +128,8 @@ func (m *Manager) Discover() ([]Plugin, error) {
 	return m.Plugins(), nil
 }
 
-// inspect validates one plugin folder and works out its status.
+// inspect validates one plugin folder and works out its status. A data
+// plugin is ready when its JSON loads — there is nothing to approve.
 func (m *Manager) inspect(dir string) *Plugin {
 	p := &Plugin{Dir: dir}
 	man, err := LoadManifest(dir)
@@ -133,6 +138,16 @@ func (m *Manager) inspect(dir string) *Plugin {
 		// Key broken plugins by folder name so each still shows up, once.
 		p.Manifest.ID = filepath.Base(dir)
 		p.Status, p.Problem = StatusInvalid, err.Error()
+		return p
+	}
+	if man.IsData() {
+		data, err := dataplug.Load(os.DirFS(dir), man.Data)
+		if err != nil {
+			p.Status, p.Problem = StatusInvalid, err.Error()
+			return p
+		}
+		p.Data = data
+		p.Status = StatusReady
 		return p
 	}
 	execPath, _ := man.ExecPath(dir) // checked by LoadManifest
@@ -180,6 +195,9 @@ func (m *Manager) Approve(id string) error {
 	if !ok {
 		return fmt.Errorf("unknown plugin %q", id)
 	}
+	if p.Manifest.IsData() {
+		return fmt.Errorf("%s is a data plugin: nothing to approve", id)
+	}
 	// Hash again: what gets approved is what is on disk now.
 	p = m.inspect(p.Dir)
 	if p.Status == StatusInvalid {
@@ -197,6 +215,9 @@ func (m *Manager) Approve(id string) error {
 // SetEnabled turns an approved plugin on or off. A plugin whose executable
 // changed must be approved again instead.
 func (m *Manager) SetEnabled(id string, enabled bool) error {
+	if p, ok := m.Plugin(id); ok && p.Manifest.IsData() {
+		return fmt.Errorf("%s is a data plugin: nothing to enable or disable", id)
+	}
 	trust, ok := m.trust.PluginState(id)
 	if !ok {
 		return fmt.Errorf("plugin %s was never approved", id)
@@ -324,6 +345,18 @@ func (m *Manager) Plugin(id string) (Plugin, bool) {
 		return Plugin{}, false
 	}
 	return *p, true
+}
+
+// DataPlugins returns every valid data plugin from the last Discover, sorted
+// by id.
+func (m *Manager) DataPlugins() []Plugin {
+	var out []Plugin
+	for _, p := range m.Plugins() {
+		if p.Manifest.IsData() && p.Data != nil {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // InstallFolder is where the plugin installs games: the user's override, or

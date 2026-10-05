@@ -452,6 +452,7 @@ export namespace types {
 	    author: string;
 	    description: string;
 	    store: string;
+	    kind?: string;
 	    status: string;
 	    problem?: string;
 	    missing: PluginRequirement[];
@@ -480,6 +481,7 @@ export namespace types {
 	        this.author = source["author"];
 	        this.description = source["description"];
 	        this.store = source["store"];
+	        this.kind = source["kind"];
 	        this.status = source["status"];
 	        this.problem = source["problem"];
 	        this.missing = this.convertValues(source["missing"], PluginRequirement);

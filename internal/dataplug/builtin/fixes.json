@@ -1,0 +1,26 @@
+{
+  "fixes": [
+    {
+      "title": "The Witcher: Enhanced Edition",
+      "source": "clarity/lutris",
+      "tier": "gold",
+      "description": "Requires GOG registry fix and d3dx9 winetricks verb to prevent silent crash on start.",
+      "winetricks": ["d3dx9", "corefonts"]
+    },
+    {
+      "title": "Arcanum: Of Steamworks and Magick Obscura",
+      "source": "clarity",
+      "tier": "platinum",
+      "description": "Bypass incompatible legacy Windows helper wrapper script on Linux.",
+      "winetricks": ["ddraw"]
+    },
+    {
+      "title": "Fallout: London",
+      "source": "lutris",
+      "tier": "gold",
+      "description": "Apply missing GOG post-install finishing steps and xaudio overrides for black screen fix.",
+      "winetricks": ["faudio", "xact"],
+      "dllOverrides": { "xaudio2_7": "n,b" }
+    }
+  ]
+}

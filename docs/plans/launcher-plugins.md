@@ -1,7 +1,8 @@
 # Plan: store plugins and launcher-free installs
 
-Status: decisions taken (see end). Milestones 1 (plumbing, `feat/plugins-plumbing`) and
-2 (store plugins end to end, `feat/plugins-e2e`) implemented. The protocol as built is in
+Status: decisions taken (see end). Milestones 1 (plumbing, `feat/plugins-plumbing`),
+2 (store plugins end to end, `feat/plugins-e2e`) and 3 (data plugins,
+`feat/plugins-data`) implemented. The protocol as built is in
 [docs/plugins/protocol.md](../plugins/protocol.md); "Changes during implementation" below
 lists where it differs from this plan.
 
@@ -239,8 +240,9 @@ plugin path (old milestones 3 and 4) came before data plugins.
    plugin games; job queue with progress, cancel, free-space check and resume;
    Install/Uninstall/Update on the game page; Downloads view; Epic via legendary as
    the first real plugin.
-3. **Data plugins**: schema, loader, and moving the built-in curated fixes and tweaks
-   to that format. Validates the trust-free path.
+3. **Data plugins** (done, `feat/plugins-data`): schema, loader, and moving the
+   built-in curated fixes and tweaks to that format (`internal/dataplug/builtin`,
+   embedded and read through the same loader). Validates the trust-free path.
 4. **GOG via gogdl**, then Amazon via nile. They should need no core changes; if they
    do, fix the protocol before calling api 1 stable.
 5. **Plugin authoring**: the protocol reference exists; add a `hydra-plugin` scaffold
@@ -249,6 +251,16 @@ plugin path (old milestones 3 and 4) came before data plugins.
 7. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
 
 ## Changes during implementation
+
+- **Data plugins (milestone 3).** A manifest with `"kind": "data"` and no `exec`
+  declares JSON-only content (`docs/plugins/data-plugins.md`); discovery marks it
+  ready once the files validate, with no approval. The built-in curated fixes
+  (`fixes.Service.GetCuratedFix`) and hardware tweaks (`fixes.SuggestTweaks`)
+  moved verbatim into embedded data plugin files (`internal/dataplug/builtin`)
+  and are applied through the same registry as user-installed data plugins.
+  Built-in behavior is unchanged, checked by a test that pins order, titles and
+  env vars; first-match-wins keeps plugins from overriding built-in recipes or
+  tweak ids.
 
 - **Small gaps left by milestone 2** (fixed on `feat/plugins-gaps`):
   - `game.details` gives plugin games real game-page metadata (summary,
