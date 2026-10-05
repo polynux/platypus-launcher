@@ -75,7 +75,10 @@ func NewManager() *Manager {
 func (m *Manager) ListPlugins() []types.PluginInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.plugins
+	// Return a copy so callers can't mutate manager state outside the lock.
+	out := make([]types.PluginInfo, len(m.plugins))
+	copy(out, m.plugins)
+	return out
 }
 
 func (m *Manager) TogglePlugin(id string, enabled bool) bool {

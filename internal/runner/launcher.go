@@ -16,7 +16,10 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, 
 	env := make(map[string]string)
 
 	// 1. Inherit or set environment variables
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot determine home directory: %w", err)
+	}
 	prefixPath := game.Settings.WinePrefix
 	if prefixPath == "" {
 		prefixPath = filepath.Join(home, ".local/share/hydra/prefixes", game.ID)
@@ -89,8 +92,19 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, 
 	// 4. Executable target
 	targetExe := game.Executable
 	if targetExe == "" && game.Store == types.StoreSteam {
-		// Launch via steam protocol or executable
+		// Steam games are launched by telling the running (or newly started)
+		// Steam client which app to start — we must NOT wrap the steam client
+		// binary in proton/gamescope/mangohud. Signal this via env var so the
+		// caller knows the pipeline is just the steam client.
+		delete(env, "WINEPREFIX")
+		delete(env, "STEAM_COMPAT_DATA_PATH")
+		delete(env, "STEAM_COMPAT_CLIENT_INSTALL_PATH")
+		delete(env, "PROTON_EAC_RUNTIME")
+		delete(env, "PROTON_BATTLEYE_RUNTIME")
+		env["HYDRA_STEAM_PROTOCOL_LAUNCH"] = game.StoreAppID
 		cmdArgs = append(cmdArgs, "steam", "-applaunch", game.StoreAppID)
+	} else if targetExe == "" {
+		return nil, nil, fmt.Errorf("game %q has no executable configured", game.Title)
 	} else {
 		cmdArgs = append(cmdArgs, targetExe)
 	}

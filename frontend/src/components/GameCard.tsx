@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Settings, ShieldCheck, Flame } from 'lucide-react';
+import { Play, Settings2, Copy, Check } from 'lucide-react';
 import type { Game } from '../types';
 
 interface GameCardProps {
@@ -7,93 +7,137 @@ interface GameCardProps {
   onSelect: (game: Game) => void;
   onOpenSettings: (game: Game) => void;
   onQuickLaunch: (game: Game, e: React.MouseEvent) => void;
+  copiedId: string | null;
+  onCopyCommand: (game: Game, e: React.MouseEvent) => void;
 }
+
+const STORE_LABEL: Record<string, string> = {
+  steam: 'STEAM',
+  epic: 'EPIC',
+  gog: 'GOG',
+  ubisoft: 'UBI',
+  custom: 'SIDELOAD',
+};
+
+const TIER_COLOR: Record<string, string> = {
+  platinum: 'text-[#7dd48a] border-[#7dd48a]/40',
+  gold: 'text-[#ffb000] border-[#ffb000]/40',
+  silver: 'text-[#b8bcc0] border-[#b8bcc0]/40',
+  bronze: 'text-[#c98a4b] border-[#c98a4b]/40',
+  borked: 'text-[#e05d5d] border-[#e05d5d]/40',
+};
+
+const runnerLabel = (game: Game): string => {
+  if (game.settings.runner_id) {
+    return game.settings.runner_id.replace('steam:', '').replace('compat:', '');
+  }
+  if (game.store === 'steam') return 'steam client';
+  return 'default runner';
+};
 
 export const GameCard: React.FC<GameCardProps> = ({
   game,
   onSelect,
   onOpenSettings,
   onQuickLaunch,
+  copiedId,
+  onCopyCommand,
 }) => {
-  const storeColor = {
-    steam: 'bg-blue-600/80 border-blue-400/40 text-blue-200',
-    epic: 'bg-zinc-800/80 border-zinc-500/40 text-zinc-200',
-    gog: 'bg-purple-700/80 border-purple-400/40 text-purple-200',
-    ubisoft: 'bg-indigo-700/80 border-indigo-400/40 text-indigo-200',
-    custom: 'bg-amber-600/80 border-amber-400/40 text-amber-200',
-  }[game.store] || 'bg-zinc-800';
-
-  const tierBadge = game.fix_info?.tier ? (
-    <div className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded shadow backdrop-blur-sm border ${
-      game.fix_info.tier.toLowerCase() === 'platinum' ? 'bg-emerald-500/30 text-emerald-300 border-emerald-500/50' :
-      game.fix_info.tier.toLowerCase() === 'gold' ? 'bg-yellow-500/30 text-yellow-300 border-yellow-500/50' :
-      game.fix_info.tier.toLowerCase() === 'silver' ? 'bg-slate-400/30 text-slate-200 border-slate-400/50' :
-      'bg-red-500/30 text-red-300 border-red-500/50'
-    }`}>
-      {game.fix_info.tier}
-    </div>
-  ) : null;
+  const tier = game.fix_info?.tier ? TIER_COLOR[game.fix_info.tier.toLowerCase()] : null;
+  const copied = copiedId === game.id;
 
   return (
     <div
       onClick={() => onSelect(game)}
-      className="group relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800/80 hover:border-purple-500/60 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/10 cursor-pointer flex flex-col aspect-[2/3]"
+      className="group relative flex flex-col aspect-[2/3] bg-[#1d2024] border border-[#2e3238] hover:border-[#ffb000]/70 transition-colors duration-150 cursor-pointer"
+      title={game.title}
     >
-      {/* Background Poster Image */}
-      <div className="absolute inset-0 bg-zinc-950">
+      {/* Cover art */}
+      <div className="absolute inset-0 overflow-hidden">
         <img
           src={game.cover_url}
-          alt={game.title}
+          alt=""
           loading="lazy"
+          draggable={false}
           onError={(e) => {
-            // Fallback placeholder
-            (e.target as HTMLElement).style.display = 'none';
+            (e.target as HTMLElement).style.opacity = '0';
           }}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-90 group-hover:opacity-100"
+          className="w-full h-full object-cover opacity-85 group-hover:opacity-100 transition-opacity duration-200"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent"></div>
+        {/* readability scrim, bottom anchored */}
+        <div className="absolute inset-x-0 bottom-0 h-2/5" style={{ background: 'linear-gradient(to top, rgba(13,14,16,.96), rgba(13,14,16,0))' }} />
+        <div className="absolute inset-x-0 top-0 h-10" style={{ background: 'linear-gradient(to bottom, rgba(13,14,16,.55), transparent)' }} />
       </div>
 
-      {/* Top Bar Badges */}
-      <div className="relative p-2.5 flex items-center justify-between z-10">
-        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md backdrop-blur-md border ${storeColor}`}>
-          {game.store}
+      {/* Top meta row: store + tier */}
+      <div className="relative z-10 flex items-center justify-between px-2 pt-2">
+        <span
+          className="font-mono text-[9px] tracking-[0.12em] text-[#c9cdd1] px-1 py-0.5 bg-[#101214]/80 border border-[#3a3f45]"
+          style={{ fontFamily: 'Hack, monospace' }}
+        >
+          {STORE_LABEL[game.store] || game.store.toUpperCase()}
         </span>
-        {tierBadge}
+        {tier && (
+          <span
+            className={`font-mono text-[9px] uppercase tracking-[0.08em] px-1 py-0.5 bg-[#101214]/80 border ${tier}`}
+            style={{ fontFamily: 'Hack, monospace' }}
+          >
+            {game.fix_info?.tier}
+          </span>
+        )}
       </div>
 
-      {/* Hover Action Overlay */}
-      <div className="absolute inset-0 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-20 bg-zinc-950/40 backdrop-blur-[2px]">
-        <button
-          onClick={(e) => onQuickLaunch(game, e)}
-          className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg shadow-purple-600/50 hover:scale-110 transition-transform"
-          title="Play Game"
-        >
-          <Play className="w-5 h-5 fill-white ml-0.5" />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenSettings(game);
-          }}
-          className="w-10 h-10 rounded-full bg-zinc-800/90 hover:bg-zinc-700 text-zinc-200 flex items-center justify-center border border-zinc-600/50 shadow-md hover:scale-110 transition-transform"
-          title="Game Settings"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+      {/* Hover action bar — instrument strip, not floating orbs */}
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-20 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <div className="flex items-stretch border border-[#ffb000]/50 bg-[#101214]/95 divide-x divide-[#3a3f45]">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onQuickLaunch(game, e);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono text-[#ffb000] hover:bg-[#ffb000] hover:text-[#101214] transition-colors"
+            title={`Launch ${game.title}`}
+            style={{ fontFamily: 'Hack, monospace' }}
+          >
+            <Play className="w-3 h-3 fill-current" />
+            RUN
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopyCommand(game, e);
+            }}
+            className="flex items-center px-2.5 py-1.5 text-[#9aa0a6] hover:text-[#e8e6e3] hover:bg-[#232327] transition-colors"
+            title="Copy launch command"
+          >
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSettings(game);
+            }}
+            className="flex items-center px-2.5 py-1.5 text-[#9aa0a6] hover:text-[#e8e6e3] hover:bg-[#232327] transition-colors"
+            title="Configure runner & fixes"
+          >
+            <Settings2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      {/* Bottom Title Area */}
-      <div className="relative mt-auto p-3 z-10">
-        <h3 className="text-sm font-semibold text-white truncate drop-shadow-md">
+      {/* Bottom readout */}
+      <div className="relative z-10 mt-auto px-2.5 pb-2">
+        <h3
+          className="text-[13px] font-semibold text-[#f2f1ee] truncate leading-tight"
+          style={{ fontFamily: '"Source Sans 3", system-ui, sans-serif' }}
+        >
           {game.title}
         </h3>
-        <p className="text-[11px] text-zinc-400 truncate mt-0.5 flex items-center gap-1.5">
-          {game.settings.runner_id ? (
-            <span className="text-purple-300 font-mono text-[10px]">{game.settings.runner_id.replace('steam:', '').replace('compat:', '')}</span>
-          ) : (
-            <span>Default Proton</span>
-          )}
+        <p
+          className="font-mono text-[9px] tracking-[0.08em] text-[#9aa0a6] truncate mt-0.5 uppercase"
+          style={{ fontFamily: 'Hack, monospace' }}
+        >
+          {runnerLabel(game)}
         </p>
       </div>
     </div>

@@ -20,29 +20,29 @@ type ProtonVersion struct {
 }
 
 type GameSettings struct {
-	RunnerID        string            `json:"runner_id"`         // e.g. "Proton - Experimental", "wine-system"
-	WinePrefix      string            `json:"wine_prefix"`       // Custom wine prefix path
-	LaunchArguments string            `json:"launch_arguments"`  // -novid -fullscreen
-	EnvVars         map[string]string `json:"env_vars"`          // e.g. PROTON_ENABLE_NVAPI=1
-	UseGameMode     bool              `json:"use_gamemode"`      // gamemoderun
-	UseMangoHud     bool              `json:"use_mangohud"`      // mangohud
-	UseGamescope    bool              `json:"use_gamescope"`     // gamescope wrapper
-	GamescopeW      int               `json:"gamescope_w"`       // gamescope width
-	GamescopeH      int               `json:"gamescope_h"`       // gamescope height
-	GamescopeR      int               `json:"gamescope_r"`       // gamescope refresh rate
-	GamescopeArgs   string            `json:"gamescope_args"`    // e.g. -f --adaptive-sync
-	EACRuntime      bool              `json:"eac_runtime"`       // EasyAntiCheat runtime binding
-	BattlEyeRuntime bool              `json:"battleye_runtime"`  // BattlEye runtime binding
+	RunnerID        string            `json:"runner_id"`        // e.g. "Proton - Experimental", "wine-system"
+	WinePrefix      string            `json:"wine_prefix"`      // Custom wine prefix path
+	LaunchArguments string            `json:"launch_arguments"` // -novid -fullscreen
+	EnvVars         map[string]string `json:"env_vars"`         // e.g. PROTON_ENABLE_NVAPI=1
+	UseGameMode     bool              `json:"use_gamemode"`     // gamemoderun
+	UseMangoHud     bool              `json:"use_mangohud"`     // mangohud
+	UseGamescope    bool              `json:"use_gamescope"`    // gamescope wrapper
+	GamescopeW      int               `json:"gamescope_w"`      // gamescope width
+	GamescopeH      int               `json:"gamescope_h"`      // gamescope height
+	GamescopeR      int               `json:"gamescope_r"`      // gamescope refresh rate
+	GamescopeArgs   string            `json:"gamescope_args"`   // e.g. -f --adaptive-sync
+	EACRuntime      bool              `json:"eac_runtime"`      // EasyAntiCheat runtime binding
+	BattlEyeRuntime bool              `json:"battleye_runtime"` // BattlEye runtime binding
 	WorkingDir      string            `json:"working_dir"`
 }
 
 type GameFixInfo struct {
-	Source      string   `json:"source"`       // "lutris", "protondb", "community"
-	Tier        string   `json:"tier"`         // "platinum", "gold", "silver", "bronze", "borked"
-	Description string   `json:"description"`  // Brief note
-	Winetricks  []string `json:"winetricks"`   // e.g. ["vcrun2019", "corefonts"]
+	Source       string            `json:"source"`        // "lutris", "protondb", "community"
+	Tier         string            `json:"tier"`          // "platinum", "gold", "silver", "bronze", "borked"
+	Description  string            `json:"description"`   // Brief note
+	Winetricks   []string          `json:"winetricks"`    // e.g. ["vcrun2019", "corefonts"]
 	DLLOverrides map[string]string `json:"dll_overrides"` // e.g. {"dxgi": "n,b"}
-	LaunchArgs  string   `json:"launch_args"`  // Recommended launch options
+	LaunchArgs   string            `json:"launch_args"`   // Recommended launch options
 }
 
 type Game struct {

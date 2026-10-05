@@ -12,6 +12,6 @@ export function LaunchGame(arg1:types.Game):Promise<string>;
 
 export function ListPlugins():Promise<Array<types.PluginInfo>>;
 
-export function PreviewLaunchCommand(arg1:types.Game):Promise<string|Record<string, string>>;
+export function PreviewLaunchCommand(arg1:types.Game):Promise<string>;
 
 export function TogglePlugin(arg1:string,arg2:boolean):Promise<boolean>;

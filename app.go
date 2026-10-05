@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/plugins"
@@ -18,7 +19,9 @@ type App struct {
 	ctx           context.Context
 	pluginManager *plugins.Manager
 	fixesService  *fixes.Service
-	cachedGames   []types.Game
+
+	mu         sync.Mutex
+	pendingCmd *exec.Cmd
 }
 
 // NewApp creates a new App application struct
@@ -32,6 +35,18 @@ func NewApp() *App {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Reap launched game processes so they don't linger, and stop the
+	// most recent game when the app (and its lifecycle context) shuts down.
+	go func() {
+		<-ctx.Done()
+		a.mu.Lock()
+		cmd := a.pendingCmd
+		a.mu.Unlock()
+		if cmd != nil && cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	}()
 }
 
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
@@ -40,73 +55,17 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 }
 
 // GetGames scans all configured sources (Steam, Custom, etc.) and returns the unified library.
-func (a *App) GetGames() []types.Game {
+func (a *App) GetGames() ([]types.Game, error) {
 	var allGames []types.Game
 
 	// Scan Steam library if enabled
 	steamGames, err := steam.ScanSteamLibrary()
-	if err == nil {
-		allGames = append(allGames, steamGames...)
+	if err != nil {
+		return nil, fmt.Errorf("steam library scan failed: %w", err)
 	}
+	allGames = append(allGames, steamGames...)
 
-	// Add sample custom/sideloaded games to demonstrate multi-store & fixes
-	allGames = append(allGames,
-		types.Game{
-			ID:          "gog_witcher1",
-			Store:       types.StoreGOG,
-			StoreAppID:  "1207658924",
-			Title:       "The Witcher: Enhanced Edition",
-			CoverURL:    "https://images.igdb.com/igdb/image/upload/t_cover_big/co1r7h.jpg",
-			BannerURL:   "https://images.igdb.com/igdb/image/upload/t_screenshot_big/sc8b8c.jpg",
-			InstallDir:  "/home/polynux/Games/GOG/The Witcher",
-			Executable:  "system/witcher.exe",
-			IsInstalled: true,
-			Settings: types.GameSettings{
-				RunnerID:    "compat:GE-Proton11-3",
-				UseGameMode: true,
-			},
-			FixInfo: a.fixesService.GetCuratedFix("The Witcher: Enhanced Edition"),
-		},
-		types.Game{
-			ID:          "epic_cyberpunk",
-			Store:       types.StoreEpic,
-			StoreAppID:  "Ginger",
-			Title:       "Cyberpunk 2077",
-			CoverURL:    "https://images.igdb.com/igdb/image/upload/t_cover_big/co2m35.jpg",
-			BannerURL:   "https://images.igdb.com/igdb/image/upload/t_screenshot_big/sc69n2.jpg",
-			InstallDir:  "/home/polynux/Games/Epic/Cyberpunk2077",
-			Executable:  "bin/x64/Cyberpunk2077.exe",
-			IsInstalled: true,
-			Settings: types.GameSettings{
-				RunnerID:     "steam:Proton - Experimental",
-				UseGameMode:  true,
-				UseMangoHud:  true,
-				UseGamescope: true,
-				GamescopeW:   2560,
-				GamescopeH:   1440,
-				GamescopeR:   144,
-			},
-		},
-		types.Game{
-			ID:          "custom_fallout_london",
-			Store:       types.StoreCustom,
-			StoreAppID:  "fallout_london",
-			Title:       "Fallout: London",
-			CoverURL:    "https://images.igdb.com/igdb/image/upload/t_cover_big/co8fgv.jpg",
-			BannerURL:   "https://images.igdb.com/igdb/image/upload/t_screenshot_big/scfp1a.jpg",
-			InstallDir:  "/home/polynux/Games/Fallout London",
-			Executable:  "f4se_loader.exe",
-			IsInstalled: true,
-			Settings: types.GameSettings{
-				RunnerID:    "compat:GE-Proton11-3",
-				UseGameMode: true,
-			},
-			FixInfo: a.fixesService.GetCuratedFix("Fallout: London"),
-		},
-	)
-
-	a.cachedGames = allGames
-	return allGames
+	return allGames, nil
 }
 
 // GetGameFix fetches live ProtonDB or curated Lutris fix data for a game.
@@ -120,49 +79,59 @@ func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
 	return nil
 }
 
-// PreviewLaunchCommand returns the exact command line and environment variables that will be used.
-func (a *App) PreviewLaunchCommand(game types.Game) (string, map[string]string) {
+// selectRunner resolves the configured runner for a game, falling back to the
+// first available runner only when nothing matches and only for runners that
+// exist on the system.
+func selectRunner(game types.Game) (types.ProtonVersion, bool) {
 	runners := runner.ScanProtonVersions()
-	var selectedRunner types.ProtonVersion
-
 	for _, r := range runners {
 		if r.ID == game.Settings.RunnerID || r.Name == game.Settings.RunnerID {
-			selectedRunner = r
-			break
+			return r, true
 		}
 	}
-	if selectedRunner.Path == "" && len(runners) > 0 {
-		selectedRunner = runners[0]
+	// Only fall back if the game never had a runner configured.
+	if game.Settings.RunnerID == "" && len(runners) > 0 {
+		return runners[0], true
 	}
+	return types.ProtonVersion{}, false
+}
 
-	cmdArgs, env, _ := runner.BuildLaunchCommand(game, selectedRunner)
-	return strings.Join(cmdArgs, " "), env
+// PreviewLaunchCommand returns the exact command line that will be used.
+func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
+	selectedRunner, ok := selectRunner(game)
+	if !ok {
+		return "", fmt.Errorf("runner %q not found", game.Settings.RunnerID)
+	}
+	cmdArgs, _, err := runner.BuildLaunchCommand(game, selectedRunner)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(cmdArgs, " "), nil
 }
 
 // LaunchGame executes the game command asynchronously.
 func (a *App) LaunchGame(game types.Game) (string, error) {
-	runners := runner.ScanProtonVersions()
-	var selectedRunner types.ProtonVersion
-
-	for _, r := range runners {
-		if r.ID == game.Settings.RunnerID || r.Name == game.Settings.RunnerID {
-			selectedRunner = r
-			break
-		}
-	}
-	if selectedRunner.Path == "" && len(runners) > 0 {
-		selectedRunner = runners[0]
+	selectedRunner, ok := selectRunner(game)
+	if !ok {
+		return "", fmt.Errorf("runner %q not found", game.Settings.RunnerID)
 	}
 
 	cmdArgs, env, err := runner.BuildLaunchCommand(game, selectedRunner)
 	if err != nil {
 		return "", err
 	}
-	if len(cmdArgs) == 0 {
-		return "", fmt.Errorf("no command built")
+	// Filter empty argv entries (e.g. a missing executable must abort, not exec "").
+	filtered := make([]string, 0, len(cmdArgs))
+	for _, arg := range cmdArgs {
+		if strings.TrimSpace(arg) != "" {
+			filtered = append(filtered, arg)
+		}
+	}
+	if len(filtered) == 0 {
+		return "", fmt.Errorf("game %q has no launch target", game.Title)
 	}
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd := exec.Command(filtered[0], filtered[1:]...)
 	for k, v := range env {
 		cmd.Env = append(cmd.Environ(), fmt.Sprintf("%s=%s", k, v))
 	}
@@ -170,6 +139,20 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
+
+	// Track the pending process: reap it on exit to avoid zombies, and keep a
+	// handle so shutdown can stop it.
+	a.mu.Lock()
+	a.pendingCmd = cmd
+	a.mu.Unlock()
+	go func() {
+		_ = cmd.Wait()
+		a.mu.Lock()
+		if a.pendingCmd == cmd {
+			a.pendingCmd = nil
+		}
+		a.mu.Unlock()
+	}()
 
 	return fmt.Sprintf("Game launched with PID %d", cmd.Process.Pid), nil
 }

@@ -1,13 +1,11 @@
 import React from 'react';
-import { 
-  Gamepad2, 
-  Layers, 
-  Settings2, 
-  Puzzle, 
-  Flame, 
+import {
+  Gamepad2,
+  Puzzle,
   FolderPlus,
   Compass,
-  Cpu
+  Cpu,
+  Wrench,
 } from 'lucide-react';
 import type { StoreType } from '../types';
 
@@ -18,7 +16,23 @@ interface SidebarProps {
   setSelectedStore: (store: StoreType | 'all') => void;
   storeCounts: Record<string, number>;
   onAddCustomGame: () => void;
+  sessionPid: number | null;
+  gameCount: number;
 }
+
+const NAV_ITEMS = [
+  { id: 'library', label: 'Library', icon: Gamepad2 },
+  { id: 'fixes', label: 'Fixes & Tweaks', icon: Wrench },
+  { id: 'plugins', label: 'Source Plugins', icon: Puzzle },
+  { id: 'system', label: 'Runners & Proton', icon: Cpu },
+] as const;
+
+const SOURCES: Array<{ id: StoreType; label: string }> = [
+  { id: 'steam', label: 'Steam' },
+  { id: 'epic', label: 'Epic Games' },
+  { id: 'gog', label: 'GOG Galaxy' },
+  { id: 'custom', label: 'Sideloaded' },
+];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
@@ -27,189 +41,143 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setSelectedStore,
   storeCounts,
   onAddCustomGame,
+  sessionPid,
+  gameCount,
 }) => {
   return (
-    <aside className="w-64 bg-zinc-900/90 backdrop-blur-md border-r border-zinc-800/80 flex flex-col justify-between p-4 h-screen select-none">
-      <div className="space-y-6">
-        {/* Launcher Title / Branding */}
-        <div className="flex items-center gap-3 px-2 py-1">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
-            <Flame className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg text-white tracking-wide flex items-center gap-1.5">
-              HYDRA <span className="text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">Linux</span>
-            </h1>
-            <p className="text-xs text-zinc-400">Universal Game Center</p>
-          </div>
+    <aside
+      className="w-60 flex-shrink-0 flex flex-col h-screen select-none bg-[#16181b] border-r border-[#2a2d31]"
+    >
+      {/* Wordmark */}
+      <div className="px-4 pt-4 pb-3 border-b border-[#2a2d31] relative overflow-hidden">
+        <div
+          aria-hidden
+          className="absolute inset-0 opacity-[0.05] pointer-events-none"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(0deg, #ffb000 0px, #ffb000 1px, transparent 1px, transparent 3px)',
+          }}
+        />
+        <div className="relative flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 bg-[#ffb000]" style={{ boxShadow: '0 0 6px rgba(255,176,0,.5)' }} />
+          <h1
+            className="font-mono font-bold text-[15px] tracking-[0.18em] text-[#e8e6e3]"
+            style={{ fontFamily: 'Hack, monospace' }}
+          >
+            HYDRA
+          </h1>
+          <span className="font-mono text-[9px] text-[#8a8f94] tracking-wider border border-[#33373c] px-1 py-px">
+            LINUX
+          </span>
         </div>
-
-        {/* Quick Add Custom Game Action */}
-        <button
-          onClick={onAddCustomGame}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/60 text-sm font-medium text-zinc-200 transition-all hover:border-purple-500/50 shadow-sm"
-        >
-          <FolderPlus className="w-4 h-4 text-purple-400" />
-          <span>Add Custom Game</span>
-        </button>
-
-        {/* Navigation Tabs */}
-        <nav className="space-y-1">
-          <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-3 mb-2">Navigation</div>
-          
-          <button
-            onClick={() => setCurrentTab('library')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentTab === 'library'
-                ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Gamepad2 className="w-4 h-4" />
-              <span>Library</span>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 font-mono">
-              {storeCounts['all'] || 0}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('fixes')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentTab === 'fixes'
-                ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Compass className="w-4 h-4 text-emerald-400" />
-              <span>Fixes & Tweaks</span>
-            </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold uppercase">
-              ProtonDB
-            </span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('plugins')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentTab === 'plugins'
-                ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Puzzle className="w-4 h-4 text-blue-400" />
-              <span>Source Plugins</span>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">
-              6
-            </span>
-          </button>
-
-          <button
-            onClick={() => setCurrentTab('system')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              currentTab === 'system'
-                ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Cpu className="w-4 h-4 text-amber-400" />
-              <span>Runners & Proton</span>
-            </div>
-          </button>
-        </nav>
-
-        {/* Store Filter List (Only visible in library tab) */}
-        {currentTab === 'library' && (
-          <div className="space-y-1 pt-2 border-t border-zinc-800/60">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider px-3 mb-2">Sources</div>
-            
-            <button
-              onClick={() => setSelectedStore('all')}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-xs transition-colors ${
-                selectedStore === 'all'
-                  ? 'bg-zinc-800 text-white font-medium'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-              }`}
-            >
-              <span>All Sources</span>
-              <span className="text-[11px] opacity-60 font-mono">{storeCounts['all'] || 0}</span>
-            </button>
-
-            <button
-              onClick={() => setSelectedStore('steam')}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-xs transition-colors ${
-                selectedStore === 'steam'
-                  ? 'bg-zinc-800 text-white font-medium'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                Steam
-              </span>
-              <span className="text-[11px] opacity-60 font-mono">{storeCounts['steam'] || 0}</span>
-            </button>
-
-            <button
-              onClick={() => setSelectedStore('epic')}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-xs transition-colors ${
-                selectedStore === 'epic'
-                  ? 'bg-zinc-800 text-white font-medium'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-zinc-300"></span>
-                Epic Games
-              </span>
-              <span className="text-[11px] opacity-60 font-mono">{storeCounts['epic'] || 0}</span>
-            </button>
-
-            <button
-              onClick={() => setSelectedStore('gog')}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-xs transition-colors ${
-                selectedStore === 'gog'
-                  ? 'bg-zinc-800 text-white font-medium'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-                GOG Galaxy
-              </span>
-              <span className="text-[11px] opacity-60 font-mono">{storeCounts['gog'] || 0}</span>
-            </button>
-
-            <button
-              onClick={() => setSelectedStore('custom')}
-              className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-xs transition-colors ${
-                selectedStore === 'custom'
-                  ? 'bg-zinc-800 text-white font-medium'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                Sideloaded / Custom
-              </span>
-              <span className="text-[11px] opacity-60 font-mono">{storeCounts['custom'] || 0}</span>
-            </button>
-          </div>
-        )}
+        <p className="relative font-mono text-[10px] text-[#8a8f94] tracking-wide mt-1">
+          launch control · linux
+        </p>
       </div>
 
-      {/* Footer Info */}
-      <div className="pt-4 border-t border-zinc-800/60 text-xs text-zinc-500 flex items-center justify-between">
-        <span className="font-mono">Linux x86_64</span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          Wails + Vite
+      {/* Navigation */}
+      <nav className="px-2 pt-3 flex-none">
+        <ul className="space-y-px">
+          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+            const active = currentTab === id;
+            return (
+              <li key={id}>
+                <button
+                  onClick={() => setCurrentTab(id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] border-l-2 transition-colors ${
+                    active
+                      ? 'border-[#ffb000] bg-[#1f2226] text-[#f2f1ee]'
+                      : 'border-transparent text-[#9aa0a6] hover:text-[#d7d5d1] hover:bg-[#1c1f22]'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 flex-none" strokeWidth={1.75} />
+                  <span className="flex-1 text-left">{label}</span>
+                  {id === 'library' && (
+                    <span className="font-mono text-[10px] text-[#8a8f94]">
+                      {String(gameCount).padStart(3, '0')}
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      {/* Store filter */}
+      {currentTab === 'library' && (
+        <div className="px-2 pt-4 pb-2 border-t border-[#2a2d31] mt-3 overflow-y-auto flex-1 min-h-0">
+          <div className="px-3 mb-1.5 font-mono text-[10px] tracking-[0.14em] text-[#767c82] uppercase">
+            Sources
+          </div>
+          <ul className="space-y-px">
+            <li>
+              <button
+                onClick={() => setSelectedStore('all')}
+                className={`w-full flex items-center justify-between px-3 py-1 text-[12px] transition-colors ${
+                  selectedStore === 'all'
+                    ? 'text-[#f2f1ee] bg-[#1f2226]'
+                    : 'text-[#9aa0a6] hover:text-[#d7d5d1] hover:bg-[#1c1f22]'
+                }`}
+              >
+                <span>All sources</span>
+                <span className="font-mono text-[10px] text-[#8a8f94]">{String(storeCounts['all'] || 0).padStart(3, '0')}</span>
+              </button>
+            </li>
+            {SOURCES.map(({ id, label }) => (
+              <li key={id}>
+                <button
+                  onClick={() => setSelectedStore(id)}
+                  className={`w-full flex items-center justify-between px-3 py-1 text-[12px] transition-colors ${
+                    selectedStore === id
+                      ? 'text-[#f2f1ee] bg-[#1f2226]'
+                      : 'text-[#9aa0a6] hover:text-[#d7d5d1] hover:bg-[#1c1f22]'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`w-1 h-2.5 flex-none ${
+                        selectedStore === id ? 'bg-[#ffb000]' : 'bg-[#3a3f45]'
+                      }`}
+                    />
+                    {label}
+                  </span>
+                  <span className="font-mono text-[10px] text-[#8a8f94]">{String(storeCounts[id] || 0).padStart(3, '0')}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <button
+            onClick={onAddCustomGame}
+            className="mt-3 w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-[#9aa0a6] border border-[#2e3238] hover:border-[#ffb000]/60 hover:text-[#e8e6e3] bg-[#1a1c1f] transition-colors"
+          >
+            <FolderPlus className="w-3.5 h-3.5" strokeWidth={1.75} />
+            Sideload a game
+          </button>
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0" />
+
+      {/* Session status line */}
+      <div
+        className={`mx-2 mb-2 px-3 py-2 border font-mono text-[10px] flex items-center justify-between ${
+          sessionPid
+            ? 'border-[#ffb000]/50 bg-[#ffb000]/[0.07] text-[#ffb000]'
+            : 'border-[#2a2d31] bg-[#1a1c1f] text-[#767c82]'
+        }`}
+      >
+        <span className="flex items-center gap-2">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              sessionPid ? 'bg-[#ffb000]' : 'bg-[#4a9a5f]'
+            }`}
+            style={sessionPid ? { boxShadow: '0 0 5px rgba(255,176,0,.6)' } : undefined}
+          />
+          {sessionPid ? 'IN SESSION' : 'IDLE'}
         </span>
+        <span>{sessionPid ? `PID ${sessionPid}` : `v0.1 · x86_64`}</span>
       </div>
     </aside>
   );
