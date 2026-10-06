@@ -132,6 +132,9 @@ type PluginRequirement struct {
 type AuthStatus struct {
 	LoggedIn bool   `json:"loggedIn"`
 	User     string `json:"user,omitempty"`
+	// QR carries the current QR login code as block-art text while a QR
+	// login is pending, so the dialog can redraw it when Steam refreshes it.
+	QR string `json:"qr,omitempty"`
 }
 
 // AuthPrompt is what the login dialog shows: a page to open, if any, a QR

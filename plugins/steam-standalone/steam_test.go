@@ -542,3 +542,46 @@ func TestSteamQRAuth(t *testing.T) {
 		t.Fatalf("logout: %+v, %v", st, err)
 	}
 }
+
+// Steam expires the login QR and hands out a new challenge URL, which
+// DepotDownloader prints as a fresh block-art block. The plugin must serve
+// the latest art through auth.status so the dialog can redraw it.
+func TestSteamQRRefresh(t *testing.T) {
+	e := setup(t)
+	e.setDDState("qr_refresh", true)
+	var pr types.AuthPrompt
+	if err := e.call("auth.begin", nil, &pr); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	first := pr.QR
+	if strings.Count(first, "\n") != 20 {
+		t.Fatalf("first QR: %d rows", strings.Count(first, "\n")+1)
+	}
+	// The fake refreshes about two seconds in; auth.status must pick the new
+	// art up.
+	var st types.AuthStatus
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if err := e.call("auth.status", nil, &st); err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		if st.LoggedIn {
+			t.Fatal("status claims logged in before any approval")
+		}
+		if st.QR != "" && st.QR != first {
+			break // refreshed
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("auth.status never served the refreshed QR code")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	if got := strings.Count(st.QR, "\n") + 1; got != 21 {
+		t.Fatalf("refreshed QR: %d rows, want 21", got)
+	}
+	// And the refreshed code still logs in when approved.
+	e.setDDState("qr_approved", true)
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("qr complete after refresh: %+v, %v", st, err)
+	}
+}

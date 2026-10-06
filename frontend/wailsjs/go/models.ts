@@ -115,6 +115,7 @@ export namespace types {
 	export class AuthStatus {
 	    loggedIn: boolean;
 	    user?: string;
+	    qr?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AuthStatus(source);
@@ -124,6 +125,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.loggedIn = source["loggedIn"];
 	        this.user = source["user"];
+	        this.qr = source["qr"];
 	    }
 	}
 	export class GameFixInfo {

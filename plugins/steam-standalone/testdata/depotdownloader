@@ -69,22 +69,27 @@ def main():
 
     # --- QR login: print block-art QR, wait for qr_approved ----------------
     if "-qr" in argv:
-        # A 21x21 QR (version 1) as block-art, each module two chars wide.
-        # Every line differs slightly so the plugin's BMP test can verify
-        # round-tripping; a real scanner would reject this, the tests only
-        # check the image encoding.
-        art = []
-        for y in range(21):
-            row = "".join("██" if (x + y) % 3 == 0 or x < 7 and y < 7 and (x in (0, 6) or y in (0, 6) or 2 <= x <= 4 and 2 <= y <= 4) else "  " for x in range(21))
-            art.append("        " + row + "  ")
-        print("Use the Steam Mobile App to sign in with this QR code:")
-        for row in art:
-            print(row, flush=True)
-        # Wait for the test to approve (or never; the caller kills us).
+        # A 21x21 QR (version 1) as block-art, each module two chars wide,
+        # like DepotDownloader's AsciiQRCode output. Like the real tool, the
+        # code can expire and be replaced: with the qr_refresh knob set, the
+        # fake prints a changed QR (shifted pattern) after two seconds, the
+        # way "The QR code has changed:" works for real.
+        def emit_art(shift):
+            print("Use the Steam Mobile App to sign in with this QR code:")
+            for y in range(21):
+                row = "".join("██" if (x + y + shift) % 3 == 0 or x < 7 and y < 7 and (x in (0, 6) or y in (0, 6) or 2 <= x <= 4 and 2 <= y <= 4) else "  " for x in range(21))
+                print("        " + row + "  ", flush=True)
+        emit_art(0)
         save(dict(st, account=st.get("account")))  # create the state file
+        refreshed = not st.get("qr_refresh")
         deadline = time.time() + 120
         while time.time() < deadline:
             st = load()
+            if not refreshed and time.time() > deadline - 118:
+                print()
+                print("The QR code has changed:", flush=True)
+                emit_art(1)
+                refreshed = True
             if st.get("qr_approved"):
                 st["account"] = st.get("account") or "HydraUser"
                 save(st)
@@ -93,9 +98,10 @@ def main():
                 os.makedirs(root, exist_ok=True)
                 with open(os.path.join(root, "account.config"), "wb") as f:
                     f.write(_z.compress(("GuardData\x00" + TOKEN + "\x00").encode()))
-                print("Done!")
+                print("Success! Next time you can login with -username "
+                      + (st.get("account") or "user") + " -remember-password instead of -qr.")
                 sys.exit(0)
-            time.sleep(0.2)
+            time.sleep(0.1)
         sys.exit(1)
 
     # --- login flow: prompts the plugin must answer ------------------------

@@ -177,6 +177,8 @@ export interface StorePlugin {
 export interface AuthStatus {
   loggedIn: boolean;
   user?: string;
+  /** Current QR login code as block-art text; refreshes while pending. */
+  qr?: string;
 }
 
 export interface AuthField {

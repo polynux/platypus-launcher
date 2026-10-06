@@ -97,11 +97,6 @@ def tail(text, n=3):
 # plugin's private data folder keeps the login key out of the user's real
 # profile (and out of Hydra's view), per the protocol's "credentials stay
 # with the plugin or the tool it wraps".
-# QR login background state: the depotdownloader -qr process and its result.
-qr_lock = threading.Lock()
-qr_proc = {"proc": None, "rc": None}
-
-
 def dd_env():
     env = dict(os.environ)
     home = os.path.join(data_dir(), "home")
@@ -227,18 +222,45 @@ def refresh_token():
 # --- QR login ---------------------------------------------------------------
 # DepotDownloader -qr prints the login QR as Unicode block-art on stdout
 # (one module = two U+2588 chars wide, one row tall, "█" = dark module) and
-# waits for the Steam mobile app to approve it, then persists the login key
-# like a password login. The plugin runs it in the background, hands the
-# block-art to the dialog as text, and the dialog draws it as square
-# modules; auth.status polling picks up the login once the phone approves.
+# waits for the Steam mobile app to approve it. Steam periodically expires and
+# refreshes the challenge URL, so DepotDownloader can print a NEW QR while
+# running ("The QR code has changed:") — the plugin keeps reading and always
+# exposes the latest art through auth.status, and the dialog redraws it. After
+# approval DepotDownloader prints "Success!" and persists the login key into
+# its isolated storage; we consider the login done then (not on process exit,
+# which is non-zero because -app is a dummy), kill the process and let
+# auth.status pick the login up.
 
 LOGINID = "2718281"  # fixed LogonID so logins never kick a running Steam client
 
+# QR login background state: the depotdownloader -qr process, its latest art
+# and its result.
+qr_lock = threading.Lock()
+qr_proc = {"proc": None, "rc": None}
+qr_art = {"text": None}                      # latest block-art, for auth.status
+qr_state = {"state": "idle", "error": None}  # idle|pending|ok|failed
+
+
+def config_stamp():
+    """Identity of the persisted credential store, to notice a fresh login."""
+    path = account_config()
+    if not path:
+        return None
+    try:
+        with open(path, "rb") as f:
+            return (path, hash(f.read()))
+    except OSError:
+        return None
+
 
 def start_qr_login():
-    """Starts `depotdownloader -qr` in the background and extracts the QR
-    block-art from its output. Returns (art text or None, error or None)."""
+    """Starts `depotdownloader -qr` in the background, tracking its QR art.
+    Returns (art text or None, error or None)."""
     stop_qr_login()
+    with qr_lock:
+        qr_art["text"] = None
+        qr_state.update(state="pending", error=None)
+    stamp_before = config_stamp()
     try:
         proc = subprocess.Popen(
             ["depotdownloader", "-app", "0", "-qr", "-remember-password",
@@ -246,21 +268,46 @@ def start_qr_login():
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, bufsize=0, env=dd_env())
     except FileNotFoundError:
-        return None, "depotdownloader is not installed; get the linux-x64 binary from github.com/SteamRE/DepotDownloader/releases"
+        with qr_lock:
+            qr_state.update(state="failed",
+                            error="depotdownloader is not installed; get the linux-x64 binary from github.com/SteamRE/DepotDownloader/releases")
+        return None, qr_state["error"]
     qr_proc["proc"] = proc
-    rows = []   # block-art lines ("█" = dark module)
+    ready = threading.Event()
+    rows = []   # current block-art lines ("█" = dark module)
     tail = []   # everything else, for error messages
+    ok = threading.Event()
 
     def watch():
         # Reads the raw byte pipe and splits on newlines itself: a text-mode
         # iterator stalls until its internal buffer fills, which would
-        # swallow the tail of the QR art. The art ends when stdout is quiet
-        # for 0.4 s after a run of block rows (there is no terminator).
+        # swallow the tail of the QR art.
         import select as _select
         fd = proc.stdout  # unbuffered byte pipe (bufsize=0)
         pend = b""
-        while True:
-            r, _, _ = _select.select([fd], [], [], 0.4)
+
+        def handle(text):
+            if "Use the Steam Mobile App to sign in with this QR code:" in text:
+                rows.clear()
+            elif "\u2588" in text:
+                rows.append(text.rstrip())
+                if len(rows) >= 21:
+                    with qr_lock:
+                        qr_art["text"] = "\n".join(rows)
+                    ready.set()
+            else:
+                if text.startswith("Success!"):
+                    ok.set()
+                if len(rows) >= 21:  # blank line closes the art block
+                    with qr_lock:
+                        qr_art["text"] = "\n".join(rows)
+                    ready.set()
+                tail.append(text)
+            if config_stamp() != stamp_before:  # token store changed
+                ok.set()
+
+        while not ok.is_set():
+            r, _, _ = _select.select([fd], [], [], 0.5)
             if r:
                 chunk = os.read(fd.fileno(), 65536)
                 if not chunk:
@@ -268,61 +315,63 @@ def start_qr_login():
                 pend += chunk
                 while b"\n" in pend:
                     line, pend = pend.split(b"\n", 1)
-                    text = line.decode("utf-8", "replace")
-                    (rows if "\u2588" in text else tail).append(text.rstrip())
+                    handle(line.decode("utf-8", "replace").rstrip("\r"))
             elif pend:
-                text = pend.decode("utf-8", "replace")
-                (rows if "\u2588" in text else tail).append(text.rstrip())
+                handle(pend.decode("utf-8", "replace").rstrip("\r"))
                 pend = b""
-            elif len(rows) >= 21:
-                break  # art complete; keep the process waiting for approval
             elif proc.poll() is not None:
                 break
 
-        if len(rows) < 21:
-            # No usable art: the run failed, so reap it and report why.
-            rc = proc.wait()
-            with qr_lock:
-                qr_proc["proc"] = None
-                qr_proc["rc"] = rc
-            return
-        # Art is up: the phone can approve it now. When it does,
-        # DepotDownloader exits 0 having persisted the login key.
-        rc = proc.wait()
-        if rc == 0 and account_config() is not None:
+        if ok.is_set():
+            # Approved: the login key is persisted. We don't need the rest of
+            # the run (it would fetch the dummy app and fail); stop it.
+            if proc.poll() is None:
+                proc.kill()
             save_state("session.json", {"account": "steam"})
+            with qr_lock:
+                qr_state.update(state="ok", error=None)
+                qr_proc["proc"] = None
+            return
+        rc = proc.wait()
+        detail = " ".join(tail[-3:]) if tail else "no output"
+        if config_stamp() != stamp_before:
+            ok.set()
+            with qr_lock:
+                qr_state.update(state="ok", error=None)
+                qr_proc["proc"] = None
+            return
         with qr_lock:
-            qr_proc["proc"] = None
             qr_proc["rc"] = rc
+            qr_state.update(state="failed", error=(
+                f"DepotDownloader QR login exited with {rc}: {detail}"
+                if rc else "DepotDownloader QR login ended without logging in: " + detail))
 
     threading.Thread(target=watch, daemon=True).start()
-    # The QR prints within a few seconds; wait for it here so auth.begin can
-    # hand the dialog a complete prompt.
-    for _ in range(100):  # up to 10 s
-        if len(rows) >= 21:
-            return "\n".join(rows), None
+    # The first QR prints within a few seconds; wait for it here so auth.begin
+    # can hand the dialog a complete prompt.
+    if not ready.wait(15):
         with qr_lock:
-            if qr_proc.get("proc") is None:
-                break
-        time.sleep(0.1)
+            err = qr_state.get("error")
+        if err:
+            return None, err
+        stop_qr_login()
+        return None, "QR code didn't appear in time; try the password login below"
     with qr_lock:
-        rc = qr_proc.get("rc")
-    tail_text = " ".join(tail[-3:]) if tail else "no output"
-    if rc is not None and rc != 0:
-        return None, f"DepotDownloader QR login exited with {rc}: {tail_text}"
-    return None, "QR code didn't appear in time; try the password login below"
+        return qr_art["text"], None
 
 
 def stop_qr_login():
     with qr_lock:
         proc = qr_proc.pop("proc", None)
         qr_proc["rc"] = None
+        qr_state.update(state="idle", error=None)
+        qr_art["text"] = None
     if proc and proc.poll() is None:
         proc.kill()
 
 
 def logged_in():
-    return bool(load_state("session.json", {}).get("account")) and account_config() is not None
+    return account_config() is not None
 
 
 def state_user():
@@ -361,22 +410,26 @@ def store_app(app_id):
     return entry.get("data") or {}
 
 
-# --- auth ------------------------------------------------------------------
-
 def auth_status(_params=None):
     if logged_in():
         user = state_user()
-        return {"loggedIn": True, "user": user} if user else {"loggedIn": True}
-    return {"loggedIn": False}
+        out = {"loggedIn": True, "user": user} if user else {"loggedIn": True}
+        return out
+    out = {"loggedIn": False}
+    with qr_lock:
+        if qr_state["state"] == "pending" and qr_art["text"]:
+            out["qr"] = qr_art["text"]  # the dialog redraws it when it changes
+    return out
 
 
 def auth_begin(_params):
     qr, err = start_qr_login()
     instructions = ("Scan the QR code with the Steam mobile app (Steam Guard → scan) "
-                    "and just wait — the dialog closes by itself. Or log in below; "
-                    "your password and the Steam Guard code go to DepotDownloader only "
-                    "and are never stored, and the login key Steam issues stays in this "
-                    "plugin's private data folder.")
+                    "and just wait — the dialog closes by itself. The code refreshes "
+                    "by itself when it expires. Or log in below; your password and "
+                    "the Steam Guard code go to DepotDownloader only and are never "
+                    "stored, and the login key Steam issues stays in this plugin's "
+                    "private data folder.")
     if err and not qr:
         instructions = f"QR login unavailable: {err}\n\n{instructions}"
     return {
@@ -423,20 +476,19 @@ def auth_complete(params):
     return auth_status()
 
 
-def wait_qr_login(timeout=120):
-    """Waits for the background -qr DepotDownloader to finish (the phone
-    approved the login) and reports the result, like a password login."""
+def wait_qr_login(timeout=300):
+    """Waits for the background -qr DepotDownloader to be approved (the phone
+    confirmed) and reports the result, like a password login."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        if logged_in():
+        with qr_lock:
+            state, err = qr_state["state"], qr_state["error"]
+        if state == "ok":
             stop_qr_login()
             return auth_status()
-        with qr_lock:
-            proc, rc = qr_proc.get("proc"), qr_proc.get("rc")
-        if proc is None and rc is not None:
-            if rc == 0:
-                raise RPCError("DepotDownloader finished but didn't persist a login key; try again")
-            raise RPCError("the QR login was rejected or timed out; try again or use the password login")
+        if state == "failed":
+            stop_qr_login()
+            raise RPCError("the QR login was rejected or failed: " + err)
         time.sleep(0.5)
     stop_qr_login()
     raise RPCError("nobody scanned the QR code in time; try again")

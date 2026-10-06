@@ -405,7 +405,9 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
 
   // QR logins finish outside the form: the store's mobile app approves and
   // the plugin's tool persists the login, so poll the status while the
-  // dialog is open and close it the moment the plugin says logged in.
+  // dialog is open and close it the moment the plugin says logged in. The
+  // status also carries the current QR code, which Steam refreshes when it
+  // expires — redraw whenever it changed.
   const qrPending = !!prompt?.qr;
   useEffect(() => {
     if (!qrPending) return;
@@ -414,8 +416,14 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
       Effect.runPromise(LauncherApi.authStatus(plugin.id))
         .then((s) => {
           if (stop) return;
-          if (s.loggedIn) onDone(s);
-          else setTimeout(poll, 1500);
+          if (s.loggedIn) {
+            onDone(s);
+            return;
+          }
+          if (s.qr) {
+            setPrompt((p) => (p && p.qr !== s.qr ? { ...p, qr: s.qr } : p));
+          }
+          setTimeout(poll, 1500);
         })
         .catch(() => !stop && setTimeout(poll, 3000));
     const t = setTimeout(poll, 1500);
