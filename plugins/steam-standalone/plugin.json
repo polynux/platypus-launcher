@@ -1,0 +1,23 @@
+{
+  "id": "steam-standalone",
+  "name": "Steam (standalone)",
+  "version": "0.1.0",
+  "author": "Hydra",
+  "description": "Install and launch the Steam games you own without the Steam client, using DepotDownloader. Games that need the Steam client at runtime still get the real client, started hidden.",
+  "api": 1,
+  "store": "steam",
+  "exec": "bin/hydra-steam",
+  "capabilities": ["library", "install", "launch", "auth"],
+  "requires": [
+    { "bin": "depotdownloader", "hint": "get the linux-x64 binary from github.com/SteamRE/DepotDownloader/releases and put it on your PATH as depotdownloader (needs dotnet runtime 8+)" },
+    { "bin": "dotnet", "hint": "install the .NET runtime from https://dotnet.microsoft.com/download or your distribution (dotnet-runtime-8.0 or newer)" },
+    { "bin": "python3", "hint": "install python3 from your distribution" },
+    { "bin": "steam", "hint": "only needed for games that refuse to run outside the Steam client; install it from your distribution or store.steampowered.com" }
+  ],
+  "install_dir": "steam",
+  "permissions": {
+    "network": ["*.steampowered.com", "*.steamcontent.com", "*.steamserver.net", "*.valve.net"],
+    "read": [],
+    "write": []
+  }
+}

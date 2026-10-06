@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""A fake depotdownloader for the plugin's tests. It mimics the surfaces of
+the real CLI that the plugin uses — the password/Steam Guard prompts on
+stdout, the .NET isolated-storage account.config with a JWT refresh token,
+the -manifest-only size dump, the per-file percent progress lines — without
+touching the network.
+
+State lives in $FAKE_DD_STATE; every call is appended to $FAKE_DD_STATE.calls
+and every answer the plugin fed to a prompt goes to $FAKE_DD_STATE.fed.
+The Steam Web API calls the plugin makes answer from $HYDRA_STEAM_API_FILE
+(the plugin's own test hook).
+
+Behaviour knobs (JSON in the state file):
+  account       set after a successful login; null when logged out
+  guard         when true, login additionally asks for a Steam Guard code
+  bad_password  logins to reject before one succeeds (0 = accept first)
+  windows_only  when true, a -os linux download reports "no depots" so the
+                plugin falls back to the Windows run
+"""
+
+import json
+import os
+import sys
+import time
+
+STATE = os.environ["FAKE_DD_STATE"]
+GOOD_PASSWORD = "correct-horse"
+GOOD_GUARD = "ABC12"
+# A syntactically valid (but fake) JWT-shaped refresh token.
+TOKEN = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." 
+         "eyJzdWIiOiI3NjU2MTE5OCJ9."
+         "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c")
+
+TEST_APP = "4321"
+TEST_DISK = 60 * 1024 * 1024
+TEST_COMPRESSED = 40 * 1024 * 1024
+
+
+def load():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"account": None, "guard": True, "bad_password": 0, "windows_only": False}
+
+
+def save(st):
+    with open(STATE, "w") as f:
+        json.dump(st, f)
+
+
+def record(suffix, text):
+    with open(STATE + suffix, "a") as f:
+        f.write(text + "\n")
+
+
+def main():
+    argv = sys.argv[1:]
+    record(".calls", " ".join(argv))
+    st = load()
+
+    def value(flag):
+        return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
+
+    app = value("-app") or ""
+    manifest_only = "-manifest-only" in argv
+    remember = "-remember-password" in argv
+    osname = value("-os")
+
+    # --- login flow: prompts the plugin must answer ------------------------
+    if value("-username"):
+        user = value("-username")
+        if not remember or not st.get("account"):
+            print(f'Enter account password for "{user}": ', end="", flush=True)
+            password = sys.stdin.readline().rstrip("\n")
+            print()
+            if password != GOOD_PASSWORD or st.get("bad_password", 0) > 0:
+                if st.get("bad_password", 0) > 0:
+                    st["bad_password"] -= 1
+                    save(st)
+                print("Unable to login to Steam3: InvalidPassword", file=sys.stderr)
+                sys.exit(1)
+            fed = {"password": password}
+            if st.get("guard"):
+                print("This account is protected by Steam Guard.")
+                print("Please enter your 2 factor auth code from your authenticator app: ", end="", flush=True)
+                guard = sys.stdin.readline().rstrip("\n")
+                if guard != GOOD_GUARD:
+                    print("Unable to login to Steam3: InvalidPassword", file=sys.stderr)
+                    sys.exit(1)
+                fed["guard"] = guard
+            record(".fed", json.dumps(fed))
+        st["account"] = user
+        save(st)
+        # Persist the "refresh token" the way .NET isolated storage would:
+        # a deflated blob containing the JWT, named account.config, under
+        # $HOME/.local/share/isolated-storage/<id>/.
+        import zlib
+        root = os.path.join(os.environ.get("HOME", "/tmp"), ".local/share/isolated-storage/fakeid")
+        os.makedirs(root, exist_ok=True)
+        with open(os.path.join(root, "account.config"), "wb") as f:
+            f.write(zlib.compress(("GuardData\x00" + TOKEN + "\x00").encode()))
+        print("Done!")
+        if app == "0":
+            sys.exit(0)  # nothing to download for app 0
+
+    # --- anything after login needs a persisted session --------------------
+    if not st.get("account"):
+        print("Unable to get steam3 credentials.", file=sys.stderr)
+        sys.exit(1)
+
+    if manifest_only:
+        d = value("-dir") or "."
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "manifest_0.txt"), "w") as f:
+            f.write(f"Content Manifest for Depot {app}\n\n")
+            f.write(f"Total bytes on disk : {TEST_DISK}\n")
+            f.write(f"Total bytes compressed : {TEST_COMPRESSED}\n")
+        print(f"Got AppInfo for {app}")
+        print(f"Total bytes on disk : {TEST_DISK}")
+        print(f"Total bytes compressed : {TEST_COMPRESSED}")
+        print("Total downloaded: 0 bytes (0 bytes uncompressed) from 0 depots")
+        sys.exit(0)
+
+    # Real download into -dir, with progress lines and game files.
+    d = value("-dir")
+    if not d:
+        print("Error: -dir not specified!", file=sys.stderr)
+        sys.exit(1)
+    if osname == "linux" and st.get("windows_only"):
+        print("Couldn't find any depots to download for app " + app, file=sys.stderr)
+        sys.exit(1)
+    os.makedirs(d, exist_ok=True)
+    exe = "game.sh" if osname == "linux" else "game.exe"
+    for pct in (25.00, 50.00, 100.00):
+        time.sleep(0.1)
+        print(f"{pct:6.2f}% {os.path.join(d, exe)}", flush=True)
+    body = "#!/bin/sh\necho 'steam standalone game'\n" if osname == "linux" else "MZ fake game executable"
+    with open(os.path.join(d, exe), "w") as f:
+        f.write(body)
+    os.chmod(os.path.join(d, exe), 0o755)
+    # FAKE_DD_STEAMWORKS: when set, the fake also plants a Steamworks library
+    # so the plugin's mode detection sees an "optional"/"client" game. A test
+    # that wants mode "client" plants it *before* install and calls the
+    # plugin's mark-needs-client afterwards; detect_mode itself always starts
+    # at "optional".
+    sw = os.environ.get("FAKE_DD_STEAMWORKS")
+    if sw:
+        os.makedirs(os.path.join(d, "libs"), exist_ok=True)
+        with open(os.path.join(d, "libs", sw), "w") as f:
+            f.write("fake steamworks")
+    print(f"Total downloaded: {TEST_COMPRESSED} bytes ({TEST_DISK} bytes uncompressed) from 1 depots")
+
+
+if __name__ == "__main__":
+    main()

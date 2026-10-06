@@ -119,3 +119,35 @@ func TestConformanceAmazon(t *testing.T) {
 		},
 	}.Conformance(t)
 }
+
+// steam-standalone wraps DepotDownloader; the fake mimics its prompts,
+// account.config login-key persistence, manifest sizes and progress lines,
+// and the plugin's Steam Web API calls answer from a file.
+func TestConformanceSteamStandalone(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "dd-state.json")
+	api := filepath.Join(t.TempDir(), "steam-api.json")
+	os.WriteFile(api, []byte(`{
+  "response": {"games": [{"appid": 4321, "name": "Standalone Game"}]},
+  "_test": {"4321": {"success": true, "data": {"type": "game", "name": "Standalone Game",
+    "short_description": "A standalone game.", "genres": [{"description": "Action"}],
+    "screenshots": [{"path_full": "https://cdn.steam/4321_ss.jpg"}],
+    "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"}}}}
+}`), 0o644)
+	plugtest.Suite{
+		ID:      "steam-standalone",
+		CopyDir: "../../plugins/steam-standalone",
+		FakeCLI: map[string]string{"depotdownloader": "../../plugins/steam-standalone/testdata/depotdownloader"},
+		Env:     map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api},
+		Login: func(t *testing.T, s *plugtest.Session) {
+			var st types.AuthStatus
+			err := s.Call("auth.complete", map[string]any{
+				"fields": map[string]string{"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st)
+			if err != nil || !st.LoggedIn {
+				t.Fatalf("login: %+v, %v", st, err)
+			}
+		},
+		PickGame: func(t *testing.T, games []types.Game) types.Game {
+			return pick(t, games, "4321")
+		},
+	}.Conformance(t)
+}

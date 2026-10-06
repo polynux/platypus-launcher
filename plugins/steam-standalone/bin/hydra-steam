@@ -1,0 +1,751 @@
+#!/usr/bin/env python3
+"""Hydra store plugin for Steam without the Steam client, wrapping DepotDownloader.
+
+Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+over stdin/stdout, one object per line. Downloads are done by the
+`depotdownloader` CLI (SteamRE/DepotDownloader), which logs into Steam with the
+user's own account and Steam Guard; the plugin never stores the password — it
+feeds it to one DepotDownloader run, and the login key Steam issues afterwards
+stays inside $HYDRA_PLUGIN_DATA, where the plugin points DepotDownloader's
+profile.
+
+Only what the logged-in account owns is installed, through Steam's own CDN,
+with the account's own licence. No DRM or licence circumvention, and no Steam
+API emulators: games that need the Steam client at runtime get the real
+client, started hidden (`steam -silent`), and the game runs against it.
+
+DepotDownloader facts that shape this plugin:
+  - Credentials are prompted interactively ("Enter account password for ...",
+    then a Steam Guard code), so the login run is driven through a pipe and
+    the plugin feeds the answers Hydra collected.
+  - -remember-password makes SteamKit persist the refresh token in .NET
+    isolated storage ("account.config", a deflated protobuf). The plugin runs
+    DepotDownloader with HOME=$HYDRA_PLUGIN_DATA/home, so that file lands in
+    the plugin's private folder. The token is extracted (JWT scan) for the
+    Steam Web API library listing, since DepotDownloader itself has no
+    "list owned games".
+  - Sizes: `-app <id> -manifest-only` dumps a text manifest with
+    "Total bytes on disk / compressed" — manifests only, no game data.
+  - Progress: per-file lines "  42.12% <path>" while downloading.
+  - Installs are resumable: DepotDownloader records installed manifests in
+    <dir>/.DepotDownloader/depot.config and skips chunks it already has.
+"""
+
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+import zlib
+
+API = 1
+CODE_AUTH_REQUIRED = -32001
+
+PROGRESS_RE = re.compile(r"^\s*(\d{1,3}(?:\.\d+)?)%\s+(\S.*)$")
+# -manifest-only dump: "Total bytes on disk : 123" / "Total bytes compressed : 456"
+DISK_RE = re.compile(r"Total bytes on disk\s*:\s*(\d+)")
+COMPRESSED_RE = re.compile(r"Total bytes compressed\s*:\s*(\d+)")
+# SteamKit refresh tokens are JWTs; they survive (deflate) compression as
+# readable strings inside account.config.
+JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+
+out_lock = threading.Lock()
+jobs_lock = threading.Lock()
+jobs = {}  # jobId -> {"proc": Popen, "canceled": bool, ...}
+
+
+class RPCError(Exception):
+    def __init__(self, message, code=-32000):
+        super().__init__(message)
+        self.code = code
+
+
+def send(msg):
+    msg["jsonrpc"] = "2.0"
+    line = json.dumps(msg, separators=(",", ":"))
+    with out_lock:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+
+def notify(method, params):
+    send({"jsonrpc": "2.0", "method": method, "params": params})
+
+
+def log(level, message):
+    notify("log", {"level": level, "message": message})
+
+
+def data_dir():
+    d = os.environ.get("HYDRA_PLUGIN_DATA") or os.path.join(os.path.expanduser("~"), ".hydra-steam-standalone")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def tail(text, n=3):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return " · ".join(lines[-n:]) if lines else "no output"
+
+
+# DepotDownloader keeps its login tokens in .NET isolated storage created
+# under the current user's profile. Running it with HOME pointed inside the
+# plugin's private data folder keeps the login key out of the user's real
+# profile (and out of Hydra's view), per the protocol's "credentials stay
+# with the plugin or the tool it wraps".
+def dd_env():
+    env = dict(os.environ)
+    home = os.path.join(data_dir(), "home")
+    os.makedirs(home, exist_ok=True)
+    env["HOME"] = home
+    env["DOTNET_CLI_HOME"] = home
+    env["XDG_DATA_HOME"] = os.path.join(home, ".local/share")
+    env["DOTNET_NOLOGO"] = "1"
+    env["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
+    return env
+
+
+def depotdownloader_login(args, feed, timeout=600):
+    """Runs DepotDownloader with stdin fed: `feed` is [(pattern, answer)]; the
+    first pattern matching a prompt line gets the answer, once."""
+    try:
+        p = subprocess.Popen(["depotdownloader", *args], stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, bufsize=1, env=dd_env())
+    except FileNotFoundError:
+        raise RPCError("depotdownloader is not installed; get the linux-x64 binary from "
+                       "github.com/SteamRE/DepotDownloader/releases")
+    # The prompts come without a trailing newline, so reading stdout
+    # line-wise to decide when to answer would deadlock. Write the answers
+    # upfront and close stdin instead: DepotDownloader only reads stdin when
+    # it prompts, and an unexpected prompt hits EOF and fails fast instead
+    # of hanging.
+    try:
+        for _pat, answer in feed:
+            p.stdin.write(answer + "\n")
+        p.stdin.flush()
+        p.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+    out = []
+    for line in p.stdout:
+        line = line.rstrip()
+        out.append(line)
+    try:
+        rc = p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        raise RPCError("login timed out")
+    return rc, "\n".join(out)
+
+
+def depotdownloader_simple(args, timeout=900):
+    try:
+        p = subprocess.run(["depotdownloader", *args], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=timeout,
+                           env=dd_env())
+    except FileNotFoundError:
+        raise RPCError("depotdownloader is not installed; get the linux-x64 binary from "
+                       "github.com/SteamRE/DepotDownloader/releases")
+    except subprocess.TimeoutExpired:
+        raise RPCError("depotdownloader timed out")
+    return p.returncode, p.stdout, p.stderr
+
+
+# --- persisted state ------------------------------------------------------
+
+def state_path(name):
+    return os.path.join(data_dir(), name)
+
+
+def load_state(name, default):
+    try:
+        with open(state_path(name)) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def save_state(name, state):
+    with open(state_path(name), "w") as f:
+        json.dump(state, f)
+
+
+def account_config():
+    """DepotDownloader's persisted credentials file, if a login left one."""
+    home = os.path.join(data_dir(), "home")
+    roots = [
+        os.path.join(home, ".local/share/isolated-storage"),
+        os.path.join(home, ".dotnet/isolated-storage"),
+        os.path.join(home, "isolated-storage"),
+    ]
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _dirs, files in os.walk(root):
+            if "account.config" in files:
+                return os.path.join(dirpath, "account.config")
+    return None
+
+
+def refresh_token():
+    """The SteamKit refresh token the login persisted, extracted from
+    account.config (deflated protobuf; JWTs are readable strings in it) and
+    cached. Used for the Web API library listing."""
+    st = load_state("token.json", {})
+    if st.get("refresh_token"):
+        return st["refresh_token"]
+    path = account_config()
+    if not path:
+        return None
+    try:
+        with open(path, "rb") as f:
+            blob = f.read()
+        try:
+            blob = zlib.decompress(blob)
+        except zlib.error:
+            pass  # newer builds may store it uncompressed
+        matches = JWT_RE.findall(blob.decode("utf-8", "ignore"))
+        if not matches:
+            return None
+        st["refresh_token"] = matches[-1]  # the newest token
+        save_state("token.json", st)
+        return st["refresh_token"]
+    except OSError:
+        return None
+
+
+def logged_in():
+    return bool(load_state("session.json", {}).get("account")) and account_config() is not None
+
+
+def state_user():
+    return load_state("session.json", {}).get("account") or ""
+
+
+# --- Steam Web API --------------------------------------------------------
+
+def api_get(url, token=None):
+    # Test hook: tests point this at a file with the responses, so nothing
+    # reaches the network. Not set in normal runs.
+    hook = os.environ.get("HYDRA_STEAM_API_FILE")
+    if hook:
+        with open(hook) as f:
+            return json.load(f)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode())
+
+
+def store_app(app_id):
+    """Public app details (name, type) from the Steam Store API. No login
+    needed; {} when the app isn't listed (bad id, region lock)."""
+    try:
+        data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app_id}&filters=basic")
+    except Exception:
+        return {}
+    if isinstance(data, dict) and data.get("_test"):
+        data = data["_test"]
+    entry = (data or {}).get(str(app_id))
+    if not entry or not entry.get("success"):
+        return {}
+    return entry.get("data") or {}
+
+
+# --- auth ------------------------------------------------------------------
+
+def auth_status(_params=None):
+    if logged_in():
+        user = state_user()
+        return {"loggedIn": True, "user": user} if user else {"loggedIn": True}
+    return {"loggedIn": False}
+
+
+def auth_begin(_params):
+    return {
+        "instructions": "Log in with your Steam account. Your password and the Steam "
+                        "Guard code go to DepotDownloader only and are never stored; the "
+                        "login key Steam issues stays in this plugin's private data "
+                        "folder so you don't log in every time.",
+        "fields": [
+            {"id": "username", "label": "Steam account name", "placeholder": "your Steam login"},
+            {"id": "password", "label": "password", "secret": True},
+            {"id": "guard", "label": "Steam Guard code — only if your account asks for one",
+             "secret": True, "placeholder": "5 characters, or leave empty"},
+        ],
+    }
+
+
+def auth_complete(params):
+    fields = ((params or {}).get("fields") or {})
+    username = (fields.get("username") or "").strip()
+    password = fields.get("password") or ""
+    guard = (fields.get("guard") or "").strip()
+    if not username or not password:
+        raise RPCError("enter your Steam account name and password")
+    # One DepotDownloader run with -remember-password: it asks for the
+    # password on stdin, then possibly a Steam Guard code, and persists the
+    # login key into the isolated storage under our HOME. `-app 0` validates
+    # the login without downloading anything.
+    feed = [(r"Enter account password", password)]
+    if guard:
+        feed.append((r"2 factor auth code|authentication code", guard))
+    depotdownloader_login(["-app", "0", "-username", username,
+                           "-remember-password", "-manifest-only"], feed)
+    token = refresh_token()
+    if not token:
+        raise RPCError("login failed: DepotDownloader didn't persist a login key. "
+                       "Check the account name and password, and try again with a fresh "
+                       "Steam Guard code.")
+    save_state("session.json", {"account": username})
+    return auth_status()
+
+
+def auth_logout(_params):
+    # Wipe the whole private data folder so no login key, guard data or
+    # cached token survives.
+    shutil.rmtree(data_dir(), ignore_errors=True)
+    os.makedirs(data_dir(), exist_ok=True)
+    return {"loggedIn": False}
+
+
+# --- library ---------------------------------------------------------------
+
+def library_list(_params):
+    if not logged_in():
+        raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
+    token = refresh_token()
+    if not token:
+        raise RPCError("no Steam session available; log in again", CODE_AUTH_REQUIRED)
+    try:
+        data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
+                       "?include_appinfo=1&include_played_free_games=1", token)
+    except Exception as e:
+        raise RPCError(f"Steam Web API is unreachable: {e}")
+    games = (data.get("response") or {}).get("games") or []
+    installed = load_state("installed.json", {})
+    out = []
+    for g in games:
+        app = str(g.get("appid") or "")
+        if not app:
+            continue
+        store = store_app(app)
+        entry = {
+            "id": app,
+            "title": store.get("name") or g.get("name") or f"App {app}",
+            "installed": app in installed,
+            "installable": True,
+        }
+        if app in installed:
+            ig = installed[app]
+            entry["installPath"] = ig.get("path", "")
+            entry["version"] = ig.get("version", "")
+            if ig.get("native"):
+                entry["native"] = True
+            entry["note"] = mode_note(ig.get("mode") or "none")
+        if store:
+            entry["coverUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_600x900_2x.jpg"
+            entry["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
+            entry["bannerUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/header.jpg"
+        # Tools, movies, music etc. aren't depot installs Hydra can run.
+        app_type = (store.get("type") or "").lower()
+        if app_type and app_type not in ("game", "demo", "beta", "application"):
+            entry["installable"] = False
+            entry["note"] = f"This entry is a {app_type}, not a game."
+        out.append(entry)
+    for app, ig in installed.items():  # installed but missing from the owned list
+        if not any(e["id"] == app for e in out):
+            out.append({
+                "id": app, "title": ig.get("title") or f"App {app}",
+                "installable": False, "installed": True,
+                "installPath": ig.get("path", ""),
+                "native": True if ig.get("native") else False,
+                "note": mode_note(ig.get("mode") or "none"),
+            })
+    return {"games": out}
+
+
+def mode_note(mode):
+    """What the game page says about how the game launches."""
+    return {
+        "none": "Launch mode: no Steamworks — runs directly, fully without Steam.",
+        "optional": "Launch mode: Steamworks present but optional — runs directly with SteamAppId set.",
+        "client": "Launch mode: needs the Steam client — Hydra starts the real client hidden.",
+    }.get(mode, "")
+
+
+def install_size(params):
+    app = params["id"]
+    # -manifest-only downloads just the manifests and dumps total sizes; no
+    # game data is transferred.
+    d = os.path.join(data_dir(), "sizes", str(app))
+    rc, out, err = depotdownloader_simple(
+        ["-app", str(app), "-manifest-only", "-dir", d], timeout=900)
+    text = out + err
+    if rc != 0:
+        if re.search(r"not available from this account|Unable to get steam3 credentials|Insufficient privileges", text, re.IGNORECASE):
+            raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
+        raise RPCError(f"couldn't get the size for app {app}: {tail(text)}")
+    disk = compressed = 0
+    for line in text.splitlines():
+        if DISK_RE.search(line):
+            disk = max(disk, int(DISK_RE.search(line).group(1)))
+        m = COMPRESSED_RE.search(line)
+        if m:
+            compressed = max(compressed, int(m.group(1)))
+    if disk == 0:
+        raise RPCError(f"depotdownloader printed no manifest sizes for app {app}")
+    return {"downloadBytes": compressed, "diskBytes": disk}
+
+
+# --- jobs ------------------------------------------------------------------
+
+def start_job(params, kind):
+    app, job_id = str(params["id"]), params["jobId"]
+    if kind == "uninstall":
+        if app not in load_state("installed.json", {}):
+            raise RPCError(f"app {app} is not installed")
+        threading.Thread(target=follow_uninstall, args=(job_id, app), daemon=True).start()
+        return {}
+    install_dir = params.get("installDir") or ""
+    if not os.path.isabs(install_dir):
+        raise RPCError("installDir is missing or relative; Hydra always sends one")
+    # One folder per game under Hydra's install dir, like steamapps/common/<name>.
+    game_dir = os.path.join(install_dir, game_dir_name(app))
+    os.makedirs(game_dir, exist_ok=True)
+    threading.Thread(target=follow_install, args=(job_id, app, game_dir), daemon=True).start()
+    return {}
+
+
+def game_dir_name(app):
+    installed = load_state("installed.json", {})
+    if app in installed and installed[app].get("dir_name"):
+        return installed[app]["dir_name"]
+    name = store_app(app).get("name") or f"app_{app}"
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("_") or f"app_{app}"
+    return safe
+
+
+def follow_install(job_id, app, game_dir):
+    """DepotDownloader run with progress; Linux depots first, Windows fallback
+    (most Steam games ship Windows only; the platform used decides `native`)."""
+    with jobs_lock:
+        jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
+    base = ["-app", app, "-dir", game_dir, "-remember-password", "-max-downloads", "8"]
+    os_used, last_text = None, ""
+    for osname in ("linux", "windows"):
+        with jobs_lock:
+            if jobs.get(job_id, {}).get("canceled"):
+                return
+        proc = subprocess.Popen(["depotdownloader", *base, "-os", osname],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1,
+                                env=dd_env())
+        with jobs_lock:
+            jobs[job_id]["proc"] = proc
+        state = {"jobId": job_id, "phase": "downloading", "percent": 0}
+        text = []
+        for line in proc.stdout:
+            line = line.rstrip()
+            text.append(line)
+            m = PROGRESS_RE.match(line)
+            if m:
+                state["percent"] = float(m.group(1))
+                notify("job.progress", dict(state))
+        rc = proc.wait()
+        last_text = "\n".join(text)
+        if rc == 0:
+            os_used = osname
+            break
+        if not re.search(r"Couldn't find any depots to download|No depot", last_text, re.IGNORECASE):
+            break  # a real failure (auth, network), not just "no Linux depots"
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        return
+    if os_used is None:
+        if re.search(r"not available from this account|Unable to get steam3 credentials|Insufficient privileges", last_text, re.IGNORECASE):
+            notify("job.failed", {"jobId": job_id, "error": "log in to Steam first (the session expired)"})
+        else:
+            notify("job.failed", {"jobId": job_id, "error": f"depotdownloader failed: {tail(last_text)}"})
+        return
+    record_install(app, game_dir, os_used)
+    notify("job.done", {"jobId": job_id})
+
+
+def record_install(app, game_dir, os_used):
+    """Remember the install: where it is, what runs it and which launch mode
+    applies (see launch modes below)."""
+    exe = find_executable(game_dir)
+    installed = load_state("installed.json", {})
+    installed[app] = {
+        "path": game_dir,
+        "dir_name": os.path.basename(game_dir),
+        "executable": exe,
+        "native": os_used == "linux",
+        "mode": detect_mode(game_dir),
+        "version": "",
+        "title": store_app(app).get("name") or "",
+    }
+    save_state("installed.json", installed)
+
+
+def find_executable(game_dir):
+    """The game's entry point: a Linux binary/script, or the biggest .exe in
+    the root (Steam Windows builds ship many helper exes)."""
+    best, size = "", 0
+    try:
+        for entry in os.scandir(game_dir):
+            if not entry.is_file():
+                continue
+            name = entry.name
+            lower = name.lower()
+            if lower.endswith((".exe",)) and not lower.startswith(
+                    ("uninst", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
+                s = entry.stat().st_size
+                if s > size:
+                    best, size = entry.path, s
+            elif lower.endswith(".sh") and os.access(entry.path, os.X_OK) and not best:
+                best = entry.path
+    except OSError:
+        pass
+    return best
+
+
+# --- launch modes ----------------------------------------------------------
+#
+# 1. "none"    No Steamworks dependency (no steam_api*.dll / libsteam_api.so
+#              anywhere in the install): launch directly. Fully launcher-free.
+# 2. "optional" Steamworks files exist, but most such games only use them for
+#              achievements or overlay and run fine when SteamAPI_Init fails:
+#              launch directly with SteamAppId/SteamGameId set so the game
+#              doesn't try to relaunch itself through Steam.
+# 3. "client"  The game needs the real client (fatal SteamAPI_Init failure or
+#              Steam's DRM wrapper): Hydra starts the real Steam client
+#              hidden (`steam -silent`) and asks it to start the game; the
+#              game runs against the live client for its licence check and
+#              achievements. No Steam API emulators, ever.
+#
+# 2 vs 3 can't be told apart reliably by inspection. The plugin tries direct
+# first; if the game dies within seconds with a Steamworks init error
+# (Hydra's session tracker reports it), retrying on the game page marks it
+# "needs client" and mode 3 is used from then on. Community data plugins can
+# pre-seed that flag.
+
+STEAMWORKS_RE = re.compile(r"^(steam_api(64)?\.dll|libsteam_api\.so(\.\d+)*)$", re.IGNORECASE)
+
+
+def has_steamworks(game_dir):
+    try:
+        for _root, _dirs, files in os.walk(game_dir):
+            for f in files:
+                if STEAMWORKS_RE.match(f):
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def detect_mode(game_dir):
+    if not has_steamworks(game_dir):
+        return "none"
+    return "optional"
+
+
+def launch_spec(params):
+    app = str(params["id"])
+    installed = load_state("installed.json", {})
+    ig = installed.get(app)
+    if not ig:
+        raise RPCError(f"app {app} is not installed")
+    path, exe = ig.get("path") or "", ig.get("executable") or ""
+    if not exe or not os.path.isfile(exe):
+        exe = find_executable(path)
+        if not exe:
+            raise RPCError(f"couldn't find a game executable in {path or 'the install folder'}")
+        ig["executable"] = exe
+        save_state("installed.json", installed)
+    mode = ig.get("mode") or "none"
+    native = bool(ig.get("native"))
+    if mode in ("none", "optional"):
+        spec = {
+            "exe": exe,
+            "args": [],
+            "cwd": os.path.dirname(exe),
+            "env": {},
+            "needsWine": not native,
+            "native": native,
+        }
+        if mode == "optional":
+            # Tell the game which app it is so SteamAPI_Init-less runs don't
+            # try to relaunch through Steam. SteamAppId/SteamGameId are not
+            # on Hydra's launch-env denylist (only STEAM_COMPAT_* are).
+            spec["env"]["SteamAppId"] = app
+            spec["env"]["SteamGameId"] = app
+        return spec
+    # mode == "client": the real client, started hidden. Hydra runs the
+    # command and follows the game through find.cmdline (Steam's reaper marks
+    # the game process with AppId=<id>), so session tracking works.
+    return {
+        "delegate": "store-client",
+        "client": "Steam",
+        "command": ["steam", "-silent", "-applaunch", app],
+        "find": {"cmdline": [f"AppId={app}"]},
+        "startTimeout": 300,
+    }
+
+
+def mark_needs_client(params):
+    """After a mode-'optional' game died with a Steamworks init error, the
+    game page's retry calls this; the next launch uses the real client."""
+    app = str((params or {}).get("id") or "")
+    installed = load_state("installed.json", {})
+    if app not in installed:
+        raise RPCError(f"app {app} is not installed")
+    installed[app]["mode"] = "client"
+    save_state("installed.json", installed)
+    return {"ok": True}
+
+
+def game_details(params):
+    """Public store metadata, no login needed (same API the built-in Steam
+    store uses)."""
+    app = str(params["id"])
+    try:
+        data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app}&l=english")
+    except Exception:
+        return {}
+    if isinstance(data, dict) and data.get("_test"):
+        data = data["_test"]
+    entry = (data or {}).get(app)
+    if not entry or not entry.get("success"):
+        return {}
+    d = entry.get("data") or {}
+    out = {}
+    if d.get("short_description"):
+        out["summary"] = re.sub(r"<[^>]+>", " ", d["short_description"]).strip()
+    if d.get("screenshots"):
+        out["screenshots"] = [s.get("path_full") or s.get("path_thumbnail")
+                              for s in d["screenshots"][:6] if isinstance(s, dict)]
+    if d.get("genres"):
+        out["genres"] = [g.get("description") for g in d["genres"][:4] if g.get("description")]
+    if d.get("developers"):
+        out["developers"] = d["developers"][:4]
+    if d.get("publishers"):
+        out["publishers"] = d["publishers"][:4]
+    date = (d.get("release_date") or {}).get("date") or ""
+    if date:
+        out["releaseDate"] = date
+    out["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
+    return {k: v for k, v in out.items() if v}
+
+
+# --- uninstall -------------------------------------------------------------
+
+def follow_uninstall(job_id, app):
+    time.sleep(0.1)
+    installed = load_state("installed.json", {})
+    ig = installed.pop(app, None)
+    if ig and ig.get("path") and os.path.isdir(ig["path"]):
+        shutil.rmtree(ig["path"], ignore_errors=True)
+    save_state("installed.json", installed)
+    notify("job.done", {"jobId": job_id})
+
+
+def stop_proc(proc, grace=15):
+    if proc is None:
+        return
+    try:
+        proc.send_signal(signal.SIGINT)
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
+def job_cancel(params):
+    with jobs_lock:
+        job = jobs.get(params.get("jobId"))
+        if job:
+            job["canceled"] = True
+            proc = job.get("proc")
+        else:
+            proc = None
+    if proc:
+        threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
+    return {}
+
+
+# --- dispatch --------------------------------------------------------------
+
+def initialize(params):
+    return {"name": "Steam (standalone)", "version": "0.1.0", "api": API,
+            "capabilities": ["library", "install", "launch", "auth"], "missing": []}
+
+
+METHODS = {
+    "initialize": initialize,
+    "auth.status": auth_status,
+    "auth.begin": auth_begin,
+    "auth.complete": auth_complete,
+    "auth.logout": auth_logout,
+    "library.list": library_list,
+    "game.details": game_details,
+    "game.installSize": install_size,
+    "game.install": lambda p: start_job(p, "install"),
+    "game.update": lambda p: start_job(p, "install"),
+    "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "job.cancel": job_cancel,
+    "game.launchSpec": launch_spec,
+}
+
+
+def handle(msg):
+    fn = METHODS.get(msg.get("method"))
+    resp = {"id": msg["id"]}
+    if fn is None:
+        resp["error"] = {"code": -32601, "message": f"method not found: {msg.get('method')}"}
+    else:
+        try:
+            result = fn(msg.get("params") or {})
+            resp["result"] = result if result is not None else {}
+        except RPCError as e:
+            resp["error"] = {"code": e.code, "message": str(e)}
+        except (KeyError, TypeError) as e:
+            resp["error"] = {"code": -32602, "message": f"invalid params: {e}"}
+        except Exception as e:  # report, never crash the plugin
+            resp["error"] = {"code": -32000, "message": f"{type(e).__name__}: {e}"}
+    send(resp)
+
+
+def main():
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError as e:
+            send({"error": {"code": -32700, "message": str(e)}})
+            continue
+        if "id" not in msg:
+            continue  # notifications need no answer
+        # Library listing and logins can take seconds; keep reading so
+        # job.cancel stays responsive.
+        threading.Thread(target=handle, args=(msg,), daemon=True).start()
+    with jobs_lock:
+        procs = [j.get("proc") for j in jobs.values()]
+    for p in procs:
+        stop_proc(p, grace=5)
+
+
+if __name__ == "__main__":
+    main()
