@@ -359,6 +359,38 @@ const inputClass =
   'w-full rounded-xl bg-white/[0.06] px-3.5 py-2.5 font-mono text-[11.5px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
 /** auth.begin → open the store's page and/or fill in fields → auth.complete. */
+/**
+ * The plugin's QR login data: block-art text straight from the store tool's
+ * stdout ("\u2588" = dark module, two chars per module, one row per module).
+ * Drawn as exact square modules so the phone can scan it off the screen.
+ */
+function QrArt({ art }: { art: string }) {
+  const rows = art.split('\n').filter((r) => r.includes('\u2588'));
+  const lead = Math.min(...rows.map((r) => r.length - r.trimStart().length));
+  let width = Math.max(...rows.map((r) => r.trimEnd().length)) - lead;
+  if (width % 2) width += 1;
+  const modules = rows.map((r) => {
+    const line = r.slice(lead).padEnd(width, ' ').slice(0, width);
+    const out: boolean[] = [];
+    for (let i = 0; i < width; i += 2) out.push(line[i] === '\u2588');
+    return out;
+  });
+  const h = modules.length;
+  const w = modules[0]?.length ?? 0;
+  const quiet = 4;
+  const size = Math.max(w, h) + quiet * 2;
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="h-48 w-48" role="img" aria-label="Login QR code" shapeRendering="crispEdges">
+      <rect width={size} height={size} fill="#fff" />
+      {modules.map((row, y) =>
+        row.map((dark, x) =>
+          dark ? <rect key={`${x}-${y}`} x={x + quiet} y={y + quiet} width={1} height={1} fill="#000" /> : null,
+        ),
+      )}
+    </svg>
+  );
+}
+
 function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: () => void; onDone: (s: AuthStatus) => void }) {
   const [prompt, setPrompt] = useState<AuthPrompt | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -371,6 +403,28 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
       .catch((e) => setError(errMsg(e)));
   }, [plugin.id]);
 
+  // QR logins finish outside the form: the store's mobile app approves and
+  // the plugin's tool persists the login, so poll the status while the
+  // dialog is open and close it the moment the plugin says logged in.
+  const qrPending = !!prompt?.qr;
+  useEffect(() => {
+    if (!qrPending) return;
+    let stop = false;
+    const poll = () =>
+      Effect.runPromise(LauncherApi.authStatus(plugin.id))
+        .then((s) => {
+          if (stop) return;
+          if (s.loggedIn) onDone(s);
+          else setTimeout(poll, 1500);
+        })
+        .catch(() => !stop && setTimeout(poll, 3000));
+    const t = setTimeout(poll, 1500);
+    return () => {
+      stop = true;
+      clearTimeout(t);
+    };
+  }, [qrPending, plugin.id]);
+
   const submit = () => {
     setSubmitting(true);
     setError(null);
@@ -380,14 +434,17 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
       .finally(() => setSubmitting(false));
   };
 
+  // A QR prompt can be confirmed with an empty form ("I scanned it"); with
+  // fields only, every field must be filled.
   const filled = prompt?.fields.every((f) => (values[f.id] ?? '').trim()) ?? false;
+  const canSubmit = (prompt?.qr && !filled) || filled;
 
   return (
     <Modal label={`Log in to ${plugin.name}`} onClose={onClose} className="max-w-lg">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (filled && !submitting) submit();
+          if (canSubmit && !submitting) submit();
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
@@ -404,6 +461,14 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
                   <ExternalLink className="h-3.5 w-3.5" /> Open login page
                 </button>
                 <p className="mt-1.5 break-all font-mono text-[9.5px] text-white/35 select-text">{prompt.url}</p>
+              </div>
+            )}
+            {prompt.qr && (
+              <div>
+                <MonoLabel className="mb-1.5">1 · scan with the {plugin.name.replace(/ \(.*\)$/, '')} mobile app</MonoLabel>
+                <div className="flex justify-center rounded-xl bg-white p-3">
+                  <QrArt art={prompt.qr} />
+                </div>
               </div>
             )}
             {prompt.instructions && <p className="text-[12px] leading-relaxed text-white/65">{prompt.instructions}</p>}
@@ -430,7 +495,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         {error && <p role="alert" className="mt-3 font-mono text-[10.5px] text-red-300">{error}</p>}
         <div className="mt-5 flex gap-2.5">
           <button type="button" onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
-          <button type="submit" disabled={!filled || submitting} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] disabled:cursor-default')}>
+          <button type="submit" disabled={!canSubmit || submitting} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] disabled:cursor-default')}>
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Log in
           </button>
         </div>

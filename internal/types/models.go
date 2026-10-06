@@ -134,11 +134,14 @@ type AuthStatus struct {
 	User     string `json:"user,omitempty"`
 }
 
-// AuthPrompt is what the login dialog shows: a page to open, if any, then the
-// fields to fill in.
+// AuthPrompt is what the login dialog shows: a page to open, if any, a QR
+// code to scan, if any, then the fields to fill in. QR holds the code as
+// block-art text ("\u2588" = dark module, two chars per module, one row per
+// module) for the dialog to draw as square modules.
 type AuthPrompt struct {
 	URL          string      `json:"url,omitempty"`
 	Instructions string      `json:"instructions,omitempty"`
+	QR           string      `json:"qr,omitempty"` // QR code as block-art text
 	Fields       []AuthField `json:"fields"`
 }
 

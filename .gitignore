@@ -36,3 +36,6 @@ __pycache__/
 /installed/
 internal/plugtest/plugins/
 plugins/echo/bin/
+
+# Root build output
+/hydra-launcher

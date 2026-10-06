@@ -483,3 +483,62 @@ func contains(list []string, s string) bool {
 	}
 	return false
 }
+
+// The QR login path: auth.begin starts depotdownloader -qr in the background
+// and returns the QR as a BMP data URL; approving it (the test flips the
+// fake's qr_approved knob, like the Steam mobile app would) makes the next
+// auth.status logged in, and an empty auth.complete waits for it.
+func TestSteamQRAuth(t *testing.T) {
+	e := setup(t)
+	var st types.AuthStatus
+	if err := e.call("auth.status", nil, &st); err != nil || st.LoggedIn {
+		t.Fatalf("status: %+v, %v", st, err)
+	}
+	var pr types.AuthPrompt
+	if err := e.call("auth.begin", nil, &pr); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	// The prompt carries the block-art the fake printed: 21 rows, and the
+	// finder pattern's dark ring must survive the round trip (module =
+	// two "\u2588" chars; the fake indents each row by one leading space).
+	rows := strings.Split(pr.QR, "\n")
+	if len(rows) != 21 || !strings.Contains(pr.QR, "\u2588") {
+		t.Fatalf("QR art: %d rows, want 21 with block chars", len(rows))
+	}
+	// Block chars are 3 bytes each, so compare runes, not bytes. Only the
+	// leading margin varies between runs; module m lives at runes 2m and 2m+1
+	// after it (light modules are two spaces and must stay put).
+	lead := len(rows[0]) - len(strings.TrimLeft(rows[0], " "))
+	strip := func(row string) []rune {
+		r := []rune(row)
+		return r[lead:]
+	}
+	for _, m := range [][2]int{{0, 0}, {6, 0}, {0, 6}, {6, 6}, {3, 3}} {
+		line := strip(rows[m[1]])
+		if len(line) <= m[0]*2+1 || string(line[m[0]*2:m[0]*2+2]) != "\u2588\u2588" {
+			t.Fatalf("finder module (%d,%d) not dark in row %q", m[0], m[1], rows[m[1]])
+		}
+	}
+	light := strip(rows[1])
+	if string(light[2:4]) == "\u2588\u2588" {
+		t.Fatal("module (1,1) should be light")
+	}
+
+	// Approve from the "phone" and confirm the empty-form flow logs in.
+	e.setDDState("qr_approved", true)
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("qr complete: %+v, %v", st, err)
+	}
+	// The login key lives inside the plugin's private data folder.
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "home", ".local/share/isolated-storage/fakeid", "account.config")); err != nil {
+		t.Fatalf("login key not in plugin data: %v", err)
+	}
+	// A library call works with the QR-issued token.
+	if lib := e.library(); len(lib) == 0 {
+		t.Fatal("empty library after QR login")
+	}
+	// Logging out wipes everything, including any running QR process state.
+	if err := e.call("auth.logout", nil, &st); err != nil || st.LoggedIn {
+		t.Fatalf("logout: %+v, %v", st, err)
+	}
+}

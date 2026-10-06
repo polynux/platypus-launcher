@@ -189,6 +189,8 @@ export interface AuthField {
 export interface AuthPrompt {
   url?: string;
   instructions?: string;
+  /** QR code to scan with the store's mobile app, as a data URL. */
+  qr?: string;
   fields: AuthField[];
 }
 

@@ -67,6 +67,37 @@ def main():
     remember = "-remember-password" in argv
     osname = value("-os")
 
+    # --- QR login: print block-art QR, wait for qr_approved ----------------
+    if "-qr" in argv:
+        # A 21x21 QR (version 1) as block-art, each module two chars wide.
+        # Every line differs slightly so the plugin's BMP test can verify
+        # round-tripping; a real scanner would reject this, the tests only
+        # check the image encoding.
+        art = []
+        for y in range(21):
+            row = "".join("██" if (x + y) % 3 == 0 or x < 7 and y < 7 and (x in (0, 6) or y in (0, 6) or 2 <= x <= 4 and 2 <= y <= 4) else "  " for x in range(21))
+            art.append("        " + row + "  ")
+        print("Use the Steam Mobile App to sign in with this QR code:")
+        for row in art:
+            print(row, flush=True)
+        # Wait for the test to approve (or never; the caller kills us).
+        save(dict(st, account=st.get("account")))  # create the state file
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            st = load()
+            if st.get("qr_approved"):
+                st["account"] = st.get("account") or "HydraUser"
+                save(st)
+                import zlib as _z
+                root = os.path.join(os.environ.get("HOME", "/tmp"), ".local/share/isolated-storage/fakeid")
+                os.makedirs(root, exist_ok=True)
+                with open(os.path.join(root, "account.config"), "wb") as f:
+                    f.write(_z.compress(("GuardData\x00" + TOKEN + "\x00").encode()))
+                print("Done!")
+                sys.exit(0)
+            time.sleep(0.2)
+        sys.exit(1)
+
     # --- login flow: prompts the plugin must answer ------------------------
     if value("-username"):
         user = value("-username")

@@ -79,6 +79,7 @@ export namespace types {
 	export class AuthPrompt {
 	    url?: string;
 	    instructions?: string;
+	    qr?: string;
 	    fields: AuthField[];
 	
 	    static createFrom(source: any = {}) {
@@ -89,6 +90,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.url = source["url"];
 	        this.instructions = source["instructions"];
+	        this.qr = source["qr"];
 	        this.fields = this.convertValues(source["fields"], AuthField);
 	    }
 	

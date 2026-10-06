@@ -252,10 +252,28 @@ plugin path (old milestones 3 and 4) came before data plugins.
    conformance suite in `internal/plugtest` drives echo, epic-legendary,
    gog-gogdl and amazon-nile through every protocol method they declare, over
    the real manager and job queue.
-6. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
+6. **steam-standalone** (in progress, `feat/steam-standalone`): DepotDownloader auth (QR and password), library, installs; the three launch modes; live run pending.
 7. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
 
 ## Changes during implementation
+
+- **steam-standalone (milestone 6).** A Python plugin wrapping DepotDownloader
+  (SteamRE). Auth supports both flows DepotDownloader offers: QR login
+  (`-qr` prints the code as Unicode block-art; the plugin captures it raw from
+  the byte pipe and the dialog redraws it as exact square modules in an SVG,
+  so the phone scans it off the screen) and password + Steam Guard code fed to
+  its stdin prompts. All runs pass a fixed `-loginid` so logins never kick a
+  running Steam client. The login key stays in DepotDownloader's isolated
+  storage inside the plugin's private data folder; the library comes from the
+  Steam Web API using the refresh token found there. Installs run
+  `depotdownloader -os linux` with a `-os windows` fallback (resumable via
+  `.DepotDownloader/depot.config`), report per-cent progress, and record the
+  executable and launch mode in `installed.json`. Launch modes: direct, direct
+  with `SteamAppId`/`SteamGameId`, or delegate to a hidden
+  `steam -silent -applaunch` (which is why the manifest declares `steam` in
+  `requires`; on systems without the client the plugin shows
+  missing-requirement). Covered by `plugins/steam-standalone` tests plus a
+  conformance-suite entry driving the fake DepotDownloader.
 
 - **Plugin authoring (milestone 5).** `plugins/new.sh <id> [store]` writes a
   minimal but complete plugin: a manifest, a Python stub that answers the
