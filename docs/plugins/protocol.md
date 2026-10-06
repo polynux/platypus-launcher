@@ -26,7 +26,7 @@ layout with `"kind": "data"` and need no approval; see
   "store": "epic",
   "exec": "bin/hydra-epic",
   "capabilities": ["library", "install", "launch", "auth"],
-  "requires": [{ "bin": "legendary", "hint": "pipx install legendary-gl" }],
+  "requires": [{ "bin": "legendary", "hint": "uv tool install legendary-gl" }],
   "install_dir": "epic",
   "permissions": { "network": ["*.epicgames.com"], "read": ["~/.config/legendary"], "write": ["~/.config/legendary"] }
 }

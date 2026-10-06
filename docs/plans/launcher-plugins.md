@@ -57,7 +57,7 @@ JSON-RPC 2.0 over stdin/stdout (one JSON object per line), the same model as LSP
   "store": "epic",
   "exec": "bin/hydra-epic",
   "capabilities": ["library", "install", "launch", "auth", "cloud-saves"],
-  "requires": [{ "bin": "legendary", "hint": "pipx install legendary-gl" }],
+  "requires": [{ "bin": "legendary", "hint": "uv tool install legendary-gl" }],
   "install_dir": "epic",
   "permissions": {
     "network": ["*.epicgames.com", "*.epicgames.dev"],
@@ -254,6 +254,22 @@ plugin path (old milestones 3 and 4) came before data plugins.
 
 ## Changes during implementation
 
+- **Real-store validation (Epic, milestone 4 wrap-up).** A full Epic cycle ran
+  against the real legendary 0.21.1 and a real account: login, library (255
+  owned titles), install of Brotato (148 MiB) into `~/Games/epic`, launch
+  under GE-Proton11-3 with gamemode, session tracked (2 min), and uninstall
+  through the UI. Two real findings:
+  - legendary reuses an existing install's directory even when `--base-path`
+    says otherwise (core.py "reuse existing installation's directory"), so a
+    game once installed outside Hydra's folder stays there. The launch check
+    catches this; the fake legendary now models the behavior.
+  - Proton assumes Steam created the compat-data dir and crashes on a missing
+    `<prefix>/pfx.lock`; `runner.BuildCommand` now creates the prefix first
+    (`internal/runner/launcher.go`).
+  GOG and Amazon remain fake-tested only; their install hints were corrected
+  to real distribution channels (GitHub release binaries; the PyPI names
+  belong to unrelated packages, and legendary is `uv/pipx install
+  legendary-gl`).
 - **Amazon (milestone 4).** `amazon-nile` wraps nile. Login is Amazon's device
   registration: the plugin generates the device serial, client id and PKCE
   verifier itself (what `nile login` would do interactively), shows the sign-in

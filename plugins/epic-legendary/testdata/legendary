@@ -109,7 +109,12 @@ def main():
             print(f"[DLManager] INFO: = Progress: {pct:.02f}% ({i}/3), Running for 00:00:0{i}, ETA: 00:00:01", file=sys.stderr, flush=True)
             print(f"[DLManager] INFO:  - Downloaded: {mib:.02f} MiB, Written: {mib:.02f} MiB", file=sys.stderr, flush=True)
             print(f"[DLManager] INFO:  + Download\t- 25.00 MiB/s (raw) / 30.00 MiB/s (decompressed)", file=sys.stderr, flush=True)
-        path = os.path.join(base, game["app_title"].replace(" ", ""))
+        # Like the real core.py, an already-registered install keeps its
+        # directory even when --base-path says otherwise.
+        if app in st["installed"]:
+            path = st["installed"][app]["install_path"]
+        else:
+            path = os.path.join(base, game["app_title"].replace(" ", ""))
         os.makedirs(os.path.join(path, "Binaries"), exist_ok=True)
         open(os.path.join(path, "Binaries", "Game.exe"), "wb").write(b"MZ")
         st["installed"][app] = {"install_path": path, "title": game["app_title"], "version": game["latest"],

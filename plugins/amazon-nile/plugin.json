@@ -9,7 +9,7 @@
   "exec": "bin/hydra-amazon",
   "capabilities": ["library", "install", "launch", "auth"],
   "requires": [
-    { "bin": "nile", "hint": "github.com/imLinguin/nile — releases page has a bundled binary; put it on your PATH" },
+    { "bin": "nile", "hint": "get the nile_linux_x86_64 binary from github.com/imLinguin/nile/releases and put it on your PATH as nile" },
     { "bin": "python3", "hint": "install python3 from your distribution" }
   ],
   "install_dir": "nile",

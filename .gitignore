@@ -32,3 +32,4 @@ design-lab/dist/
 
 # Tooling scratch
 .playwright-mcp/
+__pycache__/

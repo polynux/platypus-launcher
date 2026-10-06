@@ -45,6 +45,11 @@ func BuildCommand(game types.Game, runner types.ProtonVersion, target Target) ([
 	}
 
 	if !target.Native {
+		// Proton assumes Steam created the compat data dir; it crashes with a
+		// FileNotFoundError on <prefix>/pfx.lock when the folder is missing.
+		if err := os.MkdirAll(prefixPath, 0o755); err != nil {
+			return nil, nil, fmt.Errorf("cannot create Proton prefix %s: %w", prefixPath, err)
+		}
 		env["WINEPREFIX"] = prefixPath
 		env["STEAM_COMPAT_DATA_PATH"] = prefixPath
 		env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = filepath.Join(home, ".local/share/Steam")

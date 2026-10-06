@@ -67,7 +67,7 @@ def legendary(*args, timeout=300):
         p = subprocess.run(["legendary", *args], stdin=subprocess.DEVNULL, capture_output=True,
                            text=True, timeout=timeout)
     except FileNotFoundError:
-        raise RPCError("legendary is not installed (pipx install legendary-gl)")
+        raise RPCError("legendary is not installed (uv tool install legendary-gl)")
     except subprocess.TimeoutExpired:
         raise RPCError(f"legendary {args[0]} timed out")
     return p.returncode, p.stdout, p.stderr
@@ -270,7 +270,7 @@ def start_job(params, kind):
         proc = subprocess.Popen(["legendary", *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError:
-        raise RPCError("legendary is not installed (pipx install legendary-gl)")
+        raise RPCError("legendary is not installed (uv tool install legendary-gl)")
     with jobs_lock:
         jobs[job_id] = {"proc": proc, "canceled": False}
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()

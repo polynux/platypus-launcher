@@ -9,7 +9,7 @@
   "exec": "bin/hydra-epic",
   "capabilities": ["library", "install", "launch", "auth"],
   "requires": [
-    { "bin": "legendary", "hint": "pipx install legendary-gl" },
+    { "bin": "legendary", "hint": "uv tool install legendary-gl (or pipx install legendary-gl)" },
     { "bin": "python3", "hint": "install python3 from your distribution" }
   ],
   "install_dir": "epic",
