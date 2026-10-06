@@ -243,8 +243,10 @@ plugin path (old milestones 3 and 4) came before data plugins.
 3. **Data plugins** (done, `feat/plugins-data`): schema, loader, and moving the
    built-in curated fixes and tweaks to that format (`internal/dataplug/builtin`,
    embedded and read through the same loader). Validates the trust-free path.
-4. **GOG via gogdl** (done, `feat/plugins-gog`), then Amazon via nile. They should
-   need no core changes; if they do, fix the protocol before calling api 1 stable.
+4. **GOG via gogdl** (done, `feat/plugins-gog`), then Amazon via nile (done,
+   `feat/plugins-amazon`). They needed no core changes; the protocol additions
+   of the gaps commit (`game.details`, `native`) were enough, so api 1 can be
+   called stable once a real-store run confirms them.
 5. **Plugin authoring**: the protocol reference exists; add a `hydra-plugin` scaffold
    and a conformance test.
 6. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
@@ -252,6 +254,13 @@ plugin path (old milestones 3 and 4) came before data plugins.
 
 ## Changes during implementation
 
+- **Amazon (milestone 4).** `amazon-nile` wraps nile. Login is Amazon's device
+  registration: the plugin generates the device serial, client id and PKCE
+  verifier itself (what `nile login` would do interactively), shows the sign-in
+  URL, and completes with `nile register` using the code from the redirect
+  address. nile's config lives under `NILE_CONFIG_PATH` in the plugin's data
+  folder. Amazon titles are Windows games; specs say `needsWine`. Tested
+  against a fake nile (testdata/nile) only.
 - **GOG (milestone 4).** `gog-gogdl` wraps Heroic's gogdl the way
   `epic-legendary` wraps legendary; no core changes were needed, and the
   protocol additions of the gaps commit (`game.details`, `native`) are enough:

@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""A fake nile for the plugin's tests. It mimics the real CLI's surfaces the
+plugin uses (auth --status, library list --json, install --info, install,
+uninstall) without touching the network. State lives in
+$FAKE_NILE_STATE; every call is appended to $FAKE_NILE_STATE.calls."""
+
+import json
+import os
+import sys
+import time
+
+STATE = os.environ["FAKE_NILE_STATE"]
+
+LIBRARY = [
+    {"product": {"id": "amzn1.tt.1", "title": "Amazon Game", "productDetail": {"details": {"genres": ["Action"]}}}},
+    {"product": {"id": "amzn1.tt.2", "title": "Claimed But Not Owned", "productDetail": {"details": {}}}},
+]
+
+
+def load():
+    try:
+        with open(STATE) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"account": None, "installed": {}}
+
+
+def save(st):
+    with open(STATE, "w") as f:
+        json.dump(st, f)
+
+
+def err(msg, code=1):
+    print(f"ERROR [CLI]:\t {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def main():
+    argv = sys.argv[1:]
+    with open(STATE + ".calls", "a") as f:
+        f.write(" ".join(argv) + "\n")
+    st = load()
+    cmd, rest = argv[0], argv[1:]
+
+    if cmd == "auth":
+        if "--status" in rest:
+            user = st.get("account")
+            print(json.dumps({"Username": user or "<not logged in>", "LoggedIn": bool(user)}))
+            return
+        if "--logout" in rest:
+            st["account"] = None
+            save(st)
+            return
+        err("auth action required")
+    elif cmd == "register":
+        st["account"] = "AmazonUser"
+        save(st)
+        print("INFO [AUTH_MANAGER]:\t Succesfully registered a device", file=sys.stderr)
+    elif cmd == "library":
+        if not st.get("account"):
+            err("User not logged in")
+        if "--installed" in rest:
+            installed = [{"id": k, "path": v["path"], "version": "1.0"} for k, v in st["installed"].items()]
+            print(json.dumps(installed))
+        else:
+            print(json.dumps(LIBRARY))
+    elif cmd == "list-updates":
+        if not st.get("account"):
+            err("User not logged in")
+        print(json.dumps([]))
+    elif cmd == "install":
+        if "--info" in rest:
+            print(json.dumps({"download_size": "400.00", "uncompressed_size": "600.00"}))
+            return
+        if not st.get("account"):
+            err("User not logged in")
+        base = rest[rest.index("--base-path") + 1]
+        game_dir = os.path.join(base, "AmazonGame")
+        os.makedirs(game_dir, exist_ok=True)
+        for done, total, pct in ((100.0, 400.0, "25%"), (200.0, 400.0, "50%"), (400.0, 400.0, "100%")):
+            time.sleep(0.1)
+            print(f"[{done:.1f}/{total:.1f}MiB ({pct}, 25.0 MiB/s)] DLing file", flush=True)
+        exe = os.path.join(game_dir, "game.exe")
+        with open(exe, "wb") as f:
+            f.write(b"MZ fake windows exe")
+        st.setdefault("installed", {})["amzn1.tt.1"] = {"path": game_dir, "version": "1.0"}
+        save(st)
+        print("INFO [DLManager]:\t Download complete", file=sys.stderr)
+    elif cmd == "uninstall":
+        ig = st.get("installed", {}).pop(rest[0], None)
+        if not ig:
+            err(f"{rest[0]} is not installed")
+        import shutil
+        shutil.rmtree(ig["path"], ignore_errors=True)
+        save(st)
+    else:
+        err(f"fake nile doesn't know {cmd}")
+
+
+if __name__ == "__main__":
+    main()

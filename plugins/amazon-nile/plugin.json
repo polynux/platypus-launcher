@@ -1,0 +1,21 @@
+{
+  "id": "amazon-nile",
+  "name": "Amazon Games (nile)",
+  "version": "0.1.0",
+  "author": "Hydra",
+  "description": "Your Prime Gaming library through nile: install and launch the games you claimed on Amazon, no Amazon Games app needed.",
+  "api": 1,
+  "store": "amazon",
+  "exec": "bin/hydra-amazon",
+  "capabilities": ["library", "install", "launch", "auth"],
+  "requires": [
+    { "bin": "nile", "hint": "github.com/imLinguin/nile — releases page has a bundled binary; put it on your PATH" },
+    { "bin": "python3", "hint": "install python3 from your distribution" }
+  ],
+  "install_dir": "nile",
+  "permissions": {
+    "network": ["*.amazon.com", "*.amazon.dev", "*.a2z.com"],
+    "read": [],
+    "write": []
+  }
+}
