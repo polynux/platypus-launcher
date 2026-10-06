@@ -58,7 +58,10 @@ def main():
         creds = st.get("account")
         print(json.dumps(creds) if creds else json.dumps(None))
     elif cmd == "info":
-        print(json.dumps({"download_size": 8 * 1024 * 1024, "disk_size": 12 * 1024 * 1024}))
+        # v1.3 nests the sizes per language under "size".
+        print(json.dumps({"size": {"*": {"download_size": 0, "disk_size": 0},
+                                   "en-US": {"download_size": 8 * 1024 * 1024, "disk_size": 12 * 1024 * 1024}},
+                          "folder_name": "SuperGame", "versionName": "1.0"}))
     elif cmd in ("download", "update"):
         path = rest[rest.index("--path") + 1]
         game_dir = os.path.join(path, st.get("install_subdir", "SuperGame"))

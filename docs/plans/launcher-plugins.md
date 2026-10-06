@@ -254,11 +254,12 @@ plugin path (old milestones 3 and 4) came before data plugins.
 
 ## Changes during implementation
 
-- **Real-store validation (Epic, milestone 4 wrap-up).** A full Epic cycle ran
-  against the real legendary 0.21.1 and a real account: login, library (255
-  owned titles), install of Brotato (148 MiB) into `~/Games/epic`, launch
-  under GE-Proton11-3 with gamemode, session tracked (2 min), and uninstall
-  through the UI. Two real findings:
+- **Real-store validation (Epic and GOG, milestone 4 wrap-up).** Full cycles
+  ran against real CLIs and real accounts. Epic (legendary 0.21.1): login,
+  library (255 owned), Brotato install (148 MiB) into `~/Games/epic`, launch
+  under GE-Proton11-3 with gamemode, session tracked, uninstall. GOG (gogdl
+  1.3.0): login, library (29 owned), Cursed to Golf install (666 MiB) into
+  `~/Games/gog`, Proton launch, session tracked, uninstall. Findings:
   - legendary reuses an existing install's directory even when `--base-path`
     says otherwise (core.py "reuse existing installation's directory"), so a
     game once installed outside Hydra's folder stays there. The launch check
@@ -266,10 +267,22 @@ plugin path (old milestones 3 and 4) came before data plugins.
   - Proton assumes Steam created the compat-data dir and crashes on a missing
     `<prefix>/pfx.lock`; `runner.BuildCommand` now creates the prefix first
     (`internal/runner/launcher.go`).
-  GOG and Amazon remain fake-tested only; their install hints were corrected
-  to real distribution channels (GitHub release binaries; the PyPI names
-  belong to unrelated packages, and legendary is `uv/pipx install
-  legendary-gl`).
+  - GOG's `userData.json` no longer lists owned games; the plugin now reads
+    `www.gog.com/account/getFilteredProducts` (paged) for the library, and
+    `api.gog.com/products/<id>?expand=description,screenshots` for details —
+    the store-search endpoint it used before returns nothing for id searches.
+  - `gogdl info` (v1.3+) nests sizes per language under `size`, where `*` can
+    be zeros; the plugin takes the largest entry. It also crashes on a
+    platform with no installer, so the plugin asks the product API which
+    platforms exist before defaulting (Windows for most GOG games).
+  - gogdl unpacks into `<path>/<folder name>`, not the numeric id, and Windows
+    games have many helper exes; the plugin finds the game dir by its
+    `goggame-<id>.info` marker and the executable via that file's primary
+    play task.
+  Amazon remains fake-tested only; install hints were corrected to real
+  distribution channels (GitHub release binaries for gogdl and nile — the
+  PyPI "nile" is an unrelated Microsoft package; legendary is `uv/pipx
+  install legendary-gl`).
 - **Amazon (milestone 4).** `amazon-nile` wraps nile. Login is Amazon's device
   registration: the plugin generates the device serial, client id and PKCE
   verifier itself (what `nile login` would do interactively), shows the sign-in

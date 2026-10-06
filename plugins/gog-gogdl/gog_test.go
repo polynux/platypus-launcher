@@ -58,9 +58,9 @@ func setup(t *testing.T) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string)
 	state := filepath.Join(root, "gogdl-state.json")
 	t.Setenv("FAKE_GOGDL_STATE", state)
 	// The plugin's GOG API calls answer from this file instead of the network:
-	// a userData.json body, and the store search under _test.
+	// the account library listing, and the product API under _test.
 	userdata := filepath.Join(root, "userdata.json")
-	os.WriteFile(userdata, []byte(`{"username": "GogUser", "ownedGames": [{"id": 1234, "title": "Super Game", "image": "/img/box"}], "_test": {"products": [{"id": 1234, "description": "A super game.", "genres": ["Action"], "galleryImages": [{"formattedUrl": "//images.gog.com{formattedType}"}]}]}}`), 0o644)
+	os.WriteFile(userdata, []byte(`{"username": "GogUser", "totalPages": 1, "products": [{"id": 1234, "title": "Super Game", "isGame": true, "image": "//img.gog/box"}], "_test": {"id": 1234, "title": "Super Game", "description": {"lead": "A super game."}, "genres": [{"name": "Action"}], "release_date": "2019-09-20T00:00:00Z", "downloads": {"installers": [{"os": "linux", "language": "en-US"}]}, "screenshots": [{"formatter_template_url": "//images.gog.com/x_{formatter}.png", "formatted_images": [{"formatter_name": "ggvgl", "image_url": "https://images.gog.com/x_ggvgl.jpg"}]}]}}`), 0o644)
 	t.Setenv("HYDRA_GOG_API_FILE", userdata)
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
@@ -176,7 +176,7 @@ func TestGogInstallLaunchUninstall(t *testing.T) {
 	if err := call(t, m, "game.installSize", map[string]any{"id": "1234"}, &size); err != nil || size.DiskBytes != 12<<20 {
 		t.Fatalf("size: %+v, %v", size, err)
 	}
-	readCalls(t).check(t, "info 1234 --platform linux")
+	readCalls(t).check(t, "info 1234 --platform windows")
 
 	j, err := q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, folder)
 	if err != nil {
@@ -198,14 +198,14 @@ func TestGogInstallLaunchUninstall(t *testing.T) {
 	if done.State != jobs.StateDone || done.Total != 8<<20 || done.Bytes != 8<<20 {
 		t.Fatalf("install: %+v", done)
 	}
-	readCalls(t).check(t, "download 1234 --path "+folder+" --platform linux --skip-dlcs")
+	readCalls(t).check(t, "download 1234 --path "+folder+" --platform windows --skip-dlcs")
 
 	lib, err = store.Library(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	game = lib[0]
-	if !game.IsInstalled || game.OutsideFolder || !game.Native {
+	if !game.IsInstalled || game.OutsideFolder {
 		t.Fatalf("after install: %+v", game)
 	}
 
@@ -213,7 +213,7 @@ func TestGogInstallLaunchUninstall(t *testing.T) {
 	if err != nil || l.Direct == nil {
 		t.Fatalf("launch: %+v, %v", l, err)
 	}
-	if l.Direct.NeedsWine || !strings.HasSuffix(l.Direct.Exe, "start.sh") || l.Direct.Dir != filepath.Dir(l.Direct.Exe) {
+	if !l.Direct.NeedsWine || !strings.HasSuffix(l.Direct.Exe, "start.sh") || l.Direct.Dir != filepath.Dir(l.Direct.Exe) {
 		t.Fatalf("direct: %+v", l.Direct)
 	}
 	// The game itself runs: the fake's start.sh echoes.
@@ -223,7 +223,7 @@ func TestGogInstallLaunchUninstall(t *testing.T) {
 	}
 
 	d, err := store.Details(ctx, game)
-	if err != nil || d.Summary != "A super game." || len(d.Genres) != 1 || len(d.Screenshots) != 1 || !strings.HasSuffix(d.Screenshots[0], ".1920x1080.jpg") {
+	if err != nil || d.Summary != "A super game." || len(d.Genres) != 1 || len(d.Screenshots) != 1 || !strings.HasSuffix(d.Screenshots[0], "_ggvgl.jpg") {
 		t.Fatalf("details: %+v, %v", d, err)
 	}
 

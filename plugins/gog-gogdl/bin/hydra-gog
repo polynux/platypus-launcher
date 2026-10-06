@@ -23,6 +23,7 @@ gogdl notes that shape this plugin:
     lines come on stdout/stderr and are parsed into job.progress.
 """
 
+import glob
 import json
 import os
 import re
@@ -84,7 +85,8 @@ def gogdl(*args, timeout=300):
         p = subprocess.run(["gogdl", "--auth-config-path", auth_file(), *args],
                            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
-        raise RPCError("gogdl is not installed (pip install gogdl)")
+        raise RPCError("gogdl is not installed; get the binary from "
+                       "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
     except subprocess.TimeoutExpired:
         raise RPCError(f"gogdl {args[0]} timed out")
     return p.returncode, p.stdout, p.stderr
@@ -196,28 +198,39 @@ def library_list(_params):
         raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
     token = creds["access_token"]
     try:
-        me = api_get("https://embed.gog.com/userData.json", token)
+        # userData.json no longer lists owned games (it dropped ownedGames);
+        # the account endpoint does, with title and art included.
+        page, games = 1, []
+        while True:
+            data = api_get(f"https://www.gog.com/account/getFilteredProducts"
+                           f"?mediaType=1&page={page}", token)
+            games += data.get("products") or []
+            if page >= (data.get("totalPages") or 1):
+                break
+            page += 1
     except Exception as e:
         raise RPCError(f"GOG API is unreachable: {e}")
-    games = me.get("ownedGames") or me.get("games") or []
     installed = installed_games()
     out = []
     for g in games:
         app = str(g.get("id") or "")
-        if not app or g.get("is_game") is False:
+        if not app or g.get("isGame") is False:
             continue
         title = g.get("title") or app
+        img = (g.get("image") or "").strip()
+        if img.startswith("//"):
+            img = "https:" + img
         entry = {
             "id": app,
             "title": title,
             "installed": app in installed,
             "installable": True,
-            "coverUrl": f"https://images.gog.com/{g.get('image', '')}.jpg" if g.get("image") else "",
-            "heroUrl": f"https://images.gog.com/{g.get('image', '')}_scaled_1366x768.jpg" if g.get("image") else "",
-            "bannerUrl": f"https://images.gog.com/{g.get('image', '')}_product_card_v2_mobile_slider_639_2.jpg" if g.get("image") else "",
+            "coverUrl": f"{img}_product_card_v2_mobile_slider_639_2.jpg" if img else "",
+            "heroUrl": f"{img}_scaled_1366x768.jpg" if img else "",
+            "bannerUrl": f"{img}.jpg" if img else "",
         }
-        # ownedGames marks in-store titles; movie extras aren't installable.
-        if g.get("category") == "movie" or g.get("url", "").startswith("/movie/"):
+        # Movie extras sit in the same account list.
+        if g.get("isMovie") or g.get("category") == "movie" or g.get("url", "").startswith("/movie/"):
             entry["installable"] = False
             entry["note"] = "This is a movie or extra, not a game."
         if app in installed:
@@ -268,13 +281,32 @@ def install_size(params):
         data = json.loads(out)
     except ValueError:
         raise RPCError(f"gogdl info printed no JSON: {tail(err)}")
-    return {"downloadBytes": int(data.get("download_size") or 0),
-            "diskBytes": int(data.get("disk_size") or 0)}
+    # Real gogdl (v1.3+) nests the sizes per language under "size"; the *
+    # entry can be all zeros while the actual language carries the numbers,
+    # so take the biggest entry. Older builds printed the fields at top level.
+    sizes = data.get("size") or {"*": data}
+    entries = list(sizes.values()) or [data]
+    best = max(entries, key=lambda e: int((e or {}).get("disk_size") or 0))
+    return {"downloadBytes": int(best.get("download_size") or 0),
+            "diskBytes": int(best.get("disk_size") or 0)}
 
 
 def platform_of(app):
+    """The platform to install: what the user installed before, else what the
+    product offers (a game with no Linux installer must install Windows).
+    gogdl crashes on a platform with no installer, so never guess linux."""
     ig = installed_games().get(app)
-    return (ig or {}).get("platform", "linux")
+    if ig:
+        return ig.get("platform", "windows")
+    try:
+        data = api_get(f"https://api.gog.com/products/{app}?expand=downloads", "")
+        installers = (data.get("downloads") or {}).get("installers") or []
+        for i in installers:
+            if i.get("os") == "linux":
+                return "linux"
+    except Exception:
+        pass
+    return "windows"
 
 
 # --- jobs ---------------------------------------------------------------
@@ -300,7 +332,8 @@ def start_job(params, kind):
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError:
-        raise RPCError("gogdl is not installed (pip install gogdl)")
+        raise RPCError("gogdl is not installed; get the binary from "
+                       "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
     with jobs_lock:
         jobs[job_id] = {"proc": proc, "canceled": False, "id": app, "path": path}
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
@@ -340,10 +373,7 @@ def record_install(job, kind):
     if not app or not path:
         return
     state = installed_games()
-    game_dir = os.path.join(path, app)
-    # gogdl puts the game directly in the path for windows/linux installers
-    if not os.path.isdir(game_dir):
-        game_dir = path
+    game_dir = find_game_dir(app, path)
     exe = find_executable(game_dir)
     state[app] = {
         "path": game_dir,
@@ -355,12 +385,45 @@ def record_install(job, kind):
     save_installed(state)
 
 
+def find_game_dir(app, path):
+    """gogdl unpacks into <path>/<folder_name> (the store's folder name, not
+    the numeric id). Find the dir holding the game's goggame-<id>.info marker;
+    fall back to the id-named dir, then the path itself."""
+    direct = os.path.join(path, app)
+    if os.path.isdir(direct):
+        return direct
+    try:
+        for name in sorted(os.listdir(path)):
+            sub = os.path.join(path, name)
+            if os.path.isfile(os.path.join(sub, f"goggame-{app}.info")):
+                return sub
+    except OSError:
+        pass
+    return path
+
+
 def find_executable(game_dir):
-    """The start script or binary gogdl unpacked: start.sh, *.sh, then Mojos."""
+    """The start script or binary gogdl unpacked: start.sh, then the game's
+    own .exe (Windows installs ship many helper exes; goggame-*.info names
+    the real one), then any *.sh."""
     for name in ("start.sh",):
         p = os.path.join(game_dir, name)
         if os.path.isfile(p):
             return p
+    # The goggame info file carries the primary executable (playTasks).
+    for info in glob.glob(os.path.join(game_dir, "goggame-*.info")):
+        try:
+            with open(info, encoding="utf-8-sig") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        for task in (data.get("playTasks") or []):
+            rel = task.get("path") or ""
+            if rel and not task.get("isPrimary"):
+                continue
+            p = os.path.join(game_dir, rel.replace("\\", os.sep))
+            if os.path.isfile(p):
+                return p
     try:
         for root, _dirs, files in os.walk(game_dir):
             for f in files:
@@ -435,37 +498,56 @@ def initialize(params):
 
 
 def game_details(params):
-    """Art and description from GOG's public store data, no login needed."""
+    """Art and description from the product API, no login needed. The old
+    store-search endpoint (games/ajax/filtered) stopped returning products
+    for id searches."""
     app = params["id"]
     try:
-        data = api_get(f"https://www.gog.com/games/ajax/filtered?search={app}", "")
+        data = api_get(f"https://api.gog.com/products/{app}?expand=description,screenshots", "")
     except Exception:
         return {}
     if isinstance(data, dict) and data.get("_test"):
         data = data["_test"]  # test hook: file carries the whole response
     try:
-        products = data.get("products") or []
-        exact = next((p for p in products if str(p.get("id")) == app), None)
-        if not exact:
-            return {}
-        card = (exact.get("galleryImages") or [])
-        out = {
-            "summary": (exact.get("description") or "").strip()[:2000],
-            "genres": [g.strip() for g in (exact.get("genres") or []) if g][:4],
-        }
-        if card:
-            shots = []
-            for c in card[:6]:
-                u = c.get("formattedUrl") or ""
-                if not u:
-                    continue
-                # GOG's template URL is relative (//images.gog.com/…) and its
-                # placeholder picks the screenshot size.
-                if u.startswith("//"):
-                    u = "https:" + u
-                shots.append(u.format(formattedType=".1920x1080.jpg"))
-            if shots:
-                out["screenshots"] = shots
+        out = {}
+        desc = data.get("description") or {}
+        if isinstance(desc, str):
+            text = desc
+        else:
+            text = desc.get("lead") or desc.get("full") or ""
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            out["summary"] = text[:2000]
+        genres = data.get("genres") or []
+        names = [g.get("name") if isinstance(g, dict) else str(g) for g in genres]
+        names = [g for g in names if g]
+        if names:
+            out["genres"] = names[:4]
+        date = data.get("release_date") or ""
+        if isinstance(date, dict):
+            date = date.get("date") or ""
+        if date:
+            out["releaseDate"] = str(date)[:10]
+        shots = []
+        for s in (data.get("screenshots") or [])[:6]:
+            if not isinstance(s, dict):
+                continue
+            # formatted_images carries ready URLs; the template with {formatter}
+            # is the fallback. .ggvgl is a large screenshot format.
+            u = ""
+            for f in s.get("formatted_images") or []:
+                if f.get("formatter_name") == "ggvgl":
+                    u = f.get("image_url") or ""
+                    break
+            u = u or (s.get("formatter_template_url") or "").replace("{formatter}", ".ggvgl.jpg")
+            if not u:
+                continue
+            if u.startswith("//"):
+                u = "https:" + u
+            shots.append(u)
+        if shots:
+            out["screenshots"] = shots
         return out
     except Exception:
         return {}
