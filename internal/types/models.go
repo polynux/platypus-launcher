@@ -60,6 +60,7 @@ type Game struct {
 	FixInfo     *GameFixInfo `json:"fix_info,omitempty"`
 	LastPlayed  int64        `json:"last_played_at,omitempty"` // unix seconds
 	PlaytimeMin int          `json:"playtime_minutes,omitempty"`
+	SizeOnDisk  int64        `json:"size_on_disk,omitempty"` // bytes, from the ACF manifest
 }
 
 type PluginInfo struct {

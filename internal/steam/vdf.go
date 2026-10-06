@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"hydra-launcher/internal/types"
@@ -80,6 +81,7 @@ func parseAcfFile(path string, steamapps string) (types.Game, error) {
 	defer file.Close()
 
 	var appID, name, installDir string
+	var sizeOnDisk int64
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -98,6 +100,13 @@ func parseAcfFile(path string, steamapps string) (types.Game, error) {
 			if len(parts) >= 4 {
 				installDir = parts[3]
 			}
+		} else if strings.HasPrefix(line, `"SizeOnDisk"`) {
+			parts := strings.Split(line, `"`)
+			if len(parts) >= 4 {
+				if n, err := strconv.Atoi(parts[3]); err == nil {
+					sizeOnDisk = int64(n)
+				}
+			}
 		}
 	}
 
@@ -109,6 +118,7 @@ func parseAcfFile(path string, steamapps string) (types.Game, error) {
 		StoreAppID:  appID,
 		Title:       name,
 		InstallDir:  fullInstallDir,
+		SizeOnDisk:  sizeOnDisk,
 		IsInstalled: true,
 		Settings: types.GameSettings{
 			RunnerID:    "",
@@ -130,6 +140,10 @@ func isSystemApp(appID, title string) bool {
 	// Common utility Steam AppIDs
 	switch appID {
 	case "228980", "1070560", "1391110", "1493710", "894760", "1887720", "105600":
+		return true
+	}
+	// Steamworks test app the client keeps around; never a real entry.
+	if appID == "480" {
 		return true
 	}
 	return false
