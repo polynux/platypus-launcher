@@ -247,13 +247,24 @@ plugin path (old milestones 3 and 4) came before data plugins.
    `feat/plugins-amazon`). They needed no core changes; the protocol additions
    of the gaps commit (`game.details`, `native`) were enough, so api 1 can be
    called stable once a real-store run confirms them.
-5. **Plugin authoring**: the protocol reference exists; add a `hydra-plugin` scaffold
-   and a conformance test.
+5. **Plugin authoring** (done, `feat/plugins-authoring`): `plugins/new.sh`
+   scaffolds a working Python store plugin (manifest, stub, README); the
+   conformance suite in `internal/plugtest` drives echo, epic-legendary,
+   gog-gogdl and amazon-nile through every protocol method they declare, over
+   the real manager and job queue.
 6. **steam-standalone**: DepotDownloader auth and installs, then the three launch modes.
 7. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
 
 ## Changes during implementation
 
+- **Plugin authoring (milestone 5).** `plugins/new.sh <id> [store]` writes a
+  minimal but complete plugin: a manifest, a Python stub that answers the
+  whole protocol (one fake game, install into the folder Hydra passes,
+  launch, uninstall) and a README marking what to replace. The conformance
+  suite (`internal/plugtest`) runs every bundled plugin through the methods
+  its manifest declares — initialize, auth, library, details, install via the
+  job queue, launch preview and real spec, uninstall — with only the
+  plugin-specific wiring (fake CLI, login code, game to pick) in each test.
 - **Real-store validation (Epic and GOG, milestone 4 wrap-up).** Full cycles
   ran against real CLIs and real accounts. Epic (legendary 0.21.1): login,
   library (255 owned), Brotato install (148 MiB) into `~/Games/epic`, launch
