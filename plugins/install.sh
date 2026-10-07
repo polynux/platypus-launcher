@@ -27,8 +27,8 @@ else
 fi
 mv -f "$tmp" "$dest/$exec_rel"
 # Extra module files sitting next to the exec (e.g. python modules it
-# imports) are part of the plugin; replace them by rename too so a running
-# plugin keeps its old ones.
+# imports) are part of the plugin: copy them out, then rename over the old
+# ones (never into a running file, and never out of the source folder).
 exec_dir=$(dirname "$exec_rel")
 for f in "$src/$exec_dir"/*; do
   base=$(basename "$f")
@@ -37,7 +37,8 @@ for f in "$src/$exec_dir"/*; do
     *.pyc) continue ;;
   esac
   [ -f "$f" ] || continue
-  mv -f "$f" "$dest/$exec_dir/$base"
+  new="$dest/$exec_dir/$base.new"
+  cp "$f" "$new" && mv -f "$new" "$dest/$exec_dir/$base"
 done
 cp "$src/plugin.json" "$dest/plugin.json.new" && mv -f "$dest/plugin.json.new" "$dest/plugin.json"
 echo "installed $name in $dest"

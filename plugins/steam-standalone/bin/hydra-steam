@@ -229,8 +229,11 @@ def refresh_token():
     path = account_config()
     # The cache is only trusted while the store file hasn't changed since
     # it was taken — a fresh login must re-extract even if an older token
-    # (or an empty store from an interrupted save) is cached.
-    if st.get("refresh_token") and st.get("source") == (path, os.path.getmtime(path) if path else None):
+    # (or an empty store from an interrupted save) is cached. The account
+    # name (DD's -username for later runs) is part of what's extracted:
+    # an entry without it is stale (from before the field existed).
+    if (st.get("refresh_token") and st.get("account") is not None
+            and st.get("source") == (path, os.path.getmtime(path) if path else None)):
         return st["refresh_token"]
     if not path:
         return None
