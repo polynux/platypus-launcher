@@ -94,7 +94,13 @@ def main():
                 st["account"] = st.get("account") or "HydraUser"
                 save(st)
                 import zlib as _z
-                root = os.path.join(os.environ.get("HOME", "/tmp"), ".local/share/isolated-storage/fakeid")
+                # The real DepotDownloader 3.4.0 (dotnet 8) persists the
+                # token in .NET's layout: .local/share/IsolatedStorage/<id>/
+                # <id>/<hash>/AssemFiles/account.config (capital I). Write
+                # that real shape so the plugin can't pass by accident.
+                root = os.path.join(os.environ.get("HOME", "/tmp"),
+                                    ".local/share/IsolatedStorage/a1b2c3d4.9z8y/"
+                                    "e5f6g7h8.1x2w/Url.31jkk2knc5lh3teqw2x2f1trv5hc4yls/AssemFiles")
                 os.makedirs(root, exist_ok=True)
                 with open(os.path.join(root, "account.config"), "wb") as f:
                     f.write(_z.compress(("GuardData\x00" + TOKEN + "\x00").encode()))
@@ -130,10 +136,12 @@ def main():
         st["account"] = user
         save(st)
         # Persist the "refresh token" the way .NET isolated storage would:
-        # a deflated blob containing the JWT, named account.config, under
-        # $HOME/.local/share/isolated-storage/<id>/.
+        # a deflated blob containing the JWT, named account.config, in the
+        # real DepotDownloader 3.4.0 layout (capital-I IsolatedStorage).
         import zlib
-        root = os.path.join(os.environ.get("HOME", "/tmp"), ".local/share/isolated-storage/fakeid")
+        root = os.path.join(os.environ.get("HOME", "/tmp"),
+                            ".local/share/IsolatedStorage/a1b2c3d4.9z8y/"
+                            "e5f6g7h8.1x2w/Url.31jkk2knc5lh3teqw2x2f1trv5hc4yls/AssemFiles")
         os.makedirs(root, exist_ok=True)
         with open(os.path.join(root, "account.config"), "wb") as f:
             f.write(zlib.compress(("GuardData\x00" + TOKEN + "\x00").encode()))

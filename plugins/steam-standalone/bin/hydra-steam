@@ -176,19 +176,19 @@ def save_state(name, state):
 
 
 def account_config():
-    """DepotDownloader's persisted credentials file, if a login left one."""
+    """DepotDownloader's persisted credentials file, if a login left one.
+
+    .NET isolated storage has no fixed layout: the real DepotDownloader
+    writes `…/.local/share/IsolatedStorage/<id>/<id>/<hash>/AssemFiles/
+    account.config` (capital I), while older/dotnet-runtime variants used
+    lowercase `isolated-storage` — so don't guess paths, just walk the
+    whole plugin HOME looking for the file name."""
     home = os.path.join(data_dir(), "home")
-    roots = [
-        os.path.join(home, ".local/share/isolated-storage"),
-        os.path.join(home, ".dotnet/isolated-storage"),
-        os.path.join(home, "isolated-storage"),
-    ]
-    for root in roots:
-        if not os.path.isdir(root):
-            continue
-        for dirpath, _dirs, files in os.walk(root):
-            if "account.config" in files:
-                return os.path.join(dirpath, "account.config")
+    if not os.path.isdir(home):
+        return None
+    for dirpath, _dirs, files in os.walk(home):
+        if "account.config" in files:
+            return os.path.join(dirpath, "account.config")
     return None
 
 
@@ -287,7 +287,12 @@ def start_qr_login():
         pend = b""
 
         def handle(text):
-            if "Use the Steam Mobile App to sign in with this QR code:" in text:
+            # Both headers open a fresh art block: the first code prints
+            # "Use the Steam Mobile App…", a refreshed one (Steam expires
+            # the challenge URL) prints "The QR code has changed:" —
+            # without clearing here the new rows would be glued onto the
+            # old art and nothing scannable would ever be served.
+            if "Use the Steam Mobile App to sign in with this QR code:" in text or "The QR code has changed:" in text:
                 rows.clear()
             elif "\u2588" in text:
                 rows.append(text.rstrip())

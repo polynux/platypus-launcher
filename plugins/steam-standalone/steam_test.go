@@ -275,11 +275,11 @@ func TestSteamAuth(t *testing.T) {
 	}
 	// The login key file lives inside the plugin's data folder, not the
 	// user's real home.
-	if _, err := os.Stat(filepath.Join(e.pluginData(), "home", ".local/share/isolated-storage")); err != nil {
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "home", ".local/share/IsolatedStorage")); err != nil {
 		t.Fatalf("login key not kept inside HYDRA_PLUGIN_DATA: %v", err)
 	}
 	if got := os.Getenv("HOME"); got != "" {
-		if _, err := os.Stat(filepath.Join(got, ".local/share/isolated-storage/fakeid")); err == nil {
+		if _, err := os.Stat(filepath.Join(got, ".local/share/IsolatedStorage/a1b2c3d4.9z8y")); err == nil {
 			t.Fatal("isolated storage leaked into the real home")
 		}
 	}
@@ -529,8 +529,10 @@ func TestSteamQRAuth(t *testing.T) {
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("qr complete: %+v, %v", st, err)
 	}
-	// The login key lives inside the plugin's private data folder.
-	if _, err := os.Stat(filepath.Join(e.pluginData(), "home", ".local/share/isolated-storage/fakeid", "account.config")); err != nil {
+	// The login key lives inside the plugin's private data folder, in .NET's
+	// real IsolatedStorage layout (what the actual DepotDownloader writes).
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "home",
+		".local/share/IsolatedStorage/a1b2c3d4.9z8y/e5f6g7h8.1x2w/Url.31jkk2knc5lh3teqw2x2f1trv5hc4yls/AssemFiles/account.config")); err != nil {
 		t.Fatalf("login key not in plugin data: %v", err)
 	}
 	// A library call works with the QR-issued token.
