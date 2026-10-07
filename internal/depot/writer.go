@@ -75,14 +75,16 @@ func writeOne(dir string, f File, data map[string][]byte) error {
 }
 
 // Verify checks every file's SHA-1 against FileHash and returns the names
-// that mismatch (missing files count as mismatched).
+// that mismatch (missing files count as mismatched). Files with no chunks
+// (zero-size Steam placeholders, e.g. runtime temp files) carry a hash but
+// nothing to check it against, so they are created empty and skipped.
 func Verify(m *Manifest, dir string) ([]string, error) {
 	var bad []string
 	for _, f := range m.Files {
 		if f.IsDir() || f.IsSymlink() {
 			continue
 		}
-		if len(f.FileHash) == 0 {
+		if len(f.FileHash) == 0 || len(f.Chunks) == 0 {
 			continue
 		}
 		path := filepath.Join(dir, filepath.FromSlash(f.Name))

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha1"
+	"os"
 	"testing"
 )
 
@@ -216,5 +217,21 @@ func TestZstdContainerValidation(t *testing.T) {
 		if _, err := DecompressChunk(bad, dst); err == nil {
 			t.Fatalf("%s accepted", name)
 		}
+	}
+}
+
+func TestVerifySkipsChunklessPlaceholders(t *testing.T) {
+	dir := t.TempDir()
+	m := &Manifest{Files: []File{
+		{Name: "placeholder.tmp", Size: 0, FileHash: []byte("not-empty-hash-of-nothing")},
+	}}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/placeholder.tmp", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if bad, _ := Verify(m, dir); len(bad) != 0 {
+		t.Fatalf("chunkless placeholder must not fail verify: %v", bad)
 	}
 }
