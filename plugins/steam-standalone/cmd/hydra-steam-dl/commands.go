@@ -138,14 +138,40 @@ func runUpdate(ctx context.Context, req request) error {
 	sched := depot.NewScheduler(depot.NewClient(), depot.SchedulerConfig{})
 	onProg, _, _ := progress(totalBytes(depots))
 	for _, d := range depots {
-		old := loadInstalled(ss.dataDir, req.AppID, d.ref.DepotID)
-		var have map[string][]byte
-		if old != nil {
-			have = readOldChunks(req.InstallDir, old)
-			_, gone := depot.Diff(old, d.man)
-			for _, name := range gone {
-				os.Remove(filepath.Join(req.InstallDir, filepath.FromSlash(name)))
+		oldManifests := loadInstalledAll(ss.dataDir, req.AppID, d.ref.DepotID)
+		// Saved manifests keep encrypted filenames; decrypt the old ones
+		// with this depot's key so reuse reads the right paths (missed
+		// live: every reuse lookup failed and updates re-downloaded).
+		for _, old := range oldManifests {
+			if old.Meta.FilenamesEncrypted {
+				if err := old.DecryptFilenames(d.key); err != nil {
+					return err
+				}
 			}
+		}
+		// Reuse chunks from every saved manifest: several gids can be
+		// stored (one per installed branch), and the disk may match any
+		// of them. Bytes are Adler-checked, so foreign layouts miss.
+		var have map[string][]byte
+		var gone []string
+		seenGone := map[string]bool{}
+		for _, old := range oldManifests {
+			for id, plain := range readOldChunks(req.InstallDir, old) {
+				if have == nil {
+					have = map[string][]byte{}
+				}
+				have[id] = plain
+			}
+			_, g := depot.Diff(old, d.man)
+			for _, name := range g {
+				if !seenGone[name] {
+					seenGone[name] = true
+					gone = append(gone, name)
+				}
+			}
+		}
+		for _, name := range gone {
+			os.Remove(filepath.Join(req.InstallDir, filepath.FromSlash(name)))
 		}
 		data, err := sched.Download(ctx, d.man, d.ref.DepotID, d.hosts, d.key, have, func(p depot.Progress) { onProg(p) })
 		if err != nil {
@@ -254,12 +280,23 @@ func installedManifests(depots []fetchedDepot) *depot.Manifest {
 }
 
 func loadInstalled(dataDir string, appID, depotID uint32) *depot.Manifest {
+	all := loadInstalledAll(dataDir, appID, depotID)
+	if len(all) == 0 {
+		return nil
+	}
+	return all[0]
+}
+
+// loadInstalledAll reads every saved manifest for a depot (one per
+// installed branch gid), oldest first by file name.
+func loadInstalledAll(dataDir string, appID, depotID uint32) []*depot.Manifest {
 	dir := filepath.Join(dataDir, "manifests", fmt.Sprint(appID))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
 	prefix := fmt.Sprintf("%d_", depotID)
+	var out []*depot.Manifest
 	for _, e := range entries {
 		if len(e.Name()) > len(prefix) && e.Name()[:len(prefix)] == prefix {
 			raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
@@ -267,11 +304,11 @@ func loadInstalled(dataDir string, appID, depotID uint32) *depot.Manifest {
 				continue
 			}
 			if m, err := depot.ParseManifest(raw); err == nil {
-				return m
+				out = append(out, m)
 			}
 		}
 	}
-	return nil
+	return out
 }
 
 // readOldChunks reuses unchanged chunks by copying them from the installed
