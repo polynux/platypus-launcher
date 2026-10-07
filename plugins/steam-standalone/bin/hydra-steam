@@ -824,6 +824,29 @@ def mode_note(mode):
     }.get(mode, "")
 
 
+CELL_RE = re.compile(r'"CellIDServerOverride"\s+"(\d+)"')
+
+
+def dd_cell_args():
+    """-cellid for downloads: DepotDownloader picks a content server on its
+    own, which can be a slow one. HYDRA_STEAM_CELLID wins; otherwise the
+    download region the user set in the Steam client (CellIDServerOverride in
+    its config.vdf). Nothing when neither is set: DepotDownloader decides."""
+    cell = os.environ.get("HYDRA_STEAM_CELLID", "").strip()
+    if not cell.isdigit():
+        cell = ""
+        for rel in (".local/share/Steam/config/config.vdf", ".steam/steam/config/config.vdf"):
+            try:
+                with open(os.path.join(os.path.expanduser("~"), rel)) as f:
+                    m = CELL_RE.search(f.read())
+            except OSError:
+                continue
+            if m:
+                cell = m.group(1)
+                break
+    return ["-cellid", cell] if cell and int(cell) > 0 else []
+
+
 def dd_login_args():
     """The -username/-remember-password pair that makes DepotDownloader reuse
     the stored login key: tokens are keyed by account name, and DD refuses
@@ -916,7 +939,7 @@ def follow_install(job_id, app, game_dir):
     (most Steam games ship Windows only; the platform used decides `native`)."""
     with jobs_lock:
         jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
-    base = ["-app", app, "-dir", game_dir, *dd_login_args(), "-max-downloads", "8"]
+    base = ["-app", app, "-dir", game_dir, *dd_login_args(), *dd_cell_args(), "-max-downloads", "8"]
     os_used, last_text = None, ""
     for osname in ("linux", "windows"):
         with jobs_lock:

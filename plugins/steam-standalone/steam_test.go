@@ -476,6 +476,46 @@ func TestSteamStoreDetailsCached(t *testing.T) {
 	}
 }
 
+// Downloads use the Steam client's download region (or HYDRA_STEAM_CELLID).
+func TestSteamDownloadCellID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	os.MkdirAll(filepath.Join(home, ".local/share/Steam/config"), 0o755)
+	os.WriteFile(filepath.Join(home, ".local/share/Steam/config/config.vdf"),
+		[]byte("\"InstallConfigStore\"\n{\n\t\"Steam\"\n\t{\n\t\t\"CellIDServerOverride\"\t\t\"14\"\n\t}\n}\n"), 0o644)
+	e := setup(t)
+	e.login()
+	install := func() string {
+		game := e.find(e.library(), "4321")
+		j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+		if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+			t.Fatalf("install: %+v", got)
+		}
+		calls, _ := os.ReadFile(os.Getenv("FAKE_DD_STATE") + ".calls")
+		lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
+		return lines[len(lines)-1]
+	}
+	if last := install(); !strings.Contains(last, "-cellid 14") {
+		t.Fatalf("download without the Steam client's region: %s", last)
+	}
+}
+
+func TestSteamDownloadCellIDEnv(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // no Steam client config
+	t.Setenv("HYDRA_STEAM_CELLID", "96")
+	e := setup(t)
+	e.login()
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	calls, _ := os.ReadFile(os.Getenv("FAKE_DD_STATE") + ".calls")
+	if !strings.Contains(string(calls), "-cellid 96") {
+		t.Fatalf("env cell id ignored: %s", calls)
+	}
+}
+
 // Some depots ship the Linux binary without an extension or exec bit.
 func TestSteamNativeBinaryWithoutExecBit(t *testing.T) {
 	e := setup(t)
