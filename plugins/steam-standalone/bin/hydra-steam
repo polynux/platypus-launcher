@@ -202,6 +202,25 @@ def account_config():
     return None
 
 
+def refresh_pairs(text):
+    """(account name, refresh token) pairs from account.config's LoginTokens
+    entries: a submessage carrying the account name right before the JWT.
+    DD keys its stored tokens by account name (-username for later runs)."""
+    out = []
+    for token_match in JWT_RE.finditer(text):
+        head = text[:token_match.start()]
+        # The name is the last printable run before the token's field marks.
+        m = re.search(r"[\x21-\x7e]{2,64}(?=[^\x20-\x7e]{0,4}$)", head)
+        name = m.group(0) if m else ""
+        # Length bytes are printable too (0x21..0x7e); a glued length shows
+        # up as a stray leading char, and Steam account names are
+        # word-shaped, so trim to the last word-ish chunk.
+        tail_name = re.search(r"[A-Za-z0-9][A-Za-z0-9_ -]{1,63}$", name)
+        name = tail_name.group(0) if tail_name else name
+        out.append((name, token_match.group(0)))
+    return out
+
+
 def refresh_token():
     """The SteamKit refresh token the login persisted, extracted from
     account.config (deflated protobuf; JWTs are readable strings in it) and
@@ -225,10 +244,19 @@ def refresh_token():
                 blob = zlib.decompress(blob, -15)  # .NET raw DeflateStream
             except zlib.error:
                 pass  # newer builds may store it uncompressed
-        matches = JWT_RE.findall(blob.decode("utf-8", "ignore"))
+        text = blob.decode("utf-8", "ignore")
+        matches = JWT_RE.findall(text)
         if not matches:
             return None
         st["refresh_token"] = matches[-1]  # the newest token
+        # The LoginTokens key: the account name DD expects in -username for
+        # every later run (the phone's QR login stores it there too).
+        for name, token in reversed(refresh_pairs(text)):
+            if token == st["refresh_token"] and name:
+                st["account"] = name
+                break
+        else:
+            st["account"] = st.get("account", "")
         st["source"] = [path, os.path.getmtime(path)]
         save_state("token.json", st)
         return st["refresh_token"]
@@ -396,6 +424,9 @@ def start_qr_login():
                 # resort but don't pretend the token exists.
                 proc.kill()
             save_state("session.json", {"account": "steam"})
+            # QR: the account name is learned by refresh_token() from the
+            # LoginTokens key; make sure token.json has it before DD uses it.
+            refresh_token()
             with qr_lock:
                 qr_state.update(state="ok", error=None)
                 qr_proc["proc"] = None
@@ -570,6 +601,10 @@ def auth_complete(params):
                        "Check the account name and password, and try again with a fresh "
                        "Steam Guard code.")
     save_state("session.json", {"account": username})
+    # The token store carries the same name for later runs (dd_login_args).
+    st = load_state("token.json", {})
+    st["account"] = username
+    save_state("token.json", st)
     return auth_status()
 
 
@@ -753,27 +788,62 @@ def mode_note(mode):
     }.get(mode, "")
 
 
+def dd_login_args():
+    """The -username/-remember-password pair that makes DepotDownloader reuse
+    the stored login key: tokens are keyed by account name, and DD refuses
+    -remember-password without a username (its own message). The name comes
+    from the login (password logins know it, QR logins read it from the
+    LoginTokens key in account.config)."""
+    name = load_state("token.json", {}).get("account") or state_user()
+    return ["-username", name, "-remember-password"] if name else []
+
+
 def install_size(params):
-    app = params["id"]
-    # -manifest-only downloads just the manifests and dumps total sizes; no
-    # game data is transferred.
-    d = os.path.join(data_dir(), "sizes", str(app))
-    rc, out, err = depotdownloader_simple(
-        ["-app", str(app), "-manifest-only", "-dir", d], timeout=900)
-    text = out + err
-    if rc != 0:
-        if re.search(r"not available from this account|Unable to get steam3 credentials|Insufficient privileges", text, re.IGNORECASE):
-            raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
-        raise RPCError(f"couldn't get the size for app {app}: {tail(text)}")
+    """Depot sizes from -manifest-only: the real DepotDownloader dumps one
+    manifest_<depot>_<id>.txt per depot into -dir (the sizes are in the
+    files, not stdout); manifests only, no game data. Linux depots first,
+    Windows fallback — the same order an install uses."""
+    app = str(params["id"])
+    d = os.path.join(data_dir(), "sizes", app)
     disk = compressed = 0
-    for line in text.splitlines():
-        if DISK_RE.search(line):
-            disk = max(disk, int(DISK_RE.search(line).group(1)))
-        m = COMPRESSED_RE.search(line)
-        if m:
-            compressed = max(compressed, int(m.group(1)))
+    auth_failed = False
+    text = ""
+    for osname in ("linux", "windows"):
+        # Start clean: a previous run's dumps must not be counted again.
+        if os.path.isdir(d):
+            for f in os.listdir(d):
+                if f.startswith("manifest_"):
+                    os.unlink(os.path.join(d, f))
+        rc, out, err = depotdownloader_simple(
+            ["-app", app, "-manifest-only", "-os", osname, *dd_login_args(), "-dir", d],
+            timeout=900)
+        text = out + err
+        if rc != 0:
+            if re.search(r"not available from this account|Unable to get steam3 credentials|Insufficient privileges", text, re.IGNORECASE):
+                auth_failed = True
+                break
+            # a real failure; not just "no depots for this platform"
+            if not re.search(r"Couldn't find any depots to download|No depot", text, re.IGNORECASE):
+                break
+            continue  # try the next platform
+        for f in os.listdir(d):
+            if not f.startswith("manifest_"):
+                continue
+            with open(os.path.join(d, f)) as fh:
+                for line in fh:
+                    if DISK_RE.search(line):
+                        disk += int(DISK_RE.search(line).group(1))
+                    m = COMPRESSED_RE.search(line)
+                    if m:
+                        compressed += int(m.group(1))
+        if disk:
+            break  # this platform has the depots; sizes are for it
     if disk == 0:
-        raise RPCError(f"depotdownloader printed no manifest sizes for app {app}")
+        if auth_failed:
+            raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
+        if text:
+            raise RPCError(f"couldn't get the size for app {app}: {tail(text)}")
+        raise RPCError(f"depotdownloader produced no manifest sizes for app {app}")
     return {"downloadBytes": compressed, "diskBytes": disk}
 
 
@@ -810,7 +880,7 @@ def follow_install(job_id, app, game_dir):
     (most Steam games ship Windows only; the platform used decides `native`)."""
     with jobs_lock:
         jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
-    base = ["-app", app, "-dir", game_dir, "-remember-password", "-max-downloads", "8"]
+    base = ["-app", app, "-dir", game_dir, *dd_login_args(), "-max-downloads", "8"]
     os_used, last_text = None, ""
     for osname in ("linux", "windows"):
         with jobs_lock:

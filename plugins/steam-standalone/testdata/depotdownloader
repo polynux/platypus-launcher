@@ -34,6 +34,8 @@ TOKEN = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
 TEST_APP = "4321"
 TEST_DISK = 60 * 1024 * 1024
 TEST_COMPRESSED = 40 * 1024 * 1024
+TEST_DISK2 = 4 * 1024 * 1024
+TEST_COMPRESSED2 = 2 * 1024 * 1024
 
 
 def load():
@@ -159,16 +161,24 @@ def main():
         sys.exit(1)
 
     if manifest_only:
+        # Like the real DepotDownloader: one manifest_<depot>_<id>.txt per
+        # depot in -dir, sizes inside the files (not on stdout). One depot
+        # is enough to test the reader; a second one exists under a knob so
+        # sums are exercised.
         d = value("-dir") or "."
         os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, "manifest_0.txt"), "w") as f:
+        with open(os.path.join(d, f"manifest_{app}_1111.txt"), "w") as f:
             f.write(f"Content Manifest for Depot {app}\n\n")
-            f.write(f"Total bytes on disk : {TEST_DISK}\n")
-            f.write(f"Total bytes compressed : {TEST_COMPRESSED}\n")
-        print(f"Got AppInfo for {app}")
-        print(f"Total bytes on disk : {TEST_DISK}")
-        print(f"Total bytes compressed : {TEST_COMPRESSED}")
-        print("Total downloaded: 0 bytes (0 bytes uncompressed) from 0 depots")
+            f.write(f"Total bytes on disk    : {TEST_DISK + TEST_DISK2}\n")
+            f.write(f"Total bytes compressed : {TEST_COMPRESSED + TEST_COMPRESSED2}\n")
+        if "second_depot" in st and "-os" in argv and value("-os") == "windows":
+            # Only the Windows run has this depot, so linux/windows sums differ.
+            with open(os.path.join(d, f"manifest_{app}_2222.txt"), "w") as f:
+                f.write(f"Content Manifest for Depot {app}\n\n")
+                f.write(f"Total bytes on disk    : {TEST_DISK2}\n")
+                f.write(f"Total bytes compressed : {TEST_COMPRESSED2}\n")
+        print("Got AppInfo for " + app)
+        print("Total downloaded: 0 bytes (0 bytes uncompressed) from 2 depots")
         sys.exit(0)
 
     # Real download into -dir, with progress lines and game files.

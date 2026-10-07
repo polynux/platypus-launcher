@@ -26,8 +26,8 @@ import (
 
 const id = "steam-standalone"
 
-const diskBytes = 60 << 20
-const compressedBytes = 40 << 20
+const diskBytes = 64 << 20       // two depots: 60 MiB + 4 MiB (see testdata/depotdownloader)
+const compressedBytes = 42 << 20
 
 var outMu sync.Mutex
 
