@@ -212,7 +212,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 
 ## Checklist
 
-- [ ] Phase 1: offline core (decoder, manifest, fixtures)
+- [x] Phase 1: offline core (decoder, manifest, fixtures)
 - [ ] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
 - [ ] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [ ] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
@@ -221,4 +221,18 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 
 ## Changes during implementation
 
-(none yet)
+- **Phase 1 deps:** `github.com/klauspost/compress/zstd` (VSZa chunks),
+  `github.com/ulikunitz/xz/lzma` (VZip/LZMA chunks),
+  `google.golang.org/protobuf` (kept for later phases; the manifest and
+  CM codecs are hand-rolled in `internal/depot/pb.go` so no generated code
+  is committed). EMsg numbers from `steam/enums_clientserver.proto` and
+  field numbers from `steam/content_manifest.proto`,
+  `steam/steammessages_contentsystem.steamclient.proto`,
+  `steam/steammessages_clientserver{,_login,_appinfo,_2}.proto`,
+  `steam/steammessages_base.proto` and
+  `steam/steammessages_auth.steamclient.proto` (SteamDatabase/Protobufs).
+- **Phase 1 assumptions to check live:** file-flag values
+  (directory=1, executable=2, symlink=4) and the minimal VSZa header
+  (`VSZa` + u32 size + raw zstd) are fixture conventions; real-manifest
+  structure (section magics, chunk AES ECB-IV + CBC, VZip layout, Adler-32
+  seed 0) follows the checked protocol facts.
