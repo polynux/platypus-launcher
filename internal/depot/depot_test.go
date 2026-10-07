@@ -192,3 +192,29 @@ func TestFileFlagValues(t *testing.T) {
 		}
 	}
 }
+
+func TestZstdContainerValidation(t *testing.T) {
+	plain := bytes.Repeat([]byte("vszd validation payload "), 200)
+	good := ZstdCompress(plain)
+	dst := make([]byte, len(plain))
+	if _, err := DecompressChunk(good, dst); err != nil {
+		t.Fatalf("good container rejected: %v", err)
+	}
+	mangle := func(f func([]byte)) []byte {
+		bad := append([]byte{}, good...)
+		f(bad)
+		return bad
+	}
+	for name, bad := range map[string][]byte{
+		"bad magic":      mangle(func(b []byte) { b[0] ^= 0xFF }),
+		"bad header crc": mangle(func(b []byte) { b[4] ^= 0xFF }),
+		"bad footer crc": mangle(func(b []byte) { b[len(b)-15] ^= 0xFF }),
+		"bad size":       mangle(func(b []byte) { b[len(b)-11] += 1 }),
+		"bad footer tag": mangle(func(b []byte) { b[len(b)-1] = 'x' }),
+		"truncated":      good[:len(good)-5],
+	} {
+		if _, err := DecompressChunk(bad, dst); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}

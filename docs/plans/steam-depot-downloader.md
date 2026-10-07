@@ -231,13 +231,11 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   `steam/steammessages_clientserver{,_login,_appinfo,_2}.proto`,
   `steam/steammessages_base.proto` and
   `steam/steammessages_auth.steamclient.proto` (SteamDatabase/Protobufs).
-- **Phase 1 assumptions to check live:** the minimal VSZa header
-  (`VSZa` + u32 size + raw zstd) is a fixture convention (fixed in the
-  review pass below); real-manifest structure (section magics, chunk AES
-  ECB-IV + CBC, VZip layout, Adler-32 seed 0) follows the checked protocol
-  facts. File-flag values were confirmed against SteamKit's
-  `Resources/SteamLanguage/enums.steamd` in review and are pinned by
-  `TestFileFlagValues`.
+- **Phase 1 assumptions to check live:** real-manifest structure (section
+  magics, chunk AES ECB-IV + CBC, VZip layout, Adler-32 seed 0) follows the
+  checked protocol facts. File-flag values were confirmed against
+  SteamKit's `Resources/SteamLanguage/enums.steamd` in review and are
+  pinned by `TestFileFlagValues`.
 - **Phase 2 notes:** `internal/steamcm` ports `steam_cm.py` (hello, token
   logon, Multi/gzip, heartbeats, service calls by jobid) and adds depot
   keys (5438/5439), PICS tokens/info (8905/8906, 8903/8904, info parsed
@@ -274,3 +272,21 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   Assumptions to check live: PICS key spellings (depots/config/oslist,
   manifests/<branch>/gid, depotfromapp), VHost-as-hostname, token-as-query
   and request-code URL segment.
+- **Review fixes (before phase 5, one commit each).** (1) The steam tests
+  built hydra-steam-dl per-test; with HOME pointed at a temp dir Go put
+  its module cache in read-only folders and TempDir cleanup failed. The
+  binary is now built once per package in TestMain with the real
+  HOME/GOMODCACHE/GOCACHE and only copied per test. (2) The flag
+  constants were guessed; they now match `enums.steamd` exactly
+  (executable=32, directory=64, symlink=512, plus the rest) and
+  `TestFileFlagValues` pins every value, so flags leave the unconfirmed
+  list. (3) The VSZa container was a fixture invention; `zstdDecompress`
+  now implements `SteamKit2/Util/VZstdUtil.cs` exactly (8-byte header with
+  magic + CRC, frame-only decode, 15-byte footer with CRC + size + 4
+  ignored bytes + "zsv", CRC and size verified) and `ZstdCompress`
+  produces the real layout, covered by `TestZstdContainerValidation`
+  (bad magic/CRC/size/tag/truncation all fail), so VSZa leaves the
+  unconfirmed list. `vzipDecompress` was compared with `VZipUtil.cs` the
+  same way: header, dictionary size and footer CRC handling match (ours
+  additionally enforces the CRC where SteamKit's chunk path relies on
+  Adler instead — strictly stronger, same verdict on valid data).

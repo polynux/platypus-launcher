@@ -131,39 +131,71 @@ func DecompressChunk(container, dst []byte) ([]byte, error) {
 	}
 }
 
+// VZstd container layout (VZstdUtil.cs): an 8-byte header (uint32 magic
+// 0x615A5356 "VSZa" LE, then uint32 CRC32), the zstd frame, and a 15-byte
+// footer (uint32 CRC32, uint32 decompressed size, 4 bytes SteamKit ignores,
+// then "zsv"). Both CRCs cover the decompressed data.
+const (
+	vzstdMagic  = 0x615A5356
+	vzstdFooter = "zsv"
+)
+
 func zstdDecompress(container, dst []byte) ([]byte, error) {
+	if len(container) < 8+15 {
+		return nil, fmt.Errorf("vszd too short")
+	}
+	if binary.LittleEndian.Uint32(container) != vzstdMagic {
+		return nil, fmt.Errorf("bad vszd header")
+	}
+	headCRC := binary.LittleEndian.Uint32(container[4:])
+	footCRC := binary.LittleEndian.Uint32(container[len(container)-15:])
+	wantSize := int(binary.LittleEndian.Uint32(container[len(container)-11:]))
+	if headCRC != footCRC {
+		return nil, fmt.Errorf("vszd header and footer CRCs differ")
+	}
+	if string(container[len(container)-3:]) != vzstdFooter {
+		return nil, fmt.Errorf("bad vszd footer")
+	}
+	if uint64(wantSize) > uint64(len(dst)) {
+		return nil, fmt.Errorf("vszd output overflows the chunk buffer")
+	}
 	dec, err := zstd.NewReader(nil)
 	if err != nil {
 		return nil, err
 	}
 	defer dec.Close()
-	// SteamKit's VZstd container is "VSZa" + version + properties + zstd
-	// stream. Our fixtures write plain zstd after the 4-byte magic; the
-	// real container carries the same stream, so skip what we don't use.
-	payload := container
-	if len(payload) >= 8 {
-		payload = payload[8:]
-	} else {
-		payload = payload[4:]
-	}
-	got, err := dec.DecodeAll(payload, dst[:0])
+	got, err := dec.DecodeAll(container[8:len(container)-15], dst[:0])
 	if err != nil {
 		return nil, fmt.Errorf("zstd: %w", err)
+	}
+	if len(got) != wantSize {
+		return nil, fmt.Errorf("vszd size mismatch: got %d, want %d", len(got), wantSize)
+	}
+	if crc32.ChecksumIEEE(got) != footCRC {
+		return nil, fmt.Errorf("vszd crc mismatch")
 	}
 	return got, nil
 }
 
-// ZstdCompress builds a VSZa container for fixtures.
+// ZstdCompress builds a VSZa container for fixtures, in the real layout.
 func ZstdCompress(plain []byte) []byte {
 	enc, _ := zstd.NewWriter(nil)
-	out := enc.EncodeAll(plain, nil)
+	frame := enc.EncodeAll(plain, nil)
 	enc.Close()
-	// Our minimal VSZa header: magic + uint32 decompressed size, so the
-	// decoder can skip it without parsing SteamKit's properties.
-	hdr := make([]byte, 8)
-	copy(hdr, "VSZa")
-	binary.LittleEndian.PutUint32(hdr[4:], uint32(len(plain)))
-	return append(hdr, out...)
+	crc := crc32.ChecksumIEEE(plain)
+	out := make([]byte, 0, 8+len(frame)+15)
+	var h [8]byte
+	binary.LittleEndian.PutUint32(h[:], vzstdMagic)
+	binary.LittleEndian.PutUint32(h[4:], crc)
+	out = append(out, h[:]...)
+	out = append(out, frame...)
+	var f [15]byte
+	binary.LittleEndian.PutUint32(f[:], crc)
+	binary.LittleEndian.PutUint32(f[4:], uint32(len(plain)))
+	// f[8:12] is 4 bytes SteamKit never reads; leave them zero.
+	copy(f[12:], vzstdFooter)
+	out = append(out, f[:]...)
+	return out
 }
 
 func vzipDecompress(container, dst []byte) ([]byte, error) {
