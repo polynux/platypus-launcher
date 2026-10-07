@@ -112,6 +112,29 @@ def save_state(name, state):
         json.dump(state, f)
 
 
+# Token-bearing files (refresh.token, token.json, steam-access.json) must
+# be 0600: the data dir itself is private, but the tokens are bearer
+# credentials and must not be world-readable. os.open/write-then-chmod
+# covers both new files (umask) and pre-existing 0644 ones (WriteFile
+# keeps the old mode); session.json carries no secret and stays 0644.
+def save_secret(name, state):
+    path = state_path(name)
+    with open(path, "w") as f:
+        json.dump(state, f)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def tighten(name):
+    """chmod an existing state file to 0600; missing files are fine."""
+    try:
+        os.chmod(state_path(name), 0o600)
+    except OSError:
+        pass
+
+
 def account_config():
     """DepotDownloader's persisted credentials file, if a login left one.
 
@@ -159,6 +182,7 @@ def refresh_token():
         with open(state_path("refresh.token")) as f:
             token = f.read().strip()
         if token:
+            tighten("refresh.token")
             return token
     except OSError:
         pass
@@ -199,7 +223,7 @@ def refresh_token():
         st["refresh_token"] = token
         st["account"] = account
         st["source"] = [path, os.path.getmtime(path)]
-        save_state("token.json", st)
+        save_secret("token.json", st)
         migrate_token(token, account)
         return token
     except OSError:
@@ -224,7 +248,7 @@ def migrate_token(token, account):
                             os.path.getmtime(state_path("refresh.token"))]
         except OSError:
             pass
-        save_state("token.json", st)
+        save_secret("token.json", st)
         if account and not state_user():
             save_state("session.json", {"account": account})
     except OSError:
@@ -617,6 +641,7 @@ def access_token():
     st = load_state("steam-access.json", {})
     token = st.get("access_token") or ""
     if token and jwt_exp(token) - ACCESS_TOKEN_MARGIN > time.time():
+        tighten("steam-access.json")
         return token
     refresh = refresh_token()
     if not refresh:
@@ -627,6 +652,7 @@ def access_token():
         st = load_state("steam-access.json", {})
         token = st.get("access_token") or ""
         if token and jwt_exp(token) - ACCESS_TOKEN_MARGIN > time.time():
+            tighten("steam-access.json")
             return token
         try:
             token = steam_cm.exchange(refresh)
@@ -635,7 +661,7 @@ def access_token():
                 raise RPCError(f"Steam rejected the stored login key ({e}); log in again",
                                CODE_AUTH_REQUIRED)
             raise RPCError(str(e))
-        save_state("steam-access.json", {"access_token": token,
+        save_secret("steam-access.json", {"access_token": token,
                                          "exp": jwt_exp(token)})
         return token
 

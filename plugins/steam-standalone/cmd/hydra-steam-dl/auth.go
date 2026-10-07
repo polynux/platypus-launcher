@@ -280,7 +280,9 @@ func runAuthPassword(ctx context.Context, req authRequest, replies <-chan authCo
 // storeToken persists the login where both the Python plugin and the Go
 // downloader find it: refresh.token (0600, raw JWT), token.json (same
 // keys the plugin already uses, plus steamid) and session.json (same
-// account shape). It emits the result line for the plugin to forward.
+// account shape, no secret so 0644 is fine). Token files are chmodded
+// after writing because WriteFile keeps a pre-existing 0644 mode. It
+// emits the result line for the plugin to forward.
 func storeToken(refreshToken, account string) error {
 	if refreshToken == "" {
 		return fmt.Errorf("Steam issued no login token")
@@ -299,6 +301,7 @@ func storeToken(refreshToken, account string) error {
 	if err := os.WriteFile(filepath.Join(dir, "refresh.token"), []byte(refreshToken+"\n"), 0o600); err != nil {
 		return err
 	}
+	_ = os.Chmod(filepath.Join(dir, "refresh.token"), 0o600)
 	// token.json keeps the keys the plugin already reads
 	// (refresh_token, account, source) so the current login keeps
 	// working; steamid is new and ignored by older readers.
@@ -318,6 +321,7 @@ func storeToken(refreshToken, account string) error {
 	if err := os.WriteFile(filepath.Join(dir, "token.json"), raw, 0o600); err != nil {
 		return err
 	}
+	_ = os.Chmod(filepath.Join(dir, "token.json"), 0o600)
 	sf, _ := json.Marshal(map[string]string{"account": account})
 	if err := os.WriteFile(filepath.Join(dir, "session.json"), sf, 0o644); err != nil {
 		return err

@@ -101,7 +101,8 @@ func fatal(code, msg string) {
 }
 
 // tokenFromFile reads the refresh token from its 0600 file in the plugin's
-// data folder, when the request carried none on stdin.
+// data folder, when the request carried none on stdin. It tightens a
+// pre-existing 0644 file to 0600 on first touch.
 func tokenFromFile() string {
 	dir := os.Getenv("HYDRA_PLUGIN_DATA")
 	if dir == "" {
@@ -111,6 +112,7 @@ func tokenFromFile() string {
 	if err != nil {
 		return ""
 	}
+	_ = os.Chmod(dir+"/refresh.token", 0o600)
 	// Strip trailing newlines; tokens are single-line JWTs.
 	for len(raw) > 0 && (raw[len(raw)-1] == '\n' || raw[len(raw)-1] == '\r') {
 		raw = raw[:len(raw)-1]

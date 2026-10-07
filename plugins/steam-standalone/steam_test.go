@@ -395,6 +395,51 @@ func TestSteamAuth(t *testing.T) {
 	}
 }
 
+// Token-bearing files must end up 0600 even when they already exist as
+// 0644 (pre-fix saves): the login overwrites refresh.token/token.json
+// through the Go helper (chmod after write) and library.list writes and
+// re-touches steam-access.json through the plugin (save_secret/tighten).
+// session.json carries no secret and stays 0644.
+func TestSteamTokenFiles0600(t *testing.T) {
+	e := setup(t)
+	e.setCMState("auth_guard", "email")
+	// Pre-create the token files world-readable; the flows below must
+	// tighten them.
+	os.WriteFile(filepath.Join(e.pluginData(), "refresh.token"), []byte("stale\n"), 0o644)
+	os.WriteFile(filepath.Join(e.pluginData(), "token.json"), []byte(`{"refresh_token":"stale"}`), 0o644)
+	e.login()
+	for _, name := range []string{"refresh.token", "token.json"} {
+		fi, err := os.Stat(filepath.Join(e.pluginData(), name))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if fi.Mode().Perm()&0o077 != 0 {
+			t.Fatalf("%s mode %v, want 0600", name, fi.Mode())
+		}
+	}
+	if lib := e.library(); len(lib) == 0 {
+		t.Fatal("empty library")
+	}
+	fi, err := os.Stat(filepath.Join(e.pluginData(), "steam-access.json"))
+	if err != nil {
+		t.Fatalf("steam-access.json: %v", err)
+	}
+	if fi.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("steam-access.json mode %v, want 0600", fi.Mode())
+	}
+	// A cached access token is tightened on read, without re-exchange.
+	os.Chmod(filepath.Join(e.pluginData(), "steam-access.json"), 0o644)
+	if lib := e.library(); len(lib) == 0 {
+		t.Fatal("empty library from cache")
+	}
+	if fi, _ := os.Stat(filepath.Join(e.pluginData(), "steam-access.json")); fi.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("steam-access.json mode after cached read %v, want 0600", fi.Mode())
+	}
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "session.json")); err != nil {
+		t.Fatalf("session.json: %v", err)
+	}
+}
+
 func TestSteamLibraryInstallLaunchUninstall(t *testing.T) {
 	e := setup(t)
 	e.login()
