@@ -847,6 +847,14 @@ def dd_cell_args():
     return ["-cellid", cell] if cell and int(cell) > 0 else []
 
 
+def dd_max_downloads():
+    """Parallel chunk downloads. DepotDownloader defaults to 8; a content
+    server that throttles each connection is helped by more. HYDRA_STEAM_MAX_DOWNLOADS
+    overrides."""
+    n = os.environ.get("HYDRA_STEAM_MAX_DOWNLOADS", "").strip()
+    return n if n.isdigit() and int(n) > 0 else "24"
+
+
 def dd_login_args():
     """The -username/-remember-password pair that makes DepotDownloader reuse
     the stored login key: tokens are keyed by account name, and DD refuses
@@ -939,7 +947,7 @@ def follow_install(job_id, app, game_dir):
     (most Steam games ship Windows only; the platform used decides `native`)."""
     with jobs_lock:
         jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
-    base = ["-app", app, "-dir", game_dir, *dd_login_args(), *dd_cell_args(), "-max-downloads", "8"]
+    base = ["-app", app, "-dir", game_dir, *dd_login_args(), *dd_cell_args(), "-max-downloads", dd_max_downloads()]
     os_used, last_text = None, ""
     for osname in ("linux", "windows"):
         with jobs_lock:

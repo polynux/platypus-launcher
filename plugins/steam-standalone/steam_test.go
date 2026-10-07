@@ -514,6 +514,10 @@ func TestSteamDownloadCellIDEnv(t *testing.T) {
 	if !strings.Contains(string(calls), "-cellid 96") {
 		t.Fatalf("env cell id ignored: %s", calls)
 	}
+	// More parallel downloads than DepotDownloader's 8 by default.
+	if !strings.Contains(string(calls), "-max-downloads 24") {
+		t.Fatalf("max-downloads: %s", calls)
+	}
 }
 
 // Some depots ship the Linux binary without an extension or exec bit.
