@@ -110,12 +110,10 @@ func (f *fakeCM) answerRSAKey(c *websocket.Conn, job, steamID uint64, body []byt
 	e.Str(2, exp)
 	e.Varint(3, uint64(time.Now().Unix()))
 	_ = c.WriteMessage(websocket.BinaryMessage, packEMsg(EMsgServiceMethodResponse, f.replyHdr(steamID, job, 1), e.Bytes()))
-	f.record("service Authentication.GetPasswordRSAPublicKey#1")
 	return true
 }
 
 func (f *fakeCM) answerBeginQR(c *websocket.Conn, job, steamID uint64, body []byte, cfg fakeConfig) bool {
-	f.record("service Authentication.BeginAuthSessionViaQR#1")
 	if cfg.AuthBeginEresult != 0 && cfg.AuthBeginEresult != 1 {
 		_ = c.WriteMessage(websocket.BinaryMessage, packEMsg(EMsgServiceMethodResponse, f.replyHdr(steamID, job, cfg.AuthBeginEresult), nil))
 		return true
@@ -141,7 +139,6 @@ func (f *fakeCM) answerBeginQR(c *websocket.Conn, job, steamID uint64, body []by
 }
 
 func (f *fakeCM) answerBeginCreds(c *websocket.Conn, job, steamID uint64, body []byte, cfg fakeConfig) bool {
-	f.record("service Authentication.BeginAuthSessionViaCredentials#1")
 	if cfg.AuthBeginEresult != 0 && cfg.AuthBeginEresult != 1 {
 		_ = c.WriteMessage(websocket.BinaryMessage, packEMsg(EMsgServiceMethodResponse, f.replyHdr(steamID, job, cfg.AuthBeginEresult), nil))
 		return true

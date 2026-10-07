@@ -14,6 +14,51 @@ func setAuth(t *testing.T, fn func(*fakeConfig)) {
 	currentFake.mu.Unlock()
 }
 
+func TestAuthUnauthedUses9804(t *testing.T) {
+	// Regression: an unauthenticated client must send service calls as
+	// EMsg 9804 (NonAuthed), never 151 — the real CM closes the socket
+	// (1000) on a pre-logon 151, which surfaced as "CM connection
+	// dropped: websocket: close 1000". The fake rejects 151 pre-logon
+	// the same way, so this fails on the old code.
+	f, host := startFake(t)
+	withFakeCM(t, host)
+	setAuth(t, func(c *fakeConfig) {
+		c.AuthQRApproved = true
+	})
+	ctx := context.Background()
+	s, err := DialUnauth(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	qr, err := s.BeginQR(0)
+	if err != nil {
+		t.Fatalf("BeginQR over 9804: %v", err)
+	}
+	if qr.ChallengeURL == "" {
+		t.Fatal("empty challenge URL")
+	}
+	found := false
+	for _, ev := range f.log() {
+		if strings.HasPrefix(ev, "service_unauth Authentication.BeginAuthSessionViaQR#1") {
+			found = true
+			// Header for unauthed calls: steamid 0, session 0, job set.
+			if !strings.Contains(ev, "steamid=0") || !strings.Contains(ev, "session=0") {
+				t.Fatalf("unauthed header must carry steamid 0 and session 0: %q", ev)
+			}
+			if strings.Contains(ev, "job=0") {
+				t.Fatalf("unauthed header must carry jobid_source: %q", ev)
+			}
+		}
+		if strings.HasPrefix(ev, "rejected 151") {
+			t.Fatalf("client sent 151 before logon: %q", ev)
+		}
+	}
+	if !found {
+		t.Fatalf("no unauthed BeginQR in fake log: %v", f.log())
+	}
+}
+
 func TestAuthQRSuccess(t *testing.T) {
 	_, host := startFake(t)
 	withFakeCM(t, host)

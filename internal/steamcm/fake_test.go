@@ -150,13 +150,22 @@ func (f *fakeCM) serve(c *websocket.Conn) {
 		if emsg == EMsgClientHello {
 			continue
 		}
-		if emsg == EMsgServiceMethodCallFromClient {
+		if emsg == EMsgServiceMethodCallNonAuthed {
 			target := string(hdr.Bytes(12))
 			job := hdr.Int(10)
 			if len(target) >= 15 && target[:15] == "Authentication." {
+				f.record(fmt.Sprintf("service_unauth %s steamid=%d session=%d job=%d",
+					target, hdr.Int(1), hdr.Int(2), job))
 				f.answerAuth(c, target, job, hdr.Int(1), body, f.getCfg())
 				continue
 			}
+		}
+		if emsg == EMsgServiceMethodCallFromClient {
+			// Like the real CM: a 151 from a client that never logged
+			// on gets the socket closed normally (1000).
+			f.record(fmt.Sprintf("rejected 151 before logon"))
+			_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(1000, ""))
+			return
 		}
 		if emsg == EMsgClientLogOff {
 			f.record("logoff")

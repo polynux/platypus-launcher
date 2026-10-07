@@ -17,6 +17,11 @@ const (
 	EMsgMulti                       = 1
 	EMsgServiceMethodResponse       = 147
 	EMsgServiceMethodCallFromClient = 151
+	// Unauthenticated service calls (before any logon) go out as 9804,
+	// not 151: the real CM closes the socket (1000) on a 151 from a
+	// client that never logged on. The reply is still 147, matched by
+	// jobid_target like authed calls.
+	EMsgServiceMethodCallNonAuthed  = 9804
 	EMsgClientHeartBeat             = 703
 	EMsgClientLogOff                = 706
 	EMsgClientLicenseList           = 780

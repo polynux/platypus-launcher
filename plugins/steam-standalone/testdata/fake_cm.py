@@ -271,12 +271,18 @@ def serve(conn):
         if emsg == EMSG_CLIENT_HELLO:
             continue
         # Phase 6 logins run before any token exists, so Authentication
-        # service calls arrive on an unauthenticated connection (no logon).
-        if emsg == 151:  # ServiceMethodCallFromClient
+        # service calls arrive on an unauthenticated connection (no logon)
+        # as 9804 NonAuthed — never 151. Like the real CM, a 151 here gets
+        # the socket closed normally (1000).
+        if emsg == 9804:  # ServiceMethodCallFromClientNonAuthed
             target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
             if target.startswith("Authentication."):
                 serve_auth(conn, target, hdr, body, hdr.get(1, [0])[0])
                 continue
+        if emsg == 151:  # ServiceMethodCallFromClient
+            record("rejected 151 before logon")
+            conn.close_frame()
+            return
         if emsg == EMSG_CLIENT_LOGOFF:
             record("logoff")
             conn.close_frame()

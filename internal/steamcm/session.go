@@ -26,6 +26,10 @@ type Session struct {
 	conn      *websocket.Conn
 	licenses  []License
 	pending   [][]byte // batched messages waiting for the next read
+	// authed is false before any logon (DialUnauth): service calls go
+	// out as EMsg 9804 with no steamid/sessionid, like the real
+	// client's pre-logon calls.
+	authed bool
 }
 
 // License is one entry of CMsgClientLicenseList.
@@ -154,7 +158,7 @@ func dialOne(ctx context.Context, endpoint string, tls bool, steamID uint64, ref
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{steamID: steamID, conn: conn}
+	s := &Session{steamID: steamID, conn: conn, authed: true}
 	n, err := randInt()
 	if err != nil {
 		conn.Close()
@@ -291,6 +295,8 @@ func (s *Session) readOne(deadline time.Time) (uint32, depot.Msg, []byte, error)
 
 // Call makes one ServiceMethodCallFromClient request and returns the
 // response body. Replies match by jobid_target, like node-steam-session.
+// Before any logon the call goes out as 9804 NonAuthed with no steamid
+// or sessionid in the header, just target_job_name and jobid_source.
 func (s *Session) Call(service string, body []byte, timeout time.Duration) ([]byte, error) {
 	if timeout == 0 {
 		timeout = 30 * time.Second
@@ -298,8 +304,12 @@ func (s *Session) Call(service string, body []byte, timeout time.Duration) ([]by
 	s.jobID++
 	job := s.jobID
 	hdr := header(s.steamID, s.sessionID, job, service)
+	emsg := uint32(EMsgServiceMethodCallFromClient)
+	if !s.authed {
+		emsg = EMsgServiceMethodCallNonAuthed
+	}
 	if err := s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(EMsgServiceMethodCallFromClient, hdr, body)); err != nil {
+		packEMsg(emsg, hdr, body)); err != nil {
 		return nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	deadline := time.Now().Add(timeout)
