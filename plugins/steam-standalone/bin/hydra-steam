@@ -931,6 +931,10 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
             state["total"] = total
             if msg.get("speed"):
                 state["speed"] = msg["speed"]
+            if msg.get("connections"):
+                state["connections"] = msg["connections"]
+            if msg.get("hosts"):
+                state["hosts"] = msg["hosts"]
             notify("job.progress", dict(state))
         elif msg.get("type") == "result":
             result = msg

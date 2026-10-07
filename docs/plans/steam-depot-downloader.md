@@ -216,7 +216,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 - [x] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
 - [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [x] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
-- [ ] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
+- [x] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
 - [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed
 
 ## Changes during implementation
@@ -269,9 +269,59 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   request codes and CDN tokens; `fakesteam` builds fixture depots and the
   fake CDN both harnesses share (old `-cellid`/`-max-downloads`/size-dump
   assertions moved to the CM log and fixture sums). New dep: none.
-  Assumptions to check live: PICS key spellings (depots/config/oslist,
-  manifests/<branch>/gid, depotfromapp), VHost-as-hostname, token-as-query
-  and request-code URL segment.
+- **Phase 5 live findings.** CM: the logon burst mixes old-format
+  (non-protobuf) messages into Multis and batches the response behind
+  siblings — fixed (tolerate + queue, `TestMixedMultiOldFormat`).
+  PICS buffers are NUL-terminated **text** KV wrapped in `appinfo`
+  (confirmed live; parser tolerates the NUL, fixtures now use the live
+  shape too). Depot selection matches DepotDownloader exactly
+  (oslist/osarch/language/lowviolence; shared entries filtered by their
+  own config; manifests/keys resolved against the source app): sizes
+  match DD to the byte on KAMI (81078597/55479792, also equals the PICS
+  `size` field), Containment linux depot 203564 (560912606/162562864)
+  and Pressure depot 224221 (692230434/284891696). A Pressure mismatch
+  (extra 32-bit/shared depots) caught the missing filters.
+  Still to confirm live: VHost-as-hostname, token-as-query, manifest URL
+  shape, https_support values, branch-password hash.
+- **Phase 5 live validation (done 2026-10-07/08, user present).**
+  - Sizes match DepotDownloader to the byte on KAMI (81078597/55479792),
+    Containment linux depot 203564 (560912606/162562864) and Pressure
+    depot 224221 (692230434/284891696). A Pressure mismatch (extra
+    32-bit/shared depots) caught the missing osarch/language/lowviolence
+    filters and entry-first shared-depot handling — fixed with
+    `TestSelectDepotsFilters`.
+  - KAMI: install `job.done` (276 files, dirs, exec bit via plugin
+    detection), SHA-1 clean except two chunkless zero-size placeholders
+    (Verify now skips them), user launched fine (Windows build via
+    Proton), uninstall removed everything. installed.json correct.
+  - SUPERHOT (322500, depot 322503, 1.13 GB dl / 4.4 GB disk): peak
+    **44.4 MB/s (355 Mbps)**, finish average **29.6 MB/s (237 Mbps)**,
+    connections 8→9→11 with adaptive growth then plateau (Steam-like),
+    32 hosts served. Against the client's 325–711 Mbps on this line:
+    peak inside the band, average ~35–70% — target (≥50%) met.
+    KAMI's slow tail (~1 MB/s on few chunks) is per-chunk overhead on a
+    small depot, not a scheduler ceiling.
+  - Cancel/resume: SIGINT-crash at 94.9% (4301/4341 chunks staged), same
+    jobId resumed to `job.done` with full SHA-1 verify.
+  - Verify/repair: deleted + corrupted files both restored (`bad:2`
+    `fixed:2`, re-verify clean).
+  - Update: public→beta re-fetched (different 2014 builds share no chunk
+    IDs); beta→beta fetched **zero bytes** after the old-manifest decrypt
+    fix (saved manifests keep encrypted names; reuse looked up garbage
+    paths). Update also merges chunks from all saved branch manifests.
+  - Assumptions now confirmed live: PICS text KV + `appinfo` wrapper +
+    NUL terminator, key spellings, depot selection incl. shared-depot
+    keys, VHost-as-hostname, token-as-query, manifest URL with request
+    code, `https_support` values (fake uses `http`, real `https` worked),
+    multi-host spread over ~32 hosts. NOT confirmed live (no password
+    branch encountered): branch-password hash format and the
+    CheckBetaPassword path; the code follows DepotDownloader's shape.
+  - No EResult 84 seen (one CM session per job). Login in
+    plugin-data/steam-standalone kept.
+  - Unrelated pre-existing issue reported: after uninstall the game page
+    still shows installed until refresh — the plugin already reports
+    `installed:false`; the staleness is Hydra frontend caching, identical
+    with the old backend.
 - **Review fixes (before phase 5, one commit each).** (1) The steam tests
   built hydra-steam-dl per-test; with HOME pointed at a temp dir Go put
   its module cache in read-only folders and TempDir cleanup failed. The
