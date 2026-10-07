@@ -52,6 +52,9 @@ func (m Msg) AllBytes(f uint32) [][]byte {
 	return nil
 }
 
+// AllInts returns every varint/fixed value of a field.
+func (m Msg) AllInts(f uint32) []uint64 { return m.ints(f) }
+
 // Decode parses a protobuf message into fields.
 func Decode(data []byte) (Msg, error) {
 	m := Msg{}

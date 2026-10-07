@@ -213,7 +213,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 ## Checklist
 
 - [x] Phase 1: offline core (decoder, manifest, fixtures)
-- [ ] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
+- [x] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
 - [ ] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [ ] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
 - [ ] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
@@ -236,3 +236,14 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   (`VSZa` + u32 size + raw zstd) are fixture conventions; real-manifest
   structure (section magics, chunk AES ECB-IV + CBC, VZip layout, Adler-32
   seed 0) follows the checked protocol facts.
+- **Phase 2 notes:** `internal/steamcm` ports `steam_cm.py` (hello, token
+  logon, Multi/gzip, heartbeats, service calls by jobid) and adds depot
+  keys (5438/5439), PICS tokens/info (8905/8906, 8903/8904, info parsed
+  with `internal/steam/kv.go`), licences (780, drained via calls),
+  `GetServersForSteamPipe`, `GetManifestRequestCode`, `GetCDNAuthToken`
+  and `CheckAppBetaPassword`. A gorilla/websocket read that times out
+  breaks the connection for later reads (proven with a minimal repro),
+  so Dial never drains with a timeout. New dep:
+  `github.com/gorilla/websocket` (already indirect via wails).
+  Tested against a Go fake CM plus the Python `fake_cm.py` interop test.
+  PICS buffers are assumed to be text KeyValues; to check live.
