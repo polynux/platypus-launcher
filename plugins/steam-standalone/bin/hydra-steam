@@ -961,7 +961,7 @@ def follow_install(job_id, app, game_dir):
 def record_install(app, game_dir, os_used):
     """Remember the install: where it is, what runs it and which launch mode
     applies (see launch modes below)."""
-    exe = find_executable(game_dir)
+    exe = find_executable(game_dir, native=os_used == "linux")
     installed = load_state("installed.json", {})
     installed[app] = {
         "path": game_dir,
@@ -975,9 +975,23 @@ def record_install(app, game_dir, os_used):
     save_state("installed.json", installed)
 
 
-def find_executable(game_dir):
-    """The game's entry point: a Linux binary/script, or the biggest .exe in
-    the root (Steam Windows builds ship many helper exes)."""
+def is_elf(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"\x7fELF"
+    except OSError:
+        return False
+
+
+def find_executable(game_dir, native=False):
+    """The game's entry point: a Linux binary/script (native builds), or the
+    biggest .exe in the root (Steam Windows builds ship many helper exes).
+    Depots don't always mark the Linux binary executable, so a pick that
+    isn't gets its owner exec bit here."""
+    if native:
+        exe = find_native_executable(game_dir)
+        if exe:
+            return exe
     best, size = "", 0
     try:
         for entry in os.scandir(game_dir):
@@ -994,6 +1008,32 @@ def find_executable(game_dir):
                 best = entry.path
     except OSError:
         pass
+    return best
+
+
+def find_native_executable(game_dir):
+    """A start script (.sh) in the root, else the biggest ELF binary there
+    (shared libraries and installers excluded)."""
+    script, elf, size = "", "", 0
+    try:
+        for entry in sorted(os.scandir(game_dir), key=lambda e: e.name):
+            if not entry.is_file():
+                continue
+            lower = entry.name.lower()
+            if lower.endswith(".sh"):
+                script = script or entry.path
+            elif not re.search(r"\.so(\.\d+)*$", lower) and not lower.startswith(("unins", "setup", "install")):
+                s = entry.stat().st_size
+                if s > size and is_elf(entry.path):
+                    elf, size = entry.path, s
+    except OSError:
+        return ""
+    best = script or elf
+    if best and not os.access(best, os.X_OK):
+        try:
+            os.chmod(best, os.stat(best).st_mode | 0o100)
+        except OSError:
+            return ""
     return best
 
 
@@ -1045,7 +1085,7 @@ def launch_spec(params):
         raise RPCError(f"app {app} is not installed")
     path, exe = ig.get("path") or "", ig.get("executable") or ""
     if not exe or not os.path.isfile(exe):
-        exe = find_executable(path)
+        exe = find_executable(path, native=bool(ig.get("native")))
         if not exe:
             raise RPCError(f"couldn't find a game executable in {path or 'the install folder'}")
         ig["executable"] = exe

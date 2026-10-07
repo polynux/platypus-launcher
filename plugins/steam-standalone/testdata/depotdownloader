@@ -14,6 +14,8 @@ Behaviour knobs (JSON in the state file):
   account       set after a successful login; null when logged out
   guard         when true, login additionally asks for a Steam Guard code
   bad_password  logins to reject before one succeeds (0 = accept first)
+  bare_elf      when true, the Linux build is one ELF file without an
+                extension or exec bit (as some depots ship it)
   windows_only  when true, a -os linux download reports "no depots" so the
                 plugin falls back to the Windows run
 """
@@ -190,14 +192,17 @@ def main():
         print("Couldn't find any depots to download for app " + app, file=sys.stderr)
         sys.exit(1)
     os.makedirs(d, exist_ok=True)
-    exe = "game.sh" if osname == "linux" else "game.exe"
+    bare = osname == "linux" and st.get("bare_elf")
+    exe = "BareGame" if bare else "game.sh" if osname == "linux" else "game.exe"
     for pct in (25.00, 50.00, 100.00):
         time.sleep(0.1)
         print(f"{pct:6.2f}% {os.path.join(d, exe)}", flush=True)
     body = "#!/bin/sh\necho 'steam standalone game'\n" if osname == "linux" else "MZ fake game executable"
+    if bare:
+        body = "\x7fELF fake binary"
     with open(os.path.join(d, exe), "w") as f:
         f.write(body)
-    os.chmod(os.path.join(d, exe), 0o755)
+    os.chmod(os.path.join(d, exe), 0o644 if bare else 0o755)
     # FAKE_DD_STEAMWORKS: when set, the fake also plants a Steamworks library
     # so the plugin's mode detection sees an "optional"/"client" game. A test
     # that wants mode "client" plants it *before* install and calls the

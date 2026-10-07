@@ -476,6 +476,32 @@ func TestSteamStoreDetailsCached(t *testing.T) {
 	}
 }
 
+// Some depots ship the Linux binary without an extension or exec bit.
+func TestSteamNativeBinaryWithoutExecBit(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setDDState("bare_elf", true)
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	game = e.find(e.library(), "4321")
+	if !game.Native {
+		t.Fatalf("not native: %+v", game)
+	}
+	l, err := e.store.Launch(context.Background(), *game, false)
+	if err != nil || l.Direct == nil {
+		t.Fatalf("launch: %+v %v", l, err)
+	}
+	if filepath.Base(l.Direct.Exe) != "BareGame" {
+		t.Fatalf("exe: %+v", l.Direct)
+	}
+	if fi, err := os.Stat(l.Direct.Exe); err != nil || fi.Mode()&0o100 == 0 {
+		t.Fatalf("exec bit not set: %v %v", fi, err)
+	}
+}
+
 func TestSteamModeOptional(t *testing.T) {
 	t.Setenv("FAKE_DD_STEAMWORKS", "steam_api64.dll")
 	e := setup(t)
