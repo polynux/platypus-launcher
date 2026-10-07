@@ -361,10 +361,24 @@ def start_qr_login():
                 break
 
         if ok.is_set():
-            # Approved: the login key is persisted. We don't need the rest of
-            # the run (it would fetch the dummy app and fail); stop it.
+            # Approved. Don't kill the process here: DepotDownloader prints
+            # "Success!" BEFORE it writes the token store (Steam3Session
+            # prints, then sets LoginTokens, then calls Save), so killing
+            # right after the line loses the login key and the library
+            # silently loses its token. Wait for account.config to appear
+            # on disk, with a graceful stop as backstop; DD exits by itself
+            # right after saving (non-zero, the dummy app run) — that's
+            # expected and not an error.
+            for _ in range(100):  # up to 50s
+                if account_config() or proc.poll() is not None:
+                    break
+                time.sleep(0.5)
             if proc.poll() is None:
-                proc.kill()
+                try:
+                    proc.send_signal(signal.SIGINT)
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
             save_state("session.json", {"account": "steam"})
             with qr_lock:
                 qr_state.update(state="ok", error=None)
