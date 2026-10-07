@@ -5,7 +5,8 @@ protocol as the real thing — WebSocket framing, the
 envelopes, heartbeats — over plain ws:// on localhost, and hands out an
 access-token JWT for Authentication.GenerateAccessTokenForApp#1.
 
-State lives in $FAKE_CM_STATE (JSON, re-read for every connection):
+State lives in $FAKE_CM_STATE (JSON, re-read for every connection, and
+re-read on every auth poll so tests can approve mid-login):
   logon_eresult     EResult for the logon response (default 1 = OK)
   service_eresult   EResult in the GenerateAccessTokenForApp response header
                     (default 1 = OK)
@@ -15,6 +16,22 @@ State lives in $FAKE_CM_STATE (JSON, re-read for every connection):
   persona           persona name Player.GetPlayerLinkDetails answers with
   send_heartbeat    when true, one ClientHeartBeat arrives between the logon
                     response and the first service response
+  Auth knobs (phase 6 logins, no Valve network):
+    auth_account        account name Poll reports (default "HydraUser" for
+                        QR, else the Begin account)
+    auth_steamid        steamid for auth tokens (default 76561198)
+    auth_password       password Begin accepts (default "correct-horse")
+    auth_guard          "none", "email", "totp" or "confirm" (default "none")
+    auth_expected_code  code Update accepts (default "ABC12" for email,
+                        "123456" for totp)
+    auth_qr_approved    set true to approve a QR login, like the phone would
+    auth_mobile_approved set true to approve a password mobile confirmation
+    auth_qr_refresh     first QR poll returns a new challenge URL, like
+                        Steam expiring it
+    auth_begin_eresult  EResult for Begin (e.g. 84 rate-limit; default 1)
+    auth_poll_eresult   EResult for Poll (e.g. 27 expired, 84; default 1)
+    auth_challenge_url  QR challenge URL handed out
+    auth_new_challenge_url refreshed QR challenge URL
 Every connection appends a line to $FAKE_CM_STATE.log: "connect",
 "logon <steamid>", "heartbeat_reply", "service <jobid>", "logoff" — the Go
 tests read it to assert what the plugin actually did on the wire.
@@ -253,6 +270,17 @@ def serve(conn):
         body = payload[8 + hlen:]
         if emsg == EMSG_CLIENT_HELLO:
             continue
+        # Phase 6 logins run before any token exists, so Authentication
+        # service calls arrive on an unauthenticated connection (no logon).
+        if emsg == 151:  # ServiceMethodCallFromClient
+            target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
+            if target.startswith("Authentication."):
+                serve_auth(conn, target, hdr, body, hdr.get(1, [0])[0])
+                continue
+        if emsg == EMSG_CLIENT_LOGOFF:
+            record("logoff")
+            conn.close_frame()
+            return
         if emsg == EMSG_CLIENT_LOGON:
             serve_logged_in(conn, hdr, body, st)
             return
@@ -313,6 +341,9 @@ def serve_logged_in(conn, hdr, body, st):
             continue
         target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
         jobid = hdr.get(10, [0])[0]
+        if target.startswith("Authentication."):
+            if serve_auth(conn, target, hdr, body, steamid):
+                continue
         record(f"service {target}")
         if target == "ContentServerDirectory.GetServersForSteamPipe#1":
             serve_servers(conn, hdr, body, st, steamid, sessionid)
@@ -439,6 +470,160 @@ def serve_cdn_token(conn, hdr, body, st, steamid, sessionid):
     conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
                             content_hdr(steamid, sessionid, jobid),
                             pb_str(1, st.get("cdn_token", "cdn-token")) + pb_int(2, exp)))
+
+
+# --- authentication RPCs (phase 6 logins, no Valve network) ---------------
+# Field numbers from steammessages_auth.steamclient.proto; EResults ride
+# the service header like other calls. The RSA key below is a throwaway
+# test key (1024-bit, generated for the fake) — it encrypts only the fake
+# password "correct-horse" in tests, never real credentials.
+FAKE_RSA_MOD = "f0e1a9393eb896a7728260802446c4e5a8b258050758d97cdd3c025bb37ce7f160ec3a4ba173498d368d5f38c70d1b9e157ae237a8e02bcf54c40cce73e0f78b43ea92fdc6e4b712168e44a56574715cc390dd609ebfb6ae86977332f62a23460bcf4e805cf9bf404e8069a2579ff96a83810074d095dbf8efc5f9395c2a8321"
+FAKE_RSA_EXP = "10001"
+FAKE_RSA_D = "17b31c2335b8939a05fa2de46dad48d20fb6fc5202570b8eed756a05fbb2de5f315a0ca24450437c5151b77cae98eb8eb22e54f384fa09556cd19d30f2d5bf851359e987b283c121288a8ef6f4377b903bc71949e543776640505f76710e786447a7c1c2ca1725d2090d00a6455e905cf298a1895aab2e535fda216b35fb0001"
+FAKE_RSA_TS = 1234567890
+
+# client_id -> {"request_id", "account", "steamid", "mode", "guard",
+# "expected_code", "challenge", "refreshed", "approved", "polls"}
+_auth_sessions = {}
+_auth_next_id = [1000]
+
+
+def pb_float(field, value):
+    return pb_fixed32(field, struct.unpack("<I", struct.pack("<f", value))[0])
+
+
+def rsa_decrypt_password(b64):
+    """PKCS#1 v1.5-decrypt the base64 password with the fake key, or None."""
+    try:
+        blob = base64.b64decode(b64)
+        n = int(FAKE_RSA_MOD, 16)
+        d = int(FAKE_RSA_D, 16)
+        m = pow(int.from_bytes(blob, "big"), d, n)
+        k = (n.bit_length() + 7) // 8
+        em = m.to_bytes(k, "big")
+        # 0x00 0x02 PS 0x00 M
+        if len(em) < 11 or em[0] != 0 or em[1] != 2:
+            return None
+        sep = em.find(b"\x00", 2)
+        if sep < 10:
+            return None
+        return em[sep + 1:].decode()
+    except Exception:
+        return None
+
+
+def serve_auth(conn, target, hdr, body, steamid):
+    """One Authentication.* service call on an unauthenticated connection
+    (logins run before any token exists). Returns True when handled."""
+    jobid = hdr.get(10, [0])[0]
+    st = load()  # re-read so tests can approve mid-login
+    if target == "Authentication.GetPasswordRSAPublicKey#1":
+        record("service Authentication.GetPasswordRSAPublicKey#1")
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                                content_hdr(steamid, 0, jobid),
+                                pb_str(1, FAKE_RSA_MOD) + pb_str(2, FAKE_RSA_EXP) + pb_int(3, FAKE_RSA_TS)))
+        return True
+    if target == "Authentication.BeginAuthSessionViaQR#1":
+        record("service Authentication.BeginAuthSessionViaQR#1")
+        eres = st.get("auth_begin_eresult", 1)
+        if eres != 1:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, eres), b""))
+            return True
+        _auth_next_id[0] += 1
+        cid = _auth_next_id[0]
+        req_id = os.urandom(16)
+        challenge = st.get("auth_challenge_url", "https://steamcommunity.com/qr/TESTCHALLENGE")
+        _auth_sessions[cid] = {"request_id": req_id, "account": st.get("auth_account", "HydraUser"),
+                               "steamid": st.get("auth_steamid", 76561198), "mode": "qr",
+                               "challenge": challenge, "refreshed": False, "polls": 0}
+        allow = pb_int(1, 4) + pb_str(2, "Confirm via the Steam mobile app")
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid),
+                                pb_int(1, cid) + pb_str(2, challenge) + pb_str(3, req_id)
+                                + pb_float(4, 0.2) + pb_msg(5, allow) + pb_int(6, 2)))
+        return True
+    if target == "Authentication.BeginAuthSessionViaCredentials#1":
+        record("service Authentication.BeginAuthSessionViaCredentials#1")
+        eres = st.get("auth_begin_eresult", 1)
+        if eres != 1:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, eres), b""))
+            return True
+        req = pb_parse(body)
+        account = (req.get(2, [b""])[0]).decode() if req.get(2) else ""
+        enc = (req.get(3, [b""])[0]).decode() if req.get(3) else ""
+        want = st.get("auth_password", "correct-horse")
+        if rsa_decrypt_password(enc) != want:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, 5), b""))
+            return True
+        if not account:
+            account = st.get("auth_account", "HydraUser")
+        guard = st.get("auth_guard", "none")
+        exp_code = st.get("auth_expected_code", "123456" if guard == "totp" else "ABC12")
+        _auth_next_id[0] += 1
+        cid = _auth_next_id[0]
+        req_id = os.urandom(16)
+        sess = {"request_id": req_id, "account": account,
+                "steamid": st.get("auth_steamid", 76561198), "mode": "password",
+                "guard": guard, "expected_code": exp_code, "approved": guard == "none", "polls": 0}
+        _auth_sessions[cid] = sess
+        resp = pb_int(1, cid) + pb_str(2, req_id) + pb_float(3, 0.2)
+        if guard == "email":
+            resp += pb_msg(4, pb_int(1, 2) + pb_str(2, "Enter the code emailed to you"))
+        elif guard == "totp":
+            resp += pb_msg(4, pb_int(1, 3) + pb_str(2, "Enter the authenticator code"))
+        elif guard == "confirm":
+            resp += pb_msg(4, pb_int(1, 4) + pb_str(2, "Confirm in the mobile app"))
+        resp += pb_int(5, sess["steamid"])
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid), resp))
+        return True
+    if target == "Authentication.PollAuthSessionStatus#1":
+        req = pb_parse(body)
+        cid = req.get(1, [0])[0]
+        record(f"service Authentication.PollAuthSessionStatus#1 client={cid}")
+        eres = st.get("auth_poll_eresult", 1)
+        if eres != 1:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, eres), b""))
+            return True
+        sess = _auth_sessions.get(cid)
+        if sess is None:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, 27), b""))
+            return True
+        sess["polls"] += 1
+        if sess["mode"] == "qr" and st.get("auth_qr_refresh") and not sess["refreshed"]:
+            sess["refreshed"] = True
+            new_url = st.get("auth_new_challenge_url", "https://steamcommunity.com/qr/REFRESHED")
+            sess["challenge"] = new_url
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid), pb_str(2, new_url)))
+            return True
+        approved = False
+        if sess["mode"] == "qr" and st.get("auth_qr_approved"):
+            approved = True
+        elif sess["mode"] == "password" and (sess.get("approved") or
+                                             (sess.get("guard") == "confirm" and st.get("auth_mobile_approved"))):
+            approved = True
+        if not approved:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid), b""))
+            return True
+        ttl = st.get("token_ttl", 3600)
+        token = make_token(sess["steamid"], ttl)
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid),
+                                pb_str(3, token) + pb_str(6, sess["account"])))
+        return True
+    if target == "Authentication.UpdateAuthSessionWithSteamGuardCode#1":
+        req = pb_parse(body)
+        cid = req.get(1, [0])[0]
+        code = (req.get(3, [b""])[0]).decode() if req.get(3) else ""
+        record(f"service Authentication.UpdateAuthSessionWithSteamGuardCode#1 client={cid}")
+        sess = _auth_sessions.get(cid)
+        if sess is None:
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, 27), b""))
+            return True
+        if code != sess.get("expected_code"):
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, 5), b""))
+            return True
+        sess["approved"] = True
+        conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid), b""))
+        return True
+    return False
 
 
 def main():

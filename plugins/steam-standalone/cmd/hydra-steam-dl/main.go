@@ -1,8 +1,8 @@
 // Command hydra-steam-dl downloads Steam depots for the steam-standalone
-// plugin, replacing DepotDownloader for installs (login stays on
-// DepotDownloader until phase 6). It speaks one subcommand per argv:
+// plugin, replacing DepotDownloader for installs and logins. It speaks
+// one subcommand per argv:
 //
-//	hydra-steam-dl size|install|update|verify
+//	hydra-steam-dl size|install|update|verify|auth
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -10,7 +10,9 @@
 // go to stdout as JSON lines: {"type":"progress",...} during the job and
 // a last line that is either {"type":"result",...} or
 // {"type":"error","code":...,"message":...} with code "auth-required"
-// when Steam says the login is no good, else "error".
+// when Steam says the login is no good, else "error". The auth subcommand
+// is interactive (qr/code-needed/waiting events, code replies on stdin —
+// see auth.go) and stores the login where the plugin finds it.
 //
 // State lives in HYDRA_PLUGIN_DATA: job files under jobs/ and installed
 // manifests under manifests/<app>/, like the plan's disk layout.
@@ -26,7 +28,14 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: hydra-steam-dl size|install|update|verify")
+		fatal("error", "usage: hydra-steam-dl size|install|update|verify|auth")
+	}
+	if os.Args[1] == "auth" {
+		if err := runAuth(context.Background()); err != nil {
+			emit(map[string]any{"type": "error", "code": "error", "message": err.Error()})
+			os.Exit(1)
+		}
+		return
 	}
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -54,7 +63,7 @@ func main() {
 	case "verify":
 		runErr = runVerify(ctx, req)
 	default:
-		fatal("error", "usage: hydra-steam-dl size|install|update|verify")
+		fatal("error", "usage: hydra-steam-dl size|install|update|verify|auth")
 	}
 	if runErr != nil {
 		if ce, ok := runErr.(cmErr); ok && ce.auth {
