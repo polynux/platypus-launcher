@@ -197,9 +197,12 @@ def refresh_token():
     account.config (deflated protobuf; JWTs are readable strings in it) and
     cached. Used for the Web API library listing."""
     st = load_state("token.json", {})
-    if st.get("refresh_token"):
-        return st["refresh_token"]
     path = account_config()
+    # The cache is only trusted while the store file hasn't changed since
+    # it was taken — a fresh login must re-extract even if an older token
+    # (or an empty store from an interrupted save) is cached.
+    if st.get("refresh_token") and st.get("source") == (path, os.path.getmtime(path) if path else None):
+        return st["refresh_token"]
     if not path:
         return None
     try:
@@ -213,6 +216,7 @@ def refresh_token():
         if not matches:
             return None
         st["refresh_token"] = matches[-1]  # the newest token
+        st["source"] = [path, os.path.getmtime(path)]
         save_state("token.json", st)
         return st["refresh_token"]
     except OSError:
@@ -361,24 +365,23 @@ def start_qr_login():
                 break
 
         if ok.is_set():
-            # Approved. Don't kill the process here: DepotDownloader prints
-            # "Success!" BEFORE it writes the token store (Steam3Session
-            # prints, then sets LoginTokens, then calls Save), so killing
-            # right after the line loses the login key and the library
-            # silently loses its token. Wait for account.config to appear
-            # on disk, with a graceful stop as backstop; DD exits by itself
-            # right after saving (non-zero, the dummy app run) — that's
-            # expected and not an error.
-            for _ in range(100):  # up to 50s
-                if account_config() or proc.poll() is not None:
+            # Approved. Don't stop the process before the token store is
+            # usable: DepotDownloader prints "Success!" BEFORE it writes
+            # the token store (Steam3Session prints, then sets LoginTokens,
+            # then calls Save), and .NET's Save() creates account.config
+            # EMPTY first and writes the deflated content after — stopping
+            # in between leaves a 0-byte file and the library loses its
+            # token. So wait until the file exists AND yields a token; DD
+            # exits by itself right after saving (non-zero, the dummy app
+            # run) — that's expected and not an error.
+            for _ in range(120):  # up to 60s
+                if refresh_token() or proc.poll() is not None:
                     break
                 time.sleep(0.5)
-            if proc.poll() is None:
-                try:
-                    proc.send_signal(signal.SIGINT)
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
+            if proc.poll() is None and not refresh_token():
+                # Never got a readable key: stop DD the hard way as a last
+                # resort but don't pretend the token exists.
+                proc.kill()
             save_state("session.json", {"account": "steam"})
             with qr_lock:
                 qr_state.update(state="ok", error=None)
