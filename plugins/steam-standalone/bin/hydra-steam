@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Hydra store plugin for Steam without the Steam client, wrapping DepotDownloader.
+"""Hydra store plugin for Steam without the Steam client.
 
 Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
-over stdin/stdout, one object per line. Downloads are done by the
+over stdin/stdout, one object per line. Logins are done by the
 `depotdownloader` CLI (SteamRE/DepotDownloader), which logs into Steam with the
 user's own account and Steam Guard; the plugin never stores the password — it
 feeds it to one DepotDownloader run, and the login key Steam issues afterwards
 stays inside $HYDRA_PLUGIN_DATA, where the plugin points DepotDownloader's
-profile.
+profile. Downloads are done by hydra-steam-dl (Go, next to this file),
+which logs on to a CM with the stored refresh token and spreads chunk
+fetches over many CDN hosts like the Steam client does.
 
 Only what the logged-in account owns is installed, through Steam's own CDN,
 with the account's own licence. No DRM or licence circumvention, and no Steam
@@ -865,52 +867,98 @@ def dd_login_args():
     return ["-username", name, "-remember-password"] if name else []
 
 
+def dl_bin():
+    """The Go downloader: bin/hydra-steam-dl next to this file (built by
+    install.sh), falling back to PATH (tests put a built copy there)."""
+    sibling = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hydra-steam-dl")
+    if os.path.isfile(sibling) and os.access(sibling, os.X_OK):
+        return sibling
+    found = shutil.which("hydra-steam-dl")
+    if found:
+        return found
+    return sibling  # missing: the run surfaces it as an error
+
+
+def dl_request(params, extra=None):
+    """The stdin request for hydra-steam-dl: ids plus the refresh token.
+    The token travels on stdin, never argv, and is never logged."""
+    token = refresh_token()
+    if not token:
+        raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
+    req = {"refresh_token": token, "app_id": int(params["id"]),
+           "branch": params.get("branch") or "public"}
+    if extra:
+        req.update(extra)
+    return req
+
+
+def dl_run(subcommand, req, job_id=None, game_dir=None):
+    """Runs hydra-steam-dl and follows its JSON lines: progress
+    notifications until a result or error line. Returns the result dict."""
+    try:
+        proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1, env=dict(os.environ))
+    except FileNotFoundError:
+        raise RPCError("hydra-steam-dl is missing; reinstall the plugin")
+    if job_id is not None:
+        with jobs_lock:
+            job = jobs.get(job_id) or {}
+            job.update({"id": req.get("app_id"), "dir": game_dir, "proc": proc})
+            jobs[job_id] = job
+    try:
+        proc.stdin.write(json.dumps(req) + "\n")
+        proc.stdin.close()
+    except (BrokenPipeError, OSError):
+        pass
+    state = {"jobId": job_id, "phase": "downloading", "percent": 0} if job_id else None
+    text = []
+    result = None
+    for line in proc.stdout:
+        line = line.rstrip()
+        text.append(line)
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("type") == "progress" and state is not None:
+            total = msg.get("total") or 0
+            done = msg.get("bytes") or 0
+            state["percent"] = (100.0 * done / total) if total else 0
+            state["bytes"] = done
+            state["total"] = total
+            if msg.get("speed"):
+                state["speed"] = msg["speed"]
+            notify("job.progress", dict(state))
+        elif msg.get("type") == "result":
+            result = msg
+        elif msg.get("type") == "error":
+            if msg.get("code") == "auth-required":
+                raise RPCError("log in to Steam first (the session expired)", CODE_AUTH_REQUIRED)
+            raise RPCError("download failed: {}".format(msg.get("message") or tail(line)))
+    rc = proc.wait()
+    if result is None:
+        raise RPCError("download failed: {}".format(tail("\n".join(text))))
+    if rc != 0:
+        raise RPCError("download failed: {}".format(tail("\n".join(text))))
+    return result
+
+
 def install_size(params):
-    """Depot sizes from -manifest-only: the real DepotDownloader dumps one
-    manifest_<depot>_<id>.txt per depot into -dir (the sizes are in the
-    files, not stdout); manifests only, no game data. Linux depots first,
-    Windows fallback — the same order an install uses."""
-    app = str(params["id"])
-    d = os.path.join(data_dir(), "sizes", app)
-    disk = compressed = 0
-    auth_failed = False
-    text = ""
-    for osname in ("linux", "windows"):
-        # Start clean: a previous run's dumps must not be counted again.
-        if os.path.isdir(d):
-            for f in os.listdir(d):
-                if f.startswith("manifest_"):
-                    os.unlink(os.path.join(d, f))
-        rc, out, err = depotdownloader_simple(
-            ["-app", app, "-manifest-only", "-os", osname, *dd_login_args(), "-dir", d],
-            timeout=900)
-        text = out + err
-        if rc != 0:
-            if re.search(r"not available from this account|Unable to get steam3 credentials|Insufficient privileges", text, re.IGNORECASE):
-                auth_failed = True
-                break
-            # a real failure; not just "no depots for this platform"
-            if not re.search(r"Couldn't find any depots to download|No depot", text, re.IGNORECASE):
-                break
-            continue  # try the next platform
-        for f in os.listdir(d):
-            if not f.startswith("manifest_"):
-                continue
-            with open(os.path.join(d, f)) as fh:
-                for line in fh:
-                    if DISK_RE.search(line):
-                        disk += int(DISK_RE.search(line).group(1))
-                    m = COMPRESSED_RE.search(line)
-                    if m:
-                        compressed += int(m.group(1))
-        if disk:
-            break  # this platform has the depots; sizes are for it
+    """Depot sizes from hydra-steam-dl: it resolves the app's depots over
+    the CM and sums the manifests (Linux depots first, Windows fallback —
+    the same order an install uses)."""
+    try:
+        result = dl_run("size", dl_request(params))
+    except RPCError:
+        raise
+    except Exception as e:
+        raise RPCError("couldn't get the size for app {}: {}".format(params["id"], e))
+    disk, compressed = int(result.get("disk_bytes") or 0), int(result.get("download_bytes") or 0)
     if disk == 0:
-        if auth_failed:
-            raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
-        if text:
-            raise RPCError(f"couldn't get the size for app {app}: {tail(text)}")
-        raise RPCError(f"depotdownloader produced no manifest sizes for app {app}")
+        raise RPCError("hydra-steam-dl produced no manifest sizes for app {}".format(params["id"]))
     return {"downloadBytes": compressed, "diskBytes": disk}
 
 
@@ -929,7 +977,8 @@ def start_job(params, kind):
     # One folder per game under Hydra's install dir, like steamapps/common/<name>.
     game_dir = os.path.join(install_dir, game_dir_name(app))
     os.makedirs(game_dir, exist_ok=True)
-    threading.Thread(target=follow_install, args=(job_id, app, game_dir), daemon=True).start()
+    dl_kind = "update" if kind == "update" else "install"
+    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind), daemon=True).start()
     return {}
 
 
@@ -942,50 +991,30 @@ def game_dir_name(app):
     return safe
 
 
-def follow_install(job_id, app, game_dir):
-    """DepotDownloader run with progress; Linux depots first, Windows fallback
-    (most Steam games ship Windows only; the platform used decides `native`)."""
+def follow_install(job_id, app, game_dir, dl_kind="install"):
+    """hydra-steam-dl install/update with progress. The binary resolves the
+    depots itself (Linux first, Windows fallback — the platform used
+    decides `native`); downloads are resumable and verified."""
     with jobs_lock:
         jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
-    base = ["-app", app, "-dir", game_dir, *dd_login_args(), *dd_cell_args(), "-max-downloads", dd_max_downloads()]
-    os_used, last_text = None, ""
-    for osname in ("linux", "windows"):
+    try:
+        req = dl_request({"id": app}, {"install_dir": game_dir, "job_id": job_id})
+        result = dl_run(dl_kind, req, job_id, game_dir)
+    except RPCError as e:
         with jobs_lock:
-            if jobs.get(job_id, {}).get("canceled"):
-                return
-        proc = subprocess.Popen(["depotdownloader", *base, "-os", osname],
-                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, bufsize=1,
-                                env=dd_env())
-        with jobs_lock:
-            jobs[job_id]["proc"] = proc
-        state = {"jobId": job_id, "phase": "downloading", "percent": 0}
-        text = []
-        for line in proc.stdout:
-            line = line.rstrip()
-            text.append(line)
-            m = PROGRESS_RE.match(line)
-            if m:
-                state["percent"] = float(m.group(1))
-                notify("job.progress", dict(state))
-        rc = proc.wait()
-        last_text = "\n".join(text)
-        if rc == 0:
-            os_used = osname
-            break
-        if not re.search(r"Couldn't find any depots to download|No depot", last_text, re.IGNORECASE):
-            break  # a real failure (auth, network), not just "no Linux depots"
+            job = jobs.pop(job_id, {})
+        if job.get("canceled"):
+            return
+        if e.code == CODE_AUTH_REQUIRED:
+            notify("job.failed", {"jobId": job_id, "error": "log in to Steam first (the session expired)"})
+        else:
+            notify("job.failed", {"jobId": job_id, "error": str(e)})
+        return
     with jobs_lock:
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
         return
-    if os_used is None:
-        if re.search(r"not available from this account|Unable to get steam3 credentials|Insufficient privileges", last_text, re.IGNORECASE):
-            notify("job.failed", {"jobId": job_id, "error": "log in to Steam first (the session expired)"})
-        else:
-            notify("job.failed", {"jobId": job_id, "error": f"depotdownloader failed: {tail(last_text)}"})
-        return
-    record_install(app, game_dir, os_used)
+    record_install(app, game_dir, result.get("os_used") or "linux")
     notify("job.done", {"jobId": job_id})
 
 
@@ -1257,7 +1286,7 @@ METHODS = {
     "game.details": game_details,
     "game.installSize": install_size,
     "game.install": lambda p: start_job(p, "install"),
-    "game.update": lambda p: start_job(p, "install"),
+    "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
     "job.cancel": job_cancel,
     "game.launchSpec": launch_spec,

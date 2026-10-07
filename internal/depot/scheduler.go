@@ -47,13 +47,19 @@ func (c SchedulerConfig) withDefaults() SchedulerConfig {
 }
 
 // Progress reports bytes done/total plus the live speed, connection and
-// host counts. The binary prints it as JSON progress lines.
+// host counts, with the id of the chunk that just landed for checkpointing.
 type Progress struct {
 	DoneBytes   uint64
 	TotalBytes  uint64
 	BytesPerSec float64
 	Connections int
 	Hosts       int
+	// ChunkID names the chunk that just landed, so callers can
+	// checkpoint job state as the download runs.
+	ChunkID string
+	// Data holds the chunk's bytes for the progress callback only, so
+	// the binary can stage chunks for resume without another lookup.
+	Data []byte
 }
 
 // hostState tracks per-host health: in-flight count, errors, bytes and a
@@ -234,7 +240,7 @@ func (s *Scheduler) Download(ctx context.Context, m *Manifest, depotID uint32, h
 				hostsUsed["x"] = true
 				onProgress(Progress{DoneBytes: doneBytes.Load(), TotalBytes: total,
 					BytesPerSec: float64(doneBytes.Load()) / time.Since(start).Seconds(),
-					Connections: int(conns.Load()), Hosts: len(hosts)})
+					Connections: int(conns.Load()), Hosts: len(hosts), ChunkID: r.id, Data: r.data})
 			}
 		}
 	}

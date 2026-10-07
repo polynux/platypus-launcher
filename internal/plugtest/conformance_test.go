@@ -16,6 +16,7 @@ import (
 
 	"hydra-launcher/internal/plugtest"
 	"hydra-launcher/internal/types"
+	"hydra-launcher/plugins/steam-standalone/fakesteam"
 )
 
 // echo builds from source and answers everything itself, no external CLI.
@@ -151,11 +152,9 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 	return cmd, ""
 }
 
-// steam-standalone wraps DepotDownloader; the fake mimics its prompts,
-// account.config login-key persistence, manifest sizes and progress lines,
-// and the plugin's Steam Web API calls answer from a file. The CM token
-// exchange answers from testdata/fake_cm.py, a real WebSocket CM server on
-// localhost that speaks the plugin's protocol.
+// steam-standalone logs in through DepotDownloader (fake) and downloads
+// through hydra-steam-dl (built from source) against a fake CM and a fake
+// CDN (see fakesteam); the plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "dd-state.json")
 	api := filepath.Join(t.TempDir(), "steam-api.json")
@@ -173,6 +172,20 @@ func TestConformanceSteamStandalone(t *testing.T) {
 	// exported here too — Suite.Env applies only at plugin start.
 	t.Setenv("FAKE_CM_STATE", cmState)
 	_, endpoint := startFakeCM(t, "../../plugins/steam-standalone/testdata/fake_cm.py")
+	// hydra-steam-dl comes from a PATH copy (the copied plugin tree has no
+	// built binary); the fake CDN serves the fixture depot and the fake CM
+	// points the downloader at it.
+	dlBin := filepath.Join(t.TempDir(), "dlbin")
+	os.MkdirAll(dlBin, 0o755)
+	if out, err := exec.Command("go", "build", "-o", filepath.Join(dlBin, "hydra-steam-dl"),
+		"hydra-launcher/plugins/steam-standalone/cmd/hydra-steam-dl").CombinedOutput(); err != nil {
+		t.Fatalf("build hydra-steam-dl: %s", out)
+	}
+	t.Setenv("PATH", dlBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("FAKE_DD_STATE", state)
+	fix := fakesteam.Build(fakesteam.ReadKnobs())
+	cdn := fakesteam.StartCDN(t, fix)
+	fakesteam.WriteCMState(t, cmState, cdn, fix)
 	plugtest.Suite{
 		ID:      "steam-standalone",
 		CopyDir: "../../plugins/steam-standalone",

@@ -215,7 +215,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 - [x] Phase 1: offline core (decoder, manifest, fixtures)
 - [x] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
 - [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
-- [ ] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
+- [x] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
 - [ ] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
 - [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed
 
@@ -257,3 +257,18 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   timed-out gorilla read breaks later reads so Dial never drains.
   Benchmark (64 chunks, 5 ms/host throttle): single-host 169 ms/op vs
   multi-host (4 hosts) 45 ms/op, ~3.8x. No new deps.
+- **Phase 4 notes:** `plugins/steam-standalone/cmd/hydra-steam-dl` (size,
+  install, update, verify) prints JSON progress/result lines; the refresh
+  token arrives on stdin (or a 0600 file), never argv/logged. Depot
+  selection (linux, windows fallback) parses PICS text KV; manifests come
+  from the server list with per-host CDN tokens. `install.sh` builds
+  `cmd/*` helpers into the plugin's `bin/`; the Python plugin calls the
+  binary for sizes/installs/updates (DepotDownloader kept for login only)
+  and falls back to PATH when the sibling binary is absent (tests).
+  `testdata/fake_cm.py` now also answers depot keys, PICS, server lists,
+  request codes and CDN tokens; `fakesteam` builds fixture depots and the
+  fake CDN both harnesses share (old `-cellid`/`-max-downloads`/size-dump
+  assertions moved to the CM log and fixture sums). New dep: none.
+  Assumptions to check live: PICS key spellings (depots/config/oslist,
+  manifests/<branch>/gid, depotfromapp), VHost-as-hostname, token-as-query,
+  request-code URL segment, and the file-flag values.

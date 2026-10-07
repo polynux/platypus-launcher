@@ -26,6 +26,18 @@ else
   chmod 755 "$tmp"
 fi
 mv -f "$tmp" "$dest/$exec_rel"
+# Go helpers shipped next to a non-Go exec (e.g. cmd/hydra-steam-dl in a
+# Python plugin) are built into the plugin's bin/ alongside it.
+if [ -d "$src/cmd" ]; then
+  for cmd in "$src"/cmd/*/; do
+    [ -f "$cmd/main.go" ] || [ -n "$(ls "$cmd"*.go 2>/dev/null)" ] || continue
+    helper=$(basename "$cmd")
+    htmp="$dest/bin/$helper.new"
+    (cd "$here/.." && go build -o "$htmp" "./plugins/$name/cmd/$helper")
+    chmod 755 "$htmp"
+    mv -f "$htmp" "$dest/bin/$helper"
+  done
+fi
 # Extra module files sitting next to the exec (e.g. python modules it
 # imports) are part of the plugin: copy them out, then rename over the old
 # ones (never into a running file, and never out of the source folder).

@@ -42,7 +42,11 @@ EMSG_CLIENT_HEARTBEAT = 703
 EMSG_CLIENT_LOGOFF = 706
 EMSG_CLIENT_LOGON_RESPONSE = 751
 EMSG_CLIENT_LOGGED_OFF = 757
+EMSG_CLIENT_GET_DEPOT_KEY = 5438
+EMSG_CLIENT_CHECK_BETA_PASSWORD = 5450
 EMSG_CLIENT_LOGON = 5514
+EMSG_CLIENT_PICS_PRODUCT_INFO = 8903
+EMSG_CLIENT_PICS_ACCESS_TOKEN = 8905
 EMSG_CLIENT_HELLO = 9805
 
 
@@ -80,6 +84,10 @@ def pb_int(field, n):
 
 def pb_fixed64(field, n):
     return varint((field << 3) | 1) + struct.pack("<Q", n)
+
+
+def pb_fixed32(field, n):
+    return varint((field << 3) | 5) + struct.pack("<I", n)
 
 
 def pb_str(field, s):
@@ -299,9 +307,22 @@ def serve_logged_in(conn, hdr, body, st):
                                     pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, 1)))
             conn.close_frame()
             return
+        if emsg in (EMSG_CLIENT_GET_DEPOT_KEY, EMSG_CLIENT_PICS_ACCESS_TOKEN,
+                    EMSG_CLIENT_PICS_PRODUCT_INFO, EMSG_CLIENT_CHECK_BETA_PASSWORD):
+            serve_content(conn, emsg, hdr, body, st, steamid, sessionid)
+            continue
         target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
         jobid = hdr.get(10, [0])[0]
         record(f"service {target}")
+        if target == "ContentServerDirectory.GetServersForSteamPipe#1":
+            serve_servers(conn, hdr, body, st, steamid, sessionid)
+            continue
+        if target == "ContentServerDirectory.GetManifestRequestCode#1":
+            serve_request_code(conn, hdr, body, st, steamid, sessionid)
+            continue
+        if target == "ContentServerDirectory.GetCDNAuthToken#1":
+            serve_cdn_token(conn, hdr, body, st, steamid, sessionid)
+            continue
         if target.startswith("Player.GetPlayerLinkDetails"):
             # AccountPublicData: steamid, …, persona_name (field 10).
             resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
@@ -324,6 +345,100 @@ def serve_logged_in(conn, hdr, body, st):
         if eres != 1:
             conn.close_frame()
             return
+
+
+# --- content RPCs for hydra-steam-dl -------------------------------------
+# Driven by the state file so the Go tests control depot keys, PICS, the
+# server list, request codes and CDN tokens without touching Valve:
+#   depot_key    hex of the 32-byte depot key the fake CDN encrypted with
+#   app_token    PICS access token handed out for the app
+#   depot_id     depot the PICS reply describes (default 11)
+#   manifest_gid manifest gid the PICS reply and fake CDN agree on
+#   oslist       oslist the PICS depot carries ("linux", "windows", ...)
+#   request_code manifest request code handed out
+#   cdn_token    CDN auth token handed out
+#   cdn_hosts    ["127.0.0.1:port", ...] served as SteamCache hosts
+
+def content_hdr(steamid, sessionid, jobid, eresult=1):
+    return (pb_int(1, steamid) + pb_int(2, sessionid)
+            + pb_fixed64(11, jobid) + pb_int(13, eresult))
+
+
+def product_kv(st):
+    depot = str(st.get("depot_id", 11))
+    gid = str(st.get("manifest_gid", 999))
+    oslist = st.get("oslist", "linux")
+    return ('"depots"\n{\n"%s"\n{\n"config"\n{\n"oslist"\t\t"%s"\n}\n'
+            '"manifests"\n{\n"public"\n{\n"gid"\t\t"%s"\n}\n}\n}\n}\n'
+            % (depot, oslist, gid))
+
+
+def serve_content(conn, emsg, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    if emsg == EMSG_CLIENT_GET_DEPOT_KEY:
+        req = pb_parse(body)
+        depot_id = req.get(1, [st.get("depot_id", 11)])[0]
+        key = bytes.fromhex(st.get("depot_key", "00" * 32))
+        record(f"depot_key {depot_id}")
+        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
+                                pb_int(1, 1) + pb_int(2, depot_id) + pb_str(3, key)))
+    elif emsg == EMSG_CLIENT_PICS_ACCESS_TOKEN:
+        req = pb_parse(body)
+        apps = req.get(2, [])
+        record(f"pics_token {apps}")
+        resp = b""
+        for app in apps:
+            tok = pb_int(1, app) + pb_int(2, st.get("app_token", 12345))
+            resp += pb_msg(3, tok)
+        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid), resp))
+    elif emsg == EMSG_CLIENT_PICS_PRODUCT_INFO:
+        req = pb_parse(body)
+        app = 0
+        for raw in req.get(2, []):
+            app = pb_parse(raw).get(1, [0])[0]
+        record(f"pics_info {app}")
+        entry = (pb_int(1, app) + pb_int(2, 42)
+                 + pb_str(5, product_kv(st).encode()))
+        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
+                                pb_msg(1, entry)))
+    elif emsg == EMSG_CLIENT_CHECK_BETA_PASSWORD:
+        record("beta_password")
+        conn.send_frame(2, pack(emsg + 1, content_hdr(steamid, sessionid, jobid),
+                                pb_int(1, 1)))
+
+
+def serve_servers(conn, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    cell = pb_parse(body).get(1, [0])[0]
+    record(f"servers cell={cell}")
+    resp = b""
+    for i, host in enumerate(st.get("cdn_hosts", [])):
+        # Plain http like the httptest servers; the Go client only uses
+        # https for hosts that say so (https/all/valid).
+        entry = (pb_str(1, "SteamCache") + pb_int(3, 0) + pb_int(4, 10)
+                 + pb_fixed32(5, 1) + pb_int(6, 1)
+                 + pb_str(8, host) + pb_str(9, host) + pb_str(12, "http"))
+        resp += pb_msg(1, entry)
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid), resp))
+
+
+def serve_request_code(conn, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    req = pb_parse(body)
+    record(f"request_code depot={req.get(2, [0])[0]}")
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid),
+                            pb_int(1, st.get("request_code", 4242))))
+
+
+def serve_cdn_token(conn, hdr, body, st, steamid, sessionid):
+    jobid = hdr.get(10, [0])[0]
+    record("cdn_token")
+    exp = int(time.time()) + 3600
+    conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                            content_hdr(steamid, sessionid, jobid),
+                            pb_str(1, st.get("cdn_token", "cdn-token")) + pb_int(2, exp)))
 
 
 def main():

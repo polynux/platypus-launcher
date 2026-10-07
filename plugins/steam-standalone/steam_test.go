@@ -1,8 +1,9 @@
 // Tests the Steam-standalone plugin through Hydra's real plugin path
-// (manager, JSON-RPC, job queue, launch-spec validation) against
-// testdata/depotdownloader, a fake CLI that mimics the real DepotDownloader's
-// prompts, account.config persistence, size dump and progress lines. It
-// doesn't reach Steam or Valve's network.
+// (manager, JSON-RPC, job queue, launch-spec validation). Login still uses
+// testdata/depotdownloader, a fake CLI that mimics the real
+// DepotDownloader's prompts and account.config persistence; downloads go
+// through hydra-steam-dl (built from source) against a fake CM and a fake
+// CDN (see fakesteam). It doesn't reach Steam or Valve's network.
 package steam_test
 
 import (
@@ -22,12 +23,10 @@ import (
 	"hydra-launcher/internal/settings"
 	"hydra-launcher/internal/stores"
 	"hydra-launcher/internal/types"
+	"hydra-launcher/plugins/steam-standalone/fakesteam"
 )
 
 const id = "steam-standalone"
-
-const diskBytes = 64 << 20       // two depots: 60 MiB + 4 MiB (see testdata/depotdownloader)
-const compressedBytes = 42 << 20
 
 var outMu sync.Mutex
 
@@ -71,6 +70,19 @@ type env struct {
 	store       *stores.Plugin
 	folder      string // the plugin's install folder: Games/steam
 	gamesFolder string // Hydra's Games folder
+	cmState     string
+	fix         *fakesteam.Fixture
+	cdn         *fakesteam.CDN
+}
+
+// refreshCDN rebuilds the fake content from the current knobs (FAKE_DD_STATE
+// switches like bare_elf/windows_only plus FAKE_DD_STEAMWORKS) and points
+// the fake CM at it. Call after changing knobs, before installing.
+func (e *env) refreshCDN() {
+	e.t.Helper()
+	e.fix = fakesteam.Build(fakesteam.ReadKnobs())
+	e.cdn = fakesteam.StartCDN(e.t, e.fix)
+	fakesteam.WriteCMState(e.t, e.cmState, e.cdn, e.fix)
 }
 
 func setup(t *testing.T) *env {
@@ -160,7 +172,16 @@ func setup(t *testing.T) *env {
 	t.Setenv("HYDRA_STEAM_CM_SERVER", endpoint)
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
-	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games")}
+	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games"), cmState: cmState}
+	// hydra-steam-dl is built from source into the plugin's bin/, the way
+	// install.sh ships it (login still uses the fake depotdownloader above).
+	if out, err := exec.Command("go", "build", "-o", filepath.Join(binDir, "hydra-steam-dl"),
+		"hydra-launcher/plugins/steam-standalone/cmd/hydra-steam-dl").CombinedOutput(); err != nil {
+		t.Fatalf("build hydra-steam-dl: %s", out)
+	}
+	// The fake CDN serves the fixture depot; the fake CM points the
+	// downloader at it (see fakesteam).
+	e.refreshCDN()
 	var q *jobs.Queue
 	m := plugins.NewManager(plugins.Options{
 		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: sets,
@@ -376,8 +397,11 @@ func TestSteamLibraryInstallLaunchUninstall(t *testing.T) {
 	}
 
 	var size plugins.InstallSize
-	if err := e.call("game.installSize", map[string]any{"id": "4321"}, &size); err != nil || size.DiskBytes != diskBytes || size.DownloadBytes != compressedBytes {
-		t.Fatalf("size: %+v", size)
+	if err := e.call("game.installSize", map[string]any{"id": "4321"}, &size); err != nil {
+		t.Fatalf("installSize: %v", err)
+	}
+	if size.DiskBytes != int64(e.fix.DiskBytes) || size.DownloadBytes != int64(e.fix.CompressedBytes) {
+		t.Fatalf("size: %+v, want disk=%d compressed=%d", size, e.fix.DiskBytes, e.fix.CompressedBytes)
 	}
 
 	// Install through the job queue, with full progress.
@@ -476,7 +500,8 @@ func TestSteamStoreDetailsCached(t *testing.T) {
 	}
 }
 
-// Downloads use the Steam client's download region (or HYDRA_STEAM_CELLID).
+// Downloads use the Steam client's download region (or HYDRA_STEAM_CELLID)
+// as the server-list cell id hydra-steam-dl requests.
 func TestSteamDownloadCellID(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -485,18 +510,13 @@ func TestSteamDownloadCellID(t *testing.T) {
 		[]byte("\"InstallConfigStore\"\n{\n\t\"Steam\"\n\t{\n\t\t\"CellIDServerOverride\"\t\t\"14\"\n\t}\n}\n"), 0o644)
 	e := setup(t)
 	e.login()
-	install := func() string {
-		game := e.find(e.library(), "4321")
-		j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
-		if got := e.waitJob(j.ID); got.State != jobs.StateDone {
-			t.Fatalf("install: %+v", got)
-		}
-		calls, _ := os.ReadFile(os.Getenv("FAKE_DD_STATE") + ".calls")
-		lines := strings.Split(strings.TrimSpace(string(calls)), "\n")
-		return lines[len(lines)-1]
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
 	}
-	if last := install(); !strings.Contains(last, "-cellid 14") {
-		t.Fatalf("download without the Steam client's region: %s", last)
+	if log := e.cmLog(); !strings.Contains(log, "servers cell=14") {
+		t.Fatalf("download without the Steam client's region: %s", log)
 	}
 }
 
@@ -510,13 +530,8 @@ func TestSteamDownloadCellIDEnv(t *testing.T) {
 	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
 		t.Fatalf("install: %+v", got)
 	}
-	calls, _ := os.ReadFile(os.Getenv("FAKE_DD_STATE") + ".calls")
-	if !strings.Contains(string(calls), "-cellid 96") {
-		t.Fatalf("env cell id ignored: %s", calls)
-	}
-	// More parallel downloads than DepotDownloader's 8 by default.
-	if !strings.Contains(string(calls), "-max-downloads 24") {
-		t.Fatalf("max-downloads: %s", calls)
+	if log := e.cmLog(); !strings.Contains(log, "servers cell=96") {
+		t.Fatalf("env cell id ignored: %s", log)
 	}
 }
 
@@ -525,6 +540,7 @@ func TestSteamNativeBinaryWithoutExecBit(t *testing.T) {
 	e := setup(t)
 	e.login()
 	e.setDDState("bare_elf", true)
+	e.refreshCDN()
 	game := e.find(e.library(), "4321")
 	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
 	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
@@ -553,6 +569,7 @@ func TestSteamNativeUnityPlayerPreferred(t *testing.T) {
 	e.login()
 	e.setDDState("bare_elf", true)
 	e.setDDState("unity_decoy", true)
+	e.refreshCDN()
 	game := e.find(e.library(), "4321")
 	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
 	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
@@ -570,6 +587,7 @@ func TestSteamModeOptional(t *testing.T) {
 	e := setup(t)
 	e.login()
 	e.setDDState("windows_only", true)
+	e.refreshCDN()
 	lib := e.library()
 	game := e.find(lib, "4321")
 

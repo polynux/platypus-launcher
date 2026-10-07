@@ -145,6 +145,12 @@ func TestMultiAndHeartbeat(t *testing.T) {
 	if _, err := Exchange(context.Background(), testToken(76561198)); err != nil {
 		t.Fatalf("multi-wrapped logon: %v", err)
 	}
+	// The fake records the reply when its read loop gets to it; poll
+	// briefly rather than assuming it already has.
+	deadline := time.Now().Add(5 * time.Second)
+	for !contains(f.log(), "heartbeat_reply") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
 	if !contains(f.log(), "heartbeat_reply") {
 		t.Fatalf("heartbeat ignored: %v", f.log())
 	}

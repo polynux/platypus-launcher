@@ -3,7 +3,7 @@
   "name": "Steam (standalone)",
   "version": "0.1.0",
   "author": "Hydra",
-  "description": "Install and launch the Steam games you own without the Steam client, using DepotDownloader. Games that need the Steam client at runtime still get the real client, started hidden.",
+  "description": "Install and launch the Steam games you own without the Steam client, using the built-in Go depot downloader (Steam login via DepotDownloader). Games that need the Steam client at runtime still get the real client, started hidden.",
   "api": 1,
   "store": "steam",
   "exec": "bin/hydra-steam",
