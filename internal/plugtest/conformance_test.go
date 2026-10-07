@@ -173,15 +173,10 @@ func TestConformanceSteamStandalone(t *testing.T) {
 	t.Setenv("FAKE_CM_STATE", cmState)
 	_, endpoint := startFakeCM(t, "../../plugins/steam-standalone/testdata/fake_cm.py")
 	// hydra-steam-dl comes from a PATH copy (the copied plugin tree has no
-	// built binary); the fake CDN serves the fixture depot and the fake CM
+	// built binary); it was built once in TestMain, before any test could
+	// override HOME. The fake CDN serves the fixture depot and the fake CM
 	// points the downloader at it.
-	dlBin := filepath.Join(t.TempDir(), "dlbin")
-	os.MkdirAll(dlBin, 0o755)
-	if out, err := exec.Command("go", "build", "-o", filepath.Join(dlBin, "hydra-steam-dl"),
-		"hydra-launcher/plugins/steam-standalone/cmd/hydra-steam-dl").CombinedOutput(); err != nil {
-		t.Fatalf("build hydra-steam-dl: %s", out)
-	}
-	t.Setenv("PATH", dlBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PATH", prebuiltDLDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("FAKE_DD_STATE", state)
 	fix := fakesteam.Build(fakesteam.ReadKnobs())
 	cdn := fakesteam.StartCDN(t, fix)

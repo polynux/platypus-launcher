@@ -173,12 +173,10 @@ func setup(t *testing.T) *env {
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
 	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games"), cmState: cmState}
-	// hydra-steam-dl is built from source into the plugin's bin/, the way
-	// install.sh ships it (login still uses the fake depotdownloader above).
-	if out, err := exec.Command("go", "build", "-o", filepath.Join(binDir, "hydra-steam-dl"),
-		"hydra-launcher/plugins/steam-standalone/cmd/hydra-steam-dl").CombinedOutput(); err != nil {
-		t.Fatalf("build hydra-steam-dl: %s", out)
-	}
+	// hydra-steam-dl is built once in TestMain (real environment) and only
+	// copied here, the way install.sh ships it into the plugin's bin/.
+	// Login still uses the fake depotdownloader above.
+	copyFile(t, prebuiltDL, filepath.Join(binDir, "hydra-steam-dl"), 0o755)
 	// The fake CDN serves the fixture depot; the fake CM points the
 	// downloader at it (see fakesteam).
 	e.refreshCDN()
