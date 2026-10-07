@@ -241,6 +241,23 @@ qr_art = {"text": None}                      # latest block-art, for auth.status
 qr_state = {"state": "idle", "error": None}  # idle|pending|ok|failed
 
 
+def art_modules_wide(rows):
+    """Module count across a block-art QR block: two chars per module. Rows
+    share a leading quiet zone, whose size comes from the most-indented row;
+    the width comes from the widest row with trailing spaces trimmed (some
+    row always has a dark module at the true right edge, so the trimmed
+    maximum is the full art width, as the dialog's renderer also assumes).
+    Trailing LIGHT modules don't exist beyond that edge."""
+    full = [r for r in rows if r.strip()]
+    if not full:
+        return 0
+    lead = min(len(r) - len(r.lstrip(" ")) for r in full)
+    width = max(len(r.rstrip()) for r in full) - lead
+    if width % 2:
+        width += 1
+    return width // 2
+
+
 def config_stamp():
     """Identity of the persisted credential store, to notice a fresh login."""
     path = account_config()
@@ -296,20 +313,27 @@ def start_qr_login():
                 rows.clear()
             elif "\u2588" in text:
                 rows.append(text.rstrip())
-                if len(rows) >= 21:
-                    with qr_lock:
-                        qr_art["text"] = "\n".join(rows)
-                    ready.set()
+                publish_if_complete()
             else:
                 if text.startswith("Success!"):
                     ok.set()
-                if len(rows) >= 21:  # blank line closes the art block
-                    with qr_lock:
-                        qr_art["text"] = "\n".join(rows)
-                    ready.set()
+                publish_if_complete()  # blank line closes the art block
                 tail.append(text)
             if config_stamp() != stamp_before:  # token store changed
                 ok.set()
+
+        def publish_if_complete():
+            # DepotDownloader prints no terminator after the art (the next
+            # thing it prints may be much later, e.g. "Success!"), so don't
+            # wait for one: a QR is square, so the block is complete as soon
+            # as the row count equals the module count per row (29 for the
+            # real Steam code, 21 for the fake). Publishing earlier than
+            # that served truncated codes with their bottom rows missing.
+            if len(rows) < 21 or len(rows) != art_modules_wide(rows):
+                return
+            with qr_lock:
+                qr_art["text"] = "\n".join(rows)
+            ready.set()
 
         while not ok.is_set():
             r, _, _ = _select.select([fd], [], [], 0.5)
