@@ -360,6 +360,11 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	switch {
 	case u.Percent != nil:
 		j.Percent = min(max(*u.Percent, 0), 100)
+		// A plugin that reports only a percentage still gets a byte readout,
+		// estimated from the size Hydra queued the job with.
+		if u.Bytes == 0 && j.Total > 0 {
+			j.Bytes = int64(j.Percent / 100 * float64(j.Total))
+		}
 	case j.Total > 0:
 		j.Percent = min(float64(j.Bytes)/float64(j.Total)*100, 100)
 	}

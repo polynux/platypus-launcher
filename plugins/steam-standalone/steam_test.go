@@ -445,6 +445,37 @@ func TestSteamLibraryInstallLaunchUninstall(t *testing.T) {
 // Mode (b): with a Steamworks library planted, the spec still launches
 // directly but carries SteamAppId/SteamGameId, and the game page says
 // "optional".
+// Store lookups are cached on disk: a rescan with the Store unreachable (or
+// slow, or rate limiting) keeps names and the tool/game split.
+func TestSteamStoreDetailsCached(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.library()
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "store-apps.json")); err != nil {
+		t.Fatalf("no store cache: %v", err)
+	}
+	// Now the Store knows nothing; the owned list still answers.
+	api := os.Getenv("HYDRA_STEAM_API_FILE")
+	raw, err := os.ReadFile(api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	json.Unmarshal(raw, &doc)
+	doc["_test"] = map[string]any{}
+	raw, _ = json.Marshal(doc)
+	os.WriteFile(api, raw, 0o644)
+
+	lib := e.library()
+	tool := e.find(lib, "4322")
+	if tool == nil || tool.Installable {
+		t.Fatalf("tool after cache-only scan: %+v", tool)
+	}
+	if game := e.find(lib, "4321"); game == nil || game.Title != "Standalone Game" || !game.Installable {
+		t.Fatalf("game after cache-only scan: %+v", game)
+	}
+}
+
 func TestSteamModeOptional(t *testing.T) {
 	t.Setenv("FAKE_DD_STEAMWORKS", "steam_api64.dll")
 	e := setup(t)

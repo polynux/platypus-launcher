@@ -169,6 +169,20 @@ func TestCancelAndRetry(t *testing.T) {
 	waitState(t, q, j.ID, StateRunning)
 }
 
+// A plugin that only reports a percentage still shows bytes against the
+// queued total.
+func TestPercentOnlyProgressEstimatesBytes(t *testing.T) {
+	b := &fakeBackend{}
+	q, _ := newQueue(t, b)
+	j, _ := q.Add(KindInstall, "echo", "g", "g", "G", filepath.Join(t.TempDir(), "x"))
+	waitState(t, q, j.ID, StateRunning)
+	q.Notify("echo", "job.progress", plugins.JobUpdate{JobID: j.ID, Total: 1000})
+	q.Notify("echo", "job.progress", plugins.JobUpdate{JobID: j.ID, Percent: pct(90)})
+	if got := q.List()[0]; got.Bytes != 900 || got.Total != 1000 {
+		t.Fatalf("bytes %d of %d", got.Bytes, got.Total)
+	}
+}
+
 func TestResumeAfterRestart(t *testing.T) {
 	b := &fakeBackend{}
 	q, path := newQueue(t, b)

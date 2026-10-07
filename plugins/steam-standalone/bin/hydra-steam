@@ -524,9 +524,30 @@ def api_get(url, token=None):
         return json.loads(r.read().decode())
 
 
-def store_app(app_id):
-    """Public app details (name, type) from the Steam Store API. No login
-    needed; {} when the app isn't listed (bad id, region lock)."""
+STORE_TTL = 30 * 86400  # names and types of released apps rarely change
+STORE_BUDGET = 20  # seconds of Store lookups per library.list; the rest waits for the next rescan
+store_lock = threading.Lock()
+store_cache = None  # app id -> {"name", "type", "at"}, mirrors store-apps.json
+
+
+def store_cached(app_id):
+    """The cached Store details for an app, {} when missing or stale."""
+    global store_cache
+    with store_lock:
+        if store_cache is None:
+            store_cache = load_state("store-apps.json", {})
+        entry = store_cache.get(str(app_id)) or {}
+    return entry if time.time() - entry.get("at", 0) < STORE_TTL else {}
+
+
+def store_app(app_id, fetch=True):
+    """Public app details (name, type) from the Steam Store API, cached on
+    disk: a library scan asks about every owned game, one request each. No
+    login needed; {} when the app isn't listed (bad id, region lock) or, with
+    fetch=False, not cached yet. Misses aren't cached."""
+    entry = store_cached(app_id)
+    if entry or not fetch:
+        return entry
     try:
         data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app_id}&filters=basic")
     except Exception:
@@ -536,7 +557,17 @@ def store_app(app_id):
     entry = (data or {}).get(str(app_id))
     if not entry or not entry.get("success"):
         return {}
-    return entry.get("data") or {}
+    details = entry.get("data") or {}
+    keep = {"name": details.get("name") or "", "type": details.get("type") or "", "at": time.time()}
+    with store_lock:
+        store_cache[str(app_id)] = keep
+    return keep
+
+
+def save_store_cache():
+    with store_lock:
+        if store_cache is not None:
+            save_state("store-apps.json", store_cache)
 
 
 def auth_status(_params=None):
@@ -742,11 +773,12 @@ def library_list(_params):
     persona_name(steamid)  # best effort, for auth.status
     installed = load_state("installed.json", {})
     out = []
+    deadline = time.time() + STORE_BUDGET
     for g in games:
         app = str(g.get("appid") or "")
         if not app:
             continue
-        store = store_app(app)
+        store = store_app(app, fetch=time.time() < deadline)
         entry = {
             "id": app,
             "title": store.get("name") or g.get("name") or f"App {app}",
@@ -770,6 +802,7 @@ def library_list(_params):
             entry["installable"] = False
             entry["note"] = f"This entry is a {app_type}, not a game."
         out.append(entry)
+    save_store_cache()
     for app, ig in installed.items():  # installed but missing from the owned list
         if not any(e["id"] == app for e in out):
             out.append({
