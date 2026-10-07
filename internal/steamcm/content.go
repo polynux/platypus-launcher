@@ -179,9 +179,28 @@ func (s *Session) ProductInfo(appID uint32, accessToken uint64, timeout time.Dur
 			if am.Int(3) != 0 {
 				return nil, 0, &CMError{Msg: fmt.Sprintf("Steam needs an access token for app %d", appID), Auth: true}
 			}
-			kv, err := steam.ParseKV(string(am.Bytes(5)))
+			// PICS buffers are text KeyValues on the live CM (confirmed
+			// live), wrapped in an "appinfo" section and NUL-terminated;
+			// fixtures use the bare "depots" root. Binary KV stays as a
+			// fallback for any depot section that needs it.
+			raw := am.Bytes(5)
+			if kv, err := steam.ParseKV(string(raw)); err == nil {
+				if kv.Get("depots") != nil {
+					return kv, uint32(am.Int(2)), nil
+				}
+				if app := kv.Get("appinfo"); app != nil && app.Get("depots") != nil {
+					return app, uint32(am.Int(2)), nil
+				}
+			}
+			kv, err := steam.ParseBinaryKV(raw)
 			if err != nil {
 				return nil, 0, fmt.Errorf("product info didn't parse: %w", err)
+			}
+			if kv.Get("depots") == nil {
+				if app := kv.Get("appinfo"); app != nil && app.Get("depots") != nil {
+					return app, uint32(am.Int(2)), nil
+				}
+				return nil, 0, fmt.Errorf("product info has no depots section")
 			}
 			return kv, uint32(am.Int(2)), nil
 		}

@@ -62,8 +62,8 @@ func (p *kvParser) skip() {
 	for p.pos < len(p.src) {
 		c := p.src[p.pos]
 		switch {
-		case c == ' ' || c == '\t' || c == '\r' || c == '\n':
-			p.pos++
+		case c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0:
+			p.pos++ // NUL included: live PICS buffers are NUL-terminated
 		case c == '/' && p.pos+1 < len(p.src) && p.src[p.pos+1] == '/':
 			for p.pos < len(p.src) && p.src[p.pos] != '\n' {
 				p.pos++

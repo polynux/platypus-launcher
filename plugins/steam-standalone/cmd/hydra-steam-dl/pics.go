@@ -1,5 +1,6 @@
-// Depot selection from PICS app info (text KeyValues). The depots
-// section looks like:
+// Depot selection from PICS app info (text KeyValues, confirmed live).
+// The buffer is wrapped in an "appinfo" section (stripped by ProductInfo,
+// which hands us the section) and looks like:
 //
 //	"depots"
 //	{
@@ -20,6 +21,7 @@ package main
 import (
 	"crypto/sha1"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"hydra-launcher/internal/steam"
@@ -27,70 +29,92 @@ import (
 
 // DepotRef is one depot to download: its id, manifest id and branch.
 type DepotRef struct {
-	DepotID uint32
-	GID     uint64
-	Branch  string
-	FromApp uint32 // depotfromapp source, 0 when own
+	DepotID  uint32
+	GID      uint64
+	Branch   string
+	FromApp  uint32 // depotfromapp source, 0 when own
+	KeyAppID uint32 // app the depot key/request code belong to (source for shared)
 }
 
-// selectDepots picks the app's depots for the wanted OS names, in order:
-// the first OS name with any depots wins (the plugin tries linux, then
-// falls back to windows, and the platform used decides `native`).
-func selectDepots(kv *steam.KV, branch string, osnames []string) ([]DepotRef, string, error) {
+// steamArch reports the machine architecture the way DepotDownloader's
+// default does: "64" on 64-bit machines, "32" otherwise.
+func steamArch() string {
+	if runtime.GOARCH == "386" {
+		return "32"
+	}
+	return "64"
+}
+
+// selectDepots picks the app's depots for one OS name, applying the same
+// filters DepotDownloader uses by default: the entry's own config must
+// carry the OS in oslist, the machine architecture in osarch and english
+// in language, and lowviolence entries are skipped. An absent or empty key
+// means "all" and is included. Shared (depotfromapp) entries are filtered
+// by their own entry first, exactly like DepotDownloader filters before
+// resolving; entries with their own manifests use them, others resolve
+// against the source app in flow.go.
+func selectDepots(kv *steam.KV, appID uint32, branch, osname string) ([]DepotRef, error) {
 	if branch == "" {
 		branch = "public"
 	}
 	depots := kv.Get("depots")
 	if depots == nil || len(depots.Children) == 0 {
-		return nil, "", fmt.Errorf("app has no depots section")
+		return nil, fmt.Errorf("app has no depots section")
 	}
-	for _, osname := range osnames {
-		var out []DepotRef
-		for id, d := range depots.Children {
-			var depotID uint32
-			fmt.Sscanf(id, "%d", &depotID)
-			if depotID == 0 {
-				continue
-			}
-			if from := d.String("depotfromapp"); from != "" {
-				var src uint32
-				fmt.Sscanf(from, "%d", &src)
-				if src != 0 {
-					// Shared depots resolve against the source app's
-					// info; the caller refetches with the source id.
-					out = append(out, DepotRef{DepotID: depotID, Branch: branch, FromApp: src})
-					continue
-				}
-			}
-			if !osMatches(d.String("config", "oslist"), osname) {
-				continue
-			}
-			gidStr := d.String("manifests", branch, "gid")
-			if gidStr == "" {
-				continue
-			}
+	var out []DepotRef
+	for id, d := range depots.Children {
+		var depotID uint32
+		fmt.Sscanf(id, "%d", &depotID)
+		if depotID == 0 {
+			continue
+		}
+		cfg := d.Get("config")
+		if !listMatches(cfg, "oslist", osname) {
+			continue
+		}
+		if !listMatches(cfg, "osarch", steamArch()) {
+			continue
+		}
+		if !listMatches(cfg, "language", "english") {
+			continue
+		}
+		if cfg != nil && cfg.String("lowviolence") == "1" {
+			continue
+		}
+		if gidStr := d.String("manifests", branch, "gid"); gidStr != "" {
 			var gid uint64
 			fmt.Sscanf(gidStr, "%d", &gid)
-			if gid == 0 {
+			if gid != 0 {
+				out = append(out, DepotRef{DepotID: depotID, GID: gid, Branch: branch})
 				continue
 			}
-			out = append(out, DepotRef{DepotID: depotID, GID: gid, Branch: branch})
 		}
-		if len(out) > 0 {
-			return out, osname, nil
+		if from := d.String("depotfromapp"); from != "" {
+			var src uint32
+			fmt.Sscanf(from, "%d", &src)
+			if src != 0 && src != appID {
+				out = append(out, DepotRef{DepotID: depotID, Branch: branch, FromApp: src})
+			}
 		}
 	}
-	return nil, "", fmt.Errorf("no depots for this platform")
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no depots for this platform")
+	}
+	return out, nil
 }
 
-// osMatches reports whether an oslist ("windows", "linux,macos", empty =
-// all) includes the wanted OS.
-func osMatches(oslist, want string) bool {
-	if oslist == "" {
+// listMatches reports whether a config list key (comma-separated, like
+// oslist) contains the wanted value. Missing or empty means "all".
+func listMatches(cfg *steam.KV, key, want string) bool {
+	if cfg == nil {
 		return true
 	}
-	for _, o := range strings.Split(oslist, ",") {
-		if strings.TrimSpace(strings.ToLower(o)) == want {
+	raw := cfg.String(key)
+	if strings.TrimSpace(raw) == "" {
+		return true
+	}
+	for _, o := range strings.Split(raw, ",") {
+		if strings.TrimSpace(o) == want {
 			return true
 		}
 	}

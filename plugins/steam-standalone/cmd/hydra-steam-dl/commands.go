@@ -24,7 +24,9 @@ func runSize(ctx context.Context, req request) error {
 	}
 	var disk, compressed uint64
 	seen := map[string]bool{}
+	var depotIDs []uint32
 	for _, d := range depots {
+		depotIDs = append(depotIDs, d.ref.DepotID)
 		for _, f := range d.man.Files {
 			disk += f.Size
 			for _, c := range f.Chunks {
@@ -37,7 +39,7 @@ func runSize(ctx context.Context, req request) error {
 		}
 	}
 	emit(map[string]any{"type": "result", "download_bytes": compressed, "disk_bytes": disk,
-		"depots": len(depots)})
+		"depots": len(depots), "depot_ids": depotIDs})
 	return nil
 }
 
@@ -89,7 +91,7 @@ func runInstall(ctx context.Context, req request) error {
 		}
 	}
 	for _, d := range depots {
-		data, err := sched.Download(ctx, d.man, d.ref.DepotID, ss.hosts, d.key, merged, wrapped)
+		data, err := sched.Download(ctx, d.man, d.ref.DepotID, d.hosts, d.key, merged, wrapped)
 		if err != nil {
 			depot.SaveJob(ss.dataDir, jobID, state)
 			return err
@@ -145,7 +147,7 @@ func runUpdate(ctx context.Context, req request) error {
 				os.Remove(filepath.Join(req.InstallDir, filepath.FromSlash(name)))
 			}
 		}
-		data, err := sched.Download(ctx, d.man, d.ref.DepotID, ss.hosts, d.key, have, func(p depot.Progress) { onProg(p) })
+		data, err := sched.Download(ctx, d.man, d.ref.DepotID, d.hosts, d.key, have, func(p depot.Progress) { onProg(p) })
 		if err != nil {
 			return err
 		}
