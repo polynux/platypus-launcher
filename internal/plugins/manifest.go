@@ -6,10 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -238,16 +239,54 @@ func (m Manifest) MissingRequirements(lookPath func(string) (string, error)) []R
 	return missing
 }
 
-// hashFile returns the hex SHA-256 of a file, used to pin plugin executables.
-func hashFile(path string) (string, error) {
-	f, err := os.Open(path)
+// hashPlugin returns the hex SHA-256 of a plugin folder, used to pin what the
+// user approved: plugin.json and every regular file under it, in sorted path
+// order. Bytecode caches (__pycache__/, *.pyc) are skipped, since an
+// interpreter may write them next to the sources it already ran. Symlinks
+// count by their target text, so repointing one changes the hash.
+func hashPlugin(dir string) (string, error) {
+	var paths []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "__pycache__" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(d.Name(), ".pyc") {
+			return nil
+		}
+		if d.Type().IsRegular() || d.Type()&fs.ModeSymlink != 0 {
+			paths = append(paths, path)
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	sort.Strings(paths) // WalkDir is lexical per folder, not across the whole path
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	for _, path := range paths {
+		rel, _ := filepath.Rel(dir, path)
+		fi, err := os.Lstat(path)
+		if err != nil {
+			return "", err
+		}
+		var body []byte
+		if fi.Mode()&fs.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return "", err
+			}
+			body = []byte(target)
+		} else if body, err = os.ReadFile(path); err != nil {
+			return "", err
+		}
+		sum := sha256.Sum256(body)
+		fmt.Fprintf(h, "%s\x00%c\x00%x\n", filepath.ToSlash(rel), fi.Mode().String()[0], sum)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

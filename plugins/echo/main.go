@@ -193,6 +193,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return raw, nil
 	case "pid":
 		return os.Getpid(), nil
+	case "env":
+		return map[string]string{"PYTHONDONTWRITEBYTECODE": os.Getenv("PYTHONDONTWRITEBYTECODE")}, nil
 	case "crash":
 		os.Exit(3)
 

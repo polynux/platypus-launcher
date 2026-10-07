@@ -171,7 +171,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 	}
 	cmd := exec.Command(p.exec)
 	cmd.Dir = p.dir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("HYDRA_PLUGIN_API=%d", APIVersion), "HYDRA_PLUGIN_DATA="+p.dataDir)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("HYDRA_PLUGIN_API=%d", APIVersion), "HYDRA_PLUGIN_DATA="+p.dataDir, "PYTHONDONTWRITEBYTECODE=1")
 	cmd.Stdin = inR
 	cmd.Stdout = outW
 	var logFile *os.File

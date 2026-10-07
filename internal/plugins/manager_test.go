@@ -290,6 +290,97 @@ func TestChangedHashDisables(t *testing.T) {
 	}
 }
 
+// A sibling file the executable loads (a Python module, a config) is part of
+// what the user approved.
+func TestSiblingFileChangeRequiresReapproval(t *testing.T) {
+	for name, change := range map[string]func(dir string) error{
+		"edit": func(dir string) error {
+			return os.WriteFile(filepath.Join(dir, "bin/helper.py"), []byte("x = 2\n"), 0o644)
+		},
+		"add": func(dir string) error {
+			return os.WriteFile(filepath.Join(dir, "bin/extra.py"), []byte("y = 1\n"), 0o644)
+		},
+		"manifest": func(dir string) error {
+			raw, err := os.ReadFile(filepath.Join(dir, ManifestFile))
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(dir, ManifestFile), append(raw, '\n'), 0o644)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			dir := install(t, e.plugins, nil)
+			if err := os.WriteFile(filepath.Join(dir, "bin/helper.py"), []byte("x = 1\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			e.discover(t)
+			if err := e.m.Approve("echo"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
+				t.Fatal(err)
+			}
+			if err := change(dir); err != nil {
+				t.Fatal(err)
+			}
+			if p := e.discover(t)["echo"]; p.Status != StatusChanged {
+				t.Fatalf("status after change: %+v", p)
+			}
+			if e.m.Running("echo") != 0 {
+				t.Fatal("changed plugin still running")
+			}
+			if err := e.m.Approve("echo"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
+				t.Fatalf("after re-approval: %v", err)
+			}
+		})
+	}
+}
+
+func TestSiblingChangeCheckedAtStart(t *testing.T) {
+	e := newEnv(t)
+	e.ready(t)
+	if err := os.WriteFile(filepath.Join(e.plugins, "echo/bin/late.py"), []byte("z = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.Initialize(ctx(t), "echo"); err == nil || !strings.Contains(err.Error(), "changed") {
+		t.Fatalf("plugin with a new file started: %v", err)
+	}
+}
+
+// Bytecode caches written by an interpreter never count as a change.
+func TestBytecodeCachesIgnored(t *testing.T) {
+	e := newEnv(t)
+	e.ready(t)
+	bin := filepath.Join(e.plugins, "echo/bin")
+	if err := os.MkdirAll(filepath.Join(bin, "__pycache__"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"__pycache__/helper.cpython-312.pyc", "stray.pyc"} {
+		if err := os.WriteFile(filepath.Join(bin, f), []byte("junk"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p := e.discover(t)["echo"]; p.Status != StatusReady {
+		t.Fatalf("status with bytecode caches: %+v", p)
+	}
+}
+
+func TestPluginStartsWithoutBytecode(t *testing.T) {
+	e := newEnv(t)
+	e.ready(t)
+	var got map[string]string
+	if err := e.m.Call(ctx(t), "echo", "env", nil, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["PYTHONDONTWRITEBYTECODE"] != "1" {
+		t.Fatalf("PYTHONDONTWRITEBYTECODE=%q", got["PYTHONDONTWRITEBYTECODE"])
+	}
+}
+
 func TestHashCheckedAtStart(t *testing.T) {
 	e := newEnv(t)
 	e.ready(t)

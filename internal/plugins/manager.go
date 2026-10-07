@@ -26,7 +26,7 @@ const (
 	StatusReady      Status = "ready"
 	StatusInvalid    Status = "invalid"    // manifest or executable is broken
 	StatusUnapproved Status = "unapproved" // never approved by the user
-	StatusChanged    Status = "changed"    // executable changed since approval
+	StatusChanged    Status = "changed"    // plugin folder changed since approval
 	StatusDisabled   Status = "disabled"   // approved, then turned off
 	StatusMissing    Status = "missing-requirements"
 )
@@ -35,7 +35,7 @@ const (
 type Plugin struct {
 	Dir      string        `json:"dir"`
 	Manifest Manifest      `json:"manifest"`
-	Hash     string        `json:"hash"` // SHA-256 of the executable
+	Hash     string        `json:"hash"` // SHA-256 of the plugin folder
 	Status   Status        `json:"status"`
 	Problem  string        `json:"problem,omitempty"`
 	Missing  []Requirement `json:"missing,omitempty"`
@@ -150,8 +150,7 @@ func (m *Manager) inspect(dir string) *Plugin {
 		p.Status = StatusReady
 		return p
 	}
-	execPath, _ := man.ExecPath(dir) // checked by LoadManifest
-	if p.Hash, err = hashFile(execPath); err != nil {
+	if p.Hash, err = hashPlugin(dir); err != nil {
 		p.Status, p.Problem = StatusInvalid, err.Error()
 		return p
 	}
@@ -162,7 +161,7 @@ func (m *Manager) inspect(dir string) *Plugin {
 	case !ok:
 		p.Status = StatusUnapproved
 	case trust.Hash != p.Hash:
-		p.Status, p.Problem = StatusChanged, "the executable changed since you approved it"
+		p.Status, p.Problem = StatusChanged, "the plugin changed since you approved it"
 	case !trust.Enabled:
 		p.Status = StatusDisabled
 	case len(p.Missing) > 0:
@@ -322,12 +321,12 @@ func (m *Manager) process(id string) (*process, error) {
 		t:       m.t,
 		// The file may change between discovery and any later (re)start.
 		verify: func() error {
-			h, err := hashFile(execPath)
+			h, err := hashPlugin(p.Dir)
 			if err != nil {
 				return err
 			}
 			if h != pinned {
-				return fmt.Errorf("plugin %s: the executable changed since you approved it; approve it again", id)
+				return fmt.Errorf("plugin %s: the plugin changed since you approved it; approve it again", id)
 			}
 			return nil
 		},
