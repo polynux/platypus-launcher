@@ -1,9 +1,9 @@
 # steam-standalone
 
-A Hydra store plugin for Steam without the Steam client, wrapping
-[DepotDownloader](https://github.com/SteamRE/DepotDownloader). Install,
-update and launch the games your own Steam account owns, with Hydra's runner
-pipeline handling Proton, wrappers and session tracking.
+A Hydra store plugin for Steam without the Steam client, with its own Go
+depot downloader and Steam login. Install, update and launch the games
+your own Steam account owns, with Hydra's runner pipeline handling
+Proton, wrappers and session tracking.
 
 See [docs/plugins/protocol.md](../../docs/plugins/protocol.md) for the
 protocol and [docs/plans/launcher-plugins.md](../../docs/plans/launcher-plugins.md)
@@ -11,10 +11,7 @@ for the design ("Steam without the Steam client").
 
 ## Requirements
 
-- `depotdownloader` on PATH — get the linux-x64 binary from the
-  [DepotDownloader releases](https://github.com/SteamRE/DepotDownloader/releases)
-  and put it on your PATH as `depotdownloader`.
-- `dotnet` runtime 8 or newer (DepotDownloader needs it).
+- `python3` from your distribution (the plugin exec).
 - The Steam **client** is *not* required, except for games that need it at
   runtime (see launch modes below).
 
@@ -28,31 +25,33 @@ Then approve it in Hydra's Plugins view and log in with your Steam account.
 
 ## Auth
 
-Login goes through DepotDownloader itself: the plugin feeds your account
-name, password and (when Steam asks) the Steam Guard code to one
-DepotDownloader run with `-remember-password`. The password is used for that
-run only and never written anywhere. Steam issues a login key, which
-DepotDownloader persists in .NET isolated storage created under the plugin's
-private `HYDRA_PLUGIN_DATA` folder (the plugin points `HOME` there), so you
-don't log in every time and Hydra never sees credentials. Logging out wipes
-that folder.
+Login goes through hydra-steam-dl (Go, in the plugin's `bin/`): QR via
+`BeginAuthSessionViaQR` + poll, or your account name, password and (when
+Steam asks) the Steam Guard code via `GetPasswordRSAPublicKey` +
+`BeginAuthSessionViaCredentials` (RSA-encrypted, never stored). The
+password is used for that run only and never written anywhere. Steam
+issues a refresh token, which the helper persists in the plugin's private
+`HYDRA_PLUGIN_DATA` folder (`refresh.token` 0600, plus `token.json` /
+`session.json`), so you don't log in every time and Hydra never sees
+credentials. Logging out wipes that folder.
 
 The library listing calls Steam's Web API (`IPlayerService/GetOwnedGames`).
 The stored refresh token isn't accepted there, so `bin/steam_cm.py` logs on to
 a Steam CM with it and exchanges it for a short-lived access token (cached in
 the plugin's data folder). The list shows everything the account owns,
-installed or not. DepotDownloader runs always pass `-username` with the
-account name, because it keys the stored login by name.
+installed or not.
 
 ## Install
 
 Downloads go to `<Games folder>/steam/<game name>/`, one folder per game like
-Steam's `steamapps/common`. Sizes for Hydra's free-space check come from a
-`-manifest-only` run (manifests only, no game data). Installs are resumable:
-DepotDownloader skips chunks it already has, and Hydra re-issues the same
-job after a crash. Downloads use 24 parallel connections
-(`HYDRA_STEAM_MAX_DOWNLOADS` to change) and the Steam client's download
-region when one is set (`HYDRA_STEAM_CELLID` to override).
+Steam's `steamapps/common`. Sizes for Hydra's free-space check come from the
+Go downloader resolving the app's depots over the CM and summing the
+manifests (Linux depots first, Windows fallback — the same order an install
+uses). Installs are resumable: staged chunks survive a crash under
+`HYDRA_PLUGIN_DATA/jobs/`, and Hydra re-issues the same job after a crash.
+The scheduler spreads chunk fetches over many CDN hosts like the Steam
+client ( honouring the Steam client's download region, `HYDRA_STEAM_CELLID`
+to override).
 
 ## Launch modes
 

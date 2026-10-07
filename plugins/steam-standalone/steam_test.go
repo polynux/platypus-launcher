@@ -1,9 +1,9 @@
 // Tests the Steam-standalone plugin through Hydra's real plugin path
-// (manager, JSON-RPC, job queue, launch-spec validation). Login still uses
-// testdata/depotdownloader, a fake CLI that mimics the real
-// DepotDownloader's prompts and account.config persistence; downloads go
-// through hydra-steam-dl (built from source) against a fake CM and a fake
-// CDN (see fakesteam). It doesn't reach Steam or Valve's network.
+// (manager, JSON-RPC, job queue, launch-spec validation). Logins go
+// through hydra-steam-dl (built from source) against the fake CM
+// (testdata/fake_cm.py); downloads go through the same binary against the
+// fake CM and a fake CDN (see fakesteam). It doesn't reach Steam or
+// Valve's network.
 package steam_test
 
 import (
@@ -119,11 +119,11 @@ func setup(t *testing.T) *env {
 			copyFile(t, filepath.Join("bin", f.Name()), filepath.Join(binDir, f.Name()), 0o755)
 		}
 	}
-	bin := filepath.Join(root, "fakebin")
-	copyFile(t, "testdata/depotdownloader", filepath.Join(bin, "depotdownloader"), 0o755)
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-
+	// Fixture variants (bare_elf/windows_only plus FAKE_DD_STEAMWORKS) ride
+	// FAKE_DD_STATE for historical reasons; fakesteam.ReadKnobs reads them
+	// to build the fake CDN. Logins use the fake CM state instead.
 	state := filepath.Join(root, "dd-state.json")
+	os.WriteFile(state, []byte(`{}`), 0o644)
 	t.Setenv("FAKE_DD_STATE", state)
 	// The plugin's Steam Web API calls answer from this file: GetOwnedGames
 	// plus the appdetails entries under "_test" per app id.
@@ -175,7 +175,7 @@ func setup(t *testing.T) *env {
 	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games"), cmState: cmState}
 	// hydra-steam-dl is built once in TestMain (real environment) and only
 	// copied here, the way install.sh ships it into the plugin's bin/.
-	// Login still uses the fake depotdownloader above.
+	// Logins and downloads both go through it, against the fake CM.
 	copyFile(t, prebuiltDL, filepath.Join(binDir, "hydra-steam-dl"), 0o755)
 	// The fake CDN serves the fixture depot; the fake CM points the
 	// downloader at it (see fakesteam).
@@ -269,8 +269,8 @@ func (e *env) waitJob(jobID string) types.Job {
 // libraryDisk mirrors the plugin's private data folder, for flipping launch
 // modes and checking persisted state the way the game page and session
 // tracker would.
-// setDDState edits the fake depotdownloader's state JSON (behaviour knobs
-// like windows_only) the way the real login flow would leave it.
+// setDDState edits the fixture state JSON (behaviour knobs like
+// windows_only) for the fake CDN build.
 func (e *env) setDDState(knob string, value any) {
 	e.t.Helper()
 	state := os.Getenv("FAKE_DD_STATE")
@@ -309,16 +309,17 @@ func (e *env) setLaunchMode(appID, mode string) {
 	os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), data, 0o644)
 }
 
-// The password and guard answers must reach DepotDownloader's prompts.
-func (e *env) fedPrompts() string {
+// The login uses hydra-steam-dl auth against the fake CM: the CM log must
+// show the Authentication RPCs, and no depotdownloader call file may exist.
+func (e *env) authLog() string {
 	e.t.Helper()
-	state := os.Getenv("FAKE_DD_STATE")
-	data, _ := os.ReadFile(state + ".fed")
-	return string(data)
+	return e.cmLog()
 }
 
 func TestSteamAuth(t *testing.T) {
 	e := setup(t)
+	// Password logins need an email code from the fake CM.
+	e.setCMState("auth_guard", "email")
 	var st types.AuthStatus
 	if err := e.call("auth.status", nil, &st); err != nil || st.LoggedIn {
 		t.Fatalf("status: %+v, %v", st, err)
@@ -330,29 +331,56 @@ func TestSteamAuth(t *testing.T) {
 	if pr.URL != "" || len(pr.Fields) != 3 {
 		t.Fatalf("begin: %+v", pr)
 	}
+	if !strings.Contains(pr.QR, "█") {
+		t.Fatalf("begin QR art missing block chars")
+	}
 	// Wrong password is rejected, and nothing is persisted.
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
 		"username": "HydraUser", "password": "wrong"}}, &st); err == nil {
 		t.Fatal("wrong password accepted")
+	} else if !strings.Contains(err.Error(), "wrong account name or password") {
+		t.Fatalf("wrong-password message: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "refresh.token")); !os.IsNotExist(err) {
+		t.Fatal("refresh token written for a failed login")
+	}
+	// Bad guard code is rejected too.
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
+		"username": "HydraUser", "password": "correct-horse", "guard": "WRONG"}}, &st); err == nil {
+		t.Fatal("bad guard code accepted")
+	} else if !strings.Contains(err.Error(), "wrong Steam Guard code") {
+		t.Fatalf("bad-code message: %v", err)
 	}
 	e.login()
-	// The password reached the CLI's prompt.
-	if !strings.Contains(e.fedPrompts(), `"password": "correct-horse"`) {
-		t.Fatalf("password was not fed to DepotDownloader: %s", e.fedPrompts())
+	// The login went through the Go helper's Authentication RPCs, not a
+	// depotdownloader CLI: no .calls file from the old fake may exist.
+	if _, err := os.Stat(os.Getenv("FAKE_DD_STATE") + ".calls"); !os.IsNotExist(err) {
+		t.Fatal("depotdownloader fake was called")
 	}
-	if !strings.Contains(e.fedPrompts(), `"guard": "ABC12"`) {
-		t.Fatalf("guard code was not fed: %s", e.fedPrompts())
+	for _, want := range []string{"Authentication.GetPasswordRSAPublicKey#1",
+		"Authentication.BeginAuthSessionViaCredentials#1",
+		"Authentication.UpdateAuthSessionWithSteamGuardCode#1",
+		"Authentication.PollAuthSessionStatus#1"} {
+		if !strings.Contains(e.authLog(), want) {
+			t.Fatalf("CM log missing %q: %s", want, e.authLog())
+		}
 	}
-	// A second login with a bad password still works: -remember-password
-	// reuses the persisted login key, so no password prompt happens.
-	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "wrong"}}, &st); err != nil || !st.LoggedIn {
-		t.Fatalf("relogin with stored key: %+v, %v", st, err)
+	// The refresh token lives inside the plugin's data folder (0600), not
+	// the user's real home, with the account alongside it.
+	fi, err := os.Stat(filepath.Join(e.pluginData(), "refresh.token"))
+	if err != nil {
+		t.Fatalf("refresh token not kept inside HYDRA_PLUGIN_DATA: %v", err)
 	}
-	// The login key file lives inside the plugin's data folder, not the
-	// user's real home.
-	if _, err := os.Stat(filepath.Join(e.pluginData(), "home", ".local/share/IsolatedStorage")); err != nil {
-		t.Fatalf("login key not kept inside HYDRA_PLUGIN_DATA: %v", err)
+	if fi.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("refresh.token too open: %v", fi.Mode())
+	}
+	var tok struct {
+		Account string `json:"account"`
+	}
+	raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "token.json"))
+	json.Unmarshal(raw, &tok)
+	if tok.Account != "HydraUser" {
+		t.Fatalf("token account: %q", tok.Account)
 	}
 	if got := os.Getenv("HOME"); got != "" {
 		if _, err := os.Stat(filepath.Join(got, ".local/share/IsolatedStorage/a1b2c3d4.9z8y")); err == nil {
@@ -362,7 +390,7 @@ func TestSteamAuth(t *testing.T) {
 	if err := e.call("auth.logout", nil, &st); err != nil || st.LoggedIn {
 		t.Fatalf("logout: %+v, %v", st, err)
 	}
-	if _, err := os.Stat(filepath.Join(e.pluginData(), "home")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "refresh.token")); !os.IsNotExist(err) {
 		t.Fatal("login key survived logout")
 	}
 }
@@ -677,10 +705,10 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// The QR login path: auth.begin starts depotdownloader -qr in the background
-// and returns the QR as a BMP data URL; approving it (the test flips the
-// fake's qr_approved knob, like the Steam mobile app would) makes the next
-// auth.status logged in, and an empty auth.complete waits for it.
+// The QR login path: auth.begin starts hydra-steam-dl auth in the
+// background and returns the challenge as block-art; approving it (the
+// test flips the fake CM's auth_qr_approved knob, like the Steam mobile
+// app would) makes an empty auth.complete log in.
 func TestSteamQRAuth(t *testing.T) {
 	e := setup(t)
 	var st types.AuthStatus
@@ -691,41 +719,15 @@ func TestSteamQRAuth(t *testing.T) {
 	if err := e.call("auth.begin", nil, &pr); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	// The prompt carries the block-art the fake printed: 21 rows, and the
-	// finder pattern's dark ring must survive the round trip (module =
-	// two "\u2588" chars; the fake indents each row by one leading space).
-	rows := strings.Split(pr.QR, "\n")
-	if len(rows) != 21 || !strings.Contains(pr.QR, "\u2588") {
-		t.Fatalf("QR art: %d rows, want 21 with block chars", len(rows))
-	}
-	// Block chars are 3 bytes each, so compare runes, not bytes. Only the
-	// leading margin varies between runs; module m lives at runes 2m and 2m+1
-	// after it (light modules are two spaces and must stay put).
-	lead := len(rows[0]) - len(strings.TrimLeft(rows[0], " "))
-	strip := func(row string) []rune {
-		r := []rune(row)
-		return r[lead:]
-	}
-	for _, m := range [][2]int{{0, 0}, {6, 0}, {0, 6}, {6, 6}, {3, 3}} {
-		line := strip(rows[m[1]])
-		if len(line) <= m[0]*2+1 || string(line[m[0]*2:m[0]*2+2]) != "\u2588\u2588" {
-			t.Fatalf("finder module (%d,%d) not dark in row %q", m[0], m[1], rows[m[1]])
-		}
-	}
-	light := strip(rows[1])
-	if string(light[2:4]) == "\u2588\u2588" {
-		t.Fatal("module (1,1) should be light")
-	}
+	checkQRArt(t, pr.QR)
 
 	// Approve from the "phone" and confirm the empty-form flow logs in.
-	e.setDDState("qr_approved", true)
+	e.setCMState("auth_qr_approved", true)
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("qr complete: %+v, %v", st, err)
 	}
-	// The login key lives inside the plugin's private data folder, in .NET's
-	// real IsolatedStorage layout (what the actual DepotDownloader writes).
-	if _, err := os.Stat(filepath.Join(e.pluginData(), "home",
-		".local/share/IsolatedStorage/a1b2c3d4.9z8y/e5f6g7h8.1x2w/Url.31jkk2knc5lh3teqw2x2f1trv5hc4yls/AssemFiles/account.config")); err != nil {
+	// The refresh token lives inside the plugin's private data folder.
+	if _, err := os.Stat(filepath.Join(e.pluginData(), "refresh.token")); err != nil {
 		t.Fatalf("login key not in plugin data: %v", err)
 	}
 	// A library call works with the QR-issued token.
@@ -737,38 +739,75 @@ func TestSteamQRAuth(t *testing.T) {
 		t.Fatalf("logout: %+v, %v", st, err)
 	}
 
-	// A rematch after logout must not fail: Steam can silently re-issue the
-	// stored login key on a fresh approval, without any "Success!" line and
-	// with an unchanged token store (what the real DepotDownloader does
-	// when its profile already had the key). The plugin must accept a fresh
-	// account.config written during this login even though its content
-	// stamp was already in place when the login began.
-	e.setDDState("qr_silent", true)
+	// A fresh QR login after logout works too.
 	var pr2 types.AuthPrompt
 	if err := e.call("auth.begin", nil, &pr2); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	e.setDDState("qr_approved", true)
+	checkQRArt(t, pr2.QR)
+	e.setCMState("auth_qr_approved", true)
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
-		t.Fatalf("silent rematch: %+v, %v", st, err)
+		t.Fatalf("second qr complete: %+v, %v", st, err)
 	}
 }
 
-// Steam expires the login QR and hands out a new challenge URL, which
-// DepotDownloader prints as a fresh block-art block. The plugin must serve
-// the latest art through auth.status so the dialog can redraw it.
+// checkQRArt asserts the block-art is a square QR with the finder
+// pattern intact (module = two "█" chars; rows without dark modules are
+// quiet-zone padding the renderer drops, so only dark-bearing rows count).
+func checkQRArt(t *testing.T, art string) {
+	t.Helper()
+	if !strings.Contains(art, "█") {
+		t.Fatal("QR art has no block chars")
+	}
+	var rows []string
+	for _, r := range strings.Split(art, "\n") {
+		if strings.Contains(r, "█") {
+			rows = append(rows, r)
+		}
+	}
+	if len(rows) < 21 {
+		t.Fatalf("QR art: %d content rows, want at least 21", len(rows))
+	}
+	runes := func(s string) []rune { return []rune(s) }
+	// Width in modules from the widest row (two runes per module); the
+	// block must be square.
+	widest := 0
+	for _, r := range rows {
+		if n := len(runes(strings.TrimRight(r, " "))) / 2; n > widest {
+			widest = n
+		}
+	}
+	if len(rows) != widest {
+		t.Fatalf("QR art not square: %d rows, %d modules wide", len(rows), widest)
+	}
+	// Finder corners: (0,0), (6,0), (0,6), (6,6) dark, (1,1) light, (3,3) dark.
+	at := func(x, y int) bool {
+		r := runes(rows[y])
+		return len(r) > x*2+1 && r[x*2] == '█'
+	}
+	for _, m := range [][2]int{{0, 0}, {6, 0}, {0, 6}, {6, 6}, {3, 3}} {
+		if !at(m[0], m[1]) {
+			t.Fatalf("finder module (%d,%d) not dark", m[0], m[1])
+		}
+	}
+	if at(1, 1) {
+		t.Fatal("module (1,1) should be light")
+	}
+}
+
+// Steam expires the login QR and hands out a new challenge URL; the Go
+// helper emits a fresh qr event and the plugin serves the latest art
+// through auth.status so the dialog can redraw it.
 func TestSteamQRRefresh(t *testing.T) {
 	e := setup(t)
-	e.setDDState("qr_refresh", true)
+	e.setCMState("auth_qr_refresh", true)
 	var pr types.AuthPrompt
 	if err := e.call("auth.begin", nil, &pr); err != nil {
 		t.Fatalf("begin: %v", err)
 	}
+	checkQRArt(t, pr.QR)
 	first := pr.QR
-	if strings.Count(first, "\n") != 20 {
-		t.Fatalf("first QR: %d rows", strings.Count(first, "\n")+1)
-	}
-	// The fake refreshes about two seconds in; auth.status must pick the new
+	// The fake refreshes on the first poll; auth.status must pick the new
 	// art up.
 	var st types.AuthStatus
 	deadline := time.Now().Add(15 * time.Second)
@@ -787,11 +826,9 @@ func TestSteamQRRefresh(t *testing.T) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	if got := strings.Count(st.QR, "\n") + 1; got != 21 {
-		t.Fatalf("refreshed QR: %d rows, want 21", got)
-	}
+	checkQRArt(t, st.QR)
 	// And the refreshed code still logs in when approved.
-	e.setDDState("qr_approved", true)
+	e.setCMState("auth_qr_approved", true)
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("qr complete after refresh: %+v, %v", st, err)
 	}

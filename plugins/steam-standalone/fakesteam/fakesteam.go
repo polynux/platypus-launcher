@@ -4,10 +4,9 @@
 // points hydra-steam-dl at them. Both the plugin's own tests and the
 // conformance suite use it, so the two harnesses can't drift apart.
 //
-// Variants mirror the old fake depotdownloader's knobs (read from the
-// FAKE_DD_STATE file, so existing tests keep calling setDDState): bare_elf,
-// unity_decoy, windows_only, plus FAKE_DD_STEAMWORKS for the Steamworks
-// library that marks a game "optional".
+// Variants ride the FAKE_DD_STATE file (kept for historical reasons) with
+// knobs: bare_elf, unity_decoy, windows_only, plus FAKE_DD_STEAMWORKS for
+// the Steamworks library that marks a game "optional".
 package fakesteam
 
 import (
@@ -40,7 +39,7 @@ type Fixture struct {
 	CompressedBytes uint64
 }
 
-// Knobs mirrors the fake depotdownloader's behaviour switches.
+// Knobs are the fixture behaviour switches (see above).
 type Knobs struct {
 	BareELF     bool
 	UnityDecoy  bool

@@ -152,11 +152,12 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 	return cmd, ""
 }
 
-// steam-standalone logs in through DepotDownloader (fake) and downloads
-// through hydra-steam-dl (built from source) against a fake CM and a fake
-// CDN (see fakesteam); the plugin's Steam Web API calls answer from a file.
+// steam-standalone logs in and downloads through hydra-steam-dl (built
+// from source) against a fake CM and a fake CDN (see fakesteam); the
+// plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "dd-state.json")
+	os.WriteFile(state, []byte(`{}`), 0o644)
 	api := filepath.Join(t.TempDir(), "steam-api.json")
 	os.WriteFile(api, []byte(`{
   "response": {"games": [{"appid": 4321, "name": "Standalone Game"}]},
@@ -184,7 +185,6 @@ func TestConformanceSteamStandalone(t *testing.T) {
 	plugtest.Suite{
 		ID:      "steam-standalone",
 		CopyDir: "../../plugins/steam-standalone",
-		FakeCLI: map[string]string{"depotdownloader": "../../plugins/steam-standalone/testdata/depotdownloader"},
 		Env: map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api,
 			"HYDRA_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
 		Login: func(t *testing.T, s *plugtest.Session) {

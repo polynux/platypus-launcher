@@ -2,12 +2,14 @@
 """Hydra store plugin for Steam without the Steam client.
 
 Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
-over stdin/stdout, one object per line. Logins are done by the
-`depotdownloader` CLI (SteamRE/DepotDownloader), which logs into Steam with the
-user's own account and Steam Guard; the plugin never stores the password — it
-feeds it to one DepotDownloader run, and the login key Steam issues afterwards
-stays inside $HYDRA_PLUGIN_DATA, where the plugin points DepotDownloader's
-profile. Downloads are done by hydra-steam-dl (Go, next to this file),
+over stdin/stdout, one object per line. Logins are done by hydra-steam-dl
+(Go, next to this file), which logs into Steam with the user's own account
+and Steam Guard over the CM (QR via BeginAuthSessionViaQR + Poll, password
+via GetPasswordRSAPublicKey + BeginAuthSessionViaCredentials + Steam Guard
+code or mobile confirmation); the plugin never stores the password — it
+feeds it to one hydra-steam-dl auth run on stdin, and the refresh token
+Steam issues afterwards stays in $HYDRA_PLUGIN_DATA (refresh.token 0600,
+plus token.json/session.json). Downloads are done by the same binary,
 which logs on to a CM with the stored refresh token and spreads chunk
 fetches over many CDN hosts like the Steam client does.
 
@@ -15,22 +17,6 @@ Only what the logged-in account owns is installed, through Steam's own CDN,
 with the account's own licence. No DRM or licence circumvention, and no Steam
 API emulators: games that need the Steam client at runtime get the real
 client, started hidden (`steam -silent`), and the game runs against it.
-
-DepotDownloader facts that shape this plugin:
-  - Credentials are prompted interactively ("Enter account password for ...",
-    then a Steam Guard code), so the login run is driven through a pipe and
-    the plugin feeds the answers Hydra collected.
-  - -remember-password makes SteamKit persist the refresh token in .NET
-    isolated storage ("account.config", a deflated protobuf). The plugin runs
-    DepotDownloader with HOME=$HYDRA_PLUGIN_DATA/home, so that file lands in
-    the plugin's private folder. The token is extracted (JWT scan) for the
-    Steam Web API library listing, since DepotDownloader itself has no
-    "list owned games".
-  - Sizes: `-app <id> -manifest-only` dumps a text manifest with
-    "Total bytes on disk / compressed" — manifests only, no game data.
-  - Progress: per-file lines "  42.12% <path>" while downloading.
-  - Installs are resumable: DepotDownloader records installed manifests in
-    <dir>/.DepotDownloader/depot.config and skips chunks it already has.
 """
 
 import json
@@ -56,14 +42,12 @@ CODE_AUTH_REQUIRED = -32001
 # is one CM round trip when this lapses mid-session.
 ACCESS_TOKEN_MARGIN = 300
 
-PROGRESS_RE = re.compile(r"^\s*(\d{1,3}(?:\.\d+)?)%\s+(\S.*)$")
-# -manifest-only dump: "Total bytes on disk : 123" / "Total bytes compressed : 456"
-DISK_RE = re.compile(r"Total bytes on disk\s*:\s*(\d+)")
-COMPRESSED_RE = re.compile(r"Total bytes compressed\s*:\s*(\d+)")
-# SteamKit refresh tokens are JWTs inside account.config. Note the header
-# segment does NOT necessarily start with "eyJ": Steam's JWT JSON contains
-# spaces ("alg": "EdDSA"), so the base64 header begins "eyAi…" — anchor on
-# the dot-separated base64url shape instead, and validate by decoding.
+# Steam refresh tokens are JWTs. Note the header segment does NOT necessarily
+# start with "eyJ": Steam's JWT JSON contains spaces ("alg": "EdDSA"), so the
+# base64 header begins "eyAi…" — anchor on the dot-separated base64url shape
+# instead, and validate by decoding. Used only to migrate the pre-Go login
+# (DepotDownloader's account.config, a deflated protobuf); new logins land
+# in refresh.token directly.
 JWT_RE = re.compile(r"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}")
 
 out_lock = threading.Lock()
@@ -104,68 +88,9 @@ def tail(text, n=3):
     return " · ".join(lines[-n:]) if lines else "no output"
 
 
-# DepotDownloader keeps its login tokens in .NET isolated storage created
-# under the current user's profile. Running it with HOME pointed inside the
-# plugin's private data folder keeps the login key out of the user's real
-# profile (and out of Hydra's view), per the protocol's "credentials stay
-# with the plugin or the tool it wraps".
-def dd_env():
-    env = dict(os.environ)
-    home = os.path.join(data_dir(), "home")
-    os.makedirs(home, exist_ok=True)
-    env["HOME"] = home
-    env["DOTNET_CLI_HOME"] = home
-    env["XDG_DATA_HOME"] = os.path.join(home, ".local/share")
-    env["DOTNET_NOLOGO"] = "1"
-    env["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
-    return env
-
-
-def depotdownloader_login(args, feed, timeout=600):
-    """Runs DepotDownloader with stdin fed: `feed` is [(pattern, answer)]; the
-    first pattern matching a prompt line gets the answer, once."""
-    try:
-        p = subprocess.Popen(["depotdownloader", *args], stdin=subprocess.PIPE,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             text=True, bufsize=1, env=dd_env())
-    except FileNotFoundError:
-        raise RPCError("depotdownloader is not installed; get the linux-x64 binary from "
-                       "github.com/SteamRE/DepotDownloader/releases")
-    # The prompts come without a trailing newline, so reading stdout
-    # line-wise to decide when to answer would deadlock. Write the answers
-    # upfront and close stdin instead: DepotDownloader only reads stdin when
-    # it prompts, and an unexpected prompt hits EOF and fails fast instead
-    # of hanging.
-    try:
-        for _pat, answer in feed:
-            p.stdin.write(answer + "\n")
-        p.stdin.flush()
-        p.stdin.close()
-    except (BrokenPipeError, OSError):
-        pass
-    out = []
-    for line in p.stdout:
-        line = line.rstrip()
-        out.append(line)
-    try:
-        rc = p.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        p.kill()
-        raise RPCError("login timed out")
-    return rc, "\n".join(out)
-
-
-def depotdownloader_simple(args, timeout=900):
-    try:
-        p = subprocess.run(["depotdownloader", *args], stdin=subprocess.DEVNULL,
-                           capture_output=True, text=True, timeout=timeout,
-                           env=dd_env())
-    except FileNotFoundError:
-        raise RPCError("depotdownloader is not installed; get the linux-x64 binary from "
-                       "github.com/SteamRE/DepotDownloader/releases")
-    except subprocess.TimeoutExpired:
-        raise RPCError("depotdownloader timed out")
-    return p.returncode, p.stdout, p.stderr
+# Logins run through hydra-steam-dl (Go, next to this file), never through
+# argv-visible credentials: the password travels on the auth subcommand's
+# stdin and is never logged. See "QR login" below.
 
 
 # --- persisted state ------------------------------------------------------
@@ -224,20 +149,32 @@ def refresh_pairs(text):
 
 
 def refresh_token():
-    """The SteamKit refresh token the login persisted, extracted from
-    account.config (deflated protobuf; JWTs are readable strings in it) and
-    cached. Used for the CM token exchange, which feeds the Web API."""
+    """The SteamClient refresh token the Go login persisted (refresh.token
+    0600, plus token.json/session.json). The pre-Go login (DepotDownloader's
+    account.config, a deflated protobuf) is migrated on first read so the
+    current login keeps working without logging in again. Used for the CM
+    token exchange, which feeds the Web API."""
+    # New canonical store: raw JWT, never argv, never logged.
+    try:
+        with open(state_path("refresh.token")) as f:
+            token = f.read().strip()
+        if token:
+            return token
+    except OSError:
+        pass
+    # Legacy: extract from account.config once, then migrate forward.
     st = load_state("token.json", {})
     path = account_config()
-    # The cache is only trusted while the store file hasn't changed since
-    # it was taken — a fresh login must re-extract even if an older token
-    # (or an empty store from an interrupted save) is cached. The account
-    # name (DD's -username for later runs) is part of what's extracted:
-    # an entry without it is stale (from before the field existed).
     if (st.get("refresh_token") and st.get("account") is not None
             and st.get("source") == (path, os.path.getmtime(path) if path else None)):
+        migrate_token(st["refresh_token"], st.get("account") or "")
         return st["refresh_token"]
     if not path:
+        # A Go login may have written token.json without refresh.token
+        # (older shape); trust it and migrate.
+        if st.get("refresh_token"):
+            migrate_token(st["refresh_token"], st.get("account") or "")
+            return st["refresh_token"]
         return None
     try:
         with open(path, "rb") as f:
@@ -253,218 +190,128 @@ def refresh_token():
         matches = JWT_RE.findall(text)
         if not matches:
             return None
-        st["refresh_token"] = matches[-1]  # the newest token
-        # The LoginTokens key: the account name DD expects in -username for
-        # every later run (the phone's QR login stores it there too).
-        for name, token in reversed(refresh_pairs(text)):
-            if token == st["refresh_token"] and name:
-                st["account"] = name
+        token = matches[-1]  # the newest token
+        account = st.get("account", "")
+        for name, tok in reversed(refresh_pairs(text)):
+            if tok == token and name:
+                account = name
                 break
-        else:
-            st["account"] = st.get("account", "")
+        st["refresh_token"] = token
+        st["account"] = account
         st["source"] = [path, os.path.getmtime(path)]
         save_state("token.json", st)
-        return st["refresh_token"]
+        migrate_token(token, account)
+        return token
     except OSError:
         return None
 
 
+def migrate_token(token, account):
+    """Copy a legacy-extracted token into the Go login's files (0600)."""
+    try:
+        with open(state_path("refresh.token"), "w") as f:
+            f.write(token + "\n")
+        os.chmod(state_path("refresh.token"), 0o600)
+    except OSError:
+        pass
+    try:
+        st = load_state("token.json", {})
+        st["refresh_token"] = token
+        if account:
+            st["account"] = account
+        try:
+            st["source"] = [state_path("refresh.token"),
+                            os.path.getmtime(state_path("refresh.token"))]
+        except OSError:
+            pass
+        save_state("token.json", st)
+        if account and not state_user():
+            save_state("session.json", {"account": account})
+    except OSError:
+        pass
+
+
 # --- QR login ---------------------------------------------------------------
-# DepotDownloader -qr prints the login QR as Unicode block-art on stdout
-# (one module = two U+2588 chars wide, one row tall, "█" = dark module) and
-# waits for the Steam mobile app to approve it. Steam periodically expires and
-# refreshes the challenge URL, so DepotDownloader can print a NEW QR while
-# running ("The QR code has changed:") — the plugin keeps reading and always
-# exposes the latest art through auth.status, and the dialog redraws it. After
-# approval DepotDownloader prints "Success!" and persists the login key into
-# its isolated storage; we consider the login done then (not on process exit,
-# which is non-zero because -app is a dummy), kill the process and let
-# auth.status pick the login up.
+# hydra-steam-dl auth prints the login QR as block-art JSON events on
+# stdout (one module = two U+2588 chars wide, "█" = dark module) and waits
+# for the Steam mobile app to approve it. Steam periodically expires and
+# refreshes the challenge URL, so the binary can emit a NEW qr event while
+# running — the plugin keeps the latest art for auth.status, and the dialog
+# redraws it. After approval the binary persists the refresh token itself
+# (refresh.token 0600, token.json, session.json); we consider the login
+# done on its result event.
 
-LOGINID = "2718281"  # fixed LogonID so logins never kick a running Steam client
-
-# QR login background state: the depotdownloader -qr process, its latest art
-# and its result.
+# QR login background state: the hydra-steam-dl auth process, its latest
+# art and its result.
 qr_lock = threading.Lock()
 qr_proc = {"proc": None, "rc": None}
 qr_art = {"text": None}                      # latest block-art, for auth.status
 qr_state = {"state": "idle", "error": None}  # idle|pending|ok|failed
 
 
-def art_modules_wide(rows):
-    """Module count across a block-art QR block: two chars per module. Rows
-    share a leading quiet zone, whose size comes from the most-indented row;
-    the width comes from the widest row with trailing spaces trimmed (some
-    row always has a dark module at the true right edge, so the trimmed
-    maximum is the full art width, as the dialog's renderer also assumes).
-    Trailing LIGHT modules don't exist beyond that edge."""
-    full = [r for r in rows if r.strip()]
-    if not full:
-        return 0
-    lead = min(len(r) - len(r.lstrip(" ")) for r in full)
-    width = max(len(r.rstrip()) for r in full) - lead
-    if width % 2:
-        width += 1
-    return width // 2
-
-
-def config_stamp():
-    """Identity of the persisted credential store, to notice a fresh login."""
-    path = account_config()
-    if not path:
-        return None
-    try:
-        with open(path, "rb") as f:
-            return (path, hash(f.read()))
-    except OSError:
-        return None
-
-
 def start_qr_login():
-    """Starts `depotdownloader -qr` in the background, tracking its QR art.
-    Returns (art text or None, error or None)."""
+    """Starts `hydra-steam-dl auth` (QR mode) in the background, tracking
+    its QR art. Returns (art text or None, error or None)."""
     stop_qr_login()
     with qr_lock:
         qr_art["text"] = None
         qr_state.update(state="pending", error=None)
-    stamp_before = config_stamp()
     try:
         proc = subprocess.Popen(
-            ["depotdownloader", "-app", "0", "-qr", "-remember-password",
-             "-loginid", LOGINID],
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, bufsize=0, env=dd_env())
+            [dl_bin(), "auth"], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=dict(os.environ))
     except FileNotFoundError:
         with qr_lock:
             qr_state.update(state="failed",
-                            error="depotdownloader is not installed; get the linux-x64 binary from github.com/SteamRE/DepotDownloader/releases")
+                            error="hydra-steam-dl is missing; reinstall the plugin")
         return None, qr_state["error"]
+    try:
+        proc.stdin.write(json.dumps({"mode": "qr"}) + "\n")
+        proc.stdin.flush()
+    except (BrokenPipeError, OSError):
+        pass
     qr_proc["proc"] = proc
     ready = threading.Event()
-    rows = []   # current block-art lines ("█" = dark module)
-    tail = []   # everything else, for error messages
-    ok = threading.Event()
-    started = time.time()
 
     def watch():
-        # Reads the raw byte pipe and splits on newlines itself: a text-mode
-        # iterator stalls until its internal buffer fills, which would
-        # swallow the tail of the QR art.
-        import select as _select
-        fd = proc.stdout  # unbuffered byte pipe (bufsize=0)
-        pend = b""
-
-        def handle(text):
-            # Both headers open a fresh art block: the first code prints
-            # "Use the Steam Mobile App…", a refreshed one (Steam expires
-            # the challenge URL) prints "The QR code has changed:" —
-            # without clearing here the new rows would be glued onto the
-            # old art and nothing scannable would ever be served.
-            if "Use the Steam Mobile App to sign in with this QR code:" in text or "The QR code has changed:" in text:
-                rows.clear()
-            elif "\u2588" in text:
-                rows.append(text.rstrip())
-                publish_if_complete()
-            else:
-                if text.startswith("Success!"):
-                    ok.set()
-                publish_if_complete()  # blank line closes the art block
-                tail.append(text)
-            if config_stamp() != stamp_before:  # token store changed
-                ok.set()
-            # A second approval of the SAME code must not fail: if the token
-            # store was already updated for this identity (config unchanged
-            # since before the scan, but it existed and is newer than this
-            # login's start), Steam simply re-issued the stored key.
-            if not ok.is_set() and stamp_before is None and account_config() is not None:
-                age = max(0, time.time() - os.path.getmtime(account_config()))
-                if age < 60:
-                    ok.set()
-
-        def publish_if_complete():
-            # DepotDownloader prints no terminator after the art (the next
-            # thing it prints may be much later, e.g. "Success!"), so don't
-            # wait for one: a QR is square, so the block is complete as soon
-            # as the row count equals the module count per row (29 for the
-            # real Steam code, 21 for the fake). Publishing earlier than
-            # that served truncated codes with their bottom rows missing.
-            if len(rows) < 21 or len(rows) != art_modules_wide(rows):
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            t = msg.get("type")
+            if t == "qr" and msg.get("qr_art"):
+                with qr_lock:
+                    qr_art["text"] = msg["qr_art"]
+                ready.set()
+            elif t == "result":
+                with qr_lock:
+                    qr_state.update(state="ok", error=None)
+                    qr_proc["proc"] = None
+                try:
+                    proc.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
                 return
-            with qr_lock:
-                qr_art["text"] = "\n".join(rows)
-            ready.set()
-
-        while not ok.is_set():
-            r, _, _ = _select.select([fd], [], [], 0.5)
-            if r:
-                chunk = os.read(fd.fileno(), 65536)
-                if not chunk:
-                    break  # EOF
-                pend += chunk
-                while b"\n" in pend:
-                    line, pend = pend.split(b"\n", 1)
-                    handle(line.decode("utf-8", "replace").rstrip("\r"))
-            elif pend:
-                handle(pend.decode("utf-8", "replace").rstrip("\r"))
-                pend = b""
-            elif proc.poll() is not None:
-                break
-
-        if ok.is_set():
-            # Approved. Don't stop the process before the token store is
-            # usable: DepotDownloader prints "Success!" BEFORE it writes
-            # the token store (Steam3Session prints, then sets LoginTokens,
-            # then calls Save), and .NET's Save() creates account.config
-            # EMPTY first and writes the deflated content after — stopping
-            # in between leaves a 0-byte file and the library loses its
-            # token. So wait until the file exists AND yields a token; DD
-            # exits by itself right after saving (non-zero, the dummy app
-            # run) — that's expected and not an error.
-            for _ in range(120):  # up to 60s
-                if refresh_token() or proc.poll() is not None:
-                    break
-                time.sleep(0.5)
-            if proc.poll() is None and not refresh_token():
-                # Never got a readable key: stop DD the hard way as a last
-                # resort but don't pretend the token exists.
-                proc.kill()
-            save_state("session.json", {"account": "steam"})
-            # QR: the account name is learned by refresh_token() from the
-            # LoginTokens key; make sure token.json has it before DD uses it.
-            refresh_token()
-            with qr_lock:
-                qr_state.update(state="ok", error=None)
-                qr_proc["proc"] = None
-            return
-        rc = proc.wait()
-        detail = " ".join(t.strip() for t in tail[-4:] if t.strip()) if tail else "no output"
-        if config_stamp() != stamp_before:
-            ok.set()
-            with qr_lock:
-                qr_state.update(state="ok", error=None)
-                qr_proc["proc"] = None
-            return
-        # "Failed to authenticate with Steam: …" / "Lost connection to
-        # Steam" are CM-side flakiness, not a wrong password — the plugin
-        # retries the whole run once so a scan the phone approved isn't
-        # wasted on a dropped connection.
-        transient = rc != 0 and time.time() - started < 120 and (
-            "Failed to authenticate" in detail or "Lost connection" in detail
-            or "Unable to get steam3 credentials" in detail)
+            elif t == "error":
+                with qr_lock:
+                    qr_state.update(state="failed", error=msg.get("message") or "login failed")
+                    qr_proc["proc"] = None
+                return
+            # code-needed/waiting never appear for QR; ignore anything else.
+        # EOF without a result: the binary died.
         with qr_lock:
-            if transient and not qr_proc.get("retried"):
-                qr_proc["retried"] = True
+            if qr_state["state"] == "pending":
+                qr_state.update(state="failed",
+                                error="the login helper ended without logging in")
                 qr_proc["proc"] = None
-                qr_state.update(state="idle", error=None)
-            else:
-                qr_proc["rc"] = rc
-                qr_state.update(state="failed", error=(
-                    f"DepotDownloader QR login exited with {rc}: {detail}"
-                    if rc else "DepotDownloader QR login ended without logging in: " + detail))
-        if transient and not qr_state.get("error"):
-            log("warn", "Steam connection dropped during QR login; retrying once")
-            time.sleep(2)
-            start_qr_login()
+        ready.set()
 
     threading.Thread(target=watch, daemon=True).start()
     # The first QR prints within a few seconds; wait for it here so auth.begin
@@ -477,6 +324,9 @@ def start_qr_login():
         stop_qr_login()
         return None, "QR code didn't appear in time; try the password login below"
     with qr_lock:
+        # The watcher sets ready on error too; surface it instead of art.
+        if qr_state["state"] == "failed":
+            return None, qr_state["error"]
         return qr_art["text"], None
 
 
@@ -491,10 +341,18 @@ def stop_qr_login():
 
 
 def logged_in():
-    # session.json is written only after a login succeeded; account.config
-    # may vanish for reasons outside the session (corrupt store, logout in
-    # another instance), so don't couple the reported login to the key file.
-    return bool(state_user()) or account_config() is not None
+    # session.json is written only after a login succeeded; the refresh
+    # token may live in refresh.token (Go login) or, for the pre-Go login,
+    # in account.config — don't couple the reported login to one file.
+    if state_user():
+        return True
+    try:
+        with open(state_path("refresh.token")) as f:
+            if f.read().strip():
+                return True
+    except OSError:
+        pass
+    return account_config() is not None
 
 
 def state_user():
@@ -591,7 +449,7 @@ def auth_begin(_params):
     instructions = ("Scan the QR code with the Steam mobile app (Steam Guard → scan) "
                     "and just wait — the dialog closes by itself. The code refreshes "
                     "by itself when it expires. Or log in below; your password and "
-                    "the Steam Guard code go to DepotDownloader only and are never "
+                    "the Steam Guard code go to hydra-steam-dl only and are never "
                     "stored, and the login key Steam issues stays in this plugin's "
                     "private data folder.")
     if err and not qr:
@@ -609,6 +467,79 @@ def auth_begin(_params):
     }
 
 
+def run_auth_password(username, password, guard, timeout=300):
+    """One `hydra-steam-dl auth` password run: the password travels on
+    stdin (never argv, never logged) and the binary persists the refresh
+    token itself. Returns None on success, else the error message."""
+    try:
+        proc = subprocess.Popen(
+            [dl_bin(), "auth"], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=dict(os.environ))
+    except FileNotFoundError:
+        raise RPCError("hydra-steam-dl is missing; reinstall the plugin")
+    req = {"mode": "password", "account": username, "password": password}
+    if guard:
+        req["code"] = guard
+    try:
+        proc.stdin.write(json.dumps(req) + "\n")
+        proc.stdin.flush()
+    except (BrokenPipeError, OSError):
+        pass
+    # The binary asks for a code only when the account needs one and none
+    # was supplied; the dialog already collected it when asked, so a
+    # code-needed here means "retry with a fresh code".
+    out = []
+    try:
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            out.append(line)
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            t = msg.get("type")
+            if t == "code-needed" and not guard:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                raise RPCError("Steam needs a Steam Guard code for this account; "
+                               "try again with a fresh code")
+            elif t == "code-needed":
+                # A code was supplied but Steam still asks: it was wrong or
+                # expired — fail fast so the user retries with a fresh one.
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                raise RPCError("Steam rejected the code: wrong Steam Guard code")
+            elif t == "result":
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+                return None
+            elif t == "error":
+                raise RPCError(msg.get("message") or "login failed")
+            # waiting/qr events: keep reading until result/error.
+        try:
+            rc = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise RPCError("login timed out")
+        raise RPCError("login failed: " + tail("\n".join(out)))
+    finally:
+        try:
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+
 def auth_complete(params):
     fields = ((params or {}).get("fields") or {})
     username = (fields.get("username") or "").strip()
@@ -616,37 +547,22 @@ def auth_complete(params):
     guard = (fields.get("guard") or "").strip()
     if not username and not password:
         # Empty form = "I scanned the QR code": wait for the background
-        # DepotDownloader to be approved by the phone and finish.
+        # hydra-steam-dl auth to be approved by the phone and finish.
         return wait_qr_login()
     if not username or not password:
         raise RPCError("enter your Steam account name and password")
     stop_qr_login()
-    # One DepotDownloader run with -remember-password: it asks for the
-    # password on stdin, then possibly a Steam Guard code, and persists the
-    # login key into the isolated storage under our HOME. `-app 0` validates
-    # the login without downloading anything.
-    feed = [(r"Enter account password", password)]
-    if guard:
-        feed.append((r"2 factor auth code|authentication code", guard))
-    depotdownloader_login(["-app", "0", "-username", username,
-                           "-remember-password", "-manifest-only",
-                           "-loginid", LOGINID], feed)
-    token = refresh_token()
-    if not token:
-        raise RPCError("login failed: DepotDownloader didn't persist a login key. "
+    run_auth_password(username, password, guard)
+    if not refresh_token():
+        raise RPCError("login failed: the helper didn't persist a login key. "
                        "Check the account name and password, and try again with a fresh "
                        "Steam Guard code.")
-    save_state("session.json", {"account": username})
-    # The token store carries the same name for later runs (dd_login_args).
-    st = load_state("token.json", {})
-    st["account"] = username
-    save_state("token.json", st)
     return auth_status()
 
 
 def wait_qr_login(timeout=300):
-    """Waits for the background -qr DepotDownloader to be approved (the phone
-    confirmed) and reports the result, like a password login."""
+    """Waits for the background hydra-steam-dl auth (QR) to be approved
+    (the phone confirmed) and reports the result, like a password login."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         with qr_lock:
@@ -673,7 +589,7 @@ def auth_logout(_params):
 
 # --- access token (CM exchange) ---------------------------------------------
 #
-# The refresh token DepotDownloader persists is a SteamClient token: the Web
+# The refresh token the Go login persists is a SteamClient token: the Web
 # API rejects it with 401, and GenerateAccessTokenForApp refuses it over
 # plain REST (AccessDenied, since 2025-04-30). It only works from an
 # authenticated CM session, so the plugin logs on to a CM itself
@@ -824,47 +740,6 @@ def mode_note(mode):
         "optional": "Launch mode: Steamworks present but optional — runs directly with SteamAppId set.",
         "client": "Launch mode: needs the Steam client — Hydra starts the real client hidden.",
     }.get(mode, "")
-
-
-CELL_RE = re.compile(r'"CellIDServerOverride"\s+"(\d+)"')
-
-
-def dd_cell_args():
-    """-cellid for downloads: DepotDownloader picks a content server on its
-    own, which can be a slow one. HYDRA_STEAM_CELLID wins; otherwise the
-    download region the user set in the Steam client (CellIDServerOverride in
-    its config.vdf). Nothing when neither is set: DepotDownloader decides."""
-    cell = os.environ.get("HYDRA_STEAM_CELLID", "").strip()
-    if not cell.isdigit():
-        cell = ""
-        for rel in (".local/share/Steam/config/config.vdf", ".steam/steam/config/config.vdf"):
-            try:
-                with open(os.path.join(os.path.expanduser("~"), rel)) as f:
-                    m = CELL_RE.search(f.read())
-            except OSError:
-                continue
-            if m:
-                cell = m.group(1)
-                break
-    return ["-cellid", cell] if cell and int(cell) > 0 else []
-
-
-def dd_max_downloads():
-    """Parallel chunk downloads. DepotDownloader defaults to 8; a content
-    server that throttles each connection is helped by more. HYDRA_STEAM_MAX_DOWNLOADS
-    overrides."""
-    n = os.environ.get("HYDRA_STEAM_MAX_DOWNLOADS", "").strip()
-    return n if n.isdigit() and int(n) > 0 else "24"
-
-
-def dd_login_args():
-    """The -username/-remember-password pair that makes DepotDownloader reuse
-    the stored login key: tokens are keyed by account name, and DD refuses
-    -remember-password without a username (its own message). The name comes
-    from the login (password logins know it, QR logins read it from the
-    LoginTokens key in account.config)."""
-    name = load_state("token.json", {}).get("account") or state_user()
-    return ["-username", name, "-remember-password"] if name else []
 
 
 def dl_bin():
