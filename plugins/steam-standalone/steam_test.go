@@ -543,6 +543,22 @@ func TestSteamQRAuth(t *testing.T) {
 	if err := e.call("auth.logout", nil, &st); err != nil || st.LoggedIn {
 		t.Fatalf("logout: %+v, %v", st, err)
 	}
+
+	// A rematch after logout must not fail: Steam can silently re-issue the
+	// stored login key on a fresh approval, without any "Success!" line and
+	// with an unchanged token store (what the real DepotDownloader does
+	// when its profile already had the key). The plugin must accept a fresh
+	// account.config written during this login even though its content
+	// stamp was already in place when the login began.
+	e.setDDState("qr_silent", true)
+	var pr2 types.AuthPrompt
+	if err := e.call("auth.begin", nil, &pr2); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	e.setDDState("qr_approved", true)
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("silent rematch: %+v, %v", st, err)
+	}
 }
 
 // Steam expires the login QR and hands out a new challenge URL, which

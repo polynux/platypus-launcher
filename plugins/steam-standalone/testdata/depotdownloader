@@ -104,8 +104,12 @@ def main():
                 os.makedirs(root, exist_ok=True)
                 with open(os.path.join(root, "account.config"), "wb") as f:
                     f.write(_z.compress(("GuardData\x00" + TOKEN + "\x00").encode()))
-                print("Success! Next time you can login with -username "
-                      + (st.get("account") or "user") + " -remember-password instead of -qr.")
+                # qr_silent: like the real tool re-approving a stored token,
+                # where the existing store resolves as unchanged and nothing
+                # announces the login.
+                if not st.get("qr_silent"):
+                    print("Success! Next time you can login with -username "
+                          + (st.get("account") or "user") + " -remember-password instead of -qr.")
                 sys.exit(0)
             time.sleep(0.1)
         sys.exit(1)

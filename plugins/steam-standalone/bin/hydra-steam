@@ -321,6 +321,14 @@ def start_qr_login():
                 tail.append(text)
             if config_stamp() != stamp_before:  # token store changed
                 ok.set()
+            # A second approval of the SAME code must not fail: if the token
+            # store was already updated for this identity (config unchanged
+            # since before the scan, but it existed and is newer than this
+            # login's start), Steam simply re-issued the stored key.
+            if not ok.is_set() and stamp_before is None and account_config() is not None:
+                age = max(0, time.time() - os.path.getmtime(account_config()))
+                if age < 60:
+                    ok.set()
 
         def publish_if_complete():
             # DepotDownloader prints no terminator after the art (the next
