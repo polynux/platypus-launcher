@@ -6,9 +6,13 @@ package plugtest_test
 // whole protocol the plugin declares (see plugtest.go).
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"hydra-launcher/internal/plugtest"
 	"hydra-launcher/internal/types"
@@ -120,9 +124,38 @@ func TestConformanceAmazon(t *testing.T) {
 	}.Conformance(t)
 }
 
+// startFakeCM launches the fake CM server and returns the exec.Cmd (its
+// lifetime is tied to t.Cleanup) plus the "host:port" endpoint to connect to.
+func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
+	t.Helper()
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not installed")
+	}
+	var out bytes.Buffer
+	cmd := exec.Command("python3", path)
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Skipf("fake CM unavailable: %v", err)
+	}
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		s := out.String()
+		if i := strings.IndexByte(s, '\n'); i >= 0 {
+			return cmd, "127.0.0.1:" + strings.TrimSpace(s[:i])
+		}
+	}
+	t.Fatal("fake CM didn't print a port")
+	return cmd, ""
+}
+
 // steam-standalone wraps DepotDownloader; the fake mimics its prompts,
 // account.config login-key persistence, manifest sizes and progress lines,
-// and the plugin's Steam Web API calls answer from a file.
+// and the plugin's Steam Web API calls answer from a file. The CM token
+// exchange answers from testdata/fake_cm.py, a real WebSocket CM server on
+// localhost that speaks the plugin's protocol.
 func TestConformanceSteamStandalone(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "dd-state.json")
 	api := filepath.Join(t.TempDir(), "steam-api.json")
@@ -133,11 +166,19 @@ func TestConformanceSteamStandalone(t *testing.T) {
     "screenshots": [{"path_full": "https://cdn.steam/4321_ss.jpg"}],
     "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"}}}}
 }`), 0o644)
+	cmState := filepath.Join(t.TempDir(), "cm-state.json")
+	os.WriteFile(cmState, []byte(`{}`), 0o644)
+	// The fake CM must run while the plugin process does; its port is set
+	// per-run, so it can't come in through Suite.Env. The state path must be
+	// exported here too — Suite.Env applies only at plugin start.
+	t.Setenv("FAKE_CM_STATE", cmState)
+	_, endpoint := startFakeCM(t, "../../plugins/steam-standalone/testdata/fake_cm.py")
 	plugtest.Suite{
 		ID:      "steam-standalone",
 		CopyDir: "../../plugins/steam-standalone",
 		FakeCLI: map[string]string{"depotdownloader": "../../plugins/steam-standalone/testdata/depotdownloader"},
-		Env:     map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api},
+		Env: map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api,
+			"HYDRA_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			err := s.Call("auth.complete", map[string]any{

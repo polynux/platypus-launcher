@@ -26,5 +26,18 @@ else
   chmod 755 "$tmp"
 fi
 mv -f "$tmp" "$dest/$exec_rel"
+# Extra module files sitting next to the exec (e.g. python modules it
+# imports) are part of the plugin; replace them by rename too so a running
+# plugin keeps its old ones.
+exec_dir=$(dirname "$exec_rel")
+for f in "$src/$exec_dir"/*; do
+  base=$(basename "$f")
+  case "$base" in
+    "$(basename "$exec_rel")"|__pycache__) continue ;;
+    *.pyc) continue ;;
+  esac
+  [ -f "$f" ] || continue
+  mv -f "$f" "$dest/$exec_dir/$base"
+done
 cp "$src/plugin.json" "$dest/plugin.json.new" && mv -f "$dest/plugin.json.new" "$dest/plugin.json"
 echo "installed $name in $dest"

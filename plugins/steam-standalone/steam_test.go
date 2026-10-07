@@ -6,12 +6,14 @@
 package steam_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +28,8 @@ const id = "steam-standalone"
 
 const diskBytes = 60 << 20
 const compressedBytes = 40 << 20
+
+var outMu sync.Mutex
 
 type backend struct{ m *plugins.Manager }
 
@@ -75,9 +79,34 @@ func setup(t *testing.T) *env {
 		t.Skip("python3 not installed")
 	}
 	root := t.TempDir()
+	if keep := os.Getenv("STEAM_TEST_KEEP"); keep != "" {
+		// Debugging aid: keep the plugin root so its log survives.
+		var err error
+		root, err = os.MkdirTemp("", "steamtest")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if os.Getenv("STEAM_TEST_KEEP") == "" {
+				os.RemoveAll(root)
+			}
+		})
+		t.Logf("test root: %s", root)
+	}
 	plug := filepath.Join(root, "plugins", id)
 	copyFile(t, "plugin.json", filepath.Join(plug, "plugin.json"), 0o644)
-	copyFile(t, "bin/hydra-steam", filepath.Join(plug, "bin/hydra-steam"), 0o755)
+	// The whole bin folder: the exec plus the steam_cm module it imports.
+	binDir := filepath.Join(plug, "bin")
+	os.MkdirAll(binDir, 0o755)
+	binSrc, err := os.ReadDir("bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range binSrc {
+		if !f.IsDir() && (strings.HasSuffix(f.Name(), ".py") || f.Name() == "hydra-steam") {
+			copyFile(t, filepath.Join("bin", f.Name()), filepath.Join(binDir, f.Name()), 0o755)
+		}
+	}
 	bin := filepath.Join(root, "fakebin")
 	copyFile(t, "testdata/depotdownloader", filepath.Join(bin, "depotdownloader"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -98,9 +127,40 @@ func setup(t *testing.T) *env {
 	      "screenshots": [{"path_full": "https://cdn.steam/4321_ss.jpg"}],
 	      "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"}}},
 	    "4322": {"success": true, "data": {"type": "tool", "name": "Tool Thing"}}
+	  },
+	  "_routes": {
+	    "GetPlayerSummaries": {"response": {"players": [{"personaname": "TestPersona"}]}}
 	  }
 	}`), 0o644)
 	t.Setenv("HYDRA_STEAM_API_FILE", api)
+
+	// The CM exchange answers from testdata/fake_cm.py: a real WebSocket CM
+	// speaking the plugin's protocol on localhost (no Valve network).
+	cmState := filepath.Join(root, "cm-state.json")
+	os.WriteFile(cmState, []byte(`{}`), 0o644)
+	t.Setenv("FAKE_CM_STATE", cmState)
+	cmd := exec.Command("python3", "testdata/fake_cm.py")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Skipf("fake CM unavailable: %v", err)
+	}
+	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
+	deadline := time.Now().Add(10 * time.Second)
+	endpoint := ""
+	for time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		s := out.String()
+		if i := strings.IndexByte(s, '\n'); i >= 0 {
+			endpoint = "127.0.0.1:" + strings.TrimSpace(s[:i])
+			break
+		}
+	}
+	if endpoint == "" {
+		t.Skip("fake CM didn't print a port")
+	}
+	t.Setenv("HYDRA_STEAM_CM_SERVER", endpoint)
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
 	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games")}

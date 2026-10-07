@@ -43,8 +43,16 @@ import time
 import urllib.request
 import zlib
 
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import steam_cm  # the CM session module, next to this file
+
 API = 1
 CODE_AUTH_REQUIRED = -32001
+# Access tokens are cached until shortly before their JWT exp; Steam re-issue
+# is one CM round trip when this lapses mid-session.
+ACCESS_TOKEN_MARGIN = 300
 
 PROGRESS_RE = re.compile(r"^\s*(\d{1,3}(?:\.\d+)?)%\s+(\S.*)$")
 # -manifest-only dump: "Total bytes on disk : 123" / "Total bytes compressed : 456"
@@ -197,7 +205,7 @@ def account_config():
 def refresh_token():
     """The SteamKit refresh token the login persisted, extracted from
     account.config (deflated protobuf; JWTs are readable strings in it) and
-    cached. Used for the Web API library listing."""
+    cached. Used for the CM token exchange, which feeds the Web API."""
     st = load_state("token.json", {})
     path = account_config()
     # The cache is only trusted while the store file hasn't changed since
@@ -461,15 +469,23 @@ def state_user():
 
 def api_get(url, token=None):
     # Test hook: tests point this at a file with the responses, so nothing
-    # reaches the network. Not set in normal runs.
+    # reaches the network. Not set in normal runs. The file may carry
+    # "_routes": {substring: response} so different endpoints can answer
+    # differently; without it the file answers every call (older tests).
     hook = os.environ.get("HYDRA_STEAM_API_FILE")
     if hook:
         with open(hook) as f:
-            return json.load(f)
-    headers = {}
+            data = json.load(f)
+        for frag, resp in (data.get("_routes") or {}).items():
+            if frag in url:
+                return resp
+        return data
+    # Access tokens go as the access_token query parameter (like the Steam
+    # client does); a refresh token was never accepted there.
     if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url, headers=headers)
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}access_token={token}"
+    req = urllib.request.Request(url)
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode())
 
@@ -491,7 +507,9 @@ def store_app(app_id):
 
 def auth_status(_params=None):
     if logged_in():
-        user = state_user()
+        # The persona name (from GetPlayerSummaries, saved by library.list)
+        # when known, else the login's account name ("steam" for QR logins).
+        user = load_state("session.json", {}).get("persona") or state_user()
         out = {"loggedIn": True, "user": user} if user else {"loggedIn": True}
         return out
     out = {"loggedIn": False}
@@ -582,20 +600,97 @@ def auth_logout(_params):
     return {"loggedIn": False}
 
 
-# --- library ---------------------------------------------------------------
+# --- access token (CM exchange) ---------------------------------------------
+#
+# The refresh token DepotDownloader persists is a SteamClient token: the Web
+# API rejects it with 401, and GenerateAccessTokenForApp refuses it over
+# plain REST (AccessDenied, since 2025-04-30). It only works from an
+# authenticated CM session, so the plugin logs on to a CM itself
+# (steam_cm.py) once per access-token lifetime and calls the Web API with
+# the derived access token afterwards.
+
+cm_lock = threading.Lock()
+
+
+def jwt_exp(token):
+    try:
+        return int(steam_cm.jwt_payload(token).get("exp") or 0)
+    except (ValueError, KeyError, IndexError):
+        return 0
+
+
+def access_token():
+    """The access token for the Web API, from the cache while it lasts, else
+    from a fresh CM logon with the persisted refresh token.
+
+    CODE_AUTH_REQUIRED is raised only when there's no refresh token at all or
+    Steam says it's invalid/expired/revoked — every other failure is a normal
+    error that surfaces its real message, so the Library never shows "logged
+    out" for a network hiccup."""
+    st = load_state("steam-access.json", {})
+    token = st.get("access_token") or ""
+    if token and jwt_exp(token) - ACCESS_TOKEN_MARGIN > time.time():
+        return token
+    refresh = refresh_token()
+    if not refresh:
+        raise RPCError("no Steam session available; log in again", CODE_AUTH_REQUIRED)
+    with cm_lock:
+        # Re-check inside the lock: a concurrent library.list may have
+        # exchanged already.
+        st = load_state("steam-access.json", {})
+        token = st.get("access_token") or ""
+        if token and jwt_exp(token) - ACCESS_TOKEN_MARGIN > time.time():
+            return token
+        try:
+            token = steam_cm.exchange(refresh)
+        except steam_cm.CMError as e:
+            if e.auth:
+                raise RPCError(f"Steam rejected the stored login key ({e}); log in again",
+                               CODE_AUTH_REQUIRED)
+            raise RPCError(str(e))
+        save_state("steam-access.json", {"access_token": token,
+                                         "exp": jwt_exp(token)})
+        return token
+
+
+# Library calls run in threads; persona lookups must not repeat per call.
+persona_lock = threading.Lock()
+
+
+def persona_name(steamid, token):
+    """The account's public persona name, for auth.status. Saved in
+    session.json; {} is a non-fatal miss (profiles can be private)."""
+    with persona_lock:
+        st = load_state("session.json", {})
+        if st.get("persona"):
+            return st["persona"]
+    try:
+        data = api_get(f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0001/?steamids={steamid}", token)
+    except Exception:
+        return ""
+    player = ((data.get("response") or {}).get("players") or [{}])[0]
+    name = player.get("personaname") or ""
+    if name:
+        with persona_lock:
+            st = load_state("session.json", {})
+            st["persona"] = name
+            save_state("session.json", st)
+    return name
+
+
 
 def library_list(_params):
     if not logged_in():
         raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
-    token = refresh_token()
-    if not token:
-        raise RPCError("no Steam session available; log in again", CODE_AUTH_REQUIRED)
+    token = access_token()
+    steamid = steam_cm.jwt_payload(token).get("sub")
     try:
         data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
                        "?include_appinfo=1&include_played_free_games=1", token)
     except Exception as e:
         raise RPCError(f"Steam Web API is unreachable: {e}")
     games = (data.get("response") or {}).get("games") or []
+    persona_name(steamid, token)  # best effort, for auth.status
     installed = load_state("installed.json", {})
     out = []
     for g in games:
