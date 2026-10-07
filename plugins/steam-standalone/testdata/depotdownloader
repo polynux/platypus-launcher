@@ -16,6 +16,8 @@ Behaviour knobs (JSON in the state file):
   bad_password  logins to reject before one succeeds (0 = accept first)
   bare_elf      when true, the Linux build is one ELF file without an
                 extension or exec bit (as some depots ship it)
+  unity_decoy   with bare_elf: also a bigger ELF launcher next to a
+                Unity-style Game.x86_64 + Game_Data/ pair
   windows_only  when true, a -os linux download reports "no depots" so the
                 plugin falls back to the Windows run
 """
@@ -200,6 +202,12 @@ def main():
     body = "#!/bin/sh\necho 'steam standalone game'\n" if osname == "linux" else "MZ fake game executable"
     if bare:
         body = "\x7fELF fake binary"
+        if st.get("unity_decoy"):
+            os.makedirs(os.path.join(d, "Game_Data"), exist_ok=True)
+            with open(os.path.join(d, "Game.x86_64"), "w") as f:
+                f.write("\x7fELF unity player")
+            os.chmod(os.path.join(d, "Game.x86_64"), 0o644)
+            body += " " * 4096  # the launcher is the biggest ELF in the root
     with open(os.path.join(d, exe), "w") as f:
         f.write(body)
     os.chmod(os.path.join(d, exe), 0o644 if bare else 0o755)

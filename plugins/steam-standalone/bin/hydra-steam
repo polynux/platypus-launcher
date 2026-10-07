@@ -1043,15 +1043,22 @@ def find_executable(game_dir, native=False):
 
 
 def find_native_executable(game_dir):
-    """A start script (.sh) in the root, else the biggest ELF binary there
-    (shared libraries and installers excluded)."""
-    script, elf, size = "", "", 0
+    """The native entry point in the root. Unity builds pair <name>.x86_64
+    with a <name>_Data folder (other binaries next to it can be launchers or
+    helpers, even bigger ones); otherwise a start script (.sh), else the
+    biggest ELF binary (shared libraries and installers excluded)."""
+    unity, script, elf, size = "", "", "", 0
     try:
-        for entry in sorted(os.scandir(game_dir), key=lambda e: e.name):
+        entries = sorted(os.scandir(game_dir), key=lambda e: e.name)
+        dirs = {e.name for e in entries if e.is_dir()}
+        for entry in entries:
             if not entry.is_file():
                 continue
             lower = entry.name.lower()
-            if lower.endswith(".sh"):
+            stem, ext = os.path.splitext(entry.name)
+            if ext.lower() in (".x86_64", ".x86") and stem + "_Data" in dirs and is_elf(entry.path):
+                unity = unity or entry.path
+            elif lower.endswith(".sh"):
                 script = script or entry.path
             elif not re.search(r"\.so(\.\d+)*$", lower) and not lower.startswith(("unins", "setup", "install")):
                 s = entry.stat().st_size
@@ -1059,7 +1066,7 @@ def find_native_executable(game_dir):
                     elf, size = entry.path, s
     except OSError:
         return ""
-    best = script or elf
+    best = unity or script or elf
     if best and not os.access(best, os.X_OK):
         try:
             os.chmod(best, os.stat(best).st_mode | 0o100)

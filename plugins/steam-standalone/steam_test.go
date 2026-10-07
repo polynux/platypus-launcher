@@ -546,6 +546,25 @@ func TestSteamNativeBinaryWithoutExecBit(t *testing.T) {
 	}
 }
 
+// A Unity build ships a bigger launcher next to <name>.x86_64 + <name>_Data;
+// the player is the game.
+func TestSteamNativeUnityPlayerPreferred(t *testing.T) {
+	e := setup(t)
+	e.login()
+	e.setDDState("bare_elf", true)
+	e.setDDState("unity_decoy", true)
+	game := e.find(e.library(), "4321")
+	j, _ := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	game = e.find(e.library(), "4321")
+	l, err := e.store.Launch(context.Background(), *game, false)
+	if err != nil || l.Direct == nil || filepath.Base(l.Direct.Exe) != "Game.x86_64" {
+		t.Fatalf("launch: %+v %v", l, err)
+	}
+}
+
 func TestSteamModeOptional(t *testing.T) {
 	t.Setenv("FAKE_DD_STEAMWORKS", "steam_api64.dll")
 	e := setup(t)

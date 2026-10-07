@@ -189,16 +189,16 @@ export function GamePage(p: GamePageProps) {
         </div>
       )}
 
-      {!game.is_installed && !active && (game.note || (plugin && game.installable)) && (
+      {!active && (game.note || (!game.is_installed && plugin && game.installable)) && (
         <div className="mb-6 rounded-2xl bg-white/[0.04] px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-white/[0.07]">
           {game.note && <p>{game.note}</p>}
-          {plugin && game.installable && (
+          {!game.is_installed && plugin && game.installable && (
             <p className="font-mono text-[10.5px] text-white/45">
               installs into {plugin.install_folder} ·{' '}
               <button onClick={() => p.onNavigate({ name: 'plugins' })} className="underline decoration-white/25 underline-offset-2 hover:text-white/80">change</button>
             </p>
           )}
-          {job?.state === 'failed' && <p className="mt-1 font-mono text-[10.5px] text-red-300">last attempt failed: {job.error}</p>}
+          {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[10.5px] text-red-300">last attempt failed: {job.error}</p>}
         </div>
       )}
 
