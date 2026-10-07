@@ -22,14 +22,19 @@ const (
 // ManifestVersion is the only manifest version Steam serves today.
 const ManifestVersion = 5
 
-// File flags. The directory and executable bits are what the writer and
-// the plugin's launch detection need; the symlink bit marks entries whose
-// LinkTarget carries the target. Values are recorded as an assumption to
-// check against a real manifest in phase 5.
+// File flags (EDepotFileFlag in SteamKit's
+// Resources/SteamLanguage/enums.steamd).
 const (
-	FlagDirectory  = 1
-	FlagExecutable = 2
-	FlagSymlink    = 4
+	FlagUserConfig          = 1
+	FlagVersionedUserConfig = 2
+	FlagEncrypted           = 4
+	FlagReadOnly            = 8
+	FlagHidden              = 16
+	FlagExecutable          = 32
+	FlagDirectory           = 64
+	FlagCustomExecutable    = 128
+	FlagInstallScript       = 256
+	FlagSymlink             = 512
 )
 
 // Chunk is one content chunk of a file: ChunkID is the SHA-1 from

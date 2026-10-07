@@ -231,11 +231,13 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   `steam/steammessages_clientserver{,_login,_appinfo,_2}.proto`,
   `steam/steammessages_base.proto` and
   `steam/steammessages_auth.steamclient.proto` (SteamDatabase/Protobufs).
-- **Phase 1 assumptions to check live:** file-flag values
-  (directory=1, executable=2, symlink=4) and the minimal VSZa header
-  (`VSZa` + u32 size + raw zstd) are fixture conventions; real-manifest
-  structure (section magics, chunk AES ECB-IV + CBC, VZip layout, Adler-32
-  seed 0) follows the checked protocol facts.
+- **Phase 1 assumptions to check live:** the minimal VSZa header
+  (`VSZa` + u32 size + raw zstd) is a fixture convention (fixed in the
+  review pass below); real-manifest structure (section magics, chunk AES
+  ECB-IV + CBC, VZip layout, Adler-32 seed 0) follows the checked protocol
+  facts. File-flag values were confirmed against SteamKit's
+  `Resources/SteamLanguage/enums.steamd` in review and are pinned by
+  `TestFileFlagValues`.
 - **Phase 2 notes:** `internal/steamcm` ports `steam_cm.py` (hello, token
   logon, Multi/gzip, heartbeats, service calls by jobid) and adds depot
   keys (5438/5439), PICS tokens/info (8905/8906, 8903/8904, info parsed
@@ -270,5 +272,5 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   fake CDN both harnesses share (old `-cellid`/`-max-downloads`/size-dump
   assertions moved to the CM log and fixture sums). New dep: none.
   Assumptions to check live: PICS key spellings (depots/config/oslist,
-  manifests/<branch>/gid, depotfromapp), VHost-as-hostname, token-as-query,
-  request-code URL segment, and the file-flag values.
+  manifests/<branch>/gid, depotfromapp), VHost-as-hostname, token-as-query
+  and request-code URL segment.

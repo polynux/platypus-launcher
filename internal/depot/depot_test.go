@@ -157,3 +157,38 @@ func TestManifestRoundTrip(t *testing.T) {
 		t.Fatal("total size is zero")
 	}
 }
+
+// TestFileFlagValues pins every EDepotFileFlag to SteamKit's
+// Resources/SteamLanguage/enums.steamd. The writer, the update diff and
+// the plugin's launch detection all key off these bits.
+func TestFileFlagValues(t *testing.T) {
+	want := map[string]uint32{
+		"UserConfig":          1,
+		"VersionedUserConfig": 2,
+		"Encrypted":           4,
+		"ReadOnly":            8,
+		"Hidden":              16,
+		"Executable":          32,
+		"Directory":           64,
+		"CustomExecutable":    128,
+		"InstallScript":       256,
+		"Symlink":             512,
+	}
+	got := map[string]uint32{
+		"UserConfig":          FlagUserConfig,
+		"VersionedUserConfig": FlagVersionedUserConfig,
+		"Encrypted":           FlagEncrypted,
+		"ReadOnly":            FlagReadOnly,
+		"Hidden":              FlagHidden,
+		"Executable":          FlagExecutable,
+		"Directory":           FlagDirectory,
+		"CustomExecutable":    FlagCustomExecutable,
+		"InstallScript":       FlagInstallScript,
+		"Symlink":             FlagSymlink,
+	}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("Flag%s = %d, want %d", name, got[name], w)
+		}
+	}
+}
