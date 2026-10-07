@@ -796,6 +796,73 @@ func TestSteamQRAuth(t *testing.T) {
 	}
 }
 
+// A duplicate auth.begin (React StrictMode sends two back to back) must be
+// harmless: both calls return the same QR, no error, exactly one helper
+// stays alive and none is left a zombie. On the old code the second call
+// killed the first helper, whose watcher failed the shared state with
+// "the login helper ended without logging in".
+func TestSteamQRConcurrentBegin(t *testing.T) {
+	e := setup(t)
+	const n = 2
+	prs := make([]types.AuthPrompt, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs[i] = e.call("auth.begin", nil, &prs[i])
+		}(i)
+	}
+	wg.Wait()
+	for i := range errs {
+		if errs[i] != nil {
+			t.Fatalf("begin %d: %v", i, errs[i])
+		}
+		checkQRArt(t, prs[i].QR)
+	}
+	if prs[0].QR != prs[1].QR {
+		t.Fatal("concurrent begins served different QR codes")
+	}
+	alive, zombie := countAuthHelpers()
+	if alive != 1 {
+		t.Fatalf("want exactly 1 live auth helper, got %d", alive)
+	}
+	if zombie != 0 {
+		t.Fatalf("want no defunct auth helpers, got %d", zombie)
+	}
+	if err := e.call("auth.logout", nil, &types.AuthStatus{}); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if alive, _ := countAuthHelpers(); alive != 0 {
+		t.Fatalf("want no auth helpers after logout, got %d", alive)
+	}
+}
+
+// countAuthHelpers counts live vs zombie ("Z" stat) hydra-steam-dl auth
+// processes on this machine.
+func countAuthHelpers() (alive, zombie int) {
+	out, err := exec.Command("ps", "-eo", "stat,args").Output()
+	if err != nil {
+		return -1, -1
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.Contains(line, "hydra-steam-dl auth") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if strings.HasPrefix(fields[0], "Z") {
+			zombie++
+		} else {
+			alive++
+		}
+	}
+	return alive, zombie
+}
+
 // checkQRArt asserts the block-art is a square QR with the finder
 // pattern intact (module = two "█" chars; rows without dark modules are
 // quiet-zone padding the renderer drops, so only dark-bearing rows count).

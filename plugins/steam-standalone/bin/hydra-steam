@@ -266,92 +266,149 @@ def migrate_token(token, account):
 # done on its result event.
 
 # QR login background state: the hydra-steam-dl auth process, its latest
-# art and its result.
+# art and its result. qr_start_lock serializes start_qr_login so a
+# duplicate auth.begin (React StrictMode sends two back to back) reuses
+# the live session instead of killing it; qr_proc["ready"] wakes waiters
+# sharing one session.
 qr_lock = threading.Lock()
-qr_proc = {"proc": None, "rc": None}
+qr_start_lock = threading.Lock()
+qr_proc = {"proc": None, "rc": None, "ready": None}
 qr_art = {"text": None}                      # latest block-art, for auth.status
 qr_state = {"state": "idle", "error": None}  # idle|pending|ok|failed
 
 
+def _reap(proc):
+    """Wait out a helper so it never stays a zombie (<defunct>)."""
+    if proc is None:
+        return None
+    try:
+        return proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        try:
+            return proc.wait(timeout=10)
+        except (subprocess.TimeoutExpired, OSError):
+            return proc.poll()
+
+
 def start_qr_login():
     """Starts `hydra-steam-dl auth` (QR mode) in the background, tracking
-    its QR art. Returns (art text or None, error or None)."""
-    stop_qr_login()
-    with qr_lock:
-        qr_art["text"] = None
-        qr_state.update(state="pending", error=None)
-    try:
-        proc = subprocess.Popen(
-            [dl_bin(), "auth"], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=dict(os.environ))
-    except FileNotFoundError:
+    its QR art. Returns (art text or None, error or None). A duplicate
+    call while a session is pending reuses it and returns the current
+    art — it never kills and restarts it."""
+    with qr_start_lock:
         with qr_lock:
-            qr_state.update(state="failed",
-                            error="hydra-steam-dl is missing; reinstall the plugin")
-        return None, qr_state["error"]
-    try:
-        proc.stdin.write(json.dumps({"mode": "qr"}) + "\n")
-        proc.stdin.flush()
-    except (BrokenPipeError, OSError):
-        pass
-    qr_proc["proc"] = proc
-    ready = threading.Event()
-
-    def watch():
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                msg = json.loads(line)
-            except ValueError:
-                continue
-            if not isinstance(msg, dict):
-                continue
-            t = msg.get("type")
-            if t == "qr" and msg.get("qr_art"):
+            cur = qr_proc.get("proc")
+            if (qr_state["state"] == "pending" and cur is not None
+                    and cur.poll() is None and qr_proc.get("ready") is not None):
+                ready = qr_proc["ready"]
+            else:
+                ready = None
+        if ready is not None:
+            # Shared session: wait for its first art like the starter.
+            if ready.wait(15):
                 with qr_lock:
-                    qr_art["text"] = msg["qr_art"]
-                ready.set()
-            elif t == "result":
-                with qr_lock:
-                    qr_state.update(state="ok", error=None)
-                    qr_proc["proc"] = None
-                try:
-                    proc.stdin.close()
-                except (BrokenPipeError, OSError):
-                    pass
-                return
-            elif t == "error":
-                with qr_lock:
-                    qr_state.update(state="failed", error=msg.get("message") or "login failed")
-                    qr_proc["proc"] = None
-                return
-            # code-needed/waiting never appear for QR; ignore anything else.
-        # EOF without a result: the binary died.
-        with qr_lock:
-            if qr_state["state"] == "pending":
-                qr_state.update(state="failed",
-                                error="the login helper ended without logging in")
-                qr_proc["proc"] = None
-        ready.set()
-
-    threading.Thread(target=watch, daemon=True).start()
-    # The first QR prints within a few seconds; wait for it here so auth.begin
-    # can hand the dialog a complete prompt.
-    if not ready.wait(15):
-        with qr_lock:
-            err = qr_state.get("error")
-        if err:
-            return None, err
+                    if qr_state["state"] == "failed":
+                        return None, qr_state["error"]
+                    if qr_art["text"]:
+                        return qr_art["text"], None
+            # Stale (no art in time, or failed without a message):
+            # fall through and start a fresh session below.
         stop_qr_login()
-        return None, "QR code didn't appear in time; try the password login below"
-    with qr_lock:
-        # The watcher sets ready on error too; surface it instead of art.
-        if qr_state["state"] == "failed":
+        with qr_lock:
+            qr_art["text"] = None
+            qr_state.update(state="pending", error=None)
+            ready = threading.Event()
+            qr_proc["ready"] = ready
+        try:
+            proc = subprocess.Popen(
+                [dl_bin(), "auth"], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, env=dict(os.environ))
+        except FileNotFoundError:
+            with qr_lock:
+                qr_state.update(state="failed",
+                                error="hydra-steam-dl is missing; reinstall the plugin")
             return None, qr_state["error"]
-        return qr_art["text"], None
+        try:
+            proc.stdin.write(json.dumps({"mode": "qr"}) + "\n")
+            proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+        with qr_lock:
+            qr_proc["proc"] = proc
+
+        def watch(mine=proc, ready=ready):
+            def ours():
+                return qr_proc.get("proc") is mine
+
+            for line in mine.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(msg, dict):
+                    continue
+                t = msg.get("type")
+                if t == "qr" and msg.get("qr_art"):
+                    if ours():
+                        with qr_lock:
+                            qr_art["text"] = msg["qr_art"]
+                        ready.set()
+                elif t == "result":
+                    qr_proc["rc"] = _reap(mine)
+                    if ours():
+                        with qr_lock:
+                            qr_state.update(state="ok", error=None)
+                            qr_proc["proc"] = None
+                        ready.set()
+                    try:
+                        mine.stdin.close()
+                    except (BrokenPipeError, OSError):
+                        pass
+                    return
+                elif t == "error":
+                    qr_proc["rc"] = _reap(mine)
+                    if ours():
+                        with qr_lock:
+                            qr_state.update(state="failed", error=msg.get("message") or "login failed")
+                            qr_proc["proc"] = None
+                        ready.set()
+                    return
+                # code-needed/waiting never appear for QR; ignore anything else.
+            # EOF without a result: the binary died. Reap it, and only
+            # fail the shared state when this helper is still the owner —
+            # a superseded helper must never touch it.
+            qr_proc["rc"] = _reap(mine)
+            if ours():
+                with qr_lock:
+                    if qr_state["state"] == "pending":
+                        qr_state.update(state="failed",
+                                        error="the login helper ended without logging in")
+                        qr_proc["proc"] = None
+                ready.set()
+
+        threading.Thread(target=watch, daemon=True).start()
+        # The first QR prints within a few seconds; wait for it here so auth.begin
+        # can hand the dialog a complete prompt.
+        if not ready.wait(15):
+            with qr_lock:
+                err = qr_state.get("error")
+            if err:
+                return None, err
+            stop_qr_login()
+            return None, "QR code didn't appear in time; try the password login below"
+        with qr_lock:
+            # The watcher sets ready on error too; surface it instead of art.
+            if qr_state["state"] == "failed":
+                return None, qr_state["error"]
+            return qr_art["text"], None
 
 
 def stop_qr_login():
@@ -360,8 +417,12 @@ def stop_qr_login():
         qr_proc["rc"] = None
         qr_state.update(state="idle", error=None)
         qr_art["text"] = None
-    if proc and proc.poll() is None:
-        proc.kill()
+        ready = qr_proc.pop("ready", None)
+    # Wake anyone sharing the session so they re-check instead of
+    # sleeping out the full wait.
+    if ready is not None:
+        ready.set()
+    _reap(proc)
 
 
 def logged_in():
