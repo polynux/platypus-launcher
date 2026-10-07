@@ -4,11 +4,13 @@
 //	hydra-steam-dl auth
 //
 // Stdin starts with one request line:
+//
 //	{"mode":"qr"}
 //	{"mode":"password","account":"...","password":"...","code":"... (optional)"}
 //
 // The password never goes in argv and is never logged. Stdout carries
 // events until a final result or error:
+//
 //	{"type":"qr","challenge_url":"...","qr_art":"... block-art ..."}
 //	{"type":"code-needed","guard_type":"email|device","message":"..."}
 //	{"type":"waiting","message":"..."}
@@ -306,10 +308,10 @@ func storeToken(refreshToken, account string) error {
 	// (refresh_token, account, source) so the current login keeps
 	// working; steamid is new and ignored by older readers.
 	type tokenFile struct {
-		RefreshToken string   `json:"refresh_token"`
-		Account      string   `json:"account"`
-		SteamID      string   `json:"steamid"`
-		Source       []any    `json:"source"`
+		RefreshToken string `json:"refresh_token"`
+		Account      string `json:"account"`
+		SteamID      string `json:"steamid"`
+		Source       []any  `json:"source"`
 	}
 	var mtime int64
 	if fi, err := os.Stat(filepath.Join(dir, "refresh.token")); err == nil {
