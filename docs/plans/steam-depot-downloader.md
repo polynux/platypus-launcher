@@ -214,7 +214,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 
 - [x] Phase 1: offline core (decoder, manifest, fixtures)
 - [x] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
-- [ ] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
+- [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [ ] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
 - [ ] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
 - [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed
@@ -247,3 +247,13 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   `github.com/gorilla/websocket` (already indirect via wails).
   Tested against a Go fake CM plus the Python `fake_cm.py` interop test.
   PICS buffers are assumed to be text KeyValues; to check live.
+- **Phase 3 notes:** `internal/depot` gains the CDN client (SteamKit-like
+  10 s/60 s timeouts, token as query), the multi-host scheduler (8 conns
+  over N hosts, growth while the rate climbs, 5 s host rest on errors,
+  wait-instead-of-fail when all hosts are busy), the WriteAt writer,
+  SHA-1 verify, manifest diff, and job-state resume with checksum
+  re-check. Two scheduler bugs found by tests are fixed: the grow
+  ticker leaked the job for an hour with `GrowEvery: time.Hour`, and a
+  timed-out gorilla read breaks later reads so Dial never drains.
+  Benchmark (64 chunks, 5 ms/host throttle): single-host 169 ms/op vs
+  multi-host (4 hosts) 45 ms/op, ~3.8x. No new deps.
