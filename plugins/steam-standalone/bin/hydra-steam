@@ -50,9 +50,11 @@ PROGRESS_RE = re.compile(r"^\s*(\d{1,3}(?:\.\d+)?)%\s+(\S.*)$")
 # -manifest-only dump: "Total bytes on disk : 123" / "Total bytes compressed : 456"
 DISK_RE = re.compile(r"Total bytes on disk\s*:\s*(\d+)")
 COMPRESSED_RE = re.compile(r"Total bytes compressed\s*:\s*(\d+)")
-# SteamKit refresh tokens are JWTs; they survive (deflate) compression as
-# readable strings inside account.config.
-JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+# SteamKit refresh tokens are JWTs inside account.config. Note the header
+# segment does NOT necessarily start with "eyJ": Steam's JWT JSON contains
+# spaces ("alg": "EdDSA"), so the base64 header begins "eyAi…" — anchor on
+# the dot-separated base64url shape instead, and validate by decoding.
+JWT_RE = re.compile(r"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}")
 
 out_lock = threading.Lock()
 jobs_lock = threading.Lock()
@@ -211,7 +213,10 @@ def refresh_token():
         try:
             blob = zlib.decompress(blob)
         except zlib.error:
-            pass  # newer builds may store it uncompressed
+            try:
+                blob = zlib.decompress(blob, -15)  # .NET raw DeflateStream
+            except zlib.error:
+                pass  # newer builds may store it uncompressed
         matches = JWT_RE.findall(blob.decode("utf-8", "ignore"))
         if not matches:
             return None
