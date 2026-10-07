@@ -657,19 +657,28 @@ def access_token():
 persona_lock = threading.Lock()
 
 
-def persona_name(steamid, token):
-    """The account's public persona name, for auth.status. Saved in
-    session.json; {} is a non-fatal miss (profiles can be private)."""
+def persona_name(steamid):
+    """The account's public persona name, for auth.status — from the CM
+    session itself (Player.GetPlayerLinkDetails#1), since the Web API's
+    GetPlayerSummaries now demands an API key. Saved in session.json; an
+    empty result is a non-fatal miss (profiles can be private)."""
     with persona_lock:
         st = load_state("session.json", {})
         if st.get("persona"):
             return st["persona"]
     try:
-        data = api_get(f"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0001/?steamids={steamid}", token)
+        token = access_token()  # cached; opens one CM session if needed
+        session = steam_cm.CMSession(int(steamid), refresh_token())
+        try:
+            body = session.call("Player.GetPlayerLinkDetails#1",
+                                steam_cm.pb_msg(1, steam_cm.pb_int(1, int(steamid))))
+        finally:
+            session.logoff()
+        link = steam_cm.pb_parse(steam_cm.pb_parse(body).get(1, [b""])[0])
+        pub = steam_cm.pb_parse(link.get(1, [b""])[0])
+        name = pub.get(10, [b""])[0].decode("utf-8", "replace")  # persona_name
     except Exception:
         return ""
-    player = ((data.get("response") or {}).get("players") or [{}])[0]
-    name = player.get("personaname") or ""
     if name:
         with persona_lock:
             st = load_state("session.json", {})
@@ -685,12 +694,14 @@ def library_list(_params):
     token = access_token()
     steamid = steam_cm.jwt_payload(token).get("sub")
     try:
+        # steamid is a routing parameter: without it the Web API answers
+        # 400 "missing required routing parameter" for token auth.
         data = api_get("https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
-                       "?include_appinfo=1&include_played_free_games=1", token)
+                       f"?include_appinfo=1&include_played_free_games=1&steamid={steamid}", token)
     except Exception as e:
         raise RPCError(f"Steam Web API is unreachable: {e}")
     games = (data.get("response") or {}).get("games") or []
-    persona_name(steamid, token)  # best effort, for auth.status
+    persona_name(steamid)  # best effort, for auth.status
     installed = load_state("installed.json", {})
     out = []
     for g in games:

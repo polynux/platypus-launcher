@@ -12,6 +12,7 @@ State lives in $FAKE_CM_STATE (JSON, re-read for every connection):
   wrap_logon_multi  when true, the logon response arrives inside a Multi
                     (gzip) envelope, like the real CM sometimes sends
   token_ttl         access-token lifetime in seconds (default 3600)
+  persona           persona name Player.GetPlayerLinkDetails answers with
   send_heartbeat    when true, one ClientHeartBeat arrives between the logon
                     response and the first service response
 Every connection appends a line to $FAKE_CM_STATE.log: "connect",
@@ -85,6 +86,10 @@ def pb_str(field, s):
     if isinstance(s, str):
         s = s.encode()
     return varint((field << 3) | 2) + varint(len(s)) + s
+
+
+def pb_msg(field, payload):
+    return pb_str(field, payload)
 
 
 def pb_parse(data):
@@ -249,6 +254,7 @@ def serve(conn):
 def serve_logged_in(conn, hdr, body, st):
     steamid = hdr.get(1, [0])[0]
     record(f"logon {steamid}")
+    steamid_req = steamid  # default until the service call names one
     eres = st.get("logon_eresult", 1)
     h = pb_int(1, steamid) + pb_int(2, 4711)
     resp = pb_int(1, eres) + pb_int(3, 5)  # eresult, heartbeat_seconds
@@ -296,12 +302,20 @@ def serve_logged_in(conn, hdr, body, st):
         target = (hdr.get(12, [b""])[0]).decode() if hdr.get(12) else ""
         jobid = hdr.get(10, [0])[0]
         record(f"service {target}")
+        if target.startswith("Player.GetPlayerLinkDetails"):
+            # AccountPublicData: steamid, …, persona_name (field 10).
+            resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
+                        + pb_fixed64(11, jobid) + pb_int(13, 1))
+            pub = pb_fixed64(1, steamid_req) + pb_str(10, st.get("persona", "TestPersona"))
+            conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE,
+                                    resp_hdr, pb_msg(1, pb_msg(1, pub))))
+            continue
         if st.get("send_heartbeat") and not replied_heartbeat:
             replied_heartbeat = True
             conn.send_frame(2, pack(EMSG_CLIENT_HEARTBEAT,
                                     pb_int(1, steamid) + pb_int(2, sessionid), b""))
         eres = st.get("service_eresult", 1)
-        steamid_req = pb_parse(body).get(2, [0])[0]
+        steamid_req = pb_parse(body).get(2, [0])[0] or steamid
         resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
                     + pb_fixed64(11, jobid) + pb_int(13, eres))
         resp_body = pb_str(1, make_token(steamid_req, st.get("token_ttl", 3600))) \

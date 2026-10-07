@@ -127,9 +127,6 @@ func setup(t *testing.T) *env {
 	      "screenshots": [{"path_full": "https://cdn.steam/4321_ss.jpg"}],
 	      "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"}}},
 	    "4322": {"success": true, "data": {"type": "tool", "name": "Tool Thing"}}
-	  },
-	  "_routes": {
-	    "GetPlayerSummaries": {"response": {"players": [{"personaname": "TestPersona"}]}}
 	  }
 	}`), 0o644)
 	t.Setenv("HYDRA_STEAM_API_FILE", api)
