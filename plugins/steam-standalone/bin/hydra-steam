@@ -294,6 +294,7 @@ def start_qr_login():
     rows = []   # current block-art lines ("█" = dark module)
     tail = []   # everything else, for error messages
     ok = threading.Event()
+    started = time.time()
 
     def watch():
         # Reads the raw byte pipe and splits on newlines itself: a text-mode
@@ -370,18 +371,34 @@ def start_qr_login():
                 qr_proc["proc"] = None
             return
         rc = proc.wait()
-        detail = " ".join(tail[-3:]) if tail else "no output"
+        detail = " ".join(t.strip() for t in tail[-4:] if t.strip()) if tail else "no output"
         if config_stamp() != stamp_before:
             ok.set()
             with qr_lock:
                 qr_state.update(state="ok", error=None)
                 qr_proc["proc"] = None
             return
+        # "Failed to authenticate with Steam: …" / "Lost connection to
+        # Steam" are CM-side flakiness, not a wrong password — the plugin
+        # retries the whole run once so a scan the phone approved isn't
+        # wasted on a dropped connection.
+        transient = rc != 0 and time.time() - started < 120 and (
+            "Failed to authenticate" in detail or "Lost connection" in detail
+            or "Unable to get steam3 credentials" in detail)
         with qr_lock:
-            qr_proc["rc"] = rc
-            qr_state.update(state="failed", error=(
-                f"DepotDownloader QR login exited with {rc}: {detail}"
-                if rc else "DepotDownloader QR login ended without logging in: " + detail))
+            if transient and not qr_proc.get("retried"):
+                qr_proc["retried"] = True
+                qr_proc["proc"] = None
+                qr_state.update(state="idle", error=None)
+            else:
+                qr_proc["rc"] = rc
+                qr_state.update(state="failed", error=(
+                    f"DepotDownloader QR login exited with {rc}: {detail}"
+                    if rc else "DepotDownloader QR login ended without logging in: " + detail))
+        if transient and not qr_state.get("error"):
+            log("warn", "Steam connection dropped during QR login; retrying once")
+            time.sleep(2)
+            start_qr_login()
 
     threading.Thread(target=watch, daemon=True).start()
     # The first QR prints within a few seconds; wait for it here so auth.begin
@@ -408,7 +425,10 @@ def stop_qr_login():
 
 
 def logged_in():
-    return account_config() is not None
+    # session.json is written only after a login succeeded; account.config
+    # may vanish for reasons outside the session (corrupt store, logout in
+    # another instance), so don't couple the reported login to the key file.
+    return bool(state_user()) or account_config() is not None
 
 
 def state_user():
