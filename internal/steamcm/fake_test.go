@@ -7,6 +7,7 @@ package steamcm
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -36,6 +37,26 @@ type fakeConfig struct {
 	CDNToken       string
 	BetaOK         bool
 	Licenses       []uint32
+	// Auth knobs (phase 6): QR/password logins without Valve's network.
+	AuthAccount         string
+	AuthSteamID         uint64
+	AuthPassword        string
+	AuthGuard           string // "none", "email", "totp", "confirm"
+	AuthExpectedCode    string
+	AuthQRApproved      bool
+	AuthMobileApproved  bool
+	AuthQRRefresh       bool
+	AuthBeginEresult    int
+	AuthPollEresult     int
+	AuthChallengeURL    string
+	AuthNewChallengeURL string
+}
+
+func (c fakeConfig) AuthSteamIDOr(def uint64) uint64 {
+	if c.AuthSteamID != 0 {
+		return c.AuthSteamID
+	}
+	return def
 }
 
 // packOld builds an old-format (non-protobuf) message: the EMsg without
@@ -52,6 +73,10 @@ type fakeCM struct {
 	mu     sync.Mutex
 	cfg    fakeConfig
 	events []string
+	// Auth state (phase 6): RSA key for password encryption and live sessions.
+	rsaKey       *rsa.PrivateKey
+	authSessions map[uint64]*fakeAuthSession
+	nextID       uint64
 }
 
 func (f *fakeCM) record(ev string) {
@@ -107,7 +132,8 @@ func startFakeCM(t *testing.T, cfg fakeConfig) (*fakeCM, string) {
 func (f *fakeCM) serve(c *websocket.Conn) {
 	f.record("connect")
 	cfg := f.getCfg()
-	// Hello + logon.
+	// Hello + logon, or unauthenticated Authentication service calls
+	// (phase 6 logins run before any token exists, so they never log on).
 	var logonHdr depot.Msg
 	for {
 		op, data, err := c.ReadMessage()
@@ -117,12 +143,24 @@ func (f *fakeCM) serve(c *websocket.Conn) {
 		if op != websocket.BinaryMessage {
 			continue
 		}
-		emsg, hdr, _, err := unpackEMsg(data)
+		emsg, hdr, body, err := unpackEMsg(data)
 		if err != nil {
 			return
 		}
 		if emsg == EMsgClientHello {
 			continue
+		}
+		if emsg == EMsgServiceMethodCallFromClient {
+			target := string(hdr.Bytes(12))
+			job := hdr.Int(10)
+			if len(target) >= 15 && target[:15] == "Authentication." {
+				f.answerAuth(c, target, job, hdr.Int(1), body, f.getCfg())
+				continue
+			}
+		}
+		if emsg == EMsgClientLogOff {
+			f.record("logoff")
+			return
 		}
 		if emsg == EMsgClientLogon {
 			logonHdr = hdr
@@ -233,6 +271,9 @@ func (f *fakeCM) replyHdr(steamID, job uint64, eresult int) []byte {
 }
 
 func (f *fakeCM) answerService(c *websocket.Conn, target string, job, steamID uint64, body []byte, cfg fakeConfig) {
+	if f.answerAuth(c, target, job, steamID, body, cfg) {
+		return
+	}
 	eres := cfg.ServiceEresult
 	if eres == 0 {
 		eres = 1

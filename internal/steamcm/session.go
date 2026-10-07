@@ -118,24 +118,49 @@ func Dial(ctx context.Context, refreshToken string) (*Session, error) {
 	return nil, &CMError{Msg: "couldn't reach any Steam CM server (" + msg + ")"}
 }
 
+func dialWebsocket(ctx context.Context, rawURL string) (*websocket.Conn, error) {
+	dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
+	conn, _, err := dialer.DialContext(ctx, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func randInt() (uint64, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(1<<30))
+	if err != nil {
+		return 0, err
+	}
+	return n.Uint64() + 1, nil
+}
+
+func (s *Session) hello() error {
+	return s.conn.WriteMessage(websocket.BinaryMessage,
+		packEMsg(EMsgClientHello, header(0, 0, 0, ""), func() []byte {
+			e := &depot.Enc{}
+			e.Varint(1, ProtocolVersion)
+			return e.Bytes()
+		}()))
+}
+
 func dialOne(ctx context.Context, endpoint string, tls bool, steamID uint64, refreshToken string) (*Session, error) {
 	scheme := "wss"
 	if !tls {
 		scheme = "ws"
 	}
 	u := url.URL{Scheme: scheme, Host: endpoint, Path: "/cmsocket/"}
-	dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
-	conn, _, err := dialer.DialContext(ctx, u.String(), nil)
+	conn, err := dialWebsocket(ctx, u.String())
 	if err != nil {
 		return nil, err
 	}
 	s := &Session{steamID: steamID, conn: conn}
-	n, err := rand.Int(rand.Reader, big.NewInt(1<<30))
+	n, err := randInt()
 	if err != nil {
 		conn.Close()
 		return nil, err
 	}
-	s.jobID = n.Uint64() + 1
+	s.jobID = n
 	if err := s.logon(ctx, refreshToken); err != nil {
 		conn.Close()
 		return nil, err
@@ -144,12 +169,7 @@ func dialOne(ctx context.Context, endpoint string, tls bool, steamID uint64, ref
 }
 
 func (s *Session) logon(ctx context.Context, refreshToken string) error {
-	if err := s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(EMsgClientHello, header(0, 0, 0, ""), func() []byte {
-			e := &depot.Enc{}
-			e.Varint(1, ProtocolVersion)
-			return e.Bytes()
-		}())); err != nil {
+	if err := s.hello(); err != nil {
 		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	s.jobID++
