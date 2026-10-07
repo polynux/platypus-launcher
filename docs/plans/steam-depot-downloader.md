@@ -217,7 +217,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 - [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [x] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
 - [x] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
-- [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed
+- [x] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed
 
 ## Changes during implementation
 
@@ -340,3 +340,32 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   same way: header, dictionary size and footer CRC handling match (ours
   additionally enforces the CRC where SteamKit's chunk path relies on
   Adler instead — strictly stronger, same verdict on valid data).
+- **Phase 6 notes (fake-only so far; live check pending, user present).**
+  CM auth lives in `internal/steamcm/auth.go` from protocol facts only
+  (`steammessages_auth.steamclient.proto` field numbers fetched for the
+  work, then written from those facts — no SteamKit2 code translated):
+  QR via `BeginAuthSessionViaQR` + `PollAuthSessionStatus` (challenge URL
+  rendered as borderless block-art, refreshed on `new_challenge_url`),
+  password via `GetPasswordRSAPublicKey` + `BeginAuthSessionViaCredentials`
+  (RSA PKCS#1 v1.5, base64) + `UpdateAuthSessionWithSteamGuardCode`
+  (email=2, TOTP/device=3) or mobile-confirmation poll. Device
+  "Hydra Launcher", platform SteamClient (1), persistence Persistent (1),
+  website_id "Client", so the refresh token works with the existing CM
+  logon. Wrong password/code, expired sessions and EResult 84 surface
+  with no retry loop (84 stops immediately). Unauthenticated CM via
+  `DialUnauth` (hello only). `hydra-steam-dl auth` speaks JSON lines
+  (qr/code-needed/waiting/result/error, code replies on stdin) and stores
+  `refresh.token` (0600) + `token.json`/`session.json` in the same shapes
+  the plugin reads; the pre-Go `account.config` is migrated on first read
+  so the current login keeps working. Plugin `auth.*` drives the binary;
+  `dotnet`/`depotdownloader` leave `requires`, the `-manifest-only`
+  sizing and old download/login helpers go, as do the fake
+  depotdownloader and its QR block parsing (tests now assert square QR
+  + finders, token perms, CM auth RPCs and no `.calls` file). New dep:
+  `github.com/skip2/go-qrcode` (MIT, QR block-art). Fakes cover QR
+  success/refresh, password+email/TOTP/confirm, wrong password, bad code
+  and 84 in both Go (`fake_auth_test.go`) and Python (`fake_cm.py` with
+  a throwaway 1024-bit test RSA key, pure-`pow` decrypt). Live so far:
+  nothing — existing-token reuse, fresh QR/password logins, install /
+  uninstall with the new token, and PATH-hiding checks all await the
+  user-present live check.
