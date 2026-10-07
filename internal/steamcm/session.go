@@ -25,6 +25,7 @@ type Session struct {
 	jobID     uint64
 	conn      *websocket.Conn
 	licenses  []License
+	pending   [][]byte // batched messages waiting for the next read
 }
 
 // License is one entry of CMsgClientLicenseList.
@@ -222,8 +223,20 @@ func (s *Session) sideMessage(emsg uint32, hdr depot.Msg, body []byte) {
 	}
 }
 
-// readOne reads one binary message, unwrapping Multi envelopes.
+// readOne reads one binary message, unwrapping Multi envelopes. Extra
+// messages batched in one envelope wait in the session queue for the next
+// call instead of being dropped: the logon response routinely arrives
+// behind other messages in the same Multi.
 func (s *Session) readOne(deadline time.Time) (uint32, depot.Msg, []byte, error) {
+	if len(s.pending) > 0 {
+		m := s.pending[0]
+		s.pending = s.pending[1:]
+		emsg, hdr, body, err := unpackEMsg(m)
+		if err != nil {
+			return 0, nil, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
+		}
+		return emsg, hdr, body, nil
+	}
 	if err := s.conn.SetReadDeadline(deadline); err != nil {
 		return 0, nil, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
@@ -235,10 +248,10 @@ func (s *Session) readOne(deadline time.Time) (uint32, depot.Msg, []byte, error)
 		if op != websocket.BinaryMessage {
 			continue // text frames and pings: nothing Steam sends here concerns us
 		}
-		pending := [][]byte{data}
-		for len(pending) > 0 {
-			emsg, hdr, body, err := unpackEMsg(pending[0])
-			pending = pending[1:]
+		msgs := [][]byte{data}
+		for len(msgs) > 0 {
+			emsg, hdr, body, err := unpackEMsg(msgs[0])
+			msgs = msgs[1:]
 			if err != nil {
 				return 0, nil, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 			}
@@ -247,14 +260,10 @@ func (s *Session) readOne(deadline time.Time) (uint32, depot.Msg, []byte, error)
 				if err != nil {
 					return 0, nil, nil, &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 				}
-				pending = append(inner, pending...)
+				msgs = append(inner, msgs...)
 				continue
 			}
-			// Stash any trailing messages? The CM rarely pipelines; the
-			// Call loop re-reads, so returning the first is enough here.
-			// License lists arriving between logon and the first call are
-			// consumed by sideMessage in the callers' loops.
-			_ = pending
+			s.pending = append(s.pending, msgs...)
 			return emsg, hdr, body, nil
 		}
 	}

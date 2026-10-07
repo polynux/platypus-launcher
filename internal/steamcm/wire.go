@@ -37,7 +37,15 @@ func unpackEMsg(data []byte) (uint32, depot.Msg, []byte, error) {
 	if len(data) < 8 {
 		return 0, nil, nil, fmt.Errorf("message too short (%d bytes)", len(data))
 	}
-	emsg := binary.LittleEndian.Uint32(data) &^ protoMask
+	raw := binary.LittleEndian.Uint32(data)
+	emsg := raw &^ protoMask
+	if raw&protoMask == 0 {
+		// Old-format (non-protobuf) message: Steam still mixes some
+		// into Multi envelopes (seen live: 798, 782). The header is a
+		// fixed struct, not a protobuf, so there is nothing to match
+		// service calls by; callers ignore these via sideMessage.
+		return emsg, depot.Msg{}, data[8:], nil
+	}
 	hlen := binary.LittleEndian.Uint32(data[4:])
 	if len(data) < 8+int(hlen) {
 		return 0, nil, nil, fmt.Errorf("header runs past the end")

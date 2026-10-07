@@ -25,9 +25,10 @@ func startFake(t *testing.T) (*fakeCM, string) {
 		key[i] = byte(i + 1)
 	}
 	f, host := startFakeCM(t, fakeConfig{
-		DepotKey:    key,
-		AppTokens:   map[uint32]uint64{4321: 12345},
-		ProductKV:   "\"depots\"\n{\n\"11\"\n{\n\"manifests\"\n{\n\"public\"\n{\n\"gid\"\t\t\"999\"\n}\n}\n}\n}\n",
+		DepotKey:  key,
+		AppTokens: map[uint32]uint64{4321: 12345},
+		// Live shape: text KV wrapped in "appinfo" and NUL-terminated.
+		ProductKV:   "\"appinfo\"\n{\n\"depots\"\n{\n\"11\"\n{\n\"manifests\"\n{\n\"public\"\n{\n\"gid\"\t\t\"999\"\n}\n}\n}\n}\n}\n\x00",
 		Servers:     []Server{{Type: "SteamCache", Host: "cache1-par1.steamcontent.com", UseHTTPS: true, WeightedLoad: 1}, {Type: "CDN", Host: "cache2-par1.steamcontent.com", UseHTTPS: true, WeightedLoad: 2}},
 		RequestCode: 4242,
 		CDNToken:    "cdn-token",
@@ -63,6 +64,13 @@ func setHeartbeat(t *testing.T, v bool) {
 	t.Helper()
 	currentFake.mu.Lock()
 	currentFake.cfg.SendHeartbeat = v
+	currentFake.mu.Unlock()
+}
+
+func setMixedMulti(t *testing.T, v bool) {
+	t.Helper()
+	currentFake.mu.Lock()
+	currentFake.cfg.MixedMulti = v
 	currentFake.mu.Unlock()
 }
 
@@ -156,6 +164,27 @@ func TestMultiAndHeartbeat(t *testing.T) {
 	}
 	setWrapMulti(t, false)
 	setHeartbeat(t, false)
+}
+
+// Live Multis mix old-format (non-protobuf) messages with proto ones;
+// the client must tolerate the former and still find messages batched
+// behind them (seen live: 798/782 ahead of the logon siblings).
+func TestMixedMultiOldFormat(t *testing.T) {
+	_, host := startFake(t)
+	withFakeCM(t, host)
+	setMixedMulti(t, true)
+	defer setMixedMulti(t, false)
+	s, err := Dial(context.Background(), testToken(76561198))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.DepotKey(11, 4321, 0); err != nil {
+		t.Fatalf("call after mixed multi: %v", err)
+	}
+	if len(s.Licenses()) != 1 || s.Licenses()[0].PackageID != 77 {
+		t.Fatalf("licence behind old-format message lost: %+v", s.Licenses())
+	}
 }
 
 func TestContentRPCs(t *testing.T) {

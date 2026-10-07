@@ -6,6 +6,7 @@
 package steamcm
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -25,6 +26,7 @@ type fakeConfig struct {
 	ServiceEresult int
 	WrapLogonMulti bool
 	SendHeartbeat  bool
+	MixedMulti     bool
 	TokenTTL       int
 	DepotKey       []byte
 	AppTokens      map[uint32]uint64
@@ -34,6 +36,15 @@ type fakeConfig struct {
 	CDNToken       string
 	BetaOK         bool
 	Licenses       []uint32
+}
+
+// packOld builds an old-format (non-protobuf) message: the EMsg without
+// the proto bit and an opaque body, like the live CM's 798/782 messages.
+func packOld(emsg uint32, body []byte) []byte {
+	out := make([]byte, 8, 8+len(body))
+	binary.LittleEndian.PutUint32(out, emsg)
+	binary.LittleEndian.PutUint32(out[4:], uint32(len(body)))
+	return append(out, body...)
 }
 
 type fakeCM struct {
@@ -140,8 +151,21 @@ func (f *fakeCM) serve(c *websocket.Conn) {
 		_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(1000, ""))
 		return
 	}
-	// Licences arrive after logon, like the real CM.
-	if len(cfg.Licenses) > 0 {
+	// Licences arrive after logon, like the real CM. With MixedMulti the
+	// licence is batched behind an old-format (non-protobuf) message in
+	// one Multi, the way live Multis mix formats: the client must
+	// tolerate the old message and still find the licence behind it.
+	if cfg.MixedMulti {
+		old := packOld(798, bytes.Repeat([]byte{0xAB}, 20))
+		lic := &depot.Enc{}
+		for _, p := range cfg.Licenses {
+			l := &depot.Enc{}
+			l.Varint(1, uint64(p))
+			lic.MsgField(2, l)
+		}
+		_ = c.WriteMessage(websocket.BinaryMessage,
+			multiWrap(old, packEMsg(EMsgClientLicenseList, hdr.Bytes(), lic.Bytes())))
+	} else if len(cfg.Licenses) > 0 {
 		lic := &depot.Enc{}
 		for _, p := range cfg.Licenses {
 			l := &depot.Enc{}
