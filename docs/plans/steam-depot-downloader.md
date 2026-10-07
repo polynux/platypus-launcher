@@ -217,7 +217,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 - [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [x] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
 - [x] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
-- [x] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed
+- [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed (fake-only; live check pending)
 
 ## Changes during implementation
 
