@@ -162,8 +162,8 @@ cost:
    launch command preview. Plugins can't see other plugins' data or settings.
 2. **Explicit install, no surprises** (v1). Only from a local folder or a git URL the
    user pastes. Before enabling, Hydra shows the manifest: what it runs, declared
-   network hosts and paths, required tools. The executable's hash is pinned; if it
-   changes, the plugin is disabled until the user re-approves. No auto-update.
+   network hosts and paths, required tools. The hash of the whole plugin folder is
+   pinned; if anything in it changes, the plugin is disabled until the user re-approves. No auto-update.
 3. **Sandbox with bubblewrap** (v2, Linux-native, what Flatpak uses). Run the plugin
    under `bwrap` with the filesystem reduced to: its own folder, its install folder,
    the paths it declared in `permissions.read`/`write`, and a private `/tmp`. Declared
@@ -252,7 +252,7 @@ plugin path (old milestones 3 and 4) came before data plugins.
    conformance suite in `internal/plugtest` drives echo, epic-legendary,
    gog-gogdl and amazon-nile through every protocol method they declare, over
    the real manager and job queue.
-6. **steam-standalone** (in progress, `feat/steam-standalone`): DepotDownloader auth (QR and password), library, installs; the three launch modes; live run pending.
+6. **steam-standalone** (done, `feat/steam-standalone`): DepotDownloader auth (QR and password), library through a CM token exchange, installs; the three launch modes. Live run done on a real account (Steam library, install, launch, session, uninstall).
 7. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
 
 ## Changes during implementation
@@ -274,6 +274,54 @@ plugin path (old milestones 3 and 4) came before data plugins.
   `requires`; on systems without the client the plugin shows
   missing-requirement). Covered by `plugins/steam-standalone` tests plus a
   conformance-suite entry driving the fake DepotDownloader.
+
+  Live run findings (real account, 238 owned games), all now fixed:
+  - **Refresh tokens need a CM session.** A SteamClient refresh token (the one
+    DepotDownloader stores) isn't accepted by the Web API. `bin/steam_cm.py`
+    (stdlib only: TLS WebSocket, hand-rolled protobuf) logs on to a Steam CM
+    with it and calls `Authentication.GenerateAccessTokenForApp`, which returns
+    a ~24 h access token for the Web API; it is cached in `steam-access.json`
+    and refreshed 5 minutes before it expires. A rejected token is reported as
+    login-required only for EResults 5, 26 and 27; anything else (rate limit
+    84, service unavailable) is an ordinary error.
+  - **`steamid` is a routing parameter.** `GetOwnedGames` with token auth
+    answers 400 "missing required routing parameter" unless the request also
+    carries `steamid`.
+  - **The persona name comes from the CM session** (`Player.GetPlayerLinkDetails`),
+    because `GetPlayerSummaries` now requires an API key.
+  - **DepotDownloader keys its login by account name.** Without
+    `-username <name> -remember-password` a later run logs in anonymously and
+    answers "not available from this account". The plugin passes both on every
+    run, taking the name from the login or from the `LoginTokens` key in
+    `account.config`.
+  - **Sizes come from the `-manifest-only` dump files.** The real tool prints
+    no sizes; it writes `manifest_<depot>_<id>.txt` per depot into `-dir`, and
+    the plugin sums them (Linux depots first, Windows fallback).
+  - **Whole-folder hash pinning.** `steam_cm.py` handles the user's token, so
+    the approval hash covers the plugin folder, not only `exec`
+    (`internal/plugins/manifest.go`, `hashPlugin`); `__pycache__`/`*.pyc` are
+    skipped and plugins start with `PYTHONDONTWRITEBYTECODE=1`. Existing
+    approvals show "changed" once.
+  - **`install.sh` copies the modules next to the executable** (`bin/*.py`),
+    through a temp name and a rename inside the destination. The earlier loop
+    used `mv` and moved `steam_cm.py` out of the repo on every install.
+  - **Library scans cache Store lookups.** One Store request per owned game
+    made `library.list` take 62 s; names and types are cached in
+    `store-apps.json` (30 days, 20 s of lookups per scan), so a finished
+    install no longer shows "Install" for a minute.
+  - **Job progress with only a percentage** now shows bytes, estimated from
+    the queued total (`internal/jobs`).
+  - **Native binaries** in a depot can lack an extension and the exec bit: the
+    plugin picks the Unity player (`<name>.x86_64` next to `<name>_Data`),
+    else a start script, else the biggest ELF in the root, and sets its exec
+    bit. SUPERHOT ships a bigger Electron launcher next to the player.
+  - **The launch-mode note stays on the game page** after install.
+  - **Download speed.** DepotDownloader's default 8 connections reached
+    ~1.4 MiB/s here (the content server throttled each connection); 24 reached
+    ~5 MiB/s. The plugin passes `-max-downloads 24`
+    (`HYDRA_STEAM_MAX_DOWNLOADS` overrides) and `-cellid` from
+    `HYDRA_STEAM_CELLID` or the Steam client's `CellIDServerOverride`; the cell
+    id made no measurable difference.
 
 - **Plugin authoring (milestone 5).** `plugins/new.sh <id> [store]` writes a
   minimal but complete plugin: a manifest, a Python stub that answers the
@@ -371,7 +419,7 @@ plugin path (old milestones 3 and 4) came before data plugins.
   crash during a job requeues the job at once, which restarts the plugin.
 - **The placeholder plugin catalog is gone.** The Plugins view shows discovered
   plugins and labels Steam and ProtonDB as built in.
-- **Updating a plugin means replacing the file** (rename over it). Overwriting a
+- **Updating a plugin means replacing the files** (rename over them). Overwriting a
   running executable fails on Linux, and the new hash needs approval anyway.
 
 ## Decisions

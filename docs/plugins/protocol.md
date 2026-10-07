@@ -40,9 +40,14 @@ layout with `"kind": "data"` and need no approval; see
   (bubblewrap sandbox, plan milestone 7).
 
 Hydra runs nothing until the user approves the plugin, which pins the SHA-256 of
-`exec`. If the file changes, the plugin is disabled until the user approves it again.
-To update a plugin, replace the file (write a new one and rename it over the old one);
-Linux refuses to overwrite a running executable in place.
+the whole plugin folder: `plugin.json` plus every regular file under it, in
+sorted path order (symlinks count by their target). `__pycache__/` and `*.pyc`
+are skipped, and Hydra starts plugins with `PYTHONDONTWRITEBYTECODE=1` so an
+interpreter doesn't dirty the folder. If anything else changes (the executable,
+a helper module it imports, the manifest), the plugin is disabled until the user
+approves it again. To update a plugin, replace the files (write a new one and
+rename it over the old one); Linux refuses to overwrite a running executable
+in place.
 
 ## Process
 

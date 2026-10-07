@@ -37,9 +37,12 @@ private `HYDRA_PLUGIN_DATA` folder (the plugin points `HOME` there), so you
 don't log in every time and Hydra never sees credentials. Logging out wipes
 that folder.
 
-The library listing calls Steam's Web API (`IPlayerService/GetOwnedGames`)
-with the login session, so it shows everything the account owns, installed or
-not.
+The library listing calls Steam's Web API (`IPlayerService/GetOwnedGames`).
+The stored refresh token isn't accepted there, so `bin/steam_cm.py` logs on to
+a Steam CM with it and exchanges it for a short-lived access token (cached in
+the plugin's data folder). The list shows everything the account owns,
+installed or not. DepotDownloader runs always pass `-username` with the
+account name, because it keys the stored login by name.
 
 ## Install
 
@@ -47,7 +50,9 @@ Downloads go to `<Games folder>/steam/<game name>/`, one folder per game like
 Steam's `steamapps/common`. Sizes for Hydra's free-space check come from a
 `-manifest-only` run (manifests only, no game data). Installs are resumable:
 DepotDownloader skips chunks it already has, and Hydra re-issues the same
-job after a crash.
+job after a crash. Downloads use 24 parallel connections
+(`HYDRA_STEAM_MAX_DOWNLOADS` to change) and the Steam client's download
+region when one is set (`HYDRA_STEAM_CELLID` to override).
 
 ## Launch modes
 
