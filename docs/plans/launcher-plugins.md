@@ -253,7 +253,14 @@ plugin path (old milestones 3 and 4) came before data plugins.
    gog-gogdl and amazon-nile through every protocol method they declare, over
    the real manager and job queue.
 6. **steam-standalone** (done, `feat/steam-standalone`): DepotDownloader auth (QR and password), library through a CM token exchange, installs; the three launch modes. Live run done on a real account (Steam library, install, launch, session, uninstall).
-7. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
+7. **Go Steam depot downloader**: replaces DepotDownloader in steam-standalone,
+   spreading downloads over many CDN hosts like the Steam client does.
+   DepotDownloader sends every request to one host, which caps it at a few
+   MiB/s. Plan and references: [steam-depot-downloader.md](steam-depot-downloader.md).
+8. **bubblewrap sandbox** for store plugins, enforcing declared permissions.
+9. **Launcher performance and consistency**: a pass over slow paths (scans,
+   plugin calls on the UI path, game page loads) and mismatched states (for
+   example, a window opened after a launch doesn't show the running game).
 
 ## Changes during implementation
 

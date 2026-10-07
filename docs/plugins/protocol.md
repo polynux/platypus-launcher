@@ -37,7 +37,7 @@ layout with `"kind": "data"` and need no approval; see
 - `requires` lists command-line tools looked up on `PATH`. A missing one keeps the
   plugin from starting; the Plugins view shows the hint.
 - `permissions` are shown to the user before approval. They aren't enforced yet
-  (bubblewrap sandbox, plan milestone 7).
+  (bubblewrap sandbox, plan milestone 8).
 
 Hydra runs nothing until the user approves the plugin, which pins the SHA-256 of
 the whole plugin folder: `plugin.json` plus every regular file under it, in
