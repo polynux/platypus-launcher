@@ -395,6 +395,16 @@ function QrArt({ art }: { art: string }) {
   );
 }
 
+// QR poll backoff (FE-8): 1.5s, then escalate on consecutive failures.
+export function qrPollDelay(consecutiveFailures: number): number {
+  if (consecutiveFailures <= 1) return 1500;
+  if (consecutiveFailures === 2) return 3000;
+  if (consecutiveFailures === 3) return 5000;
+  return 15000;
+}
+export const QR_ERROR_AFTER = 2;
+export const QR_MAX_ATTEMPTS = 40;
+
 function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: () => void; onDone: (s: AuthStatus) => void }) {
   const [prompt, setPrompt] = useState<AuthPrompt | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -418,27 +428,55 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
   // status also carries the current QR code, which Steam refreshes when it
   // expires — redraw whenever it changed.
   const qrPending = !!prompt?.qr;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
   useEffect(() => {
     if (!qrPending) return;
     let stop = false;
-    const poll = () =>
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let failures = 0;
+    let attempts = 0;
+    const schedule = (ms: number) => {
+      if (stop) return;
+      // Don't hammer a hidden tab; poll at most every 15s there.
+      const delay = typeof document !== 'undefined' && document.hidden ? Math.max(ms, 15000) : ms;
+      timers.push(setTimeout(poll, delay));
+    };
+    const poll = () => {
+      if (stop) return;
+      attempts += 1;
       Effect.runPromise(LauncherApi.authStatus(plugin.id))
         .then((s) => {
           if (stop) return;
           if (s.loggedIn) {
-            onDone(s);
+            onDoneRef.current(s);
             return;
           }
           if (s.qr) {
             setPrompt((p) => (p && p.qr !== s.qr ? { ...p, qr: s.qr } : p));
           }
-          setTimeout(poll, 1500);
+          failures = 0;
+          setError((prev) => (prev && prev.startsWith('Login check') ? null : prev));
+          schedule(1500);
         })
-        .catch(() => !stop && setTimeout(poll, 3000));
-    const t = setTimeout(poll, 1500);
+        .catch(() => {
+          if (stop) return;
+          failures += 1;
+          if (failures >= QR_ERROR_AFTER) {
+            setError(
+              attempts >= QR_MAX_ATTEMPTS
+                ? 'Login check keeps failing. Close and try again.'
+                : `Login check is failing (${failures} attempts). Retrying…`,
+            );
+          }
+          if (attempts >= QR_MAX_ATTEMPTS) return;
+          schedule(qrPollDelay(failures));
+        });
+    };
+    schedule(1500);
     return () => {
       stop = true;
-      clearTimeout(t);
+      timers.forEach(clearTimeout);
     };
   }, [qrPending, plugin.id]);
 
