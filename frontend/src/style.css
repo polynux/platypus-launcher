@@ -81,6 +81,20 @@
     background-clip: padding-box;
   }
 
+  /* Tailwind 4 resets buttons to the default cursor; everything clickable gets the hand. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  [role='tab'],
+  [role='radio'],
+  [role='checkbox'],
+  [role='switch'],
+  a[href],
+  summary,
+  select:not(:disabled),
+  label:has(> input[type='checkbox']:not(:disabled)) {
+    cursor: pointer;
+  }
+
   /* Keyboard focus: amber ring */
   :focus-visible {
     outline: 2px solid rgba(252, 211, 77, 0.8);
