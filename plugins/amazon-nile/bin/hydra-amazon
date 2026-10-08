@@ -190,6 +190,11 @@ def auth_complete(params):
         raise RPCError("the pasted address doesn't contain an authorization code; "
                        "copy the whole address Amazon redirected you to")
     setup_env()
+    # NOTE (PLUG-3): the one-time code, client id, PKCE verifier and serial
+    # travel on argv, visible in ps(1) while register runs. nile offers no
+    # stdin/env alternative, so this is upstream-limited; the values are
+    # single-use and never logged (only nile's tail is kept). Contrast the
+    # Steam plugin, which feeds secrets over stdin.
     rc, _out, err = nile("register", "--code", code,
                          "--client-id", snap["client_id"],
                          "--code-verifier", snap["code_verifier"],

@@ -168,6 +168,10 @@ def auth_complete(params):
     if not re.fullmatch(r"[A-Za-z0-9._-]{5,512}", code or ""):
         raise RPCError("that doesn't look like the address of the login page; "
                        "copy the whole address including the code= part")
+    # NOTE (PLUG-3): the one-time code travels on argv, visible in ps(1)
+    # while auth runs. gogdl offers no stdin/env alternative for --code
+    # (see `gogdl auth --help`), so this is upstream-limited; the code is
+    # short-lived, single-use, and never logged (only the CLI's tail is kept).
     rc, out, err = gogdl("auth", "--code", code, timeout=120)
     if rc != 0 or not credentials():
         raise RPCError(f"login failed: {tail(err)}")

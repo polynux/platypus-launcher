@@ -119,6 +119,10 @@ def auth_complete(params):
     code = code.strip().strip('"')
     if not re.fullmatch(r"[A-Za-z0-9]{8,128}", code):
         raise RPCError("the authorization code should be letters and digits only")
+    # NOTE (PLUG-3): the one-time code travels on argv, visible in ps(1)
+    # while auth runs. legendary offers no stdin/env alternative for --code
+    # (see `legendary auth --help`), so this is upstream-limited; the code is
+    # short-lived, single-use, and never logged (only the CLI's tail is kept).
     rc, _out, err = legendary("auth", "--code", code, "--disable-webview", timeout=120)
     status = auth_status()
     if rc != 0 or not status["loggedIn"]:
