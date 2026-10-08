@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import type { Job } from '../types';
 import { EmptyState, MonoLabel, btnNeutral, cx } from './ui';
@@ -72,6 +72,10 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
 export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: DownloadsViewProps) {
   const active = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
   const finished = jobs.filter((j) => !active.includes(j)).sort((a, b) => b.updated_at - a.updated_at);
+  const [clearing, setClearing] = useState(false);
+  useEffect(() => {
+    if (finished.length === 0) setClearing(false);
+  }, [finished.length]);
   return (
     <div className="p-7">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -82,7 +86,13 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
           </p>
         </div>
         {finished.length > 0 && (
-          <button onClick={onClear} className={cx(btnNeutral, 'px-4 py-2.5 text-[12.5px]')}>Clear finished</button>
+          <button
+            onClick={() => { setClearing(true); onClear(); }}
+            disabled={clearing}
+            className={cx(btnNeutral, 'px-4 py-2.5 text-[12.5px] disabled:opacity-60')}
+          >
+            {clearing ? 'Clearing…' : 'Clear finished'}
+          </button>
         )}
       </header>
 

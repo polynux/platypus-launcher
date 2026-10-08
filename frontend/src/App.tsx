@@ -14,7 +14,7 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi, onJobs, onSession } from './effect/runtime';
-import { optimisticGamesAfterJob } from './lib/jobs';
+import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
@@ -425,7 +425,17 @@ export function App() {
           <DownloadsView
             jobs={jobs}
             onAction={jobAction}
-            onClear={() => Effect.runPromise(LauncherApi.clearFinishedJobs()).catch((err) => notify(errMsg(err), 'err'))}
+            onClear={() => {
+              // Optimistic clear so the button feels instant even when the
+              // next jobs event is slow (FE-9); reconcile afterwards.
+              setJobs((prev) => withoutFinishedJobs(prev));
+              Effect.runPromise(LauncherApi.clearFinishedJobs())
+                .then(() => Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {}))
+                .catch((err) => {
+                  notify(errMsg(err), 'err');
+                  Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
+                });
+            }}
             onOpenGame={(id) => games.some((g) => g.id === id) && openGame(id)}
           />
         );

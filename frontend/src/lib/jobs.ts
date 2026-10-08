@@ -26,3 +26,14 @@ export function optimisticGamesAfterJob(games: Game[], job: Job): Game[] {
   }
   return games;
 }
+
+/** Jobs that count as "finished" for Clear finished (FE-9). */
+export function isActiveJob(j: Job): boolean {
+  return j.state === 'queued' || j.state === 'running';
+}
+
+/** Optimistic clear: drop finished rows immediately; the next jobs event
+ *  (or an explicit listJobs refetch) reconciles. */
+export function withoutFinishedJobs(jobs: Job[]): Job[] {
+  return jobs.filter(isActiveJob);
+}
