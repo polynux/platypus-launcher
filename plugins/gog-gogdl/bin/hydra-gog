@@ -27,6 +27,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -361,10 +362,8 @@ def start_job(params, kind):
         if not ig:
             raise RPCError(f"{app} is not installed")
         ev = threading.Event()
-        with jobs_lock:
-            if job_id in jobs:
-                return {}
-            jobs[job_id] = {"proc": None, "canceled": False, "id": app, "event": ev}
+        if not claim_job(job_id, {"proc": None, "canceled": False, "id": app, "event": ev}):
+            return {}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     path = params.get("installDir") or ""
@@ -375,11 +374,12 @@ def start_job(params, kind):
     else:
         cmd = ["download", app, "--path", path]
     cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
-    # Hydra resends a job with the same jobId after a crash: run it once.
-    with jobs_lock:
-        if job_id in jobs:
-            return {}
-        jobs[job_id] = {"proc": None, "canceled": False, "id": app, "path": path}
+    # Hydra resends a job with the same jobId after a crash: run it once. A job
+    # just paused or canceled is still stopping: wait, then resume from what
+    # gogdl left in the game folder.
+    if not claim_job(job_id, {"proc": None, "canceled": False, "id": app, "path": path}):
+        return {}
+    job_started(job_id, app, kind, path)
     try:
         proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -418,11 +418,14 @@ def follow_job(job_id, kind, proc):
     with jobs_lock:
         job = jobs.pop(job_id, {})
     if job.get("canceled"):
+        job_stopped(job_id)
         return
     if rc != 0:
+        job_stopped(job_id)
         notify("job.failed", {"jobId": job_id, "error": f"gogdl exited with {rc}"})
         return
     record_install(job, kind)
+    job_finished(job_id)
     notify("job.done", {"jobId": job_id})
 
 
@@ -524,6 +527,25 @@ def follow_uninstall(job_id, app, ev=None):
     notify("job.done", {"jobId": job_id})
 
 
+def claim_job(job_id, entry, timeout=90):
+    """Registers entry as the run of job_id and returns True. False when the
+    job is already running (a repeated start). A job that job.cancel just
+    stopped is still shutting down gogdl: wait for it to go, so a resume with
+    the same jobId doesn't lose to the old run and report nothing."""
+    deadline = time.monotonic() + timeout
+    while True:
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job is None:
+                jobs[job_id] = entry
+                return True
+            if not job.get("canceled"):
+                return False
+        if time.monotonic() > deadline:
+            raise RPCError("the previous run of this download is still stopping; try again in a moment")
+        time.sleep(0.05)
+
+
 def stop_proc(proc, grace=15):
     if proc is None:
         return
@@ -549,6 +571,143 @@ def job_cancel(params):
     if proc:
         threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
     return {}
+
+
+# --- discarding a canceled job's data ---------------------------------------
+# gogdl unpacks into <installDir>/<the store's folder name> and keeps its resume
+# files (.gogdl-resume, the download cache) inside that folder, so deleting the
+# folder deletes everything. The plugin can't know the folder's name before
+# gogdl has made it, so it remembers which folders appeared in the install folder
+# while an install job ran ($HYDRA_PLUGIN_DATA/jobs-meta.json) and job.discard
+# deletes exactly those, never one that is installed.
+
+meta_lock = threading.RLock()
+JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def meta_file():
+    return os.path.join(os.environ.get("HYDRA_PLUGIN_DATA") or ".", "jobs-meta.json")
+
+
+def load_meta():
+    try:
+        with open(meta_file()) as f:
+            meta = json.load(f)
+        return meta if isinstance(meta, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def list_dir(path):
+    try:
+        return sorted(os.listdir(path))
+    except OSError:
+        return []
+
+
+def installed_dirs():
+    return [os.path.realpath(g["path"]) for g in installed_games().values() if g.get("path")]
+
+
+def claim_new_dirs(meta, m):
+    """Attributes to the job the folders that showed up since it began and that
+    nothing else accounts for: not there before, not another job's, not installed."""
+    taken = set(m["pre"]) | set(m["dirs"])
+    for o in meta.values():
+        if o is not m and o.get("installDir") == m["installDir"]:
+            taken |= set(o.get("dirs", []))
+    installed = installed_dirs()
+    for name in list_dir(m["installDir"]):
+        path = os.path.realpath(os.path.join(m["installDir"], name))
+        if name in taken or path in installed:
+            continue
+        m["dirs"].append(name)
+
+
+def job_started(job_id, app, kind, install_dir):
+    if kind != "install":
+        return
+    with meta_lock:
+        meta = load_meta()
+        m = meta.get(job_id)
+        if m is None:
+            meta[job_id] = {"app": app, "installDir": install_dir, "pre": list_dir(install_dir), "dirs": []}
+        else:
+            claim_new_dirs(meta, m)  # a run that was cut short, now resuming
+        try:
+            write_json_atomic(meta_file(), meta)
+        except OSError as e:
+            log("warn", f"couldn't record job {job_id}: {e}")
+
+
+def job_stopped(job_id):
+    """The run ended without finishing: note what it left."""
+    with meta_lock:
+        meta = load_meta()
+        m = meta.get(job_id)
+        if m is None:
+            return
+        claim_new_dirs(meta, m)
+        try:
+            write_json_atomic(meta_file(), meta)
+        except OSError:
+            pass
+
+
+def job_finished(job_id):
+    with meta_lock:
+        meta = load_meta()
+        if meta.pop(job_id, None) is not None:
+            try:
+                write_json_atomic(meta_file(), meta)
+            except OSError:
+                pass
+
+
+def job_discard(params):
+    """Deletes the partial install of a job that was canceled: the folders it
+    created in the install folder. Updates and anything installed are left."""
+    job_id = params.get("jobId")
+    if not isinstance(job_id, str) or not JOB_ID_RE.fullmatch(job_id):
+        raise RPCError("invalid jobId", -32602)
+    job_cancel({"jobId": job_id})
+    deadline = time.monotonic() + 90
+    while True:  # the job may still be shutting down
+        with jobs_lock:
+            running = job_id in jobs
+        if not running:
+            break
+        if time.monotonic() > deadline:
+            raise RPCError("the download is still stopping; try again in a moment")
+        time.sleep(0.05)
+    with meta_lock:
+        meta = load_meta()
+        m = meta.pop(job_id, None)
+        if m is not None:
+            if params.get("kind", "install") == "install" and m.get("installDir") == params.get("installDir"):
+                claim_new_dirs({**meta, job_id: m}, m)
+                remove_job_dirs(m)
+            try:
+                write_json_atomic(meta_file(), meta)
+            except OSError:
+                pass
+    return {}
+
+
+def remove_job_dirs(m):
+    base = os.path.realpath(m["installDir"])
+    installed = installed_dirs()
+    for name in m.get("dirs", []):
+        if not isinstance(name, str) or name in ("", ".", "..") or "/" in name:
+            continue
+        path = os.path.join(base, name)
+        real = os.path.realpath(path)
+        if os.path.islink(path) or not os.path.isdir(path) or os.path.dirname(real) != base:
+            continue
+        if any(i == real or i.startswith(real + os.sep) or real.startswith(i + os.sep) for i in installed):
+            log("warn", f"not deleting {path}: it holds an installed game")
+            continue
+        shutil.rmtree(path, ignore_errors=True)
 
 
 # --- launch -------------------------------------------------------------
@@ -579,7 +738,7 @@ def launch_spec(params):
 
 def initialize(params):
     return {"name": "GOG (gogdl)", "version": "0.1.0", "api": API,
-            "capabilities": ["library", "install", "launch", "auth"], "missing": []}
+            "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
 
 
 def game_details(params):
@@ -655,6 +814,7 @@ METHODS = {
     "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
     "job.cancel": job_cancel,
+    "job.discard": job_discard,
     "game.launchSpec": launch_spec,
 }
 

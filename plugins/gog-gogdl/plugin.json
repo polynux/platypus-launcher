@@ -7,7 +7,7 @@
   "api": 1,
   "store": "gog",
   "exec": "bin/hydra-gog",
-  "capabilities": ["library", "install", "launch", "auth"],
+  "capabilities": ["library", "install", "launch", "auth", "discard"],
   "requires": [
     { "bin": "gogdl", "hint": "get the gogdl_linux_x86_64 binary from github.com/Heroic-Games-Launcher/heroic-gogdl/releases and put it on your PATH as gogdl" },
     { "bin": "python3", "hint": "install python3 from your distribution" }
