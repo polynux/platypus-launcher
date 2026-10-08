@@ -5,8 +5,10 @@ import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, 
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { Lightbox } from './Lightbox';
+import { Badge } from '@/components/ds/badge';
+import { Button } from '@/components/ds/button';
 import { ScrollArea } from '@/components/ds/scroll-area';
-import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from './ui';
+import { Cover, MonoLabel, Panel, TierBadge, TogglePill, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
@@ -168,23 +170,21 @@ export function GamePage(p: GamePageProps) {
 
   return (
     <div className="p-7">
-      <button onClick={p.onBack} className="flex items-center gap-1.5 rounded text-[12px] font-semibold text-white/50 transition hover:text-white">
+      <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-white/50 hover:bg-transparent hover:text-white">
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
-      </button>
+      </Button>
 
       <section className="relative mb-6 mt-4 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
         <Cover src={hero} title={game.title} className="h-[280px] w-full" />
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.98) 10%, rgba(19,15,10,.35) 62%, rgba(19,15,10,.25) 100%)' }} />
         <div className="absolute bottom-6 left-8 right-8 flex items-end justify-between gap-6">
           <div className="min-w-0">
-            <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em]">
+            <div className="mb-2.5 flex flex-wrap gap-2">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
-              <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{storeLabel(game.store)}</span>
-              {formatBytes(game.size_bytes) && (
-                <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{formatBytes(game.size_bytes)}</span>
-              )}
-              {!game.is_installed && <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/55">not installed</span>}
-              {game.update_available && <span className="inline-flex h-6 items-center rounded-md bg-sky-400/15 px-2.5 pt-px leading-none text-sky-200 ring-1 ring-sky-300/30">update available</span>}
+              <Badge className="bg-black/50 text-white/75">{storeLabel(game.store)}</Badge>
+              {formatBytes(game.size_bytes) && <Badge className="bg-black/50 text-white/75">{formatBytes(game.size_bytes)}</Badge>}
+              {!game.is_installed && <Badge className="bg-black/50 text-white/55">not installed</Badge>}
+              {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">update available</Badge>}
             </div>
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
@@ -213,9 +213,9 @@ export function GamePage(p: GamePageProps) {
               This one is in <span className="font-mono text-[12px] text-white/90">{game.install_dir}</span>, probably from before Hydra managed it.
             </p>
           </div>
-          <button onClick={() => p.onAllowFolder(game.install_dir)} className={cx(btnNeutral, 'flex flex-none items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
+          <Button onClick={() => p.onAllowFolder(game.install_dir)} className="flex-none">
             <FolderCheck className="h-4 w-4" /> Allow this folder
-          </button>
+          </Button>
         </div>
       )}
 
@@ -225,7 +225,7 @@ export function GamePage(p: GamePageProps) {
           {!game.is_installed && plugin && game.installable && (
             <p className="font-mono text-[12px] text-white/55">
               installs into {plugin.install_folder} ·{' '}
-              <button onClick={() => p.onNavigate({ name: 'plugins' })} className="underline decoration-white/25 underline-offset-2 hover:text-white/80">change</button>
+              <Button variant="ghost" size="none" onClick={() => p.onNavigate({ name: 'plugins' })} className="inline-flex rounded-none px-0 font-mono text-[12px] font-normal underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/80">change</Button>
             </p>
           )}
           {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[11.5px] text-red-300">last attempt failed: {job.error}</p>}
@@ -303,18 +303,15 @@ export function GamePage(p: GamePageProps) {
                 </div>
               ))}
             </div>
-            <button onClick={p.onOpenSettings} className={cx(btnNeutral, 'mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/[0.1] px-5 py-2.5 text-[13px]')}>
+            <Button onClick={p.onOpenSettings} className="mt-4 w-full rounded-2xl border border-white/[0.1]">
               <Settings2 className="h-4 w-4" /> Launcher settings
-            </button>
+            </Button>
             {game.source === 'steam' && (
-              <a
-                href={`https://www.protondb.com/app/${game.store_app_id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-3 block text-center font-mono text-[11.5px] uppercase tracking-widest text-white/40 transition hover:text-white/80"
-              >
-                protondb reports ↗
-              </a>
+              <Button asChild variant="link" size="sm" className="mt-3 flex w-full">
+                <a href={`https://www.protondb.com/app/${game.store_app_id}`} target="_blank" rel="noreferrer">
+                  protondb reports ↗
+                </a>
+              </Button>
             )}
           </Panel>
 
@@ -356,9 +353,9 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
     <div className="w-72 rounded-2xl bg-black/70 px-4 py-3 ring-1 ring-white/10">
       <div className="flex items-center justify-between gap-3 font-mono text-[11.5px] uppercase tracking-wider">
         <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
-        <button onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 text-white/50 transition hover:text-white">
+        <Button variant="ghost" size="none" onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 hover:bg-transparent">
           <X className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
       <div className="mt-2 h-1.5 rounded-full bg-white/15" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
         <div className={cx('h-full rounded-full bg-amber-300 transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
@@ -383,13 +380,15 @@ function InstallButton({ game, job, onInstall, onCancel }: { game: Game; job?: J
     );
   }
   return (
-    <button
+    <Button
+      variant="primary"
+      size="none"
       onClick={onInstall}
-      className="flex items-center gap-2 rounded-2xl bg-amber-300 px-8 py-3.5 text-[15px] font-extrabold text-[#130f0a] shadow-[0_12px_30px_rgba(252,211,77,.25)] transition hover:bg-amber-200"
+      className="gap-2 rounded-2xl px-8 py-3.5 text-[15px] shadow-[0_12px_30px_rgba(252,211,77,.25)]"
     >
       <Download className="h-4 w-4" strokeWidth={3} />
       {job?.state === 'failed' ? 'Retry install' : 'Install'}
-    </button>
+    </Button>
   );
 }
 
@@ -431,29 +430,27 @@ function ManagePanel({
       ) : (
         <div className="mt-4 flex gap-2">
           {game.update_available && (
-            <button onClick={() => onJob('update')} className={cx(btnNeutral, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] text-sky-100')}>
+            <Button onClick={() => onJob('update')} className="flex-1 text-sky-100">
               <RefreshCw className="h-3.5 w-3.5" /> Update
-            </button>
+            </Button>
           )}
           {plugin.capabilities.includes('install') && (
-            <button
+            <Button
+              variant={confirm ? 'danger' : 'neutral'}
               onClick={() => (confirm ? (setConfirm(false), onJob('uninstall')) : setConfirm(true))}
               onBlur={() => setConfirm(false)}
               onKeyDown={(e) => { if (e.key === 'Escape') setConfirm(false); }}
-              className={cx(
-                'flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[12.5px] font-bold transition',
-                confirm ? 'bg-red-500/80 text-white hover:bg-red-500' : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.1]'
-              )}
+              className={cx('flex-1', confirm ? 'bg-red-500/80 text-white hover:bg-red-500' : 'text-white/70')}
             >
               <Trash2 className="h-3.5 w-3.5" /> {confirm ? 'Delete game files?' : 'Uninstall'}
-            </button>
+            </Button>
           )}
         </div>
       )}
       {job?.state === 'failed' && !active && (
         <p className="mt-2 font-mono text-[11.5px] text-red-300">
           {job.kind} failed: {job.error}{' '}
-          <button onClick={() => onJobAction('retry', job.id)} className="underline underline-offset-2 hover:text-red-200">retry</button>
+          <Button variant="ghost" size="none" onClick={() => onJobAction('retry', job.id)} className="inline-flex rounded-none px-0 font-mono text-[11.5px] font-normal text-red-300 underline underline-offset-2 hover:bg-transparent hover:text-red-200">retry</Button>
         </p>
       )}
     </Panel>
@@ -485,7 +482,7 @@ function TweaksPanel({
         {viaSteam && (
           <>
             {' '}Steam applies these only through the game's{' '}
-            <button onClick={onOpenSettings} className="underline decoration-white/30 underline-offset-2 hover:text-white/80">launch options</button>.
+            <Button variant="ghost" size="none" onClick={onOpenSettings} className="inline-flex rounded-none px-0 text-[12px] font-normal text-inherit underline decoration-white/30 underline-offset-2 hover:bg-transparent hover:text-white/80">launch options</Button>.
           </>
         )}
       </p>
