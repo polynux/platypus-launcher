@@ -66,6 +66,7 @@ export interface Achievement {
 export interface Achievements {
   total: number;
   unlocked: number; // -1 when the user's progress isn't cached locally
+  /** May arrive as null from Go (nil slice); normalized to [] at the edge. */
   list: Achievement[]; // may be a subset of total
 }
 
@@ -116,7 +117,6 @@ export interface Game {
   fix_info?: GameFixInfo;
   last_played_at?: number; // unix seconds, from Steam's localconfig.vdf
   playtime_minutes?: number;
-  size_on_disk?: string;
   size_bytes?: number;
   version?: string;
   // Plugin games only.

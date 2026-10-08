@@ -30,6 +30,7 @@ interface GamePageProps {
   onPlay: () => void;
   launching: boolean;
   session?: SessionEvent;
+  refreshing?: boolean;
   tweaks: Tweak[];
   onChangeSettings: (s: GameSettings, what: string) => void;
   onOpenSettings: () => void;
@@ -41,30 +42,71 @@ interface GamePageProps {
   onNavigate: (v: View) => void;
 }
 
-// Store metadata doesn't change during a session; keep it across navigations.
-const detailsCache = new Map<string, GameDetails>();
+// Store metadata is cached across navigations, keyed by game id + version.
+// A module-level in-flight map keeps StrictMode's double effect (and quick
+// remounts) from firing two concurrent GetGameDetails (FE-6).
+const detailsCache = new Map<string, { details: GameDetails; version: string }>();
+const detailsInflight = new Map<string, Promise<GameDetails>>();
+
+/** Evict cached game details (all, or one game). Called on library rescan
+ *  so login/logout/reinstall metadata can't stay frozen (FE-6). */
+export function invalidateGameDetailsCache(id?: string) {
+  if (id) {
+    detailsCache.delete(id);
+    detailsInflight.delete(id);
+  } else {
+    detailsCache.clear();
+    detailsInflight.clear();
+  }
+}
 
 function useDetails(game: Game) {
-  const [details, setDetails] = useState<GameDetails | null>(() => detailsCache.get(game.id) ?? null);
+  const version = game.version ?? '';
+  const [details, setDetails] = useState<GameDetails | null>(() => {
+    const cached = detailsCache.get(game.id);
+    return cached && cached.version === version ? cached.details : null;
+  });
   const [error, setError] = useState<string | null>(null);
   // Steam and store plugins both have metadata; sideloaded games have none.
   const hasSource = game.source === 'steam' || isPluginGame(game);
   useEffect(() => {
+    const v = game.version ?? '';
     const cached = detailsCache.get(game.id);
-    setDetails(cached ?? null);
+    if (cached && cached.version === v) {
+      setDetails(cached.details);
+      return;
+    }
+    setDetails(null);
     setError(null);
-    if (cached || !hasSource) return;
+    if (!hasSource) return;
+    // Attach to an in-flight fetch instead of starting a second one.
+    const inflight = detailsInflight.get(game.id);
+    if (inflight) {
+      let live = true;
+      inflight.then(
+        (d) => { if (live) setDetails(d); },
+        (e) => { if (live) setError(e instanceof Error ? e.message : String(e)); },
+      );
+      return () => { live = false; };
+    }
     let live = true;
-    Effect.runPromise(LauncherApi.getGameDetails(game))
-      .then((d) => {
-        detailsCache.set(game.id, d);
+    const p = Effect.runPromise(LauncherApi.getGameDetails(game));
+    detailsInflight.set(game.id, p);
+    p.then(
+      (d) => {
+        detailsCache.set(game.id, { details: d, version: v });
+        detailsInflight.delete(game.id);
         if (live) setDetails(d);
-      })
-      .catch((e) => live && setError(e instanceof Error ? e.message : String(e)));
+      },
+      (e) => {
+        detailsInflight.delete(game.id);
+        if (live) setError(e instanceof Error ? e.message : String(e));
+      },
+    );
     return () => { live = false; };
-    // Refetch only when the game changes, not on settings edits.
+    // Refetch when the game (or its version) changes, not on settings edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id]);
+  }, [game.id, game.version]);
   return { details, error, loading: !details && !error && hasSource };
 }
 
@@ -131,8 +173,8 @@ export function GamePage(p: GamePageProps) {
             <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.14em]">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
               <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{storeLabel(game.store)}</span>
-              {(formatBytes(game.size_bytes) || game.size_on_disk) && (
-                <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{formatBytes(game.size_bytes) || game.size_on_disk}</span>
+              {formatBytes(game.size_bytes) && (
+                <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{formatBytes(game.size_bytes)}</span>
               )}
               {!game.is_installed && <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/55">not installed</span>}
               {game.update_available && <span className="rounded-lg bg-sky-400/15 px-2.5 py-1 text-sky-200 ring-1 ring-sky-300/30">update available</span>}
@@ -200,6 +242,10 @@ export function GamePage(p: GamePageProps) {
           )}
           {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[10.5px] text-red-300">last attempt failed: {job.error}</p>}
         </div>
+      )}
+
+      {p.refreshing && (
+        <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-white/40">refreshing library…</p>
       )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -306,7 +352,7 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
   const pct = job.percent >= 0 ? Math.round(job.percent) : null;
   const what = job.state === 'queued' ? 'queued' : job.phase || job.kind;
   return (
-    <div className="w-72 rounded-2xl bg-black/55 px-4 py-3 ring-1 ring-white/10 backdrop-blur">
+    <div className="w-72 rounded-2xl bg-black/55 px-4 py-3 ring-1 ring-white/10">
       <div className="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider">
         <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
         <button onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 text-white/50 transition hover:text-white">
@@ -486,7 +532,10 @@ function AchievementsSection({
   known: boolean;
   viaSteam: boolean;
 }) {
-  const pct = known ? Math.round((ach.unlocked / ach.total) * 100) : 0;
+  const pct = known && ach.total > 0 ? Math.round((ach.unlocked / ach.total) * 100) : 0;
+  // Backend may send list:null for uncached progress; normalized at the
+  // edge in runtime.ts, guarded here too for safety (FE-10).
+  const list = ach.list ?? [];
   return (
     <section className="pb-8">
       <div className="mb-3.5 flex items-baseline justify-between">
@@ -507,13 +556,13 @@ function AchievementsSection({
         </p>
       )}
       <div className="ach-grid">
-        {ach.list.map((a) => (
+        {list.map((a) => (
           <AchievementCard key={a.id || a.name} a={a} known={known} />
         ))}
       </div>
-      {ach.list.length < ach.total && (
+      {list.length < ach.total && (
         <p className="mt-3 font-mono text-[10px] text-white/35">
-          showing {ach.list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
+          showing {list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
         </p>
       )}
     </section>

@@ -80,7 +80,20 @@ export const LauncherApi = {
     }),
 
   // Summary, screenshots and achievements for the game page (Steam only).
-  getGameDetails: (game: Game) => call<GameDetails>('GetGameDetails', () => App.GetGameDetails(backend(game))),
+  // Go marshals nil slices as null; normalize null lists to [] at the edge
+  // so consumers never crash on list.map (FE-10).
+  getGameDetails: (game: Game) =>
+    call<GameDetails>('GetGameDetails', async () => {
+      const d = (await App.GetGameDetails(backend(game))) as unknown as GameDetails;
+      return {
+        ...d,
+        screenshots: d.screenshots ?? [],
+        genres: d.genres ?? [],
+        developers: d.developers ?? [],
+        publishers: d.publishers ?? [],
+        achievements: d.achievements ? { ...d.achievements, list: d.achievements.list ?? [] } : d.achievements,
+      };
+    }),
 
   // Hardware-based tweaks offered for every game.
   getTweaks: () => call<Tweak[]>('GetTweaks', async () => (await App.GetTweaks()) ?? []),

@@ -1,4 +1,4 @@
-import type { Game } from '../types';
+import type { Game, GameSettings } from '../types';
 
 /** A game "needs attention" when it has a curated fix recipe or a poor ProtonDB tier. */
 export function needsAttention(g: Game): boolean {
@@ -74,4 +74,23 @@ export function lastPlayedLabel(g: Game, now = Date.now()): string | undefined {
 /** Most recently played first; never-played titles keep scan order at the end. */
 export function byRecent(a: Game, b: Game): number {
   return (b.last_played_at ?? 0) - (a.last_played_at ?? 0);
+}
+
+/** Merge a fresh backend scan into the current list (FE-5). Edited settings
+ *  are kept across rescans like before; `fix_info` is carried over too
+ *  because the backend list never carries it (enrichment is frontend-side).
+ *  Fresh backend `fix_info`, when present, wins. */
+export function mergeRescannedGames(
+  prev: Game[],
+  next: Game[],
+  saved: Record<string, GameSettings>,
+): Game[] {
+  const edited = new Map(prev.map((x) => [x.id, x.settings]));
+  const fixById = new Map(prev.map((x) => [x.id, x.fix_info]));
+  return next.map((x) => {
+    const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
+    const fix = x.fix_info ?? fixById.get(x.id);
+    const withSettings = s ? { ...x, settings: s } : x;
+    return fix && !withSettings.fix_info ? { ...withSettings, fix_info: fix } : withSettings;
+  });
 }

@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
-import { GamePage } from './components/GamePage';
+import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { SettingsModal } from './components/SettingsModal';
 import { AddGameModal } from './components/AddGameModal';
 import { ActivityView } from './components/ActivityView';
@@ -14,7 +14,8 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi, onJobs, onSession } from './effect/runtime';
-import { needsAttention } from './lib/games';
+import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
+import { needsAttention, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
@@ -79,31 +80,60 @@ export function App() {
   const loadData = useCallback(
     (reason: 'startup' | 'rescan') => {
       setScanning(true);
-      const program = Effect.all([
-        LauncherApi.getLibrary(),
-        LauncherApi.getProtonVersions(),
-        LauncherApi.listPlugins(),
+      // Each source resolves independently: one rejection must not discard
+      // the other three successes (FE-3). Settle each call on its own
+      // promise so a single failure can't fail the batch.
+      type Settled<A> = { ok: true; value: A } | { ok: false; error: Error };
+      const settle = <A,>(eff: Effect.Effect<A, Error>): Promise<Settled<A>> =>
+        Effect.runPromise(eff).then(
+          (value): Settled<A> => ({ ok: true, value }),
+          (error): Settled<A> => ({ ok: false, error: error instanceof Error ? error : new Error(String(error)) }),
+        );
+      return Promise.all([
+        settle(LauncherApi.getLibrary()),
+        settle(LauncherApi.getProtonVersions()),
+        settle(LauncherApi.listPlugins()),
         // Unreadable saved settings shouldn't block the library.
-        LauncherApi.getGameSettings().pipe(Effect.orElseSucceed(() => ({}) as Record<string, GameSettings>)),
+        settle(LauncherApi.getGameSettings()),
         // A missing session snapshot (old backend) shouldn't block the library either.
-        LauncherApi.getSessions().pipe(Effect.orElseSucceed(() => [] as SessionEvent[])),
-      ]);
-      return Effect.runPromise(program)
-        .then(([lib, r, p, saved, live]) => {
-          const g = lib.games;
-          setWarnings(lib.warnings);
-          // Keep edited settings across rescans; on startup, settings come
-          // from disk. Sideloaded games arrive from the backend now.
-          setGames((prev) => {
-            const edited = new Map(prev.map((x) => [x.id, x.settings]));
-            return g.map((x) => {
-              const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
-              return s ? { ...x, settings: s } : x;
+        settle(LauncherApi.getSessions()),
+      ])
+        .then(([libR, rR, pR, savedR, sessR]) => {
+          const failures: string[] = [];
+          const saved: Record<string, GameSettings> = savedR.ok ? savedR.value : {};
+          if (!savedR.ok) failures.push(`Settings: ${errMsg((savedR as { ok: false; error: Error }).error)}`);
+          if (libR.ok) {
+            const lib = (libR as { ok: true; value: { games: Game[]; warnings: SourceWarning[] } }).value;
+            const g = lib.games;
+            setWarnings(lib.warnings);
+            // Keep edited settings and frontend-enriched fix_info across
+            // rescans (FE-5); on startup, settings come from disk.
+            // Sideloaded games arrive from the backend now.
+            setGames((prev) => mergeRescannedGames(prev, g, saved));
+            const sources = new Set(g.map((x) => x.source)).size;
+            const installed = g.filter((x) => x.is_installed).length;
+            // Runner count uses whatever the runners call returned (possibly stale).
+            log({
+              type: 'update',
+              detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
+              meta: `${sources} source${sources === 1 ? '' : 's'}`,
             });
-          });
-          setRunners(r);
-          setPlugins(p);
-          // Hydrate sessions so a window opened after a launch shows Playing.
+            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message });
+          } else {
+            failures.push(`Library: ${errMsg((libR as { ok: false; error: Error }).error)}`);
+          }
+          if (rR.ok) {
+            setRunners((rR as { ok: true; value: ProtonVersion[] }).value);
+          } else {
+            failures.push(`Runners: ${errMsg((rR as { ok: false; error: Error }).error)}`);
+          }
+          if (pR.ok) {
+            setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
+          } else {
+            failures.push(`Plugins: ${errMsg((pR as { ok: false; error: Error }).error)}`);
+          }
+          // Hydrate sessions so a window opened after a launch shows Playing (CORE-1/FE-2).
+          const live = sessR.ok ? (sessR as { ok: true; value: SessionEvent[] }).value : [];
           if (live.length > 0) {
             const seeded: Record<string, SessionEvent> = {};
             const now = Date.now();
@@ -117,22 +147,25 @@ export function App() {
             }
             setSessions(seeded);
           }
-          setLoadError(null);
+          if (failures.length > 0) {
+            const msg = failures.join(' · ');
+            setLoadError(msg);
+            log({ type: 'update', detail: 'Library scan had errors', meta: msg });
+            notify(msg, 'err');
+          } else {
+            setLoadError(null);
+            if (reason === 'rescan') notify('Library rescanned');
+          }
+          // Rescans can change store metadata (login, reinstall): evict the
+          // details cache so the next visit refetches (FE-6).
+          if (reason === 'rescan') invalidateGameDetailsCache();
           setLastScan(Date.now());
-          const sources = new Set(g.map((x) => x.source)).size;
-          const installed = g.filter((x) => x.is_installed).length;
-          log({
-            type: 'update',
-            detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
-            meta: `${sources} source${sources === 1 ? '' : 's'} · ${r.length} runners`,
-          });
-          for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message.slice(0, 80) });
-          if (reason === 'rescan') notify('Library rescanned');
         })
         .catch((err) => {
+          // Unreachable: every call is guarded. Kept as a safety net.
           const msg = errMsg(err);
           setLoadError(msg);
-          notify(msg.slice(0, 90), 'err');
+          notify(msg, 'err');
         })
         .finally(() => {
           setLoaded(true);
@@ -278,11 +311,14 @@ export function App() {
         const verb = j.kind === 'uninstall' ? 'Uninstalled' : j.kind === 'update' ? 'Updated' : 'Installed';
         if (j.state === 'done') {
           rescan = true;
+          // Optimistic flip so the game page updates before the rescan
+          // round-trip (FE-4); the rescan reconciles afterwards.
+          setGames((prev) => optimisticGamesAfterJob(prev, j));
           notify(`${verb} ${j.title}`);
           log({ type: 'download', game: j.title, detail: `${verb} ${j.title}`, meta: j.source });
         } else if (j.state === 'failed') {
-          notify(`${j.title}: ${j.error ?? `${j.kind} failed`}`.slice(0, 120), 'err');
-          log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error?.slice(0, 80) });
+          notify(`${j.title}: ${j.error ?? `${j.kind} failed`}`, 'err');
+          log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error });
         }
       }
       if (rescan) loadRef.current('rescan');
@@ -400,6 +436,7 @@ export function App() {
             onPlay={() => launch(currentGame)}
             launching={launchingId === currentGame.id}
             session={sessions[currentGame.id]}
+            refreshing={scanning}
             tweaks={tweaks}
             onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
             onOpenSettings={() => setSettingsFor(currentGame.id)}
@@ -434,7 +471,17 @@ export function App() {
           <DownloadsView
             jobs={jobs}
             onAction={jobAction}
-            onClear={() => Effect.runPromise(LauncherApi.clearFinishedJobs()).catch((err) => notify(errMsg(err), 'err'))}
+            onClear={() => {
+              // Optimistic clear so the button feels instant even when the
+              // next jobs event is slow (FE-9); reconcile afterwards.
+              setJobs((prev) => withoutFinishedJobs(prev));
+              Effect.runPromise(LauncherApi.clearFinishedJobs())
+                .then(() => Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {}))
+                .catch((err) => {
+                  notify(errMsg(err), 'err');
+                  Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
+                });
+            }}
             onOpenGame={(id) => games.some((g) => g.id === id) && openGame(id)}
           />
         );
@@ -480,14 +527,15 @@ export function App() {
       {notice && (
         <div
           role="status"
+          title={notice.msg}
           className={cx(
-            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-xl border bg-[#191410] px-3 py-2 font-mono text-[11px]',
+            'fixed bottom-4 right-4 z-50 flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[11px]',
             NOTICE_STYLE[notice.kind]
           )}
           style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}
         >
           <span className={cx('h-1.5 w-1.5 flex-none rounded-full', NOTICE_DOT[notice.kind])} />
-          <span className="truncate">{notice.msg}</span>
+          <span title={notice.msg} className="break-words line-clamp-3">{notice.msg}</span>
         </div>
       )}
     </div>

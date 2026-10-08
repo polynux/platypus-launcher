@@ -237,7 +237,7 @@ export function LibraryView(p: LibraryProps) {
                   <span className={cx('font-mono text-[10px]', TIER_TEXT[tier ?? ''] ?? 'text-white/40')}>{tier ?? '—'}</span>
                   <span className="truncate font-mono text-[10px] text-white/45">{runnerShort(g.settings.runner_id, p.runners)}</span>
                   <span className="text-right font-mono text-[10.5px] tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
-                  <span className="text-right font-mono text-[10px] text-white/45">{(g.is_installed ? formatBytes(g.size_bytes) || g.size_on_disk : 'not installed') || '—'}</span>
+                  <span className="text-right font-mono text-[10px] text-white/45">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
                   <span className="text-right font-mono text-[10px] text-white/45">{lastPlayedLabel(g) ?? '—'}</span>
                 </button>
               );
