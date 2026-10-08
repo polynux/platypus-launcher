@@ -31,7 +31,21 @@ type session struct {
 	dataDir string
 	req     request
 	hosts   []depot.Host
-	tokens  map[tokenKey]string
+	tokens  map[tokenKey]tokenVal
+}
+
+type tokenVal struct {
+	token  string
+	expiry time.Time
+}
+
+// tokenFresh reports whether a cached token is still usable: zero expiry
+// (no TTL) stays cached, otherwise refresh 5m before expiry (STEAM-14).
+func tokenFresh(expiry, now time.Time) bool {
+	if expiry.IsZero() {
+		return true
+	}
+	return now.Before(expiry.Add(-5 * time.Minute))
 }
 
 func dataDir() string {
@@ -230,27 +244,33 @@ func withTokens(ctx context.Context, s *session, depots []fetchedDepot) {
 
 // hostsForDepot copies the server list for one depot, attaching that
 // depot's CDN auth tokens (tokens are per depot and host). Results are
-// cached on the session so one job asks once per pair.
+// cached on the session with expiry and refreshed past the margin, so
+// multi-hour jobs don't go stale (STEAM-14).
 func (s *session) hostsForDepot(ctx context.Context, r DepotRef) []depot.Host {
 	hosts := append([]depot.Host{}, s.hosts...)
 	keyApp := r.KeyAppID
 	if keyApp == 0 {
 		keyApp = s.req.AppID
 	}
+	now := time.Now()
 	for i, h := range hosts {
 		ck := tokenKey{host: h.Name, depot: r.DepotID}
-		if tok, ok := s.tokens[ck]; ok {
-			hosts[i].Token = tok
+		if tv, ok := s.tokens[ck]; ok && tokenFresh(tv.expiry, now) {
+			hosts[i].Token = tv.token
 			continue
 		}
 		if s.tokens == nil {
-			s.tokens = map[tokenKey]string{}
+			s.tokens = map[tokenKey]tokenVal{}
 		}
-		tok, _, err := s.cm.CDNAuthToken(r.DepotID, h.Name, keyApp, 15*time.Second)
+		tok, exp, err := s.cm.CDNAuthToken(r.DepotID, h.Name, keyApp, 15*time.Second)
 		if err != nil || tok == "" {
 			continue
 		}
-		s.tokens[ck] = tok
+		var expiry time.Time
+		if exp != 0 {
+			expiry = time.Unix(int64(exp), 0)
+		}
+		s.tokens[ck] = tokenVal{token: tok, expiry: expiry}
 		hosts[i].Token = tok
 	}
 	return hosts
