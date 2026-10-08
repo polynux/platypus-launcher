@@ -25,7 +25,7 @@ layout with `"kind": "data"` and need no approval; see
   "api": 1,
   "store": "epic",
   "exec": "bin/hydra-epic",
-  "capabilities": ["library", "install", "launch", "auth"],
+  "capabilities": ["library", "install", "launch", "auth", "discard"],
   "requires": [{ "bin": "legendary", "hint": "uv tool install legendary-gl" }],
   "install_dir": "epic",
   "permissions": { "network": ["*.epicgames.com"], "read": ["~/.config/legendary"], "write": ["~/.config/legendary"] }
@@ -33,6 +33,10 @@ layout with `"kind": "data"` and need no approval; see
 ```
 
 - `id` must match the folder name; `steam` and `custom` are reserved.
+- `capabilities` lists what the plugin does (tracked in the conformance suite:
+  `library`, `install`, `launch`, `auth`, and the optional `discard`). `discard`
+  means the plugin answers `job.discard` (see Jobs) — declare it only when the
+  method is really implemented.
 - `exec` is relative and must stay inside the folder (symlinks included).
 - `requires` lists command-line tools looked up on `PATH`. A missing one keeps the
   plugin from starting; the Plugins view shows the hint.
@@ -89,6 +93,7 @@ other errors can contain.
 | `game.update` | `{ id, installDir, jobId, title? }` | `{}` once started |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `job.cancel` | `{ jobId }` | `{}` |
+| `job.discard` | `{ jobId, id, installDir }` | `{}` |
 | `game.launchSpec` | `{ id, preview }` | `LaunchSpec` |
 
 `qr` (on `auth.begin`, and on `auth.status` while a QR login is pending) is a QR
@@ -180,11 +185,41 @@ place; it is not a fresh `game.install`. `installSize.downloadBytes` is what
 Hydra runs one job at a time and saves the queue. If Hydra or the plugin dies
 mid-install, Hydra calls `game.install` again with the same `jobId`, so installs
 must be resumable or at least idempotent: a `jobId` that is already running starts
-no second copy and ends with one `job.done`. After `job.cancel`, stop the work
-(an uninstall too: don't delete anything after the cancel) and send neither
-`job.done` nor `job.failed`; Hydra has already marked the job canceled and
-ignores later notifications for it. State that has to outlive the process (what
-is installed, where) goes under `HYDRA_PLUGIN_DATA`, not in memory.
+no second copy and ends with one `job.done`. A paused job is the same thing: Hydra
+stops it like a cancel, then calls `game.install`/`game.update` again with the
+same `jobId`, so keep everything on disk during a pause — a paused download is
+resumed later from what it already fetched, never fetched again. After
+`job.cancel`, stop the work (an uninstall too: don't delete anything after the
+cancel) and send neither `job.done` nor `job.failed`; Hydra has already marked
+the job canceled and ignores later notifications for it. State that has to
+outlive the process (what is installed, where) goes under `HYDRA_PLUGIN_DATA`,
+not in memory.
+
+### Discarding a canceled job's data
+
+A canceled install usually leaves data behind: staging chunks, a tool's resume
+files, a partially written install folder. The user can discard it with an
+explicit action, and Hydra does it later of its own accord after a grace
+period (it doesn't run for paused jobs). Hydra sends:
+
+```
+{ "method": "job.discard", "params": { "jobId": "…", "id": "…", "installDir": "/…" } }
+```
+
+The method is optional; declare the `discard` capability only if you can
+honor it. Delete exactly what the job left: the staging area of that `jobId`
+and, for an install that never finished, the game's own (partial) subfolder of
+`installDir` — and the tool's resume files for that game. Never delete an
+installed game's folder: a canceled *update* keeps the game installed, and
+`id`/`installDir` identify the game and folder Hydra started the job with, so
+recheck both against what is really installed. Stay inside `installDir` and
+`HYDRA_PLUGIN_DATA` (symlinks resolved); answer with `-32602` for anything
+unexpected. Discarding a job Hydra has already restarted yours (or forgotten)
+is not an error: answer `{}`. A discard for a still-running job means the same
+as `job.cancel` on it: stop and wait for your work to wind down first.
+
+Plugins that don't implement the method: don't list the capability. Hydra then
+only forgets the job and tells the user what may remain on disk.
 
 ## Launching
 
