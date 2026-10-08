@@ -144,6 +144,15 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, error
 		return nil, "", fmt.Errorf("Steam returned no download hosts for this app")
 	}
 	s.hosts = hosts
+	// Branch passwords (STEAM-4): check once against the app, then send
+	// SHA1(password) with every request-code call. Wrong passwords fail
+	// here with a distinct message instead of "no depots".
+	pwHash := branchPasswordHash(s.req)
+	if pwHash != "" {
+		if err := s.cm.CheckBetaPassword(appID, s.req.BranchPassword, 30*time.Second); err != nil {
+			return nil, "", fmt.Errorf("wrong branch password for %q: %w", branch, err)
+		}
+	}
 	client := depot.NewClient()
 	var out []fetchedDepot
 	for _, r := range refs {
@@ -155,7 +164,7 @@ func fetchDepots(ctx context.Context, s *session) ([]fetchedDepot, string, error
 		if err != nil {
 			return nil, "", callErr(fmt.Sprintf("depot %d key", r.DepotID), err)
 		}
-		code, err := s.cm.ManifestRequestCode(keyApp, r.DepotID, r.GID, r.Branch, "", 30*time.Second)
+		code, err := s.cm.ManifestRequestCode(keyApp, r.DepotID, r.GID, r.Branch, pwHash, 30*time.Second)
 		if err != nil {
 			return nil, "", callErr(fmt.Sprintf("depot %d request code", r.DepotID), err)
 		}

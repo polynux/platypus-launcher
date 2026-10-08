@@ -127,3 +127,16 @@ func betaHash(password string) string {
 	sum := sha1.Sum([]byte(password))
 	return fmt.Sprintf("%x", sum)
 }
+
+// branchPasswordHash returns the request-code hash for a job: SHA-1 hex
+// for non-public branches with a password, else "" (no hash sent).
+func branchPasswordHash(req request) string {
+	branch := req.Branch
+	if branch == "" {
+		branch = "public"
+	}
+	if branch == "public" || req.BranchPassword == "" {
+		return ""
+	}
+	return betaHash(req.BranchPassword)
+}

@@ -76,11 +76,12 @@ func main() {
 }
 
 type request struct {
-	RefreshToken string `json:"refresh_token"`
-	AppID        uint32 `json:"app_id"`
-	Branch       string `json:"branch"`
-	InstallDir   string `json:"install_dir"`
-	JobID        string `json:"job_id"`
+	RefreshToken   string `json:"refresh_token"`
+	AppID          uint32 `json:"app_id"`
+	Branch         string `json:"branch"`
+	BranchPassword string `json:"branch_password"`
+	InstallDir     string `json:"install_dir"`
+	JobID          string `json:"job_id"`
 }
 
 type cmErr struct {
