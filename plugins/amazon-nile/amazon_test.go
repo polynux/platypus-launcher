@@ -5,7 +5,10 @@ package amazon_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -216,5 +219,52 @@ func TestAmazonLibraryInstallLaunch(t *testing.T) {
 	lib, _ = store.Library(ctx)
 	if lib[0].IsInstalled {
 		t.Fatal("still installed")
+	}
+}
+
+// PLUG-1: two overlapping auth.begin calls (a double-submit, two windows)
+// must hand out the same login attempt, and the register call must use the
+// verifier whose challenge is in the URL the user followed.
+func TestAmazonConcurrentBeginSharesOneLogin(t *testing.T) {
+	m, _, _, _ := setup(t)
+	const n = 6
+	urls := make(chan string, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			var pr types.AuthPrompt
+			if err := call(t, m, "auth.begin", nil, &pr); err != nil {
+				urls <- "error: " + err.Error()
+				return
+			}
+			urls <- pr.URL
+		}()
+	}
+	first := <-urls
+	for i := 1; i < n; i++ {
+		if u := <-urls; u != first {
+			t.Fatalf("overlapping auth.begin calls got different logins:\n%s\n%s", first, u)
+		}
+	}
+	var st types.AuthStatus
+	redirect := "https://www.amazon.com/?openid.oa2.authorization_code=AQCODE123&openid.oa2.token_type=bearer"
+	if err := call(t, m, "auth.complete", map[string]any{"fields": map[string]string{"code": redirect}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("complete: %+v, %v", st, err)
+	}
+	u, err := url.Parse(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challenge := u.Query().Get("openid.oa2.code_challenge")
+	body, _ := os.ReadFile(os.Getenv("FAKE_NILE_STATE") + ".calls")
+	var verifier string
+	fields := strings.Fields(string(body))
+	for i, f := range fields {
+		if f == "--code-verifier" && i+1 < len(fields) {
+			verifier = fields[i+1]
+		}
+	}
+	sum := sha256.Sum256([]byte(verifier))
+	if verifier == "" || base64.RawURLEncoding.EncodeToString(sum[:]) != challenge {
+		t.Fatalf("register used a verifier that doesn't match the URL's challenge (verifier %q)", verifier)
 	}
 }
