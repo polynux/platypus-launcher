@@ -6,8 +6,8 @@ import { Modal } from './Modal';
 import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import {
-  DX_LAYERS, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
-  normalizeSettings, steamLaunchOptions, toBackendGame,
+  DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
+  composeGamescopeArgs, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
 } from '../lib/settings';
 
 interface Props {
@@ -20,7 +20,12 @@ interface Props {
 
 const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
-const GS_PLACEHOLDER = { gamescope_w: 'width', gamescope_h: 'height', gamescope_r: 'refresh' } as const;
+/** Physical pixels of the display the window is on. */
+function displayResolution(): { w: number; h: number } | undefined {
+  if (typeof window === 'undefined' || !window.screen?.width) return undefined;
+  const r = window.devicePixelRatio || 1;
+  return { w: Math.round(window.screen.width * r), h: Math.round(window.screen.height * r) };
+}
 
 function SelectField({ label, value, onChange, children, className }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
   return (
@@ -94,6 +99,20 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const runnerGroups = (['steam', 'custom', 'system'] as const)
     .map((k) => [k, runners.filter((r) => (r.is_system ? 'system' : r.is_custom ? 'custom' : 'steam') === k)] as const)
     .filter(([, l]) => l.length > 0);
+
+  const display = useMemo(displayResolution, []);
+  const [resCustom, setResCustom] = useState(false);
+  const [rateCustom, setRateCustom] = useState(false);
+  const resChoice = resCustom ? 'custom' : resolutionChoice(draft.gamescope_w, draft.gamescope_h, display);
+  const rateSel = rateCustom ? 'custom' : rateChoice(draft.gamescope_r);
+  const gs = parseGamescopeArgs(draft.gamescope_args);
+  const [gsExtra, setGsExtra] = useState(() => parseGamescopeArgs(draft.gamescope_args).extra);
+  // Toggling re-derives from the saved string, so the free-text field never keeps a flag a toggle now owns.
+  const setGs = (patch: Partial<typeof gs>) => {
+    const next = { ...gs, ...patch };
+    setGsExtra(next.extra);
+    set('gamescope_args', composeGamescopeArgs(next));
+  };
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
@@ -187,11 +206,71 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               ))}
             </div>
             {draft.use_gamescope && (
-              <div className="mt-2.5 grid grid-cols-[repeat(3,4.5rem)_1fr] gap-2">
-                {(['gamescope_w', 'gamescope_h', 'gamescope_r'] as const).map((k) => (
-                  <input key={k} aria-label={k.replace('gamescope_', 'gamescope ')} type="number" min={0} value={draft[k] || ''} onChange={(e) => set(k, parseInt(e.target.value, 10) || 0)} placeholder={GS_PLACEHOLDER[k]} className={field} />
-                ))}
-                <input aria-label="gamescope args" value={draft.gamescope_args} onChange={(e) => set('gamescope_args', e.target.value)} placeholder="-f --adaptive-sync" className={field} />
+              <div className="mt-2.5 space-y-3 rounded-xl bg-white/[0.03] p-3.5 ring-1 ring-white/[0.07]">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <MonoLabel className="mb-1.5">resolution</MonoLabel>
+                    <SelectField
+                      label="Gamescope resolution"
+                      value={resChoice}
+                      onChange={(v) => {
+                        if (v === 'custom') return setResCustom(true);
+                        setResCustom(false);
+                        const [w, h] = v ? v.split('x').map(Number) : [0, 0];
+                        setDraft((d) => ({ ...d, gamescope_w: w, gamescope_h: h }));
+                      }}
+                    >
+                      <option value="">Game default</option>
+                      {display && <option value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</option>}
+                      {GS_RESOLUTIONS.filter((r) => !(display && r.w === display.w && r.h === display.h)).map((r) => (
+                        <option key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</option>
+                      ))}
+                      <option value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</option>
+                    </SelectField>
+                    {resChoice === 'custom' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input aria-label="gamescope width" type="number" min={0} value={draft.gamescope_w || ''} onChange={(e) => set('gamescope_w', parseInt(e.target.value, 10) || 0)} placeholder="width" className={field} />
+                        <span className="text-white/40">×</span>
+                        <input aria-label="gamescope height" type="number" min={0} value={draft.gamescope_h || ''} onChange={(e) => set('gamescope_h', parseInt(e.target.value, 10) || 0)} placeholder="height" className={field} />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <MonoLabel className="mb-1.5">frame rate</MonoLabel>
+                    <SelectField
+                      label="Gamescope frame rate"
+                      value={rateSel}
+                      onChange={(v) => {
+                        if (v === 'custom') return setRateCustom(true);
+                        setRateCustom(false);
+                        set('gamescope_r', v ? Number(v) : 0);
+                      }}
+                    >
+                      <option value="">Game default</option>
+                      {GS_RATES.map((r) => <option key={r} value={r}>{r} Hz</option>)}
+                      <option value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</option>
+                    </SelectField>
+                    {rateSel === 'custom' && (
+                      <input aria-label="gamescope refresh" type="number" min={0} value={draft.gamescope_r || ''} onChange={(e) => set('gamescope_r', parseInt(e.target.value, 10) || 0)} placeholder="Hz" className={cx(field, 'mt-2')} />
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {GS_TOGGLES.map((t) => (
+                    <button key={t.key} title={t.title} aria-pressed={gs.toggles[t.key]} onClick={() => setGs({ toggles: { ...gs.toggles, [t.key]: !gs.toggles[t.key] } })} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', gs.toggles[t.key] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
+                      <span className="font-mono text-[10.5px] font-bold text-white/85">{t.label}</span>
+                      <TogglePill on={gs.toggles[t.key]} />
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <MonoLabel className="mb-1.5">upscale filter</MonoLabel>
+                  <SegRow label="Gamescope upscale filter" options={GS_FILTERS} value={gs.filter} onChange={(v) => setGs({ filter: v })} />
+                </div>
+                <label className="block">
+                  <MonoLabel className="mb-1.5">extra gamescope args</MonoLabel>
+                  <input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" className={field} />
+                </label>
               </div>
             )}
           </div>
