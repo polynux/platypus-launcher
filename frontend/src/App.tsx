@@ -15,7 +15,7 @@ import { DownloadsView } from './components/DownloadsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi, onJobs, onSession } from './effect/runtime';
 import { optimisticGamesAfterJob } from './lib/jobs';
-import { needsAttention } from './lib/games';
+import { needsAttention, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
@@ -102,15 +102,10 @@ export function App() {
             const lib = (libR as { ok: true; value: { games: Game[]; warnings: SourceWarning[] } }).value;
             const g = lib.games;
             setWarnings(lib.warnings);
-            // Keep edited settings across rescans; on startup, settings come
-            // from disk. Sideloaded games arrive from the backend now.
-            setGames((prev) => {
-              const edited = new Map(prev.map((x) => [x.id, x.settings]));
-              return g.map((x) => {
-                const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
-                return s ? { ...x, settings: s } : x;
-              });
-            });
+            // Keep edited settings and frontend-enriched fix_info across
+            // rescans (FE-5); on startup, settings come from disk.
+            // Sideloaded games arrive from the backend now.
+            setGames((prev) => mergeRescannedGames(prev, g, saved));
             const sources = new Set(g.map((x) => x.source)).size;
             const installed = g.filter((x) => x.is_installed).length;
             // Runner count uses whatever the runners call returned (possibly stale).
