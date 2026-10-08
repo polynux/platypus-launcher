@@ -56,6 +56,15 @@ type Config struct {
 	// for reconnect tests. It fires once per Fake — the next logon
 	// succeeds, so the client's reconnect can be observed end to end.
 	DropAfterLogon bool
+	// DropEveryLogon drops after EVERY successful logon response, not
+	// just the first: the client never stabilises, which is what the
+	// reconnect data-race test wants (frequent drops + heartbeats).
+	DropEveryLogon bool
+	// DropAfter closes the socket this long after a successful logon
+	// response, on every logon — an online window long enough for 1 s
+	// heartbeats to fire inside it, then a drop, repeating. The fake
+	// keeps reading (and recording) until the drop fires.
+	DropAfter time.Duration
 	// Kick sends ClientLoggedOff with this EResult (34 or 6) after
 	// KickAfter service calls, then closes. 0 = never.
 	Kick int
@@ -282,9 +291,15 @@ func (f *Fake) serve(c *fakeConn) {
 		return
 	}
 
-	if cfg.DropAfterLogon && f.takeDrop() {
-		// Abrupt drop: no close frame, like a dead socket. Fires once.
+	if cfg.DropEveryLogon || (cfg.DropAfterLogon && f.takeDrop()) {
+		// Abrupt drop: no close frame, like a dead socket.
 		return
+	}
+	if cfg.DropAfter > 0 {
+		// A deferred dead socket: the connection reads normally until
+		// the timer fires, then closes under the reader's feet.
+		drop := time.AfterFunc(cfg.DropAfter, func() { _ = c.Conn.Close() })
+		defer drop.Stop()
 	}
 
 	// Pushes scheduled for "after logon" go now.

@@ -27,8 +27,8 @@ type Session struct {
 	loginID   uint32
 	conn      *websocket.Conn
 	licenses  []License
-	pending   [][]byte // batched messages waiting for the next read
-	mu sync.Mutex // serialises concurrent service calls (STEAM-5)
+	pending   [][]byte   // batched messages waiting for the next read
+	mu        sync.Mutex // serialises concurrent service calls (STEAM-5)
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
 	// client's pre-logon calls.

@@ -546,16 +546,19 @@ func (c *Client) heartbeatLoop() {
 		case <-c.done:
 			return
 		}
+		// conn and sessionID are read under the same lock run() writes
+		// them under, so the header always matches the connection.
 		c.mu.Lock()
 		conn := c.conn
 		state := c.state
+		steamID, sessionID := c.steamID, c.sessionID
 		c.mu.Unlock()
 		if conn == nil || state != StateOnline {
 			continue
 		}
 		c.writeMu.Lock()
 		err := conn.WriteMessage(websocket.BinaryMessage,
-			packEMsg(EMsgClientHeartBeat, header(c.steamID, c.sessionID, 0, ""), nil))
+			packEMsg(EMsgClientHeartBeat, header(steamID, sessionID, 0, ""), nil))
 		c.writeMu.Unlock()
 		_ = err
 	}
