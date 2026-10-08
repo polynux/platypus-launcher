@@ -27,7 +27,7 @@ func TestConcurrentStartDirectOnlyOneWins(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			cmds[i] = exec.Command("sleep", "30")
-			pid, err := tr.StartDirect("game-race", cmds[i], "sleep 30")
+			pid, err := tr.StartDirect("game-race", cmds[i], "sleep 30", nil)
 			pids[i], errs[i] = pid, err
 		}(i)
 	}

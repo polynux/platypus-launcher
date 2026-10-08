@@ -184,21 +184,46 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 // StartDirect runs cmd and follows it until exit. Output goes to a per-game
 // log file under ~/.local/share/hydra/logs so failed launches can be diagnosed.
 // shown is the command line written to the log, with secrets redacted.
+// redact holds the launch spec's secret prefixes; the game's own stdout is
+// filtered with the same prefixes so echoed secrets reach neither the log
+// file nor the failure message (CORE-4).
 // It claims the game before starting so concurrent launches can't both run;
 // losers get ErrAlreadyRunning and never start a process.
-func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, error) {
+func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact []string) (int, error) {
 	e := t.tryClaim(gameID, cmd)
 	if e == nil {
 		return 0, fmt.Errorf("game %s %w", gameID, ErrAlreadyRunning)
 	}
 	tail := &tailBuffer{}
 	log, logPath, logErr := openLog(gameID)
-	if logErr == nil {
-		fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
-		cmd.Stdout = io.MultiWriter(log, tail)
+	var out io.Writer
+	var flush func()
+	if len(redact) == 0 {
+		if logErr == nil {
+			fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
+			out = io.MultiWriter(log, tail)
+		} else {
+			out = tail
+		}
 	} else {
-		cmd.Stdout = tail
+		var lw, tw *redactWriter
+		if logErr == nil {
+			fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
+			lw = &redactWriter{w: log, prefixes: redact}
+			tw = &redactWriter{w: tail, prefixes: redact}
+			out = io.MultiWriter(lw, tw)
+		} else {
+			tw = &redactWriter{w: tail, prefixes: redact}
+			out = tw
+		}
+		flush = func() {
+			if lw != nil {
+				lw.Flush()
+			}
+			tw.Flush()
+		}
 	}
+	cmd.Stdout = out
 	cmd.Stderr = cmd.Stdout
 	if err := cmd.Start(); err != nil {
 		if log != nil {
@@ -218,6 +243,9 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, 
 	go func() {
 		// Wait also waits for the output copy to finish, so closing after is safe.
 		err := cmd.Wait()
+		if flush != nil {
+			flush()
+		}
 		if log != nil {
 			_ = log.Close()
 		}
@@ -236,6 +264,89 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, 
 		t.emit(types.SessionEvent{GameID: gameID, State: "stopped"})
 	}()
 	return pid, nil
+}
+
+// redactWriter filters secret values out of a game's output stream. Every
+// occurrence of a prefix is kept, but the token that follows it (up to the
+// next whitespace or quote) is replaced with "***", mirroring RedactArgs.
+type redactWriter struct {
+	w        io.Writer
+	prefixes []string
+	pending  []byte
+}
+
+func (r *redactWriter) Write(p []byte) (int, error) {
+	r.pending = append(r.pending, p...)
+	for {
+		i := indexByte(r.pending, '\n')
+		if i < 0 {
+			break
+		}
+		line := redactTokens(string(r.pending[:i+1]), r.prefixes)
+		if _, err := io.WriteString(r.w, line); err != nil {
+			return len(p), err
+		}
+		r.pending = append([]byte(nil), r.pending[i+1:]...)
+	}
+	return len(p), nil
+}
+
+// Flush redacts and writes any trailing output without a newline.
+func (r *redactWriter) Flush() {
+	if len(r.pending) == 0 {
+		return
+	}
+	_, _ = io.WriteString(r.w, redactTokens(string(r.pending), r.prefixes))
+	r.pending = nil
+}
+
+func indexByte(b []byte, c byte) int {
+	for i, x := range b {
+		if x == c {
+			return i
+		}
+	}
+	return -1
+}
+
+// redactTokens replaces prefix+token with prefix+"***" for every prefix
+// occurrence with a non-empty token after it.
+func redactTokens(s string, prefixes []string) string {
+	for _, p := range prefixes {
+		if p == "" {
+			continue
+		}
+		var b strings.Builder
+		b.Grow(len(s))
+		rest := s
+		for {
+			i := strings.Index(rest, p)
+			if i < 0 {
+				b.WriteString(rest)
+				break
+			}
+			b.WriteString(rest[:i+len(p)])
+			rest = rest[i+len(p):]
+			j := 0
+			for j < len(rest) && !isTokenEnd(rest[j]) {
+				j++
+			}
+			if j > 0 {
+				b.WriteString("***")
+			}
+			rest = rest[j:]
+		}
+		s = b.String()
+	}
+	return s
+}
+
+func isTokenEnd(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '"', '\'', '`':
+		return true
+	}
+	return false
 }
 
 // tailBuffer keeps the last few KB written to it.

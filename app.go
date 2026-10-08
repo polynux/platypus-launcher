@@ -444,7 +444,7 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 		}
 		return "Asked " + cl.Client + " to start " + game.Title, nil
 	}
-	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown())
+	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact)
 	if err != nil {
 		if errors.Is(err, session.ErrAlreadyRunning) {
 			return "", fmt.Errorf("%s is already running", game.Title)

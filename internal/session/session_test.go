@@ -17,7 +17,7 @@ func TestSnapshotReportsRunningDirectGame(t *testing.T) {
 	tr := NewTracker(func(e types.SessionEvent) { events <- e })
 
 	cmd := exec.Command("sleep", "30")
-	if _, err := tr.StartDirect("game-direct", cmd, "sleep 30"); err != nil {
+	if _, err := tr.StartDirect("game-direct", cmd, "sleep 30", nil); err != nil {
 		t.Fatalf("StartDirect: %v", err)
 	}
 	defer func() {
