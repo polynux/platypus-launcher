@@ -90,10 +90,12 @@ export function LibraryView(p: LibraryProps) {
   const q = p.search.trim().toLowerCase();
   const owned = p.games.length;
   const installedCount = p.games.filter((g) => g.is_installed).length;
-  const filtered = p.games.filter(
-    (g) => (p.ownership === 'owned' || g.is_installed) && (p.source === 'all' || g.store === p.source) && g.title.toLowerCase().includes(q)
-  );
   const sources = sourceChips(p.games);
+  // A store can drop to zero games (logout, uninstall) while selected: its chip is gone, so show all.
+  const source = sources.includes(p.source) ? p.source : 'all';
+  const filtered = p.games.filter(
+    (g) => (p.ownership === 'owned' || g.is_installed) && (source === 'all' || g.store === source) && g.title.toLowerCase().includes(q)
+  );
   const jobOf = (g: Game) => p.jobs.find((j) => j.game_id === g.id);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
   const played = filtered.filter((g) => g.last_played_at).sort(byRecent).slice(0, 3);
@@ -144,7 +146,7 @@ export function LibraryView(p: LibraryProps) {
           {owned > installedCount && (
             <Segmented label="Ownership" mono value={p.ownership} onChange={p.onOwnership} options={[['installed', 'installed'], ['owned', 'owned']]} />
           )}
-          <Segmented label="Source" mono value={p.source} onChange={p.onSource} options={sources.map((s) => [s, s])} />
+          <Segmented label="Source" mono value={source} onChange={p.onSource} options={sources.map((s) => [s, s])} />
           <Segmented label="View" value={p.mode} onChange={p.onMode} options={[['cards', 'cards'], ['table', 'table']]} />
           <button onClick={p.onAddGame} className={cx(btnPrimary, 'flex items-center gap-1.5 px-4 py-2.5 text-[12.5px]')}>
             <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
