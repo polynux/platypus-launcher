@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { cx } from './ui';
+import React from 'react';
+import { Dialog, DialogContent } from './ds/dialog';
 
 interface ModalProps {
   label: string;
@@ -10,75 +10,18 @@ interface ModalProps {
   children: React.ReactNode;
 }
 
-/** Centered modal: Esc + click-outside close, focus moves in on open and back on close. Tab cycles inside (FE-11). */
+/** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11). */
 export function Modal({ label, onClose, className, dismissable = true, children }: ModalProps) {
-  const panel = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  const dismissRef = useRef(dismissable);
-  dismissRef.current = dismissable;
-
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    panel.current?.focus();
-    const focusables = () => {
-      const root = panel.current;
-      if (!root) return [] as HTMLElement[];
-      const nodes = root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      return [...nodes].filter((el) => !el.hasAttribute('disabled'));
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        if (dismissRef.current) closeRef.current();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const list = focusables();
-      if (list.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = list[0];
-      const last = list[list.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey && (active === first || !panel.current?.contains(active))) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      prev?.focus?.();
-    };
-  }, []);
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-6" onMouseDown={() => dismissable && onClose()}>
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        tabIndex={-1}
-        onMouseDown={(e) => e.stopPropagation()}
-        className={cx(
-          'flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-[#191410] outline-none ring-1 ring-white/10',
-          className
-        )}
-        style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)' }}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        label={label}
+        className={className}
+        onEscapeKeyDown={(e) => !dismissable && e.preventDefault()}
+        onInteractOutside={(e) => !dismissable && e.preventDefault()}
       >
-        {/* The panel clips; this inner element scrolls, so the scrollbar sits inside the rounded corners. */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-7 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-          {children}
-        </div>
-      </div>
-    </div>
+        {children}
+      </DialogContent>
+    </Dialog>
   );
 }

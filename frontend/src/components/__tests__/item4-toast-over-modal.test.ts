@@ -16,7 +16,7 @@ const zValue = (cls) => {
 
 describe('toast renders above an open modal', () => {
   it('toast z-index is strictly above the modal overlay z-index', () => {
-    const modalOverlay = src('components/Modal.tsx').match(/fixed inset-0 (z-\S+) grid place-items-center/)?.[1];
+    const modalOverlay = src('components/ds/dialog.tsx').match(/fixed inset-0 (z-\S+) grid place-items-center/)?.[1];
     const toast = src('App.tsx').match(/fixed bottom-4 right-4 (z-\S+)/)?.[1];
     expect(modalOverlay).toBeTruthy();
     expect(toast).toBeTruthy();
