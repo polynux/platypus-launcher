@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"hydra-launcher/internal/depot"
 )
@@ -74,7 +76,8 @@ func runInstall(ctx context.Context, req request) error {
 	for id := range stagingIDs(ss.dataDir, jobID) {
 		state.Done[id] = true
 	}
-	flush := 0
+	flusher := newJobFlusher(ss.dataDir, jobID, state, 2*time.Second)
+	defer flusher.stop()
 	var base uint64
 	for _, d := range depots {
 		w, err := depot.Preallocate(d.man, req.InstallDir)
@@ -96,12 +99,7 @@ func runInstall(ctx context.Context, req request) error {
 				return err
 			}
 			saveStagedChunk(ss.dataDir, jobID, id, data)
-			state.Done[hexChunk([]byte(id))] = true
-			flush++
-			if flush >= 50 {
-				flush = 0
-				depot.SaveJob(ss.dataDir, jobID, state)
-			}
+			flusher.mark(hexChunk([]byte(id)))
 			return nil
 		}
 		// STEAM-11: offset this depot's zero-based progress by prior
@@ -154,6 +152,19 @@ func runUpdate(ctx context.Context, req request) error {
 	}
 	client := depot.NewClient()
 	onProg, _, _ := progress(totalBytes(depots))
+	// STEAM-12: updates share the install staging/job path, so a
+	// cancelled update resumes instead of restarting from zero.
+	jobID := req.JobID
+	if jobID == "" {
+		jobID = "update-"+fmt.Sprint(req.AppID)
+	}
+	ustate := &depot.JobState{AppID: req.AppID, ManifestID: manifestGID(depots), Done: map[string]bool{}, Total: countChunks(depots)}
+	for id := range stagingIDs(ss.dataDir, jobID) {
+		ustate.Done[id] = true
+	}
+	uflusher := newJobFlusher(ss.dataDir, jobID, ustate, 2*time.Second)
+	defer uflusher.stop()
+	defer depot.SaveJob(ss.dataDir, jobID, ustate)
 	var base uint64
 	for _, d := range depots {
 		oldManifests := loadInstalledAll(ss.dataDir, req.AppID, d.ref.DepotID)
@@ -184,15 +195,26 @@ func runUpdate(ctx context.Context, req request) error {
 			return err
 		}
 		// Streaming update (STEAM-1): preallocate, copy reusable chunks
-		// from disk one at a time (bounded), fetch only the rest.
+		// from disk one at a time (bounded), replay staged chunks, then
+		// fetch only the rest.
 		w, err := depot.Preallocate(d.man, req.InstallDir)
 		if err != nil {
 			return err
 		}
+		want := chunkInfo(d.man)
 		skip := reuseFromDisk(req.InstallDir, oldManifests, d.man, w)
+		if err := restoreStaging(ss.dataDir, jobID, want, w, skip, ustate); err != nil {
+			w.Close()
+			return err
+		}
 		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(d.man.UniqueChunks()))})
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, func(id string, data []byte) error {
-			return w.Write(id, data)
+			if err := w.Write(id, data); err != nil {
+				return err
+			}
+			saveStagedChunk(ss.dataDir, jobID, id, data)
+			uflusher.mark(hexChunk([]byte(id)))
+			return nil
 		}, withBase(onProg, base))
 		cErr := w.Close()
 		if dlErr != nil {
@@ -206,6 +228,8 @@ func runUpdate(ctx context.Context, req request) error {
 			return err
 		}
 	}
+	depot.RemoveJob(ss.dataDir, jobID)
+	clearStaging(ss.dataDir, jobID)
 	emit(map[string]any{"type": "result", "os_used": osUsed, "bytes": totalBytes(depots)})
 	return nil
 }
@@ -348,6 +372,55 @@ func filterFiles(m *depot.Manifest, names []string) *depot.Manifest {
 		}
 	}
 	return sub
+}
+
+// jobFlusher checkpoints Done on count and on a timer (STEAM-12), so a
+// SIGINT-cancel loses at most the timer window instead of up to 50 chunks.
+type jobFlusher struct {
+	dataDir string
+	jobID   string
+	state   *depot.JobState
+	mu      sync.Mutex
+	n       int
+	ticker  *time.Ticker
+	stopCh  chan struct{}
+}
+
+func newJobFlusher(dataDir, jobID string, state *depot.JobState, interval time.Duration) *jobFlusher {
+	f := &jobFlusher{dataDir: dataDir, jobID: jobID, state: state, ticker: time.NewTicker(interval), stopCh: make(chan struct{})}
+	go func() {
+		for {
+			select {
+			case <-f.ticker.C:
+				f.mu.Lock()
+				st := *f.state
+				f.mu.Unlock()
+				_ = depot.SaveJob(f.dataDir, f.jobID, &st)
+			case <-f.stopCh:
+				return
+			}
+		}
+	}()
+	return f
+}
+
+func (f *jobFlusher) mark(idHex string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.state.Done[idHex] = true
+	f.n++
+	if f.n >= 50 {
+		f.n = 0
+		_ = depot.SaveJob(f.dataDir, f.jobID, f.state)
+	}
+}
+
+func (f *jobFlusher) stop() {
+	f.ticker.Stop()
+	close(f.stopCh)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_ = depot.SaveJob(f.dataDir, f.jobID, f.state)
 }
 
 // Chunk staging for resume: each landed chunk is written to

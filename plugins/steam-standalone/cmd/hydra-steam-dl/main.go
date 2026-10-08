@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"os/signal"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,7 +52,11 @@ func main() {
 	if req.RefreshToken == "" {
 		fatal("auth-required", "log in to Steam first")
 	}
-	ctx := context.Background()
+	// STEAM-12: SIGINT (job.cancel) cancels the context instead of killing
+	// immediately, so DownloadStream aborts and the deferred flusher saves
+	// JobState + staging before exit; the next run fetches only missing.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 	var runErr error
 	switch os.Args[1] {
 	case "size":
