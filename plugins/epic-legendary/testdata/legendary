@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import time
 
 STATE = os.environ["FAKE_LEGENDARY_STATE"]
@@ -43,8 +44,16 @@ def load():
 
 
 def save(st):
-    with open(STATE, "w") as f:
+    # Atomic replace: a concurrent reader (the conformance suite runs 5
+    # library.list while an install/update job runs) must never see the
+    # truncated moment of an in-place "w" write — that raced as a
+    # JSONDecodeError: "Expecting value: line 1 column 1" (the file was
+    # empty at read time), failing library.list at random.
+    d = os.path.dirname(STATE) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".state-", suffix=".json")
+    with os.fdopen(fd, "w") as f:
         json.dump(st, f)
+    os.replace(tmp, STATE)
 
 
 def err(msg, code=1):
