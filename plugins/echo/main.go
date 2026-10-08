@@ -249,6 +249,9 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 			},
 		}, nil
 	case "game.installSize":
+		if p.ID == "" {
+			return nil, &rpcError{Code: -32602, Message: "invalid params: id is required"}
+		}
 		g, ok := games[p.ID]
 		if !ok {
 			return nil, fmt.Errorf("unknown game %q", p.ID)
@@ -320,6 +323,11 @@ func startInstall(p params) (any, error) {
 	}
 	stop := make(chan struct{})
 	jobsMu.Lock()
+	if _, running := cancels[p.JobID]; running {
+		// Hydra resends a job with the same jobId after a crash: run it once.
+		jobsMu.Unlock()
+		return map[string]any{}, nil
+	}
 	cancels[p.JobID] = stop
 	jobsMu.Unlock()
 	go func() {

@@ -8,14 +8,18 @@ package plugtest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"sync"
 	"testing"
 	"time"
 
 	"hydra-launcher/internal/jobs"
+	"hydra-launcher/internal/jsonrpc"
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/settings"
 	"hydra-launcher/internal/stores"
@@ -42,6 +46,21 @@ type Suite struct {
 
 	Login    func(t *testing.T, s *Session)
 	PickGame func(t *testing.T, games []types.Game) types.Game
+
+	// Escape, when set, returns a library game the plugin reports as
+	// installed outside its folder; Hydra must refuse to launch it.
+	Escape func(t *testing.T, games []types.Game) *types.Game
+	// NoSpeed excludes the check that job.progress carries a speed (a
+	// plugin whose tool reports none).
+	NoSpeed bool
+	// NoDuplicateJobID excludes the same-jobId idempotency check.
+	NoDuplicateJobID bool
+	// NoUninstallCancel excludes the check that job.cancel stops an uninstall
+	// before it deletes anything (a plugin whose uninstall is instant).
+	NoUninstallCancel bool
+	// NoUnknownDetails excludes the check that game.details on an unknown id
+	// errors (a plugin whose test double answers every id).
+	NoUnknownDetails bool
 }
 
 // Session is the running plugin wired the way app.go wires it.
@@ -53,6 +72,34 @@ type Session struct {
 	Store  *stores.Plugin
 	Games  string // the Games folder
 	Folder string // this plugin's install folder
+
+	evMu   sync.Mutex
+	events []event
+}
+
+// event is one job notification the plugin sent, as the host saw it.
+type event struct {
+	Method string
+	Update plugins.JobUpdate
+}
+
+// Events returns the notifications seen for a job, in order.
+func (s *Session) Events(jobID string) []event {
+	s.evMu.Lock()
+	defer s.evMu.Unlock()
+	var out []event
+	for _, e := range s.events {
+		if e.Update.JobID == jobID {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func (s *Session) record(method string, u plugins.JobUpdate) {
+	s.evMu.Lock()
+	s.events = append(s.events, event{method, u})
+	s.evMu.Unlock()
 }
 
 type backend struct{ m *plugins.Manager }
@@ -159,6 +206,7 @@ func (s Suite) Start(t *testing.T) *Session {
 			}
 			var u plugins.JobUpdate
 			if json.Unmarshal(params, &u) == nil {
+				sess.record(method, u)
 				qq.Notify(id, method, u)
 			}
 		},
@@ -213,11 +261,14 @@ func (s *Session) Call(method string, params, result any) error {
 }
 
 // Conformance drives every declared protocol method end to end:
-// initialize, auth (when declared), library.list, game.details (tolerating a
-// plugin that doesn't implement it), installSize, install with progress
-// through the real job queue, launchSpec (preview and real), the job-queue
-// update, and uninstall. Plugin-specific expectations stay in the plugin's
-// own tests; this one checks the protocol shape.
+// initialize (against the manifest), error codes, auth with a logout and
+// -32001 round trip, library.list, game.details (tolerating a plugin that
+// doesn't implement it, but not an unknown id answered with data),
+// installSize, install with progress through the real job queue, launchSpec
+// (preview, real and negative), update, cancel of an install and of an
+// uninstall, a repeated jobId, concurrent requests while a job runs, and
+// uninstall. Plugin-specific expectations stay in the plugin's own tests;
+// this one checks the protocol and the behaviours every plugin must share.
 func (s Suite) Conformance(t *testing.T) {
 	t.Helper()
 	sess := s.Start(t)
@@ -234,6 +285,24 @@ func (s Suite) Conformance(t *testing.T) {
 		return false
 	}
 
+	// initialize must agree with the manifest the user approved.
+	var init struct {
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := sess.call("initialize", map[string]any{"api": 1}, &init); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+	gotCaps, wantCaps := append([]string{}, init.Capabilities...), append([]string{}, caps()...)
+	sort.Strings(gotCaps)
+	sort.Strings(wantCaps)
+	if !slices.Equal(gotCaps, wantCaps) {
+		t.Fatalf("initialize capabilities %v differ from the manifest's %v", gotCaps, wantCaps)
+	}
+
+	// Error codes: an unknown method is -32601 (missing params, -32602, is
+	// checked once logged in).
+	sess.wantCode("no.such.method", nil, jsonrpc.CodeMethodNotFound)
+
 	if has("auth") {
 		if s.Login == nil {
 			t.Fatal("plugin declares auth but the Suite has no Login")
@@ -241,6 +310,12 @@ func (s Suite) Conformance(t *testing.T) {
 		var st types.AuthStatus
 		if err := sess.call("auth.status", nil, &st); err != nil {
 			t.Fatalf("auth.status: %v", err)
+		}
+		if st.LoggedIn {
+			t.Fatalf("auth.status reports logged in before any login: %+v", st)
+		}
+		if has("library") {
+			sess.wantCode("library.list", nil, CodeAuthRequired)
 		}
 		var pr types.AuthPrompt
 		if err := sess.call("auth.begin", nil, &pr); err != nil {
@@ -251,12 +326,29 @@ func (s Suite) Conformance(t *testing.T) {
 		if err := sess.call("auth.status", nil, &st2); err != nil || !st2.LoggedIn {
 			t.Fatalf("auth after login: %+v, %v", st2, err)
 		}
+		// Logging out takes the library away again (-32001), and a second
+		// login works.
+		var out types.AuthStatus
+		if err := sess.call("auth.logout", nil, &out); err != nil || out.LoggedIn {
+			t.Fatalf("auth.logout: %+v, %v", out, err)
+		}
+		if has("library") {
+			sess.wantCode("library.list", nil, CodeAuthRequired)
+		}
+		if err := sess.call("auth.begin", nil, &pr); err != nil {
+			t.Fatalf("auth.begin after logout: %v", err)
+		}
+		s.Login(t, sess)
+	}
+
+	if has("install") {
+		sess.wantCode("game.installSize", map[string]any{}, jsonrpc.CodeInvalidParams)
 	}
 
 	if !has("library") {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	games, err := sess.Store.Library(ctx)
 	if err != nil {
@@ -280,15 +372,30 @@ func (s Suite) Conformance(t *testing.T) {
 		t.Fatalf("game.details: %v", err)
 	}
 	_ = d // shape validated by stores.Plugin; a missing method comes back empty
-
-	j, err := sess.q.Add(jobs.KindInstall, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
-	if err != nil {
-		t.Fatalf("queue install: %v", err)
+	if !s.NoUnknownDetails {
+		// An unknown id is an error (or the method is absent), never data or
+		// an empty page: all plugins answer the same way.
+		var raw json.RawMessage
+		err := sess.call("game.details", map[string]any{"id": "no-such-game-0xdead"}, &raw)
+		var rpcErr *jsonrpc.Error
+		if err == nil || !errors.As(err, &rpcErr) {
+			t.Fatalf("game.details on an unknown id answered %s (err %v), want an RPC error", raw, err)
+		}
 	}
-	done := sess.waitJob(j.ID, jobs.StateDone, 30*time.Second)
+
+	install := func() types.Job {
+		t.Helper()
+		j, err := sess.q.Add(jobs.KindInstall, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
+		if err != nil {
+			t.Fatalf("queue install: %v", err)
+		}
+		return sess.waitJob(j.ID, jobs.StateDone, 60*time.Second)
+	}
+	done := install()
 	if done.Total <= 0 || done.Bytes != done.Total {
 		t.Fatalf("install job didn't report full progress: %+v", done)
 	}
+	sess.checkProgress(done.ID, s.NoSpeed)
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {
@@ -310,19 +417,175 @@ func (s Suite) Conformance(t *testing.T) {
 		if l.Direct == nil && l.Client == nil {
 			t.Fatalf("launchSpec returned neither direct nor client: %+v", l)
 		}
+		// Negative cases: an id the plugin never installed has no spec, and a
+		// game installed outside the plugin's folder is refused.
+		if _, err := sess.Store.Launch(ctx, types.Game{StoreAppID: "no-such-game-0xdead"}, false); err == nil {
+			t.Fatal("launchSpec for an unknown game succeeded")
+		}
+		if s.Escape != nil {
+			if esc := s.Escape(t, lib); esc != nil {
+				if _, err := sess.Store.Launch(ctx, *esc, false); err == nil {
+					t.Fatalf("launchSpec for a game outside the install folder was not refused: %+v", esc)
+				}
+			}
+		}
 	}
 
+	// update: a plugin answers game.update with its own update path, and the
+	// game stays installed. 5 library.list run in parallel while it works
+	// (the doc requires answering requests concurrently).
+	up, err := sess.q.Add(jobs.KindUpdate, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
+	if err != nil {
+		t.Fatalf("queue update: %v", err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 5)
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := sess.Store.Library(ctx); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("library.list while a job runs: %v", err)
+	}
+	sess.waitJob(up.ID, jobs.StateDone, 60*time.Second)
+	lib, _ = sess.Store.Library(ctx)
+	if g := findGame(lib, game.ID); g == nil || !g.IsInstalled {
+		t.Fatalf("game not installed after update: %+v", g)
+	}
+
+	// job.cancel on an uninstall must stop it before anything is deleted:
+	// the queue already treats the job as canceled, so a plugin that carries
+	// on would delete the game behind the user's back.
+	if !s.NoUninstallCancel {
+		cu, err := sess.q.Add(jobs.KindUninstall, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
+		if err != nil {
+			t.Fatalf("queue uninstall: %v", err)
+		}
+		sess.waitState(cu.ID, jobs.StateRunning, 10*time.Second)
+		if err := sess.q.Cancel(ctx, cu.ID); err != nil {
+			t.Fatalf("cancel uninstall: %v", err)
+		}
+		time.Sleep(1500 * time.Millisecond)
+		lib, _ = sess.Store.Library(ctx)
+		if g := findGame(lib, game.ID); g == nil || !g.IsInstalled {
+			t.Fatalf("canceled uninstall still deleted the game: %+v", g)
+		}
+	}
+
+	// Real uninstall.
 	u, err := sess.q.Add(jobs.KindUninstall, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
 	if err != nil {
 		t.Fatalf("queue uninstall: %v", err)
 	}
-	sess.waitJob(u.ID, jobs.StateDone, 30*time.Second)
+	sess.waitJob(u.ID, jobs.StateDone, 60*time.Second)
 	lib, err = sess.Store.Library(ctx)
 	if err != nil {
 		t.Fatalf("library after uninstall: %v", err)
 	}
 	if left := findGame(lib, game.ID); left != nil && left.IsInstalled {
 		t.Fatalf("game still installed after uninstall: %+v", left)
+	}
+
+	// job.cancel on an install: the queue marks it canceled, the plugin stops
+	// and neither reports job.done nor leaves the game installed.
+	ci, err := sess.q.Add(jobs.KindInstall, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
+	if err != nil {
+		t.Fatalf("queue install: %v", err)
+	}
+	sess.waitProgress(ci.ID, 30*time.Second)
+	if err := sess.q.Cancel(ctx, ci.ID); err != nil {
+		t.Fatalf("cancel install: %v", err)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	for _, e := range sess.Events(ci.ID) {
+		if e.Method == "job.done" {
+			t.Fatalf("plugin reported job.done for a canceled install")
+		}
+	}
+	for _, j := range sess.q.List() {
+		if j.ID == ci.ID && j.State != jobs.StateCanceled {
+			t.Fatalf("canceled install ended %s", j.State)
+		}
+	}
+	lib, _ = sess.Store.Library(ctx)
+	if g := findGame(lib, game.ID); g != nil && g.IsInstalled {
+		t.Fatalf("canceled install left the game installed: %+v", g)
+	}
+
+	// The same jobId sent twice (Hydra resends after a crash) runs once.
+	if !s.NoDuplicateJobID {
+		dup := map[string]any{"id": game.StoreAppID, "installDir": sess.Folder, "jobId": "dup-job-1"}
+		if err := sess.call("game.install", dup, nil); err != nil {
+			t.Fatalf("game.install: %v", err)
+		}
+		if err := sess.call("game.install", dup, nil); err != nil {
+			t.Fatalf("game.install with a repeated jobId: %v", err)
+		}
+		sess.waitEvent("dup-job-1", "job.done", 60*time.Second)
+		time.Sleep(500 * time.Millisecond)
+		n := 0
+		for _, e := range sess.Events("dup-job-1") {
+			if e.Method == "job.done" {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Fatalf("repeated jobId reported job.done %d times, want 1", n)
+		}
+		u, err := sess.q.Add(jobs.KindUninstall, s.ID, game.ID, game.StoreAppID, game.Title, sess.Folder)
+		if err != nil {
+			t.Fatalf("queue uninstall: %v", err)
+		}
+		sess.waitJob(u.ID, jobs.StateDone, 60*time.Second)
+	}
+}
+
+// CodeAuthRequired is the code a plugin answers with when the user has to
+// log in first (docs/plugins/protocol.md).
+const CodeAuthRequired = -32001
+
+// wantCode checks that a call fails with a JSON-RPC error of that code.
+func (s *Session) wantCode(method string, params any, code int) {
+	s.t.Helper()
+	var raw json.RawMessage
+	err := s.call(method, params, &raw)
+	var rpcErr *jsonrpc.Error
+	if !errors.As(err, &rpcErr) {
+		s.t.Fatalf("%s: got %s, %v; want an RPC error %d", method, raw, err, code)
+	}
+	if rpcErr.Code != code {
+		s.t.Fatalf("%s: error code %d (%s), want %d", method, rpcErr.Code, rpcErr.Message, code)
+	}
+}
+
+// checkProgress asserts the install's job.progress notifications carried
+// bytes and total, and a speed when the plugin is expected to report one.
+func (s *Session) checkProgress(jobID string, noSpeed bool) {
+	s.t.Helper()
+	var withBytes, withSpeed bool
+	for _, e := range s.Events(jobID) {
+		if e.Method != "job.progress" {
+			continue
+		}
+		if e.Update.Bytes > 0 && e.Update.Total > 0 {
+			withBytes = true
+		}
+		if e.Update.Speed > 0 {
+			withSpeed = true
+		}
+	}
+	if !withBytes {
+		s.t.Fatalf("no job.progress carried bytes and total")
+	}
+	if !noSpeed && !withSpeed {
+		s.t.Fatalf("no job.progress carried a speed (bytes/s)")
 	}
 }
 
@@ -342,6 +605,63 @@ func (s *Session) waitJob(id, state string, within time.Duration) types.Job {
 	}
 	s.t.Fatalf("job %s never reached %s within %s", id, state, within)
 	return types.Job{}
+}
+
+// waitState waits for a job to be in a state, failing if it already ended.
+func (s *Session) waitState(id, state string, within time.Duration) {
+	s.t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		for _, j := range s.q.List() {
+			if j.ID != id {
+				continue
+			}
+			if j.State == state {
+				return
+			}
+			if j.State == jobs.StateDone || j.State == jobs.StateFailed || j.State == jobs.StateCanceled {
+				s.t.Fatalf("job %s ended %s (%s) before reaching %s", id, j.State, j.Error, state)
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	s.t.Fatalf("job %s never reached %s within %s", id, state, within)
+}
+
+// waitProgress waits until the plugin has reported bytes for a job.
+func (s *Session) waitProgress(id string, within time.Duration) {
+	s.t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		for _, e := range s.Events(id) {
+			if e.Method == "job.progress" && e.Update.Bytes > 0 {
+				return
+			}
+			if e.Method == "job.done" || e.Method == "job.failed" {
+				s.t.Fatalf("job %s ended (%s) before it could be canceled", id, e.Method)
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	s.t.Fatalf("job %s reported no progress within %s", id, within)
+}
+
+// waitEvent waits for one notification method on a job.
+func (s *Session) waitEvent(id, method string, within time.Duration) {
+	s.t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		for _, e := range s.Events(id) {
+			if e.Method == method {
+				return
+			}
+			if e.Method == "job.failed" {
+				s.t.Fatalf("job %s failed: %s", id, e.Update.Error)
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	s.t.Fatalf("job %s never sent %s within %s", id, method, within)
 }
 
 func findGame(games []types.Game, id string) *types.Game {

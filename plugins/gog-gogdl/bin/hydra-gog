@@ -364,6 +364,8 @@ def start_job(params, kind):
             raise RPCError(f"{app} is not installed")
         ev = threading.Event()
         with jobs_lock:
+            if job_id in jobs:
+                return {}
             jobs[job_id] = {"proc": None, "canceled": False, "id": app, "event": ev}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
@@ -375,17 +377,28 @@ def start_job(params, kind):
     else:
         cmd = ["download", app, "--path", path]
     cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
+    # Hydra resends a job with the same jobId after a crash: run it once.
+    with jobs_lock:
+        if job_id in jobs:
+            return {}
+        jobs[job_id] = {"proc": None, "canceled": False, "id": app, "path": path}
     try:
         proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError:
+        with jobs_lock:
+            jobs.pop(job_id, None)
         raise RPCError("gogdl is not installed; get the binary from "
                        "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
     with jobs_lock:
-        jobs[job_id] = {"proc": proc, "canceled": False, "id": app, "path": path,
-                        "title": params.get("title") or ""}
+        job = jobs.setdefault(job_id, {"canceled": False, "id": app})
+        job["proc"] = proc
+        canceled = job["canceled"]
+        job["title"] = params.get("title") or ""
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
+    if canceled:  # job.cancel arrived while the process was starting
+        stop_proc(proc, grace=5)
     return {}
 
 

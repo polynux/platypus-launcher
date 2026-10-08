@@ -28,6 +28,8 @@ func TestConformanceEcho(t *testing.T) {
 		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
 			"hydra-launcher/plugins/echo"},
 		BuildOut: "plugins/echo/bin/hydra-echo",
+		// Echo's uninstall is instant, so there is nothing for job.cancel to stop.
+		NoUninstallCancel: true,
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			if err := s.Call("auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, &st); err != nil || !st.LoggedIn {
@@ -87,6 +89,9 @@ func TestConformanceGog(t *testing.T) {
 		CopyDir: "../../plugins/gog-gogdl",
 		FakeCLI: map[string]string{"gogdl": "../../plugins/gog-gogdl/testdata/gogdl"},
 		Env:     map[string]string{"FAKE_GOGDL_STATE": state, "HYDRA_GOG_API_FILE": api},
+		// The API file answers every id; unknown-id details is unit-tested in
+		// plugins/gog-gogdl.
+		NoUnknownDetails: true,
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			err := s.Call("auth.complete", map[string]any{
@@ -158,7 +163,9 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 // plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "dd-state.json")
-	os.WriteFile(state, []byte(`{}`), 0o644)
+	// Several chunks served one at a time: the download has progress steps
+	// and a window in which job.cancel can land.
+	os.WriteFile(state, []byte(`{"extra_files": 8, "chunk_delay_ms": 150}`), 0o644)
 	api := filepath.Join(t.TempDir(), "steam-api.json")
 	os.WriteFile(api, []byte(`{
   "response": {"games": [{"appid": 4321, "name": "Standalone Game"}]},
@@ -186,6 +193,9 @@ func TestConformanceSteamStandalone(t *testing.T) {
 	plugtest.Suite{
 		ID:      "steam-standalone",
 		CopyDir: "../../plugins/steam-standalone",
+		// Steam's store answers success:false for delisted apps and unknown ids
+		// alike, so an unknown id gets an empty page, not an error.
+		NoUnknownDetails: true,
 		Env: map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api,
 			"HYDRA_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
 		Login: func(t *testing.T, s *plugtest.Session) {

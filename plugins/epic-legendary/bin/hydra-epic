@@ -270,14 +270,25 @@ def start_job(params, kind):
         args = ["-y", "install", app, "--update-only", "--skip-sdl"]
     else:
         args = ["-y", "uninstall", app]
+    # Hydra resends a job with the same jobId after a crash: run it once.
+    with jobs_lock:
+        if job_id in jobs:
+            return {}
+        jobs[job_id] = {"proc": None, "canceled": False}
     try:
         proc = subprocess.Popen(["legendary", *args], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError:
+        with jobs_lock:
+            jobs.pop(job_id, None)
         raise RPCError("legendary is not installed (uv tool install legendary-gl)")
     with jobs_lock:
-        jobs[job_id] = {"proc": proc, "canceled": False}
+        job = jobs.setdefault(job_id, {"canceled": False})
+        job["proc"] = proc
+        canceled = job["canceled"]
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
+    if canceled:  # job.cancel arrived while the process was starting
+        stop_proc(proc, grace=5)
     return {}
 
 

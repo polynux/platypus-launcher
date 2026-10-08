@@ -1155,6 +1155,8 @@ def start_job(params, kind):
             raise RPCError(f"app {app} is not installed")
         ev = threading.Event()
         with jobs_lock:
+            if job_id in jobs:
+                return {}
             jobs[job_id] = {"canceled": False, "id": app, "proc": None, "event": ev}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
@@ -1163,6 +1165,11 @@ def start_job(params, kind):
         raise RPCError("installDir is missing or relative; Hydra always sends one")
     # One folder per game under Hydra's install dir, like steamapps/common/<name>.
     game_dir = os.path.join(install_dir, game_dir_name(app))
+    # Hydra resends a job with the same jobId after a crash: run it once.
+    with jobs_lock:
+        if job_id in jobs:
+            return {}
+        jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir, "proc": None}
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
     branch = {k: params[k] for k in ("branch", "branchPassword", "branch_password") if params.get(k)}
@@ -1189,7 +1196,7 @@ def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
     depots itself (Linux first, Windows fallback — the platform used
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
-        jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
+        jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": game_dir})
     try:
         req = dl_request({"id": app, **(branch or {})}, {"install_dir": game_dir, "job_id": job_id})
         result = dl_run(dl_kind, req, job_id, game_dir)
