@@ -4,10 +4,9 @@ import { FolderOpen } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings } from '../types';
 import { NumberField } from '@/components/ds/number-field';
-import { MonoLabel, Panel, btnNeutral, btnPrimary, cx } from './ui';
-
-const inputClass =
-  'w-full min-w-0 rounded-xl bg-white/[0.06] px-3.5 py-2.5 font-mono text-[11.5px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
+import { Button } from '@/components/ds/button';
+import { Input } from '@/components/ds/input';
+import { MonoLabel, Panel } from './ui';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -90,30 +89,27 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
         >
           <label className="min-w-64 flex-1">
             <span className="sr-only">Games folder path</span>
-            <input
+            <Input
               value={draft}
               onChange={(e) => { setDraft(e.target.value); setError(null); }}
               placeholder={saved?.default_games_folder ?? '~/Games'}
               spellCheck={false}
               disabled={!saved}
               aria-invalid={error != null}
-              className={cx(inputClass, error && 'ring-1 ring-red-400/60')}
             />
           </label>
-          <button type="button" onClick={browse} disabled={!saved || busy} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px] disabled:opacity-60')}>
-            <FolderOpen className="h-3.5 w-3.5" /> Browse
-          </button>
-          <button type="submit" disabled={!dirty || busy} className={cx(btnPrimary, 'px-4 py-2.5 text-[12.5px] disabled:cursor-default')}>
-            Save
-          </button>
+          <Button variant="neutral" onClick={browse} disabled={!saved || busy}>
+            <FolderOpen className="size-3.5" /> Browse
+          </Button>
+          <Button type="submit" variant="primary" disabled={!dirty || busy}>Save</Button>
         </form>
 
         <div className="mt-2.5 flex min-h-4 items-center justify-between gap-4">
           {error ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p> : <span />}
           {saved && !isDefault && (
-            <button onClick={() => save('')} disabled={busy} className="flex-none rounded font-mono text-[11.5px] uppercase tracking-widest text-white/40 transition hover:text-white/80">
+            <Button variant="link" size="none" onClick={() => save('')} disabled={busy} className="flex-none text-[11.5px]">
               reset to {saved.default_games_folder.replace(/^\/home\/[^/]+/, '~')}
-            </button>
+            </Button>
           )}
         </div>
       </Panel>
@@ -146,9 +142,7 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
             />
             <span className="text-[12.5px] text-white/70">days</span>
           </label>
-          <button type="submit" disabled={!cleanupDirty || busy} className={cx(btnPrimary, 'px-4 py-2.5 text-[12.5px] disabled:cursor-default')}>
-            Save
-          </button>
+          <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>Save</Button>
         </form>
         <div className="mt-2.5 flex min-h-4 items-center gap-4">
           {cleanupError ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{cleanupError}</p> : <span />}

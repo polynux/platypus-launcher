@@ -5,9 +5,10 @@ import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ds/select';
 import { Button } from '@/components/ds/button';
+import { Switch } from '@/components/ds/switch';
 import { Input } from '@/components/ds/input';
 import { NumberField } from '@/components/ds/number-field';
-import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui';
+import { MonoLabel, SegRow, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import {
   DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
@@ -36,6 +37,20 @@ function SelectField({ label, value, onChange, children, className }: { label: s
       <SelectTrigger aria-label={label} className={className}><SelectValue /></SelectTrigger>
       <SelectContent>{children}</SelectContent>
     </Select>
+  );
+}
+
+/** On/off setting: label (+ optional mono hint) on the left, ds Switch on the right; the whole row toggles. */
+function SwitchRow({ label, hint, title, checked, onChange }: { label: string; hint?: string; title?: string; checked: boolean; onChange: (v: boolean) => void }) {
+  const id = React.useId();
+  return (
+    <label htmlFor={id} title={title} className={cx('flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 transition', checked ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
+      <span className="min-w-0">
+        <span className="block font-mono text-[11.5px] font-bold text-white/85">{label}</span>
+        {hint && <span className="block truncate font-mono text-[11px] text-white/40">{hint}</span>}
+      </span>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </label>
   );
 }
 
@@ -111,9 +126,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
           <div className="font-mono text-[11.5px] text-white/45">{game.title}</div>
         </div>
-        <button onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.07] text-white/70 transition hover:bg-white/[0.12] hover:text-white">
-          <X className="h-4 w-4" />
-        </button>
+        <Button variant="neutral" size="icon" onClick={onClose} aria-label="Close" className="size-8">
+          <X className="size-4" />
+        </Button>
       </div>
 
       {isSteamClient && (
@@ -124,9 +139,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           </p>
           <div className="mt-2.5 flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-3 py-2 font-mono text-[11.5px] text-sky-100/90 select-text">{steamLaunchOptions(backend)}</code>
-            <button onClick={() => copy(steamLaunchOptions(backend))} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-2 text-[11.5px]')}>
-              <Copy className="h-3.5 w-3.5" /> Copy
-            </button>
+            <Button variant="neutral" size="sm" onClick={() => copy(steamLaunchOptions(backend))}>
+              <Copy className="size-3.5" /> Copy
+            </Button>
           </div>
         </div>
       )}
@@ -188,10 +203,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                     ] as const)
                   : []),
               ] as const).map(([k, label, title]) => (
-                <button key={k} title={title} aria-pressed={!!draft[k]} onClick={() => set(k, !draft[k])} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', draft[k] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
-                  <span className="font-mono text-[11.5px] font-bold text-white/85">{label}</span>
-                  <TogglePill on={!!draft[k]} />
-                </button>
+                <SwitchRow key={k} label={label} title={title} checked={!!draft[k]} onChange={(v) => set(k, v)} />
               ))}
             </div>
             {draft.use_gamescope && (
@@ -246,10 +258,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                 </div>
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {GS_TOGGLES.map((t) => (
-                    <button key={t.key} title={t.title} aria-pressed={gs.toggles[t.key]} onClick={() => setGs({ toggles: { ...gs.toggles, [t.key]: !gs.toggles[t.key] } })} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', gs.toggles[t.key] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
-                      <span className="font-mono text-[11.5px] font-bold text-white/85">{t.label}</span>
-                      <TogglePill on={gs.toggles[t.key]} />
-                    </button>
+                    <SwitchRow key={t.key} label={t.label} hint={t.flag} title={t.title} checked={gs.toggles[t.key]} onChange={(v) => setGs({ toggles: { ...gs.toggles, [t.key]: v } })} />
                   ))}
                 </div>
                 <div>
@@ -301,16 +310,14 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               {PROTON_FLAGS.map((f) => {
                 const on = flags.includes(f.key);
                 return (
-                  <button
+                  <SwitchRow
                     key={f.key}
+                    label={f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}
+                    hint={f.key}
                     title={`${f.key}=1 — ${f.desc}`}
-                    aria-pressed={on}
-                    onClick={() => set('proton_flags', on ? flags.filter((x) => x !== f.key) : [...flags, f.key])}
-                    className={cx('flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 transition', on ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}
-                  >
-                    <span className="text-left font-mono text-[11.5px] font-bold text-white/85">{f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}</span>
-                    <TogglePill on={on} />
-                  </button>
+                    checked={on}
+                    onChange={(v) => set('proton_flags', v ? [...flags, f.key] : flags.filter((x) => x !== f.key))}
+                  />
                 );
               })}
             </div>
@@ -335,9 +342,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <div className="mb-1 flex items-center justify-between text-white/40">
               <span>$ preview</span>
               {preview.cmd && (
-                <button onClick={() => copy([...envLines.map(([k, v]) => `${k}=${v}`), preview.cmd].join(' '))} className="rounded px-1 text-white/40 hover:text-white/80" aria-label="Copy command">
-                  <Copy className="h-3 w-3" />
-                </button>
+                <Button variant="ghost" size="none" onClick={() => copy([...envLines.map(([k, v]) => `${k}=${v}`), preview.cmd].join(' '))} className="rounded px-1 py-0.5" aria-label="Copy command">
+                  <Copy className="size-3" />
+                </Button>
               )}
             </div>
             <div className="max-h-56 overflow-y-auto break-all select-text">
@@ -347,8 +354,8 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           </div>
 
           <div className="flex gap-2.5">
-            <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
-            <button onClick={() => onSave(current)} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
+            <Button variant="neutral" onClick={onClose} className="flex-1">Cancel</Button>
+            <Button variant="primary" onClick={() => onSave(current)} className="flex-1">Save config</Button>
           </div>
           {dirty && <div role="status" className="font-mono text-[11.5px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
