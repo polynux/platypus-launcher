@@ -114,7 +114,7 @@ export function App() {
               detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
               meta: `${sources} source${sources === 1 ? '' : 's'}`,
             });
-            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message.slice(0, 80) });
+            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message });
           } else {
             failures.push(`Library: ${errMsg((libR as { ok: false; error: Error }).error)}`);
           }
@@ -131,7 +131,7 @@ export function App() {
           if (failures.length > 0) {
             const msg = failures.join(' · ');
             setLoadError(msg);
-            log({ type: 'update', detail: 'Library scan had errors', meta: msg.slice(0, 80) });
+            log({ type: 'update', detail: 'Library scan had errors', meta: msg });
             notify(msg, 'err');
           } else {
             setLoadError(null);
@@ -271,8 +271,8 @@ export function App() {
           notify(`${verb} ${j.title}`);
           log({ type: 'download', game: j.title, detail: `${verb} ${j.title}`, meta: j.source });
         } else if (j.state === 'failed') {
-          notify(`${j.title}: ${j.error ?? `${j.kind} failed`}`.slice(0, 120), 'err');
-          log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error?.slice(0, 80) });
+          notify(`${j.title}: ${j.error ?? `${j.kind} failed`}`, 'err');
+          log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error });
         }
       }
       if (rescan) loadRef.current('rescan');
@@ -481,6 +481,7 @@ export function App() {
       {notice && (
         <div
           role="status"
+          title={notice.msg}
           className={cx(
             'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-xl border bg-[#191410] px-3 py-2 font-mono text-[11px]',
             NOTICE_STYLE[notice.kind]
@@ -488,7 +489,7 @@ export function App() {
           style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}
         >
           <span className={cx('h-1.5 w-1.5 flex-none rounded-full', NOTICE_DOT[notice.kind])} />
-          <span className="truncate">{notice.msg}</span>
+          <span title={notice.msg} className="break-words line-clamp-3">{notice.msg}</span>
         </div>
       )}
     </div>
