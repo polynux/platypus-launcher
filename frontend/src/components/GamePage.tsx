@@ -173,8 +173,8 @@ export function GamePage(p: GamePageProps) {
             <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.14em]">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
               <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{storeLabel(game.store)}</span>
-              {(formatBytes(game.size_bytes) || game.size_on_disk) && (
-                <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{formatBytes(game.size_bytes) || game.size_on_disk}</span>
+              {formatBytes(game.size_bytes) && (
+                <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{formatBytes(game.size_bytes)}</span>
               )}
               {!game.is_installed && <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/55">not installed</span>}
               {game.update_available && <span className="rounded-lg bg-sky-400/15 px-2.5 py-1 text-sky-200 ring-1 ring-sky-300/30">update available</span>}
@@ -352,7 +352,7 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
   const pct = job.percent >= 0 ? Math.round(job.percent) : null;
   const what = job.state === 'queued' ? 'queued' : job.phase || job.kind;
   return (
-    <div className="w-72 rounded-2xl bg-black/55 px-4 py-3 ring-1 ring-white/10 backdrop-blur">
+    <div className="w-72 rounded-2xl bg-black/55 px-4 py-3 ring-1 ring-white/10">
       <div className="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider">
         <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
         <button onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 text-white/50 transition hover:text-white">

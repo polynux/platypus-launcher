@@ -483,7 +483,7 @@ export function App() {
           role="status"
           title={notice.msg}
           className={cx(
-            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-xl border bg-[#191410] px-3 py-2 font-mono text-[11px]',
+            'fixed bottom-4 right-4 z-50 flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[11px]',
             NOTICE_STYLE[notice.kind]
           )}
           style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}

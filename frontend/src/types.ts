@@ -117,7 +117,6 @@ export interface Game {
   fix_info?: GameFixInfo;
   last_played_at?: number; // unix seconds, from Steam's localconfig.vdf
   playtime_minutes?: number;
-  size_on_disk?: string;
   size_bytes?: number;
   version?: string;
   // Plugin games only.
