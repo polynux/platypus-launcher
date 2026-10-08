@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -167,6 +168,20 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 	return runner.ScanProtonVersions()
 }
 
+// gameSettingsFields are the settings keys types.GameSettings models.
+// Anything else in a saved settings map rides along in Game.SettingsExtra.
+var gameSettingsFields = func() map[string]struct{} {
+	out := map[string]struct{}{}
+	t := reflect.TypeOf(types.GameSettings{})
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		if name := strings.Split(tag, ",")[0]; name != "" && name != "-" {
+			out[name] = struct{}{}
+		}
+	}
+	return out
+}()
+
 // customGames returns the games the user added by hand, saved in settings.json.
 func (a *App) customGames() []types.Game {
 	out := []types.Game{}
@@ -182,10 +197,20 @@ func (a *App) customGames() []types.Game {
 			IsInstalled: true,
 			Settings:    types.GameSettings{UseGameMode: true},
 		}
-		// Saved per-game settings win over the defaults.
+		// Saved per-game settings win over the defaults. Keys the backend
+		// doesn't model (frontend-only controls like sync_mode) are kept
+		// opaquely so sideloaded games don't lose them (CORE-9).
 		if saved, ok := a.settings.GameSettings()[g.ID]; ok {
 			if data, err := json.Marshal(saved); err == nil {
 				_ = json.Unmarshal(data, &g.Settings)
+			}
+			for k, v := range saved {
+				if _, known := gameSettingsFields[k]; !known {
+					if g.SettingsExtra == nil {
+						g.SettingsExtra = map[string]any{}
+					}
+					g.SettingsExtra[k] = v
+				}
 			}
 		}
 		out = append(out, g)

@@ -201,6 +201,7 @@ export namespace types {
 	    executable: string;
 	    is_installed: boolean;
 	    settings: GameSettings;
+	    settings_extra?: Record<string, any>;
 	    fix_info?: GameFixInfo;
 	    last_played_at?: number;
 	    playtime_minutes?: number;
@@ -230,6 +231,7 @@ export namespace types {
 	        this.executable = source["executable"];
 	        this.is_installed = source["is_installed"];
 	        this.settings = this.convertValues(source["settings"], GameSettings);
+	        this.settings_extra = source["settings_extra"];
 	        this.fix_info = this.convertValues(source["fix_info"], GameFixInfo);
 	        this.last_played_at = source["last_played_at"];
 	        this.playtime_minutes = source["playtime_minutes"];
