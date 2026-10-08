@@ -1,7 +1,9 @@
 import React from 'react';
 import type { ActivityEvent, Game, ProtonVersion, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
-import { Cover, EmptyState, Panel, TweakDot, TIER_TEXT, btnNeutral, btnPrimary, cardClass, cx } from './ui';
+import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
+import { Button } from './ds/button';
+import { Badge } from './ds/badge';
 import { attentionReason, byRecent, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 
@@ -49,20 +51,20 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <Cover src={heroImages(hero)} title={hero.title} className="h-[290px] w-full" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
           <div className="absolute bottom-6 left-7 max-w-lg">
-            <span className="rounded-lg bg-orange-400 px-2.5 py-1 font-mono text-[11px] font-black uppercase tracking-wider text-[#130f0a]">
+            <Badge variant="bronze" className="bg-orange-400 text-[#130f0a]">
               {hero.fix_info?.source === 'protondb' ? 'needs attention' : 'fix available'}
-            </span>
+            </Badge>
             <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
               {hero.fix_info?.source === 'protondb' ? `${hero.title} may need tweaks` : `${hero.title} has a community fix`}
             </h1>
             <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/60">{attentionReason(hero)}</p>
             <div className="mt-3.5 flex gap-2.5">
-              <button onClick={() => onOpenGame(hero.id)} className={cx(btnPrimary, 'px-5 py-2.5 text-[12.5px]')}>Open game</button>
-              <button onClick={() => onDismissHero([hero.id])} className="rounded-xl bg-white/10 px-4 py-2.5 text-[12.5px] font-bold text-white/85 transition hover:bg-white/15">Later</button>
+              <Button variant="primary" onClick={() => onOpenGame(hero.id)}>Open game</Button>
+              <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>Later</Button>
               {pending.length > 1 && (
-                <button onClick={() => onDismissHero(pending.map((g) => g.id))} className="rounded-xl px-3 py-2.5 text-[12.5px] font-semibold text-white/55 transition hover:text-white/85">
+                <Button variant="ghost" onClick={() => onDismissHero(pending.map((g) => g.id))}>
                   Hide all {pending.length}
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -87,9 +89,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
         <div className="min-w-0">
           <div className="mb-3 flex items-baseline justify-between">
             <h2 className="text-[16px] font-bold tracking-tight">{hasPlayData ? 'Continue playing' : 'Your games'}</h2>
-            <button onClick={() => onNavigate({ name: 'library' })} className="text-[11.5px] font-semibold text-white/45 transition hover:text-white/85">
-              full library →
-            </button>
+            <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>full library →</Button>
           </div>
           <div className="cover-grid">
             {continueGames.map((g) => (
@@ -127,17 +127,15 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
-                      <span className={cx('font-mono text-[11px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-orange-300')}>
-                        {g.fix_info?.tier}
-                      </span>
+                      {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
                     </div>
                     <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/50">{attentionReason(g)}</p>
                   </button>
                 ))}
                 {waiting.length > 3 && (
-                  <button onClick={() => onNavigate({ name: 'fixes' })} className="font-mono text-[11.5px] uppercase tracking-widest text-white/40 hover:text-white/80">
+                  <Button variant="link" onClick={() => onNavigate({ name: 'fixes' })}>
                     +{waiting.length - 3} more in fixes →
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
