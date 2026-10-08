@@ -177,8 +177,8 @@ func runUpdate(ctx context.Context, req request) error {
 				}
 			}
 		}
-		for _, name := range gone {
-			os.Remove(filepath.Join(req.InstallDir, filepath.FromSlash(name)))
+		if err := removeGone(req.InstallDir, gone); err != nil {
+			return err
 		}
 		// Streaming update (STEAM-1): preallocate, copy reusable chunks
 		// from disk one at a time (bounded), fetch only the rest.
@@ -485,4 +485,20 @@ func reuseFromDisk(installDir string, olds []*depot.Manifest, newM *depot.Manife
 
 func clearStaging(dataDir, jobID string) {
 	os.RemoveAll(stagingDir(dataDir, jobID))
+}
+
+// removeGone deletes files/dirs the new manifest no longer carries
+// (STEAM-17): RemoveAll handles directory-typed entries, and errors are
+// collected instead of swallowed.
+func removeGone(installDir string, gone []string) error {
+	var errs []string
+	for _, name := range gone {
+		if err := os.RemoveAll(filepath.Join(installDir, filepath.FromSlash(name))); err != nil {
+			errs = append(errs, name+": "+err.Error())
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("removing obsolete files: %s", errs)
+	}
+	return nil
 }
