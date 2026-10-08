@@ -35,6 +35,7 @@ API = 1
 CODE_AUTH_REQUIRED = -32001
 
 PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*\((\d+(?:\.\d+)?)%\)")
+SPEED_RE = re.compile(r"(\d+(?:\.\d+)?)\s*MiB/s")
 DOWNLOADED_RE = re.compile(r"\[\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*MiB")
 
 out_lock = threading.Lock()
@@ -85,11 +86,19 @@ def tail(text, n=3):
 
 # nile reads $NILE_CONFIG_PATH at import time, so it must be set for every
 # invocation. Subprocess inherits this process's env.
+# Idempotent and done under a lock; main() calls it once before any handler
+# thread starts, so the per-call invocations never write os.environ.
+_env_lock = threading.Lock()
+
+
 def setup_env():
     data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
-    os.makedirs(data, exist_ok=True)
-    os.environ["NILE_CONFIG_PATH"] = os.path.join(data, "nile-config")
-    return os.environ["NILE_CONFIG_PATH"]
+    path = os.path.join(data, "nile-config")
+    with _env_lock:
+        if os.environ.get("NILE_CONFIG_PATH") != path:
+            os.makedirs(data, exist_ok=True)
+            os.environ["NILE_CONFIG_PATH"] = path
+    return path
 
 
 # --- auth ---------------------------------------------------------------
@@ -220,7 +229,7 @@ def library_list(_params):
     setup_env()
     code, out, err = nile("library", "list", "--json", timeout=600)
     if code != 0:
-        if "logged" in err.lower() or "auth" in err.lower():
+        if "not logged in" in err.lower():
             raise RPCError("log in to Amazon first", CODE_AUTH_REQUIRED)
         raise RPCError(f"nile library list failed: {tail(err)}")
     try:
@@ -264,7 +273,7 @@ def install_size(params):
     setup_env()
     code, out, err = nile("install", params["id"], "--info", "--json", "--base-path", "/", timeout=600)
     if code != 0:
-        if "logged" in err.lower():
+        if "not logged in" in err.lower():
             raise RPCError("log in to Amazon first", CODE_AUTH_REQUIRED)
         raise RPCError(f"nile install info failed: {tail(err)}")
     try:
@@ -323,6 +332,9 @@ def follow_job(job_id, proc):
                 state["total"] = int(float(groups[1]) * MIB)
                 if state.get("total"):
                     state["percent"] = state["bytes"] * 100 / state["total"]
+            sp = SPEED_RE.search(line)
+            if sp:
+                state["speed"] = float(sp.group(1)) * MIB
             notify("job.progress", dict(state))
     rc = proc.wait()
     with jobs_lock:
@@ -442,7 +454,8 @@ def find_exe(path):
                     s = entry.stat().st_size
                 except OSError:
                     continue
-                if s > size and not entry.name.lower().startswith(("uninst", "setup", "redist", "dxsetup")):
+                if s > size and not entry.name.lower().startswith(
+                        ("unins", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
                     best, size = entry.path, s
     except OSError:
         pass
@@ -491,6 +504,7 @@ def handle(msg):
 
 
 def main():
+    setup_env()
     for line in sys.stdin:
         line = line.strip()
         if not line:

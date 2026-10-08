@@ -431,7 +431,7 @@ def main():
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
     # stdin closed: Hydra is shutting down. Interrupted installs resume later.
     with jobs_lock:
-        procs = [j["proc"] for j in jobs.values()]
+        procs = [j.get("proc") for j in jobs.values()]
     for p in procs:
         stop_proc(p, grace=5)
 
