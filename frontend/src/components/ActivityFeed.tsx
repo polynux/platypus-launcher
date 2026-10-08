@@ -1,6 +1,7 @@
 import React from 'react';
+import { Button } from './ds/button';
 import type { ActivityEvent } from '../types';
-import { Panel, LinkButton, EVENT_DOT, EVENT_TEXT, clock, cx } from './ui';
+import { Panel, EVENT_DOT, EVENT_TEXT, clock, cx } from './ui';
 
 export function ActivityFeed({ events, limit }: { events: ActivityEvent[]; limit?: number }) {
   const rows = limit ? events.slice(0, limit) : events;
@@ -29,7 +30,7 @@ export function ActivityPanel({ events, limit = 8, onFullLog }: { events: Activi
     <Panel as="section" className="bg-white/[0.04]">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-[15px] font-bold">Activity</h2>
-        <LinkButton onClick={onFullLog}>full log →</LinkButton>
+        <Button variant="link" onClick={onFullLog}>full log →</Button>
       </div>
       <ActivityFeed events={events} limit={limit} />
     </Panel>

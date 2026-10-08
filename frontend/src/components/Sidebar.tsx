@@ -1,6 +1,10 @@
 import React from 'react';
 import { Search, Square } from 'lucide-react';
 import { cx, clock } from './ui';
+import { Button } from './ds/button';
+import { Badge } from './ds/badge';
+import { Input } from './ds/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { storeLabel } from '../lib/games';
 import type { SessionEvent, StoreType, View } from '../types';
 
@@ -56,7 +60,7 @@ export function Sidebar(p: SidebarProps) {
       <label className="relative mb-4 block">
         <span className="sr-only">Search library</span>
         <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
-        <input
+        <Input
           type="search"
           value={p.search}
           // Typing never navigates (FE-12): the view only changes on Enter.
@@ -66,7 +70,7 @@ export function Sidebar(p: SidebarProps) {
             if (e.key === 'Escape') p.onSearch('');
           }}
           placeholder="Search…"
-          className="w-full rounded-xl bg-white/[0.06] py-2.5 pl-8.5 pr-3 text-[12px] text-white placeholder-white/35 outline-none ring-amber-300/50 focus:ring-1"
+          className="pl-8.5 font-sans"
         />
       </label>
 
@@ -82,7 +86,7 @@ export function Sidebar(p: SidebarProps) {
             )}
           >
             <span>{n.label}</span>
-            {n.count != null && <span className="rounded-full bg-white/[0.07] px-2 font-mono text-[11px] tabular-nums">{n.count}</span>}
+            {n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>}
             {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label="needs attention" />}
           </button>
         ))}
@@ -132,14 +136,20 @@ export function Sidebar(p: SidebarProps) {
                 <span className="block truncate text-[11.5px] font-semibold text-white/85">{e.title}</span>
               </span>
               {e.state !== 'stopping' && (
-                <button
-                  onClick={() => p.onStop(e.game_id)}
-                  aria-label={`Stop ${e.title}`}
-                  title="Stop"
-                  className="flex-none rounded-lg p-1.5 text-white/45 transition hover:bg-white/[0.08] hover:text-red-200"
-                >
-                  <Square className="h-3 w-3 fill-current" />
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => p.onStop(e.game_id)}
+                      aria-label={`Stop ${e.title}`}
+                      className="size-7 flex-none text-white/45 hover:text-red-200"
+                    >
+                      <Square className="h-3 w-3 fill-current" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Stop</TooltipContent>
+                </Tooltip>
               )}
             </div>
           );

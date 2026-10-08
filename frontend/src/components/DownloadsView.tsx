@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
 import type { Job } from '../types';
-import { EmptyState, MonoLabel, btnNeutral, cx } from './ui';
+import { EmptyState, MonoLabel, cx } from './ui';
+import { Button } from './ds/button';
 import { formatBytes } from '../lib/games';
 
 interface DownloadsViewProps {
@@ -56,34 +57,34 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
         <div className="flex flex-none items-center gap-2">
           {pct != null && job.state === 'running' && <span className="font-mono text-[12px] tabular-nums text-white/70">{pct}%</span>}
           {job.state === 'running' && (
-            <button onClick={() => onAction('pause', job.id)} aria-label={`Pause ${job.title}`} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+            <Button variant="neutral" size="sm" onClick={() => onAction('pause', job.id)} aria-label={`Pause ${job.title}`}>
               <Pause className="h-3 w-3" /> Pause
-            </button>
+            </Button>
           )}
           {job.state === 'paused' && (
-            <button onClick={() => onAction('resume', job.id)} aria-label={`Resume ${job.title}`} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+            <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={`Resume ${job.title}`}>
               <Play className="h-3 w-3" /> Resume
-            </button>
+            </Button>
           )}
           {job.state === 'queued' && (
-            <button onClick={() => onAction('cancel', job.id)} aria-label={`Cancel ${job.title}`} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+            <Button variant="neutral" size="sm" onClick={() => onAction('cancel', job.id)} aria-label={`Cancel ${job.title}`}>
               <X className="h-3 w-3" /> Cancel
-            </button>
+            </Button>
           )}
           {job.state === 'canceled' && job.cleaned_at == null && (
             <>
-              <button onClick={() => onAction('resume', job.id)} aria-label={`Resume ${job.title}`} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+              <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={`Resume ${job.title}`}>
                 <Play className="h-3 w-3" /> Resume
-              </button>
-              <button onClick={() => onAction('discard', job.id)} aria-label={`Discard downloaded data of ${job.title}`} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+              </Button>
+              <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={`Discard downloaded data of ${job.title}`}>
                 <Trash2 className="h-3 w-3" /> Discard data
-              </button>
+              </Button>
             </>
           )}
           {(job.state === 'failed' || job.state === 'canceled') && (
-            <button onClick={() => onAction('retry', job.id)} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+            <Button variant="neutral" size="sm" onClick={() => onAction('retry', job.id)}>
               <RotateCcw className="h-3 w-3" /> Retry
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -116,21 +117,14 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
         </div>
         <div className="flex items-center gap-2">
           {pausedCount > 0 && (
-            <button
-              onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}
-              className={cx(btnNeutral, 'px-4 py-2.5 text-[12.5px]')}
-            >
+            <Button variant="neutral" onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}>
               Resume all
-            </button>
+            </Button>
           )}
           {finished.length > 0 && (
-            <button
-              onClick={() => { setClearing(true); onClear(); }}
-              disabled={clearing}
-              className={cx(btnNeutral, 'px-4 py-2.5 text-[12.5px] disabled:opacity-60')}
-            >
+            <Button variant="neutral" onClick={() => { setClearing(true); onClear(); }} disabled={clearing}>
               {clearing ? 'Clearing…' : 'Clear finished'}
-            </button>
+            </Button>
           )}
         </div>
       </header>
