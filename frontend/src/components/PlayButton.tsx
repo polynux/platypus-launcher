@@ -1,0 +1,82 @@
+import React, { useEffect, useState } from 'react';
+import { Loader2, Play, Square } from 'lucide-react';
+import type { SessionEvent } from '../types';
+import { cx } from './ui';
+
+/** A graceful stop that takes longer than this offers a forced one. */
+export const FORCE_STOP_AFTER_MS = 3000;
+
+interface PlayButtonProps {
+  session?: SessionEvent;
+  launching: boolean;
+  disabled: boolean;
+  onPlay: () => void;
+  onStop: () => void;
+  onForceStop: () => void;
+}
+
+const stopBtn =
+  'flex items-center gap-2 rounded-2xl px-6 py-3.5 text-[15px] font-extrabold transition disabled:cursor-default';
+
+/** The hero's main action: Play, then Stop once the game is up. */
+export function PlayButton(p: PlayButtonProps) {
+  const state = p.session?.state;
+  const stopping = state === 'stopping';
+  const [canForce, setCanForce] = useState(false);
+  useEffect(() => {
+    setCanForce(false);
+    if (!stopping) return;
+    const id = setTimeout(() => setCanForce(true), FORCE_STOP_AFTER_MS);
+    return () => clearTimeout(id);
+  }, [stopping]);
+
+  if (state === 'running' || state === 'starting') {
+    const running = state === 'running';
+    return (
+      <div className="flex items-center gap-2.5">
+        {running ? (
+          <span className="flex items-center gap-2 rounded-2xl bg-emerald-400 px-6 py-3.5 text-[15px] font-extrabold text-[#0b1a12] shadow-[0_12px_30px_rgba(52,211,153,.25)]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#0b1a12]" />
+            Playing
+          </span>
+        ) : (
+          <button disabled title={p.session?.message} className="flex items-center gap-2 rounded-2xl bg-amber-300 px-6 py-3.5 text-[15px] font-extrabold text-[#130f0a] opacity-80 disabled:cursor-default">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Starting
+          </button>
+        )}
+        <button onClick={p.onStop} className={cx(stopBtn, 'bg-white/[0.08] text-white/85 ring-1 ring-white/[0.12] hover:bg-red-400/20 hover:text-red-100 hover:ring-red-300/40')}>
+          <Square className="h-3.5 w-3.5 fill-current" />
+          Stop
+        </button>
+      </div>
+    );
+  }
+
+  if (stopping) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <button disabled className={cx(stopBtn, 'bg-white/[0.08] text-white/60 ring-1 ring-white/[0.12]')}>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Stopping…
+        </button>
+        {canForce && (
+          <button onClick={p.onForceStop} className={cx(stopBtn, 'bg-red-400/20 text-red-100 ring-1 ring-red-300/40 hover:bg-red-400/30')}>
+            Force stop
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={p.onPlay}
+      disabled={p.launching || p.disabled}
+      className="flex items-center gap-2 rounded-2xl bg-amber-300 px-8 py-3.5 text-[15px] font-extrabold text-[#130f0a] shadow-[0_12px_30px_rgba(252,211,77,.25)] transition hover:bg-amber-200 disabled:cursor-default disabled:opacity-80"
+    >
+      {p.launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
+      {p.launching ? 'Launching' : 'Play'}
+    </button>
+  );
+}

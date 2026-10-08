@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
+import { PlayButton } from './PlayButton';
 import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
@@ -28,6 +29,8 @@ interface GamePageProps {
   backLabel: string;
   onBack: () => void;
   onPlay: () => void;
+  onStop: () => void;
+  onForceStop: () => void;
   launching: boolean;
   session?: SessionEvent;
   refreshing?: boolean;
@@ -148,10 +151,6 @@ export function GamePage(p: GamePageProps) {
     ? needsAttention(game) ? attentionReason(game) : fix.description
     : 'No compatibility reports loaded for this title yet.';
 
-  const state = session?.state;
-  const busy = p.launching || state === 'starting' || state === 'running';
-  const playLabel = state === 'running' ? 'Playing' : state === 'starting' ? 'Starting' : p.launching ? 'Launching' : 'Play';
-
   const about = [
     details?.genres?.length ? details.genres.slice(0, 3).join(' · ') : null,
     details?.developers?.length ? details.developers.join(', ') : null,
@@ -191,26 +190,7 @@ export function GamePage(p: GamePageProps) {
             {!game.is_installed ? (
               <InstallButton game={game} job={job} onInstall={() => p.onJob('install')} onCancel={(id) => p.onJobAction('cancel', id)} />
             ) : (
-            <button
-              onClick={p.onPlay}
-              disabled={busy || game.outside_folder}
-              title={session?.message}
-              className={cx(
-                'flex items-center gap-2 rounded-2xl px-8 py-3.5 text-[15px] font-extrabold transition disabled:cursor-default',
-                state === 'running'
-                  ? 'bg-emerald-400 text-[#0b1a12] shadow-[0_12px_30px_rgba(52,211,153,.25)]'
-                  : 'bg-amber-300 text-[#130f0a] shadow-[0_12px_30px_rgba(252,211,77,.25)] hover:bg-amber-200 disabled:opacity-80'
-              )}
-            >
-              {state === 'running' ? (
-                <span className="h-2.5 w-2.5 rounded-full bg-[#0b1a12]" />
-              ) : busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 fill-current" />
-              )}
-              {playLabel}
-            </button>
+            <PlayButton session={session} launching={p.launching} disabled={game.outside_folder} onPlay={p.onPlay} onStop={p.onStop} onForceStop={p.onForceStop} />
             )}
           </div>
         </div>

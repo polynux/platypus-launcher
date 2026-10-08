@@ -14,6 +14,7 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi, onJobs, onSession } from './effect/runtime';
+import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
@@ -138,9 +139,9 @@ export function App() {
             const seeded: Record<string, SessionEvent> = {};
             const now = Date.now();
             for (const e of live) {
-              if (e.state === 'starting' || e.state === 'running') {
+              if (isLiveState(e.state)) {
                 seeded[e.game_id] = e;
-                if (e.state === 'running' && sessionStart.current[e.game_id] === undefined) {
+                if (e.state !== 'starting' && sessionStart.current[e.game_id] === undefined) {
                   sessionStart.current[e.game_id] = now;
                 }
               }
@@ -217,6 +218,10 @@ export function App() {
       .finally(() => setLaunchingId(null));
   };
 
+  const stop = (gameId: string, force: boolean) => {
+    Effect.runPromise(force ? LauncherApi.forceStopGame(gameId) : LauncherApi.stopGame(gameId)).catch((err) => notify(errMsg(err), 'err'));
+  };
+
   // Real session state comes from the backend: for Steam games it watches the
   // game process under Steam's reaper, not the short-lived `steam` command.
   const gamesRef = useRef(games);
@@ -225,7 +230,7 @@ export function App() {
     () =>
       onSession((e) => {
         const title = gamesRef.current.find((g) => g.id === e.game_id)?.title ?? e.game_id;
-        if (e.state === 'starting' || e.state === 'running') {
+        if (isLiveState(e.state)) {
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
@@ -261,9 +266,9 @@ export function App() {
           const seeded: Record<string, SessionEvent> = {};
           const now = Date.now();
           for (const e of live) {
-            if (e.state === 'starting' || e.state === 'running') {
+            if (isLiveState(e.state)) {
               seeded[e.game_id] = e;
-              if (e.state === 'running' && sessionStart.current[e.game_id] === undefined) {
+              if (e.state !== 'starting' && sessionStart.current[e.game_id] === undefined) {
                 sessionStart.current[e.game_id] = now;
               }
             }
@@ -434,6 +439,8 @@ export function App() {
             backLabel={view.from}
             onBack={() => setView({ name: view.from } as View)}
             onPlay={() => launch(currentGame)}
+            onStop={() => stop(currentGame.id, false)}
+            onForceStop={() => stop(currentGame.id, true)}
             launching={launchingId === currentGame.id}
             session={sessions[currentGame.id]}
             refreshing={scanning}
@@ -506,6 +513,7 @@ export function App() {
         runnerCount={runners.length}
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+        onStop={(id) => stop(id, false)}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">

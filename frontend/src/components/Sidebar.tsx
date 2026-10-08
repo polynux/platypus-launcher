@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search } from 'lucide-react';
+import { Search, Square } from 'lucide-react';
 import { cx, clock } from './ui';
 import { storeLabel } from '../lib/games';
 import type { SessionEvent, StoreType, View } from '../types';
@@ -20,6 +20,7 @@ interface SidebarProps {
   runnerCount: number;
   lastScan: number | null;
   sessions: (SessionEvent & { title: string })[];
+  onStop: (gameId: string) => void;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -116,6 +117,7 @@ export function Sidebar(p: SidebarProps) {
       <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
         {p.sessions.map((e) => {
           const running = e.state === 'running';
+          const label = running ? 'playing' : e.state === 'stopping' ? 'stopping' : 'starting';
           return (
             <div
               key={e.game_id}
@@ -125,10 +127,20 @@ export function Sidebar(p: SidebarProps) {
               <span className={cx('h-2 w-2 flex-none rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-amber-300')} />
               <span className="min-w-0 flex-1">
                 <span className={cx('block font-mono text-[9px] uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
-                  {running ? 'playing' : 'starting'}
+                  {label}
                 </span>
                 <span className="block truncate text-[11.5px] font-semibold text-white/85">{e.title}</span>
               </span>
+              {e.state !== 'stopping' && (
+                <button
+                  onClick={() => p.onStop(e.game_id)}
+                  aria-label={`Stop ${e.title}`}
+                  title="Stop"
+                  className="flex-none rounded-lg p-1.5 text-white/45 transition hover:bg-white/[0.08] hover:text-red-200"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                </button>
+              )}
             </div>
           );
         })}
