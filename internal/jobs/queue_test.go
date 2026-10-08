@@ -175,11 +175,18 @@ func TestCrashRestartsJob(t *testing.T) {
 		if got.Attempts != i+1 {
 			t.Fatalf("attempt %d: %+v", i+1, got)
 		}
+		// Running is set before b.Start fires; don't crash the plugin
+		// again while that start call is still pending.
+		b.waitStarts(i+1, 3*time.Second)
 	}
 	q.PluginExited("echo", errors.New("signal: killed"))
 	if got := waitState(t, q, j.ID, StateFailed); !strings.Contains(got.Error, "crashed") {
 		t.Fatalf("give up: %+v", got)
 	}
+	// The running state is set before b.Start is called, so the final
+	// attempt's start call can still be in flight when the failed state is
+	// observed; the pending start must still be counted.
+	b.waitStarts(maxAttempts, 3*time.Second)
 	if b.starts() != maxAttempts {
 		t.Fatalf("starts = %d", b.starts())
 	}
