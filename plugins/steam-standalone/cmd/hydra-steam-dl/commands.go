@@ -123,6 +123,10 @@ func runInstall(ctx context.Context, req request) error {
 			return err
 		}
 	}
+	// Success: stop the flusher's final checkpoint BEFORE the job cleanup,
+	// so stop's save never resurrects the removed job file (live bug:
+	// jobs/<job>.json survived every finished install).
+	flusher.stop()
 	depot.RemoveJob(ss.dataDir, jobID)
 	clearStaging(ss.dataDir, jobID)
 	bad, err := depot.Verify(installedManifests(depots), req.InstallDir)
@@ -227,6 +231,9 @@ func runUpdate(ctx context.Context, req request) error {
 			return err
 		}
 	}
+	// Same success-path order as runInstall: the flusher's checkpoint
+	// happens before the job file is removed (see flusher.stop).
+	uflusher.stop()
 	depot.RemoveJob(ss.dataDir, jobID)
 	clearStaging(ss.dataDir, jobID)
 	emit(map[string]any{"type": "result", "os_used": osUsed, "bytes": totalBytes(depots)})
@@ -381,6 +388,7 @@ type jobFlusher struct {
 	state   *depot.JobState
 	mu      sync.Mutex
 	n       int
+	stopped bool
 	ticker  *time.Ticker
 	stopCh  chan struct{}
 }
@@ -391,6 +399,10 @@ type jobFlusher struct {
 func (f *jobFlusher) snapshot() *depot.JobState {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.snapshotLocked()
+}
+
+func (f *jobFlusher) snapshotLocked() *depot.JobState {
 	cp := &depot.JobState{AppID: f.state.AppID, DepotID: f.state.DepotID, ManifestID: f.state.ManifestID, Branch: f.state.Branch, Total: f.state.Total, Done: make(map[string]bool, len(f.state.Done))}
 	for k, v := range f.state.Done {
 		cp.Done[k] = v
@@ -399,9 +411,38 @@ func (f *jobFlusher) snapshot() *depot.JobState {
 }
 
 // saveNow checkpoints a consistent snapshot; safe to call alongside mark()
-// and the timer goroutine.
+// and the timer goroutine. After stop() it does nothing: the success path
+// removes the job file after its final checkpoint, and a late save (the
+// deferred stop, or a mark straggling past stop) would resurrect state a
+// finished job already removed — found live: job.json survived a finished
+// install.
 func (f *jobFlusher) saveNow() {
-	cp := f.snapshot()
+	f.mu.Lock()
+	if f.stopped {
+		f.mu.Unlock()
+		return
+	}
+	cp := f.snapshotLocked()
+	f.mu.Unlock()
+	_ = depot.SaveJob(f.dataDir, f.jobID, cp)
+}
+
+// stop ends the flusher once: the ticker goroutine exits and the live
+// state is checkpointed. Later stop() calls are no-ops (safe to defer one
+// and call it early on the success path, before RemoveJob), and saveNow
+// after it never writes again. Error/cancel paths keep the STEAM-12
+// checkpoint: their deferred stop is the first one and still saves.
+func (f *jobFlusher) stop() {
+	f.mu.Lock()
+	if f.stopped {
+		f.mu.Unlock()
+		return
+	}
+	f.stopped = true
+	f.ticker.Stop()
+	cp := f.snapshotLocked()
+	f.mu.Unlock()
+	close(f.stopCh)
 	_ = depot.SaveJob(f.dataDir, f.jobID, cp)
 }
 
@@ -424,7 +465,7 @@ func (f *jobFlusher) mark(idHex string) {
 	f.mu.Lock()
 	f.state.Done[idHex] = true
 	f.n++
-	need := f.n >= 50
+	need := f.n >= 50 && !f.stopped
 	if need {
 		f.n = 0
 	}
@@ -432,12 +473,6 @@ func (f *jobFlusher) mark(idHex string) {
 	if need {
 		f.saveNow()
 	}
-}
-
-func (f *jobFlusher) stop() {
-	f.ticker.Stop()
-	close(f.stopCh)
-	f.saveNow()
 }
 
 // Chunk staging for resume: each landed chunk is written to
