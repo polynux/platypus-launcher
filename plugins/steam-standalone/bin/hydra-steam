@@ -1119,6 +1119,11 @@ def game_dir_name(app):
         return installed[app]["dir_name"]
     name = store_app(app).get("name") or f"app_{app}"
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("_") or f"app_{app}"
+    # Suffix the app id: two store names can sanitize identically
+    # ("A/B" and "A_B" both become "A_B"). Existing installs keep their
+    # stored dir_name above.
+    if not safe.endswith(f"_{app}"):
+        safe = f"{safe}_{app}"
     return safe
 
 
