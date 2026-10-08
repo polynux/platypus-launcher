@@ -57,3 +57,28 @@ describe('gamescope resolution and rate choice', () => {
     expect(rateChoice(100)).toBe('custom');
   });
 });
+
+import { envKeyError, envToRows, rowsToEnv } from './settings';
+
+describe('env rows', () => {
+  const rows = (...kv: [string, string][]) => kv.map(([key, value], id) => ({ id, key, value }));
+  it('round-trips valid env', () => {
+    const env = { A: '1', _B2: 'x y' };
+    expect(rowsToEnv(envToRows(env))).toEqual(env);
+  });
+  it('flags invalid keys and excludes them from the env', () => {
+    const r = rows(['OK', '1'], ['1BAD', '2'], ['has space', '3'], ['A-B', '4'], ['', 'ignored']);
+    expect(envKeyError(r, 0)).toBeNull();
+    expect(envKeyError(r, 1)).toBeTruthy();
+    expect(envKeyError(r, 2)).toBeTruthy();
+    expect(envKeyError(r, 3)).toBeTruthy();
+    expect(envKeyError(r, 4)).toBeNull();
+    expect(rowsToEnv(r)).toEqual({ OK: '1' });
+  });
+  it('flags a duplicate on the later row and the last value wins', () => {
+    const r = rows(['A', '1'], ['A', '2']);
+    expect(envKeyError(r, 0)).toBeNull();
+    expect(envKeyError(r, 1)).toMatch(/Duplicate/);
+    expect(rowsToEnv(r)).toEqual({ A: '2' });
+  });
+});

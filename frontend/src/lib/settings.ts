@@ -256,3 +256,32 @@ export function rateChoice(r: number): string {
   return GS_RATES.includes(r) ? String(r) : 'custom';
 }
 
+// ---------------------------------------------------------------------------
+// Env rows: editable KEY/value list, invalid keys are flagged and never saved.
+
+export interface EnvRow {
+  id: number;
+  key: string;
+  value: string;
+}
+
+export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function envKeyError(rows: EnvRow[], index: number): string | null {
+  const key = rows[index].key;
+  if (key === '') return null; // empty row: just ignored
+  if (!ENV_KEY_RE.test(key)) return 'Letters, digits and _ only; cannot start with a digit';
+  if (rows.slice(0, index).some((r) => r.key === key)) return 'Duplicate key, this value wins';
+  return null;
+}
+
+/** Valid rows only. A duplicate key keeps the last value (like a shell would). */
+export function rowsToEnv(rows: EnvRow[]): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const r of rows) if (ENV_KEY_RE.test(r.key)) env[r.key] = r.value;
+  return env;
+}
+
+export function envToRows(env: Record<string, string>): EnvRow[] {
+  return Object.entries(env).map(([key, value], id) => ({ id, key, value }));
+}

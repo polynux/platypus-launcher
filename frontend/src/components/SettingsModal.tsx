@@ -7,7 +7,7 @@ import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui'
 import { LauncherApi } from '../effect/runtime';
 import {
   DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
-  composeGamescopeArgs, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
+  composeGamescopeArgs, envKeyError, envToRows, rowsToEnv, type EnvRow, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
 } from '../lib/settings';
 
 interface Props {
@@ -44,27 +44,14 @@ function runnerKind(r: ProtonVersion): string {
   return 'steam';
 }
 
-function parseEnv(text: string): { env: Record<string, string>; ignored: { n: number; line: string }[] } {
-  const env: Record<string, string> = {};
-  const ignored: { n: number; line: string }[] = [];
-  text.split('\n').forEach((raw, i) => {
-    const line = raw.trim();
-    if (!line) return;
-    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (m) env[m[1]] = m[2];
-    else ignored.push({ n: i + 1, line });
-  });
-  return { env, ignored };
-}
-
 export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Props) {
   const [draft, setDraft] = useState<GameSettings>(() => normalizeSettings(game.settings));
-  const [envText, setEnvText] = useState(() =>
-    Object.entries(normalizeSettings(game.settings).env_vars).map(([k, v]) => `${k}=${v}`).join('\n')
-  );
-  // Dirty = draft or env text differs from what was loaded: Esc / click-outside then stay inert.
-  const initial = useRef({ draft: JSON.stringify(draft), env: envText });
-  const dirty = JSON.stringify(draft) !== initial.current.draft || envText !== initial.current.env;
+  const [envRows, setEnvRows] = useState<EnvRow[]>(() => envToRows(normalizeSettings(game.settings).env_vars));
+  const nextRowId = useRef(envRows.length);
+  // Dirty = draft or env rows differ from what was loaded: Esc / click-outside then stay inert.
+  const envSig = JSON.stringify(envRows.map((r) => [r.key, r.value]));
+  const initial = useRef({ draft: JSON.stringify(draft), env: envSig });
+  const dirty = JSON.stringify(draft) !== initial.current.draft || envSig !== initial.current.env;
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -72,9 +59,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
   const native = !!game.native;
-  const parsedEnv = useMemo(() => parseEnv(envText), [envText]);
-  const current = { ...draft, env_vars: parsedEnv.env };
-  const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, envText]); // eslint-disable-line react-hooks/exhaustive-deps
+  const validEnv = useMemo(() => rowsToEnv(envRows), [envRows]);
+  const current = { ...draft, env_vars: validEnv };
+  const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, validEnv]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live preview from the real backend, debounced 300ms.
   useEffect(() => {
@@ -280,15 +267,28 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
               <input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" className={field} />
             </label>
-            <label className="block">
+            <div>
               <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
-              <textarea rows={2} value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder="KEY=value (one per line)" className={cx(field, 'resize-y')} />
-              {parsedEnv.ignored.length > 0 && (
-                <p role="status" className="mt-1.5 break-all font-mono text-[10px] text-orange-300">
-                  {parsedEnv.ignored.map((l) => `Ignored line ${l.n}: ${l.line}`).join(' · ')}
-                </p>
-              )}
-            </label>
+              <div className="space-y-1.5">
+                {envRows.map((r, i) => {
+                  const err = envKeyError(envRows, i);
+                  const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
+                  return (
+                    <div key={r.id}>
+                      <div className="flex items-center gap-1.5">
+                        <input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx(field, 'w-[42%] flex-none', err && 'ring-1 ring-orange-300/70')} />
+                        <input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className={field} />
+                        <button aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-white/[0.07] text-white/60 transition hover:bg-white/[0.12] hover:text-white">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {err && <p role="status" className="mt-1 font-mono text-[10px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className={cx(btnNeutral, 'mt-2 px-3 py-1.5 text-[11px]')}>+ Add variable</button>
+            </div>
           </div>
         </div>
 
