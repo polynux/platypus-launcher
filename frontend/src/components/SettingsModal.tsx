@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
@@ -40,6 +40,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const [envText, setEnvText] = useState(() =>
     Object.entries(normalizeSettings(game.settings).env_vars).map(([k, v]) => `${k}=${v}`).join('\n')
   );
+  // Dirty = draft or env text differs from what was loaded: Esc / click-outside then stay inert.
+  const initial = useRef({ draft: JSON.stringify(draft), env: envText });
+  const dirty = JSON.stringify(draft) !== initial.current.draft || envText !== initial.current.env;
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -71,7 +74,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
   return (
-    <Modal label={`Launcher settings for ${game.title}`} onClose={onClose} className="max-w-[920px]">
+    <Modal label={`Launcher settings for ${game.title}`} onClose={onClose} dismissable={!dirty} className="max-w-[920px]">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
@@ -242,6 +245,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
             <button onClick={() => onSave(current)} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
           </div>
+          {dirty && <div role="status" className="font-mono text-[10px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[9px] leading-relaxed text-white/40">
             saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
           </div>

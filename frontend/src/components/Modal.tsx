@@ -5,14 +5,18 @@ interface ModalProps {
   label: string;
   onClose: () => void;
   className?: string;
+  /** false = Esc and click-outside are ignored (e.g. unsaved edits); the owner's own buttons still close. */
+  dismissable?: boolean;
   children: React.ReactNode;
 }
 
 /** Centered modal: Esc + click-outside close, focus moves in on open and back on close. Tab cycles inside (FE-11). */
-export function Modal({ label, onClose, className, children }: ModalProps) {
+export function Modal({ label, onClose, className, dismissable = true, children }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const dismissRef = useRef(dismissable);
+  dismissRef.current = dismissable;
 
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
@@ -28,7 +32,7 @@ export function Modal({ label, onClose, className, children }: ModalProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        closeRef.current();
+        if (dismissRef.current) closeRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -56,7 +60,7 @@ export function Modal({ label, onClose, className, children }: ModalProps) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-6" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-6" onMouseDown={() => dismissable && onClose()}>
       <div
         ref={panel}
         role="dialog"
