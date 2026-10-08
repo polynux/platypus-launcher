@@ -21,6 +21,7 @@ client, started hidden (`steam -silent`), and the game runs against it.
 
 import json
 import os
+import queue
 import re
 import shutil
 import signal
@@ -553,76 +554,166 @@ def auth_begin(_params):
 
 
 def run_auth_password(username, password, guard, timeout=300):
-    """One `hydra-steam-dl auth` password run: the password travels on
-    stdin (never argv, never logged) and the binary persists the refresh
-    token itself. Returns None on success, else the error message."""
+    """Password login across one or two dialog submits sharing a SINGLE
+    auth session (one BeginAuthSessionViaCredentials, one CM socket).
+
+    First submit carries no guard code yet: when Steam asks for an
+    email/authenticator code, the session stays alive and the dialog
+    error names the kind, so the second submit feeds the code into the
+    SAME session via UpdateAuthSessionWithSteamGuardCode. Restarting the
+    session instead would send a NEW email and invalidate the code the
+    user just typed — a loop they can't win. A wrong/expired code fails
+    fast; mobile confirmation just waits on the same session until the
+    phone approves. The password travels on stdin (never argv, never
+    logged) and the binary persists the refresh token itself."""
+    deadline = time.time() + timeout
+    with pw_lock:
+        sess = pw_sessions.get(username)
+        if sess is None or not sess.alive():
+            if sess is not None:
+                pw_sessions.pop(username, None)
+            sess = PWSession(username, password, guard)
+            pw_sessions[username] = sess
+            sent_code = False
+        else:
+            # Resuming the code-waiting session from the first submit.
+            sent_code = True
+            if guard:
+                sess.send_code(guard)
+            elif sess.need is not None:
+                raise RPCError(_need_code_message(sess.need))
     try:
-        proc = subprocess.Popen(
-            [dl_bin(), "auth"], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1, env=dict(os.environ))
-    except FileNotFoundError:
-        raise RPCError("hydra-steam-dl is missing; reinstall the plugin")
-    req = {"mode": "password", "account": username, "password": password}
-    if guard:
-        req["code"] = guard
-    try:
-        proc.stdin.write(json.dumps(req) + "\n")
-        proc.stdin.flush()
-    except (BrokenPipeError, OSError):
-        pass
-    # The binary asks for a code only when the account needs one and none
-    # was supplied; the dialog already collected it when asked, so a
-    # code-needed here means "retry with a fresh code".
-    out = []
-    try:
-        for line in proc.stdout:
-            line = line.strip()
-            if not line:
-                continue
-            out.append(line)
+        while time.time() < deadline:
             try:
-                msg = json.loads(line)
-            except ValueError:
-                continue
-            if not isinstance(msg, dict):
+                msg = sess.events.get(timeout=5)
+            except queue.Empty:
+                if not sess.alive():
+                    break
                 continue
             t = msg.get("type")
-            if t == "code-needed" and not guard:
-                try:
-                    proc.kill()
-                except OSError:
-                    pass
-                raise RPCError("Steam needs a Steam Guard code for this account; "
-                               "try again with a fresh code")
-            elif t == "code-needed":
-                # A code was supplied but Steam still asks: it was wrong or
-                # expired — fail fast so the user retries with a fresh one.
-                try:
-                    proc.kill()
-                except OSError:
-                    pass
-                raise RPCError("Steam rejected the code: wrong Steam Guard code")
+            if t == "code-needed":
+                sess.need = msg
+                if sent_code:
+                    # A code was already tried on this session and Steam
+                    # still asks: wrong or expired — fail fast on a dead
+                    # session so the retry starts fresh with a new code.
+                    sess.stop()
+                    with pw_lock:
+                        if pw_sessions.get(username) is sess:
+                            pw_sessions.pop(username, None)
+                    raise RPCError("Steam rejected the code: wrong Steam Guard code")
+                # Keep the session (same Begin, same email) and ask the
+                # dialog for the right kind of code.
+                raise RPCError(_need_code_message(msg))
+            elif t == "waiting":
+                continue  # mobile confirmation: the poll continues server-side
             elif t == "result":
-                try:
-                    proc.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    pass
+                with pw_lock:
+                    if pw_sessions.get(username) is sess:
+                        pw_sessions.pop(username, None)
                 return None
             elif t == "error":
+                with pw_lock:
+                    if pw_sessions.get(username) is sess:
+                        pw_sessions.pop(username, None)
                 raise RPCError(msg.get("message") or "login failed")
-            # waiting/qr events: keep reading until result/error.
+        sess.stop()
+        with pw_lock:
+            if pw_sessions.get(username) is sess:
+                pw_sessions.pop(username, None)
+        raise RPCError("login timed out")
+    except RPCError:
+        raise
+
+
+# Password-login sessions that survive across auth.complete calls: the
+# first attempt (no guard code yet) keeps its BeginAuthSessionViaCredentials
+# session — same client_id, same CM socket — while the dialog waits.
+pw_lock = threading.Lock()
+pw_sessions = {}  # account -> PWSession waiting for a code
+
+
+class PWSession:
+    """One live `hydra-steam-dl auth` password run, read by a single
+    background thread into a queue. The password travels on stdin (never
+    argv, never logged)."""
+
+    def __init__(self, username, password, code=""):
         try:
-            rc = proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            raise RPCError("login timed out")
-        raise RPCError("login failed: " + tail("\n".join(out)))
-    finally:
+            proc = subprocess.Popen(
+                [dl_bin(), "auth"], stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, env=dict(os.environ))
+        except FileNotFoundError:
+            raise RPCError("hydra-steam-dl is missing; reinstall the plugin")
+        self.proc, self.account = proc, username
+        self.events = queue.Queue()
+        self.ended = threading.Event()
+        self.need = None  # the last code-needed event, while waiting
+        req = {"mode": "password", "account": username, "password": password}
+        if code:
+            req["code"] = code
         try:
-            proc.stdin.close()
+            proc.stdin.write(json.dumps(req) + "\n")
+            proc.stdin.flush()
         except (BrokenPipeError, OSError):
             pass
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        try:
+            for line in self.proc.stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(msg, dict) and msg.get("type"):
+                    self.events.put(msg)
+                    if msg["type"] in ("result", "error"):
+                        return
+        finally:
+            self.ended.set()
+            _reap(self.proc)
+
+    def send_code(self, code):
+        try:
+            self.proc.stdin.write(json.dumps({"code": code}) + "\n")
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def alive(self):
+        return self.proc.poll() is None and not self.ended.is_set()
+
+    def stop(self):
+        try:
+            self.proc.kill()
+        except OSError:
+            pass
+        _reap(self.proc)
+        try:
+            self.proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+
+def _need_code_message(msg):
+    """Which kind of code the helper asks for, in dialog words."""
+    guard = (msg.get("guard_type") or "").strip()
+    detail = (msg.get("message") or "").strip()
+    if guard == "device":
+        want = "the code from your authenticator app"
+    elif guard == "email":
+        want = "the code Steam emailed you"
+    else:
+        want = "your Steam Guard code"
+    if detail:
+        return (f"Steam needs {want} ({detail}); enter it in the Steam Guard "
+                f"field and submit again")
+    return f"Steam needs {want}; enter it in the Steam Guard field and submit again"
 
 
 def auth_complete(params):
@@ -686,6 +777,11 @@ def wait_qr_login(timeout=300):
 
 def auth_logout(_params):
     stop_qr_login()
+    with pw_lock:
+        sessions = list(pw_sessions.values())
+        pw_sessions.clear()
+    for sess in sessions:
+        sess.stop()
     # Wipe the whole private data folder so no login key, guard data or
     # cached token survives.
     shutil.rmtree(data_dir(), ignore_errors=True)
