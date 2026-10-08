@@ -159,7 +159,7 @@ export function GamePage(p: GamePageProps) {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="px-10 py-6">
+    <div className="p-7">
       <button onClick={p.onBack} className="flex items-center gap-1.5 rounded text-[12px] font-semibold text-white/50 transition hover:text-white">
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
       </button>
@@ -332,7 +332,7 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
   const pct = job.percent >= 0 ? Math.round(job.percent) : null;
   const what = job.state === 'queued' ? 'queued' : job.phase || job.kind;
   return (
-    <div className="w-72 rounded-2xl bg-black/55 px-4 py-3 ring-1 ring-white/10">
+    <div className="w-72 rounded-2xl bg-black/70 px-4 py-3 ring-1 ring-white/10">
       <div className="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider">
         <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
         <button onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 text-white/50 transition hover:text-white">
@@ -418,6 +418,7 @@ function ManagePanel({
             <button
               onClick={() => (confirm ? (setConfirm(false), onJob('uninstall')) : setConfirm(true))}
               onBlur={() => setConfirm(false)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setConfirm(false); }}
               className={cx(
                 'flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-[12.5px] font-bold transition',
                 confirm ? 'bg-red-500/80 text-white hover:bg-red-500' : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.1]'
