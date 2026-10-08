@@ -77,44 +77,77 @@ export function App() {
   const loadData = useCallback(
     (reason: 'startup' | 'rescan') => {
       setScanning(true);
-      const program = Effect.all([
-        LauncherApi.getLibrary(),
-        LauncherApi.getProtonVersions(),
-        LauncherApi.listPlugins(),
+      // Each source resolves independently: one rejection must not discard
+      // the other three successes (FE-3). Settle each call on its own
+      // promise so a single failure can't fail the batch.
+      type Settled<A> = { ok: true; value: A } | { ok: false; error: Error };
+      const settle = <A,>(eff: Effect.Effect<A, Error>): Promise<Settled<A>> =>
+        Effect.runPromise(eff).then(
+          (value): Settled<A> => ({ ok: true, value }),
+          (error): Settled<A> => ({ ok: false, error: error instanceof Error ? error : new Error(String(error)) }),
+        );
+      return Promise.all([
+        settle(LauncherApi.getLibrary()),
+        settle(LauncherApi.getProtonVersions()),
+        settle(LauncherApi.listPlugins()),
         // Unreadable saved settings shouldn't block the library.
-        LauncherApi.getGameSettings().pipe(Effect.orElseSucceed(() => ({}) as Record<string, GameSettings>)),
-      ]);
-      return Effect.runPromise(program)
-        .then(([lib, r, p, saved]) => {
-          const g = lib.games;
-          setWarnings(lib.warnings);
-          // Keep edited settings across rescans; on startup, settings come
-          // from disk. Sideloaded games arrive from the backend now.
-          setGames((prev) => {
-            const edited = new Map(prev.map((x) => [x.id, x.settings]));
-            return g.map((x) => {
-              const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
-              return s ? { ...x, settings: s } : x;
+        settle(LauncherApi.getGameSettings()),
+      ])
+        .then(([libR, rR, pR, savedR]) => {
+          const failures: string[] = [];
+          const saved: Record<string, GameSettings> = savedR.ok ? savedR.value : {};
+          if (!savedR.ok) failures.push(`Settings: ${errMsg((savedR as { ok: false; error: Error }).error)}`);
+          if (libR.ok) {
+            const lib = (libR as { ok: true; value: { games: Game[]; warnings: SourceWarning[] } }).value;
+            const g = lib.games;
+            setWarnings(lib.warnings);
+            // Keep edited settings across rescans; on startup, settings come
+            // from disk. Sideloaded games arrive from the backend now.
+            setGames((prev) => {
+              const edited = new Map(prev.map((x) => [x.id, x.settings]));
+              return g.map((x) => {
+                const s = edited.get(x.id) ?? (saved[x.id] ? { ...x.settings, ...saved[x.id] } : undefined);
+                return s ? { ...x, settings: s } : x;
+              });
             });
-          });
-          setRunners(r);
-          setPlugins(p);
-          setLoadError(null);
+            const sources = new Set(g.map((x) => x.source)).size;
+            const installed = g.filter((x) => x.is_installed).length;
+            // Runner count uses whatever the runners call returned (possibly stale).
+            log({
+              type: 'update',
+              detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
+              meta: `${sources} source${sources === 1 ? '' : 's'}`,
+            });
+            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message.slice(0, 80) });
+          } else {
+            failures.push(`Library: ${errMsg((libR as { ok: false; error: Error }).error)}`);
+          }
+          if (rR.ok) {
+            setRunners((rR as { ok: true; value: ProtonVersion[] }).value);
+          } else {
+            failures.push(`Runners: ${errMsg((rR as { ok: false; error: Error }).error)}`);
+          }
+          if (pR.ok) {
+            setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
+          } else {
+            failures.push(`Plugins: ${errMsg((pR as { ok: false; error: Error }).error)}`);
+          }
+          if (failures.length > 0) {
+            const msg = failures.join(' · ');
+            setLoadError(msg);
+            log({ type: 'update', detail: 'Library scan had errors', meta: msg.slice(0, 80) });
+            notify(msg, 'err');
+          } else {
+            setLoadError(null);
+            if (reason === 'rescan') notify('Library rescanned');
+          }
           setLastScan(Date.now());
-          const sources = new Set(g.map((x) => x.source)).size;
-          const installed = g.filter((x) => x.is_installed).length;
-          log({
-            type: 'update',
-            detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
-            meta: `${sources} source${sources === 1 ? '' : 's'} · ${r.length} runners`,
-          });
-          for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message.slice(0, 80) });
-          if (reason === 'rescan') notify('Library rescanned');
         })
         .catch((err) => {
+          // Unreachable: every call is guarded. Kept as a safety net.
           const msg = errMsg(err);
           setLoadError(msg);
-          notify(msg.slice(0, 90), 'err');
+          notify(msg, 'err');
         })
         .finally(() => {
           setLoaded(true);
