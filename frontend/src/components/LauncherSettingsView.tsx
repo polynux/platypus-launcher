@@ -108,9 +108,9 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
         </form>
 
         <div className="mt-2.5 flex min-h-4 items-center justify-between gap-4">
-          {error ? <p role="alert" className="font-mono text-[10.5px] text-red-300">{error}</p> : <span />}
+          {error ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p> : <span />}
           {saved && !isDefault && (
-            <button onClick={() => save('')} disabled={busy} className="flex-none rounded font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:text-white/80">
+            <button onClick={() => save('')} disabled={busy} className="flex-none rounded font-mono text-[11.5px] uppercase tracking-widest text-white/40 transition hover:text-white/80">
               reset to {saved.default_games_folder.replace(/^\/home\/[^/]+/, '~')}
             </button>
           )}
@@ -154,7 +154,7 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
           </button>
         </form>
         <div className="mt-2.5 flex min-h-4 items-center gap-4">
-          {cleanupError ? <p role="alert" className="font-mono text-[10.5px] text-red-300">{cleanupError}</p> : <span />}
+          {cleanupError ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{cleanupError}</p> : <span />}
         </div>
       </Panel>
     </div>

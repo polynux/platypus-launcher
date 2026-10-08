@@ -176,20 +176,20 @@ export function GamePage(p: GamePageProps) {
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.98) 10%, rgba(19,15,10,.35) 62%, rgba(19,15,10,.25) 100%)' }} />
         <div className="absolute bottom-6 left-8 right-8 flex items-end justify-between gap-6">
           <div className="min-w-0">
-            <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.14em]">
+            <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em]">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
-              <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{storeLabel(game.store)}</span>
+              <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{storeLabel(game.store)}</span>
               {formatBytes(game.size_bytes) && (
-                <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{formatBytes(game.size_bytes)}</span>
+                <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{formatBytes(game.size_bytes)}</span>
               )}
-              {!game.is_installed && <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/55">not installed</span>}
-              {game.update_available && <span className="inline-flex h-5 items-center rounded-md bg-sky-400/15 px-2.5 pt-px leading-none text-sky-200 ring-1 ring-sky-300/30">update available</span>}
+              {!game.is_installed && <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/55">not installed</span>}
+              {game.update_available && <span className="inline-flex h-6 items-center rounded-md bg-sky-400/15 px-2.5 pt-px leading-none text-sky-200 ring-1 ring-sky-300/30">update available</span>}
             </div>
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
           <div className="flex flex-none items-center gap-4">
             {(hours != null || last) && (
-              <div className="text-right font-mono text-[10px] leading-relaxed text-white/50">
+              <div className="text-right font-mono text-[11.5px] leading-relaxed text-white/50">
                 {hours != null && <div>{hours}h logged</div>}
                 {last && <div>last played {last}</div>}
               </div>
@@ -208,8 +208,8 @@ export function GamePage(p: GamePageProps) {
           <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
             <p className="font-bold text-amber-200">Installed outside {plugin.name}'s folder</p>
             <p>
-              Hydra only launches {plugin.name} games from <span className="font-mono text-[11px]">{plugin.install_folder}</span> or folders you allow.
-              This one is in <span className="font-mono text-[11px] text-white/90">{game.install_dir}</span>, probably from before Hydra managed it.
+              Hydra only launches {plugin.name} games from <span className="font-mono text-[12px]">{plugin.install_folder}</span> or folders you allow.
+              This one is in <span className="font-mono text-[12px] text-white/90">{game.install_dir}</span>, probably from before Hydra managed it.
             </p>
           </div>
           <button onClick={() => p.onAllowFolder(game.install_dir)} className={cx(btnNeutral, 'flex flex-none items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
@@ -222,17 +222,17 @@ export function GamePage(p: GamePageProps) {
         <div className="mb-6 rounded-2xl bg-white/[0.04] px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-white/[0.07]">
           {game.note && <p>{game.note}</p>}
           {!game.is_installed && plugin && game.installable && (
-            <p className="font-mono text-[10.5px] text-white/45">
+            <p className="font-mono text-[12px] text-white/55">
               installs into {plugin.install_folder} ·{' '}
               <button onClick={() => p.onNavigate({ name: 'plugins' })} className="underline decoration-white/25 underline-offset-2 hover:text-white/80">change</button>
             </p>
           )}
-          {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[10.5px] text-red-300">last attempt failed: {job.error}</p>}
+          {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[11.5px] text-red-300">last attempt failed: {job.error}</p>}
         </div>
       )}
 
       {p.refreshing && (
-        <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-white/40">refreshing library…</p>
+        <p className="mb-4 font-mono text-[11.5px] uppercase tracking-widest text-white/40">refreshing library…</p>
       )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -282,7 +282,7 @@ export function GamePage(p: GamePageProps) {
             ) : (
               <p className="text-[13px] text-white/45">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
             )}
-            {about.length > 0 && <p className="mt-3 font-mono text-[10.5px] text-white/45">{about.join('  ·  ')}</p>}
+            {about.length > 0 && <p className="mt-3 font-mono text-[12px] text-white/55">{about.join('  ·  ')}</p>}
           </Panel>
         </div>
 
@@ -291,9 +291,9 @@ export function GamePage(p: GamePageProps) {
             <h2 className="mb-2 text-[15px] font-bold">Compatibility</h2>
             <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
             {fix?.winetricks && fix.winetricks.length > 0 && (
-              <p className="mt-2 font-mono text-[10.5px] text-sky-200/80">recipe: winetricks {fix.winetricks.join(' ')}</p>
+              <p className="mt-2 font-mono text-[11.5px] text-sky-200/80">recipe: winetricks {fix.winetricks.join(' ')}</p>
             )}
-            <div className="mt-4 space-y-2 font-mono text-[10.5px]">
+            <div className="mt-4 space-y-2 font-mono text-[11.5px]">
               {facts.map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
                   <span className="text-white/45">{k}</span>
@@ -309,7 +309,7 @@ export function GamePage(p: GamePageProps) {
                 href={`https://www.protondb.com/app/${game.store_app_id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-3 block text-center font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:text-white/80"
+                className="mt-3 block text-center font-mono text-[11.5px] uppercase tracking-widest text-white/40 transition hover:text-white/80"
               >
                 protondb reports ↗
               </a>
@@ -352,7 +352,7 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
   const what = job.state === 'queued' ? 'queued' : job.phase || job.kind;
   return (
     <div className="w-72 rounded-2xl bg-black/70 px-4 py-3 ring-1 ring-white/10">
-      <div className="flex items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-wider">
+      <div className="flex items-center justify-between gap-3 font-mono text-[11.5px] uppercase tracking-wider">
         <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
         <button onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 text-white/50 transition hover:text-white">
           <X className="h-3.5 w-3.5" />
@@ -362,7 +362,7 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
         <div className={cx('h-full rounded-full bg-amber-300 transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
       </div>
       {job.state === 'running' && job.total > 0 && (
-        <div className="mt-1.5 font-mono text-[9.5px] tabular-nums text-white/45">
+        <div className="mt-1.5 font-mono text-[11px] tabular-nums text-white/45">
           {formatBytes(job.bytes) || '0 B'} of {formatBytes(job.total)}
           {job.speed > 0 && ` · ${formatBytes(job.speed)}/s`}
         </div>
@@ -411,7 +411,7 @@ function ManagePanel({
   return (
     <Panel className="bg-white/[0.05]">
       <h2 className="mb-2 text-[15px] font-bold">Installation</h2>
-      <div className="space-y-2 font-mono text-[10.5px]">
+      <div className="space-y-2 font-mono text-[11.5px]">
         {[
           ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
           ['Folder', game.install_dir || '—'],
@@ -449,7 +449,7 @@ function ManagePanel({
         </div>
       )}
       {job?.state === 'failed' && !active && (
-        <p className="mt-2 font-mono text-[10px] text-red-300">
+        <p className="mt-2 font-mono text-[11.5px] text-red-300">
           {job.kind} failed: {job.error}{' '}
           <button onClick={() => onJobAction('retry', job.id)} className="underline underline-offset-2 hover:text-red-200">retry</button>
         </p>
@@ -478,7 +478,7 @@ function TweaksPanel({
   return (
     <Panel className="bg-white/[0.05]">
       <h2 className="text-[15px] font-bold">Suggested tweaks</h2>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-white/45">
+      <p className="mt-1 text-[12px] leading-relaxed text-white/55">
         Based on this machine, not the game's rating: a platinum game can still need them on your GPU.
         {viaSteam && (
           <>
@@ -504,9 +504,9 @@ function TweaksPanel({
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-[12.5px] font-semibold text-white/90">{t.title}</span>
-                      <span className="block text-[11px] leading-snug text-white/50">{t.reason}</span>
+                      <span className="block text-[12px] leading-snug text-white/50">{t.reason}</span>
                       {t.env && Object.keys(t.env).length > 0 && (
-                        <span className="mt-1 block truncate font-mono text-[9.5px] text-sky-200/60">
+                        <span className="mt-1 block truncate font-mono text-[11px] text-sky-200/60">
                           {Object.entries(t.env).map(([k, v]) => `${k}=${v}`).join(' ')}
                         </span>
                       )}
@@ -540,7 +540,7 @@ function AchievementsSection({
     <section className="pb-8">
       <div className="mb-3.5 flex items-baseline justify-between">
         <h2 className="text-[16px] font-bold tracking-tight">Achievements</h2>
-        <span className="font-mono text-[11px] tabular-nums text-white/45">
+        <span className="font-mono text-[12px] tabular-nums text-white/45">
           {known ? `${ach.unlocked}/${ach.total} · ${pct}%` : `${ach.total} total`}
         </span>
       </div>
@@ -549,7 +549,7 @@ function AchievementsSection({
           <div className="h-full rounded-full bg-amber-300" style={{ width: `${pct}%` }} />
         </div>
       ) : (
-        <p className="mb-4 text-[11.5px] text-white/45">
+        <p className="mb-4 text-[12px] text-white/55">
           {viaSteam
             ? "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here."
             : 'The store lists these achievements; your progress there isn\'t available to Hydra.'}
@@ -561,7 +561,7 @@ function AchievementsSection({
         ))}
       </div>
       {list.length < ach.total && (
-        <p className="mt-3 font-mono text-[10px] text-white/35">
+        <p className="mt-3 font-mono text-[12px] text-white/55">
           showing {list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
         </p>
       )}
@@ -585,8 +585,8 @@ function AchievementCard({ a, known }: { a: Achievement; known: boolean }) {
       )}
       <div className={cx('min-w-0', dim && 'opacity-60')}>
         <div className="truncate text-[12px] font-bold">{a.name}</div>
-        {a.description && <div className="line-clamp-2 text-[10.5px] leading-snug text-white/50">{a.description}</div>}
-        {meta && <div className="mt-0.5 font-mono text-[9px] text-white/40">{meta}</div>}
+        {a.description && <div className="line-clamp-2 text-[11.5px] leading-snug text-white/50">{a.description}</div>}
+        {meta && <div className="mt-0.5 font-mono text-[11px] text-white/40">{meta}</div>}
       </div>
     </div>
   );

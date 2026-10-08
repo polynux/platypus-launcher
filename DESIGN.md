@@ -36,7 +36,7 @@ Read `PRODUCT.md` for product truth. Design summary:
    translucent panels, not shadows (except modal + toast, see §6.4/§6.6).
 4. **Typography.** One UI family: **Hanken Grotesk** — 800 headings (H1 23–27px, game
    title 32–36px), 700 card titles (12–13px), 400 body (12–13px), plus **JetBrains Mono**
-   uppercase micro-labels 8.5–10px `tracking-[0.14–0.16em]` for metadata. All numeric
+   uppercase micro-labels 11–11.5px `tracking-[0.12–0.16em]` for metadata. **Size floor:** mono micro-labels 11–11.5px, body text at least 12px; hint sentences (empty states, notes under fields, warnings, footers) are at least 12px and at least `text-white/55`. All numeric
    readouts `tabular-nums`. **Fonts bundled locally** (no network fetch in the app).
 5. **Event-type color system** (Activity, fixes): session=emerald, unlock=amber, fix=sky,
    update=neutral, download=violet, add=neutral, tweak=orange. Source of truth:
@@ -119,10 +119,10 @@ Apply `.app-wash` on the root div (not `body`). Game pages use `.app-wash-game`.
 
 - **Panel:** `rounded-3xl bg-white/[0.045] ring-1 ring-white/[0.07] p-5` (hero panels `p-6`)
 - **Card:** `rounded-2xl bg-white/[0.045] ring-1 ring-white/[0.07]` hover: `ring-amber-300/40` + `-translate-y-0.5` + `transition duration-300`
-- **Seg chip:** `rounded-lg px-3 py-1.5 font-mono text-[11px]`; active `bg-amber-300 font-bold text-[#130f0a]`; inactive `bg-white/[0.06] text-white/55 hover:bg-white/[0.1]`
+- **Seg chip:** `rounded-lg px-3 py-1.5 font-mono text-[12px]`; active `bg-amber-300 font-bold text-[#130f0a]`; inactive `bg-white/[0.06] text-white/55 hover:bg-white/[0.1]`
 - **SegRow:** flex-wrap row of chips (all enum settings)
 - **Toggle pill:** track `h-4 w-7` thumb `h-3 w-3 bg-[#191410]`; on = amber track, thumb translated (14px)
-- **Mono label:** `font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/35`
+- **Mono label:** `font-mono text-[11px] uppercase tracking-[0.16em] text-white/35`
 - **Tier badge** (mono uppercase `rounded-md px-2 py-0.5`):
   platinum = solid `bg-amber-300 text-[#130f0a]`; gold = `bg-amber-300/15 text-amber-300 ring-1 ring-amber-300/40`;
   silver = `bg-white/[0.06] text-white/55`; bronze = `bg-orange-400/10 text-orange-300`; borked = `bg-red-500/15 text-red-300`
@@ -148,24 +148,24 @@ Apply `.app-wash` on the root div (not `body`). Game pages use `.app-wash-game`.
 ## 4. Sidebar spec (w-56; fixed, never scrolls)
 
 1. **Brand:** 36px amber→rose gradient rounded-xl tile "H"; "Hydra" 15px extrabold;
-   `GAME HUB` mono 8.5px `text-white/30`.
+   `GAME HUB` mono 11px `text-white/30`.
 2. **Search:** styled input with lucide `Search` icon absolute-left; `rounded-xl bg-white/[0.06] px-3.5 py-2.5 text-[12px] placeholder-white/30`. Live-filters library.
 3. **Nav** (12.5px semibold, `px-3 py-2 rounded-xl mb-0.5`): Dashboard, Library (count badge),
    Downloads (badge only >0), Achievements, Activity. Active: `bg-amber-300/12 text-amber-200`.
    Hover: `hover:bg-white/[0.05] hover:text-white`.
 4. **Sources:** mono `SOURCES` label; rows Steam/GOG/Epic — dot `h-1.5 w-1.5 bg-amber-300/50`,
-   count mono `text-[9.5px] text-white/25`. Click → Library pre-filtered.
+   count mono `text-[11px] text-white/25`. Click → Library pre-filtered.
 5. **Friends panel** (pinned `mt-auto`, **`flex-none`, fixed content** — this fixes the
    "friends list bugged" squeeze bug; never grows with content):
    - Header: `FRIENDS` mono + `● 2 online` `text-emerald-300`.
    - Exactly 3 visible rows in `rounded-2xl bg-white/[0.05] p-2.5`: 32px avatar
      `rounded-lg`, presence dot bottom-right with boxShadow ring; name 11.5px bold;
-     status mono 8.5px uppercase (in-game = `text-emerald-300/80` + game; away =
+     status mono 11px uppercase (in-game = `text-emerald-300/80` + game; away =
      `text-white/30` + "away · 3h"). "See all friends" link if more. Real presence data
      only — until friends/presence are real backend features, this panel is a **stub:
      render "Friends — coming soon" honest empty state** OR omit; do not fabricate.
      (The mockup shows fake friends; the app must not.)
-   - Footer: `hydra v0.2 · scan 09:41` mono 8.5px `text-white/20`.
+   - Footer: `hydra v0.2 · scan 09:41` mono 11px `text-white/55`.
 
 ---
 
@@ -240,7 +240,7 @@ override settings for "launch once with X".
    `relative mb-6 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]`; image
    `h-[290px] w-full object-cover`; overlay
    `linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)`;
-   bottom-left: orange `ACTION REQUIRED` chip (mono 9px black uppercase), H1 27px extrabold
+   bottom-left: orange `ACTION REQUIRED` chip (mono 11px black uppercase), H1 27px extrabold
    "{Game} needs its fix re-applied", CTAs: amber "Open game" + neutral "Later".
    **Stat chips** `absolute bottom-6 right-7 hidden gap-3 lg:flex`: 3 ×
    `w-28 rounded-2xl bg-black/45 p-3.5` (this one may use `backdrop-blur`) —
@@ -251,17 +251,17 @@ override settings for "launch once with X".
 2. **Continue playing** (left `1.75fr`) + right column (stacked:
    **Waiting on you** → up to 3 cards (`rounded-2xl bg-white/[0.045] p-4 ring-1 ring-white/[0.06] hover:ring-orange-400/40`: title 13px bold + tier mono orange + verdict 2-line clamp);
    below it **Recently added** panel (5 rows: 32px thumb, title 12px semibold,
-   `STORE · WHEN` mono 8.5px uppercase)).
+   `STORE · WHEN` mono 11px uppercase)).
    ContinueGrid card: cover `aspect-[3/4]`, tweak dot, below title 12px bold truncate,
-   meta mono 8.5px `{hours}h · {RUNNER-SHORT}`. Grid: `grid-cols-4 gap-3.5` (2 rows = 8 games).
+   meta mono 11px `{hours}h · {RUNNER-SHORT}`. Grid: `grid-cols-4 gap-3.5` (2 rows = 8 games).
    Hover: `-translate-y-0.5`, ring-amber-300/40. **No center overlay buttons on cards.**
    Header row: title 16px bold + `full library →` link (goes Library).
 3. **Hero fix target routing:** "Open game" opens that game's page.
 4. **Activity** full-width panel (`rounded-3xl bg-white/[0.04] p-5 ring-1 ring-white/[0.07]`):
    header "Activity" 15px + `FULL LOG →` mono right; 8 rows from `GetRecentActivity(8)`;
-   row: ts mono 10px `text-white/30` tabular-nums · dot `h-1.5 rounded-full` ·
+   row: ts mono 11.5px `text-white/30` tabular-nums · dot `h-1.5 rounded-full` ·
    detail 13px (type label mono uppercase 10px colored per §3.2 + text `text-white/85`) ·
-   meta mono 10px `text-white/35`.
+   meta mono 11.5px `text-white/35`.
 
 ### 6.2 Library (`p-7`; source: `design-lab/src/pages/library.jsx`)
 
@@ -274,7 +274,7 @@ source chips (ALL/STEAM/GOG/EPIC `rounded-xl bg-white/[0.05] p-1` container),
 1. `LAST PLAYED` (mono section label): 3 large cards `h-[210px]`:
    wide image + `linear-gradient(0deg, rgba(19,15,10,.95) 8%, transparent 60%)`;
    bottom: title 16px extrabold + tier mono right; meta row
-   `{hours}h · {last} · {RUNNER}` mono 9px `text-white/45`; **playtime progress bar**
+   `{hours}h · {last} · {RUNNER}` mono 11px `text-white/45`; **playtime progress bar**
    `h-1 rounded-full bg-white/[0.14]` fill `bg-amber-300/80` width = hours/maxHours;
    hover: play badge top-right (`h-9 w-9 rounded-full bg-black/45` grid center, opacity 0→100).
 2. `ALL TITLES`: `grid-cols-5 gap-3` vertical cards (aspect 2/3 cover, tweak dot,
@@ -301,18 +301,18 @@ gap-3: tier dot, title with 28px cover thumb, tier, runner, hrs, size, last
    amber fill; tiles grid **`repeat(auto-fill, minmax(190px, 220px))`** — define as a static
    CSS class in style.css (`.ach-grid`) to avoid Tailwind arbitrary-value flakiness:
    tile = star box 40px `rounded-xl` (unlocked: `bg-amber-300/15 ring-1 ring-amber-300/40`;
-   locked: `bg-white/[0.05] opacity-30`), name 12px bold truncate, date/rarity mono 9px.
+   locked: `bg-white/[0.05] opacity-30`), name 12px bold truncate, date/rarity mono 11px.
 4. Optional per-game activity rows (only if `GetRecentActivity` has entries for this game).
 
 ### 6.4 Settings modal (source: shared16.jsx modal; 14's layout, centered)
 
 - Overlay: `fixed inset-0 z-50 grid place-items-center bg-black/65 p-6`; click-outside closes; **Esc closes**.
 - Panel: `w-[880px] max-h-[86vh] overflow-y-auto rounded-3xl bg-[#191410] p-7 ring-1 ring-white/10`, shadow `0 40px 100px rgba(0,0,0,.6)`. Enter animation: fade + scale .96→1, 150ms ease-out.
-- Header: "Launcher settings" 20px extrabold + game title mono 10px + close button.
+- Header: "Launcher settings" 20px extrabold + game title mono 11.5px + close button.
 - Body `grid grid-cols-[1.5fr_1fr] gap-6`:
   - **Left:** Runner radio-cards (four, from `GetProtonVersions`; selected =
     `border-amber-300/50 bg-amber-300/[0.07]` + amber radio dot; sub-line
-    `{kind} · updated {when}` mono 9.5px). Renderer & sync SegRows in 2-col grid:
+    `{kind} · updated {when}` mono 11px). Renderer & sync SegRows in 2-col grid:
     DXVK version / VKD3D-Proton / sync / upscaler / MangoHud preset / shader cache.
   - **Right:** Proton flags — 8 pill rows; label = flag name without `PROTON_` prefix,
     lowercase spaces; full var + description in `title` attr; on-row =
@@ -321,7 +321,7 @@ gap-3: tier dot, title with 28px cover thumb, tier, runner, hrs, size, last
     fed by live `PreviewLaunchCommand` with current draft settings — updates on any change
     (debounced 300ms). Footer: Cancel + **Save config** (calls `SetGameSettings`, closes,
     toasts "Settings saved").
-- `prefix: {path}` mono 9px at the modal bottom.
+- `prefix: {path}` mono 12px `text-white/55` at the modal bottom.
 
 ### 6.5 Stub views (Downloads / Achievements-global / Activity-log / Runners / Fix DB)
 
@@ -333,7 +333,7 @@ label + one-line explanation. **Never fabricate rows.**
 ### 6.6 Toast notifications
 
 Keep existing toast: `fixed bottom-4 right-4 z-[60] rounded-[3px] border px-3 py-2 font-mono
-text-[11px] bg-[#191410]` with event dot; kinds ok/emerald, err/red, busy/amber;
+text-[12px] bg-[#191410]` with event dot; kinds ok/emerald, err/red, busy/amber;
 3.5s auto-dismiss. (Instrument readout style.) The z sits above the modal
 overlay (`z-50`): a toast must stay readable over an open dialog, not lean on
 DOM order.

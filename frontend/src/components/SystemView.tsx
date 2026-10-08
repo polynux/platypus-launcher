@@ -34,12 +34,12 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-bold">{r.name}</span>
-                  {r.is_custom && <span className="rounded-md bg-amber-300/15 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-amber-300 ring-1 ring-amber-300/40">custom</span>}
-                  {r.is_system && <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/55">system</span>}
+                  {r.is_custom && <span className="rounded-md bg-amber-300/15 px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-amber-300 ring-1 ring-amber-300/40">custom</span>}
+                  {r.is_system && <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">system</span>}
                 </div>
-                <div className="truncate font-mono text-[9.5px] text-white/45 select-text">{r.path}</div>
+                <div className="truncate font-mono text-[11px] text-white/45 select-text">{r.path}</div>
               </div>
-              <span className="flex flex-none items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-wider text-emerald-300">
+              <span className="flex flex-none items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> found
               </span>
             </div>

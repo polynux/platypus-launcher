@@ -46,11 +46,11 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
                     {needsAttention(g) && <TweakDot />}
                     <span className="truncate text-[14px] font-bold">{g.title}</span>
                     <TierBadge tier={f.tier} />
-                    <span className="font-mono text-[9px] uppercase tracking-wider text-white/40">{storeLabel(g.store)} · {f.source}</span>
+                    <span className="font-mono text-[11px] uppercase tracking-wider text-white/40">{storeLabel(g.store)} · {f.source}</span>
                   </div>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{needsAttention(g) ? attentionReason(g) : f.description}</p>
                   {(f.winetricks?.length || f.dll_overrides) && (
-                    <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[10px]">
+                    <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[11.5px]">
                       {f.winetricks?.map((t) => <span key={t} className="rounded-lg bg-sky-300/10 px-2 py-0.5 text-sky-200">{t}</span>)}
                       {f.dll_overrides && Object.entries(f.dll_overrides).map(([k, v]) => <span key={k} className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-white/60">{k}={v}</span>)}
                     </div>
