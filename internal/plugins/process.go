@@ -66,6 +66,7 @@ type process struct {
 	stdin    *os.File
 	ready    chan struct{} // closed once initialize succeeded
 	exited   chan struct{} // closed when the current run is over
+	dead     chan struct{} // closed right after cmd.Wait returns, before the drain (CORE-2)
 	info     *InitResult
 	started  time.Time
 	crashes  int
@@ -83,7 +84,20 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 	}
 	err = conn.Call(ctx, method, params, result)
 	if errors.Is(err, jsonrpc.ErrClosed) {
-		return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
+		// The connection died under us (stale conn raced cleanup, or the
+		// plugin exited mid-call). Resolve a fresh connection once and
+		// retry; if the manager already gave up, surface that instead.
+		fresh, err2 := p.ensure(ctx)
+		if err2 != nil {
+			return err2
+		}
+		if fresh == conn {
+			return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
+		}
+		if err2 = fresh.Call(ctx, method, params, result); errors.Is(err2, jsonrpc.ErrClosed) {
+			return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
+		}
+		return err2
 	}
 	return err
 }
@@ -99,10 +113,23 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 			return nil, fmt.Errorf("plugin %s is stopped", p.id)
 		}
 		if p.conn != nil {
-			conn, ready, exited := p.conn, p.ready, p.exited
+			conn, ready, exited, dead := p.conn, p.ready, p.exited, p.dead
 			p.mu.Unlock()
 			select {
 			case <-ready:
+				// The process died but cleanup hasn't finished (CORE-2
+				// drain window): never hand out the stale conn. Wait for
+				// the reaper, then loop to restart or report give-up.
+				select {
+				case <-dead:
+					select {
+					case <-exited:
+						continue
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					}
+				default:
+				}
 				select {
 				case <-conn.Done():
 					// The plugin just died; wait for cleanup, then restart.
@@ -200,12 +227,16 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 
 	conn := jsonrpc.NewConn(outR, inW, p.notify)
 	exited := make(chan struct{})
-	p.cmd, p.conn, p.stdin, p.exited, p.info = cmd, conn, inW, exited, nil
+	dead := make(chan struct{})
+	p.cmd, p.conn, p.stdin, p.exited, p.dead, p.info = cmd, conn, inW, exited, dead, nil
 	p.ready = make(chan struct{})
 	p.started = time.Now()
 
 	go func() {
 		waitErr := cmd.Wait()
+		// Mark the run dead before the reader-drain below (CORE-2): from
+		// here on ensure() must not hand out this conn.
+		close(dead)
 		// The leader is gone; take any helpers it left behind with it.
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		// Let the reader drain what the plugin wrote before exiting.
@@ -223,7 +254,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 		p.mu.Lock()
 		crashed := false
 		if p.cmd == cmd {
-			p.cmd, p.conn, p.stdin, p.info = nil, nil, nil, nil
+			p.cmd, p.conn, p.stdin, p.dead, p.info = nil, nil, nil, nil, nil
 			if p.initErr != nil {
 				waitErr, p.initErr = p.initErr, nil
 			}
