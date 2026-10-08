@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
@@ -397,7 +397,12 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // StrictMode mounts effects twice in dev; starting login twice spawns two
+  // store-tool flows (two QR codes / two legendary attempts racing).
+  const begunFor = useRef<string | null>(null);
   useEffect(() => {
+    if (begunFor.current === plugin.id) return;
+    begunFor.current = plugin.id;
     Effect.runPromise(LauncherApi.authBegin(plugin.id))
       .then(setPrompt)
       .catch((e) => setError(errMsg(e)));
