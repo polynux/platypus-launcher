@@ -4,6 +4,8 @@ import { Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ds/select';
+import { Button } from '@/components/ds/button';
+import { Input } from '@/components/ds/input';
 import { NumberField } from '@/components/ds/number-field';
 import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
@@ -19,8 +21,6 @@ interface Props {
   onSave: (s: GameSettings) => void;
   onCopied: () => void;
 }
-
-const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[12px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
 /** Physical pixels of the display the window is on. */
 function displayResolution(): { w: number; h: number } | undefined {
@@ -258,39 +258,38 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                 </div>
                 <label className="block">
                   <MonoLabel className="mb-1.5">extra gamescope args</MonoLabel>
-                  <input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" className={field} />
+                  <Input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" />
                 </label>
               </div>
             )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
-              <input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" className={field} />
-            </label>
-            <div>
-              <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
-              <div className="space-y-1.5">
-                {envRows.map((r, i) => {
-                  const err = envKeyError(envRows, i);
-                  const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
-                  return (
-                    <div key={r.id}>
-                      <div className="flex items-center gap-1.5">
-                        <input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx(field, 'w-[42%] flex-none', err && 'ring-1 ring-orange-300/70')} />
-                        <input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className={field} />
-                        <button aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-white/[0.07] text-white/60 transition hover:bg-white/[0.12] hover:text-white">
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      {err && <p role="status" className="mt-1 font-mono text-[11.5px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+          <label className="block">
+            <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
+            <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" />
+          </label>
+
+          <div>
+            <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
+            <div className="space-y-1.5">
+              {envRows.map((r, i) => {
+                const err = envKeyError(envRows, i);
+                const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
+                return (
+                  <div key={r.id}>
+                    <div className="flex items-center gap-1.5">
+                      <Input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx('w-[40%] flex-none', err && 'ring-1 ring-orange-300/70')} />
+                      <Input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className="min-w-0 flex-1" />
+                      <Button variant="ghost" size="icon" aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none">
+                        <X className="size-4" />
+                      </Button>
                     </div>
-                  );
-                })}
-              </div>
-              <button onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className={cx(btnNeutral, 'mt-2 px-3 py-1.5 text-[12px]')}>+ Add variable</button>
+                    {err && <p role="status" className="mt-1 font-mono text-[11.5px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                  </div>
+                );
+              })}
             </div>
+            <Button variant="ghost" size="sm" onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className="mt-2">+ Add variable</Button>
           </div>
         </div>
 
