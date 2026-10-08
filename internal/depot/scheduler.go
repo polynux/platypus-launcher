@@ -184,15 +184,20 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	for i, h := range hosts {
 		states[i] = &hostState{host: h}
 	}
-	// Network workers.
+	// Network workers. Cap at host slots: workers beyond
+	// len(hosts)*MaxPerHost would only spin in fetchOne's wait loop.
+	maxWorkers := s.cfg.MaxConns
+	if cap := len(hosts) * s.cfg.MaxPerHost; cap < maxWorkers {
+		maxWorkers = cap
+	}
 	var wg sync.WaitGroup
 	var conns atomic.Int32
 	initial := s.cfg.InitialConns
 	if initial > len(ordered) {
 		initial = len(ordered)
 	}
-	if initial > s.cfg.MaxConns {
-		initial = s.cfg.MaxConns
+	if initial > maxWorkers {
+		initial = maxWorkers
 	}
 	conns.Store(int32(initial))
 	tasks := make(chan chunkTask, len(ordered))
@@ -202,6 +207,7 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	type result struct {
 		id   string
 		data []byte
+		host string
 		task chunkTask
 		err  error
 	}
@@ -221,14 +227,14 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	worker := func() {
 		defer wg.Done()
 		for task := range tasks {
-			data, err := s.fetchOne(ctx, m, depotID, task.chunk, states, key)
+			data, host, err := s.fetchOne(ctx, m, depotID, task.chunk, states, key)
 			if err != nil {
 				results <- result{id: string(task.chunk.ID), task: task, err: err}
 				continue
 			}
 			doneBytes.Add(uint64(len(data)))
 			doneChunks.Add(1)
-			results <- result{id: string(task.chunk.ID), data: data}
+			results <- result{id: string(task.chunk.ID), data: data, host: host}
 		}
 	}
 	wg.Add(initial)
@@ -257,7 +263,7 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 				done := doneBytes.Load()
 				rate := float64(done-lastBytes) / s.cfg.GrowEvery.Seconds()
 				lastBytes = done
-				if rate > lastRate && int(conns.Load()) < s.cfg.MaxConns {
+				if rate > lastRate && int(conns.Load()) < maxWorkers {
 					conns.Add(1)
 					lastRate = rate
 					wg.Add(1)
@@ -270,7 +276,7 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	}()
 	var failures []error
 	completed := 0
-	hostsUsed := map[string]bool{}
+	usedHosts := map[string]bool{}
 	for completed < len(ordered) {
 		select {
 		case <-ctx.Done():
@@ -291,6 +297,9 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 				failures = append(failures, r.err)
 				continue
 			}
+			if r.host != "" {
+				usedHosts[r.host] = true
+			}
 			if sink != nil {
 				if err := sink(r.id, r.data); err != nil {
 					close(stopGrow)
@@ -304,10 +313,9 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 			// next progress report; only in-flight chunks stay in RAM.
 			r.data = nil
 			if onProgress != nil {
-				hostsUsed["x"] = true
 				onProgress(Progress{DoneBytes: doneBytes.Load(), TotalBytes: total,
 					BytesPerSec: float64(doneBytes.Load()) / time.Since(start).Seconds(),
-					Connections: int(conns.Load()), Hosts: len(hosts), ChunkID: r.id, Data: nil})
+					Connections: int(conns.Load()), Hosts: len(usedHosts), ChunkID: r.id, Data: nil})
 			}
 		}
 	}
@@ -315,7 +323,6 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 	close(tasks)
 	wg.Wait()
 	<-growDone
-	_ = hostsUsed
 	_ = chunkByID
 	if len(failures) > 0 {
 		return failures[0]
@@ -327,8 +334,9 @@ func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uin
 // load order and penalising failures. When every host is resting or full
 // it waits for one to free up instead of failing: giving up instantly
 // turns a momentarily-busy pool into a failed job. Decrypt runs inline;
-// parallelism across workers already spreads it over GOMAXPROCS.
-func (s *Scheduler) fetchOne(ctx context.Context, m *Manifest, depotID uint32, c Chunk, states []*hostState, key []byte) ([]byte, error) {
+// parallelism across workers already spreads it over GOMAXPROCS. It
+// returns the serving host's name for real Hosts progress reporting.
+func (s *Scheduler) fetchOne(ctx context.Context, m *Manifest, depotID uint32, c Chunk, states []*hostState, key []byte) ([]byte, string, error) {
 	wait := 20 * time.Millisecond
 	for {
 		order := append([]*hostState{}, states...)
@@ -361,18 +369,18 @@ func (s *Scheduler) fetchOne(ctx context.Context, m *Manifest, depotID uint32, c
 				last = err
 				continue
 			}
-			return data, nil
+			return data, h.host.Name, nil
 		}
 		if tried {
 			if last == nil {
 				last = fmt.Errorf("chunk %x failed on every host", c.ID)
 			}
-			return nil, last
+			return nil, "", last
 		}
 		// Every host is resting or full: wait for one instead of failing.
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		case <-time.After(wait):
 		}
 		if wait < 500*time.Millisecond {
