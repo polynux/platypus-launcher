@@ -1,8 +1,18 @@
 import React from 'react';
-import clsx from 'clsx';
 import type { ActivityType } from '../types';
+import { cn } from '@/lib/utils';
+import { buttonVariantClass } from './ds/button';
+import { Badge } from './ds/badge';
+import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 
-export const cx = clsx;
+/*
+ * App-level primitives and legacy helpers. src/components/ds/ (shadcn/Radix, restyled to
+ * DESIGN.md) is the source of truth for controls: Button, Input, Select, NumberField, Switch,
+ * ToggleGroup, ScrollArea, Dialog, Badge, Tooltip. Prefer those in new code; the btn* strings,
+ * SegRow, TogglePill and TierBadge below are thin adapters kept so existing surfaces keep working.
+ */
+
+export const cx = cn;
 
 export function Panel({ className, children, as: Tag = 'div' }: { className?: string; children: React.ReactNode; as?: 'div' | 'section' | 'aside' }) {
   return <Tag className={cx('rounded-3xl bg-white/[0.045] p-5 ring-1 ring-white/[0.07]', className)}>{children}</Tag>;
@@ -40,26 +50,24 @@ export interface SegOption<T extends string> {
 
 export function SegRow<T extends string>({ options, value, onChange, label }: { options: SegOption<T>[]; value: T; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
+    <ToggleGroup
+      type="single"
+      role="radiogroup"
+      aria-label={label}
+      value={value}
+      // Single groups report '' when the active item is clicked again; a radio group never deselects.
+      onValueChange={(v) => v && onChange(v as T)}
+    >
       {options.map((o) => (
-        <button
-          key={o.value}
-          role="radio"
-          aria-checked={value === o.value}
-          title={o.title}
-          onClick={() => onChange(o.value)}
-          className={cx(
-            'rounded-lg px-3 py-1.5 font-mono text-[12px] transition',
-            value === o.value ? 'bg-amber-300 font-bold text-[#130f0a]' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'
-          )}
-        >
+        <ToggleGroupItem key={o.value} value={o.value} title={o.title}>
           {o.label}
-        </button>
+        </ToggleGroupItem>
       ))}
-    </div>
+    </ToggleGroup>
   );
 }
 
+/** Visual-only switch for use inside a clickable row/button. For a standalone control use ds/Switch. */
 export function TogglePill({ on }: { on: boolean }) {
   return (
     <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-amber-300' : 'bg-white/15')}>
@@ -68,21 +76,16 @@ export function TogglePill({ on }: { on: boolean }) {
   );
 }
 
-const TIER_STYLE: Record<string, string> = {
-  platinum: 'bg-amber-300 text-[#130f0a]',
-  gold: 'bg-amber-300/15 text-amber-300 ring-1 ring-amber-300/40',
-  silver: 'bg-white/[0.06] text-white/60',
-  bronze: 'bg-orange-400/10 text-orange-300',
-  borked: 'bg-red-500/15 text-red-300',
-};
+const TIERS = ['platinum', 'gold', 'silver', 'bronze', 'borked'] as const;
 
 export function TierBadge({ tier, suffix }: { tier?: string | null; suffix?: string }) {
   if (!tier) return null;
+  const variant = (TIERS as readonly string[]).includes(tier) ? (tier as (typeof TIERS)[number]) : 'silver';
   return (
-    <span className={cx('inline-flex h-6 items-center rounded-md px-2 pt-px font-mono leading-none text-[11px] font-bold uppercase tracking-[0.14em]', TIER_STYLE[tier] ?? TIER_STYLE.silver)}>
+    <Badge variant={variant}>
       {tier}
       {suffix ? ` ${suffix}` : ''}
-    </span>
+    </Badge>
   );
 }
 
@@ -111,9 +114,9 @@ export function TweakDot({ className }: { className?: string }) {
   );
 }
 
-export const btnPrimary =
-  'rounded-xl bg-amber-300 font-extrabold text-[#130f0a] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60';
-export const btnNeutral = 'rounded-xl bg-white/[0.06] font-bold text-white/80 transition hover:bg-white/[0.1]';
+// Derived from ds/Button variants (look only: callers size and lay these out themselves).
+export const btnPrimary = buttonVariantClass.primary;
+export const btnNeutral = buttonVariantClass.neutral;
 
 export const EVENT_TEXT: Record<ActivityType, string> = {
   session: 'text-emerald-300',
