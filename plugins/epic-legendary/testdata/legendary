@@ -101,21 +101,30 @@ def main():
             return
         base = rest[rest.index("--base-path") + 1]
         game = next(g for g in CATALOG if g["app_name"] == app)
-        print(f"[cli] INFO: Install size: 12.00 MiB", file=sys.stderr, flush=True)
-        print(f"[cli] INFO: Download size: 10.00 MiB (Compression savings: 16.7%)", file=sys.stderr, flush=True)
-        for i, mib in enumerate((2.5, 5.0, 10.0), 1):
-            time.sleep(0.1)
-            pct = mib * 10
-            print(f"[DLManager] INFO: = Progress: {pct:.02f}% ({i}/3), Running for 00:00:0{i}, ETA: 00:00:01", file=sys.stderr, flush=True)
-            print(f"[DLManager] INFO:  - Downloaded: {mib:.02f} MiB, Written: {mib:.02f} MiB", file=sys.stderr, flush=True)
-            print(f"[DLManager] INFO:  + Download\t- 25.00 MiB/s (raw) / 30.00 MiB/s (decompressed)", file=sys.stderr, flush=True)
-        # Like the real core.py, an already-registered install keeps its
-        # directory even when --base-path says otherwise.
+        # Like the real tool: the game folder (with its download cache) and a
+        # resume file in the config folder exist before the first byte lands.
         if app in st["installed"]:
             path = st["installed"][app]["install_path"]
         else:
             path = os.path.join(base, game["app_title"].replace(" ", ""))
+        os.makedirs(os.path.join(path, ".cache"), exist_ok=True)
+        cfg = os.environ.get("LEGENDARY_CONFIG_PATH")
+        if cfg:
+            os.makedirs(os.path.join(cfg, "tmp"), exist_ok=True)
+            open(os.path.join(cfg, "tmp", f"{app}.resume"), "w").write("{}")
+        step = float(os.environ.get("FAKE_LEGENDARY_STEP", "0.1"))
+        print(f"[cli] INFO: Install size: 12.00 MiB", file=sys.stderr, flush=True)
+        print(f"[cli] INFO: Download size: 10.00 MiB (Compression savings: 16.7%)", file=sys.stderr, flush=True)
+        for i, mib in enumerate((2.5, 5.0, 10.0), 1):
+            time.sleep(step)
+            pct = mib * 10
+            print(f"[DLManager] INFO: = Progress: {pct:.02f}% ({i}/3), Running for 00:00:0{i}, ETA: 00:00:01", file=sys.stderr, flush=True)
+            print(f"[DLManager] INFO:  - Downloaded: {mib:.02f} MiB, Written: {mib:.02f} MiB", file=sys.stderr, flush=True)
+            print(f"[DLManager] INFO:  + Download\t- 25.00 MiB/s (raw) / 30.00 MiB/s (decompressed)", file=sys.stderr, flush=True)
         os.makedirs(os.path.join(path, "Binaries"), exist_ok=True)
+        shutil.rmtree(os.path.join(path, ".cache"), ignore_errors=True)
+        if cfg:
+            os.unlink(os.path.join(cfg, "tmp", f"{app}.resume"))
         open(os.path.join(path, "Binaries", "Game.exe"), "wb").write(b"MZ")
         st["installed"][app] = {"install_path": path, "title": game["app_title"], "version": game["latest"],
                                 "platform": "Windows", "install_size": 12 * 1024 * 1024, "is_dlc": False,
