@@ -143,7 +143,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         {r.hint && <> · <span className="select-text">{r.hint}</span></>}
                       </div>
                     ))}
-                    <p className="mt-1.5 text-[12px] text-white/45">Then rescan.</p>
+                    <p className="mt-1.5 text-[12px] text-white/55">Then rescan.</p>
                   </div>
                 )}
 
@@ -264,7 +264,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                     {p.problem && <p className="font-mono text-[11.5px] text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
-                      <p className="mt-auto text-[12px] text-white/45">
+                      <p className="mt-auto text-[12px] text-white/55">
                         JSON only — fix recipes and tweaks. It can't run anything, so Hydra applies it without asking.
                       </p>
                     )}
@@ -514,7 +514,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
-        <p className="mt-1 text-[11.5px] text-white/45">Your login stays with {plugin.name}'s own tool; Hydra doesn't store it.</p>
+        <p className="mt-1 text-[12px] text-white/55">Your login stays with {plugin.name}'s own tool; Hydra doesn't store it.</p>
         {!prompt && !error && (
           <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/45"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
         )}
@@ -526,7 +526,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
                 <button type="button" onClick={() => BrowserOpenURL(prompt.url!)} className={cx(btnNeutral, 'flex w-full items-center justify-center gap-2 py-2.5 text-[12.5px]')}>
                   <ExternalLink className="h-3.5 w-3.5" /> Open login page
                 </button>
-                <p className="mt-1.5 break-all font-mono text-[11px] text-white/35 select-text">{prompt.url}</p>
+                <p className="mt-1.5 break-all font-mono text-[12px] text-white/55 select-text">{prompt.url}</p>
               </div>
             )}
             {prompt.qr && (

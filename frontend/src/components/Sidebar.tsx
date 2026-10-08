@@ -144,7 +144,7 @@ export function Sidebar(p: SidebarProps) {
             </div>
           );
         })}
-        <div className="px-1.5 font-mono text-[11px] text-white/35">
+        <div className="px-1.5 font-mono text-[12px] text-white/55">
           hydra v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
       </div>

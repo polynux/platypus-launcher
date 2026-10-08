@@ -178,12 +178,12 @@ export function GamePage(p: GamePageProps) {
           <div className="min-w-0">
             <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.14em]">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
-              <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{storeLabel(game.store)}</span>
+              <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{storeLabel(game.store)}</span>
               {formatBytes(game.size_bytes) && (
-                <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{formatBytes(game.size_bytes)}</span>
+                <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{formatBytes(game.size_bytes)}</span>
               )}
-              {!game.is_installed && <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/55">not installed</span>}
-              {game.update_available && <span className="inline-flex h-5 items-center rounded-md bg-sky-400/15 px-2.5 pt-px leading-none text-sky-200 ring-1 ring-sky-300/30">update available</span>}
+              {!game.is_installed && <span className="inline-flex h-6 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/55">not installed</span>}
+              {game.update_available && <span className="inline-flex h-6 items-center rounded-md bg-sky-400/15 px-2.5 pt-px leading-none text-sky-200 ring-1 ring-sky-300/30">update available</span>}
             </div>
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
@@ -222,7 +222,7 @@ export function GamePage(p: GamePageProps) {
         <div className="mb-6 rounded-2xl bg-white/[0.04] px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-white/[0.07]">
           {game.note && <p>{game.note}</p>}
           {!game.is_installed && plugin && game.installable && (
-            <p className="font-mono text-[11.5px] text-white/45">
+            <p className="font-mono text-[12px] text-white/55">
               installs into {plugin.install_folder} ·{' '}
               <button onClick={() => p.onNavigate({ name: 'plugins' })} className="underline decoration-white/25 underline-offset-2 hover:text-white/80">change</button>
             </p>
@@ -282,7 +282,7 @@ export function GamePage(p: GamePageProps) {
             ) : (
               <p className="text-[13px] text-white/45">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
             )}
-            {about.length > 0 && <p className="mt-3 font-mono text-[11.5px] text-white/45">{about.join('  ·  ')}</p>}
+            {about.length > 0 && <p className="mt-3 font-mono text-[12px] text-white/55">{about.join('  ·  ')}</p>}
           </Panel>
         </div>
 
@@ -478,7 +478,7 @@ function TweaksPanel({
   return (
     <Panel className="bg-white/[0.05]">
       <h2 className="text-[15px] font-bold">Suggested tweaks</h2>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-white/45">
+      <p className="mt-1 text-[12px] leading-relaxed text-white/55">
         Based on this machine, not the game's rating: a platinum game can still need them on your GPU.
         {viaSteam && (
           <>
@@ -549,7 +549,7 @@ function AchievementsSection({
           <div className="h-full rounded-full bg-amber-300" style={{ width: `${pct}%` }} />
         </div>
       ) : (
-        <p className="mb-4 text-[11.5px] text-white/45">
+        <p className="mb-4 text-[12px] text-white/55">
           {viaSteam
             ? "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here."
             : 'The store lists these achievements; your progress there isn\'t available to Hydra.'}
@@ -561,7 +561,7 @@ function AchievementsSection({
         ))}
       </div>
       {list.length < ach.total && (
-        <p className="mt-3 font-mono text-[11.5px] text-white/35">
+        <p className="mt-3 font-mono text-[12px] text-white/55">
           showing {list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
         </p>
       )}

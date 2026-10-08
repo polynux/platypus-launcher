@@ -350,7 +350,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <button onClick={() => onSave(current)} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
           </div>
           {dirty && <div role="status" className="font-mono text-[11.5px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
-          <div className="font-mono text-[11px] leading-relaxed text-white/40">
+          <div className="font-mono text-[12px] leading-relaxed text-white/55">
             saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
           </div>
         </div>

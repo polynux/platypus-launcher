@@ -88,7 +88,7 @@ function jobLabel(j: Job): string {
   if (j.state === 'queued') return `${j.kind} queued`;
   return j.percent >= 0 ? `${j.kind === 'uninstall' ? 'removing' : 'installing'} ${Math.round(j.percent)}%` : j.phase ?? j.kind;
 }
-const TABLE_COLS = 'grid-cols-[16px_minmax(180px,2fr)_5rem_7.5rem_4.5rem_4.5rem_7rem]';
+const TABLE_COLS = 'grid-cols-[16px_minmax(180px,2fr)_5rem_7.5rem_4.5rem_6rem_7rem]';
 
 function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string; sort: Sort | null; onSort: (k: SortKey) => void; right?: boolean }) {
   const active = sort?.key === k;
@@ -297,7 +297,7 @@ export function LibraryView(p: LibraryProps) {
       ) : (
         <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
           <div role="table" aria-label="Library" className="min-w-[760px]">
-            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-white/40', TABLE_COLS)}>
+            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-white/40', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">status</span></span>
               <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
               <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>

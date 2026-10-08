@@ -79,7 +79,7 @@ const TIER_STYLE: Record<string, string> = {
 export function TierBadge({ tier, suffix }: { tier?: string | null; suffix?: string }) {
   if (!tier) return null;
   return (
-    <span className={cx('inline-flex h-5 items-center rounded-md px-2 pt-px font-mono leading-none text-[11px] font-bold uppercase tracking-[0.14em]', TIER_STYLE[tier] ?? TIER_STYLE.silver)}>
+    <span className={cx('inline-flex h-6 items-center rounded-md px-2 pt-px font-mono leading-none text-[11px] font-bold uppercase tracking-[0.14em]', TIER_STYLE[tier] ?? TIER_STYLE.silver)}>
       {tier}
       {suffix ? ` ${suffix}` : ''}
     </span>

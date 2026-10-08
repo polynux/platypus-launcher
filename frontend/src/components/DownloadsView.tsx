@@ -92,7 +92,7 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
           <div className={cx('h-full rounded-full transition-[width]', job.state === 'paused' ? 'bg-sky-300' : 'bg-amber-300', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
         </div>
       )}
-      {job.install_dir && job.kind !== 'uninstall' && <div className="mt-1.5 truncate font-mono text-[11px] text-white/35">{job.install_dir}</div>}
+      {job.install_dir && job.kind !== 'uninstall' && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir}</div>}
     </div>
   );
 }
