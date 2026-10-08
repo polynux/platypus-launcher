@@ -529,7 +529,10 @@ export function App() {
           role="status"
           title={notice.msg}
           className={cx(
-            'fixed bottom-4 right-4 z-50 flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[11px]',
+            // z-[60]: above the modal overlay (z-50) — a toast (e.g. a save
+            // or scan failure) must stay visible over an open dialog and not
+            // rely on DOM order. Shape unchanged (DESIGN.md §6.6).
+            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[11px]',
             NOTICE_STYLE[notice.kind]
           )}
           style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}

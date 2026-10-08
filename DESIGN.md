@@ -332,9 +332,11 @@ label + one-line explanation. **Never fabricate rows.**
 
 ### 6.6 Toast notifications
 
-Keep existing toast: `fixed bottom-4 right-4 z-50 rounded-[3px] border px-3 py-2 font-mono
+Keep existing toast: `fixed bottom-4 right-4 z-[60] rounded-[3px] border px-3 py-2 font-mono
 text-[11px] bg-[#191410]` with event dot; kinds ok/emerald, err/red, busy/amber;
-3.5s auto-dismiss. (Instrument readout style.)
+3.5s auto-dismiss. (Instrument readout style.) The z sits above the modal
+overlay (`z-50`): a toast must stay readable over an open dialog, not lean on
+DOM order.
 
 ---
 

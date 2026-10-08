@@ -14,11 +14,17 @@ describe('FE-14 design drift guards', () => {
     expect(dashboard.includes('backdrop-blur')).toBe(true);
   });
 
-  it('toast matches DESIGN §6.6 instrument readout (z-50, 3px radius)', () => {
+  it('toast matches DESIGN §6.6 instrument readout (rounded-[3px]) and sits above an open modal', () => {
     const app = src('App.tsx');
-    expect(app).toContain('z-50');
+    // FE-14 gave the toast z-50, the same as the modal overlay, so visibility
+    // over a modal relied on DOM order. The shape stays spec'd by §6.6
+    // (radius/border/mono); the stacking plane must not rely on DOM order:
+    // z-[60] beats any z-50 overlay wherever the toast mounts.
+    expect(app).toContain('z-[60]');
     expect(app).toContain('rounded-[3px]');
-    expect(app.includes('z-[60]')).toBe(false);
+    expect(app.includes('z-[60] flex max-w-md')).toBe(true);
+    const modal = src('components/Modal.tsx');
+    expect(modal).toContain('z-50');
   });
 
   it('ach-grid matches DESIGN §6.3 tile sizing', () => {
