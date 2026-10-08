@@ -931,18 +931,33 @@ func TestSteamQRConcurrentBegin(t *testing.T) {
 }
 
 // countAuthHelpers counts live vs zombie ("Z" stat) hydra-steam-dl auth
-// processes on this machine.
+// processes on this machine. It matches the executable name plus an
+// "auth" argv entry — never a substring of the full command line, which
+// would also match observers (this test runner included).
 func countAuthHelpers() (alive, zombie int) {
 	out, err := exec.Command("ps", "-eo", "stat,args").Output()
 	if err != nil {
 		return -1, -1
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "hydra-steam-dl auth") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
 			continue
 		}
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
+		exe := fields[1]
+		if i := strings.LastIndex(exe, "/"); i >= 0 {
+			exe = exe[i+1:]
+		}
+		if exe != "hydra-steam-dl" {
+			continue
+		}
+		auth := false
+		for _, a := range fields[2:] {
+			if a == "auth" {
+				auth = true
+			}
+		}
+		if !auth {
 			continue
 		}
 		if strings.HasPrefix(fields[0], "Z") {
