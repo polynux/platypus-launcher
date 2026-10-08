@@ -69,12 +69,15 @@ export function Modal({ label, onClose, className, dismissable = true, children 
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
         className={cx(
-          'max-h-[86vh] w-full animate-modal-in overflow-y-auto rounded-3xl bg-[#191410] p-7 outline-none ring-1 ring-white/10',
+          'flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-[#191410] outline-none ring-1 ring-white/10',
           className
         )}
         style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)' }}
       >
-        {children}
+        {/* The panel clips; this inner element scrolls, so the scrollbar sits inside the rounded corners. */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-7 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+          {children}
+        </div>
       </div>
     </div>
   );

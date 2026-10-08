@@ -171,3 +171,117 @@ export function setTweak(s: GameSettings, t: Tweak, on: boolean): GameSettings {
   }
   return normalizeSettings(next);
 }
+
+// ---------------------------------------------------------------------------
+// Gamescope: toggles <-> the free-form `gamescope_args` string.
+// The Go launcher appends -w/-h/-r, then strings.Fields(gamescope_args), so the
+// structured controls are folded into that string. Flag spellings checked
+// against `gamescope --help`.
+
+export const GS_TOGGLES: { key: GsToggleKey; flag: string; aliases: string[]; label: string; title: string }[] = [
+  { key: 'fullscreen', flag: '-f', aliases: ['--fullscreen'], label: 'fullscreen', title: '-f: make the window fullscreen' },
+  { key: 'borderless', flag: '-b', aliases: ['--borderless'], label: 'borderless', title: '-b: make the window borderless' },
+  { key: 'grabCursor', flag: '--force-grab-cursor', aliases: [], label: 'force grab cursor', title: '--force-grab-cursor: always use relative mouse mode' },
+  { key: 'hdr', flag: '--hdr-enabled', aliases: [], label: 'hdr', title: '--hdr-enabled: enable HDR output (needs the Gamescope WSI layer)' },
+  { key: 'vrr', flag: '--adaptive-sync', aliases: [], label: 'adaptive sync (vrr)', title: '--adaptive-sync: variable refresh rate if available' },
+  { key: 'wayland', flag: '--expose-wayland', aliases: [], label: 'expose wayland', title: '--expose-wayland: support Wayland clients via xdg-shell' },
+];
+
+export type GsToggleKey = 'fullscreen' | 'borderless' | 'grabCursor' | 'hdr' | 'vrr' | 'wayland';
+export type GsFilter = '' | 'fsr' | 'nis' | 'linear' | 'nearest' | 'pixel';
+
+export const GS_FILTERS: { value: GsFilter; label: string; title: string }[] = [
+  { value: '', label: 'default', title: 'No -F flag' },
+  { value: 'linear', label: 'linear', title: '-F linear' },
+  { value: 'nearest', label: 'nearest', title: '-F nearest' },
+  { value: 'fsr', label: 'fsr', title: '-F fsr (AMD FidelityFX Super Resolution)' },
+  { value: 'nis', label: 'nis', title: '-F nis (NVIDIA Image Scaling)' },
+  { value: 'pixel', label: 'pixel', title: '-F pixel' },
+];
+
+export interface GsArgs {
+  toggles: Record<GsToggleKey, boolean>;
+  filter: GsFilter;
+  /** Tokens we do not model, kept in their original order. */
+  extra: string;
+}
+
+const GS_FILTER_VALUES = new Set<string>(GS_FILTERS.map((f) => f.value).filter(Boolean));
+
+export function parseGamescopeArgs(args: string): GsArgs {
+  const toggles = Object.fromEntries(GS_TOGGLES.map((t) => [t.key, false])) as Record<GsToggleKey, boolean>;
+  let filter: GsFilter = '';
+  const extra: string[] = [];
+  const tokens = (args ?? '').split(/\s+/).filter(Boolean);
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    const t = GS_TOGGLES.find((x) => x.flag === tok || x.aliases.includes(tok));
+    if (t) {
+      toggles[t.key] = true;
+    } else if ((tok === '-F' || tok === '--filter') && GS_FILTER_VALUES.has(tokens[i + 1] ?? '')) {
+      filter = tokens[++i] as GsFilter;
+    } else {
+      extra.push(tok);
+    }
+  }
+  return { toggles, filter, extra: extra.join(' ') };
+}
+
+export function composeGamescopeArgs(a: GsArgs): string {
+  const parts: string[] = GS_TOGGLES.filter((t) => a.toggles[t.key]).map((t) => t.flag);
+  if (a.filter) parts.push('-F', a.filter);
+  parts.push(...a.extra.split(/\s+/).filter(Boolean));
+  return parts.join(' ');
+}
+
+export const GS_RESOLUTIONS: { w: number; h: number }[] = [
+  { w: 1280, h: 720 },
+  { w: 1280, h: 800 },
+  { w: 1920, h: 1080 },
+  { w: 1920, h: 1200 },
+  { w: 2560, h: 1440 },
+  { w: 3840, h: 2160 },
+];
+export const GS_RATES = [60, 75, 90, 120, 144, 165, 240];
+
+/** Select value for a saved resolution: '' (game default), 'WxH' for a known one, 'custom' otherwise. */
+export function resolutionChoice(w: number, h: number, display?: { w: number; h: number }): string {
+  if (!w && !h) return '';
+  const known = [...(display ? [display] : []), ...GS_RESOLUTIONS];
+  return known.some((r) => r.w === w && r.h === h) ? `${w}x${h}` : 'custom';
+}
+
+export function rateChoice(r: number): string {
+  if (!r) return '';
+  return GS_RATES.includes(r) ? String(r) : 'custom';
+}
+
+// ---------------------------------------------------------------------------
+// Env rows: editable KEY/value list, invalid keys are flagged and never saved.
+
+export interface EnvRow {
+  id: number;
+  key: string;
+  value: string;
+}
+
+export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export function envKeyError(rows: EnvRow[], index: number): string | null {
+  const key = rows[index].key;
+  if (key === '') return null; // empty row: just ignored
+  if (!ENV_KEY_RE.test(key)) return 'Letters, digits and _ only; cannot start with a digit';
+  if (rows.slice(0, index).some((r) => r.key === key)) return 'Duplicate key, this value wins';
+  return null;
+}
+
+/** Valid rows only. A duplicate key keeps the last value (like a shell would). */
+export function rowsToEnv(rows: EnvRow[]): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const r of rows) if (ENV_KEY_RE.test(r.key)) env[r.key] = r.value;
+  return env;
+}
+
+export function envToRows(env: Record<string, string>): EnvRow[] {
+  return Object.entries(env).map(([key, value], id) => ({ id, key, value }));
+}

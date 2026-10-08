@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { Copy, X } from 'lucide-react';
+import { ChevronDown, Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import {
-  DX_LAYERS, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
-  normalizeSettings, steamLaunchOptions, toBackendGame,
+  DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
+  composeGamescopeArgs, envKeyError, envToRows, rowsToEnv, type EnvRow, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
 } from '../lib/settings';
 
 interface Props {
@@ -20,7 +20,23 @@ interface Props {
 
 const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
-const GS_PLACEHOLDER = { gamescope_w: 'width', gamescope_h: 'height', gamescope_r: 'refresh' } as const;
+/** Physical pixels of the display the window is on. */
+function displayResolution(): { w: number; h: number } | undefined {
+  if (typeof window === 'undefined' || !window.screen?.width) return undefined;
+  const r = window.devicePixelRatio || 1;
+  return { w: Math.round(window.screen.width * r), h: Math.round(window.screen.height * r) };
+}
+
+function SelectField({ label, value, onChange, children, className }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cx('relative', className)}>
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cx(field, 'appearance-none py-2 pr-8 [color-scheme:dark]')}>
+        {children}
+      </select>
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/45" />
+    </div>
+  );
+}
 
 function runnerKind(r: ProtonVersion): string {
   if (r.is_system) return 'system';
@@ -28,27 +44,14 @@ function runnerKind(r: ProtonVersion): string {
   return 'steam';
 }
 
-function parseEnv(text: string): { env: Record<string, string>; ignored: { n: number; line: string }[] } {
-  const env: Record<string, string> = {};
-  const ignored: { n: number; line: string }[] = [];
-  text.split('\n').forEach((raw, i) => {
-    const line = raw.trim();
-    if (!line) return;
-    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (m) env[m[1]] = m[2];
-    else ignored.push({ n: i + 1, line });
-  });
-  return { env, ignored };
-}
-
 export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Props) {
   const [draft, setDraft] = useState<GameSettings>(() => normalizeSettings(game.settings));
-  const [envText, setEnvText] = useState(() =>
-    Object.entries(normalizeSettings(game.settings).env_vars).map(([k, v]) => `${k}=${v}`).join('\n')
-  );
-  // Dirty = draft or env text differs from what was loaded: Esc / click-outside then stay inert.
-  const initial = useRef({ draft: JSON.stringify(draft), env: envText });
-  const dirty = JSON.stringify(draft) !== initial.current.draft || envText !== initial.current.env;
+  const [envRows, setEnvRows] = useState<EnvRow[]>(() => envToRows(normalizeSettings(game.settings).env_vars));
+  const nextRowId = useRef(envRows.length);
+  // Dirty = draft or env rows differ from what was loaded: Esc / click-outside then stay inert.
+  const envSig = JSON.stringify(envRows.map((r) => [r.key, r.value]));
+  const initial = useRef({ draft: JSON.stringify(draft), env: envSig });
+  const dirty = JSON.stringify(draft) !== initial.current.draft || envSig !== initial.current.env;
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -56,9 +59,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
   const native = !!game.native;
-  const parsedEnv = useMemo(() => parseEnv(envText), [envText]);
-  const current = { ...draft, env_vars: parsedEnv.env };
-  const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, envText]); // eslint-disable-line react-hooks/exhaustive-deps
+  const validEnv = useMemo(() => rowsToEnv(envRows), [envRows]);
+  const current = { ...draft, env_vars: validEnv };
+  const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, validEnv]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live preview from the real backend, debounced 300ms.
   useEffect(() => {
@@ -74,9 +77,29 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const envLines = Object.entries(backend.settings.env_vars).sort(([a], [b]) => a.localeCompare(b));
   const flags = draft.proton_flags ?? [];
   const tricks = draft.winetricks ?? [];
-  const runnerOptions: ProtonVersion[] = runners;
   const selectedRunner = draft.runner_id;
   const autoPick = runners.find((r) => r.is_default);
+  const isAuto = !selectedRunner || selectedRunner === 'auto';
+  const chosenRunner = isAuto ? undefined : runners.find((r) => r.id === selectedRunner);
+  const runnerMissing = !isAuto && !chosenRunner;
+  const runnerValue = isAuto ? 'auto' : selectedRunner;
+  const runnerGroups = (['steam', 'custom', 'system'] as const)
+    .map((k) => [k, runners.filter((r) => (r.is_system ? 'system' : r.is_custom ? 'custom' : 'steam') === k)] as const)
+    .filter(([, l]) => l.length > 0);
+
+  const display = useMemo(displayResolution, []);
+  const [resCustom, setResCustom] = useState(false);
+  const [rateCustom, setRateCustom] = useState(false);
+  const resChoice = resCustom ? 'custom' : resolutionChoice(draft.gamescope_w, draft.gamescope_h, display);
+  const rateSel = rateCustom ? 'custom' : rateChoice(draft.gamescope_r);
+  const gs = parseGamescopeArgs(draft.gamescope_args);
+  const [gsExtra, setGsExtra] = useState(() => parseGamescopeArgs(draft.gamescope_args).extra);
+  // Toggling re-derives from the saved string, so the free-text field never keeps a flag a toggle now owns.
+  const setGs = (patch: Partial<typeof gs>) => {
+    const next = { ...gs, ...patch };
+    setGsExtra(next.extra);
+    set('gamescope_args', composeGamescopeArgs(next));
+  };
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
@@ -120,27 +143,23 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           {!native && (
           <div>
             <MonoLabel className="mb-2">runner</MonoLabel>
-            <div role="radiogroup" aria-label="Runner" className="space-y-2">
-              {[{ id: 'auto', name: 'Automatic', path: autoPick ? `uses ${autoPick.name} · newest GE-Proton, then Experimental` : 'no runner installed', is_system: false, is_custom: false, is_default: false } as ProtonVersion, ...runnerOptions].map((r) => {
-                const on = selectedRunner === r.id || (r.id === 'auto' && !selectedRunner);
-                return (
-                  <button
-                    key={r.id}
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => set('runner_id', r.id)}
-                    className={cx('flex w-full items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition', on ? 'border-amber-300/50 bg-amber-300/[0.07]' : 'border-white/[0.08] hover:border-white/20')}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-bold">{r.name}</div>
-                      <div className="truncate font-mono text-[9.5px] text-white/45">{r.id === 'auto' ? r.path : `${runnerKind(r)} · ${r.path}`}</div>
-                    </div>
-                    <span className={cx('h-4 w-4 flex-none rounded-full border-2', on ? 'border-amber-300 bg-amber-300' : 'border-white/20')} />
-                  </button>
-                );
-              })}
-              {runners.length === 0 && <p className="text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
+            <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
+              <option value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</option>
+              {runnerMissing && <option value={selectedRunner}>{selectedRunner} (missing)</option>}
+              {runnerGroups.map(([kind, list]) => (
+                <optgroup key={kind} label={kind}>
+                  {list.map((r) => <option key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</option>)}
+                </optgroup>
+              ))}
+            </SelectField>
+            <div className={cx('mt-1.5 truncate font-mono text-[9.5px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
+              {runnerMissing
+                ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
+                : chosenRunner
+                  ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
+                  : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
             </div>
+            {runners.length === 0 && <p className="mt-1 text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
           </div>
           )}
 
@@ -174,11 +193,71 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               ))}
             </div>
             {draft.use_gamescope && (
-              <div className="mt-2.5 grid grid-cols-[repeat(3,4.5rem)_1fr] gap-2">
-                {(['gamescope_w', 'gamescope_h', 'gamescope_r'] as const).map((k) => (
-                  <input key={k} aria-label={k.replace('gamescope_', 'gamescope ')} type="number" min={0} value={draft[k] || ''} onChange={(e) => set(k, parseInt(e.target.value, 10) || 0)} placeholder={GS_PLACEHOLDER[k]} className={field} />
-                ))}
-                <input aria-label="gamescope args" value={draft.gamescope_args} onChange={(e) => set('gamescope_args', e.target.value)} placeholder="-f --adaptive-sync" className={field} />
+              <div className="mt-2.5 space-y-3 rounded-xl bg-white/[0.03] p-3.5 ring-1 ring-white/[0.07]">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <MonoLabel className="mb-1.5">resolution</MonoLabel>
+                    <SelectField
+                      label="Gamescope resolution"
+                      value={resChoice}
+                      onChange={(v) => {
+                        if (v === 'custom') return setResCustom(true);
+                        setResCustom(false);
+                        const [w, h] = v ? v.split('x').map(Number) : [0, 0];
+                        setDraft((d) => ({ ...d, gamescope_w: w, gamescope_h: h }));
+                      }}
+                    >
+                      <option value="">Game default</option>
+                      {display && <option value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</option>}
+                      {GS_RESOLUTIONS.filter((r) => !(display && r.w === display.w && r.h === display.h)).map((r) => (
+                        <option key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</option>
+                      ))}
+                      <option value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</option>
+                    </SelectField>
+                    {resChoice === 'custom' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input aria-label="gamescope width" type="number" min={0} value={draft.gamescope_w || ''} onChange={(e) => set('gamescope_w', parseInt(e.target.value, 10) || 0)} placeholder="width" className={field} />
+                        <span className="text-white/40">×</span>
+                        <input aria-label="gamescope height" type="number" min={0} value={draft.gamescope_h || ''} onChange={(e) => set('gamescope_h', parseInt(e.target.value, 10) || 0)} placeholder="height" className={field} />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <MonoLabel className="mb-1.5">frame rate</MonoLabel>
+                    <SelectField
+                      label="Gamescope frame rate"
+                      value={rateSel}
+                      onChange={(v) => {
+                        if (v === 'custom') return setRateCustom(true);
+                        setRateCustom(false);
+                        set('gamescope_r', v ? Number(v) : 0);
+                      }}
+                    >
+                      <option value="">Game default</option>
+                      {GS_RATES.map((r) => <option key={r} value={r}>{r} Hz</option>)}
+                      <option value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</option>
+                    </SelectField>
+                    {rateSel === 'custom' && (
+                      <input aria-label="gamescope refresh" type="number" min={0} value={draft.gamescope_r || ''} onChange={(e) => set('gamescope_r', parseInt(e.target.value, 10) || 0)} placeholder="Hz" className={cx(field, 'mt-2')} />
+                    )}
+                  </div>
+                </div>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {GS_TOGGLES.map((t) => (
+                    <button key={t.key} title={t.title} aria-pressed={gs.toggles[t.key]} onClick={() => setGs({ toggles: { ...gs.toggles, [t.key]: !gs.toggles[t.key] } })} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', gs.toggles[t.key] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
+                      <span className="font-mono text-[10.5px] font-bold text-white/85">{t.label}</span>
+                      <TogglePill on={gs.toggles[t.key]} />
+                    </button>
+                  ))}
+                </div>
+                <div>
+                  <MonoLabel className="mb-1.5">upscale filter</MonoLabel>
+                  <SegRow label="Gamescope upscale filter" options={GS_FILTERS} value={gs.filter} onChange={(v) => setGs({ filter: v })} />
+                </div>
+                <label className="block">
+                  <MonoLabel className="mb-1.5">extra gamescope args</MonoLabel>
+                  <input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" className={field} />
+                </label>
               </div>
             )}
           </div>
@@ -188,15 +267,28 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
               <input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" className={field} />
             </label>
-            <label className="block">
+            <div>
               <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
-              <textarea rows={2} value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder="KEY=value (one per line)" className={cx(field, 'resize-y')} />
-              {parsedEnv.ignored.length > 0 && (
-                <p role="status" className="mt-1.5 break-all font-mono text-[10px] text-orange-300">
-                  {parsedEnv.ignored.map((l) => `Ignored line ${l.n}: ${l.line}`).join(' · ')}
-                </p>
-              )}
-            </label>
+              <div className="space-y-1.5">
+                {envRows.map((r, i) => {
+                  const err = envKeyError(envRows, i);
+                  const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
+                  return (
+                    <div key={r.id}>
+                      <div className="flex items-center gap-1.5">
+                        <input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx(field, 'w-[42%] flex-none', err && 'ring-1 ring-orange-300/70')} />
+                        <input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className={field} />
+                        <button aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-white/[0.07] text-white/60 transition hover:bg-white/[0.12] hover:text-white">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {err && <p role="status" className="mt-1 font-mono text-[10px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+              <button onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className={cx(btnNeutral, 'mt-2 px-3 py-1.5 text-[11px]')}>+ Add variable</button>
+            </div>
           </div>
         </div>
 
