@@ -77,8 +77,21 @@ func newQueue(t *testing.T, b Backend) (*Queue, string) {
 	}
 	q.freeSpace = func(string) (uint64, error) { return 10 << 30, nil }
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go q.Run(ctx)
+	// Join Run on cleanup: cancel alone leaves a next/prepare (MkdirAll of
+	// the install dir) in flight, whose syscall can land after the test
+	// framework's TempDir RemoveAll has scanned the folder — "directory
+	// not empty", a cleanup flake. Waiting for Run to return orders all
+	// queue disk writes before the removal. Cleanups run LIFO, later
+	// registrations first, so this runs before the TempDir teardown too.
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	go func() {
+		defer close(done)
+		q.Run(ctx)
+	}()
 	return q, path
 }
 
@@ -229,8 +242,17 @@ func TestResumeAfterRestart(t *testing.T) {
 		t.Fatalf("reloaded: %+v", got)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go q2.Run(ctx)
+	// Same join discipline as newQueue: the framework's TempDir cleanup
+	// must not race q2's next/prepare syscalls.
+	done := make(chan struct{})
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	go func() {
+		defer close(done)
+		q2.Run(ctx)
+	}()
 	waitState(t, q2, j.ID, StateRunning)
 }
 
