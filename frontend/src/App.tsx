@@ -55,7 +55,7 @@ export function App() {
   // Games Hydra launched that are starting or running, keyed by game id.
   const [sessions, setSessions] = useState<Record<string, SessionEvent>>({});
   const [tweaks, setTweaks] = useState<Tweak[]>([]);
-  const [dismissedHero, setDismissedHero] = useState<string | null>(null);
+  const [dismissedHero, setDismissedHero] = useState<ReadonlySet<string>>(() => new Set());
 
   // Activity is real session events only (scans, launches, setting changes).
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
@@ -405,10 +405,11 @@ export function App() {
         return (
           <Dashboard
             games={installedGames}
+            ownedCount={games.length}
             runners={runners}
             activity={activity}
             dismissedHero={dismissedHero}
-            onDismissHero={setDismissedHero}
+            onDismissHero={(ids) => setDismissedHero((prev) => new Set([...prev, ...ids]))}
             onOpenGame={openGame}
             onNavigate={setView}
           />
