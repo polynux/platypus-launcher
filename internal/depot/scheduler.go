@@ -111,44 +111,79 @@ type chunkTask struct {
 // fetched. Files are sorted by path and chunks by offset first, so a
 // partial result is mostly whole files; shared chunks download once.
 // Calls onProgress as bytes land.
+//
+// Download buffers the whole depot in RAM; production install/update paths
+// use DownloadStream instead to bound memory. Download is kept for the
+// fake-CDN tests and small fixtures.
 func (s *Scheduler) Download(ctx context.Context, m *Manifest, depotID uint32, hosts []Host, key []byte, have map[string][]byte, onProgress func(Progress)) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	skip := map[string]bool{}
+	for _, c := range orderedChunks(m) {
+		if plain, ok := have[string(c.ID)]; ok && uint32(len(plain)) == c.UncompressedLength && Adler0(plain) == c.Checksum {
+			out[string(c.ID)] = plain
+			skip[string(c.ID)] = true
+		}
+	}
+	// Preserve the old Progress.Data contract for test callers: the
+	// streaming core reports Data:nil, so reattach from out here. The
+	// collector calls sink then onProgress sequentially, so this is
+	// race-free.
+	wrapped := onProgress
+	if onProgress != nil {
+		wrapped = func(p Progress) {
+			if p.ChunkID != "" {
+				p.Data = out[p.ChunkID]
+			}
+			onProgress(p)
+		}
+	}
+	err := s.DownloadStream(ctx, m, depotID, hosts, key, skip,
+		func(id string, data []byte) error {
+			out[id] = append([]byte{}, data...)
+			return nil
+		}, wrapped)
+	if err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// DownloadStream fetches every unique chunk of m not in skip, calling sink
+// once per landed chunk. Chunks are written out as they land, so memory
+// stays bounded by in-flight chunks (worker count x ~1 MiB) instead of the
+// whole depot. skip names chunks already on disk (staged or reused); they
+// are counted in progress totals but never fetched. sink must not retain
+// data beyond its call (copy if needed).
+func (s *Scheduler) DownloadStream(ctx context.Context, m *Manifest, depotID uint32, hosts []Host, key []byte, skip map[string]bool, sink func(id string, data []byte) error, onProgress func(Progress)) error {
 	if len(hosts) == 0 {
-		return nil, fmt.Errorf("no download hosts")
+		return fmt.Errorf("no download hosts")
 	}
 	ordered := orderedChunks(m)
 	var total uint64
 	for _, c := range ordered {
 		total += uint64(c.UncompressedLength)
 	}
-	// Resume: re-check what we have by checksum, keep the good ones.
-	out := map[string][]byte{}
+	var skippedBytes uint64
+	chunkByID := make(map[string]Chunk, len(ordered))
+	for _, c := range ordered {
+		chunkByID[string(c.ID)] = c
+	}
 	var pending []Chunk
 	for _, c := range ordered {
-		if plain, ok := have[string(c.ID)]; ok && uint32(len(plain)) == c.UncompressedLength && Adler0(plain) == c.Checksum {
-			out[string(c.ID)] = plain
+		if skip[string(c.ID)] {
+			skippedBytes += uint64(c.UncompressedLength)
 			continue
 		}
 		pending = append(pending, c)
 	}
 	ordered = pending
 	if len(ordered) == 0 {
-		return out, nil
+		return nil
 	}
 	states := make([]*hostState, len(hosts))
 	for i, h := range hosts {
 		states[i] = &hostState{host: h}
 	}
-	tasks := make(chan chunkTask, len(ordered))
-	for _, c := range ordered {
-		tasks <- chunkTask{chunk: c}
-	}
-	type result struct {
-		id   string
-		data []byte
-		task chunkTask
-		err  error
-	}
-	results := make(chan result, len(ordered))
 	// Network workers.
 	var wg sync.WaitGroup
 	var conns atomic.Int32
@@ -160,8 +195,29 @@ func (s *Scheduler) Download(ctx context.Context, m *Manifest, depotID uint32, h
 		initial = s.cfg.MaxConns
 	}
 	conns.Store(int32(initial))
+	tasks := make(chan chunkTask, len(ordered))
+	for _, c := range ordered {
+		tasks <- chunkTask{chunk: c}
+	}
+	type result struct {
+		id   string
+		data []byte
+		task chunkTask
+		err  error
+	}
+	// Small buffer bounds bytes in flight: workers block until the
+	// collector writes each chunk out via sink.
+	bufCap := 2 * initial
+	if bufCap < 4 {
+		bufCap = 4
+	}
+	if bufCap > len(ordered) {
+		bufCap = len(ordered)
+	}
+	results := make(chan result, bufCap)
 	var doneBytes atomic.Uint64
 	var doneChunks atomic.Int64
+	doneBytes.Store(skippedBytes)
 	worker := func() {
 		defer wg.Done()
 		for task := range tasks {
@@ -222,7 +278,7 @@ func (s *Scheduler) Download(ctx context.Context, m *Manifest, depotID uint32, h
 			close(tasks)
 			wg.Wait()
 			<-growDone
-			return nil, ctx.Err()
+			return ctx.Err()
 		case r := <-results:
 			completed++
 			if r.err != nil {
@@ -235,12 +291,23 @@ func (s *Scheduler) Download(ctx context.Context, m *Manifest, depotID uint32, h
 				failures = append(failures, r.err)
 				continue
 			}
-			out[r.id] = r.data
+			if sink != nil {
+				if err := sink(r.id, r.data); err != nil {
+					close(stopGrow)
+					close(tasks)
+					wg.Wait()
+					<-growDone
+					return err
+				}
+			}
+			// Drop the reference so the chunk can be GC'd before the
+			// next progress report; only in-flight chunks stay in RAM.
+			r.data = nil
 			if onProgress != nil {
 				hostsUsed["x"] = true
 				onProgress(Progress{DoneBytes: doneBytes.Load(), TotalBytes: total,
 					BytesPerSec: float64(doneBytes.Load()) / time.Since(start).Seconds(),
-					Connections: int(conns.Load()), Hosts: len(hosts), ChunkID: r.id, Data: r.data})
+					Connections: int(conns.Load()), Hosts: len(hosts), ChunkID: r.id, Data: nil})
 			}
 		}
 	}
@@ -249,10 +316,11 @@ func (s *Scheduler) Download(ctx context.Context, m *Manifest, depotID uint32, h
 	wg.Wait()
 	<-growDone
 	_ = hostsUsed
+	_ = chunkByID
 	if len(failures) > 0 {
-		return out, failures[0]
+		return failures[0]
 	}
-	return out, nil
+	return nil
 }
 
 // fetchOne downloads, decrypts and verifies one chunk, trying hosts in

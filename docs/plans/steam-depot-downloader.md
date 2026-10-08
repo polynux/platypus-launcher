@@ -400,3 +400,17 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
     empty, `installed.json` `{}`, jobs/staging clean). No launch (user
     away). Still fake-only: the password login (email/TOTP/mobile
     wording covered by fake tests only).
+- **Review fixes STEAM-1 (streaming, bounded memory).** `Scheduler.Download`
+  buffered the whole depot (plus a cross-depot `merged` map and a full
+  staging copy) in RAM. New path: `Scheduler.DownloadStream` fetches
+  missing chunks with a small results buffer and calls a per-chunk sink;
+  `internal/depot/stream.go` (`Preallocate` + `InstallWriter.Write` +
+  `Close`) preallocates files and `WriteAt`s each landed chunk to every
+  file offset (shared chunks once on the wire, many writes), files before
+  symlinks. `runInstall` replays staging one chunk at a time (IDs only in
+  RAM, bad entries re-downloaded), stages each landed chunk fsynced and
+  flushes `JobState`; `runUpdate` copies reusable chunks from disk one at
+  a time (Adler-checked) and fetches only the rest — no `readOldChunks`
+  whole-install map. `Download` stays as a small-fixture wrapper for the
+  fake-CDN tests/benchmark. Matches the scheduler design (bounded memory,
+  `WriteAt`).

@@ -60,8 +60,9 @@ func runInstall(ctx context.Context, req request) error {
 	if err != nil {
 		return err
 	}
-	// Resume: chunks staged by an interrupted run come back through
-	// merged, re-checked by checksum inside Download.
+	// Streaming install (STEAM-1): chunks go straight to final files via
+	// WriteAt as they land. Only chunk IDs + staging paths stay in RAM;
+	// no whole-game map, no full staging copy.
 	jobID := req.JobID
 	if jobID == "" {
 		jobID = fmt.Sprintf("%d", req.AppID)
@@ -69,41 +70,50 @@ func runInstall(ctx context.Context, req request) error {
 	total := countChunks(depots)
 	sched := depot.NewScheduler(depot.NewClient(), depot.SchedulerConfig{})
 	onProg, _, _ := progress(totalBytes(depots))
-	// Resume: chunks staged by an interrupted run come back through
-	// have, re-checked by checksum inside Download.
-	merged := loadStaging(ss.dataDir, jobID)
 	state := &depot.JobState{AppID: req.AppID, ManifestID: manifestGID(depots), Done: map[string]bool{}, Total: total}
-	for id := range merged {
-		state.Done[hexChunk([]byte(id))] = true
+	for id := range stagingIDs(ss.dataDir, jobID) {
+		state.Done[id] = true
 	}
 	flush := 0
-	wrapped := func(p depot.Progress) {
-		onProg(p)
-		if p.ChunkID != "" && len(p.Data) > 0 {
-			merged[p.ChunkID] = p.Data
-			state.Done[hexChunk([]byte(p.ChunkID))] = true
-			saveStagedChunk(ss.dataDir, jobID, p.ChunkID, p.Data)
+	for _, d := range depots {
+		w, err := depot.Preallocate(d.man, req.InstallDir)
+		if err != nil {
+			depot.SaveJob(ss.dataDir, jobID, state)
+			return err
+		}
+		want := chunkInfo(d.man)
+		skip := map[string]bool{}
+		// Resume: replay staged chunks one at a time (bounded), then
+		// skip them in the download.
+		if err := restoreStaging(ss.dataDir, jobID, want, w, skip, state); err != nil {
+			w.Close()
+			depot.SaveJob(ss.dataDir, jobID, state)
+			return err
+		}
+		sink := func(id string, data []byte) error {
+			if err := w.Write(id, data); err != nil {
+				return err
+			}
+			saveStagedChunk(ss.dataDir, jobID, id, data)
+			state.Done[hexChunk([]byte(id))] = true
 			flush++
 			if flush >= 50 {
 				flush = 0
 				depot.SaveJob(ss.dataDir, jobID, state)
 			}
+			return nil
 		}
-	}
-	for _, d := range depots {
-		data, err := sched.Download(ctx, d.man, d.ref.DepotID, d.hosts, d.key, merged, wrapped)
-		if err != nil {
+		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, sink, onProg)
+		cErr := w.Close()
+		if dlErr != nil {
 			depot.SaveJob(ss.dataDir, jobID, state)
-			return err
+			return dlErr
 		}
-		for id, plain := range data {
-			merged[id] = plain
-			state.Done[hexChunk([]byte(id))] = true
-		}
-		if err := depot.WriteChunks(d.man, req.InstallDir, data); err != nil {
+		if cErr != nil {
 			depot.SaveJob(ss.dataDir, jobID, state)
-			return err
+			return cErr
 		}
+		depot.SaveJob(ss.dataDir, jobID, state)
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
 		}
@@ -149,19 +159,11 @@ func runUpdate(ctx context.Context, req request) error {
 				}
 			}
 		}
-		// Reuse chunks from every saved manifest: several gids can be
-		// stored (one per installed branch), and the disk may match any
-		// of them. Bytes are Adler-checked, so foreign layouts miss.
-		var have map[string][]byte
+		// Gone files: delete after collecting across all saved branch
+		// manifests (disk may match any of them).
 		var gone []string
 		seenGone := map[string]bool{}
 		for _, old := range oldManifests {
-			for id, plain := range readOldChunks(req.InstallDir, old) {
-				if have == nil {
-					have = map[string][]byte{}
-				}
-				have[id] = plain
-			}
 			_, g := depot.Diff(old, d.man)
 			for _, name := range g {
 				if !seenGone[name] {
@@ -173,18 +175,22 @@ func runUpdate(ctx context.Context, req request) error {
 		for _, name := range gone {
 			os.Remove(filepath.Join(req.InstallDir, filepath.FromSlash(name)))
 		}
-		data, err := sched.Download(ctx, d.man, d.ref.DepotID, d.hosts, d.key, have, func(p depot.Progress) { onProg(p) })
+		// Streaming update (STEAM-1): preallocate, copy reusable chunks
+		// from disk one at a time (bounded), fetch only the rest.
+		w, err := depot.Preallocate(d.man, req.InstallDir)
 		if err != nil {
 			return err
 		}
-		// Merge reused chunks for the write.
-		for id, plain := range have {
-			if _, ok := data[id]; !ok {
-				data[id] = plain
-			}
+		skip := reuseFromDisk(req.InstallDir, oldManifests, d.man, w)
+		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, func(id string, data []byte) error {
+			return w.Write(id, data)
+		}, func(p depot.Progress) { onProg(p) })
+		cErr := w.Close()
+		if dlErr != nil {
+			return dlErr
 		}
-		if err := depot.WriteChunks(d.man, req.InstallDir, data); err != nil {
-			return err
+		if cErr != nil {
+			return cErr
 		}
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
@@ -311,32 +317,6 @@ func loadInstalledAll(dataDir string, appID, depotID uint32) []*depot.Manifest {
 	return out
 }
 
-// readOldChunks reuses unchanged chunks by copying them from the installed
-// files, checked by checksum like a resume.
-func readOldChunks(dir string, old *depot.Manifest) map[string][]byte {
-	out := map[string][]byte{}
-	for _, f := range old.Files {
-		if f.IsDir() || f.IsSymlink() {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(f.Name)))
-		if err != nil {
-			continue
-		}
-		for _, c := range f.Chunks {
-			if uint64(len(raw)) < c.Offset+uint64(c.UncompressedLength) {
-				continue
-			}
-			plain := append([]byte{}, raw[c.Offset:c.Offset+uint64(c.UncompressedLength)]...)
-			if depot.Adler0(plain) != c.Checksum {
-				continue
-			}
-			out[string(c.ID)] = plain
-		}
-	}
-	return out
-}
-
 func filterFiles(m *depot.Manifest, names []string) *depot.Manifest {
 	want := map[string]bool{}
 	for _, n := range names {
@@ -352,8 +332,9 @@ func filterFiles(m *depot.Manifest, names []string) *depot.Manifest {
 }
 
 // Chunk staging for resume: each landed chunk is written to
-// jobs/<job>.chunks/<hex> as it arrives, so an interrupted install
-// re-checks them by checksum and fetches only what's missing.
+// jobs/<job>.chunks/<hex> as it arrives (fsynced), so an interrupted
+// install replays them one at a time and fetches only what's missing.
+// Only chunk IDs stay in RAM; bytes are never all loaded at once.
 func stagingDir(dataDir, jobID string) string {
 	return filepath.Join(dataDir, "jobs", jobID+".chunks")
 }
@@ -361,17 +342,48 @@ func stagingDir(dataDir, jobID string) string {
 func saveStagedChunk(dataDir, jobID, id string, data []byte) {
 	dir := stagingDir(dataDir, jobID)
 	os.MkdirAll(dir, 0o755)
-	os.WriteFile(filepath.Join(dir, hexChunk([]byte(id))), data, 0o644)
+	p := filepath.Join(dir, hexChunk([]byte(id)))
+	os.WriteFile(p, data, 0o644)
+	if fh, err := os.OpenFile(p, os.O_RDWR, 0o644); err == nil {
+		fh.Sync()
+		fh.Close()
+	}
 }
 
-func loadStaging(dataDir, jobID string) map[string][]byte {
-	out := map[string][]byte{}
+// stagingIDs lists staged chunk hex IDs without loading any bytes.
+func stagingIDs(dataDir, jobID string) map[string]bool {
+	out := map[string]bool{}
 	entries, err := os.ReadDir(stagingDir(dataDir, jobID))
 	if err != nil {
 		return out
 	}
 	for _, e := range entries {
-		raw, err := os.ReadFile(filepath.Join(stagingDir(dataDir, jobID), e.Name()))
+		if len(e.Name()) == 40 {
+			out[e.Name()] = true
+		}
+	}
+	return out
+}
+
+// chunkInfo maps raw chunk id -> chunk for checksum/length checks.
+func chunkInfo(m *depot.Manifest) map[string]depot.Chunk {
+	out := map[string]depot.Chunk{}
+	for _, c := range m.UniqueChunks() {
+		out[string(c.ID)] = c
+	}
+	return out
+}
+
+// restoreStaging replays staged chunks into the writer one at a time,
+// verifying checksum/length and skipping bad entries for re-download.
+func restoreStaging(dataDir, jobID string, want map[string]depot.Chunk, w *depot.InstallWriter, skip map[string]bool, state *depot.JobState) error {
+	dir := stagingDir(dataDir, jobID)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			continue
 		}
@@ -379,9 +391,82 @@ func loadStaging(dataDir, jobID string) map[string][]byte {
 		if err != nil {
 			continue
 		}
-		out[string(id)] = raw
+		key := string(id)
+		c, ok := want[key]
+		if !ok || uint32(len(raw)) != c.UncompressedLength || depot.Adler0(raw) != c.Checksum {
+			os.Remove(filepath.Join(dir, e.Name()))
+			continue
+		}
+		if err := w.Write(key, raw); err != nil {
+			return err
+		}
+		skip[key] = true
+		state.Done[e.Name()] = true
+		raw = nil
 	}
-	return out
+	return nil
+}
+
+// reuseFromDisk copies unchanged chunks from installed files into the
+// writer one chunk at a time (bounded to one chunk in RAM), returning the
+// set of chunk IDs to skip downloading. Bytes are Adler-checked, so
+// foreign layouts miss and re-download.
+func reuseFromDisk(installDir string, olds []*depot.Manifest, newM *depot.Manifest, w *depot.InstallWriter) map[string]bool {
+	skip := map[string]bool{}
+	want := chunkInfo(newM)
+	// chunk id -> old locations holding it.
+	type loc struct {
+		path   string
+		offset uint64
+	}
+	holders := map[string][]loc{}
+	for _, old := range olds {
+		for _, f := range old.Files {
+			if f.IsDir() || f.IsSymlink() {
+				continue
+			}
+			p := filepath.Join(installDir, filepath.FromSlash(f.Name))
+			for _, c := range f.Chunks {
+				if _, ok := want[string(c.ID)]; !ok {
+					continue
+				}
+				holders[string(c.ID)] = append(holders[string(c.ID)], loc{path: p, offset: c.Offset})
+			}
+		}
+	}
+	handles := map[string]*os.File{}
+	defer func() {
+		for _, fh := range handles {
+			fh.Close()
+		}
+	}()
+	for id, c := range want {
+		for _, h := range holders[id] {
+			fh, ok := handles[h.path]
+			if !ok {
+				f, err := os.Open(h.path)
+				if err != nil {
+					continue
+				}
+				handles[h.path] = f
+				fh = f
+			}
+			buf := make([]byte, c.UncompressedLength)
+			n, err := fh.ReadAt(buf, int64(h.offset))
+			if err != nil && n != len(buf) {
+				continue
+			}
+			if uint32(len(buf)) != c.UncompressedLength || depot.Adler0(buf) != c.Checksum {
+				continue
+			}
+			if err := w.Write(id, buf); err != nil {
+				break
+			}
+			skip[id] = true
+			break
+		}
+	}
+	return skip
 }
 
 func clearStaging(dataDir, jobID string) {
