@@ -71,11 +71,11 @@ type Game struct {
 	// doesn't model (frontend-only controls like sync_mode), so
 	// sideloaded games don't lose them in the emitted library (CORE-9).
 	SettingsExtra map[string]any `json:"settings_extra,omitempty"`
-	FixInfo     *GameFixInfo `json:"fix_info,omitempty"`
-	LastPlayed  int64        `json:"last_played_at,omitempty"` // unix seconds
-	PlaytimeMin int          `json:"playtime_minutes,omitempty"`
-	SizeBytes   int64        `json:"size_bytes,omitempty"` // installed size, if known
-	Version     string       `json:"version,omitempty"`
+	FixInfo       *GameFixInfo   `json:"fix_info,omitempty"`
+	LastPlayed    int64          `json:"last_played_at,omitempty"` // unix seconds
+	PlaytimeMin   int            `json:"playtime_minutes,omitempty"`
+	SizeBytes     int64          `json:"size_bytes,omitempty"` // installed size, if known
+	Version       string         `json:"version,omitempty"`
 	// Plugin games only.
 	UpdateAvailable bool   `json:"update_available,omitempty"`
 	Installable     bool   `json:"installable,omitempty"`    // Hydra can install it through the plugin
@@ -121,6 +121,9 @@ type StorePlugin struct {
 	Read         []string            `json:"read"`
 	Write        []string            `json:"write"`
 	Running      bool                `json:"running"`
+	// GaveUp is true when the plugin crashed MaxCrashes times in a row: it
+	// fails fast until retried. The Plugins view offers a Retry action.
+	GaveUp bool `json:"gave_up,omitempty"`
 	// Where its games install: the Games folder subfolder, or the user's override.
 	InstallFolder        string   `json:"install_folder"`
 	DefaultInstallFolder string   `json:"default_install_folder"`

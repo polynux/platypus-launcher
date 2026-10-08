@@ -57,6 +57,7 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		Read:                 nonNil(m.Permissions.Read),
 		Write:                nonNil(m.Permissions.Write),
 		Running:              a.plugins.Running(m.ID) != 0,
+		GaveUp:               a.plugins.GaveUp(m.ID),
 		InstallFolder:        folder,
 		DefaultInstallFolder: def,
 		ExtraFolders:         nonNil(extra),

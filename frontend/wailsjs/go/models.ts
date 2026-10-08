@@ -489,6 +489,7 @@ export namespace types {
 	    read: string[];
 	    write: string[];
 	    running: boolean;
+	    gave_up?: boolean;
 	    install_folder: string;
 	    default_install_folder: string;
 	    extra_folders: string[];
@@ -518,6 +519,7 @@ export namespace types {
 	        this.read = source["read"];
 	        this.write = source["write"];
 	        this.running = source["running"];
+	        this.gave_up = source["gave_up"];
 	        this.install_folder = source["install_folder"];
 	        this.default_install_folder = source["default_install_folder"];
 	        this.extra_folders = source["extra_folders"];

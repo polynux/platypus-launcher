@@ -58,6 +58,9 @@ type Options struct {
 	// OnExit is called when a plugin exits without being asked to (crash),
 	// so work in flight can be restarted.
 	OnExit func(pluginID string, err error)
+	// Timings overrides the crash/restart timings for tests. Zero fields
+	// keep the defaults.
+	Timings *Timings
 }
 
 type Manager struct {
@@ -78,7 +81,7 @@ type Manager struct {
 
 // NewManager manages the plugins in o.Dir. Call Discover before use.
 func NewManager(o Options) *Manager {
-	return &Manager{
+	m := &Manager{
 		dir:      o.Dir,
 		logDir:   o.LogDir,
 		dataDir:  o.DataDir,
@@ -90,6 +93,28 @@ func NewManager(o Options) *Manager {
 		plugins:  map[string]*Plugin{},
 		procs:    map[string]*process{},
 	}
+	if o.Timings != nil {
+		t := *o.Timings
+		if t.BackoffBase > 0 {
+			m.t.backoffBase = t.BackoffBase
+		}
+		if t.BackoffMax > 0 {
+			m.t.backoffMax = t.BackoffMax
+		}
+		if t.StableAfter > 0 {
+			m.t.stableAfter = t.StableAfter
+		}
+		if t.MaxCrashes > 0 {
+			m.t.maxCrashes = t.MaxCrashes
+		}
+		if t.StopGrace > 0 {
+			m.t.stopGrace = t.StopGrace
+		}
+		if t.InitTimeout > 0 {
+			m.t.initTimeout = t.InitTimeout
+		}
+	}
+	return m
 }
 
 // Dir is the plugins folder.
@@ -498,6 +523,22 @@ func (m *Manager) Running(id string) int {
 		return 0
 	}
 	return proc.pid()
+}
+
+// GaveUp reports whether a plugin gave up: it crashed maxCrashes times in a
+// row without a stable run in between, so every call fails fast until
+// RetryPlugin (or re-approval, or re-enabling) resets the count (CORE-10).
+// The Plugins view offers a Retry action when this is true.
+func (m *Manager) GaveUp(id string) bool {
+	m.mu.Lock()
+	proc := m.procs[id]
+	m.mu.Unlock()
+	if proc == nil {
+		return false
+	}
+	proc.mu.Lock()
+	defer proc.mu.Unlock()
+	return proc.crashes >= proc.t.maxCrashes
 }
 
 // Shutdown stops every plugin (on app exit). The manager can't be used after.

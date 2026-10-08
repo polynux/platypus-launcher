@@ -125,6 +125,8 @@ export const LauncherApi = {
   rescanPlugins: () => call<StorePlugin[]>('RescanPlugins', async () => (await App.RescanPlugins()) ?? []),
   approvePlugin: (id: string) => call<void>('ApprovePlugin', () => App.ApprovePlugin(id)),
   setPluginEnabled: (id: string, enabled: boolean) => call<void>('SetPluginEnabled', () => App.SetPluginEnabled(id, enabled)),
+  // Clears a gave-up plugin's crash count so the next call restarts it (CORE-10).
+  retryPlugin: (id: string) => call<void>('RetryPlugin', () => App.RetryPlugin(id)),
   openPluginsFolder: () => call<void>('OpenPluginsFolder', () => App.OpenPluginsFolder()),
   setPluginInstallFolder: (id: string, path: string) => call<void>('SetPluginInstallFolder', () => App.SetPluginInstallFolder(id, path)),
   choosePluginInstallFolder: (id: string) => call<string>('ChoosePluginInstallFolder', () => App.ChoosePluginInstallFolder(id)),

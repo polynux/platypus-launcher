@@ -18,7 +18,17 @@ import (
 // ErrExited is returned for calls the plugin never answered because it exited.
 var ErrExited = errors.New("exited")
 
-// Lifecycle timings. Tests shorten them.
+// Lifecycle timings. Tests override them through Options.Timings.
+type Timings struct {
+	BackoffBase time.Duration // wait before the first restart after a crash
+	BackoffMax  time.Duration
+	StableAfter time.Duration // a run this long resets the crash count
+	MaxCrashes  int           // consecutive crashes before giving up
+	StopGrace   time.Duration // time to exit after stdin closes, before SIGKILL
+	InitTimeout time.Duration
+}
+
+// timings is the internal view of Timings with defaults applied.
 type timings struct {
 	backoffBase time.Duration // wait before the first restart after a crash
 	backoffMax  time.Duration

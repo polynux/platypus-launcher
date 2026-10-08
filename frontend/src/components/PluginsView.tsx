@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
@@ -217,6 +217,17 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}
                     >
                       Enable
+                    </button>
+                  )}
+                  {/* CORE-10: a plugin that gave up after repeated crashes
+                      fails fast until its crash count is cleared. */}
+                  {p.gave_up && p.status === 'ready' && (
+                    <button
+                      onClick={() => act(p.id, 'retry', LauncherApi.retryPlugin(p.id), `${p.name} will start again on the next call`)}
+                      disabled={busy === p.id + 'retry'}
+                      className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Retry
                     </button>
                   )}
                 </div>

@@ -169,6 +169,9 @@ export interface StorePlugin {
   read: string[];
   write: string[];
   running: boolean;
+  /** True when the plugin gave up after repeated crashes: it fails fast
+   *  until the user retries it (CORE-10). */
+  gave_up?: boolean;
   install_folder: string;
   default_install_folder: string;
   extra_folders: string[];
