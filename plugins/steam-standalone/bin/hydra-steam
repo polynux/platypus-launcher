@@ -1170,56 +1170,119 @@ def is_elf(path):
         return False
 
 
+EXE_SKIP_DIRS = ("redist", "directx", "dotnet", "__installer")
+EXE_SKIP_SUFFIXES = ("_data",)
+
+
+def _walk_limited(game_dir, max_depth=3):
+    """(dirpath, depth, entries) up to max_depth, skipping redist/data dirs."""
+    try:
+        base = os.path.abspath(game_dir)
+    except OSError:
+        return
+    stack = [(base, 0)]
+    while stack:
+        cur, depth = stack.pop(0)
+        try:
+            with os.scandir(cur) as it:
+                entries = list(it)
+        except OSError:
+            continue
+        yield cur, depth, entries
+        if depth >= max_depth:
+            continue
+        for e in entries:
+            try:
+                is_dir = e.is_dir()
+            except OSError:
+                continue
+            if not is_dir:
+                continue
+            low = e.name.lower()
+            if low in EXE_SKIP_DIRS or low.endswith(EXE_SKIP_SUFFIXES):
+                continue
+            stack.append((e.path, depth + 1))
+
+
 def find_executable(game_dir, native=False):
     """The game's entry point: a Linux binary/script (native builds), or the
-    biggest .exe in the root (Steam Windows builds ship many helper exes).
+    biggest .exe (Steam Windows builds ship many helper exes). Searches the
+    install root and subdirs (bounded depth, redist/data dirs skipped).
     Depots don't always mark the Linux binary executable, so a pick that
     isn't gets its owner exec bit here."""
     if native:
         exe = find_native_executable(game_dir)
         if exe:
             return exe
-    best, size = "", 0
+    best, size, best_depth = "", 0, 99
+    script = ""
     try:
-        for entry in os.scandir(game_dir):
-            if not entry.is_file():
-                continue
-            name = entry.name
-            lower = name.lower()
-            if lower.endswith((".exe",)) and not lower.startswith(
-                    ("uninst", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
-                s = entry.stat().st_size
-                if s > size:
-                    best, size = entry.path, s
-            elif lower.endswith(".sh") and os.access(entry.path, os.X_OK) and not best:
-                best = entry.path
+        for _dir, depth, entries in _walk_limited(game_dir):
+            for entry in entries:
+                try:
+                    if not entry.is_file():
+                        continue
+                except OSError:
+                    continue
+                name = entry.name
+                lower = name.lower()
+                if lower.endswith((".exe",)) and not lower.startswith(
+                        ("uninst", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
+                    try:
+                        s = entry.stat().st_size
+                    except OSError:
+                        continue
+                    if s > size or (s == size and depth < best_depth):
+                        best, size, best_depth = entry.path, s, depth
+                elif lower.endswith(".sh") and not script:
+                    try:
+                        if os.access(entry.path, os.X_OK):
+                            script = entry.path
+                    except OSError:
+                        pass
     except OSError:
         pass
-    return best
+    return best or script
 
 
 def find_native_executable(game_dir):
-    """The native entry point in the root. Unity builds pair <name>.x86_64
+    """The native entry point. Unity builds pair <name>.x86_64
     with a <name>_Data folder (other binaries next to it can be launchers or
     helpers, even bigger ones); otherwise a start script (.sh), else the
-    biggest ELF binary (shared libraries and installers excluded)."""
+    biggest ELF binary (shared libraries and installers excluded).
+    Searches the root and subdirs (bounded depth, *_Data/redist skipped)."""
     unity, script, elf, size = "", "", "", 0
     try:
-        entries = sorted(os.scandir(game_dir), key=lambda e: e.name)
-        dirs = {e.name for e in entries if e.is_dir()}
-        for entry in entries:
-            if not entry.is_file():
-                continue
-            lower = entry.name.lower()
-            stem, ext = os.path.splitext(entry.name)
-            if ext.lower() in (".x86_64", ".x86") and stem + "_Data" in dirs and is_elf(entry.path):
-                unity = unity or entry.path
-            elif lower.endswith(".sh"):
-                script = script or entry.path
-            elif not re.search(r"\.so(\.\d+)*$", lower) and not lower.startswith(("unins", "setup", "install")):
-                s = entry.stat().st_size
-                if s > size and is_elf(entry.path):
-                    elf, size = entry.path, s
+        for _dir, _depth, entries in _walk_limited(game_dir):
+            names = sorted(entries, key=lambda e: e.name)
+            dirs = set()
+            for e in names:
+                try:
+                    if e.is_dir():
+                        dirs.add(e.name)
+                except OSError:
+                    pass
+            for entry in names:
+                try:
+                    if not entry.is_file():
+                        continue
+                except OSError:
+                    continue
+                lower = entry.name.lower()
+                stem, ext = os.path.splitext(entry.name)
+                if ext.lower() in (".x86_64", ".x86") and stem + "_Data" in dirs and is_elf(entry.path):
+                    unity = unity or entry.path
+                elif lower.endswith(".sh") and not script:
+                    script = script or entry.path
+                elif not re.search(r"\.so(\.\d+)*$", lower) and not lower.startswith(("unins", "setup", "install")):
+                    try:
+                        s = entry.stat().st_size
+                    except OSError:
+                        continue
+                    if s > size and is_elf(entry.path):
+                        elf, size = entry.path, s
+            if unity:
+                break
     except OSError:
         return ""
     best = unity or script or elf
