@@ -82,16 +82,16 @@ func runInstall(ctx context.Context, req request) error {
 	for _, d := range depots {
 		w, err := depot.Preallocate(d.man, req.InstallDir)
 		if err != nil {
-			depot.SaveJob(ss.dataDir, jobID, state)
+			flusher.saveNow()
 			return err
 		}
 		want := chunkInfo(d.man)
 		skip := map[string]bool{}
 		// Resume: replay staged chunks one at a time (bounded), then
 		// skip them in the download.
-		if err := restoreStaging(ss.dataDir, jobID, want, w, skip, state); err != nil {
+		if err := restoreStaging(ss.dataDir, jobID, want, w, skip, flusher); err != nil {
 			w.Close()
-			depot.SaveJob(ss.dataDir, jobID, state)
+			flusher.saveNow()
 			return err
 		}
 		sink := func(id string, data []byte) error {
@@ -110,15 +110,15 @@ func runInstall(ctx context.Context, req request) error {
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, sink, withBase(onProg, base))
 		cErr := w.Close()
 		if dlErr != nil {
-			depot.SaveJob(ss.dataDir, jobID, state)
+			flusher.saveNow()
 			return dlErr
 		}
 		if cErr != nil {
-			depot.SaveJob(ss.dataDir, jobID, state)
+			flusher.saveNow()
 			return cErr
 		}
 		base += d.man.TotalSize()
-		depot.SaveJob(ss.dataDir, jobID, state)
+		flusher.saveNow()
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
 		}
@@ -164,7 +164,6 @@ func runUpdate(ctx context.Context, req request) error {
 	}
 	uflusher := newJobFlusher(ss.dataDir, jobID, ustate, 2*time.Second)
 	defer uflusher.stop()
-	defer depot.SaveJob(ss.dataDir, jobID, ustate)
 	var base uint64
 	for _, d := range depots {
 		oldManifests := loadInstalledAll(ss.dataDir, req.AppID, d.ref.DepotID)
@@ -203,7 +202,7 @@ func runUpdate(ctx context.Context, req request) error {
 		}
 		want := chunkInfo(d.man)
 		skip := reuseFromDisk(req.InstallDir, oldManifests, d.man, w)
-		if err := restoreStaging(ss.dataDir, jobID, want, w, skip, ustate); err != nil {
+		if err := restoreStaging(ss.dataDir, jobID, want, w, skip, uflusher); err != nil {
 			w.Close()
 			return err
 		}
@@ -386,16 +385,33 @@ type jobFlusher struct {
 	stopCh  chan struct{}
 }
 
+// snapshot deep-copies the state under the lock; the caller marshals and
+// writes the copy outside the lock, so json.Marshal never iterates the
+// live Done map while mark() writes to it.
+func (f *jobFlusher) snapshot() *depot.JobState {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cp := &depot.JobState{AppID: f.state.AppID, DepotID: f.state.DepotID, ManifestID: f.state.ManifestID, Branch: f.state.Branch, Total: f.state.Total, Done: make(map[string]bool, len(f.state.Done))}
+	for k, v := range f.state.Done {
+		cp.Done[k] = v
+	}
+	return cp
+}
+
+// saveNow checkpoints a consistent snapshot; safe to call alongside mark()
+// and the timer goroutine.
+func (f *jobFlusher) saveNow() {
+	cp := f.snapshot()
+	_ = depot.SaveJob(f.dataDir, f.jobID, cp)
+}
+
 func newJobFlusher(dataDir, jobID string, state *depot.JobState, interval time.Duration) *jobFlusher {
 	f := &jobFlusher{dataDir: dataDir, jobID: jobID, state: state, ticker: time.NewTicker(interval), stopCh: make(chan struct{})}
 	go func() {
 		for {
 			select {
 			case <-f.ticker.C:
-				f.mu.Lock()
-				st := *f.state
-				f.mu.Unlock()
-				_ = depot.SaveJob(f.dataDir, f.jobID, &st)
+				f.saveNow()
 			case <-f.stopCh:
 				return
 			}
@@ -406,21 +422,22 @@ func newJobFlusher(dataDir, jobID string, state *depot.JobState, interval time.D
 
 func (f *jobFlusher) mark(idHex string) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.state.Done[idHex] = true
 	f.n++
-	if f.n >= 50 {
+	need := f.n >= 50
+	if need {
 		f.n = 0
-		_ = depot.SaveJob(f.dataDir, f.jobID, f.state)
+	}
+	f.mu.Unlock()
+	if need {
+		f.saveNow()
 	}
 }
 
 func (f *jobFlusher) stop() {
 	f.ticker.Stop()
 	close(f.stopCh)
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_ = depot.SaveJob(f.dataDir, f.jobID, f.state)
+	f.saveNow()
 }
 
 // Chunk staging for resume: each landed chunk is written to
@@ -468,7 +485,9 @@ func chunkInfo(m *depot.Manifest) map[string]depot.Chunk {
 
 // restoreStaging replays staged chunks into the writer one at a time,
 // verifying checksum/length and skipping bad entries for re-download.
-func restoreStaging(dataDir, jobID string, want map[string]depot.Chunk, w *depot.InstallWriter, skip map[string]bool, state *depot.JobState) error {
+// Done writes go through the flusher so the timer goroutine never races
+// the live map.
+func restoreStaging(dataDir, jobID string, want map[string]depot.Chunk, w *depot.InstallWriter, skip map[string]bool, flusher *jobFlusher) error {
 	dir := stagingDir(dataDir, jobID)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -493,7 +512,7 @@ func restoreStaging(dataDir, jobID string, want map[string]depot.Chunk, w *depot
 			return err
 		}
 		skip[key] = true
-		state.Done[e.Name()] = true
+		flusher.mark(e.Name())
 		raw = nil
 	}
 	return nil
