@@ -415,6 +415,7 @@ export function qrPollDelay(consecutiveFailures: number): number {
 export const QR_ERROR_AFTER = 2;
 export const QR_MAX_ATTEMPTS = 40;
 
+/** auth.begin → open the store's page and/or fill in fields → auth.complete. */
 function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: () => void; onDone: (s: AuthStatus) => void }) {
   const [prompt, setPrompt] = useState<AuthPrompt | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
