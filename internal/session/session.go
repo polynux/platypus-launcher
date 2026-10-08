@@ -8,6 +8,7 @@ package session
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -78,21 +79,35 @@ func (t *Tracker) Snapshot() []types.SessionEvent {
 	return out
 }
 
-func (t *Tracker) set(gameID string, cmd *exec.Cmd) {
+// ErrAlreadyRunning is returned when a launch is claimed while the game is
+// already tracked. LaunchGame maps it to a titled message.
+var ErrAlreadyRunning = errors.New("already running")
+
+// tryClaim atomically claims gameID for one launch (CORE-3). It returns nil
+// when the game is already tracked, so concurrent launches can't both start.
+func (t *Tracker) tryClaim(gameID string, cmd *exec.Cmd) *entry {
 	t.mu.Lock()
-	state := "starting"
-	if cmd != nil {
-		state = "running"
-		pid := 0
-		if cmd.Process != nil {
-			pid = cmd.Process.Pid
-		}
-		t.active[gameID] = &entry{cmd: cmd, state: state, pid: pid}
-		t.mu.Unlock()
-		return
+	defer t.mu.Unlock()
+	if _, ok := t.active[gameID]; ok {
+		return nil
 	}
-	t.active[gameID] = &entry{cmd: cmd, state: state}
-	t.mu.Unlock()
+	e := &entry{cmd: cmd, state: "starting"}
+	if cmd != nil && cmd.Process != nil {
+		e.state = "running"
+		e.pid = cmd.Process.Pid
+	}
+	t.active[gameID] = e
+	return e
+}
+
+// clearEntry removes gameID only if it still holds this launch's entry, so
+// one run's exit can't drop another run's tracking (CORE-3).
+func (t *Tracker) clearEntry(gameID string, e *entry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if cur, ok := t.active[gameID]; ok && cur == e {
+		delete(t.active, gameID)
+	}
 }
 
 // setRunning marks an already-claimed game as running with its pid.
@@ -116,12 +131,6 @@ func (t *Tracker) setMessage(gameID, message string) {
 	}
 }
 
-func (t *Tracker) clear(gameID string) {
-	t.mu.Lock()
-	delete(t.active, gameID)
-	t.mu.Unlock()
-}
-
 // StopAll kills direct-launch processes (on app shutdown). Steam games are
 // owned by the Steam client and are left alone.
 func (t *Tracker) StopAll() {
@@ -136,17 +145,20 @@ func (t *Tracker) StopAll() {
 
 // WatchClient follows a game started through a store's own client (Steam).
 // client names it in messages; find returns the game's PID, or 0 while it
-// isn't running.
-func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration) {
+// isn't running. It reports false when the game is already tracked.
+func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration) bool {
 	if startTimeout <= 0 {
 		startTimeout = clientStartTimeout
 	}
-	t.set(gameID, nil)
+	e := t.tryClaim(gameID, nil)
+	if e == nil {
+		return false
+	}
 	msg := "Waiting for " + client + " to start the game"
 	t.setMessage(gameID, msg)
 	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: msg})
 	go func() {
-		defer t.clear(gameID)
+		defer t.clearEntry(gameID, e)
 		deadline := time.Now().Add(startTimeout)
 		pid := 0
 		for pid == 0 {
@@ -166,12 +178,19 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 		}
 		t.emit(types.SessionEvent{GameID: gameID, State: "stopped"})
 	}()
+	return true
 }
 
 // StartDirect runs cmd and follows it until exit. Output goes to a per-game
 // log file under ~/.local/share/hydra/logs so failed launches can be diagnosed.
 // shown is the command line written to the log, with secrets redacted.
+// It claims the game before starting so concurrent launches can't both run;
+// losers get ErrAlreadyRunning and never start a process.
 func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, error) {
+	e := t.tryClaim(gameID, cmd)
+	if e == nil {
+		return 0, fmt.Errorf("game %s %w", gameID, ErrAlreadyRunning)
+	}
 	tail := &tailBuffer{}
 	log, logPath, logErr := openLog(gameID)
 	if logErr == nil {
@@ -185,10 +204,15 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, 
 		if log != nil {
 			_ = log.Close()
 		}
+		t.clearEntry(gameID, e)
 		return 0, err
 	}
 	pid := cmd.Process.Pid
-	t.set(gameID, cmd)
+	t.mu.Lock()
+	e.cmd = cmd
+	e.state = "running"
+	e.pid = pid
+	t.mu.Unlock()
 	t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
 	started := time.Now()
 	go func() {
@@ -197,7 +221,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, 
 		if log != nil {
 			_ = log.Close()
 		}
-		t.clear(gameID)
+		t.clearEntry(gameID, e)
 		if err != nil && time.Since(started) < quickExit {
 			msg := strings.TrimSpace(tail.String())
 			if msg == "" {

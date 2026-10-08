@@ -439,11 +439,16 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 			return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 		}
 		go func() { _ = cmd.Wait() }()
-		a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout)
+		if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
+			return "", fmt.Errorf("%s is already running", game.Title)
+		}
 		return "Asked " + cl.Client + " to start " + game.Title, nil
 	}
 	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown())
 	if err != nil {
+		if errors.Is(err, session.ErrAlreadyRunning) {
+			return "", fmt.Errorf("%s is already running", game.Title)
+		}
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
