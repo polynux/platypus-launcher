@@ -70,8 +70,8 @@ type ClientConfig struct {
 // Client is one persistent logon session to one CM. All methods are
 // safe for concurrent use.
 type Client struct {
-	cfg    ClientConfig
-	role   LoginRole
+	cfg     ClientConfig
+	role    LoginRole
 	loginID uint32
 	steamID uint64
 
@@ -85,7 +85,17 @@ type Client struct {
 	writeMu   sync.Mutex // one writer at a time (gorilla/websocket)
 	// hbSeconds is the cadence the logon response asked for.
 	hbSeconds uint64
-	// stop closes the run loop; doneWaiters fire once it ends.
+	// logonCtx outlives Connect's first logon and is cancelled when
+	// stop closes: a reconnect logon already in flight during Close
+	// aborts there instead of logging a session on into a client
+	// nobody holds (review bug 1). Built by Connect and restarted per
+	// reconnect in run().
+	logonCtx    context.Context
+	logonCancel context.CancelFunc
+	// stop closes the run loop; done fires once run() has returned.
+	// Only run() closes done — Close waits on it instead of closing
+	// it itself, which used to make the wait below return early and
+	// let run()'s tail race with the caller (review bug 1).
 	stop     chan struct{}
 	doneOnce sync.Once
 	done     chan struct{}
@@ -150,7 +160,8 @@ func Connect(ctx context.Context, cfg ClientConfig) (*Client, error) {
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
 	}
-	conn, sessionID, hbSeconds, err := c.dialAndLogon(ctx)
+	c.logonCtx, c.logonCancel = context.WithCancel(context.Background())
+	conn, sessionID, hbSeconds, err := c.dialAndLogon(c.logonCtx)
 	if err != nil {
 		c.mu.Lock()
 		c.state = StateOffline
@@ -355,17 +366,41 @@ func (c *Client) run() {
 			backoff = c.cfg.BackoffMax
 		}
 
-		conn, sessionID, hb, err := c.dialAndLogon(context.Background())
+		conn, sessionID, hb, err := c.dialAndLogon(c.logonCtx)
 		if err != nil {
-			c.mu.Lock()
-			c.lastErr = err
-			c.mu.Unlock()
+			// Token rejected this time: the refresh token is no good.
+			// Stop reconnecting for good, keep the error; the caller
+			// re-auths and builds a fresh Client (review bug 2).
+			if ce, ok := err.(*CMError); ok && tokenRejected(ce.EResult) {
+				c.mu.Lock()
+				c.lastErr = err
+				c.mu.Unlock()
+				c.setState(StateOffline)
+				return
+			}
 			// Replaced while reconnecting: give up for good.
 			if ce, ok := err.(*CMError); ok && logonTaken(ce.EResult) {
+				c.mu.Lock()
+				c.lastErr = err
+				c.mu.Unlock()
 				c.setState(StateReplaced)
 				return
 			}
+			c.mu.Lock()
+			c.lastErr = err
+			c.mu.Unlock()
 			continue
+		}
+		// A Close() that landed while the logon was in flight: send the
+		// logoff the fake expects, drop the connection and leave — the
+		// session never goes Online and never lands on the client (the
+		// fake would otherwise keep the login id claimed forever).
+		if c.stopped() {
+			_ = conn.WriteMessage(websocket.BinaryMessage,
+				packEMsg(EMsgClientLogOff, header(c.steamID, 0, 0, ""), nil))
+			_ = conn.Close()
+			c.setState(StateOffline)
+			return
 		}
 		c.mu.Lock()
 		c.conn = conn
@@ -582,15 +617,20 @@ func (c *Client) Call(service string, body []byte, timeout time.Duration) ([]byt
 	}
 }
 
-// Close logs off and ends the session. Idempotent.
+// Close logs off and ends the session. Idempotent, and safe to call
+// from anywhere at any point in the connect/reconnect cycle: it waits
+// for run() to actually return, so after Close there is no goroutine
+// left and no session newly logged on behind the caller's back (review
+// bug 1: Close used to close done itself, so its wait returned at once // and run()'s reconnect tail raced the caller).
 func (c *Client) Close() {
-	c.doneOnce.Do(func() { close(c.done) })
 	c.mu.Lock()
 	if c.stopped() {
 		c.mu.Unlock()
+		<-c.done // an earlier Close is still tearing down: wait too
 		return
 	}
 	close(c.stop)
+	c.logonCancel() // abort any logon already in flight
 	conn := c.conn
 	c.conn = nil
 	c.mu.Unlock()
@@ -603,6 +643,8 @@ func (c *Client) Close() {
 		_ = conn.Close()
 	}
 	c.failPending(&CMError{Msg: "Steam session closed"})
+	// Only run() closes done; this waits until it really exited (with
+	// heartbeatLoop, which also selects on done, on its way out).
 	<-c.done
 }
 

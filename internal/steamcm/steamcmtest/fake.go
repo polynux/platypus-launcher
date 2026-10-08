@@ -62,6 +62,13 @@ type Config struct {
 	// KickAfter counts service calls before the kick (0 = immediately
 	// after logon).
 	KickAfter int
+	// LogonDelay makes the fake sleep before answering a logon
+	// (response or rejection), so a test can drop the socket or Close()
+	// while the reconnect logon is still in flight. Applies to every
+	// logon on this fake, including Connect's first one — tests that
+	// need a fast first logon must call SetConfig right after Connect
+	// returns.
+	LogonDelay time.Duration
 	// Pushes is the scripted push queue (friends list, persona state,
 	// playing session state, cloud change notification, ...).
 	Pushes []Push
@@ -224,6 +231,11 @@ func (f *Fake) serve(c *fakeConn) {
 	loginID := loginIDOf(logonBody)
 	f.record(fmt.Sprintf("logon %d loginid=%d", steamID, loginID))
 
+	if cfg.LogonDelay > 0 {
+		time.Sleep(cfg.LogonDelay)
+		cfg = f.snapshot() // knobs may have changed while we slept
+	}
+
 	eres := cfg.LogonEresult
 	if eres == 0 {
 		eres = 1
@@ -311,7 +323,7 @@ func (f *Fake) serve(c *fakeConn) {
 			if cfg.Kick != 0 && serviceCalls >= cfg.KickAfter {
 				f.record(fmt.Sprintf("kick %d loginid=%d", cfg.Kick, loginID))
 				off := &depot.Enc{}
-			off.Varint(1, uint64(cfg.Kick))
+				off.Varint(1, uint64(cfg.Kick))
 				c.write(steamcm.PackEMsg(steamcm.EMsgClientLoggedOff, sessHdr.Bytes(), off.Bytes()))
 				c.write(websocket.FormatCloseMessage(1000, ""))
 				return

@@ -22,7 +22,8 @@ type loginRegistry struct {
 func (r *loginRegistry) claim(loginID uint32, c *fakeConn) *fakeConn {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.conns == nil {			r.conns = map[uint32]*fakeConn{}
+	if r.conns == nil {
+		r.conns = map[uint32]*fakeConn{}
 	}
 	old := r.conns[loginID]
 	r.conns[loginID] = c
@@ -46,8 +47,24 @@ func (r *loginRegistry) count(loginID uint32) int {
 	return 0
 }
 
+// live counts every connection claimed by any login id; conns maps one
+// connection per id, so sessions that re-claim (a reconnect) replace
+// their entry. The fake increments liveSessions separately in claim and
+// release, which handles the same-id-reclaim case without double counting.
+func (r *loginRegistry) live() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.conns)
+}
+
 // LiveLogins reports how many of this fake's live sessions use loginID.
 func (f *Fake) LiveLogins(loginID uint32) int { return f.logins.count(loginID) }
+
+// LiveSessions reports how many connections the fake currently has
+// logged on (claimed a login id and past a successful logon response).
+// A leaked session — one that keeps a registry slot while its client is
+// gone — shows up here.
+func (f *Fake) LiveSessions() int { return f.logins.live() }
 
 func base64Encode(raw []byte) string {
 	return base64.RawURLEncoding.EncodeToString(raw)
