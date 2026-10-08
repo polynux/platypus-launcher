@@ -14,6 +14,7 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { cx, EmptyState, btnPrimary } from './components/ui';
 import { LauncherApi, onJobs, onSession } from './effect/runtime';
+import { optimisticGamesAfterJob } from './lib/jobs';
 import { needsAttention } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
@@ -266,6 +267,9 @@ export function App() {
         const verb = j.kind === 'uninstall' ? 'Uninstalled' : j.kind === 'update' ? 'Updated' : 'Installed';
         if (j.state === 'done') {
           rescan = true;
+          // Optimistic flip so the game page updates before the rescan
+          // round-trip (FE-4); the rescan reconciles afterwards.
+          setGames((prev) => optimisticGamesAfterJob(prev, j));
           notify(`${verb} ${j.title}`);
           log({ type: 'download', game: j.title, detail: `${verb} ${j.title}`, meta: j.source });
         } else if (j.state === 'failed') {
@@ -388,6 +392,7 @@ export function App() {
             onPlay={() => launch(currentGame)}
             launching={launchingId === currentGame.id}
             session={sessions[currentGame.id]}
+            refreshing={scanning}
             tweaks={tweaks}
             onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
             onOpenSettings={() => setSettingsFor(currentGame.id)}

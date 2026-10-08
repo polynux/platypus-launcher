@@ -30,6 +30,7 @@ interface GamePageProps {
   onPlay: () => void;
   launching: boolean;
   session?: SessionEvent;
+  refreshing?: boolean;
   tweaks: Tweak[];
   onChangeSettings: (s: GameSettings, what: string) => void;
   onOpenSettings: () => void;
@@ -200,6 +201,10 @@ export function GamePage(p: GamePageProps) {
           )}
           {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[10.5px] text-red-300">last attempt failed: {job.error}</p>}
         </div>
+      )}
+
+      {p.refreshing && (
+        <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-white/40">refreshing library…</p>
       )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
