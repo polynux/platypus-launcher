@@ -59,3 +59,37 @@ Shared edges:
   - FE-12: sidebar search now jumps to the Library only on Enter;
   - PLUG-3: legendary, gogdl and nile accept secrets only on argv (tool limitation).
 - **Not done:** branch picker UI (beta branches and passwords) and `settings_extra` UI.
+
+## Status — live validation (2026-10-08, 07:45)
+
+Live validation of the rewritten Steam downloader on KAMI (app 272040, single depot 272041, manifest
+`6869307445582119673`, ~55 MB compressed / 81 MB disk), branch `integ/review-fixes`, hydra-steam-dl built from
+this worktree and run from a temp dir first on PATH (the plugin's sibling-binary preference falls back to PATH
+when `bin/hydra-steam-dl` is not shipped). Plugin exec driven over stdin JSON-RPC with the real login
+(`HYDRA_PLUGIN_DATA=~/.local/share/hydra/plugin-data/steam-standalone`). The cancel landed mid-flight, so no
+CDN throttling was needed.
+
+| Step | Result | Numbers |
+|---|---|---|
+| 1 `game.installSize` | PASS | 55,479,792 download / 81,078,597 disk — exactly the expected numbers |
+| 2 fresh install (STEAM-1, STEAM-5) | PASS (after one fix) | TTFB 8.9 s (CM logon, PICS, depot key, CDN list, manifest); 81.0 MB streamed in 1.6 s, avg 51 MB/s, peak ~108 MB/s; 32 connections from the first progress event (STEAM-5 seeding), distinct hosts ramping 1→32 in ~0.5 s; peak RSS (VmHWM) 73.5 MiB (~68 MiB on the resume run, 81.5 MiB on the third install) |
+| 3 cancel + same-jobId resume (STEAM-12) | PASS | `job.cancel` at 41.1 % (33.3 MB in); staging kept 35 chunks (30.8 MB) plus a job-state checkpoint; the rerun with the same jobId resumed from 38.1 % (30,885,999 bytes) and finished ~2 s later with `job.done` |
+| 4 SHA-1 vs manifest | PASS | independent Python manifest parser (zip container + protobuf + AES filename decryption, hashlib, no Go code): 274 files, 81,078,597 bytes, 0 mismatches, 0 missing, 29 dir entries plus 2 zero-chunk placeholders |
+| 5 verify/repair (STEAM-2) | PASS | deleted `puzzles/StageD/SDL8_art2.xml`, corrupted 27 bytes of `fonts/Ubuntu-R.ttf` at offset 1000; `hydra-steam-dl verify` → `bad:2 fixed:2` in 9 s; both files byte-identical to backups afterwards; full SHA-1 sweep clean |
+| 6 uninstall + login check | PASS | `~/Games/steam`, `jobs/` (state + staging) and `installed.json` all empty afterwards; `auth.status` still `loggedIn: rUwUe` |
+
+**Fix found live, committed on this branch (test first against the fakes):**
+- a156ed2 `live: flusher stop is idempotent; success path stops before RemoveJob` — after a *finished* install
+  the plugin's `jobs/<jobId>.json` survived: runInstall's deferred `flusher.stop()` saved state again after
+  `depot.RemoveJob`/`clearStaging`, resurrecting the job file (observed twice, including across an uninstall).
+  `stop()` now latches (the first call checkpoints and stops the ticker; later calls, `saveNow` and `mark`
+  never write again), and runInstall/runUpdate call `flusher.stop()` *before* the cleanup so the removal wins.
+  Error and cancel paths keep the STEAM-12 checkpoint: there the deferred stop is the first one and still
+  saves. `TestFlusherNoSaveAfterStop` failed on the old code (double stop panicked; the deferred save
+  resurrected the file); the existing STEAM-12 checkpoint tests still pass.
+
+**Checks after the fix:** cold `go test ./... -count=1` passes (18 packages). `~/Games/steam` and the plugin's
+`jobs/` folder are empty at the end; the dev launcher session (port 34115) was left untouched.
+
+Not covered by this pass: multi-GB peak-RAM ceiling, STEAM-3 symlink folders, STEAM-14 token expiry and the
+phase 6 password login — still on the live checklist above.
