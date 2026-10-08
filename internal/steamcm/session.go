@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -26,6 +27,7 @@ type Session struct {
 	conn      *websocket.Conn
 	licenses  []License
 	pending   [][]byte // batched messages waiting for the next read
+	mu sync.Mutex // serialises concurrent service calls (STEAM-5)
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
 	// client's pre-logon calls.
@@ -298,6 +300,8 @@ func (s *Session) readOne(deadline time.Time) (uint32, depot.Msg, []byte, error)
 // Before any logon the call goes out as 9804 NonAuthed with no steamid
 // or sessionid in the header, just target_job_name and jobid_source.
 func (s *Session) Call(service string, body []byte, timeout time.Duration) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}

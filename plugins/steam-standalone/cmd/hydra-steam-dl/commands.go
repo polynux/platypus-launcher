@@ -68,7 +68,7 @@ func runInstall(ctx context.Context, req request) error {
 		jobID = fmt.Sprintf("%d", req.AppID)
 	}
 	total := countChunks(depots)
-	sched := depot.NewScheduler(depot.NewClient(), depot.SchedulerConfig{})
+	client := depot.NewClient()
 	onProg, _, _ := progress(totalBytes(depots))
 	state := &depot.JobState{AppID: req.AppID, ManifestID: manifestGID(depots), Done: map[string]bool{}, Total: total}
 	for id := range stagingIDs(ss.dataDir, jobID) {
@@ -106,6 +106,9 @@ func runInstall(ctx context.Context, req request) error {
 		}
 		// STEAM-11: offset this depot's zero-based progress by prior
 		// depots so the bar never jumps backwards.
+		// STEAM-5: seed connections by hosts*slots and chunks so small
+		// depots start wide instead of waiting for growth ticks.
+		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(d.man.UniqueChunks()))})
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, sink, withBase(onProg, base))
 		cErr := w.Close()
 		if dlErr != nil {
@@ -149,7 +152,7 @@ func runUpdate(ctx context.Context, req request) error {
 	if err != nil {
 		return err
 	}
-	sched := depot.NewScheduler(depot.NewClient(), depot.SchedulerConfig{})
+	client := depot.NewClient()
 	onProg, _, _ := progress(totalBytes(depots))
 	var base uint64
 	for _, d := range depots {
@@ -187,6 +190,7 @@ func runUpdate(ctx context.Context, req request) error {
 			return err
 		}
 		skip := reuseFromDisk(req.InstallDir, oldManifests, d.man, w)
+		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(d.man.UniqueChunks()))})
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, func(id string, data []byte) error {
 			return w.Write(id, data)
 		}, withBase(onProg, base))
@@ -230,7 +234,7 @@ func runVerify(ctx context.Context, req request) error {
 		return nil
 	}
 	// Re-fetch the chunks of mismatched files only.
-	sched := depot.NewScheduler(depot.NewClient(), depot.SchedulerConfig{})
+	client := depot.NewClient()
 	fixed := 0
 	for _, d := range depots {
 		var want []string
@@ -251,6 +255,7 @@ func runVerify(ctx context.Context, req request) error {
 		if err != nil {
 			return err
 		}
+		sched := depot.NewScheduler(client, depot.SchedulerConfig{InitialConns: seededInitialConns(len(d.hosts), 4, len(sub.UniqueChunks()))})
 		dlErr := sched.DownloadStream(ctx, sub, d.ref.DepotID, d.hosts, d.key, nil, func(id string, data []byte) error {
 			return w.Write(id, data)
 		}, nil)
