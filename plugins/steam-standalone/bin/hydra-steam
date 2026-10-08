@@ -55,6 +55,8 @@ out_lock = threading.Lock()
 jobs_lock = threading.Lock()
 jobs = {}  # jobId -> {"proc": Popen, "canceled": bool, ...}
 token_lock = threading.RLock()
+# Serializes read-modify-write of installed.json across handler/job threads.
+installed_lock = threading.RLock()
 
 
 class RPCError(Exception):
@@ -110,8 +112,20 @@ def load_state(name, default):
 
 
 def save_state(name, state):
-    with open(state_path(name), "w") as f:
-        json.dump(state, f)
+    """Write via a temp file and rename, so a concurrent reader never sees a
+    half-written file (load_state would return the default and a caller could
+    then overwrite everything with it)."""
+    path = state_path(name)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.new"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(state, f)
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 # Token-bearing files (refresh.token, token.json, steam-access.json) must
@@ -120,13 +134,20 @@ def save_state(name, state):
 # covers both new files (umask) and pre-existing 0644 ones (WriteFile
 # keeps the old mode); session.json carries no secret and stays 0644.
 def save_secret(name, state):
+    # Created 0600 from the start (no window at the umask's mode), then
+    # renamed over the old file, which may have been 0644.
     path = state_path(name)
-    with open(path, "w") as f:
-        json.dump(state, f)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.new"
     try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(state, f)
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 def tighten(name):
@@ -1040,6 +1061,11 @@ def dl_request(params, extra=None):
         raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
     req = {"refresh_token": token, "app_id": int(params["id"]),
            "branch": params.get("branch") or "public"}
+    # A password-protected beta branch. Stdin only, like the token: never
+    # argv, never logged.
+    pw = params.get("branchPassword") or params.get("branch_password")
+    if pw:
+        req["branch_password"] = pw
     if extra:
         req.update(extra)
     return req
@@ -1139,7 +1165,8 @@ def start_job(params, kind):
     game_dir = os.path.join(install_dir, game_dir_name(app))
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
-    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind), daemon=True).start()
+    branch = {k: params[k] for k in ("branch", "branchPassword", "branch_password") if params.get(k)}
+    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind, branch), daemon=True).start()
     return {}
 
 
@@ -1157,14 +1184,14 @@ def game_dir_name(app):
     return safe
 
 
-def follow_install(job_id, app, game_dir, dl_kind="install"):
+def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
     """hydra-steam-dl install/update with progress. The binary resolves the
     depots itself (Linux first, Windows fallback — the platform used
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
         jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
     try:
-        req = dl_request({"id": app}, {"install_dir": game_dir, "job_id": job_id})
+        req = dl_request({"id": app, **(branch or {})}, {"install_dir": game_dir, "job_id": job_id})
         result = dl_run(dl_kind, req, job_id, game_dir)
     except RPCError as e:
         with jobs_lock:
@@ -1188,8 +1215,7 @@ def record_install(app, game_dir, os_used):
     """Remember the install: where it is, what runs it and which launch mode
     applies (see launch modes below)."""
     exe = find_executable(game_dir, native=os_used == "linux")
-    installed = load_state("installed.json", {})
-    installed[app] = {
+    entry = {
         "path": game_dir,
         "dir_name": os.path.basename(game_dir),
         "executable": exe,
@@ -1198,7 +1224,10 @@ def record_install(app, game_dir, os_used):
         "version": "",
         "title": store_app(app).get("name") or "",
     }
-    save_state("installed.json", installed)
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        installed[app] = entry
+        save_state("installed.json", installed)
 
 
 def is_elf(path):
@@ -1384,8 +1413,12 @@ def launch_spec(params):
         exe = find_executable(path, native=bool(ig.get("native")))
         if not exe:
             raise RPCError(f"couldn't find a game executable in {path or 'the install folder'}")
+        with installed_lock:  # re-read: only this field changes
+            fresh = load_state("installed.json", {})
+            if app in fresh:
+                fresh[app]["executable"] = exe
+                save_state("installed.json", fresh)
         ig["executable"] = exe
-        save_state("installed.json", installed)
     mode = ig.get("mode") or "none"
     native = bool(ig.get("native"))
     if mode in ("none", "optional"):
@@ -1420,11 +1453,12 @@ def mark_needs_client(params):
     """After a mode-'optional' game died with a Steamworks init error, the
     game page's retry calls this; the next launch uses the real client."""
     app = str((params or {}).get("id") or "")
-    installed = load_state("installed.json", {})
-    if app not in installed:
-        raise RPCError(f"app {app} is not installed")
-    installed[app]["mode"] = "client"
-    save_state("installed.json", installed)
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        if app not in installed:
+            raise RPCError(f"app {app} is not installed")
+        installed[app]["mode"] = "client"
+        save_state("installed.json", installed)
     return {"ok": True}
 
 
@@ -1473,16 +1507,17 @@ def follow_uninstall(job_id, app, ev=None):
         if job.get("canceled"):
             jobs.pop(job_id, None)
             return
-    installed = load_state("installed.json", {})
-    ig = installed.pop(app, None)
-    with jobs_lock:
-        if jobs.get(job_id, {}).get("canceled"):
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        ig = installed.pop(app, None)
+        with jobs_lock:
+            if jobs.get(job_id, {}).get("canceled"):
+                jobs.pop(job_id, None)
+                return
             jobs.pop(job_id, None)
-            return
-        jobs.pop(job_id, None)
-    if ig and ig.get("path") and os.path.isdir(ig["path"]):
-        shutil.rmtree(ig["path"], ignore_errors=True)
-    save_state("installed.json", installed)
+        if ig and ig.get("path") and os.path.isdir(ig["path"]):
+            shutil.rmtree(ig["path"], ignore_errors=True)
+        save_state("installed.json", installed)
     notify("job.done", {"jobId": job_id})
 
 

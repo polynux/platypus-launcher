@@ -1119,3 +1119,73 @@ func (s *syncBuf) String() string {
 	defer s.mu.Unlock()
 	return s.b.String()
 }
+
+// STEAM-16 changed new installs to <name>_<appid>. An install recorded under
+// the old bare-name folder keeps working from its recorded path: launch,
+// update (in place, no second folder) and uninstall.
+func TestSteamLegacyInstallFolderKeepsWorking(t *testing.T) {
+	e := setup(t)
+	e.login()
+	lib := e.library()
+	game := e.find(lib, "4321")
+	j, err := e.q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.waitJob(j.ID); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	// Turn the fresh install into one recorded by an older plugin: bare name.
+	var installed map[string]map[string]any
+	idx := filepath.Join(e.pluginData(), "installed.json")
+	data, _ := os.ReadFile(idx)
+	if err := json.Unmarshal(data, &installed); err != nil || installed["4321"] == nil {
+		t.Fatalf("installed.json: %s, %v", data, err)
+	}
+	cur := installed["4321"]["path"].(string)
+	legacy := filepath.Join(e.folder, "Standalone_Game")
+	if cur == legacy {
+		t.Fatalf("new install already uses the legacy name: %s", cur)
+	}
+	if err := os.Rename(cur, legacy); err != nil {
+		t.Fatal(err)
+	}
+	exe := installed["4321"]["executable"].(string)
+	installed["4321"]["path"] = legacy
+	installed["4321"]["dir_name"] = "Standalone_Game"
+	installed["4321"]["executable"] = filepath.Join(legacy, strings.TrimPrefix(exe, cur))
+	data, _ = json.Marshal(installed)
+	os.WriteFile(idx, data, 0o644)
+
+	game = e.find(e.library(), "4321")
+	if !game.IsInstalled || game.OutsideFolder {
+		t.Fatalf("legacy install not recognised: %+v", game)
+	}
+	l, err := e.store.Launch(context.Background(), *game, false)
+	if err != nil || l.Direct == nil || !strings.HasPrefix(l.Direct.Exe, legacy) {
+		t.Fatalf("launch from the recorded path: %+v, %v", l, err)
+	}
+
+	up, err := e.q.Add(jobs.KindUpdate, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.waitJob(up.ID); got.State != jobs.StateDone {
+		t.Fatalf("update: %+v", got)
+	}
+	entries, _ := os.ReadDir(e.folder)
+	if len(entries) != 1 || entries[0].Name() != "Standalone_Game" {
+		t.Fatalf("update created or renamed a folder: %v", entries)
+	}
+
+	u, err := e.q.Add(jobs.KindUninstall, id, game.ID, game.StoreAppID, game.Title, e.folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := e.waitJob(u.ID); got.State != jobs.StateDone {
+		t.Fatalf("uninstall: %+v", got)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy folder not removed: %v", err)
+	}
+}
