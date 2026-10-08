@@ -250,7 +250,6 @@ def library_list(_params):
         if not app:
             continue
         product = g.get("product") or {}
-        detail = product.get("productDetail") or {}
         entry = {
             "id": app,
             "title": product.get("title") or app,
@@ -262,9 +261,6 @@ def library_list(_params):
             entry["installPath"] = ig.get("path", "")
             entry["version"] = ig.get("version", "")
             entry["updateAvailable"] = app in updates
-        genres = (detail.get("details") or {}).get("genres") or []
-        if genres:
-            entry["genres"] = genres  # unused by the protocol, kept for debugging
         out.append(entry)
     return {"games": out}
 

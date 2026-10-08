@@ -1435,7 +1435,6 @@ def launch_spec(params):
             "cwd": os.path.dirname(exe),
             "env": {},
             "needsWine": not native,
-            "native": native,
         }
         if mode == "optional":
             # Tell the game which app it is so SteamAPI_Init-less runs don't

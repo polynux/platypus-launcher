@@ -367,12 +367,28 @@ func (s Suite) Conformance(t *testing.T) {
 		}
 	}
 	game := s.PickGame(t, games)
+	// Strict wire check: only keys docs/plugins/protocol.md defines. Hydra
+	// ignores the rest today, but authors copy whatever the bundled plugins
+	// send, so extras spread.
+	var rawLib struct {
+		Games []json.RawMessage `json:"games"`
+	}
+	if err := sess.call("library.list", nil, &rawLib); err != nil {
+		t.Fatalf("library.list: %v", err)
+	}
+	for _, g := range rawLib.Games {
+		checkKeys(t, "library.list game", g, LibraryKeys)
+	}
 
 	d, err := sess.Store.Details(ctx, game)
 	if err != nil {
 		t.Fatalf("game.details: %v", err)
 	}
 	_ = d // shape validated by stores.Plugin; a missing method comes back empty
+	var rawDetails json.RawMessage
+	if err := sess.call("game.details", map[string]any{"id": game.StoreAppID}, &rawDetails); err == nil {
+		checkKeys(t, "game.details", rawDetails, DetailsKeys)
+	}
 	if !s.NoUnknownDetails {
 		// An unknown id is an error (or the method is absent), never data or
 		// an empty page: all plugins answer the same way.
@@ -411,6 +427,11 @@ func (s Suite) Conformance(t *testing.T) {
 		if _, err := sess.Store.Launch(ctx, *installed, true); err != nil {
 			t.Fatalf("launchSpec preview: %v", err)
 		}
+		var rawSpec json.RawMessage
+		if err := sess.call("game.launchSpec", map[string]any{"id": game.StoreAppID, "preview": true}, &rawSpec); err != nil {
+			t.Fatalf("launchSpec: %v", err)
+		}
+		checkKeys(t, "game.launchSpec", rawSpec, LaunchKeys)
 		l, err := sess.Store.Launch(ctx, *installed, false)
 		if err != nil {
 			t.Fatalf("launchSpec: %v", err)
@@ -545,6 +566,30 @@ func (s Suite) Conformance(t *testing.T) {
 			t.Fatalf("queue uninstall: %v", err)
 		}
 		sess.waitJob(u.ID, jobs.StateDone, 60*time.Second)
+	}
+}
+
+// The keys docs/plugins/protocol.md defines for each payload. Extending one
+// means documenting it there first.
+var (
+	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
+		"version", "updateAvailable", "sizeBytes", "native", "coverUrl", "heroUrl", "bannerUrl"}
+	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
+		"releaseDate", "heroUrl", "achievements"}
+	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
+		"delegate", "client", "command", "find", "startTimeout"}
+)
+
+func checkKeys(t *testing.T, what string, raw json.RawMessage, allowed []string) {
+	t.Helper()
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		t.Fatalf("%s isn't a JSON object: %s", what, raw)
+	}
+	for k := range obj {
+		if !slices.Contains(allowed, k) {
+			t.Errorf("%s has the key %q, which docs/plugins/protocol.md doesn't define", what, k)
+		}
 	}
 }
 

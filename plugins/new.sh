@@ -276,7 +276,6 @@ def launch_spec(params):
         "cwd": os.path.dirname(script),
         "env": {},
         "needsWine": not g["native"],
-        "native": g["native"],
     }
 
 

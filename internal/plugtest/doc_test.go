@@ -1,0 +1,69 @@
+package plugtest_test
+
+// docs/plugins/protocol.md is what plugin authors read, and the bundled
+// plugins are what they copy. This test keeps the two in step: every method a
+// plugin dispatches, and every key the conformance suite lets a payload carry,
+// must appear in the doc.
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+
+	"hydra-launcher/internal/plugtest"
+)
+
+func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
+	doc, err := os.ReadFile("../../docs/plugins/protocol.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(doc)
+
+	pyMethod := regexp.MustCompile(`(?m)^\s+"([a-z]+\.[A-Za-z]+)":\s`)
+	methods := map[string]string{}
+	scripts, _ := filepath.Glob("../../plugins/*/bin/hydra-*")
+	for _, p := range scripts {
+		data, err := os.ReadFile(p)
+		if err != nil || !strings.HasPrefix(string(data), "#!/usr/bin/env python3") {
+			continue // the built hydra-steam-dl binary
+		}
+		_, after, ok := strings.Cut(string(data), "\nMETHODS = {")
+		if !ok {
+			t.Errorf("%s has no METHODS table", p)
+			continue
+		}
+		table, _, _ := strings.Cut(after, "\n}")
+		for _, m := range pyMethod.FindAllStringSubmatch(table, -1) {
+			methods[m[1]] = p
+		}
+	}
+	echo, err := os.ReadFile("../../plugins/echo/main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quoted := regexp.MustCompile(`"([a-z]+\.[A-Za-z]+)"`)
+	for _, line := range regexp.MustCompile(`(?m)^\s*case ".*:$`).FindAllString(string(echo), -1) {
+		for _, m := range quoted.FindAllStringSubmatch(line, -1) {
+			methods[m[1]] = "plugins/echo/main.go"
+		}
+	}
+	if len(methods) < 10 {
+		t.Fatalf("found only %d methods; the extraction is broken: %v", len(methods), methods)
+	}
+	for m, src := range methods {
+		if !strings.Contains(text, "`"+m+"`") {
+			t.Errorf("%s dispatches %q, which protocol.md doesn't document", src, m)
+		}
+	}
+
+	for _, set := range [][]string{plugtest.LibraryKeys, plugtest.DetailsKeys, plugtest.LaunchKeys} {
+		for _, k := range set {
+			if !strings.Contains(text, "`"+k+"`") && !strings.Contains(text, `"`+k+`"`) {
+				t.Errorf("protocol.md doesn't mention the key %q", k)
+			}
+		}
+	}
+}

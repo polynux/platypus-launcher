@@ -308,9 +308,7 @@ def add_installed(entry, ig):
     entry["installed"] = True
     entry["installPath"] = ig.get("path", "")
     entry["version"] = ig.get("version", "")
-    entry["platform"] = ig.get("platform", "windows")
-    entry["native"] = entry.get("platform") == "linux"
-    entry["executable"] = ig.get("executable", "")
+    entry["native"] = ig.get("platform", "windows") == "linux"
 
 
 def install_size(params):
@@ -574,7 +572,6 @@ def launch_spec(params):
         "cwd": os.path.dirname(exe),
         "env": {},
         "needsWine": not native,
-        "native": native,
     }
 
 
