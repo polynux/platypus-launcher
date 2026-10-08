@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ChevronDown, Copy, X } from 'lucide-react';
+import { Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ds/select';
+import { NumberField } from '@/components/ds/number-field';
 import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import {
@@ -27,14 +29,13 @@ function displayResolution(): { w: number; h: number } | undefined {
   return { w: Math.round(window.screen.width * r), h: Math.round(window.screen.height * r) };
 }
 
+/** ds Select with an aria-label on the trigger. Radix forbids '' as an item value, so callers use sentinels. */
 function SelectField({ label, value, onChange, children, className }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cx('relative', className)}>
-      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cx(field, 'appearance-none py-2 pr-8 [color-scheme:dark]')}>
-        {children}
-      </select>
-      <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/45" />
-    </div>
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger aria-label={label} className={className}><SelectValue /></SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
   );
 }
 
@@ -144,12 +145,13 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           <div>
             <MonoLabel className="mb-2">runner</MonoLabel>
             <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
-              <option value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</option>
-              {runnerMissing && <option value={selectedRunner}>{selectedRunner} (missing)</option>}
+              <SelectItem value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</SelectItem>
+              {runnerMissing && <SelectItem value={selectedRunner}>{selectedRunner} (missing)</SelectItem>}
               {runnerGroups.map(([kind, list]) => (
-                <optgroup key={kind} label={kind}>
-                  {list.map((r) => <option key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</option>)}
-                </optgroup>
+                <SelectGroup key={kind}>
+                  <SelectLabel>{kind}</SelectLabel>
+                  {list.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</SelectItem>)}
+                </SelectGroup>
               ))}
             </SelectField>
             <div className={cx('mt-1.5 truncate font-mono text-[11px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
@@ -199,26 +201,26 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                     <MonoLabel className="mb-1.5">resolution</MonoLabel>
                     <SelectField
                       label="Gamescope resolution"
-                      value={resChoice}
+                      value={resChoice || 'default'}
                       onChange={(v) => {
                         if (v === 'custom') return setResCustom(true);
                         setResCustom(false);
-                        const [w, h] = v ? v.split('x').map(Number) : [0, 0];
+                        const [w, h] = v !== 'default' ? v.split('x').map(Number) : [0, 0];
                         setDraft((d) => ({ ...d, gamescope_w: w, gamescope_h: h }));
                       }}
                     >
-                      <option value="">Game default</option>
-                      {display && <option value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</option>}
+                      <SelectItem value="default">Game default</SelectItem>
+                      {display && <SelectItem value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</SelectItem>}
                       {GS_RESOLUTIONS.filter((r) => !(display && r.w === display.w && r.h === display.h)).map((r) => (
-                        <option key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</option>
+                        <SelectItem key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</SelectItem>
                       ))}
-                      <option value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</option>
+                      <SelectItem value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</SelectItem>
                     </SelectField>
                     {resChoice === 'custom' && (
                       <div className="mt-2 flex items-center gap-2">
-                        <input aria-label="gamescope width" type="number" min={0} value={draft.gamescope_w || ''} onChange={(e) => set('gamescope_w', parseInt(e.target.value, 10) || 0)} placeholder="width" className={field} />
+                        <NumberField aria-label="gamescope width" min={0} step={10} hideSteppers value={draft.gamescope_w || undefined} onChange={(v) => set('gamescope_w', v ?? 0)} placeholder="width" className="min-w-0 flex-1" />
                         <span className="text-white/40">×</span>
-                        <input aria-label="gamescope height" type="number" min={0} value={draft.gamescope_h || ''} onChange={(e) => set('gamescope_h', parseInt(e.target.value, 10) || 0)} placeholder="height" className={field} />
+                        <NumberField aria-label="gamescope height" min={0} step={10} hideSteppers value={draft.gamescope_h || undefined} onChange={(v) => set('gamescope_h', v ?? 0)} placeholder="height" className="min-w-0 flex-1" />
                       </div>
                     )}
                   </div>
@@ -226,19 +228,19 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                     <MonoLabel className="mb-1.5">frame rate</MonoLabel>
                     <SelectField
                       label="Gamescope frame rate"
-                      value={rateSel}
+                      value={rateSel || 'default'}
                       onChange={(v) => {
                         if (v === 'custom') return setRateCustom(true);
                         setRateCustom(false);
-                        set('gamescope_r', v ? Number(v) : 0);
+                        set('gamescope_r', v !== 'default' ? Number(v) : 0);
                       }}
                     >
-                      <option value="">Game default</option>
-                      {GS_RATES.map((r) => <option key={r} value={r}>{r} Hz</option>)}
-                      <option value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</option>
+                      <SelectItem value="default">Game default</SelectItem>
+                      {GS_RATES.map((r) => <SelectItem key={r} value={String(r)}>{r} Hz</SelectItem>)}
+                      <SelectItem value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</SelectItem>
                     </SelectField>
                     {rateSel === 'custom' && (
-                      <input aria-label="gamescope refresh" type="number" min={0} value={draft.gamescope_r || ''} onChange={(e) => set('gamescope_r', parseInt(e.target.value, 10) || 0)} placeholder="Hz" className={cx(field, 'mt-2')} />
+                      <NumberField aria-label="gamescope refresh" min={0} hideSteppers value={draft.gamescope_r || undefined} onChange={(v) => set('gamescope_r', v ?? 0)} placeholder="Hz" className="mt-2" />
                     )}
                   </div>
                 </div>

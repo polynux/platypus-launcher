@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import { FolderOpen } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings } from '../types';
+import { NumberField } from '@/components/ds/number-field';
 import { MonoLabel, Panel, btnNeutral, btnPrimary, cx } from './ui';
 
 const inputClass =
@@ -132,20 +133,16 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
         >
           <label className="flex items-center gap-2">
             <span className="text-[12.5px] text-white/70">Keep for</span>
-            <input
-              type="number"
+            <NumberField
               min={0}
               max={365}
               step={1}
-              value={cleanupDays}
-              onChange={(e) => {
-                const v = e.target.value === '' ? '' : Math.max(0, Math.min(365, Number(e.target.value)));
-                setCleanupDays(v as number | '');
-                setCleanupError(null);
-              }}
+              hideSteppers
+              value={cleanupDays === '' ? undefined : cleanupDays}
+              onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }}
               disabled={!saved}
               aria-label="Days to keep canceled downloads' data"
-              className={cx(inputClass, 'w-24', cleanupError && 'ring-1 ring-red-400/60')}
+              className="w-24"
             />
             <span className="text-[12.5px] text-white/70">days</span>
           </label>
