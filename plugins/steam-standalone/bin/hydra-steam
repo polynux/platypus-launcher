@@ -595,12 +595,28 @@ def run_auth_password(username, password, guard, timeout=300):
     phone approves. The password travels on stdin (never argv, never
     logged) and the binary persists the refresh token itself."""
     deadline = time.time() + timeout
+    import hashlib as _hashlib
+    pw_hash = _hashlib.sha256(password.encode()).hexdigest()
     with pw_lock:
         sess = pw_sessions.get(username)
         if sess is None or not sess.alive():
             if sess is not None:
                 pw_sessions.pop(username, None)
             sess = PWSession(username, password, guard)
+            sess.pw_hash = pw_hash
+            pw_sessions[username] = sess
+            sent_code = False
+        elif getattr(sess, "pw_hash", None) != pw_hash:
+            # Corrected password on retry: the old session baked in the
+            # first password, so stop it and start fresh instead of
+            # failing against the wrong secret.
+            try:
+                sess.stop()
+            except Exception:
+                pass
+            pw_sessions.pop(username, None)
+            sess = PWSession(username, password, guard)
+            sess.pw_hash = pw_hash
             pw_sessions[username] = sess
             sent_code = False
         else:
