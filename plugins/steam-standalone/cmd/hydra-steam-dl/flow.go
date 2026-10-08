@@ -322,4 +322,14 @@ func progress(total uint64) (func(depot.Progress), *uint64, *uint64) {
 	}, &done, &peak
 }
 
+// withBase offsets one depot's zero-based progress by the bytes of prior
+// depots, so multi-depot installs report monotonically non-decreasing
+// bytes (STEAM-11).
+func withBase(onProg func(depot.Progress), base uint64) func(depot.Progress) {
+	return func(p depot.Progress) {
+		p.DoneBytes += base
+		onProg(p)
+	}
+}
+
 func hexChunk(id []byte) string { return hex.EncodeToString(id) }

@@ -75,6 +75,7 @@ func runInstall(ctx context.Context, req request) error {
 		state.Done[id] = true
 	}
 	flush := 0
+	var base uint64
 	for _, d := range depots {
 		w, err := depot.Preallocate(d.man, req.InstallDir)
 		if err != nil {
@@ -103,7 +104,9 @@ func runInstall(ctx context.Context, req request) error {
 			}
 			return nil
 		}
-		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, sink, onProg)
+		// STEAM-11: offset this depot's zero-based progress by prior
+		// depots so the bar never jumps backwards.
+		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, sink, withBase(onProg, base))
 		cErr := w.Close()
 		if dlErr != nil {
 			depot.SaveJob(ss.dataDir, jobID, state)
@@ -113,6 +116,7 @@ func runInstall(ctx context.Context, req request) error {
 			depot.SaveJob(ss.dataDir, jobID, state)
 			return cErr
 		}
+		base += d.man.TotalSize()
 		depot.SaveJob(ss.dataDir, jobID, state)
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
@@ -147,6 +151,7 @@ func runUpdate(ctx context.Context, req request) error {
 	}
 	sched := depot.NewScheduler(depot.NewClient(), depot.SchedulerConfig{})
 	onProg, _, _ := progress(totalBytes(depots))
+	var base uint64
 	for _, d := range depots {
 		oldManifests := loadInstalledAll(ss.dataDir, req.AppID, d.ref.DepotID)
 		// Saved manifests keep encrypted filenames; decrypt the old ones
@@ -184,7 +189,7 @@ func runUpdate(ctx context.Context, req request) error {
 		skip := reuseFromDisk(req.InstallDir, oldManifests, d.man, w)
 		dlErr := sched.DownloadStream(ctx, d.man, d.ref.DepotID, d.hosts, d.key, skip, func(id string, data []byte) error {
 			return w.Write(id, data)
-		}, func(p depot.Progress) { onProg(p) })
+		}, withBase(onProg, base))
 		cErr := w.Close()
 		if dlErr != nil {
 			return dlErr
@@ -192,6 +197,7 @@ func runUpdate(ctx context.Context, req request) error {
 		if cErr != nil {
 			return cErr
 		}
+		base += d.man.TotalSize()
 		if err := depot.SaveManifest(ss.dataDir, req.AppID, d.ref.DepotID, d.ref.GID, d.raw); err != nil {
 			return err
 		}
