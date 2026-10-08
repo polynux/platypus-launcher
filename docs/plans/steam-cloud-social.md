@@ -103,7 +103,7 @@ rich presence are out of scope.
 
 Sizes are rough: S = ≤1 day, M = 2-3 days, L = 4-6 days of focused work, including tests. Dependencies in the right column.
 
-### Phase 0: session foundations (M, no user-visible change)
+### Phase 0: session foundations (M, no user-visible change) — done, merged in cde2cd3
 
 Scope:
 
@@ -267,6 +267,29 @@ All use the real account and wait for approval; all are small and reversible exc
 - Core orchestration tested with a fake plugin (extend `plugins/echo`): pull before launch, push after exit, policy when the official client is "running" (a temp `steam.pid`), conflict flow, offline flow.
 - Frontend: component tests for the cloud row, conflict dialog, friends panel and status selector under `frontend/src/components/__tests__`.
 - Never run `wails dev` from CI or agents.
+
+## User decisions (2026-10-08)
+
+Answers to the open questions below; they override the recommendations where they differ.
+
+| Question | Decision |
+|---|---|
+| Q-A API-only games (e.g. Terraria) | Launch them through the official Steam client. Making Hydra answer for the Steam client (Steamworks IPC) is deferred; if ever done: only with real account data, no game file changes, its own droppable plugin. |
+| Q-B Official client running | D7 as recommended: Hydra does not sync that game and offers "Launch through Steam". |
+| Q-C Automatic vs ask | Auto-sync clean cases; dialog only on conflicts. |
+| Q-D In-game reporting | Report "in game" like Steam does (playtime credited). Goal is to replicate Steam's behaviour. Overrides D9's "off by default". |
+| Q-E Status and connection | Follow Steam's status (not Invisible); connect at launcher start. |
+| Q-F UI | Small friends summary section in the sidebar; clicking it opens a friends modal, like Steam. |
+| Q-G SUPERHOT conflict | Skip. |
+| Q-H Terms of service | Accepted. Everything Steam-specific stays in the Steam plugin so it can be dropped. |
+| Q-I Save backups | Keep the last N backups per game. |
+
+Further Steam plugin scope requested by the user:
+
+- **Steam Families**: list games shared by family members, install and play them with Steam's own rules (one player per copy, the borrower is warned then disconnected when the owner plays, owner exclusions, parental limits). Same persistent session as social.
+- **Game version selection** (store-agnostic core capability): install an older build. Steam via beta branches and older depot manifests.
+
+Product direction: Hydra replaces the official launchers (Steam, Epic, GOG, Ubisoft). Store features are replicated in their plugins; the core offers store-agnostic capabilities (cloud saves, social, versions, ...).
 
 ## Open product questions for the user
 
