@@ -350,6 +350,37 @@ func (m *Manager) Initialize(ctx context.Context, id string) (*InitResult, error
 	return &info, nil
 }
 
+// Runtime says what the plugin offers right now: what its last initialize
+// returned, or the manifest's capabilities until it has initialized. It never
+// starts the plugin.
+func (m *Manager) Runtime(id string) Runtime {
+	m.mu.Lock()
+	p, known := m.plugins[id]
+	proc := m.procs[id]
+	m.mu.Unlock()
+	if proc != nil {
+		proc.mu.Lock()
+		rt := proc.runtime
+		proc.mu.Unlock()
+		if rt != nil {
+			return Runtime{Initialized: true, Capabilities: slices.Clone(rt.Capabilities), Features: rt.Features}
+		}
+	}
+	if !known {
+		return Runtime{}
+	}
+	caps := slices.Clone(p.Manifest.Capabilities)
+	if caps == nil {
+		caps = []string{}
+	}
+	return Runtime{Capabilities: caps}
+}
+
+// Has reports whether the plugin offers the capability right now (see Runtime).
+func (m *Manager) Has(id, capability string) bool {
+	return slices.Contains(m.Runtime(id).Capabilities, capability)
+}
+
 // process returns the plugin's process, creating it if the plugin may run.
 func (m *Manager) process(id string) (*process, error) {
 	m.mu.Lock()
@@ -398,15 +429,16 @@ func (m *Manager) process(id string) (*process, error) {
 	}
 	pinned := p.Hash
 	proc := &process{
-		dataDir: dataDir,
-		onExit:  onExit,
-		id:      id,
-		dir:     p.Dir,
-		exec:    execPath,
-		hash:    pinned,
-		logPath: logPath,
-		notify:  notifyToLog(logPath, next),
-		t:       m.t,
+		dataDir:  dataDir,
+		declared: p.Manifest.Capabilities,
+		onExit:   onExit,
+		id:       id,
+		dir:      p.Dir,
+		exec:     execPath,
+		hash:     pinned,
+		logPath:  logPath,
+		notify:   notifyToLog(logPath, next),
+		t:        m.t,
 		// The file may change between discovery and any later (re)start.
 		verify: func() error {
 			h, err := hashPlugin(p.Dir)

@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -49,27 +51,72 @@ var defaultTimings = timings{
 
 // InitResult is the plugin's answer to initialize.
 type InitResult struct {
-	Name         string        `json:"name"`
-	Version      string        `json:"version"`
-	API          int           `json:"api"`
-	Capabilities []string      `json:"capabilities"`
-	Missing      []Requirement `json:"missing"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	API     int    `json:"api"`
+	// Capabilities is the subset of the manifest's that is on right now. A
+	// plugin that leaves it out offers everything it declared.
+	Capabilities []string `json:"capabilities"`
+	// Features are depth flags per capability, e.g.
+	// {"versions": {"channels": true, "password": false}}.
+	Features map[string]map[string]bool `json:"features,omitempty"`
+	Missing  []Requirement              `json:"missing"`
+}
+
+// Runtime is what a plugin offers right now, as its last initialize said.
+// Before the plugin has ever initialized it is the manifest's promise.
+type Runtime struct {
+	Initialized  bool
+	Capabilities []string
+	Features     map[string]map[string]bool
+}
+
+// resolveInit applies the subset rule: the runtime capabilities are what
+// initialize returned, limited to what the manifest declared. It returns the
+// result with Capabilities and Features clamped, and the names it dropped.
+func resolveInit(declared []string, res InitResult) (InitResult, []string) {
+	if res.Capabilities == nil {
+		res.Capabilities = slices.Clone(declared)
+		if res.Capabilities == nil {
+			res.Capabilities = []string{}
+		}
+	}
+	caps := []string{}
+	var dropped []string
+	for _, c := range res.Capabilities {
+		switch {
+		case !slices.Contains(declared, c):
+			dropped = append(dropped, c)
+		case !slices.Contains(caps, c):
+			caps = append(caps, c)
+		}
+	}
+	res.Capabilities = caps
+	features := map[string]map[string]bool{}
+	for c, f := range res.Features {
+		if slices.Contains(caps, c) {
+			features[c] = f
+		}
+	}
+	res.Features = features
+	return res, dropped
 }
 
 // process runs one plugin executable. It starts on the first call, restarts
 // after a crash with exponential backoff, and gives up after maxCrashes quick
 // crashes in a row.
 type process struct {
-	id      string
-	dir     string
-	exec    string
-	hash    string       // pinned at approval
-	verify  func() error // re-checks the pinned hash before every start
-	logPath string
-	dataDir string      // HYDRA_PLUGIN_DATA
-	onExit  func(error) // unexpected exits only
-	notify  jsonrpc.NotifyFunc
-	t       timings
+	id       string
+	dir      string
+	exec     string
+	hash     string       // pinned at approval
+	verify   func() error // re-checks the pinned hash before every start
+	logPath  string
+	dataDir  string      // HYDRA_PLUGIN_DATA
+	declared []string    // the manifest's capabilities
+	onExit   func(error) // unexpected exits only
+	notify   jsonrpc.NotifyFunc
+	t        timings
 
 	mu        sync.Mutex
 	cmd       *exec.Cmd
@@ -79,6 +126,8 @@ type process struct {
 	exited    chan struct{} // closed when the current run is over
 	dead      chan struct{} // closed right after cmd.Wait returns, before the drain (CORE-2)
 	info      *InitResult
+	runtime   *Runtime        // the latest initialize, kept across restarts until the next one
+	absent    map[string]bool // optional methods the plugin answered -32601 to, this run
 	started   time.Time
 	crashes   int
 	retryAt   time.Time
@@ -108,11 +157,44 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 		}
 	default:
 	}
+	optional, err := p.gate(method)
+	if err != nil {
+		return err
+	}
 	err = conn.Call(ctx, method, params, result)
 	if errors.Is(err, jsonrpc.ErrClosed) {
 		return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
 	}
+	if optional && rpcCode(err) == jsonrpc.CodeMethodNotFound {
+		p.mu.Lock()
+		if p.absent != nil {
+			p.absent[method] = true
+		}
+		p.mu.Unlock()
+	}
 	return err
+}
+
+// gate keeps Hydra from sending a request the plugin has said it doesn't
+// serve: one belonging to a capability that is off at runtime, or an optional
+// method it already answered -32601 to in this run. Both answer as the plugin
+// would (method not found), so callers handle one case. Methods outside the
+// registry pass.
+func (p *process) gate(method string) (optional bool, err error) {
+	capability, optional, ok := CapabilityForMethod(method)
+	if !ok {
+		return false, nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.runtime != nil && !slices.Contains(p.runtime.Capabilities, capability) {
+		return optional, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound,
+			Message: fmt.Sprintf("plugin %s doesn't offer %s right now (%s)", p.id, capability, method)}
+	}
+	if optional && p.absent[method] {
+		return optional, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found: " + method}
+	}
+	return optional, nil
 }
 
 // ensure returns a connection to a running, initialized plugin, plus the
@@ -253,6 +335,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 	exited := make(chan struct{})
 	dead := make(chan struct{})
 	p.cmd, p.conn, p.stdin, p.exited, p.dead, p.info = cmd, conn, inW, exited, dead, nil
+	p.absent = map[string]bool{}
 	p.ready = make(chan struct{})
 	p.started = time.Now()
 
@@ -335,7 +418,12 @@ func (p *process) initialize(conn *jsonrpc.Conn) {
 		_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
 		return
 	}
+	res, dropped := resolveInit(p.declared, res)
+	if len(dropped) > 0 {
+		appendPluginLog(p.logPath, fmt.Sprintf("[warn] initialize listed capabilities the manifest doesn't declare; ignored: %s\n", strings.Join(dropped, ", ")))
+	}
 	p.info = &res
+	p.runtime = &Runtime{Initialized: true, Capabilities: res.Capabilities, Features: res.Features}
 	close(p.ready)
 }
 
