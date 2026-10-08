@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Button } from '@/components/ds/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { cx } from './ui';
 
 const FOCUSABLE = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -39,9 +41,18 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
     }
   };
 
-  const nav = 'absolute z-10 grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white/85 ring-1 ring-white/15 transition hover:bg-black/80 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300';
+  /** Icon button with a tooltip; the content sits above the lightbox (z-100). */
+  const tip = (label: string, btn: React.ReactNode, side: 'left' | 'right' | 'bottom') => (
+    <Tooltip>
+      <TooltipTrigger asChild>{btn}</TooltipTrigger>
+      <TooltipContent side={side} className="z-[110]">{label}</TooltipContent>
+    </Tooltip>
+  );
+
+  const nav = 'absolute z-10 h-11 w-11 rounded-full bg-black/60 text-white/85 ring-1 ring-white/15 hover:bg-black/80 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300';
 
   return (
+    <TooltipProvider>
     <div
       ref={root}
       role="dialog"
@@ -52,18 +63,19 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 motion-safe:animate-[fadeIn_.15s_ease-out]"
     >
       <style>{'@keyframes fadeIn{from{opacity:0}to{opacity:1}}'}</style>
-      <button
+      {tip('Close', <Button
         data-autofocus
+        size="none"
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         aria-label="Close slideshow"
         className={cx(nav, 'right-5 top-5')}
       >
         <X size={18} />
-      </button>
+      </Button>, 'left')}
       {n > 1 && (
-        <button onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label="Previous screenshot" className={cx(nav, 'left-5 top-1/2 -translate-y-1/2')}>
+        tip('Previous', <Button size="none" onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label="Previous screenshot" className={cx(nav, 'left-5 top-1/2 -translate-y-1/2')}>
           <ChevronLeft size={22} />
-        </button>
+        </Button>, 'right')
       )}
       <img
         src={images[index]}
@@ -72,9 +84,9 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
         className="max-h-[calc(100vh-6rem)] max-w-[calc(100vw-9rem)] select-none object-contain"
       />
       {n > 1 && (
-        <button onClick={(e) => { e.stopPropagation(); go(1); }} aria-label="Next screenshot" className={cx(nav, 'right-5 top-1/2 -translate-y-1/2')}>
+        tip('Next', <Button size="none" onClick={(e) => { e.stopPropagation(); go(1); }} aria-label="Next screenshot" className={cx(nav, 'right-5 top-1/2 -translate-y-1/2')}>
           <ChevronRight size={22} />
-        </button>
+        </Button>, 'left')
       )}
       <div
         aria-live="polite"
@@ -84,5 +96,6 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
         {index + 1} / {n}
       </div>
     </div>
+    </TooltipProvider>
   );
 }
