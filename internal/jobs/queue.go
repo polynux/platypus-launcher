@@ -206,7 +206,10 @@ func (q *Queue) prepare(ctx context.Context, job types.Job) error {
 			return fmt.Errorf("not enough space in %s: needs %s, %s free", job.InstallDir, human(need), human(int64(free)))
 		}
 		q.mu.Lock()
-		if j := q.find(job.ID); j != nil && j.Total == 0 {
+		// The probe just ran, so its size is newer than any total kept
+		// from an earlier attempt (CORE-15). Progress totals arriving
+		// later in this run still win via Notify.
+		if j := q.find(job.ID); j != nil && size.DownloadBytes > 0 {
 			j.Total = size.DownloadBytes
 		}
 		q.mu.Unlock()
@@ -358,8 +361,11 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	if u.Total > 0 {
 		j.Total = u.Total
 	}
-	if u.Bytes > 0 {
+	if u.Bytes >= 0 {
 		j.Bytes = u.Bytes
+		if j.Total > 0 && j.Bytes > j.Total {
+			j.Bytes = j.Total
+		}
 	}
 	j.Speed = u.Speed
 	switch {
