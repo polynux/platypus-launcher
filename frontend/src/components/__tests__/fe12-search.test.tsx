@@ -15,6 +15,7 @@ const base = {
   runnerCount: 0,
   lastScan: null,
   sessions: [],
+  onStop: () => {},
 };
 
 describe('FE-12 sidebar search does not hijack navigation', () => {

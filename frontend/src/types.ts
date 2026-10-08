@@ -91,7 +91,7 @@ export interface Tweak {
   wrappers?: string[];
 }
 
-export type SessionState = 'starting' | 'running' | 'stopped' | 'failed';
+export type SessionState = 'starting' | 'running' | 'stopping' | 'stopped' | 'failed';
 
 export interface SessionEvent {
   game_id: string;

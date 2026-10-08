@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"hydra-launcher/internal/types"
@@ -36,6 +37,7 @@ type Emit func(types.SessionEvent)
 
 type Tracker struct {
 	emit   Emit
+	grace  time.Duration // how long a game gets to exit after SIGTERM before SIGKILL
 	mu     sync.Mutex
 	active map[string]*entry // gameID → launch entry (direct process or store-client watch)
 }
@@ -48,10 +50,17 @@ type entry struct {
 	state   string
 	pid     int
 	message string
+
+	done     chan struct{} // closed when the launch is no longer tracked
+	doneOnce sync.Once
+	token    string // HYDRA_SESSION value in the game's environment (direct launches)
+	hook     func(force bool)
+	stopping bool // the user asked to stop it
+	forceReq bool // ... and asked for SIGKILL before a pid was known
 }
 
 func NewTracker(emit Emit) *Tracker {
-	return &Tracker{emit: emit, active: map[string]*entry{}}
+	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}}
 }
 
 // Running reports whether a game launched by Hydra is still tracked.
@@ -91,7 +100,7 @@ func (t *Tracker) tryClaim(gameID string, cmd *exec.Cmd) *entry {
 	if _, ok := t.active[gameID]; ok {
 		return nil
 	}
-	e := &entry{cmd: cmd, state: "starting"}
+	e := &entry{cmd: cmd, state: "starting", done: make(chan struct{})}
 	if cmd != nil && cmd.Process != nil {
 		e.state = "running"
 		e.pid = cmd.Process.Pid
@@ -108,18 +117,24 @@ func (t *Tracker) clearEntry(gameID string, e *entry) {
 	if cur, ok := t.active[gameID]; ok && cur == e {
 		delete(t.active, gameID)
 	}
+	e.doneOnce.Do(func() { close(e.done) })
 }
 
-// setRunning marks an already-claimed game as running with its pid.
-// Used when a store client hands the game over after the starting phase.
-func (t *Tracker) setRunning(gameID string, pid int) {
+// setRunning records the pid of an already-claimed game once a store client
+// has handed it over. It reports whether the user asked to stop the game in
+// the meantime; the state then stays "stopping".
+func (t *Tracker) setRunning(gameID string, pid int) (stopping bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if e, ok := t.active[gameID]; ok {
-		e.state = "running"
 		e.pid = pid
+		if e.stopping {
+			return true
+		}
+		e.state = "running"
 		e.message = ""
 	}
+	return false
 }
 
 // setMessage updates the stored message for a tracked game.
@@ -131,13 +146,14 @@ func (t *Tracker) setMessage(gameID, message string) {
 	}
 }
 
-// StopAll kills direct-launch processes (on app shutdown). Steam games are
-// owned by the Steam client and are left alone.
+// StopAll kills direct-launch processes and their groups (on app shutdown).
+// Steam games are owned by the Steam client and are left alone.
 func (t *Tracker) StopAll() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for _, e := range t.active {
 		if e.cmd != nil && e.cmd.Process != nil {
+			killGroup(e.cmd.Process.Pid, syscall.SIGKILL)
 			_ = e.cmd.Process.Kill()
 		}
 	}
@@ -166,17 +182,26 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 				break
 			}
 			if time.Now().After(deadline) {
+				if t.userStopped(e) {
+					t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
+					return
+				}
 				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: client + " never started the game. Check the " + client + " window for an update, a prompt or an error."})
 				return
 			}
 			time.Sleep(pollEvery)
 		}
-		t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
-		t.setRunning(gameID, pid)
+		if t.setRunning(gameID, pid) {
+			// Stop was requested while the client was still starting the game.
+			t.emit(types.SessionEvent{GameID: gameID, State: "stopping", PID: pid})
+			t.deliverPending(e)
+		} else {
+			t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
+		}
 		for find() != 0 {
 			time.Sleep(pollEvery)
 		}
-		t.emit(types.SessionEvent{GameID: gameID, State: "stopped"})
+		t.emitStopped(gameID, e)
 	}()
 	return true
 }
@@ -189,11 +214,17 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 // file nor the failure message (CORE-4).
 // It claims the game before starting so concurrent launches can't both run;
 // losers get ErrAlreadyRunning and never start a process.
-func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact []string) (int, error) {
+func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact []string, opts ...StartOption) (int, error) {
 	e := t.tryClaim(gameID, cmd)
 	if e == nil {
 		return 0, fmt.Errorf("game %s %w", gameID, ErrAlreadyRunning)
 	}
+	t.mu.Lock()
+	for _, o := range opts {
+		o(e)
+	}
+	t.mu.Unlock()
+	prepareForStop(cmd, e)
 	tail := &tailBuffer{}
 	log, logPath, logErr := openLog(gameID)
 	var out io.Writer
@@ -235,10 +266,19 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 	pid := cmd.Process.Pid
 	t.mu.Lock()
 	e.cmd = cmd
-	e.state = "running"
 	e.pid = pid
+	if !e.stopping {
+		e.state = "running"
+	}
+	stopping := e.stopping
 	t.mu.Unlock()
-	t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
+	if stopping {
+		// Stop arrived between the claim and the process start.
+		t.emit(types.SessionEvent{GameID: gameID, State: "stopping", PID: pid})
+		t.deliverPending(e)
+	} else {
+		t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
+	}
 	started := time.Now()
 	go func() {
 		// Wait also waits for the output copy to finish, so closing after is safe.
@@ -249,7 +289,13 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		if log != nil {
 			_ = log.Close()
 		}
+		stoppedByUser := t.userStopped(e)
 		t.clearEntry(gameID, e)
+		if stoppedByUser {
+			// A stop by the user is never a failed launch, however fast the exit.
+			t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
+			return
+		}
 		if err != nil && time.Since(started) < quickExit {
 			msg := strings.TrimSpace(tail.String())
 			if msg == "" {

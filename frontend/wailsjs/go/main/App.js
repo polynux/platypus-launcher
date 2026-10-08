@@ -30,6 +30,10 @@ export function ClearFinishedJobs() {
   return window['go']['main']['App']['ClearFinishedJobs']();
 }
 
+export function ForceStopGame(arg1) {
+  return window['go']['main']['App']['ForceStopGame'](arg1);
+}
+
 export function GetGameDetails(arg1) {
   return window['go']['main']['App']['GetGameDetails'](arg1);
 }
@@ -132,6 +136,10 @@ export function SetPluginEnabled(arg1, arg2) {
 
 export function SetPluginInstallFolder(arg1, arg2) {
   return window['go']['main']['App']['SetPluginInstallFolder'](arg1, arg2);
+}
+
+export function StopGame(arg1) {
+  return window['go']['main']['App']['StopGame'](arg1);
 }
 
 export function UninstallGame(arg1) {

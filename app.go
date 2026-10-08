@@ -371,6 +371,7 @@ type prepared struct {
 	dir    string
 	client *stores.ClientLaunch // set when a store client starts the game
 	redact []string             // argument prefixes hidden in previews and logs
+	runner types.ProtonVersion  // the Wine/Proton runner, when the game uses one
 }
 
 // prepareLaunch asks the game's store how to launch it and builds the command.
@@ -409,7 +410,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		if game.Settings.WorkingDir != "" {
 			dir = game.Settings.WorkingDir
 		}
-		return &prepared{args: args, env: env, dir: dir, redact: d.Redact}, nil
+		return &prepared{args: args, env: env, dir: dir, redact: d.Redact, runner: r}, nil
 	}
 
 	r, err := selectRunner(game)
@@ -424,7 +425,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return &prepared{args: args, env: env, dir: dir}, nil
+	return &prepared{args: args, env: env, dir: dir, runner: r}, nil
 }
 
 // shown is the command line with env, redacted for previews and logs.
@@ -439,6 +440,28 @@ func (p *prepared) shown() string {
 		parts = append(parts, k+"="+p.env[k])
 	}
 	return strings.Join(append(parts, stores.RedactArgs(p.args, p.redact)...), " ")
+}
+
+// stopHook asks the game's wineserver to terminate when the game is stopped;
+// wineserver daemonizes, so it outlives the launch's process group. Native
+// games have none.
+func (p *prepared) stopHook() func(force bool) {
+	return func(force bool) {
+		cmd := runner.WineserverStopCommand(p.runner, p.env, force)
+		if cmd == nil {
+			return
+		}
+		done := make(chan struct{})
+		if err := cmd.Start(); err != nil {
+			return
+		}
+		go func() { _ = cmd.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			_ = cmd.Process.Kill()
+		}
+	}
 }
 
 // PreviewLaunchCommand returns the exact command line that will be used.
@@ -490,7 +513,7 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 		}
 		return "Asked " + cl.Client + " to start " + game.Title, nil
 	}
-	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact)
+	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, session.WithStopHook(p.stopHook()))
 	if err != nil {
 		if errors.Is(err, session.ErrAlreadyRunning) {
 			return "", fmt.Errorf("%s is already running", game.Title)
@@ -498,6 +521,27 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
+}
+
+// StopGame asks a running game to quit: SIGTERM to its processes (and the
+// Wine prefix's wineserver), then SIGKILL after a few seconds. It returns once
+// the request is delivered; the "session" event reports "stopping", then
+// "stopped". Stopping a game that is already stopping does nothing.
+func (a *App) StopGame(gameID string) error {
+	return a.stopGame(gameID, false)
+}
+
+// ForceStopGame kills the game's processes right away.
+func (a *App) ForceStopGame(gameID string) error {
+	return a.stopGame(gameID, true)
+}
+
+func (a *App) stopGame(gameID string, force bool) error {
+	err := a.sessions.Stop(gameID, force)
+	if errors.Is(err, session.ErrNotRunning) {
+		return errors.New("that game is not running")
+	}
+	return err
 }
 
 func (a *App) launcherSettings() types.LauncherSettings {

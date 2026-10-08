@@ -64,6 +64,8 @@ const baseProps = {
   backLabel: 'Library',
   onBack: () => {},
   onPlay: () => {},
+  onStop: () => {},
+  onForceStop: () => {},
   launching: false,
   tweaks: [],
   onChangeSettings: () => {},

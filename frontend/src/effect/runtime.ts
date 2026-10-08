@@ -69,6 +69,12 @@ export const LauncherApi = {
 
   launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
 
+  // Graceful stop (SIGTERM, then SIGKILL after a few seconds); progress arrives
+  // as session events ("stopping", then "stopped").
+  stopGame: (gameId: string) => call<void>('StopGame', () => App.StopGame(gameId)),
+
+  forceStopGame: (gameId: string) => call<void>('ForceStopGame', () => App.ForceStopGame(gameId)),
+
   previewCommand: (game: Game) => call<string>('PreviewLaunchCommand', () => App.PreviewLaunchCommand(backend(game))),
 
   // Curated fix first, then ProtonDB summary (Steam ids only). Resolves null
