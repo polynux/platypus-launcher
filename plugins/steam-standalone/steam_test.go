@@ -309,6 +309,77 @@ func (e *env) setLaunchMode(appID, mode string) {
 	os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), data, 0o644)
 }
 
+// The email code from attempt 1 works on attempt 2 because both share ONE
+// auth session: a retry must not start a new Begin (which would send a new
+// email and invalidate the typed code). Exactly one Begin and one Update
+// hit the wire.
+func TestSteamPasswordTwoStepEmail(t *testing.T) {
+	e := setup(t)
+	e.setCMState("auth_guard", "email")
+	var st types.AuthStatus
+	// Attempt 1 carries no code: the dialog must be told which kind.
+	err := e.call("auth.complete", map[string]any{"fields": map[string]string{
+		"username": "HydraUser", "password": "correct-horse"}}, &st)
+	if err == nil || !strings.Contains(err.Error(), "emailed") {
+		t.Fatalf("want email-code prompt, got %+v, %v", st, err)
+	}
+	// Attempt 2 feeds the attempt-1 code into the SAME session.
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
+		"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("second attempt: %+v, %v", st, err)
+	}
+	if n := strings.Count(e.cmLog(), "Authentication.BeginAuthSessionViaCredentials#1"); n != 1 {
+		t.Fatalf("want exactly 1 Begin, got %d", n)
+	}
+	if n := strings.Count(e.cmLog(), "Authentication.UpdateAuthSessionWithSteamGuardCode#1"); n != 1 {
+		t.Fatalf("want exactly 1 Update, got %d", n)
+	}
+	if err := e.call("auth.logout", nil, &st); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+}
+
+// Same shape for TOTP codes: the kind is named, one Begin, one Update.
+func TestSteamPasswordTwoStepTOTP(t *testing.T) {
+	e := setup(t)
+	e.setCMState("auth_guard", "totp")
+	var st types.AuthStatus
+	err := e.call("auth.complete", map[string]any{"fields": map[string]string{
+		"username": "HydraUser", "password": "correct-horse"}}, &st)
+	if err == nil || !strings.Contains(err.Error(), "authenticator") {
+		t.Fatalf("want authenticator prompt, got %+v, %v", st, err)
+	}
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
+		"username": "HydraUser", "password": "correct-horse", "guard": "123456"}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("second attempt: %+v, %v", st, err)
+	}
+	if n := strings.Count(e.cmLog(), "Authentication.BeginAuthSessionViaCredentials#1"); n != 1 {
+		t.Fatalf("want exactly 1 Begin, got %d", n)
+	}
+	if err := e.call("auth.logout", nil, &st); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+}
+
+// Mobile confirmation needs no code at all: one submit waits on the same
+// session until the phone approves.
+func TestSteamPasswordMobileConfirm(t *testing.T) {
+	e := setup(t)
+	e.setCMState("auth_guard", "confirm")
+	e.setCMState("auth_mobile_approved", true)
+	var st types.AuthStatus
+	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
+		"username": "HydraUser", "password": "correct-horse"}}, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("confirm login: %+v, %v", st, err)
+	}
+	if n := strings.Count(e.cmLog(), "Authentication.BeginAuthSessionViaCredentials#1"); n != 1 {
+		t.Fatalf("want exactly 1 Begin, got %d", n)
+	}
+	if err := e.call("auth.logout", nil, &st); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+}
+
 // The login uses hydra-steam-dl auth against the fake CM: the CM log must
 // show the Authentication RPCs, and no depotdownloader call file may exist.
 func (e *env) authLog() string {
