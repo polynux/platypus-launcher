@@ -138,10 +138,22 @@ func EResultName(e int) string {
 }
 
 // tokenRejected marks EResults that mean "Steam says this login/token is
-// no good". Callers map these to auth-required; everything else is an
-// ordinary error.
+// no good": InvalidPassword 5, Revoked 26 and Expired 27. AccessDenied
+// 15 is deliberately absent: on a service call it usually means "no
+// permission for this app", not "logged out" (see session_test).
+// Callers map these to auth-required; everything else is an ordinary
+// error.
 func tokenRejected(eresult int) bool {
 	return eresult == 5 || eresult == 26 || eresult == 27
+}
+
+// logonTokenRejected marks the EResults that mean the token itself was
+// refused at LOGON time — there, AccessDenied 15 is the CM's answer to
+// a revoked token (a service-call AccessDenied means app permissions,
+// which is why tokenRejected above stays narrower). The persistent
+// Client uses this to stop reconnecting on a dead token.
+func logonTokenRejected(eresult int) bool {
+	return tokenRejected(eresult) || eresult == 15
 }
 
 // CMError is a failed CM exchange. EResult is the server's result (or 0

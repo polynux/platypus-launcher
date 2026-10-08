@@ -313,7 +313,7 @@ func parseLogonResponse(hdr depot.Msg, body []byte) (int32, uint64, error) {
 	sessionID := int32(hdr.Int(2))
 	if eresult != 1 {
 		suffix := ""
-		auth := tokenRejected(eresult)
+		auth := logonTokenRejected(eresult)
 		if !auth {
 			suffix = " while logging on to its CM server"
 		}
@@ -371,7 +371,7 @@ func (c *Client) run() {
 			// Token rejected this time: the refresh token is no good.
 			// Stop reconnecting for good, keep the error; the caller
 			// re-auths and builds a fresh Client (review bug 2).
-			if ce, ok := err.(*CMError); ok && tokenRejected(ce.EResult) {
+			if ce, ok := err.(*CMError); ok && logonTokenRejected(ce.EResult) {
 				c.mu.Lock()
 				c.lastErr = err
 				c.mu.Unlock()

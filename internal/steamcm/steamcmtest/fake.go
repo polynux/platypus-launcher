@@ -62,6 +62,10 @@ type Config struct {
 	// KickAfter counts service calls before the kick (0 = immediately
 	// after logon).
 	KickAfter int
+	// RetryLogonEresult, when set, rejects every logon with this
+	// EResult (response eresult and a close), like a CM refusing a
+	// revoked/expired token. Set between test steps.
+	RetryLogonEresult int
 	// LogonDelay makes the fake sleep before answering a logon
 	// (response or rejection), so a test can drop the socket or Close()
 	// while the reconnect logon is still in flight. Applies to every
@@ -239,6 +243,10 @@ func (f *Fake) serve(c *fakeConn) {
 	eres := cfg.LogonEresult
 	if eres == 0 {
 		eres = 1
+	}
+	if cfg.RetryLogonEresult != 0 {
+		// Token refused on this attempt (revoked, expired, ...).
+		eres = cfg.RetryLogonEresult
 	}
 
 	// Duplicate logon id: the newcomer takes the slot; the old
