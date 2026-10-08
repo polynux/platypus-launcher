@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/settings"
@@ -207,8 +208,12 @@ func (m *Manager) Approve(id string) error {
 	if err := m.trust.SetPluginState(id, state); err != nil {
 		return err
 	}
-	_, err := m.Discover()
-	return err
+	if _, err := m.Discover(); err != nil {
+		return err
+	}
+	// Re-approving a gave-up plugin gives it another chance (CORE-10).
+	m.resetCrashes(id)
+	return nil
 }
 
 // SetEnabled turns an approved plugin on or off. A plugin whose executable
@@ -231,8 +236,49 @@ func (m *Manager) SetEnabled(id string, enabled bool) error {
 	if err := m.trust.SetPluginState(id, trust); err != nil {
 		return err
 	}
-	_, err := m.Discover()
-	return err
+	if _, err := m.Discover(); err != nil {
+		return err
+	}
+	if enabled {
+		// Re-enabling a gave-up plugin gives it another chance (CORE-10).
+		m.resetCrashes(id)
+	}
+	return nil
+}
+
+// resetCrashes clears the crash count so the next call restarts the plugin
+// instead of repeating the give-up error. Unknown plugins and plugins with
+// no recorded run are a no-op.
+func (m *Manager) resetCrashes(id string) {
+	m.mu.Lock()
+	proc := m.procs[id]
+	m.mu.Unlock()
+	if proc == nil {
+		return
+	}
+	proc.mu.Lock()
+	proc.crashes, proc.retryAt, proc.lastErr = 0, time.Time{}, nil
+	proc.mu.Unlock()
+}
+
+// RetryPlugin clears a gave-up plugin's crash count so the next call
+// restarts it immediately. The Plugins view offers it after a give-up
+// (CORE-10).
+func (m *Manager) RetryPlugin(id string) error {
+	m.mu.Lock()
+	_, known := m.plugins[id]
+	proc := m.procs[id]
+	m.mu.Unlock()
+	if !known {
+		return fmt.Errorf("unknown plugin %q", id)
+	}
+	if proc == nil {
+		return nil // nothing recorded; the next call starts fresh anyway
+	}
+	proc.mu.Lock()
+	proc.crashes, proc.retryAt, proc.lastErr = 0, time.Time{}, nil
+	proc.mu.Unlock()
+	return nil
 }
 
 // Call sends a request to a ready plugin, starting it on demand.

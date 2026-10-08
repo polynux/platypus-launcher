@@ -72,6 +72,7 @@ type process struct {
 	crashes  int
 	retryAt  time.Time
 	lastErr  error
+	lastCrash time.Time // when the latest crash was recorded (for decay)
 	initErr  error // why initialize failed, reported instead of "killed"
 	stopping bool
 }
@@ -153,6 +154,11 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
+		}
+		// A breakage fixed long ago shouldn't look permanent: crashes older
+		// than a stable run decay away (CORE-10).
+		if p.crashes >= p.t.maxCrashes && !p.lastCrash.IsZero() && time.Since(p.lastCrash) >= p.t.stableAfter {
+			p.crashes = 0
 		}
 		if p.crashes >= p.t.maxCrashes {
 			err := fmt.Errorf("plugin %s crashed %d times in a row, last: %v", p.id, p.crashes, p.lastErr)
@@ -280,13 +286,15 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 
 // recordCrash schedules the next start. Callers hold p.mu.
 func (p *process) recordCrash(err error) {
+	now := time.Now()
 	p.crashes++
 	p.lastErr = err
+	p.lastCrash = now
 	backoff := p.t.backoffBase << (p.crashes - 1)
 	if backoff > p.t.backoffMax || backoff <= 0 {
 		backoff = p.t.backoffMax
 	}
-	p.retryAt = time.Now().Add(backoff)
+	p.retryAt = now.Add(backoff)
 }
 
 // initialize performs the handshake on a fresh process. A plugin that fails it

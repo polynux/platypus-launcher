@@ -58,6 +58,8 @@ export function RescanPlugins():Promise<Array<types.StorePlugin>>;
 
 export function RetryJob(arg1:string):Promise<void>;
 
+export function RetryPlugin(arg1:string):Promise<void>;
+
 export function SaveGameSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;

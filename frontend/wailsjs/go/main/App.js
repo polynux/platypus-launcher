@@ -114,6 +114,10 @@ export function RetryJob(arg1) {
   return window['go']['main']['App']['RetryJob'](arg1);
 }
 
+export function RetryPlugin(arg1) {
+  return window['go']['main']['App']['RetryPlugin'](arg1);
+}
+
 export function SaveGameSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveGameSettings'](arg1, arg2);
 }

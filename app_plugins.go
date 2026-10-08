@@ -122,6 +122,13 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 	return nil
 }
 
+// RetryPlugin clears a gave-up plugin's crash count so the next call
+// restarts it. The Plugins view offers it after a give-up (CORE-10);
+// frontend wiring belongs to workstream D.
+func (a *App) RetryPlugin(id string) error {
+	return a.plugins.RetryPlugin(id)
+}
+
 // OpenPluginsFolder opens the plugins folder in the file manager.
 func (a *App) OpenPluginsFolder() error {
 	dir := a.plugins.Dir()
