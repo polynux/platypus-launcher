@@ -37,6 +37,23 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		}
 		return s
 	}
+	rt := a.plugins.Runtime(m.ID)
+	offers := make([]types.PluginCapability, 0, len(m.Capabilities))
+	for _, name := range m.Capabilities {
+		c, known := plugins.LookupCapability(name)
+		f := rt.Features[name]
+		if f == nil {
+			f = map[string]bool{}
+		}
+		offers = append(offers, types.PluginCapability{
+			Name: name, On: slices.Contains(rt.Capabilities, name), Known: known, Orchestrated: c.Orchestrated, Features: f,
+		})
+	}
+	versions, transport := "", ""
+	if kind == plugins.KindStore {
+		set, tr := m.Offered()
+		versions, transport = set.String(), tr
+	}
 	return types.StorePlugin{
 		ID:                   m.ID,
 		Name:                 m.Name,
@@ -49,7 +66,15 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		Problem:              p.Problem,
 		Missing:              reqs(p.Missing),
 		Requires:             reqs(m.Requires),
-		Capabilities:         nonNil(m.Capabilities),
+		Capabilities:         nonNil(rt.Capabilities),
+		Declared:             nonNil(m.Capabilities),
+		Offers:               offers,
+		Needs:                nonNil(m.Needs),
+		Warnings:             nonNil(p.Warnings),
+		Initialized:          rt.Initialized,
+		Protocol:             rt.Protocol,
+		ProtocolVersions:     versions,
+		Transport:            transport,
 		Dir:                  p.Dir,
 		Exec:                 m.Exec,
 		Hash:                 p.Hash,
@@ -149,7 +174,7 @@ func (a *App) authCall(id, method string, params, result any) error {
 	if !ok {
 		return fmt.Errorf("unknown plugin %q", id)
 	}
-	if !slices.Contains(p.Manifest.Capabilities, "auth") {
+	if !a.plugins.Has(id, "auth") {
 		return fmt.Errorf("%s has no login", p.Manifest.Name)
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, authTimeout)

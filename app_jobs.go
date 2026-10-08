@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"time"
 
 	"hydra-launcher/internal/jobs"
@@ -59,7 +58,7 @@ func (a *App) queueJob(kind string, game types.Game) (types.Job, error) {
 	if p.Status != plugins.StatusReady {
 		return types.Job{}, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
 	}
-	if !slices.Contains(p.Manifest.Capabilities, "install") {
+	if !a.plugins.Has(game.Source, "install") {
 		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
 	}
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())

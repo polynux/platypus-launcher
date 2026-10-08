@@ -122,7 +122,27 @@ type StorePlugin struct {
 	Problem      string              `json:"problem,omitempty"`
 	Missing      []PluginRequirement `json:"missing"`
 	Requires     []PluginRequirement `json:"requires"`
-	Capabilities []string            `json:"capabilities"`
+	// Capabilities is what the plugin offers right now: its last
+	// initialize's answer, or the declared list until it has run. UI
+	// surfaces test this, through the frontend's capability helper.
+	Capabilities []string `json:"capabilities"`
+	// Declared is the manifest's list: the promise the user approved.
+	Declared []string `json:"declared"`
+	// Offers lists every declared capability with its state and depth flags,
+	// for the Plugins view.
+	Offers []PluginCapability `json:"offers"`
+	// Needs are the capabilities Hydra must know for the plugin to run.
+	Needs []string `json:"needs"`
+	// Warnings are things that don't stop the plugin, e.g. capabilities this
+	// Hydra ignores because it doesn't know them.
+	Warnings []string `json:"warnings"`
+	// Initialized is true once the plugin has answered initialize in this
+	// session; Protocol is the negotiated version ("1.1").
+	Initialized bool   `json:"initialized"`
+	Protocol    string `json:"protocol,omitempty"`
+	// ProtocolVersions and Transport are what the manifest declares.
+	ProtocolVersions string `json:"protocol_versions,omitempty"`
+	Transport        string `json:"transport,omitempty"`
 	Dir          string              `json:"dir"`
 	Exec         string              `json:"exec"`
 	Hash         string              `json:"hash"`
@@ -137,6 +157,20 @@ type StorePlugin struct {
 	InstallFolder        string   `json:"install_folder"`
 	DefaultInstallFolder string   `json:"default_install_folder"`
 	ExtraFolders         []string `json:"extra_folders"` // other folders the user allowed launching from
+}
+
+// PluginCapability is one declared capability as the Plugins view shows it.
+type PluginCapability struct {
+	Name string `json:"name"`
+	// On: the plugin offers it right now (see StorePlugin.Capabilities).
+	On bool `json:"on"`
+	// Known: this Hydra has it in its registry; unknown names are ignored.
+	Known bool `json:"known"`
+	// Orchestrated: core has code that uses it. Known but not orchestrated
+	// capabilities are recognised and not used yet.
+	Orchestrated bool `json:"orchestrated"`
+	// Features are the plugin's depth flags for the capability.
+	Features map[string]bool `json:"features"`
 }
 
 type PluginRequirement struct {
