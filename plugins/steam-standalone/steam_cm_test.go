@@ -102,9 +102,13 @@ func TestSteamCMErrorsAreHonest(t *testing.T) {
 // A second library.list must not touch the CM again (cache until exp).
 func TestSteamCMExchangeAndCache(t *testing.T) {
 	e := setup(t)
+	// The ttl knob must be in place before the login: login resolves the
+	// persona, which mints and caches the access token (the default lifetime
+	// would cache a ~1h exp that the expiry assert below sits within a
+	// second of — a flake under load, with the 7200 knob never observed).
+	e.setCMState("token_ttl", 7200)
 	e.login()
 
-	e.setCMState("token_ttl", 7200)
 	if lib := e.library(); len(lib) == 0 {
 		t.Fatal("empty library")
 	}
