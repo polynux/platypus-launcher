@@ -66,6 +66,11 @@ type Queue struct {
 	lastEmit time.Time
 	wake     chan struct{}
 	pending  chan []types.Job // latest snapshot for the emitter
+	// saveErrs counts failed persistence attempts and lastSaveErr is the
+	// latest save error, so a full disk or crash can't silently lose the
+	// queue (CORE-12). The queue keeps emitting live state regardless.
+	saveErrs    int
+	lastSaveErr string
 }
 
 type file struct {
@@ -471,12 +476,16 @@ func (q *Queue) find(id string) *types.Job {
 }
 
 // changed saves and emits. State changes do both at once; progress is
-// throttled. Callers hold q.mu.
+// throttled. A failed state save is counted and remembered (see SaveErrors)
+// but never blocks the live UI. Callers hold q.mu.
 func (q *Queue) changed(state bool) {
 	now := time.Now()
 	if state || now.Sub(q.lastSave) >= saveEvery {
 		q.lastSave = now
-		_ = q.save()
+		if err := q.save(); err != nil {
+			q.saveErrs++
+			q.lastSaveErr = err.Error()
+		}
 	}
 	if q.emit != nil && (state || now.Sub(q.lastEmit) >= emitEvery) {
 		q.lastEmit = now
@@ -493,14 +502,43 @@ func (q *Queue) save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(q.path), 0o755); err != nil {
+	dir := filepath.Dir(q.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp := q.path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+	// Temp file + Sync + rename, mirroring settings.save, so a crash
+	// mid-write never leaves a truncated jobs file (CORE-12).
+	tmp, err := os.CreateTemp(dir, ".jobs-*.json")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, q.path)
+	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), q.path)
+}
+
+// SaveErrors counts failed queue persistence attempts since Open.
+func (q *Queue) SaveErrors() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.saveErrs
+}
+
+// LastSaveError is the latest queue persistence error, or "".
+func (q *Queue) LastSaveError() string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.lastSaveErr
 }
 
 func newID() string {
