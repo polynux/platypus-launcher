@@ -11,25 +11,31 @@ import (
 // returns, to settle.
 func crashUntilGiveUp(t *testing.T, e *env) {
 	t.Helper()
-	for range e.m.t.maxCrashes {
-		_ = e.m.Call(ctx(t), "echo", "crash", nil, nil)
-	}
 	proc, err := e.m.process("echo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		proc.mu.Lock()
-		n := proc.crashes
-		proc.mu.Unlock()
-		if n >= e.m.t.maxCrashes {
-			return
+	for i := range e.m.t.maxCrashes {
+		_ = e.m.Call(ctx(t), "echo", "crash", nil, nil)
+		// The crash is recorded by the reaper goroutine after cmd.Wait,
+		// and a call can return ErrExited while a previous process is
+		// still being reaped (no new crash started). Wait for THIS crash
+		// to land before sending the next, so maxCrashes calls mean
+		// maxCrashes counted crashes.
+		want := i + 1
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			proc.mu.Lock()
+			n := proc.crashes
+			proc.mu.Unlock()
+			if n >= want {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("crash count stuck at %d, want %d", n, want)
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("crash count stuck at %d", n)
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 
