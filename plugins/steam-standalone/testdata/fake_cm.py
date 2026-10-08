@@ -16,6 +16,24 @@ re-read on every auth poll so tests can approve mid-login):
   persona           persona name Player.GetPlayerLinkDetails answers with
   send_heartbeat    when true, one ClientHeartBeat arrives between the logon
                     response and the first service response
+  heartbeat_seconds heartbeat_seconds of the logon response (default 5);
+                    a persistent client sends its own ClientHeartBeat at
+                    this cadence, recorded like any other heartbeat
+  push_after        {"<n>": ["friends", "persona", "playing", "cloud"]}
+                    unsolicited pushes sent before the n-th service reply
+                    (0 = right after logon), so they land between the
+                    client's request and the reply it waits for:
+                    friends  -> ClientFriendsList (767)
+                    persona  -> ClientPersonaState (766)
+                    playing  -> ClientPlayingSessionState (9600)
+                    cloud    -> CloudClient.NotifyAppStateChange (146)
+  kick              ClientLoggedOff EResult sent after kick_after service
+                    calls, then the socket closes: 34 = the session was
+                    replaced, 6 = logged in elsewhere (0 = never)
+  kick_after        service calls before the kick (default 0 = after logon)
+  drop_after_logon  when true, the first successful logon is followed by an
+                    abrupt close (no close frame), like a dead socket; the
+                    drop fires once, the next logon stays up
   Auth knobs (phase 6 logins, no Valve network):
     auth_account        account name Poll reports (default "HydraUser" for
                         QR, else the Begin account)
@@ -65,6 +83,14 @@ EMSG_CLIENT_LOGON = 5514
 EMSG_CLIENT_PICS_PRODUCT_INFO = 8903
 EMSG_CLIENT_PICS_ACCESS_TOKEN = 8905
 EMSG_CLIENT_HELLO = 9805
+# Push messages phase 0 fakes (enums_clientserver.proto).
+EMSG_CLOUD_NOTIFY_APP_STATE_CHANGE = 146
+EMSG_CLIENT_PERSONA_STATE = 766
+EMSG_CLIENT_FRIENDS_LIST = 767
+EMSG_CLIENT_PLAYING_SESSION_STATE = 9600
+
+# drop_after_logon fires once per server process.
+drop_fired = {}
 
 
 def load():
@@ -295,11 +321,15 @@ def serve(conn):
 
 def serve_logged_in(conn, hdr, body, st):
     steamid = hdr.get(1, [0])[0]
-    record(f"logon {steamid}")
+    logon_body = pb_parse(body)
+    loginid = logon_body.get(2, [0])[0]
+    if not loginid and logon_body.get(11):
+        loginid = pb_parse(logon_body[11][0]).get(1, [0])[0]
+    record(f"logon {steamid} loginid={loginid}")
     steamid_req = steamid  # default until the service call names one
     eres = st.get("logon_eresult", 1)
     h = pb_int(1, steamid) + pb_int(2, 4711)
-    resp = pb_int(1, eres) + pb_int(3, 5)  # eresult, heartbeat_seconds
+    resp = pb_int(1, eres) + pb_int(3, st.get("heartbeat_seconds", 5))  # eresult, heartbeat_seconds
     if st.get("wrap_logon_multi"):
         # EMsg 1 envelope carrying the gzip'd logon response; the real CM
         # packs message_body as length-prefixed chunks ([u32 len][msg]).
@@ -315,6 +345,20 @@ def serve_logged_in(conn, hdr, body, st):
         return
     sessionid = 4711
     replied_heartbeat = False
+    service_calls = 0
+
+    def send_pushes(count):
+        for kind in (st.get("push_after") or {}).get(str(count), []):
+            emsg = {"friends": 767, "persona": 766, "playing": 9600, "cloud": 146}.get(kind)
+            if emsg is None:
+                continue
+            record(f"push {emsg} {kind}")
+            conn.send_frame(2, pack(emsg, pb_int(1, steamid) + pb_int(2, sessionid), b""))
+
+    send_pushes(0)
+    if st.get("drop_after_logon") and not drop_fired.get("x"):
+        drop_fired["x"] = True
+        return
     while True:
         try:
             opcode, payload = conn.read_frame()
@@ -333,6 +377,10 @@ def serve_logged_in(conn, hdr, body, st):
         hdr = pb_parse(payload[8:8 + hlen])
         body = payload[8 + hlen:]
         if emsg == EMSG_CLIENT_HEARTBEAT:
+            # A client heartbeat: either the plugin's reply to a
+            # server-initiated one (send_heartbeat) or the persistent
+            # client's own cadence. Recorded as heartbeat_reply, the
+            # string the plugin tests have always asserted on.
             record("heartbeat_reply")
             continue
         if emsg == EMSG_CLIENT_LOGOFF:
@@ -360,6 +408,10 @@ def serve_logged_in(conn, hdr, body, st):
         if target == "ContentServerDirectory.GetCDNAuthToken#1":
             serve_cdn_token(conn, hdr, body, st, steamid, sessionid)
             continue
+        # Pushes scheduled for this call go out BEFORE the reply, so
+        # they land between the client's request and the reply it waits
+        # for (jobid_target matching must not lose them).
+        send_pushes(service_calls)
         if target.startswith("Player.GetPlayerLinkDetails"):
             # AccountPublicData: steamid, …, persona_name (field 10).
             resp_hdr = (pb_int(1, steamid) + pb_int(2, sessionid)
@@ -380,6 +432,13 @@ def serve_logged_in(conn, hdr, body, st):
             if eres == 1 else b""
         conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, resp_hdr, resp_body))
         if eres != 1:
+            conn.close_frame()
+            return
+        kick = st.get("kick", 0)
+        if kick and service_calls >= st.get("kick_after", 0):
+            record(f"kick {kick} loginid={loginid}")
+            conn.send_frame(2, pack(EMSG_CLIENT_LOGGED_OFF,
+                                    pb_int(1, steamid) + pb_int(2, sessionid), pb_int(1, kick)))
             conn.close_frame()
             return
 

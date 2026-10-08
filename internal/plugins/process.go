@@ -157,13 +157,19 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, <-chan struct{}, e
 					return conn, dead, nil
 				}
 			case <-exited:
-				p.mu.Lock()
-				err := p.lastErr
-				p.mu.Unlock()
-				if err == nil {
-					err = errors.New("stopped")
+				// The run ended while we waited. This caller wants a
+				// working plugin: fall through to the loop top, where
+				// backoff, give-up and the restart decision actually
+				// live. (Returning p.lastErr here raced the reaper: the
+				// lastErr may still be from the *previous* run, which
+				// swallowed a crash call and let the give-up never fire.)
+				select {
+				case <-dead:
+					// Reaped: loop; the top decides restart vs give-up.
+				case <-ctx.Done():
+					return nil, nil, ctx.Err()
 				}
-				return nil, nil, fmt.Errorf("plugin %s: %w", p.id, err)
+				continue
 			case <-ctx.Done():
 				return nil, nil, ctx.Err()
 			}

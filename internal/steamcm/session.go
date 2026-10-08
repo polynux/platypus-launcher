@@ -24,10 +24,11 @@ type Session struct {
 	steamID   uint64
 	sessionID int32
 	jobID     uint64
+	loginID   uint32
 	conn      *websocket.Conn
 	licenses  []License
-	pending   [][]byte // batched messages waiting for the next read
-	mu sync.Mutex // serialises concurrent service calls (STEAM-5)
+	pending   [][]byte   // batched messages waiting for the next read
+	mu        sync.Mutex // serialises concurrent service calls (STEAM-5)
 	// authed is false before any logon (DialUnauth): service calls go
 	// out as EMsg 9804 with no steamid/sessionid, like the real
 	// client's pre-logon calls.
@@ -133,6 +134,11 @@ func dialWebsocket(ctx context.Context, rawURL string) (*websocket.Conn, error) 
 	return conn, nil
 }
 
+// machineIDForDial picks the machine id for a one-shot dial: stable
+// under HYDRA_PLUGIN_DATA when the plugin data dir is known, otherwise
+// a random one (the old behaviour).
+func machineIDForDial() []byte { return StableMachineID(os.Getenv("HYDRA_PLUGIN_DATA")) }
+
 func randInt() (uint64, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(1<<30))
 	if err != nil {
@@ -160,7 +166,7 @@ func dialOne(ctx context.Context, endpoint string, tls bool, steamID uint64, ref
 	if err != nil {
 		return nil, err
 	}
-	s := &Session{steamID: steamID, conn: conn, authed: true}
+	s := &Session{steamID: steamID, conn: conn, authed: true, loginID: LoginIDFor(LoginRoleOneShot)}
 	n, err := randInt()
 	if err != nil {
 		conn.Close()
@@ -180,7 +186,8 @@ func (s *Session) logon(ctx context.Context, refreshToken string) error {
 	}
 	s.jobID++
 	if err := s.conn.WriteMessage(websocket.BinaryMessage,
-		packEMsg(EMsgClientLogon, header(s.steamID, 0, 0, ""), logonBody(refreshToken))); err != nil {
+		packEMsg(EMsgClientLogon, header(s.steamID, 0, 0, ""),
+			logonBody(refreshToken, s.loginID, machineIDForDial()))); err != nil {
 		return &CMError{Msg: fmt.Sprintf("Steam CM connection dropped: %v", err)}
 	}
 	deadline := time.Now().Add(30 * time.Second)
