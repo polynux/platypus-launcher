@@ -111,17 +111,17 @@ type SourceWarning struct {
 // StorePlugin is a discovered plugin as the Plugins view shows it. Kind is
 // "store" (a program, needs approval) or "data" (JSON only, always on).
 type StorePlugin struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name"`
-	Version      string              `json:"version"`
-	Author       string              `json:"author"`
-	Description  string              `json:"description"`
-	Store        string              `json:"store"`
-	Kind         string              `json:"kind,omitempty"`
-	Status       string              `json:"status"` // see plugins.Status
-	Problem      string              `json:"problem,omitempty"`
-	Missing      []PluginRequirement `json:"missing"`
-	Requires     []PluginRequirement `json:"requires"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Version     string              `json:"version"`
+	Author      string              `json:"author"`
+	Description string              `json:"description"`
+	Store       string              `json:"store"`
+	Kind        string              `json:"kind,omitempty"`
+	Status      string              `json:"status"` // see plugins.Status
+	Problem     string              `json:"problem,omitempty"`
+	Missing     []PluginRequirement `json:"missing"`
+	Requires    []PluginRequirement `json:"requires"`
 	// Capabilities is what the plugin offers right now: its last
 	// initialize's answer, or the declared list until it has run. UI
 	// surfaces test this, through the frontend's capability helper.
@@ -141,15 +141,15 @@ type StorePlugin struct {
 	Initialized bool   `json:"initialized"`
 	Protocol    string `json:"protocol,omitempty"`
 	// ProtocolVersions and Transport are what the manifest declares.
-	ProtocolVersions string `json:"protocol_versions,omitempty"`
-	Transport        string `json:"transport,omitempty"`
-	Dir          string              `json:"dir"`
-	Exec         string              `json:"exec"`
-	Hash         string              `json:"hash"`
-	Network      []string            `json:"network"`
-	Read         []string            `json:"read"`
-	Write        []string            `json:"write"`
-	Running      bool                `json:"running"`
+	ProtocolVersions string   `json:"protocol_versions,omitempty"`
+	Transport        string   `json:"transport,omitempty"`
+	Dir              string   `json:"dir"`
+	Exec             string   `json:"exec"`
+	Hash             string   `json:"hash"`
+	Network          []string `json:"network"`
+	Read             []string `json:"read"`
+	Write            []string `json:"write"`
+	Running          bool     `json:"running"`
 	// GaveUp is true when the plugin crashed MaxCrashes times in a row: it
 	// fails fast until retried. The Plugins view offers a Retry action.
 	GaveUp bool `json:"gave_up,omitempty"`
