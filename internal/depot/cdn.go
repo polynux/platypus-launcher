@@ -51,7 +51,16 @@ func (c *Client) url(h Host, path string) string {
 }
 
 func (c *Client) get(ctx context.Context, url string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	return c.getWithTimeouts(ctx, url, 10*time.Second, 60*time.Second)
+}
+
+const maxBody = 64 << 20 // chunks are ~1 MiB; manifests stay small
+
+func (c *Client) getWithTimeouts(ctx context.Context, url string, headerTimeout, bodyTimeout time.Duration) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, headerTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -65,21 +74,35 @@ func (c *Client) get(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode/100 != 2 {
 		return nil, &HostError{Status: resp.StatusCode, Msg: fmt.Sprintf("host answered %d", resp.StatusCode)}
 	}
-	bodyCtx, cancelBody := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancelBody()
-	limited := io.LimitReader(resp.Body, 64<<20) // chunks are ~1 MiB; manifests stay small
-	done := make(chan struct{})
-	var data []byte
-	var readErr error
+	// Read the body with a timeout that cannot leak: on expiry close the
+	// body to unblock the reader, then wait for it before returning.
+	// Limit to maxBody+1 so over-long bodies error instead of truncating.
+	type res struct {
+		data []byte
+		err  error
+	}
+	done := make(chan res, 1)
 	go func() {
-		defer close(done)
-		data, readErr = io.ReadAll(limited)
+		limited := io.LimitReader(resp.Body, maxBody+1)
+		data, err := io.ReadAll(limited)
+		done <- res{data: data, err: err}
 	}()
+	timer := time.NewTimer(bodyTimeout)
+	defer timer.Stop()
 	select {
-	case <-bodyCtx.Done():
+	case <-timer.C:
+		resp.Body.Close() // unblock the reader; it then exits
+		r := <-done
+		_ = r
 		return nil, &HostError{Timeout: true, Msg: "body timed out"}
-	case <-done:
-		return data, readErr
+	case r := <-done:
+		if r.err != nil {
+			return nil, r.err
+		}
+		if len(r.data) > maxBody {
+			return nil, fmt.Errorf("body exceeds %d bytes", maxBody)
+		}
+		return r.data, nil
 	}
 }
 
