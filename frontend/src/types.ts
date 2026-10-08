@@ -200,7 +200,7 @@ export interface AuthPrompt {
 }
 
 export type JobKind = 'install' | 'update' | 'uninstall';
-export type JobState = 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+export type JobState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
 
 export interface Job {
   id: string;
@@ -220,12 +220,25 @@ export interface Job {
   attempts: number;
   created_at: number;
   updated_at: number;
+  /** When the user canceled the job; its partial data is deleted after the
+   *  cleanup threshold (LauncherSettings.cancel_cleanup_days), until then it
+   *  can be resumed. */
+  canceled_at?: number;
+  /** When the canceled job's leftovers were deleted (or forgotten — see
+   *  leftover); 0/absent = not yet. */
+  cleaned_at?: number;
+  /** What may remain on disk when the plugin couldn't delete the data, or why
+   *  the last cleanup attempt failed. */
+  leftover?: string;
 }
 
 /** Hydra-wide settings, persisted in ~/.local/share/hydra/settings.json. */
 export interface LauncherSettings {
   games_folder: string;
   default_games_folder: string;
+  /** How long a canceled download's partial data is kept before Hydra deletes
+   *  it, in days; 0 deletes it right away. */
+  cancel_cleanup_days: number;
 }
 
 export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak';

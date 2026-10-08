@@ -145,6 +145,16 @@ export const LauncherApi = {
   cancelJob: (id: string) => call<void>('CancelJob', () => App.CancelJob(id)),
   retryJob: (id: string) => call<void>('RetryJob', () => App.RetryJob(id)),
   clearFinishedJobs: () => call<void>('ClearFinishedJobs', () => App.ClearFinishedJobs()),
+  // Pause keeps everything downloaded so far; resume continues with the same job id.
+  pauseJob: (id: string) => call<void>('PauseJob', () => App.PauseJob(id)),
+  resumeJob: (id: string) => call<void>('ResumeJob', () => App.ResumeJob(id)),
+  // Deletes the downloaded data of a canceled download right now.
+  discardJob: (id: string) => call<void>('DiscardJob', () => App.DiscardJob(id)),
+  pauseAllJobs: () => call<void>('PauseAllJobs', () => App.PauseAllJobs()),
+  resumeAllJobs: () => call<void>('ResumeAllJobs', () => App.ResumeAllJobs()),
+  // How long a canceled download's data is kept before Hydra deletes it (0 = right away).
+  setCancelCleanupDays: (days: number) =>
+    call<LauncherSettings>('SetCancelCleanupDays', () => App.SetCancelCleanupDays(days)),
 };
 
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */

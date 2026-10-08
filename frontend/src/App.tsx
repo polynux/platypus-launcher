@@ -334,8 +334,14 @@ export function App() {
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
-  const jobAction = (action: 'cancel' | 'retry', id: string) => {
-    Effect.runPromise(action === 'cancel' ? LauncherApi.cancelJob(id) : LauncherApi.retryJob(id)).catch((err) => notify(errMsg(err), 'err'));
+  const jobAction = (action: 'cancel' | 'retry' | 'pause' | 'resume' | 'discard', id: string) => {
+    const call =
+      action === 'cancel' ? LauncherApi.cancelJob
+      : action === 'retry' ? LauncherApi.retryJob
+      : action === 'pause' ? LauncherApi.pauseJob
+      : action === 'resume' ? LauncherApi.resumeJob
+      : LauncherApi.discardJob;
+    Effect.runPromise(call(id)).catch((err) => notify(errMsg(err), 'err'));
   };
 
   const allowFolder = (game: Game, folder: string) => {
