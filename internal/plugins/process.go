@@ -61,58 +61,60 @@ type process struct {
 	notify  jsonrpc.NotifyFunc
 	t       timings
 
-	mu       sync.Mutex
-	cmd      *exec.Cmd
-	conn     *jsonrpc.Conn
-	stdin    *os.File
-	ready    chan struct{} // closed once initialize succeeded
-	exited   chan struct{} // closed when the current run is over
-	dead     chan struct{} // closed right after cmd.Wait returns, before the drain (CORE-2)
-	info     *InitResult
-	started  time.Time
-	crashes  int
-	retryAt  time.Time
-	lastErr  error
+	mu        sync.Mutex
+	cmd       *exec.Cmd
+	conn      *jsonrpc.Conn
+	stdin     *os.File
+	ready     chan struct{} // closed once initialize succeeded
+	exited    chan struct{} // closed when the current run is over
+	dead      chan struct{} // closed right after cmd.Wait returns, before the drain (CORE-2)
+	info      *InitResult
+	started   time.Time
+	crashes   int
+	retryAt   time.Time
+	lastErr   error
 	lastCrash time.Time // when the latest crash was recorded (for decay)
-	initErr  error // why initialize failed, reported instead of "killed"
-	stopping bool
+	initErr   error     // why initialize failed, reported instead of "killed"
+	stopping  bool
 }
 
-// call sends a request, starting the plugin first if needed.
+// call sends a request exactly once, starting the plugin first if needed.
+// If the run died before anything was sent (its dead channel is already
+// closed — the reaped process cannot have read the request), it resolves a
+// fresh connection and sends there. A death during or after the send is
+// reported as ErrExited without resending: plugin methods are not
+// idempotent (install/update/uninstall, auth.complete, job.cancel), so a
+// request the dead process may already have acted on is never replayed.
 func (p *process) call(ctx context.Context, method string, params, result any) error {
-	conn, err := p.ensure(ctx)
+	conn, dead, err := p.ensure(ctx)
 	if err != nil {
 		return err
 	}
+	select {
+	case <-dead:
+		conn, _, err = p.ensure(ctx)
+		if err != nil {
+			return err
+		}
+	default:
+	}
 	err = conn.Call(ctx, method, params, result)
 	if errors.Is(err, jsonrpc.ErrClosed) {
-		// The connection died under us (stale conn raced cleanup, or the
-		// plugin exited mid-call). Resolve a fresh connection once and
-		// retry; if the manager already gave up, surface that instead.
-		fresh, err2 := p.ensure(ctx)
-		if err2 != nil {
-			return err2
-		}
-		if fresh == conn {
-			return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
-		}
-		if err2 = fresh.Call(ctx, method, params, result); errors.Is(err2, jsonrpc.ErrClosed) {
-			return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
-		}
-		return err2
+		return fmt.Errorf("plugin %s %w during %s", p.id, ErrExited, method)
 	}
 	return err
 }
 
-// ensure returns a connection to a running, initialized plugin. Concurrent
+// ensure returns a connection to a running, initialized plugin, plus the
+// run's dead channel (closed once its process has been reaped). Concurrent
 // callers share one start and all wait for initialize. After a crash, the next
 // call waits out the backoff before starting the plugin again.
-func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
+func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, <-chan struct{}, error) {
 	for {
 		p.mu.Lock()
 		if p.stopping {
 			p.mu.Unlock()
-			return nil, fmt.Errorf("plugin %s is stopped", p.id)
+			return nil, nil, fmt.Errorf("plugin %s is stopped", p.id)
 		}
 		if p.conn != nil {
 			conn, ready, exited, dead := p.conn, p.ready, p.exited, p.dead
@@ -128,7 +130,7 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 					case <-exited:
 						continue
 					case <-ctx.Done():
-						return nil, ctx.Err()
+						return nil, nil, ctx.Err()
 					}
 				default:
 				}
@@ -139,10 +141,10 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 					case <-exited:
 						continue
 					case <-ctx.Done():
-						return nil, ctx.Err()
+						return nil, nil, ctx.Err()
 					}
 				default:
-					return conn, nil
+					return conn, dead, nil
 				}
 			case <-exited:
 				p.mu.Lock()
@@ -151,9 +153,9 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 				if err == nil {
 					err = errors.New("stopped")
 				}
-				return nil, fmt.Errorf("plugin %s: %w", p.id, err)
+				return nil, nil, fmt.Errorf("plugin %s: %w", p.id, err)
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
 		}
 		// A breakage fixed long ago shouldn't look permanent: crashes older
@@ -164,14 +166,14 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 		if p.crashes >= p.t.maxCrashes {
 			err := fmt.Errorf("plugin %s crashed %d times in a row, last: %v", p.id, p.crashes, p.lastErr)
 			p.mu.Unlock()
-			return nil, err
+			return nil, nil, err
 		}
 		wait := time.Until(p.retryAt)
 		if wait <= 0 {
 			conn, err := p.start()
 			p.mu.Unlock()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			// Not tied to ctx: a caller giving up must not kill a healthy plugin.
 			go p.initialize(conn)
@@ -181,7 +183,7 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 		select {
 		case <-time.After(wait):
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 	}
 }

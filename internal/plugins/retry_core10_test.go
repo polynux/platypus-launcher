@@ -6,6 +6,33 @@ import (
 	"time"
 )
 
+// crashUntilGiveUp crashes the plugin maxCrashes times and waits for the
+// crash accounting, which is recorded asynchronously after each call
+// returns, to settle.
+func crashUntilGiveUp(t *testing.T, e *env) {
+	t.Helper()
+	for range e.m.t.maxCrashes {
+		_ = e.m.Call(ctx(t), "echo", "crash", nil, nil)
+	}
+	proc, err := e.m.process("echo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		proc.mu.Lock()
+		n := proc.crashes
+		proc.mu.Unlock()
+		if n >= e.m.t.maxCrashes {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("crash count stuck at %d", n)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // CORE-10: a plugin that gave up after repeated crashes must be recoverable
 // without a restart: re-approval, an explicit retry, or time passing must
 // let the next call restart it.
@@ -13,9 +40,7 @@ func TestRecoverAfterGiveUp(t *testing.T) {
 	t.Run("approve", func(t *testing.T) {
 		e := newEnv(t)
 		e.ready(t)
-		for range e.m.t.maxCrashes {
-			_ = e.m.Call(ctx(t), "echo", "crash", nil, nil)
-		}
+		crashUntilGiveUp(t, e)
 		if err := e.m.Call(ctx(t), "echo", "echo", nil, nil); err == nil || !strings.Contains(err.Error(), "crashed 3 times") {
 			t.Fatalf("want give-up error, got %v", err)
 		}
@@ -34,9 +59,7 @@ func TestRecoverAfterGiveUp(t *testing.T) {
 	t.Run("retry", func(t *testing.T) {
 		e := newEnv(t)
 		e.ready(t)
-		for range e.m.t.maxCrashes {
-			_ = e.m.Call(ctx(t), "echo", "crash", nil, nil)
-		}
+		crashUntilGiveUp(t, e)
 		if err := e.m.RetryPlugin("echo"); err != nil {
 			t.Fatalf("retry: %v", err)
 		}
@@ -52,9 +75,7 @@ func TestRecoverAfterGiveUp(t *testing.T) {
 	t.Run("decay", func(t *testing.T) {
 		e := newEnv(t)
 		e.ready(t)
-		for range e.m.t.maxCrashes {
-			_ = e.m.Call(ctx(t), "echo", "crash", nil, nil)
-		}
+		crashUntilGiveUp(t, e)
 		proc, err := e.m.process("echo")
 		if err != nil {
 			t.Fatal(err)

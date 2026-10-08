@@ -296,7 +296,7 @@ func (m *Manager) Initialize(ctx context.Context, id string) (*InitResult, error
 	if err != nil {
 		return nil, err
 	}
-	if _, err := proc.ensure(ctx); err != nil {
+	if _, _, err := proc.ensure(ctx); err != nil {
 		return nil, err
 	}
 	proc.mu.Lock()

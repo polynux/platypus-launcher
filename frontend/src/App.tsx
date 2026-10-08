@@ -218,6 +218,34 @@ export function App() {
     [log, notify]
   );
 
+  // A hidden window can miss nothing (events stay live) but re-checks on
+  // focus anyway, so it never shows a stale Play button. Silent: the event
+  // stream remains the source of notifications and activity.
+  useEffect(() => {
+    const onFocus = () => {
+      Effect.runPromise(LauncherApi.getSessions())
+        .then((live) => {
+          const seeded: Record<string, SessionEvent> = {};
+          const now = Date.now();
+          for (const e of live) {
+            if (e.state === 'starting' || e.state === 'running') {
+              seeded[e.game_id] = e;
+              if (e.state === 'running' && sessionStart.current[e.game_id] === undefined) {
+                sessionStart.current[e.game_id] = now;
+              }
+            }
+          }
+          for (const id of Object.keys(sessionStart.current)) {
+            if (!(id in seeded)) delete sessionStart.current[id];
+          }
+          setSessions(seeded);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   const saveSettings = (id: string, settings: GameSettings, what = 'Launcher settings changed') => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));

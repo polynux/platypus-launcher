@@ -33,7 +33,7 @@ func TestEnsureDoesNotHandOutDeadConn(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	got, err := p.ensure(ctx)
+	got, _, err := p.ensure(ctx)
 	if err == nil || got != nil {
 		t.Fatalf("ensure returned stale conn (got=%v, err=%v); want blocked until exited/ctx", got, err)
 	}
