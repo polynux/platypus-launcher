@@ -1173,9 +1173,9 @@ def start_job(params, kind):
         if app not in load_state("installed.json", {}):
             raise RPCError(f"app {app} is not installed")
         ev = threading.Event()
+        if not claim_job(job_id):
+            return {}
         with jobs_lock:
-            if job_id in jobs:
-                return {}
             jobs[job_id] = {"canceled": False, "id": app, "proc": None, "event": ev}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
@@ -1184,16 +1184,37 @@ def start_job(params, kind):
         raise RPCError("installDir is missing or relative; Hydra always sends one")
     # One folder per game under Hydra's install dir, like steamapps/common/<name>.
     game_dir = os.path.join(install_dir, game_dir_name(app))
-    # Hydra resends a job with the same jobId after a crash: run it once.
+    # Hydra resends a job with the same jobId after a crash: run it once. A
+    # job that was just paused or canceled is still winding down: wait for it,
+    # then start again from what it left on disk.
+    if not claim_job(job_id):
+        return {}
     with jobs_lock:
-        if job_id in jobs:
-            return {}
         jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir, "proc": None}
+    write_job_meta(job_id, {"app": app, "kind": kind, "dir": game_dir, "installDir": install_dir})
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
     branch = {k: params[k] for k in ("branch", "branchPassword", "branch_password") if params.get(k)}
     threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind, branch), daemon=True).start()
     return {}
+
+
+def claim_job(job_id, timeout=90):
+    """True when job_id may start now. False when it is already running (a
+    repeated start). A job that job.cancel just stopped is still shutting down
+    its downloader: wait for it to go, so a resume with the same jobId doesn't
+    lose to the old run and report nothing."""
+    deadline = time.monotonic() + timeout
+    while True:
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job is None:
+                return True
+            if not job.get("canceled"):
+                return False
+        if time.monotonic() > deadline:
+            raise RPCError("the previous run of this download is still stopping; try again in a moment")
+        time.sleep(0.05)
 
 
 def game_dir_name(app):
@@ -1234,6 +1255,7 @@ def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
     if job.get("canceled"):
         return
     record_install(app, game_dir, result.get("os_used") or "linux")
+    drop_job_meta(job_id)
     notify("job.done", {"jobId": job_id})
 
 
@@ -1561,11 +1583,104 @@ def job_cancel(params):
     return {}
 
 
+# --- discarding a canceled job's data ---------------------------------------
+# Staging lives under $HYDRA_PLUGIN_DATA/jobs/<jobId>.{json,chunks} (written by
+# hydra-steam-dl); start_job also leaves <jobId>.meta.json with the folder the
+# job installs into, so job.discard knows what to delete after a restart.
+
+JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def jobs_dir():
+    return os.path.join(data_dir(), "jobs")
+
+
+def meta_file(job_id):
+    return os.path.join(jobs_dir(), job_id + ".meta.json")
+
+
+def write_job_meta(job_id, meta):
+    try:
+        os.makedirs(jobs_dir(), exist_ok=True)
+        save_state(os.path.join("jobs", job_id + ".meta.json"), meta)
+    except OSError as e:
+        log("warn", f"couldn't record job {job_id}: {e}")
+
+
+def drop_job_meta(job_id):
+    try:
+        os.unlink(meta_file(job_id))
+    except OSError:
+        pass
+
+
+def inside(path, parent):
+    """path is strictly below parent, links resolved."""
+    path, parent = os.path.realpath(path), os.path.realpath(parent)
+    return path != parent and path.startswith(parent + os.sep)
+
+
+def installed_paths():
+    out = []
+    for entry in load_state("installed.json", {}).values():
+        if entry.get("path"):
+            out.append(os.path.realpath(entry["path"]))
+    return out
+
+
+def job_discard(params):
+    """Deletes what a canceled job left: staged chunks and checkpoints, and,
+    for an install that never finished, its half-written game folder. Never
+    an installed game's folder, and never anything for an update: the game it
+    updates stays."""
+    job_id = params.get("jobId")
+    if not isinstance(job_id, str) or not JOB_ID_RE.fullmatch(job_id):
+        raise RPCError("invalid jobId", -32602)
+    # The job may still be shutting down (discarding right after a cancel).
+    job_cancel({"jobId": job_id})
+    deadline = time.monotonic() + 90
+    while True:
+        with jobs_lock:
+            running = job_id in jobs
+        if not running:
+            break
+        if time.monotonic() > deadline:
+            raise RPCError("the download is still stopping; try again in a moment")
+        time.sleep(0.05)
+
+    meta = load_state(os.path.join("jobs", job_id + ".meta.json"), {})
+    kind = params.get("kind") or meta.get("kind") or "install"
+    install_dir = params.get("installDir") or ""
+    if kind == "install" and meta.get("dir"):
+        game_dir = meta["dir"]
+        # The recorded folder must be a subfolder of the install folder Hydra
+        # named for this job, and not something that is installed.
+        if (os.path.isabs(install_dir) and os.path.isabs(game_dir)
+                and inside(game_dir, install_dir)
+                and os.path.isdir(game_dir) and not os.path.islink(game_dir)
+                and str(params.get("id", meta.get("app"))) not in load_state("installed.json", {})):
+            real = os.path.realpath(game_dir)
+            clash = [p for p in installed_paths() if p == real or p.startswith(real + os.sep) or real.startswith(p + os.sep)]
+            if clash:
+                log("warn", f"not deleting {game_dir}: it holds an installed game")
+            else:
+                shutil.rmtree(game_dir, ignore_errors=True)
+    # Staging: only these three names under jobs/, built from the validated id.
+    base = jobs_dir()
+    shutil.rmtree(os.path.join(base, job_id + ".chunks"), ignore_errors=True)
+    for suffix in (".json", ".json.new", ".meta.json"):
+        try:
+            os.unlink(os.path.join(base, job_id + suffix))
+        except OSError:
+            pass
+    return {}
+
+
 # --- dispatch --------------------------------------------------------------
 
 def initialize(params):
     return {"name": "Steam (standalone)", "version": "0.1.0", "api": API,
-            "capabilities": ["library", "install", "launch", "auth"], "missing": []}
+            "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
 
 
 METHODS = {
@@ -1581,6 +1696,7 @@ METHODS = {
     "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
     "job.cancel": job_cancel,
+    "job.discard": job_discard,
     "game.launchSpec": launch_spec,
 }
 
