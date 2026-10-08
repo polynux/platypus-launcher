@@ -50,6 +50,8 @@ func Exchange(ctx context.Context, refreshToken string) (string, error) {
 // carries eresult = 1, depot_id = 2, depot_encryption_key = 3). These are
 // plain CM messages, not service calls.
 func (s *Session) DepotKey(depotID, appID uint32, timeout time.Duration) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
@@ -92,6 +94,8 @@ func (s *Session) DepotKey(depotID, appID uint32, timeout time.Duration) ([]byte
 // response: package_access_tokens = 1, app_access_tokens = 3, each with
 // packageid/appid = 1 and access_token = 2).
 func (s *Session) PICSAccessTokens(appIDs, packageIDs []uint32, timeout time.Duration) (map[uint32]uint64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
@@ -139,6 +143,8 @@ func (s *Session) PICSAccessTokens(appIDs, packageIDs []uint32, timeout time.Dur
 // KeyValues parser. Missing tokens come back flagged; unknown apps are
 // an error, not an empty reply.
 func (s *Session) ProductInfo(appID uint32, accessToken uint64, timeout time.Duration) (*steam.KV, uint32, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
@@ -319,6 +325,8 @@ func (s *Session) CDNAuthToken(depotID uint32, host string, appID uint32, timeou
 // CheckBetaPassword checks a password branch (EMsg 5450/5451:
 // CMsgClientCheckAppBetaPassword: app_id = 1, betapassword = 2).
 func (s *Session) CheckBetaPassword(appID uint32, password string, timeout time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
