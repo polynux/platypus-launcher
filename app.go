@@ -84,6 +84,7 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		wruntime.LogErrorf(ctx, "jobs: %v", err)
 	}
+	a.jobs.SetCleanupAfter(cleanupAfter(a.settings.CancelCleanupDays()))
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -548,6 +549,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 	return types.LauncherSettings{
 		GamesFolder:        a.settings.GamesFolder(),
 		DefaultGamesFolder: settings.DefaultGamesFolder(),
+		CancelCleanupDays:  a.settings.CancelCleanupDays(),
 	}
 }
 

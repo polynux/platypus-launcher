@@ -16,6 +16,8 @@ export function ChoosePluginInstallFolder(arg1:string):Promise<string>;
 
 export function ClearFinishedJobs():Promise<void>;
 
+export function DiscardJob(arg1:string):Promise<void>;
+
 export function ForceStopGame(arg1:string):Promise<void>;
 
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
@@ -44,6 +46,10 @@ export function ListStorePlugins():Promise<Array<types.StorePlugin>>;
 
 export function OpenPluginsFolder():Promise<void>;
 
+export function PauseAllJobs():Promise<void>;
+
+export function PauseJob(arg1:string):Promise<void>;
+
 export function PluginAuthBegin(arg1:string):Promise<types.AuthPrompt>;
 
 export function PluginAuthComplete(arg1:string,arg2:Record<string, string>):Promise<types.AuthStatus>;
@@ -58,11 +64,17 @@ export function RemoveCustomGame(arg1:string):Promise<void>;
 
 export function RescanPlugins():Promise<Array<types.StorePlugin>>;
 
+export function ResumeAllJobs():Promise<void>;
+
+export function ResumeJob(arg1:string):Promise<void>;
+
 export function RetryJob(arg1:string):Promise<void>;
 
 export function RetryPlugin(arg1:string):Promise<void>;
 
 export function SaveGameSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
+
+export function SetCancelCleanupDays(arg1:number):Promise<types.LauncherSettings>;
 
 export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;
 

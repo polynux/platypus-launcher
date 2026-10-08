@@ -19,10 +19,12 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cleanupDays, setCleanupDays] = useState<number | ''>('');
+  const [cleanupError, setCleanupError] = useState<string | null>(null);
 
   useEffect(() => {
     Effect.runPromise(LauncherApi.getLauncherSettings())
-      .then((s) => { setSaved(s); setDraft(s.games_folder); })
+      .then((s) => { setSaved(s); setDraft(s.games_folder); setCleanupDays(s.cancel_cleanup_days); })
       .catch((e) => setError(errMsg(e)));
   }, []);
 
@@ -44,6 +46,21 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
       .then((path) => { if (path) save(path); })
       .catch((e) => onNotify(errMsg(e), 'err'));
   };
+
+  const saveCleanupDays = (days: number) => {
+    setBusy(true);
+    setCleanupError(null);
+    Effect.runPromise(LauncherApi.setCancelCleanupDays(days))
+      .then((s) => {
+        setSaved(s);
+        setCleanupDays(s.cancel_cleanup_days);
+        onNotify('Download cleanup setting saved');
+      })
+      .catch((e) => setCleanupError(errMsg(e)))
+      .finally(() => setBusy(false));
+  };
+
+  const cleanupDirty = saved != null && typeof cleanupDays === 'number' && cleanupDays !== saved.cancel_cleanup_days;
 
   const dirty = saved != null && draft.trim() !== saved.games_folder;
   const isDefault = saved != null && saved.games_folder === saved.default_games_folder;
@@ -97,6 +114,47 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
               reset to {saved.default_games_folder.replace(/^\/home\/[^/]+/, '~')}
             </button>
           )}
+        </div>
+      </Panel>
+
+      <Panel as="section" className="mt-4 max-w-2xl">
+        <h2 className="text-[14px] font-bold">Canceled downloads</h2>
+        <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
+          How long Hydra keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
+          time. 0 deletes it right away; a paused download is never touched.
+        </p>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays);
+          }}
+        >
+          <label className="flex items-center gap-2">
+            <span className="text-[12.5px] text-white/70">Keep for</span>
+            <input
+              type="number"
+              min={0}
+              max={365}
+              step={1}
+              value={cleanupDays}
+              onChange={(e) => {
+                const v = e.target.value === '' ? '' : Math.max(0, Math.min(365, Number(e.target.value)));
+                setCleanupDays(v as number | '');
+                setCleanupError(null);
+              }}
+              disabled={!saved}
+              aria-label="Days to keep canceled downloads' data"
+              className={cx(inputClass, 'w-24', cleanupError && 'ring-1 ring-red-400/60')}
+            />
+            <span className="text-[12.5px] text-white/70">days</span>
+          </label>
+          <button type="submit" disabled={!cleanupDirty || busy} className={cx(btnPrimary, 'px-4 py-2.5 text-[12.5px] disabled:cursor-default')}>
+            Save
+          </button>
+        </form>
+        <div className="mt-2.5 flex min-h-4 items-center gap-4">
+          {cleanupError ? <p role="alert" className="font-mono text-[10.5px] text-red-300">{cleanupError}</p> : <span />}
         </div>
       </Panel>
     </div>

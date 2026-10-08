@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -28,6 +29,7 @@ const (
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
+	StatePaused   = "paused"
 	StateDone     = "done"
 	StateFailed   = "failed"
 	StateCanceled = "canceled"
@@ -40,9 +42,30 @@ type Backend interface {
 	// Start asks the plugin to begin the job (game.install, …). The plugin
 	// reports progress and the outcome through notifications (Update).
 	Start(ctx context.Context, job types.Job) error
-	// Cancel asks the plugin to stop the job.
+	// Cancel asks the plugin to stop the job. It keeps everything downloaded
+	// so far: pausing is the same call, and a canceled job resumes with the
+	// same job id until it is discarded.
 	Cancel(ctx context.Context, job types.Job) error
 }
+
+// Discarder is the optional half of a Backend: it deletes the partial data of
+// a job that was canceled and will not be resumed (staging chunks, checkpoints
+// and, for a fresh install, the half-written install folder). A backend whose
+// plugin can't do that returns ErrDiscardUnsupported, or doesn't implement
+// Discarder at all; the queue then only forgets the job and notes what may
+// remain.
+type Discarder interface {
+	Discard(ctx context.Context, job types.Job) error
+}
+
+// ErrDiscardUnsupported means the job's plugin has no way to delete the data.
+var ErrDiscardUnsupported = errors.New("the plugin can't delete downloaded data")
+
+// DefaultCleanupAfter is how long a canceled job's partial data is kept.
+const DefaultCleanupAfter = 7 * 24 * time.Hour
+
+// cleanupEvery is how often Run looks for canceled jobs past their threshold.
+const cleanupEvery = time.Hour
 
 const (
 	maxAttempts  = 4               // plugin crashes survived by one job
@@ -60,12 +83,18 @@ type Queue struct {
 	emit      func([]types.Job)
 	freeSpace func(path string) (uint64, error)
 
-	mu       sync.Mutex
-	jobs     []*types.Job
-	lastSave time.Time
-	lastEmit time.Time
-	wake     chan struct{}
-	pending  chan []types.Job // latest snapshot for the emitter
+	mu  sync.Mutex
+	now func() time.Time // injected by tests
+	// cleanupAfter is how long a canceled job's data is kept. discarding
+	// marks the jobs a cleanup is working on, so a resume can't race it.
+	cleanupAfter time.Duration
+	discarding   map[string]bool
+	cleanupWake  chan struct{}
+	jobs         []*types.Job
+	lastSave     time.Time
+	lastEmit     time.Time
+	wake         chan struct{}
+	pending      chan []types.Job // latest snapshot for the emitter
 	// saveErrs counts failed persistence attempts and lastSaveErr is the
 	// latest save error, so a full disk or crash can't silently lose the
 	// queue (CORE-12). The queue keeps emitting live state regardless.
@@ -81,7 +110,11 @@ type file struct {
 // Open loads the queue. Jobs that were running when Hydra stopped are queued
 // again; plugins resume their downloads where the files left off.
 func Open(path string, b Backend, emit func([]types.Job)) (*Queue, error) {
-	q := &Queue{path: path, b: b, emit: emit, freeSpace: freeSpace, wake: make(chan struct{}, 1), pending: make(chan []types.Job, 1)}
+	q := &Queue{
+		path: path, b: b, emit: emit, freeSpace: freeSpace, now: time.Now,
+		wake: make(chan struct{}, 1), pending: make(chan []types.Job, 1),
+		cleanupAfter: DefaultCleanupAfter, discarding: map[string]bool{}, cleanupWake: make(chan struct{}, 1),
+	}
 	if emit != nil {
 		// One emitter keeps events in order; a slow consumer only ever
 		// misses intermediate snapshots.
@@ -111,6 +144,11 @@ func Open(path string, b Backend, emit func([]types.Job)) (*Queue, error) {
 		if j.State == StateRunning {
 			j.State, j.Phase = StateQueued, "resuming"
 		}
+		// Files written before canceled_at existed: the last update is
+		// when the job was canceled.
+		if j.State == StateCanceled && j.CanceledAt == 0 {
+			j.CanceledAt = j.UpdatedAt
+		}
 		q.jobs = append(q.jobs, j)
 	}
 	return q, nil
@@ -118,6 +156,12 @@ func Open(path string, b Backend, emit func([]types.Job)) (*Queue, error) {
 
 // Run processes the queue until ctx is done.
 func (q *Queue) Run(ctx context.Context) {
+	cleaned := make(chan struct{})
+	go func() {
+		defer close(cleaned)
+		q.cleanupLoop(ctx)
+	}()
+	defer func() { <-cleaned }()
 	q.signal()
 	for {
 		select {
@@ -133,6 +177,24 @@ func (q *Queue) signal() {
 	select {
 	case q.wake <- struct{}{}:
 	default:
+	}
+}
+
+// cleanupLoop deletes the data of canceled jobs past the threshold: once at
+// startup, hourly, and whenever a cancel or a threshold change asks for it.
+// It runs apart from the job loop because a plugin can take a while to wind a
+// job down before it deletes anything.
+func (q *Queue) cleanupLoop(ctx context.Context) {
+	tick := time.NewTicker(cleanupEvery)
+	defer tick.Stop()
+	for {
+		q.Cleanup(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		case <-q.cleanupWake:
+		}
 	}
 }
 
@@ -235,7 +297,7 @@ func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for _, j := range q.jobs {
-		if j.GameID == gameID && (j.State == StateQueued || j.State == StateRunning) {
+		if j.GameID == gameID && holdsGame(j) {
 			return types.Job{}, fmt.Errorf("%s already has a %s queued", title, j.Kind)
 		}
 	}
@@ -251,8 +313,48 @@ func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string)
 	return *j, nil
 }
 
-// Cancel stops a queued or running job.
+// holdsGame is true for jobs that keep a game from getting another job: the
+// ones in the queue and the paused ones, which resume later.
+func holdsGame(j *types.Job) bool {
+	return j.State == StateQueued || j.State == StateRunning || j.State == StatePaused
+}
+
+// Cancel stops a queued, running or paused job. Its downloaded data stays
+// until the cleanup threshold passes (or Discard); until then Resume picks it
+// up again.
 func (q *Queue) Cancel(ctx context.Context, id string) error {
+	q.mu.Lock()
+	j := q.find(id)
+	if j == nil {
+		q.mu.Unlock()
+		return fmt.Errorf("no job %s", id)
+	}
+	state, snapshot := j.State, *j
+	if !holdsGame(j) {
+		q.mu.Unlock()
+		return nil
+	}
+	j.State, j.Phase, j.Speed = StateCanceled, "", 0
+	j.CanceledAt, j.CleanedAt, j.Leftover = q.now().UnixMilli(), 0, ""
+	j.UpdatedAt = j.CanceledAt
+	q.changed(true)
+	q.mu.Unlock()
+	if state == StateRunning {
+		// Best effort: the job is canceled for Hydra either way, and later
+		// notifications for it are ignored.
+		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		_ = q.b.Cancel(cctx, snapshot)
+	}
+	q.signal()
+	q.wakeCleanup() // threshold 0 deletes right away
+	return nil
+}
+
+// Pause stops a queued or running job and keeps all its data. The plugin is
+// asked to stop like a cancel; the job stays paused, across restarts, until
+// Resume. It doesn't hold up the rest of the queue.
+func (q *Queue) Pause(ctx context.Context, id string) error {
 	q.mu.Lock()
 	j := q.find(id)
 	if j == nil {
@@ -264,13 +366,11 @@ func (q *Queue) Cancel(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return nil
 	}
-	j.State, j.Phase, j.Speed = StateCanceled, "", 0
-	j.UpdatedAt = time.Now().UnixMilli()
+	j.State, j.Phase, j.Speed = StatePaused, "", 0
+	j.UpdatedAt = q.now().UnixMilli()
 	q.changed(true)
 	q.mu.Unlock()
 	if state == StateRunning {
-		// Best effort: the job is canceled for Hydra either way, and later
-		// notifications for it are ignored.
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		_ = q.b.Cancel(cctx, snapshot)
@@ -279,41 +379,70 @@ func (q *Queue) Cancel(ctx context.Context, id string) error {
 	return nil
 }
 
+// Resume queues a paused or canceled job again, with the same job id so the
+// plugin continues from what is on disk. A canceled job whose data was already
+// deleted starts over.
+func (q *Queue) Resume(id string) error {
+	return q.requeue(id, StatePaused, StateCanceled)
+}
+
 // Retry queues a failed or canceled job again.
 func (q *Queue) Retry(id string) error {
+	return q.requeue(id, StateFailed, StateCanceled)
+}
+
+func (q *Queue) requeue(id string, from ...string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j := q.find(id)
 	if j == nil {
 		return fmt.Errorf("no job %s", id)
 	}
-	if j.State != StateFailed && j.State != StateCanceled {
+	if !slices.Contains(from, j.State) {
 		return nil
 	}
+	if q.discarding[id] {
+		return fmt.Errorf("%s is being cleaned up; try again in a moment", j.Title)
+	}
 	for _, o := range q.jobs {
-		if o != j && o.GameID == j.GameID && (o.State == StateQueued || o.State == StateRunning) {
+		if o != j && o.GameID == j.GameID && holdsGame(o) {
 			return fmt.Errorf("%s already has a %s queued", j.Title, o.Kind)
 		}
 	}
-	j.State, j.Error, j.Attempts, j.Phase = StateQueued, "", 0, ""
-	j.UpdatedAt = time.Now().UnixMilli()
+	// A resumed run starts counting crashes afresh. Pausing or canceling and
+	// resuming shows "resuming" until the plugin reports.
+	was := j.State
+	j.State, j.Error, j.Phase, j.Attempts = StateQueued, "", "", 0
+	j.CanceledAt, j.CleanedAt, j.Leftover = 0, 0, ""
+	if was != StateFailed {
+		j.Phase = "resuming"
+	}
+	j.UpdatedAt = q.now().UnixMilli()
 	q.changed(true)
 	q.signal()
 	return nil
 }
 
-// ClearFinished drops done, failed and canceled jobs from the list.
+// ClearFinished drops done, failed and canceled jobs from the list. A canceled
+// job whose data hasn't been deleted yet stays, so clearing the list can't
+// orphan downloaded data nobody tracks anymore.
 func (q *Queue) ClearFinished() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	kept := q.jobs[:0]
 	for _, j := range q.jobs {
-		if j.State == StateQueued || j.State == StateRunning {
+		if holdsGame(j) || q.holdsData(j) {
 			kept = append(kept, j)
 		}
 	}
 	q.jobs = kept
 	q.changed(true)
+}
+
+// holdsData is true for a canceled download whose partial data is still on
+// disk. Callers hold q.mu.
+func (q *Queue) holdsData(j *types.Job) bool {
+	return j.State == StateCanceled && j.CleanedAt == 0 && j.Kind != KindUninstall
 }
 
 func (q *Queue) List() []types.Job {
@@ -453,7 +582,7 @@ func (q *Queue) finish(id, state, msg string) {
 func (q *Queue) trim() {
 	finished := 0
 	for _, j := range q.jobs {
-		if j.State != StateQueued && j.State != StateRunning {
+		if !holdsGame(j) {
 			finished++
 		}
 	}
@@ -463,7 +592,7 @@ func (q *Queue) trim() {
 	drop := finished - keepFinished
 	kept := q.jobs[:0]
 	for _, j := range q.jobs {
-		if drop > 0 && j.State != StateQueued && j.State != StateRunning {
+		if drop > 0 && !holdsGame(j) && !q.holdsData(j) {
 			drop--
 			continue
 		}
@@ -531,6 +660,113 @@ func (q *Queue) save() error {
 		return err
 	}
 	return os.Rename(tmp.Name(), q.path)
+}
+
+// SetClock replaces the time source (tests).
+func (q *Queue) SetClock(now func() time.Time) {
+	q.mu.Lock()
+	q.now = now
+	q.mu.Unlock()
+}
+
+// SetCleanupAfter sets how long a canceled job's data is kept before it is
+// deleted; 0 deletes it as soon as the job is canceled. Canceled jobs already
+// older than the new threshold are cleaned right away.
+func (q *Queue) SetCleanupAfter(d time.Duration) {
+	q.mu.Lock()
+	q.cleanupAfter = max(d, 0)
+	q.mu.Unlock()
+	q.wakeCleanup()
+}
+
+func (q *Queue) wakeCleanup() {
+	select {
+	case q.cleanupWake <- struct{}{}:
+	default:
+	}
+}
+
+// Cleanup deletes the data of every canceled job older than the threshold.
+// Paused jobs, and jobs in the queue, are never touched.
+func (q *Queue) Cleanup(ctx context.Context) {
+	q.mu.Lock()
+	cutoff := q.now().Add(-q.cleanupAfter).UnixMilli()
+	var ids []string
+	for _, j := range q.jobs {
+		if q.holdsData(j) && j.CanceledAt <= cutoff {
+			ids = append(ids, j.ID)
+		}
+	}
+	// Uninstalls have no download: just stop tracking their leftovers.
+	for _, j := range q.jobs {
+		if j.State == StateCanceled && j.CleanedAt == 0 && j.Kind == KindUninstall && j.CanceledAt <= cutoff {
+			j.CleanedAt = q.now().UnixMilli()
+			q.changed(true)
+		}
+	}
+	q.mu.Unlock()
+	for _, id := range ids {
+		if ctx.Err() != nil {
+			return
+		}
+		_ = q.Discard(ctx, id)
+	}
+}
+
+// Discard deletes the downloaded data of a canceled job now. Only canceled
+// jobs qualify: pausing keeps data for good, and a queued or running job is
+// still using it. A plugin that can't delete anything leaves the job
+// forgotten, with a note about what may remain on disk.
+func (q *Queue) Discard(ctx context.Context, id string) error {
+	q.mu.Lock()
+	j := q.find(id)
+	if j == nil {
+		q.mu.Unlock()
+		return fmt.Errorf("no job %s", id)
+	}
+	if j.State != StateCanceled {
+		q.mu.Unlock()
+		return fmt.Errorf("%s isn't canceled; cancel it before discarding its data", j.Title)
+	}
+	if j.CleanedAt != 0 || q.discarding[id] {
+		q.mu.Unlock()
+		return nil
+	}
+	snapshot := *j
+	q.discarding[id] = true
+	q.mu.Unlock()
+
+	err := ErrDiscardUnsupported
+	if d, ok := q.b.(Discarder); ok && snapshot.Kind != KindUninstall {
+		dctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		err = d.Discard(dctx, snapshot)
+		cancel()
+	}
+	var rpcErr *jsonrpc.Error
+	unsupported := errors.Is(err, ErrDiscardUnsupported) || (errors.As(err, &rpcErr) && rpcErr.Code == jsonrpc.CodeMethodNotFound)
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.discarding, id)
+	j = q.find(id)
+	if j == nil || j.State != StateCanceled {
+		return nil
+	}
+	switch {
+	case err == nil:
+		j.CleanedAt, j.Leftover = q.now().UnixMilli(), ""
+	case unsupported:
+		j.CleanedAt = q.now().UnixMilli()
+		j.Leftover = fmt.Sprintf("The %s plugin can't delete a partial download. Files may remain in %s.", j.Source, j.InstallDir)
+	default:
+		j.Leftover = "Couldn't delete the downloaded data: " + err.Error()
+	}
+	j.UpdatedAt = q.now().UnixMilli()
+	q.changed(true)
+	if err != nil && !unsupported {
+		return err
+	}
+	return nil
 }
 
 // SaveErrors counts failed queue persistence attempts since Open.

@@ -7,7 +7,7 @@
   "api": 1,
   "store": "steam",
   "exec": "bin/hydra-steam",
-  "capabilities": ["library", "install", "launch", "auth"],
+  "capabilities": ["library", "install", "launch", "auth", "discard"],
   "requires": [
     { "bin": "python3", "hint": "install python3 from your distribution" },
     { "bin": "steam", "hint": "only needed for games that refuse to run outside the Steam client; install it from your distribution or store.steampowered.com" }

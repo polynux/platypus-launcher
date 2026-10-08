@@ -74,8 +74,12 @@ def main():
         path = rest[rest.index("--path") + 1]
         game_dir = os.path.join(path, st.get("install_subdir", "SuperGame"))
         os.makedirs(game_dir, exist_ok=True)
+        # Like the real tool, resume bookkeeping lives inside the game folder.
+        with open(os.path.join(game_dir, ".gogdl-resume"), "w") as f:
+            f.write("{}")
+        step = float(os.environ.get("FAKE_GOGDL_STEP", "0.1"))
         for pct, mib, speed in ((25.0, 2.0, 4.2), (50.0, 4.0, 4.5), (100.0, 8.0, 4.8)):
-            time.sleep(0.1)
+            time.sleep(step)
             print(f"Progress: {pct}% ({mib:.2f}/8.00 MiB) @ {speed:.2f} MiB/s", flush=True)
         script = os.path.join(game_dir, "start.sh")
         with open(script, "w") as f:

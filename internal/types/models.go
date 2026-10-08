@@ -166,6 +166,9 @@ type AuthField struct {
 type LauncherSettings struct {
 	GamesFolder        string `json:"games_folder"` // store plugins install into <GamesFolder>/<plugin>
 	DefaultGamesFolder string `json:"default_games_folder"`
+	// CancelCleanupDays is how long a canceled download's partial data is
+	// kept before Hydra deletes it; 0 deletes it right away.
+	CancelCleanupDays int `json:"cancel_cleanup_days"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when
@@ -226,7 +229,7 @@ type Job struct {
 	GameID      string  `json:"game_id"`       // Hydra's game id
 	StoreGameID string  `json:"store_game_id"` // the plugin's game id
 	Title       string  `json:"title"`
-	State       string  `json:"state"` // "queued" | "running" | "done" | "failed" | "canceled"
+	State       string  `json:"state"` // "queued" | "running" | "paused" | "done" | "failed" | "canceled"
 	InstallDir  string  `json:"install_dir,omitempty"`
 	Phase       string  `json:"phase,omitempty"`
 	Bytes       int64   `json:"bytes"`
@@ -237,4 +240,13 @@ type Job struct {
 	Attempts    int     `json:"attempts"`
 	CreatedAt   int64   `json:"created_at"` // unix ms
 	UpdatedAt   int64   `json:"updated_at"`
+	// CanceledAt is when the user canceled the job (unix ms). Its partial
+	// download is deleted CleanupAfter later; until then it can be resumed.
+	CanceledAt int64 `json:"canceled_at,omitempty"`
+	// CleanedAt is when the canceled job's leftovers were deleted, or
+	// forgotten when the plugin can't delete them (unix ms; 0 = not yet).
+	CleanedAt int64 `json:"cleaned_at,omitempty"`
+	// Leftover says what may remain on disk after a cleanup the plugin
+	// couldn't perform, or why the last cleanup attempt failed.
+	Leftover string `json:"leftover,omitempty"`
 }

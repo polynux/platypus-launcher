@@ -38,6 +38,10 @@ type file struct {
 	// Games the user added by hand (sideloaded executables), with their
 	// per-game settings in Games like every other game's.
 	CustomGames []CustomGame `json:"custom_games,omitempty"`
+	// CancelCleanupDays is how long a canceled download's partial data is
+	// kept before Hydra deletes it. A pointer: 0 (delete at once) is a
+	// choice, unset means DefaultCancelCleanupDays.
+	CancelCleanupDays *int `json:"cancel_cleanup_days,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra
@@ -142,6 +146,39 @@ func (s *Store) SetGamesFolder(path string) (string, error) {
 		return DefaultGamesFolder(), nil
 	}
 	return path, nil
+}
+
+// Canceled downloads keep their partial data this many days by default.
+const (
+	DefaultCancelCleanupDays = 7
+	MaxCancelCleanupDays     = 365
+)
+
+// CancelCleanupDays is how many days a canceled download's data is kept.
+func (s *Store) CancelCleanupDays() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data.CancelCleanupDays == nil {
+		return DefaultCancelCleanupDays
+	}
+	return *s.data.CancelCleanupDays
+}
+
+// SetCancelCleanupDays saves the retention of canceled downloads (0 = delete
+// right away).
+func (s *Store) SetCancelCleanupDays(days int) error {
+	if days < 0 || days > MaxCancelCleanupDays {
+		return fmt.Errorf("keep canceled downloads between 0 and %d days, got %d", MaxCancelCleanupDays, days)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.data.CancelCleanupDays
+	s.data.CancelCleanupDays = &days
+	if err := s.save(); err != nil {
+		s.data.CancelCleanupDays = prev
+		return err
+	}
+	return nil
 }
 
 // GameSettings returns every saved per-game settings object, keyed by game ID.
