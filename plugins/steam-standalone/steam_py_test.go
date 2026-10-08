@@ -4,7 +4,9 @@ package steam_test
 // module (no Steam, no downloader).
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -64,5 +66,42 @@ print("s3cret" in repr(sent) or "s3cret" in repr(hs.jobs))
 `)
 	if got != "False" {
 		t.Fatalf("branch password leaked into notifications or the job table")
+	}
+}
+
+// STEAM-7: a token source persisted as JSON (list, mtime maybe an int) still
+// matches the live account.config stamp, so the legacy fast path hits.
+func TestSteamTokenSourceSurvivesJSONRoundTrip(t *testing.T) {
+	got := pyRun(t, `
+import json
+src = ("/h/account.config", 1700000000.5)
+rt = json.loads(json.dumps(src))
+print(hs._source_matches(rt, "/h/account.config", 1700000000.5),
+      hs._source_matches([ "/h/account.config", 1700000000], "/h/account.config", 1700000000.0),
+      hs._source_matches(rt, "/h/other", 1700000000.5),
+      hs._source_matches(rt, "/h/account.config", 1700000001.5),
+      hs._source_matches(None, "/h/account.config", 1.0))
+`)
+	if got != "True True False False False" {
+		t.Fatalf("_source_matches = %q", got)
+	}
+}
+
+// STEAM-9: the game's exe often sits in a subfolder of the install.
+func TestSteamFindExecutableSearchesSubfolders(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "bin", "x64")
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(sub, "Game.exe"), make([]byte, 4000), 0o755)
+	os.WriteFile(filepath.Join(dir, "setup.exe"), make([]byte, 9000), 0o755)
+	os.MkdirAll(filepath.Join(dir, "redist"), 0o755)
+	os.WriteFile(filepath.Join(dir, "redist", "Big.exe"), make([]byte, 50000), 0o755)
+	cmd := exec.Command("python3", "-c", pyLoad+`print(hs.find_executable(sys.argv[1]))`, dir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got := strings.TrimSpace(string(out)); got != filepath.Join(sub, "Game.exe") {
+		t.Fatalf("find_executable = %q, want bin/x64/Game.exe", got)
 	}
 }
