@@ -1455,19 +1455,6 @@ def launch_spec(params):
     }
 
 
-def mark_needs_client(params):
-    """After a mode-'optional' game died with a Steamworks init error, the
-    game page's retry calls this; the next launch uses the real client."""
-    app = str((params or {}).get("id") or "")
-    with installed_lock:
-        installed = load_state("installed.json", {})
-        if app not in installed:
-            raise RPCError(f"app {app} is not installed")
-        installed[app]["mode"] = "client"
-        save_state("installed.json", installed)
-    return {"ok": True}
-
-
 def game_details(params):
     """Public store metadata, no login needed (same API the built-in Steam
     store uses)."""
