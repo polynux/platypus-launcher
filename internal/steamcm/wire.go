@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,6 +26,32 @@ import (
 )
 
 const protoMask = 0x80000000
+
+// PackEMsg and UnpackEMsg expose the wire framing to the importable
+// fake CM in internal/steamcm/steamcmtest; everything else keeps using
+// the unexported forms.
+func PackEMsg(emsg uint32, header, body []byte) []byte { return packEMsg(emsg, header, body) }
+
+func UnpackEMsg(data []byte) (emsg uint32, hdr depot.Msg, body []byte, err error) {
+	return unpackEMsg(data)
+}
+
+// Header builds a CMsgProtoBufHeader (see header); HeaderReply adds the
+// jobid_target/eresult fields replies carry.
+func Header(steamid uint64, sessionid int32, jobSource uint64, targetJobName string) []byte {
+	return header(steamid, sessionid, jobSource, targetJobName)
+}
+
+func HeaderReply(steamid uint64, sessionid int32, jobTarget uint64, eresult int) []byte {
+	base := header(steamid, sessionid, 0, "")
+	out := append([]byte{}, base...)
+	e := &depot.Enc{}
+	e.Fixed64(11, jobTarget)
+	e.Varint(13, uint64(eresult))
+	return append(out, e.Bytes()...)
+}
+
+func MultiWrap(msgs ...[]byte) []byte { return multiWrap(msgs...) }
 
 func packEMsg(emsg uint32, header, body []byte) []byte {
 	out := make([]byte, 8, 8+len(header)+len(body))
@@ -137,15 +165,17 @@ func multiUnwrap(body []byte) ([][]byte, error) {
 	return out, nil
 }
 
-// machineID builds a binary-KeyValues MessageObject with SHA-1 hashes
-// like SteamKit's machine_id (well-formed; values just identify this
-// machine, random once per session like node-steam-user).
-func machineID() []byte {
+// machineIDBody builds a binary-KeyValues MessageObject with SHA-1
+// hashes like SteamKit's machine_id (well-formed; the values just
+// identify this machine). The seed is one fixed nonce: the same seed
+// gives the same machine id, so a persistent session looks like the
+// same device every time (research R2).
+func machineIDBody(seed []byte) []byte {
 	out := []byte("\x00MessageObject\x00")
 	for _, name := range []string{"BB3", "FF2", "3B3"} {
-		nonce := make([]byte, 16)
-		rand.Read(nonce)
-		digest := sha1.Sum(nonce)
+		// One digest per key, derived from the same seed so the blob
+		// is deterministic for the install but its keys differ.
+		digest := sha1.Sum(append(append([]byte{}, seed...), name...))
 		out = append(out, 0x01)
 		out = append(out, name...)
 		out = append(out, 0x00)
@@ -154,6 +184,50 @@ func machineID() []byte {
 		out = append(out, 0x00)
 	}
 	return append(out, 0x08, 0x08)
+}
+
+// machineSeed returns the stored per-install nonce (32 random bytes,
+// created on first use) or nil when there is nowhere to store it. The
+// file sits under HYDRA_PLUGIN_DATA with 0600 permissions, next to the
+// refresh token.
+func machineSeed(dir string) []byte {
+	if dir == "" {
+		return nil
+	}
+	path := filepath.Join(dir, "machine.id")
+	if seed, err := os.ReadFile(path); err == nil && len(seed) >= 32 {
+		return seed
+	}
+	seed := make([]byte, 32)
+	if _, err := rand.Read(seed); err != nil {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil
+	}
+	if err := os.WriteFile(path, seed, 0o600); err != nil {
+		return nil
+	}
+	return seed
+}
+
+// StableMachineID returns the machine_id blob for the install whose
+// plugin data lives in dataDir: stable across restarts, random on
+// first use. dataDir "" or an unusable directory falls back to a
+// random per-call id (the old behaviour).
+func StableMachineID(dataDir string) []byte {
+	if seed := machineSeed(dataDir); seed != nil {
+		return machineIDBody(seed)
+	}
+	return randomMachineID()
+}
+
+// randomMachineID builds a one-off machine id, like the old per-logon
+// behaviour.
+func randomMachineID() []byte {
+	seed := make([]byte, 32)
+	rand.Read(seed)
+	return machineIDBody(seed)
 }
 
 // jwtPayload decodes the payload segment of a Steam JWT ({" sub": ...}
@@ -226,18 +300,18 @@ func TokenExpiry(token string) time.Time {
 // should_remember_password = 8, machine_id = 30, chat_mode = 33,
 // machine_name = 96, supports_rate_limit_response = 102,
 // access_token = 108 (the refresh token).
-func logonBody(refreshToken string) []byte {
+func logonBody(refreshToken string, loginID uint32, machineIDBlob []byte) []byte {
 	obf := &depot.Enc{}
-	obf.Fixed32(1, LoginID) // v4
+	obf.Fixed32(1, loginID) // v4
 	e := &depot.Enc{}
 	e.Varint(1, ProtocolVersion)
 	e.MsgField(11, obf)
-	e.Varint(2, LoginID)
+	e.Varint(2, uint64(loginID))
 	e.Varint(5, ClientPackageVersion)
 	e.Str(6, "english")
 	e.Varint(7, uint64(ClientOSLinux))
 	e.Varint(8, 1)
-	e.BytesField(30, machineID())
+	e.BytesField(30, machineIDBlob)
 	e.Varint(33, 2)
 	e.Str(96, MachineName)
 	e.Varint(102, 1)
