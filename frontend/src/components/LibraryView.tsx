@@ -52,7 +52,7 @@ export function sortGames(games: Game[], sort: Sort | null): Game[] {
   if (!sort) return games;
   return [...games].sort((a, b) => {
     const x = sortValue(a, sort.key), y = sortValue(b, sort.key);
-    if (sort.key === 'tier' && (x === -1 || y === -1) && x !== y) return x === -1 ? 1 : -1;
+    if (typeof x === 'number' && (x === -1 || y === -1) && x !== y) return x === -1 ? 1 : -1;
     const c = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number);
     return (sort.dir === 'asc' ? c : -c) || a.title.localeCompare(b.title);
   });
