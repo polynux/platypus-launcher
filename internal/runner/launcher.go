@@ -21,13 +21,15 @@ type Target struct {
 
 // BuildLaunchCommand runs the game's configured executable through the
 // pipeline (see BuildCommand).
-func BuildLaunchCommand(game types.Game, runner types.ProtonVersion) ([]string, map[string]string, error) {
-	return BuildCommand(game, runner, Target{Exe: game.Executable})
+func BuildLaunchCommand(game types.Game, runner types.ProtonVersion, preview bool) ([]string, map[string]string, error) {
+	return BuildCommand(game, runner, Target{Exe: game.Executable}, preview)
 }
 
 // BuildCommand constructs, for games Hydra starts itself (see
 // steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
-func BuildCommand(game types.Game, runner types.ProtonVersion, target Target) ([]string, map[string]string, error) {
+// When preview is true, no on-disk state is created: the Proton prefix is
+// resolved (so the preview is honest) but not created (CORE-8).
+func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, preview bool) ([]string, map[string]string, error) {
 	var cmdArgs []string
 	env := make(map[string]string)
 	for k, v := range target.Env {
@@ -47,8 +49,11 @@ func BuildCommand(game types.Game, runner types.ProtonVersion, target Target) ([
 	if !target.Native {
 		// Proton assumes Steam created the compat data dir; it crashes with a
 		// FileNotFoundError on <prefix>/pfx.lock when the folder is missing.
-		if err := os.MkdirAll(prefixPath, 0o755); err != nil {
-			return nil, nil, fmt.Errorf("cannot create Proton prefix %s: %w", prefixPath, err)
+		// Previews resolve the path without creating it (CORE-8).
+		if !preview {
+			if err := os.MkdirAll(prefixPath, 0o755); err != nil {
+				return nil, nil, fmt.Errorf("cannot create Proton prefix %s: %w", prefixPath, err)
+			}
 		}
 		env["WINEPREFIX"] = prefixPath
 		env["STEAM_COMPAT_DATA_PATH"] = prefixPath

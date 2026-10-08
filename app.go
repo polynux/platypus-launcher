@@ -376,7 +376,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 				return nil, err
 			}
 		}
-		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine})
+		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview)
 		if err != nil {
 			return nil, err
 		}
@@ -391,7 +391,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	if err != nil {
 		return nil, err
 	}
-	args, env, err := runner.BuildLaunchCommand(game, r)
+	args, env, err := runner.BuildLaunchCommand(game, r, preview)
 	if err != nil {
 		return nil, err
 	}
