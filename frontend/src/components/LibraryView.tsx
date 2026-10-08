@@ -3,7 +3,12 @@ import { ArrowDown, ArrowUp, Download, LogIn, Play, Plus, X } from 'lucide-react
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
-import { Cover, EmptyState, Panel, TweakDot, TIER_DOT, TIER_TEXT, btnPrimary, cardClass, clock, cx } from './ui';
+import { Cover, EmptyState, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
+import { Button } from './ds/button';
+import { Badge } from './ds/badge';
+import { Input } from './ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { byRecent, formatBytes, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 
@@ -60,25 +65,37 @@ export function sortGames(games: Game[], sort: Sort | null): Game[] {
 const SORT_OPTIONS: [SortKey | '', string][] = [['', 'default'], ['title', 'title'], ['last', 'recently played'], ['hours', 'hours played'], ['size', 'size'], ['tier', 'tier']];
 const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
 
+const DEFAULT_SORT = 'default'; // Radix forbids '' as an item value
+
 function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort | null) => void }) {
+  const asc = sort?.dir === 'asc';
   return (
-    <div className="flex items-center rounded-xl bg-white/[0.05] p-1 font-mono text-[11.5px] uppercase tracking-wider text-white/60">
-      <select
-        aria-label="Sort by"
-        value={sort?.key ?? ''}
-        onChange={(e) => onChange(e.target.value ? { key: e.target.value as SortKey, dir: defaultDir(e.target.value as SortKey) } : null)}
-        className="cursor-pointer rounded-lg bg-transparent px-2.5 py-1.5 uppercase tracking-wider outline-none ring-amber-300/50 focus-visible:ring-1"
+    <div className="flex items-center gap-1.5">
+      <Select
+        value={sort?.key ?? DEFAULT_SORT}
+        onValueChange={(v) => onChange(v === DEFAULT_SORT ? null : { key: v as SortKey, dir: defaultDir(v as SortKey) })}
       >
-        {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v} className="bg-[#1a1612] normal-case">{v ? l : 'sort: default'}</option>)}
-      </select>
+        <SelectTrigger aria-label="Sort by" className="w-44 uppercase tracking-wider">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SORT_OPTIONS.map(([v, l]) => <SelectItem key={v || DEFAULT_SORT} value={v || DEFAULT_SORT}>{v ? l : 'sort: default'}</SelectItem>)}
+        </SelectContent>
+      </Select>
       {sort && (
-        <button
-          aria-label={sort.dir === 'asc' ? 'Ascending, switch to descending' : 'Descending, switch to ascending'}
-          onClick={() => onChange({ ...sort, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
-          className="grid h-7 w-7 place-items-center rounded-lg transition hover:text-white"
-        >
-          {sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="neutral"
+              size="icon"
+              aria-label={asc ? 'Ascending, switch to descending' : 'Descending, switch to ascending'}
+              onClick={() => onChange({ ...sort, dir: asc ? 'desc' : 'asc' })}
+            >
+              {asc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{asc ? 'Ascending' : 'Descending'}</TooltipContent>
+        </Tooltip>
       )}
     </div>
   );
@@ -99,28 +116,6 @@ function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string
         {active && (sort!.dir === 'asc' ? <ArrowUp className="h-2.5 w-2.5" /> : <ArrowDown className="h-2.5 w-2.5" />)}
       </button>
     </span>
-  );
-}
-
-function Segmented<T extends string>({ value, options, onChange, label, mono }: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string; mono?: boolean }) {
-  return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-xl bg-white/[0.05] p-1">
-      {options.map(([v, l]) => (
-        <button
-          key={v}
-          role="radio"
-          aria-checked={value === v}
-          onClick={() => onChange(v)}
-          className={cx(
-            'rounded-lg px-3.5 py-1.5 transition',
-            mono ? 'font-mono text-[11.5px] uppercase tracking-wider' : 'text-[12px] font-bold',
-            value === v ? 'bg-white/12 text-white' : 'text-white/45 hover:text-white/80'
-          )}
-        >
-          {l}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -158,34 +153,40 @@ export function LibraryView(p: LibraryProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative">
-            <input
+            <Input
               type="search"
               aria-label="Filter library"
               value={p.search}
               onChange={(e) => p.onSearch(e.target.value)}
               placeholder="filter…"
-              className="w-48 rounded-xl bg-white/[0.06] py-2 pl-3.5 pr-8 font-mono text-[11.5px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1 [&::-webkit-search-cancel-button]:hidden"
+              className="w-48 pr-9 [&::-webkit-search-cancel-button]:hidden"
             />
             {p.search && (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => p.onSearch('')}
-                className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-lg text-white/45 transition hover:text-white/90"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Clear search"
+                    onClick={() => p.onSearch('')}
+                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-white/45"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Clear search</TooltipContent>
+              </Tooltip>
             )}
           </div>
           {owned > installedCount && (
-            <Segmented label="Ownership" mono value={p.ownership} onChange={p.onOwnership} options={[['installed', 'installed'], ['owned', 'owned']]} />
+            <SegRow label="Ownership" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
           )}
-          <Segmented label="Source" mono value={source} onChange={p.onSource} options={sources.map((s) => [s, s])} />
+          <SegRow label="Source" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
           <SortControl sort={sort} onChange={setSort} />
-          <Segmented label="View" value={p.mode} onChange={p.onMode} options={[['cards', 'cards'], ['table', 'table']]} />
-          <button onClick={p.onAddGame} className={cx(btnPrimary, 'flex items-center gap-1.5 px-4 py-2.5 text-[12.5px]')}>
+          <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
+          <Button variant="primary" onClick={p.onAddGame}>
             <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -197,9 +198,9 @@ export function LibraryView(p: LibraryProps) {
                 <span className="font-bold text-amber-200">{pluginName(w.source)}</span>{' '}
                 {w.needs_auth ? 'is logged out, so its games are missing.' : <>couldn't list its games: <span className="font-mono text-[12px] text-white/55">{w.message}</span></>}
               </p>
-              <button onClick={() => p.onNavigate({ name: 'plugins' })} className={cx(btnPrimary, 'flex flex-none items-center gap-1.5 px-3.5 py-2 text-[12px]')}>
+              <Button variant="primary" size="sm" className="flex-none" onClick={() => p.onNavigate({ name: 'plugins' })}>
                 {w.needs_auth && <LogIn className="h-3.5 w-3.5" />} {w.needs_auth ? 'Log in' : 'Plugins'}
-              </button>
+              </Button>
             </div>
           ))}
         </div>
@@ -226,7 +227,7 @@ export function LibraryView(p: LibraryProps) {
                     <div className="absolute bottom-4 left-5 right-5">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="truncate text-[16px] font-extrabold tracking-tight">{g.title}</span>
-                        <span className={cx('font-mono text-[11px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-white/45')}>{g.fix_info?.tier}</span>
+                        {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
                       </div>
                       <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-white/50">
                         {hoursPlayed(g) != null && <><span>{hoursPlayed(g)}h</span><span>·</span></>}
@@ -266,9 +267,9 @@ export function LibraryView(p: LibraryProps) {
                         </div>
                       ) : (
                         !g.is_installed && (
-                          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-white/70">
+                          <Badge variant="neutral" className="absolute bottom-2 left-2 gap-1 bg-black/65 text-white/70">
                             {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? 'not installed' : 'owned'}
-                          </span>
+                          </Badge>
                         )
                       )}
                     </div>

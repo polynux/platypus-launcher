@@ -1,9 +1,11 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent, within } from '@testing-library/react';
+import { render as rtlRender, fireEvent, within } from '@testing-library/react';
 import { Dashboard } from '../Dashboard';
 import { LibraryView, sourceChips } from '../LibraryView';
 import type { Game } from '../../types';
+import { TooltipProvider } from '../ds/tooltip';
+const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider });
 
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
