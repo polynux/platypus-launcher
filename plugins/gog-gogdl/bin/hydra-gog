@@ -317,7 +317,10 @@ def start_job(params, kind):
         ig = installed_games().get(app)
         if not ig:
             raise RPCError(f"{app} is not installed")
-        threading.Thread(target=follow_uninstall, args=(job_id, app), daemon=True).start()
+        ev = threading.Event()
+        with jobs_lock:
+            jobs[job_id] = {"proc": None, "canceled": False, "id": app, "event": ev}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     path = params.get("installDir") or ""
     if not os.path.isabs(path):
@@ -434,10 +437,22 @@ def find_executable(game_dir):
     return ""
 
 
-def follow_uninstall(job_id, app):
-    time.sleep(0.2)
+def follow_uninstall(job_id, app, ev=None):
+    if ev is not None:
+        ev.wait(0.5)
+    else:
+        time.sleep(0.2)
+    with jobs_lock:
+        if jobs.get(job_id, {}).get("canceled"):
+            jobs.pop(job_id, None)
+            return
     state = installed_games()
     ig = state.pop(app, None)
+    with jobs_lock:
+        if jobs.get(job_id, {}).get("canceled"):
+            jobs.pop(job_id, None)
+            return
+        jobs.pop(job_id, None)
     if ig and ig.get("path") and os.path.isdir(ig["path"]):
         import shutil
         shutil.rmtree(ig["path"], ignore_errors=True)
@@ -446,6 +461,8 @@ def follow_uninstall(job_id, app):
 
 
 def stop_proc(proc, grace=15):
+    if proc is None:
+        return
     try:
         proc.send_signal(signal.SIGINT)
         proc.wait(timeout=grace)
@@ -460,8 +477,13 @@ def job_cancel(params):
         job = jobs.get(params.get("jobId"))
         if job:
             job["canceled"] = True
-    if job:
-        threading.Thread(target=stop_proc, args=(job["proc"],), daemon=True).start()
+            proc, ev = job.get("proc"), job.get("event")
+        else:
+            proc, ev = None, None
+    if ev is not None:
+        ev.set()
+    if proc:
+        threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
     return {}
 
 
@@ -605,7 +627,7 @@ def main():
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
     # stdin closed: Hydra is shutting down. Interrupted installs resume later.
     with jobs_lock:
-        procs = [j["proc"] for j in jobs.values()]
+        procs = [j.get("proc") for j in jobs.values()]
     for p in procs:
         stop_proc(p, grace=5)
 

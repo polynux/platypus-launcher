@@ -1096,7 +1096,10 @@ def start_job(params, kind):
     if kind == "uninstall":
         if app not in load_state("installed.json", {}):
             raise RPCError(f"app {app} is not installed")
-        threading.Thread(target=follow_uninstall, args=(job_id, app), daemon=True).start()
+        ev = threading.Event()
+        with jobs_lock:
+            jobs[job_id] = {"canceled": False, "id": app, "proc": None, "event": ev}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
@@ -1424,10 +1427,23 @@ def game_details(params):
 
 # --- uninstall -------------------------------------------------------------
 
-def follow_uninstall(job_id, app):
-    time.sleep(0.1)
+def follow_uninstall(job_id, app, ev=None):
+    if ev is not None:
+        ev.wait(0.5)
+    else:
+        time.sleep(0.1)
+    with jobs_lock:
+        job = jobs.get(job_id, {})
+        if job.get("canceled"):
+            jobs.pop(job_id, None)
+            return
     installed = load_state("installed.json", {})
     ig = installed.pop(app, None)
+    with jobs_lock:
+        if jobs.get(job_id, {}).get("canceled"):
+            jobs.pop(job_id, None)
+            return
+        jobs.pop(job_id, None)
     if ig and ig.get("path") and os.path.isdir(ig["path"]):
         shutil.rmtree(ig["path"], ignore_errors=True)
     save_state("installed.json", installed)
@@ -1452,8 +1468,11 @@ def job_cancel(params):
         if job:
             job["canceled"] = True
             proc = job.get("proc")
+            ev = job.get("event")
         else:
-            proc = None
+            proc, ev = None, None
+    if ev is not None:
+        ev.set()
     if proc:
         threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
     return {}
