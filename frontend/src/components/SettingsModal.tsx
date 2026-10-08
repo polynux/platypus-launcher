@@ -20,19 +20,25 @@ interface Props {
 
 const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
+const GS_PLACEHOLDER = { gamescope_w: 'width', gamescope_h: 'height', gamescope_r: 'refresh' } as const;
+
 function runnerKind(r: ProtonVersion): string {
   if (r.is_system) return 'system';
   if (r.is_custom) return 'custom · compatibilitytools.d';
   return 'steam';
 }
 
-function parseEnv(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const line of text.split('\n')) {
-    const m = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
+function parseEnv(text: string): { env: Record<string, string>; ignored: { n: number; line: string }[] } {
+  const env: Record<string, string> = {};
+  const ignored: { n: number; line: string }[] = [];
+  text.split('\n').forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (m) env[m[1]] = m[2];
+    else ignored.push({ n: i + 1, line });
+  });
+  return { env, ignored };
 }
 
 export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Props) {
@@ -50,7 +56,8 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
   const native = !!game.native;
-  const current = { ...draft, env_vars: parseEnv(envText) };
+  const parsedEnv = useMemo(() => parseEnv(envText), [envText]);
+  const current = { ...draft, env_vars: parsedEnv.env };
   const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, envText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live preview from the real backend, debounced 300ms.
@@ -169,7 +176,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             {draft.use_gamescope && (
               <div className="mt-2.5 grid grid-cols-[repeat(3,4.5rem)_1fr] gap-2">
                 {(['gamescope_w', 'gamescope_h', 'gamescope_r'] as const).map((k) => (
-                  <input key={k} aria-label={k.replace('gamescope_', 'gamescope ')} type="number" min={0} value={draft[k] || ''} onChange={(e) => set(k, parseInt(e.target.value, 10) || 0)} placeholder={k.slice(-1)} className={field} />
+                  <input key={k} aria-label={k.replace('gamescope_', 'gamescope ')} type="number" min={0} value={draft[k] || ''} onChange={(e) => set(k, parseInt(e.target.value, 10) || 0)} placeholder={GS_PLACEHOLDER[k]} className={field} />
                 ))}
                 <input aria-label="gamescope args" value={draft.gamescope_args} onChange={(e) => set('gamescope_args', e.target.value)} placeholder="-f --adaptive-sync" className={field} />
               </div>
@@ -184,6 +191,11 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <label className="block">
               <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
               <textarea rows={2} value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder="KEY=value (one per line)" className={cx(field, 'resize-y')} />
+              {parsedEnv.ignored.length > 0 && (
+                <p role="status" className="mt-1.5 break-all font-mono text-[10px] text-orange-300">
+                  {parsedEnv.ignored.map((l) => `Ignored line ${l.n}: ${l.line}`).join(' · ')}
+                </p>
+              )}
             </label>
           </div>
         </div>
