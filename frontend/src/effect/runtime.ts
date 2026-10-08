@@ -101,6 +101,9 @@ export const LauncherApi = {
   // Saved per-game settings, keyed by game id, exactly as saveGameSettings stored them.
   getGameSettings: () => call<Record<string, GameSettings>>('GetGameSettings', async () => (await App.GetGameSettings()) ?? {}),
 
+  // Currently tracked sessions so late windows hydrate (CORE-1/FE-2).
+  getSessions: () => call<SessionEvent[]>('ListSessions', async () => (await App.ListSessions()) ?? []),
+
   saveGameSettings: (id: string, settings: GameSettings) =>
     call<void>('SaveGameSettings', () => App.SaveGameSettings(id, settings as unknown as Record<string, unknown>)),
 

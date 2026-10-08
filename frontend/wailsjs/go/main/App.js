@@ -70,6 +70,10 @@ export function ListJobs() {
   return window['go']['main']['App']['ListJobs']();
 }
 
+export function ListSessions() {
+  return window['go']['main']['App']['ListSessions']();
+}
+
 export function ListStorePlugins() {
   return window['go']['main']['App']['ListStorePlugins']();
 }

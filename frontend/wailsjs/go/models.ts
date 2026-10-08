@@ -448,6 +448,24 @@ export namespace types {
 	        this.is_default = source["is_default"];
 	    }
 	}
+	export class SessionEvent {
+	    game_id: string;
+	    state: string;
+	    pid?: number;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.game_id = source["game_id"];
+	        this.state = source["state"];
+	        this.pid = source["pid"];
+	        this.message = source["message"];
+	    }
+	}
 	
 	export class StorePlugin {
 	    id: string;

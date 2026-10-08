@@ -74,6 +74,8 @@ export function App() {
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
 
+  // When a session started before this window mounted (CORE-1).
+  const sessionStart = useRef<Record<string, number>>({});
   const loadData = useCallback(
     (reason: 'startup' | 'rescan') => {
       setScanning(true);
@@ -83,9 +85,11 @@ export function App() {
         LauncherApi.listPlugins(),
         // Unreadable saved settings shouldn't block the library.
         LauncherApi.getGameSettings().pipe(Effect.orElseSucceed(() => ({}) as Record<string, GameSettings>)),
+        // A missing session snapshot (old backend) shouldn't block the library either.
+        LauncherApi.getSessions().pipe(Effect.orElseSucceed(() => [] as SessionEvent[])),
       ]);
       return Effect.runPromise(program)
-        .then(([lib, r, p, saved]) => {
+        .then(([lib, r, p, saved, live]) => {
           const g = lib.games;
           setWarnings(lib.warnings);
           // Keep edited settings across rescans; on startup, settings come
@@ -99,6 +103,20 @@ export function App() {
           });
           setRunners(r);
           setPlugins(p);
+          // Hydrate sessions so a window opened after a launch shows Playing.
+          if (live.length > 0) {
+            const seeded: Record<string, SessionEvent> = {};
+            const now = Date.now();
+            for (const e of live) {
+              if (e.state === 'starting' || e.state === 'running') {
+                seeded[e.game_id] = e;
+                if (e.state === 'running' && sessionStart.current[e.game_id] === undefined) {
+                  sessionStart.current[e.game_id] = now;
+                }
+              }
+            }
+            setSessions(seeded);
+          }
           setLoadError(null);
           setLastScan(Date.now());
           const sources = new Set(g.map((x) => x.source)).size;
@@ -170,7 +188,6 @@ export function App() {
   // game process under Steam's reaper, not the short-lived `steam` command.
   const gamesRef = useRef(games);
   gamesRef.current = games;
-  const sessionStart = useRef<Record<string, number>>({});
   useEffect(
     () =>
       onSession((e) => {

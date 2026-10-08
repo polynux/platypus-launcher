@@ -36,6 +36,8 @@ export function LaunchGame(arg1:types.Game):Promise<string>;
 
 export function ListJobs():Promise<Array<types.Job>>;
 
+export function ListSessions():Promise<Array<types.SessionEvent>>;
+
 export function ListStorePlugins():Promise<Array<types.StorePlugin>>;
 
 export function OpenPluginsFolder():Promise<void>;

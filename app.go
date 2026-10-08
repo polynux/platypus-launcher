@@ -295,6 +295,16 @@ func (a *App) GetTweaks() []types.Tweak {
 	return a.tweaks
 }
 
+// ListSessions returns the currently tracked game sessions (starting or
+// running) so windows opened after a launch can hydrate without waiting for
+// the next session event (CORE-1). It never returns nil.
+func (a *App) ListSessions() []types.SessionEvent {
+	if a.sessions == nil {
+		return []types.SessionEvent{}
+	}
+	return a.sessions.Snapshot()
+}
+
 // selectRunner resolves the game's runner; "auto" or empty picks the best
 // installed one (see runner.PickAuto).
 func selectRunner(game types.Game) (types.ProtonVersion, error) {

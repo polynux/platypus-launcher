@@ -36,11 +36,21 @@ type Emit func(types.SessionEvent)
 type Tracker struct {
 	emit   Emit
 	mu     sync.Mutex
-	active map[string]*exec.Cmd // gameID → direct-launch process (nil for store-client launches)
+	active map[string]*entry // gameID → launch entry (direct process or store-client watch)
+}
+
+// entry is one tracked launch. cmd is the direct-launch process (nil for
+// store-client launches); state/pid/message mirror the last emitted event
+// so late subscribers can hydrate via Snapshot (CORE-1).
+type entry struct {
+	cmd     *exec.Cmd
+	state   string
+	pid     int
+	message string
 }
 
 func NewTracker(emit Emit) *Tracker {
-	return &Tracker{emit: emit, active: map[string]*exec.Cmd{}}
+	return &Tracker{emit: emit, active: map[string]*entry{}}
 }
 
 // Running reports whether a game launched by Hydra is still tracked.
@@ -51,10 +61,59 @@ func (t *Tracker) Running(gameID string) bool {
 	return ok
 }
 
+// Snapshot returns the currently tracked sessions for late subscribers
+// (second windows, reloads). Entries are copies; the slice is never nil.
+func (t *Tracker) Snapshot() []types.SessionEvent {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]types.SessionEvent, 0, len(t.active))
+	for gameID, e := range t.active {
+		out = append(out, types.SessionEvent{
+			GameID:  gameID,
+			State:   e.state,
+			PID:     e.pid,
+			Message: e.message,
+		})
+	}
+	return out
+}
+
 func (t *Tracker) set(gameID string, cmd *exec.Cmd) {
 	t.mu.Lock()
-	t.active[gameID] = cmd
+	state := "starting"
+	if cmd != nil {
+		state = "running"
+		pid := 0
+		if cmd.Process != nil {
+			pid = cmd.Process.Pid
+		}
+		t.active[gameID] = &entry{cmd: cmd, state: state, pid: pid}
+		t.mu.Unlock()
+		return
+	}
+	t.active[gameID] = &entry{cmd: cmd, state: state}
 	t.mu.Unlock()
+}
+
+// setRunning marks an already-claimed game as running with its pid.
+// Used when a store client hands the game over after the starting phase.
+func (t *Tracker) setRunning(gameID string, pid int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if e, ok := t.active[gameID]; ok {
+		e.state = "running"
+		e.pid = pid
+		e.message = ""
+	}
+}
+
+// setMessage updates the stored message for a tracked game.
+func (t *Tracker) setMessage(gameID, message string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if e, ok := t.active[gameID]; ok {
+		e.message = message
+	}
 }
 
 func (t *Tracker) clear(gameID string) {
@@ -68,9 +127,9 @@ func (t *Tracker) clear(gameID string) {
 func (t *Tracker) StopAll() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for _, cmd := range t.active {
-		if cmd != nil && cmd.Process != nil {
-			_ = cmd.Process.Kill()
+	for _, e := range t.active {
+		if e.cmd != nil && e.cmd.Process != nil {
+			_ = e.cmd.Process.Kill()
 		}
 	}
 }
@@ -83,7 +142,9 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 		startTimeout = clientStartTimeout
 	}
 	t.set(gameID, nil)
-	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: "Waiting for " + client + " to start the game"})
+	msg := "Waiting for " + client + " to start the game"
+	t.setMessage(gameID, msg)
+	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: msg})
 	go func() {
 		defer t.clear(gameID)
 		deadline := time.Now().Add(startTimeout)
@@ -99,6 +160,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 			time.Sleep(pollEvery)
 		}
 		t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
+		t.setRunning(gameID, pid)
 		for find() != 0 {
 			time.Sleep(pollEvery)
 		}
