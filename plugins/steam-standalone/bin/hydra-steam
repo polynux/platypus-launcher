@@ -54,6 +54,9 @@ JWT_RE = re.compile(r"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}
 out_lock = threading.Lock()
 jobs_lock = threading.Lock()
 jobs = {}  # jobId -> {"proc": Popen, "canceled": bool, ...}
+token_lock = threading.RLock()
+# Serializes read-modify-write of installed.json across handler/job threads.
+installed_lock = threading.RLock()
 
 
 class RPCError(Exception):
@@ -109,8 +112,20 @@ def load_state(name, default):
 
 
 def save_state(name, state):
-    with open(state_path(name), "w") as f:
-        json.dump(state, f)
+    """Write via a temp file and rename, so a concurrent reader never sees a
+    half-written file (load_state would return the default and a caller could
+    then overwrite everything with it)."""
+    path = state_path(name)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.new"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(state, f)
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 # Token-bearing files (refresh.token, token.json, steam-access.json) must
@@ -119,13 +134,20 @@ def save_state(name, state):
 # covers both new files (umask) and pre-existing 0644 ones (WriteFile
 # keeps the old mode); session.json carries no secret and stays 0644.
 def save_secret(name, state):
+    # Created 0600 from the start (no window at the umask's mode), then
+    # renamed over the old file, which may have been 0644.
     path = state_path(name)
-    with open(path, "w") as f:
-        json.dump(state, f)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.new"
     try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(state, f)
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 def tighten(name):
@@ -172,6 +194,23 @@ def refresh_pairs(text):
     return out
 
 
+def _source_matches(src, path, mtime):
+    """Whether a persisted token source still tracks the current file.
+
+    JSON turns the stored tuple into a list and may round-trip the mtime
+    as int vs float, so normalize both before comparing."""
+    try:
+        if not isinstance(src, (list, tuple)) or len(src) != 2:
+            return False
+        if src[0] != path:
+            return False
+        if src[1] is None or mtime is None:
+            return False
+        return float(src[1]) == float(mtime)
+    except (TypeError, ValueError):
+        return False
+
+
 def refresh_token():
     """The SteamClient refresh token the Go login persisted (refresh.token
     0600, plus token.json/session.json). The pre-Go login (DepotDownloader's
@@ -188,17 +227,23 @@ def refresh_token():
     except OSError:
         pass
     # Legacy: extract from account.config once, then migrate forward.
-    st = load_state("token.json", {})
-    path = account_config()
-    if (st.get("refresh_token") and st.get("account") is not None
-            and st.get("source") == (path, os.path.getmtime(path) if path else None)):
-        migrate_token(st["refresh_token"], st.get("account") or "")
-        return st["refresh_token"]
+    with token_lock:
+        st = load_state("token.json", {})
+        path = account_config()
+        try:
+            cur_mtime = os.path.getmtime(path) if path else None
+        except OSError:
+            cur_mtime = None
+        if (st.get("refresh_token") and st.get("account") is not None
+                and _source_matches(st.get("source"), path, cur_mtime)):
+            migrate_token(st["refresh_token"], st.get("account") or "")
+            return st["refresh_token"]
     if not path:
         # A Go login may have written token.json without refresh.token
         # (older shape); trust it and migrate.
         if st.get("refresh_token"):
-            migrate_token(st["refresh_token"], st.get("account") or "")
+            with token_lock:
+                migrate_token(st["refresh_token"], st.get("account") or "")
             return st["refresh_token"]
         return None
     try:
@@ -224,36 +269,40 @@ def refresh_token():
         st["refresh_token"] = token
         st["account"] = account
         st["source"] = [path, os.path.getmtime(path)]
-        save_secret("token.json", st)
-        migrate_token(token, account)
+        with token_lock:
+            save_secret("token.json", st)
+            migrate_token(token, account)
         return token
     except OSError:
         return None
 
 
 def migrate_token(token, account):
-    """Copy a legacy-extracted token into the Go login's files (0600)."""
-    try:
-        with open(state_path("refresh.token"), "w") as f:
-            f.write(token + "\n")
-        os.chmod(state_path("refresh.token"), 0o600)
-    except OSError:
-        pass
-    try:
-        st = load_state("token.json", {})
-        st["refresh_token"] = token
-        if account:
-            st["account"] = account
+    """Copy a legacy-extracted token into the Go login's files (0600).
+
+    Keeps the account.config source stamp so the legacy fast path in
+    refresh_token() still matches; overwriting it with the refresh.token
+    path would make every later call re-walk home/ and re-extract."""
+    with token_lock:
         try:
-            st["source"] = [state_path("refresh.token"),
-                            os.path.getmtime(state_path("refresh.token"))]
+            with open(state_path("refresh.token"), "w") as f:
+                f.write(token + "\n")
+            os.chmod(state_path("refresh.token"), 0o600)
         except OSError:
             pass
-        save_secret("token.json", st)
-        if account and not state_user():
-            save_state("session.json", {"account": account})
-    except OSError:
-        pass
+        try:
+            st = load_state("token.json", {})
+            st["refresh_token"] = token
+            if account:
+                st["account"] = account
+            # Do not touch st["source"]: it tracks account.config for the
+            # legacy fast path. (An older version stored the refresh.token
+            # path here, which never matched account_config() again.)
+            save_secret("token.json", st)
+            if account and not state_user():
+                save_state("session.json", {"account": account})
+        except OSError:
+            pass
 
 
 # --- QR login ---------------------------------------------------------------
@@ -363,9 +412,10 @@ def start_qr_login():
                             qr_art["text"] = msg["qr_art"]
                         ready.set()
                 elif t == "result":
-                    qr_proc["rc"] = _reap(mine)
+                    rc = _reap(mine)
                     if ours():
                         with qr_lock:
+                            qr_proc["rc"] = rc
                             qr_state.update(state="ok", error=None)
                             qr_proc["proc"] = None
                         ready.set()
@@ -375,9 +425,10 @@ def start_qr_login():
                         pass
                     return
                 elif t == "error":
-                    qr_proc["rc"] = _reap(mine)
+                    rc = _reap(mine)
                     if ours():
                         with qr_lock:
+                            qr_proc["rc"] = rc
                             qr_state.update(state="failed", error=msg.get("message") or "login failed")
                             qr_proc["proc"] = None
                         ready.set()
@@ -386,9 +437,10 @@ def start_qr_login():
             # EOF without a result: the binary died. Reap it, and only
             # fail the shared state when this helper is still the owner —
             # a superseded helper must never touch it.
-            qr_proc["rc"] = _reap(mine)
+            rc = _reap(mine)
             if ours():
                 with qr_lock:
+                    qr_proc["rc"] = rc
                     if qr_state["state"] == "pending":
                         qr_state.update(state="failed",
                                         error="the login helper ended without logging in")
@@ -474,6 +526,7 @@ STORE_TTL = 30 * 86400  # names and types of released apps rarely change
 STORE_BUDGET = 20  # seconds of Store lookups per library.list; the rest waits for the next rescan
 store_lock = threading.Lock()
 store_cache = None  # app id -> {"name", "type", "at"}, mirrors store-apps.json
+store_inflight = {}  # app id -> threading.Event for a fetch in progress
 
 
 def store_cached(app_id):
@@ -490,23 +543,49 @@ def store_app(app_id, fetch=True):
     """Public app details (name, type) from the Steam Store API, cached on
     disk: a library scan asks about every owned game, one request each. No
     login needed; {} when the app isn't listed (bad id, region lock) or, with
-    fetch=False, not cached yet. Misses aren't cached."""
+    fetch=False, not cached yet. Misses aren't cached. Concurrent callers
+    share one fetch per app (singleflight)."""
     entry = store_cached(app_id)
     if entry or not fetch:
         return entry
+    key = str(app_id)
+    with store_lock:
+        # Recheck under the lock: another thread may have filled it.
+        if store_cache is not None:
+            entry = store_cache.get(key) or {}
+            if time.time() - entry.get("at", 0) < STORE_TTL:
+                return entry
+        ev = store_inflight.get(key)
+        if ev is None:
+            ev = threading.Event()
+            store_inflight[key] = ev
+            owner = True
+        else:
+            owner = False
+    if not owner:
+        ev.wait(60)
+        return store_cached(app_id)
     try:
         data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app_id}&filters=basic")
     except Exception:
+        with store_lock:
+            store_inflight.pop(key, None)
+            ev.set()
         return {}
     if isinstance(data, dict) and data.get("_test"):
         data = data["_test"]
     entry = (data or {}).get(str(app_id))
     if not entry or not entry.get("success"):
+        with store_lock:
+            store_inflight.pop(key, None)
+            ev.set()
         return {}
     details = entry.get("data") or {}
     keep = {"name": details.get("name") or "", "type": details.get("type") or "", "at": time.time()}
     with store_lock:
         store_cache[str(app_id)] = keep
+        store_inflight.pop(key, None)
+        ev.set()
     return keep
 
 
@@ -567,12 +646,28 @@ def run_auth_password(username, password, guard, timeout=300):
     phone approves. The password travels on stdin (never argv, never
     logged) and the binary persists the refresh token itself."""
     deadline = time.time() + timeout
+    import hashlib as _hashlib
+    pw_hash = _hashlib.sha256(password.encode()).hexdigest()
     with pw_lock:
         sess = pw_sessions.get(username)
         if sess is None or not sess.alive():
             if sess is not None:
                 pw_sessions.pop(username, None)
             sess = PWSession(username, password, guard)
+            sess.pw_hash = pw_hash
+            pw_sessions[username] = sess
+            sent_code = False
+        elif getattr(sess, "pw_hash", None) != pw_hash:
+            # Corrected password on retry: the old session baked in the
+            # first password, so stop it and start fresh instead of
+            # failing against the wrong secret.
+            try:
+                sess.stop()
+            except Exception:
+                pass
+            pw_sessions.pop(username, None)
+            sess = PWSession(username, password, guard)
+            sess.pw_hash = pw_hash
             pw_sessions[username] = sess
             sent_code = False
         else:
@@ -966,6 +1061,11 @@ def dl_request(params, extra=None):
         raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
     req = {"refresh_token": token, "app_id": int(params["id"]),
            "branch": params.get("branch") or "public"}
+    # A password-protected beta branch. Stdin only, like the token: never
+    # argv, never logged.
+    pw = params.get("branchPassword") or params.get("branch_password")
+    if pw:
+        req["branch_password"] = pw
     if extra:
         req.update(extra)
     return req
@@ -991,7 +1091,8 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
     except (BrokenPipeError, OSError):
         pass
     state = {"jobId": job_id, "phase": "downloading", "percent": 0} if job_id else None
-    text = []
+    import collections as _collections
+    text = _collections.deque(maxlen=20)
     result = None
     for line in proc.stdout:
         line = line.rstrip()
@@ -1052,16 +1153,27 @@ def start_job(params, kind):
     if kind == "uninstall":
         if app not in load_state("installed.json", {}):
             raise RPCError(f"app {app} is not installed")
-        threading.Thread(target=follow_uninstall, args=(job_id, app), daemon=True).start()
+        ev = threading.Event()
+        with jobs_lock:
+            if job_id in jobs:
+                return {}
+            jobs[job_id] = {"canceled": False, "id": app, "proc": None, "event": ev}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
         raise RPCError("installDir is missing or relative; Hydra always sends one")
     # One folder per game under Hydra's install dir, like steamapps/common/<name>.
     game_dir = os.path.join(install_dir, game_dir_name(app))
+    # Hydra resends a job with the same jobId after a crash: run it once.
+    with jobs_lock:
+        if job_id in jobs:
+            return {}
+        jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir, "proc": None}
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
-    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind), daemon=True).start()
+    branch = {k: params[k] for k in ("branch", "branchPassword", "branch_password") if params.get(k)}
+    threading.Thread(target=follow_install, args=(job_id, app, game_dir, dl_kind, branch), daemon=True).start()
     return {}
 
 
@@ -1071,17 +1183,22 @@ def game_dir_name(app):
         return installed[app]["dir_name"]
     name = store_app(app).get("name") or f"app_{app}"
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("_") or f"app_{app}"
+    # Suffix the app id: two store names can sanitize identically
+    # ("A/B" and "A_B" both become "A_B"). Existing installs keep their
+    # stored dir_name above.
+    if not safe.endswith(f"_{app}"):
+        safe = f"{safe}_{app}"
     return safe
 
 
-def follow_install(job_id, app, game_dir, dl_kind="install"):
+def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
     """hydra-steam-dl install/update with progress. The binary resolves the
     depots itself (Linux first, Windows fallback — the platform used
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
-        jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir}
+        jobs.setdefault(job_id, {"canceled": False, "id": app, "dir": game_dir})
     try:
-        req = dl_request({"id": app}, {"install_dir": game_dir, "job_id": job_id})
+        req = dl_request({"id": app, **(branch or {})}, {"install_dir": game_dir, "job_id": job_id})
         result = dl_run(dl_kind, req, job_id, game_dir)
     except RPCError as e:
         with jobs_lock:
@@ -1105,8 +1222,7 @@ def record_install(app, game_dir, os_used):
     """Remember the install: where it is, what runs it and which launch mode
     applies (see launch modes below)."""
     exe = find_executable(game_dir, native=os_used == "linux")
-    installed = load_state("installed.json", {})
-    installed[app] = {
+    entry = {
         "path": game_dir,
         "dir_name": os.path.basename(game_dir),
         "executable": exe,
@@ -1115,7 +1231,10 @@ def record_install(app, game_dir, os_used):
         "version": "",
         "title": store_app(app).get("name") or "",
     }
-    save_state("installed.json", installed)
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        installed[app] = entry
+        save_state("installed.json", installed)
 
 
 def is_elf(path):
@@ -1126,56 +1245,119 @@ def is_elf(path):
         return False
 
 
+EXE_SKIP_DIRS = ("redist", "directx", "dotnet", "__installer")
+EXE_SKIP_SUFFIXES = ("_data",)
+
+
+def _walk_limited(game_dir, max_depth=3):
+    """(dirpath, depth, entries) up to max_depth, skipping redist/data dirs."""
+    try:
+        base = os.path.abspath(game_dir)
+    except OSError:
+        return
+    stack = [(base, 0)]
+    while stack:
+        cur, depth = stack.pop(0)
+        try:
+            with os.scandir(cur) as it:
+                entries = list(it)
+        except OSError:
+            continue
+        yield cur, depth, entries
+        if depth >= max_depth:
+            continue
+        for e in entries:
+            try:
+                is_dir = e.is_dir()
+            except OSError:
+                continue
+            if not is_dir:
+                continue
+            low = e.name.lower()
+            if low in EXE_SKIP_DIRS or low.endswith(EXE_SKIP_SUFFIXES):
+                continue
+            stack.append((e.path, depth + 1))
+
+
 def find_executable(game_dir, native=False):
     """The game's entry point: a Linux binary/script (native builds), or the
-    biggest .exe in the root (Steam Windows builds ship many helper exes).
+    biggest .exe (Steam Windows builds ship many helper exes). Searches the
+    install root and subdirs (bounded depth, redist/data dirs skipped).
     Depots don't always mark the Linux binary executable, so a pick that
     isn't gets its owner exec bit here."""
     if native:
         exe = find_native_executable(game_dir)
         if exe:
             return exe
-    best, size = "", 0
+    best, size, best_depth = "", 0, 99
+    script = ""
     try:
-        for entry in os.scandir(game_dir):
-            if not entry.is_file():
-                continue
-            name = entry.name
-            lower = name.lower()
-            if lower.endswith((".exe",)) and not lower.startswith(
-                    ("uninst", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
-                s = entry.stat().st_size
-                if s > size:
-                    best, size = entry.path, s
-            elif lower.endswith(".sh") and os.access(entry.path, os.X_OK) and not best:
-                best = entry.path
+        for _dir, depth, entries in _walk_limited(game_dir):
+            for entry in entries:
+                try:
+                    if not entry.is_file():
+                        continue
+                except OSError:
+                    continue
+                name = entry.name
+                lower = name.lower()
+                if lower.endswith((".exe",)) and not lower.startswith(
+                        ("uninst", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
+                    try:
+                        s = entry.stat().st_size
+                    except OSError:
+                        continue
+                    if s > size or (s == size and depth < best_depth):
+                        best, size, best_depth = entry.path, s, depth
+                elif lower.endswith(".sh") and not script:
+                    try:
+                        if os.access(entry.path, os.X_OK):
+                            script = entry.path
+                    except OSError:
+                        pass
     except OSError:
         pass
-    return best
+    return best or script
 
 
 def find_native_executable(game_dir):
-    """The native entry point in the root. Unity builds pair <name>.x86_64
+    """The native entry point. Unity builds pair <name>.x86_64
     with a <name>_Data folder (other binaries next to it can be launchers or
     helpers, even bigger ones); otherwise a start script (.sh), else the
-    biggest ELF binary (shared libraries and installers excluded)."""
+    biggest ELF binary (shared libraries and installers excluded).
+    Searches the root and subdirs (bounded depth, *_Data/redist skipped)."""
     unity, script, elf, size = "", "", "", 0
     try:
-        entries = sorted(os.scandir(game_dir), key=lambda e: e.name)
-        dirs = {e.name for e in entries if e.is_dir()}
-        for entry in entries:
-            if not entry.is_file():
-                continue
-            lower = entry.name.lower()
-            stem, ext = os.path.splitext(entry.name)
-            if ext.lower() in (".x86_64", ".x86") and stem + "_Data" in dirs and is_elf(entry.path):
-                unity = unity or entry.path
-            elif lower.endswith(".sh"):
-                script = script or entry.path
-            elif not re.search(r"\.so(\.\d+)*$", lower) and not lower.startswith(("unins", "setup", "install")):
-                s = entry.stat().st_size
-                if s > size and is_elf(entry.path):
-                    elf, size = entry.path, s
+        for _dir, _depth, entries in _walk_limited(game_dir):
+            names = sorted(entries, key=lambda e: e.name)
+            dirs = set()
+            for e in names:
+                try:
+                    if e.is_dir():
+                        dirs.add(e.name)
+                except OSError:
+                    pass
+            for entry in names:
+                try:
+                    if not entry.is_file():
+                        continue
+                except OSError:
+                    continue
+                lower = entry.name.lower()
+                stem, ext = os.path.splitext(entry.name)
+                if ext.lower() in (".x86_64", ".x86") and stem + "_Data" in dirs and is_elf(entry.path):
+                    unity = unity or entry.path
+                elif lower.endswith(".sh") and not script:
+                    script = script or entry.path
+                elif not re.search(r"\.so(\.\d+)*$", lower) and not lower.startswith(("unins", "setup", "install")):
+                    try:
+                        s = entry.stat().st_size
+                    except OSError:
+                        continue
+                    if s > size and is_elf(entry.path):
+                        elf, size = entry.path, s
+            if unity:
+                break
     except OSError:
         return ""
     best = unity or script or elf
@@ -1238,8 +1420,12 @@ def launch_spec(params):
         exe = find_executable(path, native=bool(ig.get("native")))
         if not exe:
             raise RPCError(f"couldn't find a game executable in {path or 'the install folder'}")
+        with installed_lock:  # re-read: only this field changes
+            fresh = load_state("installed.json", {})
+            if app in fresh:
+                fresh[app]["executable"] = exe
+                save_state("installed.json", fresh)
         ig["executable"] = exe
-        save_state("installed.json", installed)
     mode = ig.get("mode") or "none"
     native = bool(ig.get("native"))
     if mode in ("none", "optional"):
@@ -1249,7 +1435,6 @@ def launch_spec(params):
             "cwd": os.path.dirname(exe),
             "env": {},
             "needsWine": not native,
-            "native": native,
         }
         if mode == "optional":
             # Tell the game which app it is so SteamAPI_Init-less runs don't
@@ -1274,11 +1459,12 @@ def mark_needs_client(params):
     """After a mode-'optional' game died with a Steamworks init error, the
     game page's retry calls this; the next launch uses the real client."""
     app = str((params or {}).get("id") or "")
-    installed = load_state("installed.json", {})
-    if app not in installed:
-        raise RPCError(f"app {app} is not installed")
-    installed[app]["mode"] = "client"
-    save_state("installed.json", installed)
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        if app not in installed:
+            raise RPCError(f"app {app} is not installed")
+        installed[app]["mode"] = "client"
+        save_state("installed.json", installed)
     return {"ok": True}
 
 
@@ -1317,13 +1503,27 @@ def game_details(params):
 
 # --- uninstall -------------------------------------------------------------
 
-def follow_uninstall(job_id, app):
-    time.sleep(0.1)
-    installed = load_state("installed.json", {})
-    ig = installed.pop(app, None)
-    if ig and ig.get("path") and os.path.isdir(ig["path"]):
-        shutil.rmtree(ig["path"], ignore_errors=True)
-    save_state("installed.json", installed)
+def follow_uninstall(job_id, app, ev=None):
+    if ev is not None:
+        ev.wait(0.5)
+    else:
+        time.sleep(0.1)
+    with jobs_lock:
+        job = jobs.get(job_id, {})
+        if job.get("canceled"):
+            jobs.pop(job_id, None)
+            return
+    with installed_lock:
+        installed = load_state("installed.json", {})
+        ig = installed.pop(app, None)
+        with jobs_lock:
+            if jobs.get(job_id, {}).get("canceled"):
+                jobs.pop(job_id, None)
+                return
+            jobs.pop(job_id, None)
+        if ig and ig.get("path") and os.path.isdir(ig["path"]):
+            shutil.rmtree(ig["path"], ignore_errors=True)
+        save_state("installed.json", installed)
     notify("job.done", {"jobId": job_id})
 
 
@@ -1345,8 +1545,11 @@ def job_cancel(params):
         if job:
             job["canceled"] = True
             proc = job.get("proc")
+            ev = job.get("event")
         else:
-            proc = None
+            proc, ev = None, None
+    if ev is not None:
+        ev.set()
     if proc:
         threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
     return {}

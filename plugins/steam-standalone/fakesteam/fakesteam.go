@@ -20,8 +20,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"hydra-launcher/internal/depot"
 )
@@ -45,6 +47,12 @@ type Knobs struct {
 	UnityDecoy  bool
 	WindowsOnly bool
 	Steamworks  string // e.g. "steam_api64.dll" from FAKE_DD_STEAMWORKS
+	// ExtraFiles adds that many small files (one chunk each), and
+	// ChunkDelayMs serves chunks one at a time with that delay, so a download
+	// has several progress steps and can be canceled halfway
+	// (extra_files / chunk_delay_ms in FAKE_DD_STATE).
+	ExtraFiles   int
+	ChunkDelayMs int
 }
 
 // ReadKnobs loads the variant from the FAKE_DD_STATE file and env.
@@ -65,6 +73,12 @@ func ReadKnobs() Knobs {
 				}
 				if v, ok := st["windows_only"].(bool); ok {
 					k.WindowsOnly = v
+				}
+				if v, ok := st["extra_files"].(float64); ok {
+					k.ExtraFiles = int(v)
+				}
+				if v, ok := st["chunk_delay_ms"].(float64); ok {
+					k.ChunkDelayMs = int(v)
 				}
 			}
 		}
@@ -119,6 +133,10 @@ func Build(k Knobs) *Fixture {
 			specs = append(specs, fileSpec{name: "libs/" + k.Steamworks, body: []byte("fake steamworks")})
 		}
 	}
+	for i := 0; i < k.ExtraFiles; i++ {
+		specs = append(specs, fileSpec{name: fmt.Sprintf("data/extra%02d.bin", i),
+			body: bytes.Repeat([]byte{byte(i + 1)}, 2048)})
+	}
 	fix := &Fixture{Key: key, DepotID: 11, GID: 999, OSUsed: osUsed, Chunks: map[string][]byte{}}
 	var files []depot.File
 	for _, sp := range specs {
@@ -170,6 +188,8 @@ type CDN struct {
 func StartCDN(t *testing.T, fix *Fixture) *CDN {
 	t.Helper()
 	c := &CDN{t: t, Hits: new(int64), fix: fix}
+	delay := time.Duration(ReadKnobs().ChunkDelayMs) * time.Millisecond
+	var chunkMu sync.Mutex // serves chunks one at a time when a delay is set
 	for i := 0; i < 2; i++ {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			atomic.AddInt64(c.Hits, 1)
@@ -181,6 +201,11 @@ func StartCDN(t *testing.T, fix *Fixture) *CDN {
 			}
 			if len(parts) == 4 && parts[0] == "depot" && parts[2] == "chunk" {
 				if enc, ok := fix.Chunks[parts[3]]; ok {
+					if delay > 0 {
+						chunkMu.Lock()
+						defer chunkMu.Unlock()
+						time.Sleep(delay)
+					}
 					w.Write(enc)
 					return
 				}

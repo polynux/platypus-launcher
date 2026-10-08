@@ -127,6 +127,7 @@ def main():
         ig = st["installed"].pop(app, None)
         if not ig:
             err(f'Game "{app}" is not installed')
+        time.sleep(0.6)  # real uninstalls take a moment; leaves room for job.cancel
         shutil.rmtree(ig["install_path"], ignore_errors=True)
         save(st)
     elif cmd == "launch":

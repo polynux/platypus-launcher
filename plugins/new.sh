@@ -55,15 +55,17 @@ CODE_AUTH_REQUIRED = -32001
 
 
 class RPCError(Exception):
-    def __init__(self, message, code=1):
+    def __init__(self, message, code=-32000):
         super().__init__(message)
         self.code = code
 
 
 out_lock = threading.Lock()
+jobs_lock = threading.Lock()
 
 
 def send(msg):
+    msg["jsonrpc"] = "2.0"
     line = json.dumps(msg, separators=(",", ":"))
     with out_lock:
         sys.stdout.write(line + "\n")
@@ -124,6 +126,8 @@ GAMES = {
 
 
 def library_list(_params):
+    if user is None:
+        raise RPCError("log in first", CODE_AUTH_REQUIRED)
     out = []
     for app, g in GAMES.items():
         installed = os.path.isfile(install_path(app))
@@ -138,10 +142,31 @@ def library_list(_params):
     return {"games": out}
 
 
+def data_dir():
+    d = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def load_installs():
+    try:
+        with open(os.path.join(data_dir(), "installed.json")) as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_installs(state):
+    with open(os.path.join(data_dir(), "installed.json"), "w") as f:
+        json.dump(state, f)
+
+
 def install_path(app):
     # Where the game landed. Hydra picks the folder and passes it to
-    # game.install; remember it (a real plugin keeps this in HYDRA_PLUGIN_DATA).
-    return INSTALLS.get(app, "")
+    # game.install; it survives restarts in HYDRA_PLUGIN_DATA/installed.json
+    # so the same jobId stays resumable and idempotent.
+    return load_installs().get(app, "")
 
 
 def install_size(params):
@@ -153,9 +178,7 @@ def install_size(params):
 
 # --- jobs ----------------------------------------------------------------
 
-jobs = {}
-jobs_lock = threading.Lock()
-INSTALLS = {}  # game id -> installed game.sh path
+jobs = {}  # jobId -> {"canceled": bool, "event": threading.Event}
 
 
 def start_job(params, kind):
@@ -163,40 +186,77 @@ def start_job(params, kind):
     if app not in GAMES:
         raise RPCError(f"unknown game {app}")
     if kind == "uninstall":
-        script = INSTALLS.pop(app, "")
-        if script and os.path.isfile(script):
-            import shutil
-            shutil.rmtree(os.path.dirname(script), ignore_errors=True)
-        notify("job.done", {"jobId": job_id})
+        ev = threading.Event()
+        with jobs_lock:
+            if job_id in jobs:
+                return {}  # Hydra resends a jobId after a crash: run it once
+            jobs[job_id] = {"canceled": False, "event": ev}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
         raise RPCError("installDir is missing or relative; Hydra always sends one")
-    threading.Thread(target=follow_install, args=(job_id, app, install_dir), daemon=True).start()
+    ev = threading.Event()
+    with jobs_lock:
+        if job_id in jobs:
+            return {}  # Hydra resends a jobId after a crash: run it once
+        jobs[job_id] = {"canceled": False, "event": ev}
+    threading.Thread(target=follow_install, args=(job_id, app, install_dir, kind, ev), daemon=True).start()
     return {}
 
 
-def follow_install(job_id, app, install_dir):
+def follow_install(job_id, app, install_dir, kind, ev):
     import time
     dest = os.path.join(install_dir, app.replace("-", ""))
     os.makedirs(dest, exist_ok=True)
     script = os.path.join(dest, "game.sh")
-    for pct in (50, 100):
-        time.sleep(0.2)
+    steps = (50, 100) if kind == "install" else (100,)
+    for pct in steps:
+        if ev.wait(0.2):
+            break
+        with jobs_lock:
+            if jobs.get(job_id, {}).get("canceled"):
+                break
         notify("job.progress", {"jobId": job_id, "percent": pct, "phase": "downloading",
-                                "bytes": 512 * pct // 100, "total": 512})
+                                "bytes": 512 * pct // 100, "total": 512,
+                                "speed": 2560.0})  # bytes per second
+    with jobs_lock:
+        canceled = jobs.pop(job_id, {}).get("canceled", False)
+    if canceled:
+        return
     with open(script, "w") as f:
         f.write(GAMES[app]["script"])
     os.chmod(script, 0o755)
-    INSTALLS[app] = script
+    installs = load_installs()
+    installs[app] = script
+    save_installs(installs)
+    notify("job.done", {"jobId": job_id})
+
+
+def follow_uninstall(job_id, app, ev):
+    ev.wait(0.2)
+    with jobs_lock:
+        if jobs.pop(job_id, {}).get("canceled"):
+            return
+    installs = load_installs()
+    script = installs.pop(app, "")
+    if script and os.path.isfile(script):
+        import shutil
+        shutil.rmtree(os.path.dirname(script), ignore_errors=True)
+    save_installs(installs)
     notify("job.done", {"jobId": job_id})
 
 
 def job_cancel(params):
     with jobs_lock:
-        job = jobs.pop(params.get("jobId"), None)
-    if job and job.get("proc"):
-        job["proc"].kill()
+        job = jobs.get(params.get("jobId"))
+        if job:
+            job["canceled"] = True
+            ev = job.get("event")
+        else:
+            ev = None
+    if ev is not None:
+        ev.set()
     return {}
 
 
@@ -216,7 +276,6 @@ def launch_spec(params):
         "cwd": os.path.dirname(script),
         "env": {},
         "needsWine": not g["native"],
-        "native": g["native"],
     }
 
 
@@ -242,11 +301,29 @@ METHODS = {
     "game.details": game_details,
     "game.installSize": install_size,
     "game.install": lambda p: start_job(p, "install"),
-    "game.update": lambda p: start_job(p, "install"),
+    "game.update": lambda p: start_job(p, "update"),
     "game.uninstall": lambda p: start_job(p, "uninstall"),
     "job.cancel": job_cancel,
     "game.launchSpec": launch_spec,
 }
+
+
+def handle(msg):
+    fn = METHODS.get(msg.get("method"))
+    resp = {"id": msg["id"]}
+    if fn is None:
+        resp["error"] = {"code": -32601, "message": f"method not found: {msg.get('method')}"}
+    else:
+        try:
+            result = fn(msg.get("params") or {})
+            resp["result"] = result if result is not None else {}
+        except RPCError as e:
+            resp["error"] = {"code": e.code, "message": str(e)}
+        except (KeyError, TypeError) as e:
+            resp["error"] = {"code": -32602, "message": f"invalid params: {e}"}
+        except Exception as e:  # never crash on a request; report it
+            resp["error"] = {"code": -32000, "message": f"{type(e).__name__}: {e}"}
+    send(resp)
 
 
 def main():
@@ -256,19 +333,14 @@ def main():
             continue
         try:
             msg = json.loads(line)
-        except ValueError:
+        except ValueError as e:
+            send({"error": {"code": -32700, "message": str(e)}})
             continue
-        resp = {"id": msg.get("id")}
-        fn = METHODS.get(msg.get("method"))
-        try:
-            if fn is None:
-                raise RPCError(f"method not found: {msg.get('method')}", -32601)
-            resp["result"] = fn(msg.get("params") or {}) or {}
-        except RPCError as e:
-            resp["error"] = {"code": e.code, "message": str(e)}
-        except Exception as e:  # never crash on a request; report it
-            resp["error"] = {"code": 1, "message": f"{type(e).__name__}: {e}"}
-        send(resp)
+        if "id" not in msg:
+            continue  # notifications need no answer
+        # Installs and logins take a while; answer concurrently so
+        # job.cancel stays responsive.
+        threading.Thread(target=handle, args=(msg,), daemon=True).start()
 
 
 if __name__ == "__main__":

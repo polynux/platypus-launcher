@@ -51,12 +51,20 @@ def main():
             if code != GOOD_CODE:
                 print(json.dumps({"error": True}))
                 return
-            st["account"] = {"access_token": "tok123", "refresh_token": "r", "expires_in": 3600, "loginTime": time.time()}
-            save(st)
-            print(json.dumps(st["account"]))
+            account = {"access_token": "tok123", "refresh_token": "r", "expires_in": 3600, "loginTime": time.time()}
+            # Like the real gogdl, the credentials live in --auth-config-path,
+            # so deleting that file (the plugin's logout) logs out.
+            os.makedirs(os.path.dirname(auth_path) or ".", exist_ok=True)
+            with open(auth_path, "w") as f:
+                json.dump(account, f)
+            print(json.dumps(account))
             return
-        creds = st.get("account")
-        print(json.dumps(creds) if creds else json.dumps(None))
+        try:
+            with open(auth_path) as f:
+                creds = json.load(f)
+        except (OSError, ValueError):
+            creds = None
+        print(json.dumps(creds))
     elif cmd == "info":
         # v1.3 nests the sizes per language under "size".
         print(json.dumps({"size": {"*": {"download_size": 0, "disk_size": 0},

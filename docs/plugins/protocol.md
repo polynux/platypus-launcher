@@ -63,13 +63,23 @@ in place.
 ## Requests (Hydra → plugin)
 
 Errors are JSON-RPC errors. Their `message` is shown to the user as is, so write it
-for people. Use code `-32001` when the user has to log in first.
+for people. Codes:
+
+| Code | Use |
+|---|---|
+| `-32001` | the user has to log in first (`library.list`, `game.installSize`, `game.install`…) |
+| `-32602` | missing or invalid params |
+| `-32601` | unknown method (Hydra treats it as "not implemented" for `game.details`) |
+| `-32000` | anything else the user should read |
+
+Match `-32001` on the tool's real logged-out signal, not on a substring that
+other errors can contain.
 
 | Method | Params | Result |
 |---|---|---|
 | `initialize` | `{ api }` | `{ name, version, api, capabilities, missing }` |
-| `auth.status` | | `{ loggedIn, user? }` |
-| `auth.begin` | | `{ url?, instructions?, fields: [{ id, label, secret?, placeholder? }] }` |
+| `auth.status` | | `{ loggedIn, user?, qr? }` |
+| `auth.begin` | | `{ url?, instructions?, qr?, fields: [{ id, label, secret?, placeholder? }] }` |
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
@@ -80,6 +90,17 @@ for people. Use code `-32001` when the user has to log in first.
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `game.launchSpec` | `{ id, preview }` | `LaunchSpec` |
+
+`qr` (on `auth.begin`, and on `auth.status` while a QR login is pending) is a QR
+code as block-art text: `"\u2588"` is a dark module, two characters per module,
+one row per module. The dialog draws it as square modules and redraws it when
+`auth.status` returns a new one (the store refreshes the code as it expires).
+The user can scan it or fill the fields. When the QR login completes,
+`auth.status` turns `loggedIn`; the dialog closes by itself. Steam uses this.
+
+Two overlapping `auth.begin` calls (a double-submit, two windows) must not break
+each other: the second reuses the first's login attempt, or invalidates it with a
+clear error.
 
 `auth.begin` with a `url`: Hydra shows a button that opens it in the user's
 browser (http and https only), then the fields. Without a URL it's a plain form.
@@ -100,7 +121,13 @@ Credentials stay with the plugin or the tool it wraps; Hydra never stores them.
 
 Set `native` when the game ships a Linux build: Hydra then launches it
 directly, with no Proton runner and without the Proton-only settings (DX layer,
-sync mode, Proton flags), on its game page too.
+sync mode, Proton flags), on its game page too. `native` belongs on library
+entries only; a launch spec says the same through `needsWine`.
+
+Send only the keys listed here. Hydra ignores unknown keys, but new plugins copy
+what the bundled ones send, so the conformance suite (`internal/plugtest`)
+rejects extras on `library.list`, `game.details` and `game.launchSpec`. To add a
+key, document it here and in the suite first.
 
 Hydra keys plugin games as `p.<plugin id>.<game id>`. List every owned game; the
 Library shows the uninstalled ones under "owned".
@@ -119,6 +146,11 @@ entry's art and title only.
 }
 ```
 
+For an id the store doesn't know, `game.details` fails with an error; a game the
+store knows but has no metadata for gets `{}`. (Steam's store answers
+`success: false` for delisted games and unknown ids alike, so it returns `{}` for
+both.)
+
 Every URL must be http(s); Hydra drops others. `achievements` describes what
 the store shows about the game — if the plugin can't see the user's progress,
 leave it out rather than guess. Keep `list` short (a highlight, say 10) and let
@@ -129,19 +161,28 @@ leave it out rather than guess. Keep `list` short (a highlight, say 10) and let
 Hydra creates the `jobId`, picks `installDir` (the user's Games folder plus the
 plugin's `install_dir`, or the user's override) and checks free space against
 `game.installSize` before calling `game.install`. Install into `installDir`, never
-anywhere else. Report progress with notifications:
+anywhere else, and give each game its own subfolder of it (Steam uses
+`<name>_<appid>`, GOG the store's folder name): two games must never share a
+directory, and a folder recorded by an earlier version of the plugin keeps working
+from its recorded path. `game.update` brings the installed game up to date in
+place; it is not a fresh `game.install`. `installSize.downloadBytes` is what
+`job.progress.total` counts. Report progress with notifications:
 
 | Notification | Params |
 |---|---|
-| `job.progress` | `{ jobId, phase?, bytes?, total?, speed?, percent? }` (speed in bytes/s) |
+| `job.progress` | `{ jobId, phase?, bytes?, total?, speed?, percent? }` (`speed` in bytes/s; send it whenever the tool reports one) |
 | `job.done` | `{ jobId }` |
 | `job.failed` | `{ jobId, error }` |
 | `log` | `{ level, message }` (goes to the plugin's log file) |
 
 Hydra runs one job at a time and saves the queue. If Hydra or the plugin dies
 mid-install, Hydra calls `game.install` again with the same `jobId`, so installs
-must be resumable or at least idempotent. After `job.cancel`, stop the work; Hydra
-has already marked the job canceled and ignores later notifications for it.
+must be resumable or at least idempotent: a `jobId` that is already running starts
+no second copy and ends with one `job.done`. After `job.cancel`, stop the work
+(an uninstall too: don't delete anything after the cancel) and send neither
+`job.done` nor `job.failed`; Hydra has already marked the job canceled and
+ignores later notifications for it. State that has to outlive the process (what
+is installed, where) goes under `HYDRA_PLUGIN_DATA`, not in memory.
 
 ## Launching
 
@@ -168,6 +209,9 @@ Hydra refuses the spec when:
 - `env` sets a key on the denylist: `PATH`, `HOME`, `LD_*`, `WINE*` (prefix and DLL
   overrides are Hydra's), `PROTON_*`, `STEAM_COMPAT_*`, `VK_*`, interpreter paths and
   similar. See `internal/stores/launchspec.go`.
+
+A direct spec has exactly these keys: `exe`, `args`, `cwd`, `env`, `needsWine` and
+`redact`. Whether the game is a Linux build shows only through `needsWine`.
 
 Arguments starting with a `redact` prefix are shown as `prefix***` in the command
 preview and the launch log. With `preview: true`, return the command without

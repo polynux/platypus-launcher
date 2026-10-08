@@ -32,6 +32,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 
 API = 1
@@ -43,6 +44,9 @@ LOGIN_URL = ("https://auth.gog.com/auth?client_id=46899977096215655&response_typ
 
 out_lock = threading.Lock()
 jobs_lock = threading.Lock()
+# Serializes read-modify-write of installed.json / titles.json: finishing jobs
+# and library listings run on different threads.
+state_lock = threading.RLock()
 jobs = {}  # jobId -> {"proc": Popen, "canceled": bool}
 
 MIB = 1024 * 1024
@@ -119,8 +123,10 @@ def api_get(url, token):
     if hook:
         with open(hook) as f:
             return json.load(f)
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
-                                               "User-Agent": "gogdl (Hydra Launcher)"})
+    headers = {"User-Agent": "gogdl (Hydra Launcher)"}
+    if token:  # anonymous endpoints can reject an empty Bearer
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode())
 
@@ -168,6 +174,10 @@ def auth_complete(params):
     if not re.fullmatch(r"[A-Za-z0-9._-]{5,512}", code or ""):
         raise RPCError("that doesn't look like the address of the login page; "
                        "copy the whole address including the code= part")
+    # NOTE (PLUG-3): the one-time code travels on argv, visible in ps(1)
+    # while auth runs. gogdl offers no stdin/env alternative for --code
+    # (see `gogdl auth --help`), so this is upstream-limited; the code is
+    # short-lived, single-use, and never logged (only the CLI's tail is kept).
     rc, out, err = gogdl("auth", "--code", code, timeout=120)
     if rc != 0 or not credentials():
         raise RPCError(f"login failed: {tail(err)}")
@@ -211,6 +221,7 @@ def library_list(_params):
     except Exception as e:
         raise RPCError(f"GOG API is unreachable: {e}")
     installed = installed_games()
+    remember_titles({str(g.get("id")): g["title"] for g in games if g.get("id") and g.get("title")})
     out = []
     for g in games:
         app = str(g.get("id") or "")
@@ -238,10 +249,44 @@ def library_list(_params):
         out.append(entry)
     for app, ig in installed.items():  # installed but missing from the owned list
         if not any(e["id"] == app for e in out):
-            entry = {"id": app, "title": ig.get("title") or app, "installable": False}
+            entry = {"id": app, "title": ig.get("title") or known_titles().get(app) or app,
+                     "installable": False}
             add_installed(entry, ig)
             out.append(entry)
     return {"games": out}
+
+
+def known_titles():
+    """Titles the account listing returned, so an install whose account entry
+    later vanishes keeps its name instead of the numeric id."""
+    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    try:
+        with open(os.path.join(data, "titles.json")) as f:
+            t = json.load(f)
+        return t if isinstance(t, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def remember_titles(new):
+    with state_lock:
+        known = known_titles()
+        if all(known.get(k) == v for k, v in new.items()):
+            return
+        known.update(new)
+        data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+        try:
+            write_json_atomic(os.path.join(data, "titles.json"), known)
+        except OSError:
+            pass
+
+
+def write_json_atomic(path, obj):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".new"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
 
 
 def installed_games():
@@ -256,25 +301,23 @@ def installed_games():
 
 def save_installed(state):
     data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
-    os.makedirs(data, exist_ok=True)
-    with open(os.path.join(data, "installed.json"), "w") as f:
-        json.dump(state, f)
+    write_json_atomic(os.path.join(data, "installed.json"), state)
 
 
 def add_installed(entry, ig):
     entry["installed"] = True
     entry["installPath"] = ig.get("path", "")
     entry["version"] = ig.get("version", "")
-    entry["platform"] = ig.get("platform", "windows")
-    entry["native"] = entry.get("platform") == "linux"
-    entry["executable"] = ig.get("executable", "")
+    entry["native"] = ig.get("platform", "windows") == "linux"
 
 
 def install_size(params):
     app, platform = params["id"], platform_of(params["id"])
     code, out, err = gogdl("info", app, "--platform", platform, timeout=600)
     if code != 0:
-        if "not logged in" in err.lower() or "auth" in err.lower():
+        # Logged out = gogdl says so, or no stored credentials. A bare "auth"
+        # substring also matches unrelated words ("authoritative").
+        if "not logged in" in err.lower() or credentials() is None:
             raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
         raise RPCError(f"gogdl info failed: {tail(err)}")
     try:
@@ -317,7 +360,12 @@ def start_job(params, kind):
         ig = installed_games().get(app)
         if not ig:
             raise RPCError(f"{app} is not installed")
-        threading.Thread(target=follow_uninstall, args=(job_id, app), daemon=True).start()
+        ev = threading.Event()
+        with jobs_lock:
+            if job_id in jobs:
+                return {}
+            jobs[job_id] = {"proc": None, "canceled": False, "id": app, "event": ev}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     path = params.get("installDir") or ""
     if not os.path.isabs(path):
@@ -327,16 +375,28 @@ def start_job(params, kind):
     else:
         cmd = ["download", app, "--path", path]
     cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
+    # Hydra resends a job with the same jobId after a crash: run it once.
+    with jobs_lock:
+        if job_id in jobs:
+            return {}
+        jobs[job_id] = {"proc": None, "canceled": False, "id": app, "path": path}
     try:
         proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError:
+        with jobs_lock:
+            jobs.pop(job_id, None)
         raise RPCError("gogdl is not installed; get the binary from "
                        "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
     with jobs_lock:
-        jobs[job_id] = {"proc": proc, "canceled": False, "id": app, "path": path}
+        job = jobs.setdefault(job_id, {"canceled": False, "id": app})
+        job["proc"] = proc
+        canceled = job["canceled"]
+        job["title"] = params.get("title") or ""
     threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
+    if canceled:  # job.cancel arrived while the process was starting
+        stop_proc(proc, grace=5)
     return {}
 
 
@@ -372,17 +432,19 @@ def record_install(job, kind):
     app, path = job.get("id"), job.get("path")
     if not app or not path:
         return
-    state = installed_games()
     game_dir = find_game_dir(app, path)
     exe = find_executable(game_dir)
-    state[app] = {
-        "path": game_dir,
-        "platform": platform_of(app),
-        "version": "",
-        "executable": exe,
-        "title": job.get("title", ""),
-    }
-    save_installed(state)
+    platform = platform_of(app)
+    with state_lock:
+        state = installed_games()
+        state[app] = {
+            "path": game_dir,
+            "platform": platform,
+            "version": "",
+            "executable": exe,
+            "title": job.get("title") or known_titles().get(app, ""),
+        }
+        save_installed(state)
 
 
 def find_game_dir(app, path):
@@ -411,6 +473,7 @@ def find_executable(game_dir):
         if os.path.isfile(p):
             return p
     # The goggame info file carries the primary executable (playTasks).
+    candidates = []
     for info in glob.glob(os.path.join(game_dir, "goggame-*.info")):
         try:
             with open(info, encoding="utf-8-sig") as f:
@@ -419,11 +482,14 @@ def find_executable(game_dir):
             continue
         for task in (data.get("playTasks") or []):
             rel = task.get("path") or ""
-            if rel and not task.get("isPrimary"):
+            if not rel:
                 continue
             p = os.path.join(game_dir, rel.replace("\\", os.sep))
             if os.path.isfile(p):
-                return p
+                candidates.append((not task.get("isPrimary"), p))
+    if candidates:
+        # Prefer the primary task; any playTask beats guessing a script.
+        return min(candidates, key=lambda c: c[0])[1]
     try:
         for root, _dirs, files in os.walk(game_dir):
             for f in files:
@@ -434,18 +500,33 @@ def find_executable(game_dir):
     return ""
 
 
-def follow_uninstall(job_id, app):
-    time.sleep(0.2)
-    state = installed_games()
-    ig = state.pop(app, None)
-    if ig and ig.get("path") and os.path.isdir(ig["path"]):
-        import shutil
-        shutil.rmtree(ig["path"], ignore_errors=True)
-    save_installed(state)
+def follow_uninstall(job_id, app, ev=None):
+    if ev is not None:
+        ev.wait(0.5)
+    else:
+        time.sleep(0.2)
+    with jobs_lock:
+        if jobs.get(job_id, {}).get("canceled"):
+            jobs.pop(job_id, None)
+            return
+    with state_lock:
+        state = installed_games()
+        ig = state.pop(app, None)
+        with jobs_lock:
+            if jobs.get(job_id, {}).get("canceled"):
+                jobs.pop(job_id, None)
+                return
+            jobs.pop(job_id, None)
+        if ig and ig.get("path") and os.path.isdir(ig["path"]):
+            import shutil
+            shutil.rmtree(ig["path"], ignore_errors=True)
+        save_installed(state)
     notify("job.done", {"jobId": job_id})
 
 
 def stop_proc(proc, grace=15):
+    if proc is None:
+        return
     try:
         proc.send_signal(signal.SIGINT)
         proc.wait(timeout=grace)
@@ -460,8 +541,13 @@ def job_cancel(params):
         job = jobs.get(params.get("jobId"))
         if job:
             job["canceled"] = True
-    if job:
-        threading.Thread(target=stop_proc, args=(job["proc"],), daemon=True).start()
+            proc, ev = job.get("proc"), job.get("event")
+        else:
+            proc, ev = None, None
+    if ev is not None:
+        ev.set()
+    if proc:
+        threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
     return {}
 
 
@@ -486,7 +572,6 @@ def launch_spec(params):
         "cwd": os.path.dirname(exe),
         "env": {},
         "needsWine": not native,
-        "native": native,
     }
 
 
@@ -504,6 +589,10 @@ def game_details(params):
     app = params["id"]
     try:
         data = api_get(f"https://api.gog.com/products/{app}?expand=description,screenshots", "")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:  # the other plugins error on an unknown id too
+            raise RPCError(f"{app} is not a GOG product")
+        return {}
     except Exception:
         return {}
     if isinstance(data, dict) and data.get("_test"):
@@ -605,7 +694,7 @@ def main():
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
     # stdin closed: Hydra is shutting down. Interrupted installs resume later.
     with jobs_lock:
-        procs = [j["proc"] for j in jobs.values()]
+        procs = [j.get("proc") for j in jobs.values()]
     for p in procs:
         stop_proc(p, grace=5)
 
