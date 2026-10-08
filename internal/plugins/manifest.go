@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -19,17 +20,6 @@ const APIVersion = 1
 
 // ManifestFile is the manifest's name inside a plugin folder.
 const ManifestFile = "plugin.json"
-
-// Capabilities a store plugin may declare.
-var knownCapabilities = map[string]bool{
-	"library":     true,
-	"install":     true,
-	"launch":      true,
-	"auth":        true,
-	"cloud-saves": true,
-	// discard: the plugin implements job.discard (see docs/plugins/protocol.md).
-	"discard": true,
-}
 
 // Plugin kinds. "store" is the default: an executable Hydra talks to over
 // JSON-RPC. "data" is JSON only — fix recipes and tweak packs — and needs no
@@ -59,10 +49,15 @@ type Manifest struct {
 	Exec        string `json:"exec"`
 	// Kind is "store" (default) or "data". A data plugin has no exec and
 	// lists its JSON files in Data.
-	Kind         string        `json:"kind"`
-	Data         []string      `json:"data"`
-	Capabilities []string      `json:"capabilities"`
-	Requires     []Requirement `json:"requires"`
+	Kind         string   `json:"kind"`
+	Data         []string `json:"data"`
+	Capabilities []string `json:"capabilities"`
+	// Needs lists capabilities this Hydra must know for the plugin to be
+	// worth running: if one is not in the registry the plugin is listed and
+	// can be approved, but doesn't start ("needs a newer Hydra"). Every
+	// entry must also be in Capabilities.
+	Needs    []string      `json:"needs"`
+	Requires []Requirement `json:"requires"`
 	// InstallDir is the plugin's subfolder of the Games folder; empty means
 	// the plugin id.
 	InstallDir  string      `json:"install_dir"`
@@ -108,6 +103,29 @@ func LoadManifest(dir string) (Manifest, error) {
 		return m, err
 	}
 	return m, nil
+}
+
+// UnknownCapabilities returns the declared capabilities missing from the
+// registry. Hydra ignores them.
+func (m Manifest) UnknownCapabilities() []string {
+	var out []string
+	for _, c := range m.Capabilities {
+		if _, ok := LookupCapability(c); !ok {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// UnmetNeeds returns the needed capabilities missing from the registry.
+func (m Manifest) UnmetNeeds() []string {
+	var out []string
+	for _, c := range m.Needs {
+		if _, ok := LookupCapability(c); !ok {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // IsData reports whether the manifest describes a data plugin.
@@ -170,9 +188,22 @@ func (m Manifest) validate() error {
 	default:
 		bad("kind %q must be %q or %q", m.Kind, KindStore, KindData)
 	}
-	for _, c := range m.Capabilities {
-		if !knownCapabilities[c] {
-			bad("unknown capability %q", c)
+	// A well-formed name Hydra doesn't know is not an error (UnknownCapabilities
+	// reports it as a warning); a malformed one is.
+	for i, c := range m.Capabilities {
+		switch {
+		case !ValidCapabilityName(c):
+			bad("capability %q is malformed (lowercase words joined by '-')", c)
+		case slices.Contains(m.Capabilities[:i], c):
+			bad("capability %q is listed twice", c)
+		}
+	}
+	for _, c := range m.Needs {
+		switch {
+		case !ValidCapabilityName(c):
+			bad("needs: %q is malformed (lowercase words joined by '-')", c)
+		case !slices.Contains(m.Capabilities, c):
+			bad("needs: %q is not in capabilities", c)
 		}
 	}
 	for _, r := range m.Requires {

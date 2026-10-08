@@ -437,13 +437,19 @@ func TestMissingRequirement(t *testing.T) {
 
 func TestInvalidManifests(t *testing.T) {
 	cases := map[string]func(m map[string]any){
-		"wrong api":         func(m map[string]any) { m["api"] = 2 },
-		"id mismatch":       func(m map[string]any) { m["id"] = "other" },
-		"exec escapes":      func(m map[string]any) { m["exec"] = "../../bin/sh" },
-		"exec absolute":     func(m map[string]any) { m["exec"] = "/bin/sh" },
-		"exec missing":      func(m map[string]any) { m["exec"] = "bin/nope" },
-		"no name":           func(m map[string]any) { delete(m, "name") },
-		"bad capability":    func(m map[string]any) { m["capabilities"] = []string{"root"} },
+		"wrong api":            func(m map[string]any) { m["api"] = 2 },
+		"id mismatch":          func(m map[string]any) { m["id"] = "other" },
+		"exec escapes":         func(m map[string]any) { m["exec"] = "../../bin/sh" },
+		"exec absolute":        func(m map[string]any) { m["exec"] = "/bin/sh" },
+		"exec missing":         func(m map[string]any) { m["exec"] = "bin/nope" },
+		"no name":              func(m map[string]any) { delete(m, "name") },
+		"malformed capability": func(m map[string]any) { m["capabilities"] = []string{"Root!"} },
+		"duplicate capability": func(m map[string]any) { m["capabilities"] = []string{"library", "library"} },
+		"needs not declared":   func(m map[string]any) { m["needs"] = []string{"versions"} },
+		"malformed need": func(m map[string]any) {
+			m["capabilities"] = []string{"library", "No Way"}
+			m["needs"] = []string{"No Way"}
+		},
 		"requires path":     func(m map[string]any) { m["requires"] = []map[string]string{{"bin": "/usr/bin/legendary"}} },
 		"install_dir abs":   func(m map[string]any) { m["install_dir"] = "/etc" },
 		"relative perm":     func(m map[string]any) { m["permissions"] = map[string]any{"read": []string{"config"}} },

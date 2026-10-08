@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -30,6 +31,9 @@ const (
 	StatusChanged    Status = "changed"    // plugin folder changed since approval
 	StatusDisabled   Status = "disabled"   // approved, then turned off
 	StatusMissing    Status = "missing-requirements"
+	// StatusNeedsNewer: approved, but the manifest `needs` a capability this
+	// Hydra doesn't know. It is listed, never started.
+	StatusNeedsNewer Status = "needs-newer-hydra"
 )
 
 // Plugin is one folder under the plugins directory.
@@ -40,6 +44,9 @@ type Plugin struct {
 	Status   Status        `json:"status"`
 	Problem  string        `json:"problem,omitempty"`
 	Missing  []Requirement `json:"missing,omitempty"`
+	// Warnings are things the user should know that don't stop the plugin:
+	// capabilities this Hydra ignores because it doesn't know them.
+	Warnings []string `json:"warnings,omitempty"`
 	// Data is a data plugin's content, loaded at discovery. Store plugins
 	// have none.
 	Data *dataplug.Data `json:"-"`
@@ -181,6 +188,14 @@ func (m *Manager) inspect(dir string) *Plugin {
 		return p
 	}
 	p.Missing = man.MissingRequirements(m.lookPath)
+	unmet := man.UnmetNeeds()
+	for _, c := range man.UnknownCapabilities() {
+		if slices.Contains(unmet, c) {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("needs %q, which this Hydra doesn't know: a newer Hydra is required", c))
+		} else {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("offers %q, which this Hydra doesn't know; it is ignored", c))
+		}
+	}
 
 	trust, ok := m.trust.PluginState(man.ID)
 	switch {
@@ -190,6 +205,8 @@ func (m *Manager) inspect(dir string) *Plugin {
 		p.Status, p.Problem = StatusChanged, "the plugin changed since you approved it"
 	case !trust.Enabled:
 		p.Status = StatusDisabled
+	case len(unmet) > 0:
+		p.Status, p.Problem = StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (unknown capability %s)", quoteList(unmet))
 	case len(p.Missing) > 0:
 		p.Status, p.Problem = StatusMissing, fmt.Sprintf("%d required tool(s) not found", len(p.Missing))
 	default:
@@ -557,4 +574,12 @@ func (m *Manager) Shutdown() {
 		}()
 	}
 	wg.Wait()
+}
+
+func quoteList(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = fmt.Sprintf("%q", n)
+	}
+	return strings.Join(q, ", ")
 }
