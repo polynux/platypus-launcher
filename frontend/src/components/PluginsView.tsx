@@ -5,7 +5,11 @@ import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin }
 import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { Modal } from './Modal';
-import { EmptyState, MonoLabel, Panel, btnNeutral, btnPrimary, cx } from './ui';
+import { EmptyState, MonoLabel, Panel, cx } from './ui';
+import { Button } from './ds/button';
+import { Badge, type badgeVariants } from './ds/badge';
+import { Input } from './ds/input';
+import type { VariantProps } from 'class-variance-authority';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -18,13 +22,14 @@ interface PluginsViewProps {
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 }
 
-const STATUS: Record<PluginStatus, { label: string; style: string }> = {
-  ready: { label: 'approved', style: 'bg-emerald-400/10 text-emerald-300' },
-  unapproved: { label: 'needs approval', style: 'bg-amber-300/15 text-amber-200 ring-1 ring-amber-300/40' },
-  changed: { label: 'changed · re-approve', style: 'bg-orange-400/15 text-orange-200 ring-1 ring-orange-300/40' },
-  disabled: { label: 'disabled', style: 'bg-white/[0.06] text-white/45' },
-  'missing-requirements': { label: 'missing a tool', style: 'bg-orange-400/15 text-orange-200 ring-1 ring-orange-300/40' },
-  invalid: { label: 'invalid', style: 'bg-red-500/15 text-red-300' },
+type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>;
+const STATUS: Record<PluginStatus, { label: string; variant: BadgeVariant }> = {
+  ready: { label: 'approved', variant: 'ok' },
+  unapproved: { label: 'needs approval', variant: 'gold' },
+  changed: { label: 'changed · re-approve', variant: 'bronze' },
+  disabled: { label: 'disabled', variant: 'neutral' },
+  'missing-requirements': { label: 'missing a tool', variant: 'bronze' },
+  invalid: { label: 'invalid', variant: 'borked' },
 };
 
 const BUILT_IN = [
@@ -96,12 +101,12 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(errMsg(e), 'err'))} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
+          <Button variant="neutral" onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(errMsg(e), 'err'))}>
             <FolderOpen className="h-3.5 w-3.5" /> Plugins folder
-          </button>
-          <button onClick={() => refresh(true).then(onLibraryChanged)} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px]')}>
+          </Button>
+          <Button variant="neutral" onClick={() => refresh(true).then(onLibraryChanged)}>
             <RefreshCw className="h-3.5 w-3.5" /> Rescan
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -126,7 +131,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
                       </p>
                     </div>
-                    <span className={cx('flex-none rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em]', st.style)}>{st.label}</span>
+                    <Badge variant={st.variant} className="flex-none">{st.label}</Badge>
                   </div>
                   {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                   {p.problem && p.status !== 'missing-requirements' && (
@@ -161,13 +166,13 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       )}
                     </span>
                     {a && !('error' in a) && a.loggedIn ? (
-                      <button onClick={() => logout(p)} disabled={busy === p.id + 'logout'} className={cx(btnNeutral, 'flex flex-none items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+                      <Button variant="neutral" size="sm" className="flex-none" onClick={() => logout(p)} disabled={busy === p.id + 'logout'}>
                         <LogOut className="h-3 w-3" /> Log out
-                      </button>
+                      </Button>
                     ) : (
-                      <button onClick={() => setLoggingIn(p)} className={cx(btnPrimary, 'flex flex-none items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
+                      <Button variant="primary" size="sm" className="flex-none" onClick={() => setLoggingIn(p)}>
                         <LogIn className="h-3 w-3" /> Log in
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -178,11 +183,11 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       <span className="text-white/45">installs into</span>
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
-                        <button onClick={() => chooseFolder(p)} className="flex-none text-white/40 underline-offset-2 hover:text-white/80 hover:underline">change</button>
+                        <Button variant="link" className="flex-none" onClick={() => chooseFolder(p)}>change</Button>
                         {p.install_folder !== p.default_install_folder && (
-                          <button onClick={() => act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), `${p.name} installs into the Games folder again`)} className="flex-none text-white/40 underline-offset-2 hover:text-white/80 hover:underline">
+                          <Button variant="link" className="flex-none" onClick={() => act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), `${p.name} installs into the Games folder again`)}>
                             reset
-                          </button>
+                          </Button>
                         )}
                       </span>
                     </div>
@@ -197,38 +202,41 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
                 <div className="mt-auto flex gap-2">
                   {(p.status === 'unapproved' || p.status === 'changed') && (
-                    <button onClick={() => setReviewing(p)} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px]')}>
+                    <Button variant="primary" className="flex-1" onClick={() => setReviewing(p)}>
                       <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? 'Review and re-approve' : 'Review and approve'}
-                    </button>
+                    </Button>
                   )}
                   {(p.status === 'ready' || p.status === 'missing-requirements') && (
-                    <button
+                    <Button
+                      variant="neutral"
+                      className="flex-1"
                       onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), `${p.name} disabled`)}
                       disabled={busy === p.id + 'toggle'}
-                      className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}
                     >
                       Disable
-                    </button>
+                    </Button>
                   )}
                   {p.status === 'disabled' && (
-                    <button
+                    <Button
+                      variant="primary"
+                      className="flex-1"
                       onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), `${p.name} enabled`)}
                       disabled={busy === p.id + 'toggle'}
-                      className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}
                     >
                       Enable
-                    </button>
+                    </Button>
                   )}
                   {/* CORE-10: a plugin that gave up after repeated crashes
                       fails fast until its crash count is cleared. */}
                   {p.gave_up && p.status === 'ready' && (
-                    <button
+                    <Button
+                      variant="neutral"
+                      className="flex-1"
                       onClick={() => act(p.id, 'retry', LauncherApi.retryPlugin(p.id), `${p.name} will start again on the next call`)}
                       disabled={busy === p.id + 'retry'}
-                      className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}
                     >
                       <RotateCcw className="h-3.5 w-3.5" /> Retry
-                    </button>
+                    </Button>
                   )}
                 </div>
               </Panel>
@@ -252,14 +260,9 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
                         <p className="font-mono text-[11px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
                       </div>
-                      <span
-                        className={cx(
-                          'flex-none rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em]',
-                          p.status === 'ready' ? 'bg-white/[0.06] text-white/45' : st.style
-                        )}
-                      >
+                      <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
                         {p.status === 'ready' ? 'data' : st.label}
-                      </span>
+                      </Badge>
                     </div>
                     {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                     {p.problem && <p className="font-mono text-[11.5px] text-red-300">{p.problem}</p>}
@@ -283,7 +286,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
               <div className="text-[13px] font-bold">{b.name}</div>
               <div className="text-[12px] text-white/50">{b.what}</div>
             </div>
-            <span className="flex-none rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">built in</span>
+            <Badge variant="neutral" className="flex-none">built in</Badge>
           </div>
         ))}
       </div>
@@ -362,16 +365,13 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
         </div>
 
         <div className="mt-5 flex gap-2.5">
-          <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
-          <button onClick={onApprove} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Approve and enable</button>
+          <Button variant="neutral" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" className="flex-1" onClick={onApprove}>Approve and enable</Button>
         </div>
       </div>
     </Modal>
   );
 }
-
-const inputClass =
-  'w-full rounded-xl bg-white/[0.06] px-3.5 py-2.5 font-mono text-[11.5px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
 /**
  * The plugin's QR login data: block-art text straight from the store tool's
@@ -523,9 +523,9 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             {prompt.url && (
               <div>
                 <MonoLabel className="mb-1.5">1 · log in on the store's page</MonoLabel>
-                <button type="button" onClick={() => BrowserOpenURL(prompt.url!)} className={cx(btnNeutral, 'flex w-full items-center justify-center gap-2 py-2.5 text-[12.5px]')}>
+                <Button variant="neutral" className="w-full" onClick={() => BrowserOpenURL(prompt.url!)}>
                   <ExternalLink className="h-3.5 w-3.5" /> Open login page
-                </button>
+                </Button>
                 <p className="mt-1.5 break-all font-mono text-[12px] text-white/55 select-text">{prompt.url}</p>
               </div>
             )}
@@ -543,7 +543,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
               {prompt.fields.map((f, i) => (
                 <label key={f.id} className="block">
                   <span className="mb-1 block text-[12px] font-semibold text-white/75">{f.label}</span>
-                  <input
+                  <Input
                     autoFocus={i === 0 && !prompt.url}
                     type={f.secret ? 'password' : 'text'}
                     value={values[f.id] ?? ''}
@@ -551,7 +551,6 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
                     placeholder={f.placeholder}
                     spellCheck={false}
                     autoComplete="off"
-                    className={inputClass}
                   />
                 </label>
               ))}
@@ -560,10 +559,10 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         )}
         {error && <p role="alert" className="mt-3 font-mono text-[11.5px] text-red-300">{error}</p>}
         <div className="mt-5 flex gap-2.5">
-          <button type="button" onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
-          <button type="submit" disabled={!canSubmit || submitting} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] disabled:cursor-default')}>
+          <Button type="button" variant="neutral" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" className="flex-1" disabled={!canSubmit || submitting}>
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {prompt?.qr && !filled ? 'I scanned it' : 'Log in'}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>
