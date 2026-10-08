@@ -58,9 +58,11 @@ export function Sidebar(p: SidebarProps) {
         <input
           type="search"
           value={p.search}
-          onChange={(e) => {
-            p.onSearch(e.target.value);
-            if (p.view.name !== 'library') p.onNavigate({ name: 'library' });
+          // Typing never navigates (FE-12): the view only changes on Enter.
+          onChange={(e) => p.onSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && p.view.name !== 'library') p.onNavigate({ name: 'library' });
+            if (e.key === 'Escape') p.onSearch('');
           }}
           placeholder="Search…"
           className="w-full rounded-xl bg-white/[0.06] py-2.5 pl-8.5 pr-3 text-[12px] text-white placeholder-white/35 outline-none ring-amber-300/50 focus:ring-1"
