@@ -145,6 +145,27 @@ Apply `.app-wash` on the root div (not `body`). Game pages use `.app-wash-game`.
 
 ---
 
+### 3.3 Components (`frontend/src/components/ds/`)
+
+`ds/` is shadcn/ui (Radix primitives, copied into the repo) restyled to this contract; it is the
+source of truth for controls. Import via `@/components/ds/<name>`. Never use native `<select>`,
+`<input type="number">` or hand-rolled field/toggle classes in surfaces. `cn()` lives in `@/lib/utils`.
+`ui.tsx` keeps thin adapters (`SegRow`, `TogglePill`, `TierBadge`, `btnPrimary`, `btnNeutral`).
+
+| Component | Variants / key props | Use when |
+|---|---|---|
+| `Button` | `variant`: primary (amber), neutral, ghost, link, danger; `size`: sm, md, lg, icon, none; `asChild` | Any action. One primary per view region; icon-only buttons use `size="icon"` + Tooltip. |
+| `Input`, `Textarea` | `fieldClass` shared look, `h-9`, mono 12px, amber focus ring | Free text. `aria-invalid` shows a red ring. |
+| `Select` (+ `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectGroup`, `SelectLabel`, `SelectItem`) | Radix; `value` / `onValueChange`; groups get mono uppercase labels; list scrolls past 20rem | More than 4 options or any dynamic list (runners, resolutions, sort). Never a native select. |
+| `NumberField` | `value: number \| undefined`, `onChange`, `min`, `max`, `step`, `hideSteppers`; clamps on blur, empty = unset, no native spinner, wheel ignored | Every numeric setting. |
+| `Switch` | Radix; `checked` / `onCheckedChange` | Booleans as a standalone control (`TogglePill` is the visual-only variant inside clickable rows). |
+| `ToggleGroup` / `ToggleGroupItem` | Radix single/multiple; amber when on | Backs `SegRow`; use `SegRow` for 2-5 fixed options. |
+| `ScrollArea` | `orientation`: vertical, horizontal, both; `viewportClassName`, `viewportRef`; thumb widens and brightens on hover | Any horizontal strip and any bounded scrolling region. Native scrollbars (global CSS) are styled to match. |
+| `Dialog` (+ `DialogContent label`) | Overlay `bg-black/65 z-50`, raised `rounded-3xl` panel, inner scroll region | Modals. `Modal` (props `label`, `onClose`, `className`, `dismissable`) wraps it. |
+| `Badge` | `variant`: platinum, gold, silver, bronze, borked, neutral, accent, ok, info | Tier/store pills (`h-6`, mono uppercase). `TierBadge` wraps it. |
+| `Tooltip` (`TooltipProvider`, `Tooltip`, `TooltipTrigger`, `TooltipContent`) | Radix, 300ms delay | Icon-only buttons; wrap the app once in `TooltipProvider`. |
+| `Label`, `Separator` | mono micro-label; `bg-white/[0.07]` hairline | Form field captions; dividers. |
+
 ## 4. Sidebar spec (w-56; fixed, never scrolls)
 
 1. **Brand:** 36px amber→rose gradient rounded-xl tile "H"; "Hydra" 15px extrabold;
