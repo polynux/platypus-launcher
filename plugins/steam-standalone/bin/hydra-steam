@@ -54,6 +54,7 @@ JWT_RE = re.compile(r"[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}
 out_lock = threading.Lock()
 jobs_lock = threading.Lock()
 jobs = {}  # jobId -> {"proc": Popen, "canceled": bool, ...}
+token_lock = threading.RLock()
 
 
 class RPCError(Exception):
@@ -172,6 +173,23 @@ def refresh_pairs(text):
     return out
 
 
+def _source_matches(src, path, mtime):
+    """Whether a persisted token source still tracks the current file.
+
+    JSON turns the stored tuple into a list and may round-trip the mtime
+    as int vs float, so normalize both before comparing."""
+    try:
+        if not isinstance(src, (list, tuple)) or len(src) != 2:
+            return False
+        if src[0] != path:
+            return False
+        if src[1] is None or mtime is None:
+            return False
+        return float(src[1]) == float(mtime)
+    except (TypeError, ValueError):
+        return False
+
+
 def refresh_token():
     """The SteamClient refresh token the Go login persisted (refresh.token
     0600, plus token.json/session.json). The pre-Go login (DepotDownloader's
@@ -188,17 +206,23 @@ def refresh_token():
     except OSError:
         pass
     # Legacy: extract from account.config once, then migrate forward.
-    st = load_state("token.json", {})
-    path = account_config()
-    if (st.get("refresh_token") and st.get("account") is not None
-            and st.get("source") == (path, os.path.getmtime(path) if path else None)):
-        migrate_token(st["refresh_token"], st.get("account") or "")
-        return st["refresh_token"]
+    with token_lock:
+        st = load_state("token.json", {})
+        path = account_config()
+        try:
+            cur_mtime = os.path.getmtime(path) if path else None
+        except OSError:
+            cur_mtime = None
+        if (st.get("refresh_token") and st.get("account") is not None
+                and _source_matches(st.get("source"), path, cur_mtime)):
+            migrate_token(st["refresh_token"], st.get("account") or "")
+            return st["refresh_token"]
     if not path:
         # A Go login may have written token.json without refresh.token
         # (older shape); trust it and migrate.
         if st.get("refresh_token"):
-            migrate_token(st["refresh_token"], st.get("account") or "")
+            with token_lock:
+                migrate_token(st["refresh_token"], st.get("account") or "")
             return st["refresh_token"]
         return None
     try:
@@ -224,36 +248,40 @@ def refresh_token():
         st["refresh_token"] = token
         st["account"] = account
         st["source"] = [path, os.path.getmtime(path)]
-        save_secret("token.json", st)
-        migrate_token(token, account)
+        with token_lock:
+            save_secret("token.json", st)
+            migrate_token(token, account)
         return token
     except OSError:
         return None
 
 
 def migrate_token(token, account):
-    """Copy a legacy-extracted token into the Go login's files (0600)."""
-    try:
-        with open(state_path("refresh.token"), "w") as f:
-            f.write(token + "\n")
-        os.chmod(state_path("refresh.token"), 0o600)
-    except OSError:
-        pass
-    try:
-        st = load_state("token.json", {})
-        st["refresh_token"] = token
-        if account:
-            st["account"] = account
+    """Copy a legacy-extracted token into the Go login's files (0600).
+
+    Keeps the account.config source stamp so the legacy fast path in
+    refresh_token() still matches; overwriting it with the refresh.token
+    path would make every later call re-walk home/ and re-extract."""
+    with token_lock:
         try:
-            st["source"] = [state_path("refresh.token"),
-                            os.path.getmtime(state_path("refresh.token"))]
+            with open(state_path("refresh.token"), "w") as f:
+                f.write(token + "\n")
+            os.chmod(state_path("refresh.token"), 0o600)
         except OSError:
             pass
-        save_secret("token.json", st)
-        if account and not state_user():
-            save_state("session.json", {"account": account})
-    except OSError:
-        pass
+        try:
+            st = load_state("token.json", {})
+            st["refresh_token"] = token
+            if account:
+                st["account"] = account
+            # Do not touch st["source"]: it tracks account.config for the
+            # legacy fast path. (An older version stored the refresh.token
+            # path here, which never matched account_config() again.)
+            save_secret("token.json", st)
+            if account and not state_user():
+                save_state("session.json", {"account": account})
+        except OSError:
+            pass
 
 
 # --- QR login ---------------------------------------------------------------
