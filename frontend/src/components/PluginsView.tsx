@@ -373,7 +373,6 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
 const inputClass =
   'w-full rounded-xl bg-white/[0.06] px-3.5 py-2.5 font-mono text-[11.5px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
-/** auth.begin → open the store's page and/or fill in fields → auth.complete. */
 /**
  * The plugin's QR login data: block-art text straight from the store tool's
  * stdout ("\u2588" = dark module, two chars per module, one row per module).
@@ -416,6 +415,7 @@ export function qrPollDelay(consecutiveFailures: number): number {
 export const QR_ERROR_AFTER = 2;
 export const QR_MAX_ATTEMPTS = 40;
 
+/** auth.begin → open the store's page and/or fill in fields → auth.complete. */
 function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: () => void; onDone: (s: AuthStatus) => void }) {
   const [prompt, setPrompt] = useState<AuthPrompt | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -562,7 +562,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         <div className="mt-5 flex gap-2.5">
           <button type="button" onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
           <button type="submit" disabled={!canSubmit || submitting} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] disabled:cursor-default')}>
-            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Log in
+            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {prompt?.qr && !filled ? 'I scanned it' : 'Log in'}
           </button>
         </div>
       </form>
