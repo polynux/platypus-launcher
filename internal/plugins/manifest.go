@@ -75,7 +75,7 @@ type Requirement struct {
 }
 
 // Permissions are declared now and enforced by the bubblewrap sandbox later
-// (plan milestone 7). Until then they are shown to the user before approval.
+// (plan milestone 8). Until then they are shown to the user before approval.
 type Permissions struct {
 	Network []string `json:"network"`
 	Read    []string `json:"read"`

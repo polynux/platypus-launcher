@@ -201,6 +201,7 @@ export namespace types {
 	    executable: string;
 	    is_installed: boolean;
 	    settings: GameSettings;
+	    settings_extra?: Record<string, any>;
 	    fix_info?: GameFixInfo;
 	    last_played_at?: number;
 	    playtime_minutes?: number;
@@ -230,6 +231,7 @@ export namespace types {
 	        this.executable = source["executable"];
 	        this.is_installed = source["is_installed"];
 	        this.settings = this.convertValues(source["settings"], GameSettings);
+	        this.settings_extra = source["settings_extra"];
 	        this.fix_info = this.convertValues(source["fix_info"], GameFixInfo);
 	        this.last_played_at = source["last_played_at"];
 	        this.playtime_minutes = source["playtime_minutes"];
@@ -446,6 +448,24 @@ export namespace types {
 	        this.is_system = source["is_system"];
 	        this.is_custom = source["is_custom"];
 	        this.is_default = source["is_default"];
+	    }
+	}
+	export class SessionEvent {
+	    game_id: string;
+	    state: string;
+	    pid?: number;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.game_id = source["game_id"];
+	        this.state = source["state"];
+	        this.pid = source["pid"];
+	        this.message = source["message"];
 	    }
 	}
 	

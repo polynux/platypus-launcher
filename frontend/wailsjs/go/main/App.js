@@ -70,6 +70,10 @@ export function ListJobs() {
   return window['go']['main']['App']['ListJobs']();
 }
 
+export function ListSessions() {
+  return window['go']['main']['App']['ListSessions']();
+}
+
 export function ListStorePlugins() {
   return window['go']['main']['App']['ListStorePlugins']();
 }
@@ -108,6 +112,10 @@ export function RescanPlugins() {
 
 export function RetryJob(arg1) {
   return window['go']['main']['App']['RetryJob'](arg1);
+}
+
+export function RetryPlugin(arg1) {
+  return window['go']['main']['App']['RetryPlugin'](arg1);
 }
 
 export function SaveGameSettings(arg1, arg2) {

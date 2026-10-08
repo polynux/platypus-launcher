@@ -8,6 +8,7 @@ package session
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,11 +37,21 @@ type Emit func(types.SessionEvent)
 type Tracker struct {
 	emit   Emit
 	mu     sync.Mutex
-	active map[string]*exec.Cmd // gameID → direct-launch process (nil for store-client launches)
+	active map[string]*entry // gameID → launch entry (direct process or store-client watch)
+}
+
+// entry is one tracked launch. cmd is the direct-launch process (nil for
+// store-client launches); state/pid/message mirror the last emitted event
+// so late subscribers can hydrate via Snapshot (CORE-1).
+type entry struct {
+	cmd     *exec.Cmd
+	state   string
+	pid     int
+	message string
 }
 
 func NewTracker(emit Emit) *Tracker {
-	return &Tracker{emit: emit, active: map[string]*exec.Cmd{}}
+	return &Tracker{emit: emit, active: map[string]*entry{}}
 }
 
 // Running reports whether a game launched by Hydra is still tracked.
@@ -51,16 +62,73 @@ func (t *Tracker) Running(gameID string) bool {
 	return ok
 }
 
-func (t *Tracker) set(gameID string, cmd *exec.Cmd) {
+// Snapshot returns the currently tracked sessions for late subscribers
+// (second windows, reloads). Entries are copies; the slice is never nil.
+func (t *Tracker) Snapshot() []types.SessionEvent {
 	t.mu.Lock()
-	t.active[gameID] = cmd
-	t.mu.Unlock()
+	defer t.mu.Unlock()
+	out := make([]types.SessionEvent, 0, len(t.active))
+	for gameID, e := range t.active {
+		out = append(out, types.SessionEvent{
+			GameID:  gameID,
+			State:   e.state,
+			PID:     e.pid,
+			Message: e.message,
+		})
+	}
+	return out
 }
 
-func (t *Tracker) clear(gameID string) {
+// ErrAlreadyRunning is returned when a launch is claimed while the game is
+// already tracked. LaunchGame maps it to a titled message.
+var ErrAlreadyRunning = errors.New("already running")
+
+// tryClaim atomically claims gameID for one launch (CORE-3). It returns nil
+// when the game is already tracked, so concurrent launches can't both start.
+func (t *Tracker) tryClaim(gameID string, cmd *exec.Cmd) *entry {
 	t.mu.Lock()
-	delete(t.active, gameID)
-	t.mu.Unlock()
+	defer t.mu.Unlock()
+	if _, ok := t.active[gameID]; ok {
+		return nil
+	}
+	e := &entry{cmd: cmd, state: "starting"}
+	if cmd != nil && cmd.Process != nil {
+		e.state = "running"
+		e.pid = cmd.Process.Pid
+	}
+	t.active[gameID] = e
+	return e
+}
+
+// clearEntry removes gameID only if it still holds this launch's entry, so
+// one run's exit can't drop another run's tracking (CORE-3).
+func (t *Tracker) clearEntry(gameID string, e *entry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if cur, ok := t.active[gameID]; ok && cur == e {
+		delete(t.active, gameID)
+	}
+}
+
+// setRunning marks an already-claimed game as running with its pid.
+// Used when a store client hands the game over after the starting phase.
+func (t *Tracker) setRunning(gameID string, pid int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if e, ok := t.active[gameID]; ok {
+		e.state = "running"
+		e.pid = pid
+		e.message = ""
+	}
+}
+
+// setMessage updates the stored message for a tracked game.
+func (t *Tracker) setMessage(gameID, message string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if e, ok := t.active[gameID]; ok {
+		e.message = message
+	}
 }
 
 // StopAll kills direct-launch processes (on app shutdown). Steam games are
@@ -68,24 +136,29 @@ func (t *Tracker) clear(gameID string) {
 func (t *Tracker) StopAll() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	for _, cmd := range t.active {
-		if cmd != nil && cmd.Process != nil {
-			_ = cmd.Process.Kill()
+	for _, e := range t.active {
+		if e.cmd != nil && e.cmd.Process != nil {
+			_ = e.cmd.Process.Kill()
 		}
 	}
 }
 
 // WatchClient follows a game started through a store's own client (Steam).
 // client names it in messages; find returns the game's PID, or 0 while it
-// isn't running.
-func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration) {
+// isn't running. It reports false when the game is already tracked.
+func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration) bool {
 	if startTimeout <= 0 {
 		startTimeout = clientStartTimeout
 	}
-	t.set(gameID, nil)
-	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: "Waiting for " + client + " to start the game"})
+	e := t.tryClaim(gameID, nil)
+	if e == nil {
+		return false
+	}
+	msg := "Waiting for " + client + " to start the game"
+	t.setMessage(gameID, msg)
+	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: msg})
 	go func() {
-		defer t.clear(gameID)
+		defer t.clearEntry(gameID, e)
 		deadline := time.Now().Add(startTimeout)
 		pid := 0
 		for pid == 0 {
@@ -99,43 +172,84 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 			time.Sleep(pollEvery)
 		}
 		t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
+		t.setRunning(gameID, pid)
 		for find() != 0 {
 			time.Sleep(pollEvery)
 		}
 		t.emit(types.SessionEvent{GameID: gameID, State: "stopped"})
 	}()
+	return true
 }
 
 // StartDirect runs cmd and follows it until exit. Output goes to a per-game
 // log file under ~/.local/share/hydra/logs so failed launches can be diagnosed.
 // shown is the command line written to the log, with secrets redacted.
-func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, error) {
+// redact holds the launch spec's secret prefixes; the game's own stdout is
+// filtered with the same prefixes so echoed secrets reach neither the log
+// file nor the failure message (CORE-4).
+// It claims the game before starting so concurrent launches can't both run;
+// losers get ErrAlreadyRunning and never start a process.
+func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact []string) (int, error) {
+	e := t.tryClaim(gameID, cmd)
+	if e == nil {
+		return 0, fmt.Errorf("game %s %w", gameID, ErrAlreadyRunning)
+	}
 	tail := &tailBuffer{}
 	log, logPath, logErr := openLog(gameID)
-	if logErr == nil {
-		fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
-		cmd.Stdout = io.MultiWriter(log, tail)
+	var out io.Writer
+	var flush func()
+	if len(redact) == 0 {
+		if logErr == nil {
+			fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
+			out = io.MultiWriter(log, tail)
+		} else {
+			out = tail
+		}
 	} else {
-		cmd.Stdout = tail
+		var lw, tw *redactWriter
+		if logErr == nil {
+			fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
+			lw = &redactWriter{w: log, prefixes: redact}
+			tw = &redactWriter{w: tail, prefixes: redact}
+			out = io.MultiWriter(lw, tw)
+		} else {
+			tw = &redactWriter{w: tail, prefixes: redact}
+			out = tw
+		}
+		flush = func() {
+			if lw != nil {
+				lw.Flush()
+			}
+			tw.Flush()
+		}
 	}
+	cmd.Stdout = out
 	cmd.Stderr = cmd.Stdout
 	if err := cmd.Start(); err != nil {
 		if log != nil {
 			_ = log.Close()
 		}
+		t.clearEntry(gameID, e)
 		return 0, err
 	}
 	pid := cmd.Process.Pid
-	t.set(gameID, cmd)
+	t.mu.Lock()
+	e.cmd = cmd
+	e.state = "running"
+	e.pid = pid
+	t.mu.Unlock()
 	t.emit(types.SessionEvent{GameID: gameID, State: "running", PID: pid})
 	started := time.Now()
 	go func() {
 		// Wait also waits for the output copy to finish, so closing after is safe.
 		err := cmd.Wait()
+		if flush != nil {
+			flush()
+		}
 		if log != nil {
 			_ = log.Close()
 		}
-		t.clear(gameID)
+		t.clearEntry(gameID, e)
 		if err != nil && time.Since(started) < quickExit {
 			msg := strings.TrimSpace(tail.String())
 			if msg == "" {
@@ -150,6 +264,89 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string) (int, 
 		t.emit(types.SessionEvent{GameID: gameID, State: "stopped"})
 	}()
 	return pid, nil
+}
+
+// redactWriter filters secret values out of a game's output stream. Every
+// occurrence of a prefix is kept, but the token that follows it (up to the
+// next whitespace or quote) is replaced with "***", mirroring RedactArgs.
+type redactWriter struct {
+	w        io.Writer
+	prefixes []string
+	pending  []byte
+}
+
+func (r *redactWriter) Write(p []byte) (int, error) {
+	r.pending = append(r.pending, p...)
+	for {
+		i := indexByte(r.pending, '\n')
+		if i < 0 {
+			break
+		}
+		line := redactTokens(string(r.pending[:i+1]), r.prefixes)
+		if _, err := io.WriteString(r.w, line); err != nil {
+			return len(p), err
+		}
+		r.pending = append([]byte(nil), r.pending[i+1:]...)
+	}
+	return len(p), nil
+}
+
+// Flush redacts and writes any trailing output without a newline.
+func (r *redactWriter) Flush() {
+	if len(r.pending) == 0 {
+		return
+	}
+	_, _ = io.WriteString(r.w, redactTokens(string(r.pending), r.prefixes))
+	r.pending = nil
+}
+
+func indexByte(b []byte, c byte) int {
+	for i, x := range b {
+		if x == c {
+			return i
+		}
+	}
+	return -1
+}
+
+// redactTokens replaces prefix+token with prefix+"***" for every prefix
+// occurrence with a non-empty token after it.
+func redactTokens(s string, prefixes []string) string {
+	for _, p := range prefixes {
+		if p == "" {
+			continue
+		}
+		var b strings.Builder
+		b.Grow(len(s))
+		rest := s
+		for {
+			i := strings.Index(rest, p)
+			if i < 0 {
+				b.WriteString(rest)
+				break
+			}
+			b.WriteString(rest[:i+len(p)])
+			rest = rest[i+len(p):]
+			j := 0
+			for j < len(rest) && !isTokenEnd(rest[j]) {
+				j++
+			}
+			if j > 0 {
+				b.WriteString("***")
+			}
+			rest = rest[j:]
+		}
+		s = b.String()
+	}
+	return s
+}
+
+func isTokenEnd(c byte) bool {
+	switch c {
+	case ' ', '\t', '\n', '\r', '"', '\'', '`':
+		return true
+	}
+	return false
 }
 
 // tailBuffer keeps the last few KB written to it.

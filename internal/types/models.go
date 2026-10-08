@@ -67,6 +67,10 @@ type Game struct {
 	Executable  string       `json:"executable"`
 	IsInstalled bool         `json:"is_installed"`
 	Settings    GameSettings `json:"settings"`
+	// SettingsExtra carries saved per-game settings keys the backend
+	// doesn't model (frontend-only controls like sync_mode), so
+	// sideloaded games don't lose them in the emitted library (CORE-9).
+	SettingsExtra map[string]any `json:"settings_extra,omitempty"`
 	FixInfo     *GameFixInfo `json:"fix_info,omitempty"`
 	LastPlayed  int64        `json:"last_played_at,omitempty"` // unix seconds
 	PlaytimeMin int          `json:"playtime_minutes,omitempty"`

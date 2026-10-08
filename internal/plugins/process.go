@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -60,26 +61,42 @@ type process struct {
 	notify  jsonrpc.NotifyFunc
 	t       timings
 
-	mu       sync.Mutex
-	cmd      *exec.Cmd
-	conn     *jsonrpc.Conn
-	stdin    *os.File
-	ready    chan struct{} // closed once initialize succeeded
-	exited   chan struct{} // closed when the current run is over
-	info     *InitResult
-	started  time.Time
-	crashes  int
-	retryAt  time.Time
-	lastErr  error
-	initErr  error // why initialize failed, reported instead of "killed"
-	stopping bool
+	mu        sync.Mutex
+	cmd       *exec.Cmd
+	conn      *jsonrpc.Conn
+	stdin     *os.File
+	ready     chan struct{} // closed once initialize succeeded
+	exited    chan struct{} // closed when the current run is over
+	dead      chan struct{} // closed right after cmd.Wait returns, before the drain (CORE-2)
+	info      *InitResult
+	started   time.Time
+	crashes   int
+	retryAt   time.Time
+	lastErr   error
+	lastCrash time.Time // when the latest crash was recorded (for decay)
+	initErr   error     // why initialize failed, reported instead of "killed"
+	stopping  bool
 }
 
-// call sends a request, starting the plugin first if needed.
+// call sends a request exactly once, starting the plugin first if needed.
+// If the run died before anything was sent (its dead channel is already
+// closed — the reaped process cannot have read the request), it resolves a
+// fresh connection and sends there. A death during or after the send is
+// reported as ErrExited without resending: plugin methods are not
+// idempotent (install/update/uninstall, auth.complete, job.cancel), so a
+// request the dead process may already have acted on is never replayed.
 func (p *process) call(ctx context.Context, method string, params, result any) error {
-	conn, err := p.ensure(ctx)
+	conn, dead, err := p.ensure(ctx)
 	if err != nil {
 		return err
+	}
+	select {
+	case <-dead:
+		conn, _, err = p.ensure(ctx)
+		if err != nil {
+			return err
+		}
+	default:
 	}
 	err = conn.Call(ctx, method, params, result)
 	if errors.Is(err, jsonrpc.ErrClosed) {
@@ -88,21 +105,35 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 	return err
 }
 
-// ensure returns a connection to a running, initialized plugin. Concurrent
+// ensure returns a connection to a running, initialized plugin, plus the
+// run's dead channel (closed once its process has been reaped). Concurrent
 // callers share one start and all wait for initialize. After a crash, the next
 // call waits out the backoff before starting the plugin again.
-func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
+func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, <-chan struct{}, error) {
 	for {
 		p.mu.Lock()
 		if p.stopping {
 			p.mu.Unlock()
-			return nil, fmt.Errorf("plugin %s is stopped", p.id)
+			return nil, nil, fmt.Errorf("plugin %s is stopped", p.id)
 		}
 		if p.conn != nil {
-			conn, ready, exited := p.conn, p.ready, p.exited
+			conn, ready, exited, dead := p.conn, p.ready, p.exited, p.dead
 			p.mu.Unlock()
 			select {
 			case <-ready:
+				// The process died but cleanup hasn't finished (CORE-2
+				// drain window): never hand out the stale conn. Wait for
+				// the reaper, then loop to restart or report give-up.
+				select {
+				case <-dead:
+					select {
+					case <-exited:
+						continue
+					case <-ctx.Done():
+						return nil, nil, ctx.Err()
+					}
+				default:
+				}
 				select {
 				case <-conn.Done():
 					// The plugin just died; wait for cleanup, then restart.
@@ -110,10 +141,10 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 					case <-exited:
 						continue
 					case <-ctx.Done():
-						return nil, ctx.Err()
+						return nil, nil, ctx.Err()
 					}
 				default:
-					return conn, nil
+					return conn, dead, nil
 				}
 			case <-exited:
 				p.mu.Lock()
@@ -122,22 +153,27 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 				if err == nil {
 					err = errors.New("stopped")
 				}
-				return nil, fmt.Errorf("plugin %s: %w", p.id, err)
+				return nil, nil, fmt.Errorf("plugin %s: %w", p.id, err)
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, nil, ctx.Err()
 			}
+		}
+		// A breakage fixed long ago shouldn't look permanent: crashes older
+		// than a stable run decay away (CORE-10).
+		if p.crashes >= p.t.maxCrashes && !p.lastCrash.IsZero() && time.Since(p.lastCrash) >= p.t.stableAfter {
+			p.crashes = 0
 		}
 		if p.crashes >= p.t.maxCrashes {
 			err := fmt.Errorf("plugin %s crashed %d times in a row, last: %v", p.id, p.crashes, p.lastErr)
 			p.mu.Unlock()
-			return nil, err
+			return nil, nil, err
 		}
 		wait := time.Until(p.retryAt)
 		if wait <= 0 {
 			conn, err := p.start()
 			p.mu.Unlock()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			// Not tied to ctx: a caller giving up must not kill a healthy plugin.
 			go p.initialize(conn)
@@ -147,7 +183,7 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, error) {
 		select {
 		case <-time.After(wait):
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 	}
 }
@@ -176,10 +212,9 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 	cmd.Stdout = outW
 	var logFile *os.File
 	if p.logPath != "" {
-		if f, err := os.OpenFile(p.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-			fmt.Fprintf(f, "\n=== %s · start %s\n", time.Now().Format(time.RFC3339), p.exec)
-			logFile = f
-			cmd.Stderr = f
+		if logFile = openLogFile(p.logPath); logFile != nil {
+			fmt.Fprintf(logFile, "\n=== %s · start %s\n", time.Now().Format(time.RFC3339), p.exec)
+			cmd.Stderr = logFile
 		}
 	}
 	// Own process group, so the plugin's helpers (legendary, …) die with it,
@@ -200,12 +235,16 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 
 	conn := jsonrpc.NewConn(outR, inW, p.notify)
 	exited := make(chan struct{})
-	p.cmd, p.conn, p.stdin, p.exited, p.info = cmd, conn, inW, exited, nil
+	dead := make(chan struct{})
+	p.cmd, p.conn, p.stdin, p.exited, p.dead, p.info = cmd, conn, inW, exited, dead, nil
 	p.ready = make(chan struct{})
 	p.started = time.Now()
 
 	go func() {
 		waitErr := cmd.Wait()
+		// Mark the run dead before the reader-drain below (CORE-2): from
+		// here on ensure() must not hand out this conn.
+		close(dead)
 		// The leader is gone; take any helpers it left behind with it.
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		// Let the reader drain what the plugin wrote before exiting.
@@ -223,7 +262,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 		p.mu.Lock()
 		crashed := false
 		if p.cmd == cmd {
-			p.cmd, p.conn, p.stdin, p.info = nil, nil, nil, nil
+			p.cmd, p.conn, p.stdin, p.dead, p.info = nil, nil, nil, nil, nil
 			if p.initErr != nil {
 				waitErr, p.initErr = p.initErr, nil
 			}
@@ -249,13 +288,15 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 
 // recordCrash schedules the next start. Callers hold p.mu.
 func (p *process) recordCrash(err error) {
+	now := time.Now()
 	p.crashes++
 	p.lastErr = err
+	p.lastCrash = now
 	backoff := p.t.backoffBase << (p.crashes - 1)
 	if backoff > p.t.backoffMax || backoff <= 0 {
 		backoff = p.t.backoffMax
 	}
-	p.retryAt = time.Now().Add(backoff)
+	p.retryAt = now.Add(backoff)
 }
 
 // initialize performs the handshake on a fresh process. A plugin that fails it
@@ -321,14 +362,55 @@ func notifyToLog(path string, next func(method string, params json.RawMessage)) 
 				Message string `json:"message"`
 			}
 			_ = json.Unmarshal(params, &l)
-			if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-				fmt.Fprintf(f, "[%s] %s\n", l.Level, l.Message)
-				f.Close()
-			}
+			appendPluginLog(path, fmt.Sprintf("[%s] %s\n", l.Level, l.Message))
 			return
 		}
 		if next != nil {
 			next(method, params)
 		}
 	}
+}
+
+// maxPluginLogBytes bounds one plugin log file; older output moves to a
+// single ".prev" backup, so the pair stays under ~2x the cap (CORE-13).
+const maxPluginLogBytes = 1 << 20
+
+// rotateLogFile moves an over-cap log aside before the next write.
+func rotateLogFile(path string) {
+	st, err := os.Stat(path)
+	if err != nil || st.Size() < maxPluginLogBytes {
+		return
+	}
+	_ = os.Remove(path + ".prev")
+	_ = os.Rename(path, path+".prev")
+}
+
+// openLogFile opens the plugin log for appending: owner-only like the
+// plugin state files, rotated when over the cap (CORE-13).
+func openLogFile(path string) *os.File {
+	if path == "" {
+		return nil
+	}
+	rotateLogFile(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil
+	}
+	_ = os.Chmod(path, 0o600) // tighten logs written 0644 before the fix
+	return f
+}
+
+// appendPluginLog appends one log line, rotating first when over the cap.
+func appendPluginLog(path, text string) {
+	if path == "" {
+		return
+	}
+	rotateLogFile(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	_ = os.Chmod(path, 0o600)
+	_, _ = io.WriteString(f, text)
+	f.Close()
 }

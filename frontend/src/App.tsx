@@ -74,6 +74,8 @@ export function App() {
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
 
+  // When a session started before this window mounted (CORE-1).
+  const sessionStart = useRef<Record<string, number>>({});
   const loadData = useCallback(
     (reason: 'startup' | 'rescan') => {
       setScanning(true);
@@ -83,9 +85,11 @@ export function App() {
         LauncherApi.listPlugins(),
         // Unreadable saved settings shouldn't block the library.
         LauncherApi.getGameSettings().pipe(Effect.orElseSucceed(() => ({}) as Record<string, GameSettings>)),
+        // A missing session snapshot (old backend) shouldn't block the library either.
+        LauncherApi.getSessions().pipe(Effect.orElseSucceed(() => [] as SessionEvent[])),
       ]);
       return Effect.runPromise(program)
-        .then(([lib, r, p, saved]) => {
+        .then(([lib, r, p, saved, live]) => {
           const g = lib.games;
           setWarnings(lib.warnings);
           // Keep edited settings across rescans; on startup, settings come
@@ -99,6 +103,20 @@ export function App() {
           });
           setRunners(r);
           setPlugins(p);
+          // Hydrate sessions so a window opened after a launch shows Playing.
+          if (live.length > 0) {
+            const seeded: Record<string, SessionEvent> = {};
+            const now = Date.now();
+            for (const e of live) {
+              if (e.state === 'starting' || e.state === 'running') {
+                seeded[e.game_id] = e;
+                if (e.state === 'running' && sessionStart.current[e.game_id] === undefined) {
+                  sessionStart.current[e.game_id] = now;
+                }
+              }
+            }
+            setSessions(seeded);
+          }
           setLoadError(null);
           setLastScan(Date.now());
           const sources = new Set(g.map((x) => x.source)).size;
@@ -170,7 +188,6 @@ export function App() {
   // game process under Steam's reaper, not the short-lived `steam` command.
   const gamesRef = useRef(games);
   gamesRef.current = games;
-  const sessionStart = useRef<Record<string, number>>({});
   useEffect(
     () =>
       onSession((e) => {
@@ -200,6 +217,34 @@ export function App() {
       }),
     [log, notify]
   );
+
+  // A hidden window can miss nothing (events stay live) but re-checks on
+  // focus anyway, so it never shows a stale Play button. Silent: the event
+  // stream remains the source of notifications and activity.
+  useEffect(() => {
+    const onFocus = () => {
+      Effect.runPromise(LauncherApi.getSessions())
+        .then((live) => {
+          const seeded: Record<string, SessionEvent> = {};
+          const now = Date.now();
+          for (const e of live) {
+            if (e.state === 'starting' || e.state === 'running') {
+              seeded[e.game_id] = e;
+              if (e.state === 'running' && sessionStart.current[e.game_id] === undefined) {
+                sessionStart.current[e.game_id] = now;
+              }
+            }
+          }
+          for (const id of Object.keys(sessionStart.current)) {
+            if (!(id in seeded)) delete sessionStart.current[id];
+          }
+          setSessions(seeded);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   const saveSettings = (id: string, settings: GameSettings, what = 'Launcher settings changed') => {
     const g = games.find((x) => x.id === id);

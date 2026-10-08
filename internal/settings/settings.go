@@ -237,9 +237,17 @@ func (s *Store) RemoveCustomGame(id string) error {
 	for i, g := range s.data.CustomGames {
 		if g.ID == id {
 			prev := s.data.CustomGames
+			prevSettings, hadSettings := s.data.Games[id]
 			s.data.CustomGames = append(s.data.CustomGames[:i], s.data.CustomGames[i+1:]...)
+			delete(s.data.Games, id)
 			if err := s.save(); err != nil {
 				s.data.CustomGames = prev
+				if hadSettings {
+					if s.data.Games == nil {
+						s.data.Games = map[string]map[string]any{}
+					}
+					s.data.Games[id] = prevSettings
+				}
 				return err
 			}
 			return nil

@@ -36,6 +36,8 @@ export function LaunchGame(arg1:types.Game):Promise<string>;
 
 export function ListJobs():Promise<Array<types.Job>>;
 
+export function ListSessions():Promise<Array<types.SessionEvent>>;
+
 export function ListStorePlugins():Promise<Array<types.StorePlugin>>;
 
 export function OpenPluginsFolder():Promise<void>;
@@ -55,6 +57,8 @@ export function RemoveCustomGame(arg1:string):Promise<void>;
 export function RescanPlugins():Promise<Array<types.StorePlugin>>;
 
 export function RetryJob(arg1:string):Promise<void>;
+
+export function RetryPlugin(arg1:string):Promise<void>;
 
 export function SaveGameSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
 

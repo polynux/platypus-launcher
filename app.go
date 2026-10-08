@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -48,8 +49,9 @@ type App struct {
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
 
-	tweaksOnce sync.Once
-	tweaks     []types.Tweak
+	tweaksMu     sync.Mutex
+	tweaksCached bool
+	tweaks       []types.Tweak
 }
 
 // NewApp creates a new App application struct
@@ -106,13 +108,10 @@ func (a *App) startup(ctx context.Context) {
 			msg += " (" + p.Problem + ")"
 		}
 		wruntime.LogInfo(ctx, msg)
-		if p.Data != nil {
-			a.data.Add(p.Data)
-		}
 	}
-	// The built-in fixes and tweaks are data plugin files too, applied through
-	// the same registry.
-	a.data.Add(dataplug.Builtin())
+	// Data plugins feed the fixes/tweaks registry; rebuilt here and on
+	// every rescan so installs and removals apply without a restart.
+	a.syncDataPlugins(found)
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
@@ -169,6 +168,20 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 	return runner.ScanProtonVersions()
 }
 
+// gameSettingsFields are the settings keys types.GameSettings models.
+// Anything else in a saved settings map rides along in Game.SettingsExtra.
+var gameSettingsFields = func() map[string]struct{} {
+	out := map[string]struct{}{}
+	t := reflect.TypeOf(types.GameSettings{})
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("json")
+		if name := strings.Split(tag, ",")[0]; name != "" && name != "-" {
+			out[name] = struct{}{}
+		}
+	}
+	return out
+}()
+
 // customGames returns the games the user added by hand, saved in settings.json.
 func (a *App) customGames() []types.Game {
 	out := []types.Game{}
@@ -184,10 +197,20 @@ func (a *App) customGames() []types.Game {
 			IsInstalled: true,
 			Settings:    types.GameSettings{UseGameMode: true},
 		}
-		// Saved per-game settings win over the defaults.
+		// Saved per-game settings win over the defaults. Keys the backend
+		// doesn't model (frontend-only controls like sync_mode) are kept
+		// opaquely so sideloaded games don't lose them (CORE-9).
 		if saved, ok := a.settings.GameSettings()[g.ID]; ok {
 			if data, err := json.Marshal(saved); err == nil {
 				_ = json.Unmarshal(data, &g.Settings)
+			}
+			for k, v := range saved {
+				if _, known := gameSettingsFields[k]; !known {
+					if g.SettingsExtra == nil {
+						g.SettingsExtra = map[string]any{}
+					}
+					g.SettingsExtra[k] = v
+				}
 			}
 		}
 		out = append(out, g)
@@ -288,11 +311,44 @@ func sourceOf(game types.Game) string {
 	return game.Source
 }
 
+// syncDataPlugins rebuilds the fixes/tweaks registry from the discovered
+// data plugins plus the built-in data, and invalidates the cached tweaks
+// (CORE-5). Call after every Discover.
+func (a *App) syncDataPlugins(found []plugins.Plugin) {
+	a.data.Reset()
+	for _, p := range found {
+		if p.Data != nil {
+			a.data.Add(p.Data)
+		}
+	}
+	// The built-in fixes and tweaks are data plugin files too, applied
+	// through the same registry.
+	a.data.Add(dataplug.Builtin())
+	a.tweaksMu.Lock()
+	a.tweaksCached = false
+	a.tweaksMu.Unlock()
+}
+
 // GetTweaks returns hardware-based tweaks offered for every game, from the
 // built-in data plugin and any user-installed ones.
 func (a *App) GetTweaks() []types.Tweak {
-	a.tweaksOnce.Do(func() { a.tweaks = a.data.Tweaks(dataplug.DetectSystem()) })
+	a.tweaksMu.Lock()
+	defer a.tweaksMu.Unlock()
+	if !a.tweaksCached {
+		a.tweaks = a.data.Tweaks(dataplug.DetectSystem())
+		a.tweaksCached = true
+	}
 	return a.tweaks
+}
+
+// ListSessions returns the currently tracked game sessions (starting or
+// running) so windows opened after a launch can hydrate without waiting for
+// the next session event (CORE-1). It never returns nil.
+func (a *App) ListSessions() []types.SessionEvent {
+	if a.sessions == nil {
+		return []types.SessionEvent{}
+	}
+	return a.sessions.Snapshot()
 }
 
 // selectRunner resolves the game's runner; "auto" or empty picks the best
@@ -345,7 +401,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 				return nil, err
 			}
 		}
-		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine})
+		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview)
 		if err != nil {
 			return nil, err
 		}
@@ -360,7 +416,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	if err != nil {
 		return nil, err
 	}
-	args, env, err := runner.BuildLaunchCommand(game, r)
+	args, env, err := runner.BuildLaunchCommand(game, r, preview)
 	if err != nil {
 		return nil, err
 	}
@@ -429,11 +485,16 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 			return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 		}
 		go func() { _ = cmd.Wait() }()
-		a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout)
+		if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
+			return "", fmt.Errorf("%s is already running", game.Title)
+		}
 		return "Asked " + cl.Client + " to start " + game.Title, nil
 	}
-	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown())
+	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact)
 	if err != nil {
+		if errors.Is(err, session.ErrAlreadyRunning) {
+			return "", fmt.Errorf("%s is already running", game.Title)
+		}
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
