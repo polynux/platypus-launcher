@@ -80,7 +80,7 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
         <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
           Store plugins install games here, each in its own subfolder, for example{' '}
           <span className="font-mono text-[11.5px] text-white/75">{(saved?.games_folder ?? '~/Games') + '/epic'}</span>. Steam keeps using its own
-          library folders. Nothing installs here until store plugins arrive.
+          library folders.
         </p>
 
         <form
