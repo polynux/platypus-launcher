@@ -217,7 +217,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 - [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
 - [x] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
 - [x] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
-- [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed (fake-only; live check pending)
+- [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed (live: QR + install OK; password pending)
 
 ## Changes during implementation
 
@@ -369,3 +369,34 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   nothing — existing-token reuse, fresh QR/password logins, install /
   uninstall with the new token, and PATH-hiding checks all await the
   user-present live check.
+- **Phase 6 live findings (2026-10-08, user present for QR).**
+  - Unauthenticated service calls must use EMsg 9804
+    (`k_EMsgServiceMethodCallFromClientNonAuthed`), not 151: the real CM
+    closes the socket (1000) on a pre-logon 151, which broke the first
+    live QR attempt ("CM connection dropped: websocket: close 1000").
+    `Session.authed` picks the EMsg; both fakes reject a pre-logon 151
+    the same way. Proven live with one real `BeginAuthSessionViaQR`
+    (challenge `https://s.team/q/1/…`, then cancelled — no login).
+  - Duplicate `auth.begin` calls (React StrictMode in dev) raced: the
+    second `start_qr_login()` killed the first helper, whose watcher
+    failed the shared state ("helper ended without logging in") — timing
+    decided whether Chrome or WebKitGTK won, and dead helpers stayed
+    `<defunct>`. Now begins are serialized, duplicates reuse the live
+    session's art, watchers only touch state they own, and stops/EOF
+    reap. A retry after a Guard prompt likewise reuses its Begin session
+    (same client_id/CM socket) instead of sending a new email.
+  - The card showed the account name until the first library scan because
+    the persona is only fetched there; both login paths now resolve and
+    store it before reporting loggedIn.
+  - Token files are 0600 live (`refresh.token`, `token.json`,
+    `steam-access.json`, tightened on touch; `session.json` stays 0644):
+    the legacy `account.config` migrated to `refresh.token` on first
+    read-only use, and the pre-Go `home/` store was never deleted.
+  - Live QR login via the launcher works (dialog closed on scan).
+    Live install of KAMI (272040) with the QR token: 55,479,792 B
+    download / 81,078,597 B disk (byte-exact with phase 5), ~10 s at
+    60–100 MB/s over 32 hosts, 276 files, dirs intact, `verify`
+    bad:0/fixed:0, then uninstall removed everything (`~/Games/steam`
+    empty, `installed.json` `{}`, jobs/staging clean). No launch (user
+    away). Still fake-only: the password login (email/TOTP/mobile
+    wording covered by fake tests only).
