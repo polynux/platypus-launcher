@@ -50,8 +50,12 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
   // Login state of every approved plugin with a login. Asking starts the plugin.
   const readyIds = plugins.filter((p) => p.status === 'ready' && hasAuth(p)).map((p) => p.id).join(',');
+  // StrictMode mounts effects twice: only ask once per plugin id (FE-7).
+  const statusFetched = useRef(new Set<string>());
   useEffect(() => {
     for (const id of readyIds ? readyIds.split(',') : []) {
+      if (statusFetched.current.has(id)) continue;
+      statusFetched.current.add(id);
       Effect.runPromise(LauncherApi.authStatus(id))
         .then((s) => setAuth((a) => ({ ...a, [id]: s })))
         .catch((e) => setAuth((a) => ({ ...a, [id]: { error: errMsg(e) } })));
