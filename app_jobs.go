@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"hydra-launcher/internal/jobs"
 	"hydra-launcher/internal/plugins"
@@ -99,8 +101,65 @@ func (a *App) ListJobs() []types.Job {
 	return a.jobs.List()
 }
 
+// CancelJob stops a download. Its data is deleted after the cleanup
+// threshold (Settings → Downloads) unless it is resumed first.
 func (a *App) CancelJob(id string) error {
 	return a.jobs.Cancel(a.ctx, id)
+}
+
+// PauseJob stops a download and keeps everything downloaded so far.
+func (a *App) PauseJob(id string) error {
+	return a.jobs.Pause(a.ctx, id)
+}
+
+// ResumeJob continues a paused or canceled download where it stopped.
+func (a *App) ResumeJob(id string) error {
+	return a.jobs.Resume(id)
+}
+
+// DiscardJob deletes the downloaded data of a canceled download right now.
+func (a *App) DiscardJob(id string) error {
+	return a.jobs.Discard(a.ctx, id)
+}
+
+// PauseAllJobs pauses every queued and running download. Queued ones first,
+// so pausing the running download doesn't start the next one for a moment.
+func (a *App) PauseAllJobs() error {
+	var errs []error
+	for _, state := range []string{jobs.StateQueued, jobs.StateRunning} {
+		for _, j := range a.jobs.List() {
+			if j.State == state {
+				errs = append(errs, a.jobs.Pause(a.ctx, j.ID))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ResumeAllJobs resumes every paused download, oldest first.
+func (a *App) ResumeAllJobs() error {
+	var errs []error
+	for _, j := range a.jobs.List() {
+		if j.State == jobs.StatePaused {
+			errs = append(errs, a.jobs.Resume(j.ID))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// SetCancelCleanupDays sets how many days a canceled download's data is kept
+// before Hydra deletes it (0 = right away). It applies to downloads that are
+// already canceled too.
+func (a *App) SetCancelCleanupDays(days int) (types.LauncherSettings, error) {
+	if err := a.settings.SetCancelCleanupDays(days); err != nil {
+		return a.launcherSettings(), err
+	}
+	a.jobs.SetCleanupAfter(cleanupAfter(days))
+	return a.launcherSettings(), nil
+}
+
+func cleanupAfter(days int) time.Duration {
+	return time.Duration(days) * 24 * time.Hour
 }
 
 func (a *App) RetryJob(id string) error {

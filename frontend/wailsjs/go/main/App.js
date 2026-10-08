@@ -30,6 +30,10 @@ export function ClearFinishedJobs() {
   return window['go']['main']['App']['ClearFinishedJobs']();
 }
 
+export function DiscardJob(arg1) {
+  return window['go']['main']['App']['DiscardJob'](arg1);
+}
+
 export function GetGameDetails(arg1) {
   return window['go']['main']['App']['GetGameDetails'](arg1);
 }
@@ -82,6 +86,14 @@ export function OpenPluginsFolder() {
   return window['go']['main']['App']['OpenPluginsFolder']();
 }
 
+export function PauseAllJobs() {
+  return window['go']['main']['App']['PauseAllJobs']();
+}
+
+export function PauseJob(arg1) {
+  return window['go']['main']['App']['PauseJob'](arg1);
+}
+
 export function PluginAuthBegin(arg1) {
   return window['go']['main']['App']['PluginAuthBegin'](arg1);
 }
@@ -110,6 +122,14 @@ export function RescanPlugins() {
   return window['go']['main']['App']['RescanPlugins']();
 }
 
+export function ResumeAllJobs() {
+  return window['go']['main']['App']['ResumeAllJobs']();
+}
+
+export function ResumeJob(arg1) {
+  return window['go']['main']['App']['ResumeJob'](arg1);
+}
+
 export function RetryJob(arg1) {
   return window['go']['main']['App']['RetryJob'](arg1);
 }
@@ -120,6 +140,10 @@ export function RetryPlugin(arg1) {
 
 export function SaveGameSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveGameSettings'](arg1, arg2);
+}
+
+export function SetCancelCleanupDays(arg1) {
+  return window['go']['main']['App']['SetCancelCleanupDays'](arg1);
 }
 
 export function SetGamesFolder(arg1) {

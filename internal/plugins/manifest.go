@@ -27,6 +27,8 @@ var knownCapabilities = map[string]bool{
 	"launch":      true,
 	"auth":        true,
 	"cloud-saves": true,
+	// discard: the plugin implements job.discard (see docs/plugins/protocol.md).
+	"discard": true,
 }
 
 // Plugin kinds. "store" is the default: an executable Hydra talks to over

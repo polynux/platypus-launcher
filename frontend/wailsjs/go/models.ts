@@ -326,6 +326,9 @@ export namespace types {
 	    attempts: number;
 	    created_at: number;
 	    updated_at: number;
+	    canceled_at?: number;
+	    cleaned_at?: number;
+	    leftover?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
@@ -350,11 +353,15 @@ export namespace types {
 	        this.attempts = source["attempts"];
 	        this.created_at = source["created_at"];
 	        this.updated_at = source["updated_at"];
+	        this.canceled_at = source["canceled_at"];
+	        this.cleaned_at = source["cleaned_at"];
+	        this.leftover = source["leftover"];
 	    }
 	}
 	export class LauncherSettings {
 	    games_folder: string;
 	    default_games_folder: string;
+	    cancel_cleanup_days: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new LauncherSettings(source);
@@ -364,6 +371,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.games_folder = source["games_folder"];
 	        this.default_games_folder = source["default_games_folder"];
+	        this.cancel_cleanup_days = source["cancel_cleanup_days"];
 	    }
 	}
 	export class SourceWarning {
