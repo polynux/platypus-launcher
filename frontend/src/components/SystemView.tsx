@@ -1,7 +1,9 @@
 import React from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { ProtonVersion } from '../types';
-import { EmptyState, btnNeutral, cx } from './ui';
+import { EmptyState } from './ui';
+import { Button } from './ds/button';
+import { Badge } from './ds/badge';
 
 interface SystemViewProps {
   runners: ProtonVersion[];
@@ -17,10 +19,10 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
           <h1 className="text-[23px] font-extrabold tracking-tight">Runners</h1>
           <p className="mt-0.5 text-[12.5px] text-white/50">Proton, GE-Proton and Wine builds detected on this system.</p>
         </div>
-        <button onClick={onRefresh} disabled={scanning} className={cx(btnNeutral, 'flex items-center gap-2 px-4 py-2.5 text-[12.5px] disabled:opacity-60')}>
+        <Button variant="neutral" onClick={onRefresh} disabled={scanning}>
           {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           {scanning ? 'Scanning' : 'Rescan'}
-        </button>
+        </Button>
       </header>
 
       {runners.length === 0 ? (
@@ -34,14 +36,14 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-bold">{r.name}</span>
-                  {r.is_custom && <span className="rounded-md bg-amber-300/15 px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-amber-300 ring-1 ring-amber-300/40">custom</span>}
-                  {r.is_system && <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">system</span>}
+                  {r.is_custom && <Badge variant="gold">custom</Badge>}
+                  {r.is_system && <Badge variant="neutral">system</Badge>}
                 </div>
                 <div className="truncate font-mono text-[11px] text-white/45 select-text">{r.path}</div>
               </div>
-              <span className="flex flex-none items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-emerald-300">
+              <Badge variant="ok" className="flex-none gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> found
-              </span>
+              </Badge>
             </div>
           ))}
         </div>

@@ -1,8 +1,10 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
-import { render, fireEvent, within } from '@testing-library/react';
+import { render as rtlRender, fireEvent, within } from '@testing-library/react';
 import { LibraryView, sortGames } from '../LibraryView';
 import type { Game } from '../../types';
+import { TooltipProvider } from '../ds/tooltip';
+const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider });
 
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
@@ -28,16 +30,17 @@ describe('Library sort', () => {
   it('table tier header sorts and the toolbar control stays in sync', () => {
     const { getAllByRole, getByRole, getByLabelText } = lib(games, 'table');
     fireEvent.click(getByRole('button', { name: 'tier' }));
-    expect((getByLabelText('Sort by') as HTMLSelectElement).value).toBe('tier');
+    expect(getByLabelText('Sort by').textContent).toMatch(/tier/i);
     const order = () => getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[1].textContent);
     expect(order()[0]).toBe('plat');
     expect(order()[5]).toBe('none');
   });
   it('card mode sorts via the toolbar and drops the last-played strip', () => {
     const played = [mk('b', { last_played_at: 5, playtime_minutes: 1 }), mk('a', { last_played_at: 9, playtime_minutes: 99 }), mk('c', { playtime_minutes: 50 })];
-    const { container, getByLabelText, queryByText } = lib(played, 'cards');
+    const { container, getByLabelText, getByRole, queryByText } = lib(played, 'cards');
     expect(queryByText('Last played')).toBeTruthy();
-    fireEvent.change(getByLabelText('Sort by'), { target: { value: 'hours' } });
+    fireEvent.pointerDown(getByLabelText('Sort by'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    fireEvent.click(getByRole('option', { name: 'hours played' }));
     expect(queryByText('Last played')).toBeNull();
     const titles = () => [...container.querySelectorAll('.cover-grid-sm > button')].map((b) => b.querySelector('.truncate')?.textContent);
     expect(titles()).toEqual(['a', 'c', 'b']);

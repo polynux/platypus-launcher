@@ -12,7 +12,9 @@ import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
-import { cx, EmptyState, btnPrimary } from './components/ui';
+import { cx, EmptyState } from './components/ui';
+import { Button } from './components/ds/button';
+import { TooltipProvider } from './components/ds/tooltip';
 import { LauncherApi, onJobs, onSession } from './effect/runtime';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
@@ -393,7 +395,7 @@ export function App() {
         <div className="p-7">
           <EmptyState
             label="backend unreachable"
-            action={<button onClick={() => loadData('rescan')} className={cx(btnPrimary, 'px-4 py-2 text-[12.5px]')}>Retry</button>}
+            action={<Button variant="primary" size="sm" onClick={() => loadData('rescan')}>Retry</Button>}
           >
             {loadError}
           </EmptyState>
@@ -505,6 +507,7 @@ export function App() {
   };
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className={cx('flex h-screen overflow-hidden text-[#ece6da]', view.name === 'game' ? 'app-wash-game' : 'app-wash')}>
       <Sidebar
         view={view}
@@ -557,6 +560,7 @@ export function App() {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }
 

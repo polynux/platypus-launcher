@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Game } from '../types';
-import { Cover, EmptyState, TierBadge, TweakDot, cx } from './ui';
+import { Cover, EmptyState, SegRow, TierBadge, TweakDot } from './ui';
+import { Badge } from './ds/badge';
 import { attentionReason, needsAttention, storeLabel } from '../lib/games';
 
 type Filter = 'attention' | 'all';
@@ -19,13 +20,12 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
             Curated recipes (Lutris, community) and ProtonDB ratings for your library. {withData.length} of {games.length} titles have data.
           </p>
         </div>
-        <div role="radiogroup" aria-label="Filter" className="flex rounded-xl bg-white/[0.05] p-1">
-          {([['attention', 'needs attention'], ['all', 'all rated']] as const).map(([v, l]) => (
-            <button key={v} role="radio" aria-checked={filter === v} onClick={() => setFilter(v)} className={cx('rounded-lg px-3.5 py-1.5 text-[12px] font-bold transition', filter === v ? 'bg-white/12 text-white' : 'text-white/45 hover:text-white/80')}>
-              {l}
-            </button>
-          ))}
-        </div>
+        <SegRow<Filter>
+          label="Filter"
+          value={filter}
+          onChange={setFilter}
+          options={[{ value: 'attention', label: 'needs attention' }, { value: 'all', label: 'all rated' }]}
+        />
       </header>
 
       {shown.length === 0 ? (
@@ -46,13 +46,13 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
                     {needsAttention(g) && <TweakDot />}
                     <span className="truncate text-[14px] font-bold">{g.title}</span>
                     <TierBadge tier={f.tier} />
-                    <span className="font-mono text-[11px] uppercase tracking-wider text-white/40">{storeLabel(g.store)} · {f.source}</span>
+                    <Badge variant="neutral">{storeLabel(g.store)} · {f.source}</Badge>
                   </div>
                   <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{needsAttention(g) ? attentionReason(g) : f.description}</p>
                   {(f.winetricks?.length || f.dll_overrides) && (
-                    <div className="mt-2 flex flex-wrap gap-1.5 font-mono text-[11.5px]">
-                      {f.winetricks?.map((t) => <span key={t} className="rounded-lg bg-sky-300/10 px-2 py-0.5 text-sky-200">{t}</span>)}
-                      {f.dll_overrides && Object.entries(f.dll_overrides).map(([k, v]) => <span key={k} className="rounded-lg bg-white/[0.06] px-2 py-0.5 text-white/60">{k}={v}</span>)}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {f.winetricks?.map((t) => <Badge key={t} variant="info" className="normal-case tracking-normal">{t}</Badge>)}
+                      {f.dll_overrides && Object.entries(f.dll_overrides).map(([k, v]) => <Badge key={k} variant="neutral" className="normal-case tracking-normal">{k}={v}</Badge>)}
                     </div>
                   )}
                 </div>
