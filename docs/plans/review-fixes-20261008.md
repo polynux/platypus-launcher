@@ -35,3 +35,27 @@ Shared edges:
 - No `wails dev`. Port 34115 belongs to the user's session in `~/dev/hydra-steam-depot-dl`, and that worktree must not be edited.
 - No real logins or downloads.
 - If a finding turns out to be wrong, say so in the final report and skip it.
+
+## Status (2026-10-08, 07:30)
+- **A to D: done.** Merged into `integ/review-fixes` (worktree `~/dev/hydra-integ`). The only conflict was App.tsx loadData (FE-3 combined with CORE-1); resolved in the merge commit.
+- **Corrections from the lead's review:**
+  - STEAM-12: the job-state flusher marshalled the live map outside its lock, a fatal concurrent map write;
+  - CORE-2: no replay of non-idempotent plugin calls after a crash;
+  - PLUG-5: install.sh deleted the hydra-steam-dl helper it had just built.
+- **Leftovers, done on integ:**
+  - Retry button for plugins that gave up (CORE-10);
+  - `title` sent in install/update params;
+  - toast above modals;
+  - dead code removed;
+  - deflaked TestInstallFlow, TestSteamCMExchangeAndCache, the crash give-up test and the queue cleanup.
+- **Checks:** everything passes. Cold `go test ./...` three times in a row, `-race` on internal and plugins, vet, and in the frontend tsc, vitest (27) and build, plus the production build.
+- **Still to do live, with the user:**
+  - the STEAM-1 streaming rewrite: install, cancel and resume, update, verify and repair, and peak RAM on a multi-GB depot;
+  - STEAM-5 small-depot start time;
+  - STEAM-3 on real manifests with symlinked folders;
+  - the STEAM-14 token expiry unit;
+  - the phase 6 password login.
+- **Product decisions for the user:**
+  - FE-12: sidebar search now jumps to the Library only on Enter;
+  - PLUG-3: legendary, gogdl and nile accept secrets only on argv (tool limitation).
+- **Not done:** branch picker UI (beta branches and passwords) and `settings_extra` UI.
