@@ -7,6 +7,7 @@ import { PlayButton } from './PlayButton';
 import { Lightbox } from './Lightbox';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, TogglePill, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
@@ -169,6 +170,7 @@ export function GamePage(p: GamePageProps) {
   ].filter(Boolean) as string[];
 
   return (
+    <TooltipProvider>
     <div className="p-7">
       <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-white/50 hover:bg-transparent hover:text-white">
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
@@ -240,6 +242,8 @@ export function GamePage(p: GamePageProps) {
         <div className="min-w-0 space-y-5">
           {shots.length > 0 && (
             <div className="space-y-3">
+              <Tooltip>
+              <TooltipTrigger asChild>
               <button
                 onClick={() => setLightbox(true)}
                 aria-label="Open screenshots in slideshow"
@@ -250,6 +254,9 @@ export function GamePage(p: GamePageProps) {
                   <Maximize2 size={15} />
                 </span>
               </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Open slideshow</TooltipContent>
+              </Tooltip>
               <ScrollArea orientation="horizontal" viewportRef={strip} data-testid="shot-strip">
                 {/* Padding keeps the active ring and rounded corners inside the viewport; pb leaves room for the overlay bar. */}
                 <div data-testid="shot-strip-inner" className="flex w-max gap-2.5 px-1.5 pb-3.5 pt-1.5">
@@ -343,6 +350,7 @@ export function GamePage(p: GamePageProps) {
         </section>
       )}
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -353,9 +361,14 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
     <div className="w-72 rounded-2xl bg-black/70 px-4 py-3 ring-1 ring-white/10">
       <div className="flex items-center justify-between gap-3 font-mono text-[11.5px] uppercase tracking-wider">
         <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
-        <Button variant="ghost" size="none" onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 hover:bg-transparent">
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="none" onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 hover:bg-transparent">
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Cancel {job.kind}</TooltipContent>
+        </Tooltip>
       </div>
       <div className="mt-2 h-1.5 rounded-full bg-white/15" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
         <div className={cx('h-full rounded-full bg-amber-300 transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
