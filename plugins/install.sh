@@ -123,6 +123,10 @@ if [ -d "$dest/$exec_dir" ]; then
     case "$base" in
       "$exec_base"|*.new) continue ;;
     esac
+    # Helpers built from cmd/ land in bin/ without a source file there.
+    if [ "$exec_dir" = bin ] && [ -d "$src/cmd/$base" ]; then
+      continue
+    fi
     if [ ! -e "$src/$exec_dir/$base" ]; then
       rm -f "$f"
     fi
