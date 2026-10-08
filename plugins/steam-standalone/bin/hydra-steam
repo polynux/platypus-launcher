@@ -1173,10 +1173,8 @@ def start_job(params, kind):
         if app not in load_state("installed.json", {}):
             raise RPCError(f"app {app} is not installed")
         ev = threading.Event()
-        if not claim_job(job_id):
+        if not claim_job(job_id, {"canceled": False, "id": app, "proc": None, "event": ev}):
             return {}
-        with jobs_lock:
-            jobs[job_id] = {"canceled": False, "id": app, "proc": None, "event": ev}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     install_dir = params.get("installDir") or ""
@@ -1187,10 +1185,8 @@ def start_job(params, kind):
     # Hydra resends a job with the same jobId after a crash: run it once. A
     # job that was just paused or canceled is still winding down: wait for it,
     # then start again from what it left on disk.
-    if not claim_job(job_id):
+    if not claim_job(job_id, {"canceled": False, "id": app, "dir": game_dir, "proc": None}):
         return {}
-    with jobs_lock:
-        jobs[job_id] = {"canceled": False, "id": app, "dir": game_dir, "proc": None}
     write_job_meta(job_id, {"app": app, "kind": kind, "dir": game_dir, "installDir": install_dir})
     os.makedirs(game_dir, exist_ok=True)
     dl_kind = "update" if kind == "update" else "install"
@@ -1199,16 +1195,18 @@ def start_job(params, kind):
     return {}
 
 
-def claim_job(job_id, timeout=90):
-    """True when job_id may start now. False when it is already running (a
-    repeated start). A job that job.cancel just stopped is still shutting down
-    its downloader: wait for it to go, so a resume with the same jobId doesn't
-    lose to the old run and report nothing."""
+def claim_job(job_id, entry, timeout=90):
+    """Registers entry as the run of job_id and returns True. False when the
+    job is already running (a repeated start). A job that job.cancel just
+    stopped is still shutting down its downloader: wait for it to go, so a
+    resume with the same jobId doesn't lose to the old run and report
+    nothing."""
     deadline = time.monotonic() + timeout
     while True:
         with jobs_lock:
             job = jobs.get(job_id)
             if job is None:
+                jobs[job_id] = entry
                 return True
             if not job.get("canceled"):
                 return False
