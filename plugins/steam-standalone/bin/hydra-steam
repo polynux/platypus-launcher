@@ -391,9 +391,10 @@ def start_qr_login():
                             qr_art["text"] = msg["qr_art"]
                         ready.set()
                 elif t == "result":
-                    qr_proc["rc"] = _reap(mine)
+                    rc = _reap(mine)
                     if ours():
                         with qr_lock:
+                            qr_proc["rc"] = rc
                             qr_state.update(state="ok", error=None)
                             qr_proc["proc"] = None
                         ready.set()
@@ -403,9 +404,10 @@ def start_qr_login():
                         pass
                     return
                 elif t == "error":
-                    qr_proc["rc"] = _reap(mine)
+                    rc = _reap(mine)
                     if ours():
                         with qr_lock:
+                            qr_proc["rc"] = rc
                             qr_state.update(state="failed", error=msg.get("message") or "login failed")
                             qr_proc["proc"] = None
                         ready.set()
@@ -414,9 +416,10 @@ def start_qr_login():
             # EOF without a result: the binary died. Reap it, and only
             # fail the shared state when this helper is still the owner —
             # a superseded helper must never touch it.
-            qr_proc["rc"] = _reap(mine)
+            rc = _reap(mine)
             if ours():
                 with qr_lock:
+                    qr_proc["rc"] = rc
                     if qr_state["state"] == "pending":
                         qr_state.update(state="failed",
                                         error="the login helper ended without logging in")
@@ -502,6 +505,7 @@ STORE_TTL = 30 * 86400  # names and types of released apps rarely change
 STORE_BUDGET = 20  # seconds of Store lookups per library.list; the rest waits for the next rescan
 store_lock = threading.Lock()
 store_cache = None  # app id -> {"name", "type", "at"}, mirrors store-apps.json
+store_inflight = {}  # app id -> threading.Event for a fetch in progress
 
 
 def store_cached(app_id):
@@ -518,23 +522,49 @@ def store_app(app_id, fetch=True):
     """Public app details (name, type) from the Steam Store API, cached on
     disk: a library scan asks about every owned game, one request each. No
     login needed; {} when the app isn't listed (bad id, region lock) or, with
-    fetch=False, not cached yet. Misses aren't cached."""
+    fetch=False, not cached yet. Misses aren't cached. Concurrent callers
+    share one fetch per app (singleflight)."""
     entry = store_cached(app_id)
     if entry or not fetch:
         return entry
+    key = str(app_id)
+    with store_lock:
+        # Recheck under the lock: another thread may have filled it.
+        if store_cache is not None:
+            entry = store_cache.get(key) or {}
+            if time.time() - entry.get("at", 0) < STORE_TTL:
+                return entry
+        ev = store_inflight.get(key)
+        if ev is None:
+            ev = threading.Event()
+            store_inflight[key] = ev
+            owner = True
+        else:
+            owner = False
+    if not owner:
+        ev.wait(60)
+        return store_cached(app_id)
     try:
         data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app_id}&filters=basic")
     except Exception:
+        with store_lock:
+            store_inflight.pop(key, None)
+            ev.set()
         return {}
     if isinstance(data, dict) and data.get("_test"):
         data = data["_test"]
     entry = (data or {}).get(str(app_id))
     if not entry or not entry.get("success"):
+        with store_lock:
+            store_inflight.pop(key, None)
+            ev.set()
         return {}
     details = entry.get("data") or {}
     keep = {"name": details.get("name") or "", "type": details.get("type") or "", "at": time.time()}
     with store_lock:
         store_cache[str(app_id)] = keep
+        store_inflight.pop(key, None)
+        ev.set()
     return keep
 
 
