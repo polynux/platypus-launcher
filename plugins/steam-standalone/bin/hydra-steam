@@ -597,9 +597,13 @@ def save_store_cache():
 
 def auth_status(_params=None):
     if logged_in():
-        # The persona name (from GetPlayerSummaries, saved by library.list)
-        # when known, else the login's account name ("steam" for QR logins).
-        user = load_state("session.json", {}).get("persona") or state_user()
+        # The persona name when known, else the login's account name. The
+        # login dialog closes on the first loggedIn status without calling
+        # auth.complete (QR path), so resolve the persona here too.
+        persona = load_state("session.json", {}).get("persona")
+        if not persona:
+            persona = status_persona()
+        user = persona or state_user()
         out = {"loggedIn": True, "user": user} if user else {"loggedIn": True}
         return out
     out = {"loggedIn": False}
@@ -851,6 +855,20 @@ def ensure_persona():
         pass
 
 
+# auth.status is polled; a failed persona lookup (offline, private profile)
+# must not open a CM session on every poll.
+PERSONA_RETRY = 60
+persona_tried = {"at": 0.0}
+
+
+def status_persona():
+    if time.time() - persona_tried["at"] < PERSONA_RETRY:
+        return ""
+    persona_tried["at"] = time.time()
+    ensure_persona()
+    return load_state("session.json", {}).get("persona") or ""
+
+
 def wait_qr_login(timeout=300):
     """Waits for the background hydra-steam-dl auth (QR) to be approved
     (the phone confirmed) and reports the result, like a password login."""
@@ -881,6 +899,7 @@ def auth_logout(_params):
     # cached token survives.
     shutil.rmtree(data_dir(), ignore_errors=True)
     os.makedirs(data_dir(), exist_ok=True)
+    persona_tried["at"] = 0.0
     return {"loggedIn": False}
 
 

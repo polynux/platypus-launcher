@@ -1192,3 +1192,29 @@ func TestSteamLegacyInstallFolderKeepsWorking(t *testing.T) {
 		t.Fatalf("legacy folder not removed: %v", err)
 	}
 }
+
+// The dialog closes on its own once a polled auth.status turns loggedIn,
+// without ever calling auth.complete: that first status must already carry
+// the persona, not the account name.
+func TestSteamQRStatusPollShowsPersona(t *testing.T) {
+	e := setup(t)
+	var pr types.AuthPrompt
+	if err := e.call("auth.begin", nil, &pr); err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	e.setCMState("auth_qr_approved", true)
+	var st types.AuthStatus
+	deadline := time.Now().Add(20 * time.Second)
+	for !st.LoggedIn {
+		if time.Now().After(deadline) {
+			t.Fatal("auth.status never turned loggedIn after the QR approval")
+		}
+		time.Sleep(100 * time.Millisecond)
+		if err := e.call("auth.status", nil, &st); err != nil {
+			t.Fatalf("status: %v", err)
+		}
+	}
+	if st.User != "TestPersona" {
+		t.Fatalf("want persona TestPersona on the first loggedIn status, got %q", st.User)
+	}
+}
