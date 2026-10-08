@@ -141,7 +141,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
             <div><MonoLabel className="mb-1.5">dx layer</MonoLabel><SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} /></div>
             <div><MonoLabel className="mb-1.5">sync</MonoLabel><SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} /></div>
-            <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler === 'integer' ? 'native' : draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
+            <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
             <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
             <div><MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel><SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} /></div>
           </div>
