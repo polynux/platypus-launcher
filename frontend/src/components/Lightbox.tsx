@@ -39,7 +39,7 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
     }
   };
 
-  const nav = 'absolute top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/60 text-white/85 ring-1 ring-white/15 transition hover:bg-black/80 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300';
+  const nav = 'absolute z-10 grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white/85 ring-1 ring-white/15 transition hover:bg-black/80 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300';
 
   return (
     <div
@@ -56,13 +56,12 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
         data-autofocus
         onClick={(e) => { e.stopPropagation(); onClose(); }}
         aria-label="Close slideshow"
-        className={cx(nav, 'right-5 top-5 translate-y-0')}
-        style={{ top: 20 }}
+        className={cx(nav, 'right-5 top-5')}
       >
         <X size={18} />
       </button>
       {n > 1 && (
-        <button onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label="Previous screenshot" className={cx(nav, 'left-5')}>
+        <button onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label="Previous screenshot" className={cx(nav, 'left-5 top-1/2 -translate-y-1/2')}>
           <ChevronLeft size={22} />
         </button>
       )}
@@ -73,7 +72,7 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
         className="max-h-[calc(100vh-6rem)] max-w-[calc(100vw-9rem)] select-none object-contain"
       />
       {n > 1 && (
-        <button onClick={(e) => { e.stopPropagation(); go(1); }} aria-label="Next screenshot" className={cx(nav, 'right-5')}>
+        <button onClick={(e) => { e.stopPropagation(); go(1); }} aria-label="Next screenshot" className={cx(nav, 'right-5 top-1/2 -translate-y-1/2')}>
           <ChevronRight size={22} />
         </button>
       )}
