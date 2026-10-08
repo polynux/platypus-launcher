@@ -380,6 +380,11 @@ func (m *Manager) SetInstallFolder(id, path string) error {
 	}
 	if path != "" {
 		path = filepath.Clean(path)
+		// The install folder is always a valid launch location, so it
+		// gets the same system-folder guard as AllowFolder (CORE-6).
+		if err := checkAllowable(path); err != nil {
+			return err
+		}
 	}
 	st.InstallDir = path
 	return m.trust.SetPluginState(id, st)
