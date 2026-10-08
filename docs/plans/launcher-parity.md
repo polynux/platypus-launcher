@@ -187,6 +187,25 @@ Ubisoft A ~2 weeks including live iteration.
 | L-F1 | Steam Families: what the CM sends for a family group (group membership, borrowed library, in-use state) | family | read-only, user's real group |
 | L-S1 | Run each new method against real plugin binaries once the conformance suite passes | all | per item |
 
+## User decisions (2026-10-09)
+
+| Question | Decision |
+|---|---|
+| Q-U1 Ubisoft web API | Recommended: local cache only, no official app id. |
+| Q-U2 Ubisoft downloads | Recommended: Ubisoft Connect does the downloading in a Hydra-managed Wine prefix. Ideally a light, headless setup that Hydra drives programmatically. |
+| Q-V1 Steam rollback | OK (branches, passwords, install ledger, typed manifest id). The UI shows a link to the game's depots on SteamDB so the user can look up a manifest id themselves; Hydra never scrapes SteamDB. |
+| Q-V2 Order | As in the roadmap. |
+| Q-LIC Licence | Permissive: MIT or Apache-2.0 (user leaning away from GPL). Final pick pending. |
+| Q-REDEEM | OK. |
+| Q-SOCIAL | Per-store sections inside one friends modal. |
+| Q-MOVE | Core moves the folder itself when the plugin has no `game.move`. |
+| Q-OVERLAY | Overlays (Epic EOS, Steam) are managed by the plugin, which launches its games; core provides the settings surface for them. |
+| Q-PARENT | Show state only, never enforce. |
+
+**Implementation focus:** build each capability block in the launcher core (registry, protocol, orchestration,
+UI surfaces) and validate it with the test plugin (`plugins/echo`), extended to fake every capability.
+Real store plugins (Steam, GOG, Epic, Ubisoft) implement them later.
+
 ## 5. Open product questions for the user
 
 - **Q-U1. Ubisoft web API.** Library, friends and playtime need Ubisoft Connect's own application id. Sending it
