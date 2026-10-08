@@ -13,11 +13,43 @@ import (
 
 // WriteChunks materialises data (chunk id -> uncompressed bytes) into dir
 // according to m. It preallocates each file, writes chunks with WriteAt
-// (no per-file lock; disjoint offsets), and applies flags.
+// (no per-file lock; disjoint offsets), and applies flags. Files land
+// before symlinks, and file writes through symlink components are
+// refused, so a symlink entry can never redirect a file outside dir.
 func WriteChunks(m *Manifest, dir string, data map[string][]byte) error {
 	files := append([]File{}, m.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+	// Refuse files under a symlink entry upfront (same as Preallocate).
+	syms := map[string]bool{}
 	for _, f := range files {
+		if f.IsSymlink() && f.LinkTarget != "" {
+			syms[filepath.FromSlash(f.Name)] = true
+		}
+	}
+	for _, f := range files {
+		if f.IsDir() || (f.IsSymlink() && f.LinkTarget != "") {
+			continue
+		}
+		rel := filepath.FromSlash(f.Name)
+		for s := range syms {
+			if rel == s || len(rel) > len(s) && rel[len(s)] == filepath.Separator && rel[:len(s)] == s {
+				return fmt.Errorf("refusing write through symlink %q: %q", s, f.Name)
+			}
+		}
+	}
+	// Pass 1: dirs + regular files. Pass 2: symlinks last.
+	for _, f := range files {
+		if f.IsSymlink() && f.LinkTarget != "" {
+			continue
+		}
+		if err := writeOne(dir, f, data); err != nil {
+			return err
+		}
+	}
+	for _, f := range files {
+		if !(f.IsSymlink() && f.LinkTarget != "") {
+			continue
+		}
 		if err := writeOne(dir, f, data); err != nil {
 			return err
 		}
@@ -27,7 +59,10 @@ func WriteChunks(m *Manifest, dir string, data map[string][]byte) error {
 
 func writeOne(dir string, f File, data map[string][]byte) error {
 	rel := filepath.FromSlash(f.Name)
-	if rel == "" || strings.Contains(rel, "..") {
+	if rel == "" || rel == "." || strings.Contains(rel, "..") {
+		return fmt.Errorf("unsafe path %q", f.Name)
+	}
+	if filepath.IsAbs(rel) || filepath.Clean(rel) != rel {
 		return fmt.Errorf("unsafe path %q", f.Name)
 	}
 	path := filepath.Join(dir, rel)
@@ -35,11 +70,17 @@ func writeOne(dir string, f File, data map[string][]byte) error {
 		return os.MkdirAll(path, 0o755)
 	}
 	if f.IsSymlink() && f.LinkTarget != "" {
+		if err := checkNoSymlinkEscape(dir, path); err != nil {
+			return err
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
 		os.Remove(path)
 		return os.Symlink(f.LinkTarget, path)
+	}
+	if err := checkNoSymlinkEscape(dir, path); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

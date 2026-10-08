@@ -39,6 +39,26 @@ type InstallWriter struct {
 func Preallocate(m *Manifest, dir string) (*InstallWriter, error) {
 	files := append([]File{}, m.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+	// Refuse files under a symlink entry upfront: symlinks land last, so
+	// link/pwned would otherwise be written to a real dir that the later
+	// symlink cannot replace.
+	syms := map[string]bool{}
+	for _, f := range files {
+		if f.IsSymlink() && f.LinkTarget != "" {
+			syms[filepath.FromSlash(f.Name)] = true
+		}
+	}
+	for _, f := range files {
+		if f.IsDir() || (f.IsSymlink() && f.LinkTarget != "") {
+			continue
+		}
+		rel := filepath.FromSlash(f.Name)
+		for s := range syms {
+			if rel == s || len(rel) > len(s) && rel[len(s)] == filepath.Separator && rel[:len(s)] == s {
+				return nil, fmt.Errorf("refusing write through symlink %q: %q", s, f.Name)
+			}
+		}
+	}
 	w := &InstallWriter{dir: dir, man: m, index: map[string][]chunkLoc{}}
 	for _, f := range files {
 		rel := filepath.FromSlash(f.Name)
