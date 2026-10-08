@@ -66,6 +66,7 @@ export interface Achievement {
 export interface Achievements {
   total: number;
   unlocked: number; // -1 when the user's progress isn't cached locally
+  /** May arrive as null from Go (nil slice); normalized to [] at the edge. */
   list: Achievement[]; // may be a subset of total
 }
 

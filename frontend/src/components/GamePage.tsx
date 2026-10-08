@@ -532,7 +532,10 @@ function AchievementsSection({
   known: boolean;
   viaSteam: boolean;
 }) {
-  const pct = known ? Math.round((ach.unlocked / ach.total) * 100) : 0;
+  const pct = known && ach.total > 0 ? Math.round((ach.unlocked / ach.total) * 100) : 0;
+  // Backend may send list:null for uncached progress; normalized at the
+  // edge in runtime.ts, guarded here too for safety (FE-10).
+  const list = ach.list ?? [];
   return (
     <section className="pb-8">
       <div className="mb-3.5 flex items-baseline justify-between">
@@ -553,13 +556,13 @@ function AchievementsSection({
         </p>
       )}
       <div className="ach-grid">
-        {ach.list.map((a) => (
+        {list.map((a) => (
           <AchievementCard key={a.id || a.name} a={a} known={known} />
         ))}
       </div>
-      {ach.list.length < ach.total && (
+      {list.length < ach.total && (
         <p className="mt-3 font-mono text-[10px] text-white/35">
-          showing {ach.list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
+          showing {list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
         </p>
       )}
     </section>
