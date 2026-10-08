@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -45,6 +46,26 @@ func (f *fakeBackend) starts() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.started)
+}
+
+// waitStarts blocks until the backend has been asked to start n jobs. The
+// queue delivers game.install (Start) only after the size probe (prepare)
+// has set Total, so a test that notifies after waitStarts mirrors what a
+// real plugin can do.
+func (f *fakeBackend) waitStarts(n int, d time.Duration) {
+	deadline := time.Now().Add(d)
+	for {
+		f.mu.Lock()
+		got := len(f.started)
+		f.mu.Unlock()
+		if got >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			panic(fmt.Sprintf("backend never started %d jobs (got %d)", n, got))
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 func newQueue(t *testing.T, b Backend) (*Queue, string) {
@@ -91,6 +112,10 @@ func TestInstallFlow(t *testing.T) {
 		t.Fatal("second active job for one game accepted")
 	}
 	waitState(t, q, j.ID, StateRunning)
+	// Real plugins only learn the job from game.install, which Start
+	// delivers after the size probe has set Total. Wait for that, or the
+	// progress below can race the probe and land with Total unset.
+	b.waitStarts(1, 3*time.Second)
 
 	q.Notify("echo", "job.progress", plugins.JobUpdate{JobID: j.ID, Bytes: 50, Speed: 10, Phase: "downloading"})
 	got := waitState(t, q, j.ID, StateRunning)
