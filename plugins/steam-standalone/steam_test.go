@@ -10,9 +10,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -915,7 +918,7 @@ func TestSteamQRConcurrentBegin(t *testing.T) {
 	if prs[0].QR != prs[1].QR {
 		t.Fatal("concurrent begins served different QR codes")
 	}
-	alive, zombie := countAuthHelpers()
+	alive, zombie := e.countAuthHelpers()
 	if alive != 1 {
 		t.Fatalf("want exactly 1 live auth helper, got %d", alive)
 	}
@@ -925,48 +928,95 @@ func TestSteamQRConcurrentBegin(t *testing.T) {
 	if err := e.call("auth.logout", nil, &types.AuthStatus{}); err != nil {
 		t.Fatalf("logout: %v", err)
 	}
-	if alive, _ := countAuthHelpers(); alive != 0 {
+	if alive, _ := e.countAuthHelpers(); alive != 0 {
 		t.Fatalf("want no auth helpers after logout, got %d", alive)
 	}
 }
 
-// countAuthHelpers counts live vs zombie ("Z" stat) hydra-steam-dl auth
-// processes on this machine. It matches the executable name plus an
-// "auth" argv entry — never a substring of the full command line, which
-// would also match observers (this test runner included).
-func countAuthHelpers() (alive, zombie int) {
-	out, err := exec.Command("ps", "-eo", "stat,args").Output()
-	if err != nil {
-		return -1, -1
+// countAuthHelpers counts this test's live vs zombie hydra-steam-dl auth
+// processes: direct children of the harness's plugin process only, so
+// helpers from parallel packages, other tests, or the user's dev launcher
+// never leak into the count. (An earlier version scraped `ps` output for
+// an args substring and even matched the test runner itself.)
+func (e *env) countAuthHelpers() (alive, zombie int) {
+	e.t.Helper()
+	mine := e.m.Running(id)
+	if mine == 0 {
+		e.t.Fatal("plugin process is not running")
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		e.t.Fatalf("no /proc: %v", err)
+	}
+	for _, de := range entries {
+		pid, err := strconv.Atoi(de.Name())
+		if err != nil {
 			continue
 		}
-		exe := fields[1]
-		if i := strings.LastIndex(exe, "/"); i >= 0 {
-			exe = exe[i+1:]
-		}
-		if exe != "hydra-steam-dl" {
+		ppid, comm, state, cmdline, ok := procInfo(pid)
+		if !ok || ppid != mine {
 			continue
 		}
-		auth := false
-		for _, a := range fields[2:] {
-			if a == "auth" {
-				auth = true
+		if state == "Z" {
+			// Zombies have no cmdline; comm (15 chars) still names
+			// the binary. Only auth helpers spawn in this test.
+			if comm == "hydra-steam-dl" {
+				zombie++
 			}
-		}
-		if !auth {
 			continue
 		}
-		if strings.HasPrefix(fields[0], "Z") {
-			zombie++
-		} else {
-			alive++
+		if procExe(cmdline) != "hydra-steam-dl" || !slices.Contains(cmdline, "auth") {
+			continue
 		}
+		alive++
 	}
 	return alive, zombie
+}
+
+// procInfo reads one /proc entry: parent pid, comm, state and argv.
+func procInfo(pid int) (ppid int, comm, state string, cmdline []string, ok bool) {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return 0, "", "", nil, false
+	}
+	s := string(raw)
+	open, close := strings.IndexByte(s, '('), strings.LastIndexByte(s, ')')
+	if open < 0 || close < 0 || close < open {
+		return 0, "", "", nil, false
+	}
+	comm = s[open+1 : close]
+	rest := strings.Fields(s[close+2:])
+	if len(rest) < 2 {
+		return 0, "", "", nil, false
+	}
+	state = rest[0]
+	if n, err := strconv.Atoi(rest[1]); err == nil {
+		ppid = n
+	} else {
+		return 0, "", "", nil, false
+	}
+	argv, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return 0, "", "", nil, false
+	}
+	for _, a := range strings.Split(string(argv), "\x00") {
+		if a != "" {
+			cmdline = append(cmdline, a)
+		}
+	}
+	return ppid, comm, state, cmdline, true
+}
+
+// procExe basenames argv[0], "" when absent (zombies).
+func procExe(cmdline []string) string {
+	if len(cmdline) == 0 {
+		return ""
+	}
+	exe := cmdline[0]
+	if i := strings.LastIndexByte(exe, '/'); i >= 0 {
+		exe = exe[i+1:]
+	}
+	return exe
 }
 
 // checkQRArt asserts the block-art is a square QR with the finder
