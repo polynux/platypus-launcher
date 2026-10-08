@@ -34,15 +34,54 @@ interface LibraryProps {
 
 const CORE_SOURCES: StoreType[] = ['steam', 'gog', 'epic'];
 
-type SortKey = 'title' | 'hours' | 'size' | 'last';
+type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier';
 type Sort = { key: SortKey; dir: 'asc' | 'desc' };
+/** ProtonDB quality order, best first. Unknown or missing tiers have no rank and sort last. */
+export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver: 3, bronze: 2, borked: 1 };
 const sortValue = (g: Game, k: SortKey): string | number =>
-  k === 'title' ? g.title.toLowerCase() : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
+  k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? g.title.toLowerCase() : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
 
 /** Source chips come from what the library really holds: no chip for a store with zero games. */
 export function sourceChips(games: Game[]): (StoreType | 'all')[] {
   const present = new Set(games.map((g) => g.store));
   return ['all', ...CORE_SOURCES.filter((s) => present.has(s)), ...[...present].filter((s) => s !== 'custom' && !CORE_SOURCES.includes(s))];
+}
+
+/** Games with no value for the key (no tier, never played...) stay last in both directions. */
+export function sortGames(games: Game[], sort: Sort | null): Game[] {
+  if (!sort) return games;
+  return [...games].sort((a, b) => {
+    const x = sortValue(a, sort.key), y = sortValue(b, sort.key);
+    if (sort.key === 'tier' && (x === -1 || y === -1) && x !== y) return x === -1 ? 1 : -1;
+    const c = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number);
+    return (sort.dir === 'asc' ? c : -c) || a.title.localeCompare(b.title);
+  });
+}
+const SORT_OPTIONS: [SortKey | '', string][] = [['', 'default'], ['title', 'title'], ['last', 'recently played'], ['hours', 'hours played'], ['size', 'size'], ['tier', 'tier']];
+const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
+
+function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort | null) => void }) {
+  return (
+    <div className="flex items-center rounded-xl bg-white/[0.05] p-1 font-mono text-[10px] uppercase tracking-wider text-white/60">
+      <select
+        aria-label="Sort by"
+        value={sort?.key ?? ''}
+        onChange={(e) => onChange(e.target.value ? { key: e.target.value as SortKey, dir: defaultDir(e.target.value as SortKey) } : null)}
+        className="cursor-pointer rounded-lg bg-transparent px-2.5 py-1.5 uppercase tracking-wider outline-none ring-amber-300/50 focus-visible:ring-1"
+      >
+        {SORT_OPTIONS.map(([v, l]) => <option key={v} value={v} className="bg-[#1a1612] normal-case">{v ? l : 'sort: default'}</option>)}
+      </select>
+      {sort && (
+        <button
+          aria-label={sort.dir === 'asc' ? 'Ascending, switch to descending' : 'Descending, switch to ascending'}
+          onClick={() => onChange({ ...sort, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+          className="grid h-7 w-7 place-items-center rounded-lg transition hover:text-white"
+        >
+          {sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function jobLabel(j: Job): string {
@@ -98,17 +137,12 @@ export function LibraryView(p: LibraryProps) {
   );
   const jobOf = (g: Game) => p.jobs.find((j) => j.game_id === g.id);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
-  const played = filtered.filter((g) => g.last_played_at).sort(byRecent).slice(0, 3);
-  const tableRows = sort
-    ? [...filtered].sort((a, b) => {
-        const x = sortValue(a, sort.key), y = sortValue(b, sort.key);
-        const c = typeof x === 'string' ? x.localeCompare(y as string) : (x as number) - (y as number);
-        return (sort.dir === 'asc' ? c : -c) || a.title.localeCompare(b.title);
-      })
-    : filtered;
+  // The Last played strip belongs to the default order; an explicit sort shows one ordered grid.
+  const played = sort ? [] : filtered.filter((g) => g.last_played_at).sort(byRecent).slice(0, 3);
+  const tableRows = sortGames(filtered, sort);
   const toggleSort = (key: SortKey) =>
-    setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'title' ? 'asc' : 'desc' }));
-  const rest = filtered.filter((g) => !played.includes(g));
+    setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultDir(key) }));
+  const rest = (sort ? tableRows : filtered).filter((g) => !played.includes(g));
   const maxHours = Math.max(1, ...p.games.map((g) => hoursPlayed(g) ?? 0));
   const recentlyAdded = p.games.filter((g) => g.store === 'custom').slice(0, 6);
 
@@ -147,6 +181,7 @@ export function LibraryView(p: LibraryProps) {
             <Segmented label="Ownership" mono value={p.ownership} onChange={p.onOwnership} options={[['installed', 'installed'], ['owned', 'owned']]} />
           )}
           <Segmented label="Source" mono value={source} onChange={p.onSource} options={sources.map((s) => [s, s])} />
+          <SortControl sort={sort} onChange={setSort} />
           <Segmented label="View" value={p.mode} onChange={p.onMode} options={[['cards', 'cards'], ['table', 'table']]} />
           <button onClick={p.onAddGame} className={cx(btnPrimary, 'flex items-center gap-1.5 px-4 py-2.5 text-[12.5px]')}>
             <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
@@ -265,7 +300,7 @@ export function LibraryView(p: LibraryProps) {
             <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/40', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">status</span></span>
               <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
-              <span role="columnheader">tier</span><span role="columnheader">runner</span>
+              <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>
               <SortHead k="hours" label="hrs" sort={sort} onSort={toggleSort} right />
               <SortHead k="size" label="size" sort={sort} onSort={toggleSort} right />
               <SortHead k="last" label="last played" sort={sort} onSort={toggleSort} right />
