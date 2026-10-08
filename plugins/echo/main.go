@@ -537,6 +537,9 @@ func library() (any, error) {
 			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client,
 			"version": "1.0", "note": g.note, "native": g.native,
 		}
+		if f, set := gameFeatures(id); set {
+			e["features"] = f
+		}
 		if g.size > 0 {
 			e["sizeBytes"] = g.size
 		}

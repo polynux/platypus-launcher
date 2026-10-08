@@ -84,6 +84,12 @@ type Game struct {
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
+	// Features are the plugin capabilities on offer for this game (names from
+	// the plugin capability registry): the plugin's per-game list, or every
+	// capability the plugin offers when it gave none. Never omitted for plugin
+	// games, so an empty list ("nothing") differs from null (Steam, sideloaded:
+	// not capability-driven).
+	Features []string `json:"features"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -97,6 +103,9 @@ type SourceWarning struct {
 	Source    string `json:"source"`
 	Message   string `json:"message"`
 	NeedsAuth bool   `json:"needs_auth,omitempty"`
+	// Unavailable marks a source that answered "unavailable right now"
+	// (plugin error -32002): not a login problem, worth trying again later.
+	Unavailable bool `json:"unavailable,omitempty"`
 }
 
 // StorePlugin is a discovered plugin as the Plugins view shows it. Kind is

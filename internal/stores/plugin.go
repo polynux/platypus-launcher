@@ -30,8 +30,26 @@ func NewPlugin(m *plugins.Manager, p plugins.Plugin, folders func() []string) *P
 
 func (s *Plugin) ID() string { return s.p.Manifest.ID }
 
-func (s *Plugin) has(capability string) bool {
-	return slices.Contains(s.p.Manifest.Capabilities, capability)
+// has reports whether the plugin offers the capability right now: what its
+// last initialize said, or the manifest's list before it has initialized.
+func (s *Plugin) has(capability string) bool { return s.m.Has(s.ID(), capability) }
+
+// gameFeatures resolves a library entry's `features` against the runtime
+// capabilities. A plugin that says nothing offers every capability for the
+// game; one that lists some offers those it really has, once each, in the
+// registry's vocabulary of the plugin's own manifest.
+func (s *Plugin) gameFeatures(listed []string) []string {
+	runtime := s.m.Runtime(s.ID()).Capabilities
+	if listed == nil {
+		return slices.Clone(runtime)
+	}
+	out := []string{}
+	for _, f := range listed {
+		if slices.Contains(runtime, f) && !slices.Contains(out, f) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func (s *Plugin) Library(ctx context.Context) ([]types.Game, error) {
@@ -73,6 +91,7 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Installable:     lg.Installable && s.has("install"),
 		Note:            lg.Note,
 		Native:          lg.Native,
+		Features:        s.gameFeatures(lg.Features),
 		Settings:        types.GameSettings{UseGameMode: true},
 	}
 	if lg.Installed && lg.InstallPath != "" {
