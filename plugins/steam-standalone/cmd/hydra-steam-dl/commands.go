@@ -239,12 +239,20 @@ func runVerify(ctx context.Context, req request) error {
 			continue
 		}
 		sub := filterFiles(d.man, want)
-		data, err := sched.Download(ctx, sub, d.ref.DepotID, ss.hosts, d.key, nil, nil)
+		// STEAM-2: repair with per-depot tokened hosts (d.hosts), not the
+		// bare server list (ss.hosts) install/update download with.
+		w, err := depot.Preallocate(sub, req.InstallDir)
 		if err != nil {
 			return err
 		}
-		if err := depot.WriteChunks(sub, req.InstallDir, data); err != nil {
-			return err
+		dlErr := sched.DownloadStream(ctx, sub, d.ref.DepotID, d.hosts, d.key, nil, func(id string, data []byte) error {
+			return w.Write(id, data)
+		}, nil)
+		if cErr := w.Close(); dlErr == nil {
+			dlErr = cErr
+		}
+		if dlErr != nil {
+			return dlErr
 		}
 		fixed += len(want)
 	}
