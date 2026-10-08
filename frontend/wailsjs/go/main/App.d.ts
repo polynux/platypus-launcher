@@ -16,6 +16,8 @@ export function ChoosePluginInstallFolder(arg1:string):Promise<string>;
 
 export function ClearFinishedJobs():Promise<void>;
 
+export function ForceStopGame(arg1:string):Promise<void>;
+
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
 export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
@@ -67,6 +69,8 @@ export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;
 export function SetPluginEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetPluginInstallFolder(arg1:string,arg2:string):Promise<void>;
+
+export function StopGame(arg1:string):Promise<void>;
 
 export function UninstallGame(arg1:types.Game):Promise<types.Job>;
 
