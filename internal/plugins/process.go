@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -209,10 +210,9 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 	cmd.Stdout = outW
 	var logFile *os.File
 	if p.logPath != "" {
-		if f, err := os.OpenFile(p.logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-			fmt.Fprintf(f, "\n=== %s · start %s\n", time.Now().Format(time.RFC3339), p.exec)
-			logFile = f
-			cmd.Stderr = f
+		if logFile = openLogFile(p.logPath); logFile != nil {
+			fmt.Fprintf(logFile, "\n=== %s · start %s\n", time.Now().Format(time.RFC3339), p.exec)
+			cmd.Stderr = logFile
 		}
 	}
 	// Own process group, so the plugin's helpers (legendary, …) die with it,
@@ -360,14 +360,55 @@ func notifyToLog(path string, next func(method string, params json.RawMessage)) 
 				Message string `json:"message"`
 			}
 			_ = json.Unmarshal(params, &l)
-			if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
-				fmt.Fprintf(f, "[%s] %s\n", l.Level, l.Message)
-				f.Close()
-			}
+			appendPluginLog(path, fmt.Sprintf("[%s] %s\n", l.Level, l.Message))
 			return
 		}
 		if next != nil {
 			next(method, params)
 		}
 	}
+}
+
+// maxPluginLogBytes bounds one plugin log file; older output moves to a
+// single ".prev" backup, so the pair stays under ~2x the cap (CORE-13).
+const maxPluginLogBytes = 1 << 20
+
+// rotateLogFile moves an over-cap log aside before the next write.
+func rotateLogFile(path string) {
+	st, err := os.Stat(path)
+	if err != nil || st.Size() < maxPluginLogBytes {
+		return
+	}
+	_ = os.Remove(path + ".prev")
+	_ = os.Rename(path, path+".prev")
+}
+
+// openLogFile opens the plugin log for appending: owner-only like the
+// plugin state files, rotated when over the cap (CORE-13).
+func openLogFile(path string) *os.File {
+	if path == "" {
+		return nil
+	}
+	rotateLogFile(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil
+	}
+	_ = os.Chmod(path, 0o600) // tighten logs written 0644 before the fix
+	return f
+}
+
+// appendPluginLog appends one log line, rotating first when over the cap.
+func appendPluginLog(path, text string) {
+	if path == "" {
+		return
+	}
+	rotateLogFile(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	_ = os.Chmod(path, 0o600)
+	_, _ = io.WriteString(f, text)
+	f.Close()
 }
