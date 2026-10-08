@@ -28,6 +28,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 
 API = 1
@@ -107,51 +108,80 @@ def auth_status(_params=None):
     return {"loggedIn": True, "user": st.get("Username") or ""}
 
 
+# Set by auth.begin, read by auth.complete. The plugin serves one user.
+# Guarded by pending_lock: RPC handlers run one thread per request, and two
+# overlapping auth.begin calls (StrictMode double-submit, two windows, retry
+# while the first dialog is open) must not overwrite each other's triple.
+# A second begin while one is pending reuses it (same URL, same verifier),
+# so either dialog completes against the triple it showed.
+pending_login = {}
+pending_lock = threading.Lock()
+PENDING_TTL = 600  # seconds a triple stays valid
+
+
+def _auth_instructions():
+    return ("Log in to Amazon in your browser. You land on a normal amazon.com "
+            "page: copy its full address (it contains "
+            "openid.oa2.authorization_code=…) and paste it here.")
+
+
+def _auth_fields():
+    return [{"id": "code", "label": "address you were redirected to",
+             "placeholder": "https://www.amazon.com/…openid.oa2.authorization_code=…", "secret": True}]
+
+
 def auth_begin(_params):
     # The device registration triple: nile's register needs exactly these,
     # and only this plugin process knows them for this login.
-    serial = uuid.uuid1().hex.upper()
-    client_id = f"{serial}#A2UMVHOX7UP4V7"
-    client_id_hex = client_id.encode("ascii").hex()
-    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-    url = "https://amazon.com/ap/signin?" + urllib.parse.urlencode({
-        "openid.ns": "http://specs.openid.net/auth/2.0",
-        "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
-        "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
-        "openid.mode": "checkid_setup",
-        "openid.oa2.scope": "device_auth_access",
-        "openid.ns.oa2": "http://www.amazon.com/ap/ext/oauth/2",
-        "openid.oa2.response_type": "code",
-        "openid.oa2.code_challenge_method": "S256",
-        "openid.oa2.client_id": f"device:{client_id_hex}",
-        "language": "en_US",
-        "marketPlaceId": "ATVPDKIKX0DER",
-        "openid.return_to": "https://www.amazon.com",
-        "openid.pape.max_auth_age": 0,
-        "openid.assoc_handle": "amzn_sonic_games_launcher",
-        "pageId": "amzn_sonic_games_launcher",
-        "openid.oa2.code_challenge": challenge,
-    })
-    # Remember until auth.complete; the protocol has no session, so the values
-    # travel with the params instead.
-    pending_login.update({"client_id": client_id_hex, "code_verifier": verifier, "serial": serial})
+    import time as _time
+    with pending_lock:
+        cur = dict(pending_login)
+        if cur.get("client_id") and cur.get("url") and _time.time() - cur.get("at", 0) < PENDING_TTL:
+            return {"url": cur["url"], "instructions": _auth_instructions(), "fields": _auth_fields()}
+        serial = uuid.uuid4().hex.upper()
+        client_id = f"{serial}#A2UMVHOX7UP4V7"
+        client_id_hex = client_id.encode("ascii").hex()
+        verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        url = "https://amazon.com/ap/signin?" + urllib.parse.urlencode({
+            "openid.ns": "http://specs.openid.net/auth/2.0",
+            "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
+            "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
+            "openid.mode": "checkid_setup",
+            "openid.oa2.scope": "device_auth_access",
+            "openid.ns.oa2": "http://www.amazon.com/ap/ext/oauth/2",
+            "openid.oa2.response_type": "code",
+            "openid.oa2.code_challenge_method": "S256",
+            "openid.oa2.client_id": f"device:{client_id_hex}",
+            "language": "en_US",
+            "marketPlaceId": "ATVPDKIKX0DER",
+            "openid.return_to": "https://www.amazon.com",
+            "openid.pape.max_auth_age": 0,
+            "openid.assoc_handle": "amzn_sonic_games_launcher",
+            "pageId": "amzn_sonic_games_launcher",
+            "openid.oa2.code_challenge": challenge,
+        })
+        # Remember until auth.complete; the protocol has no session, so the values
+        # travel with the params instead.
+        pending_login.clear()
+        pending_login.update({"client_id": client_id_hex, "code_verifier": verifier,
+                              "serial": serial, "url": url, "at": _time.time()})
     return {
         "url": url,
-        "instructions": "Log in to Amazon in your browser. You land on a normal amazon.com "
-                        "page: copy its full address (it contains "
-                        "openid.oa2.authorization_code=…) and paste it here.",
-        "fields": [{"id": "code", "label": "address you were redirected to",
-                    "placeholder": "https://www.amazon.com/…openid.oa2.authorization_code=…", "secret": True}],
+        "instructions": _auth_instructions(),
+        "fields": _auth_fields(),
     }
 
 
-# Set by auth.begin, read by auth.complete. The plugin serves one user.
-pending_login = {}
-
-
 def auth_complete(params):
-    if not pending_login:
+    import time as _time
+    with pending_lock:
+        snap = dict(pending_login)
+    if not snap.get("client_id"):
+        raise RPCError("start the login again; it expired")
+    if _time.time() - snap.get("at", 0) >= PENDING_TTL:
+        with pending_lock:
+            pending_login.clear()
         raise RPCError("start the login again; it expired")
     text = ((params or {}).get("fields") or {}).get("code", "")
     m = re.search(r"openid\.oa2\.authorization_code=([^&\s]+)", text or "")
@@ -161,12 +191,15 @@ def auth_complete(params):
                        "copy the whole address Amazon redirected you to")
     setup_env()
     rc, _out, err = nile("register", "--code", code,
-                         "--client-id", pending_login["client_id"],
-                         "--code-verifier", pending_login["code_verifier"],
-                         "--serial", pending_login["serial"], timeout=300)
+                         "--client-id", snap["client_id"],
+                         "--code-verifier", snap["code_verifier"],
+                         "--serial", snap["serial"], timeout=300)
     if rc != 0:
         raise RPCError(f"Amazon rejected the login: {tail(err)}")
-    pending_login.clear()
+    with pending_lock:
+        # Clear only our own triple; a newer begin must survive.
+        if pending_login.get("serial") == snap.get("serial"):
+            pending_login.clear()
     return auth_status()
 
 
