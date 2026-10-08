@@ -121,7 +121,7 @@ export function App() {
               detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
               meta: `${sources} source${sources === 1 ? '' : 's'}`,
             });
-            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : 'library unavailable'}`, meta: w.message });
+            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : w.unavailable ? 'unavailable right now' : 'library unavailable'}`, meta: w.message });
           } else {
             failures.push(`Library: ${errMsg((libR as { ok: false; error: Error }).error)}`);
           }
