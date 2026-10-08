@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
-import { GamePage } from './components/GamePage';
+import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { SettingsModal } from './components/SettingsModal';
 import { AddGameModal } from './components/AddGameModal';
 import { ActivityView } from './components/ActivityView';
@@ -137,6 +137,9 @@ export function App() {
             setLoadError(null);
             if (reason === 'rescan') notify('Library rescanned');
           }
+          // Rescans can change store metadata (login, reinstall): evict the
+          // details cache so the next visit refetches (FE-6).
+          if (reason === 'rescan') invalidateGameDetailsCache();
           setLastScan(Date.now());
         })
         .catch((err) => {

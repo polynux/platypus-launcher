@@ -42,30 +42,71 @@ interface GamePageProps {
   onNavigate: (v: View) => void;
 }
 
-// Store metadata doesn't change during a session; keep it across navigations.
-const detailsCache = new Map<string, GameDetails>();
+// Store metadata is cached across navigations, keyed by game id + version.
+// A module-level in-flight map keeps StrictMode's double effect (and quick
+// remounts) from firing two concurrent GetGameDetails (FE-6).
+const detailsCache = new Map<string, { details: GameDetails; version: string }>();
+const detailsInflight = new Map<string, Promise<GameDetails>>();
+
+/** Evict cached game details (all, or one game). Called on library rescan
+ *  so login/logout/reinstall metadata can't stay frozen (FE-6). */
+export function invalidateGameDetailsCache(id?: string) {
+  if (id) {
+    detailsCache.delete(id);
+    detailsInflight.delete(id);
+  } else {
+    detailsCache.clear();
+    detailsInflight.clear();
+  }
+}
 
 function useDetails(game: Game) {
-  const [details, setDetails] = useState<GameDetails | null>(() => detailsCache.get(game.id) ?? null);
+  const version = game.version ?? '';
+  const [details, setDetails] = useState<GameDetails | null>(() => {
+    const cached = detailsCache.get(game.id);
+    return cached && cached.version === version ? cached.details : null;
+  });
   const [error, setError] = useState<string | null>(null);
   // Steam and store plugins both have metadata; sideloaded games have none.
   const hasSource = game.source === 'steam' || isPluginGame(game);
   useEffect(() => {
+    const v = game.version ?? '';
     const cached = detailsCache.get(game.id);
-    setDetails(cached ?? null);
+    if (cached && cached.version === v) {
+      setDetails(cached.details);
+      return;
+    }
+    setDetails(null);
     setError(null);
-    if (cached || !hasSource) return;
+    if (!hasSource) return;
+    // Attach to an in-flight fetch instead of starting a second one.
+    const inflight = detailsInflight.get(game.id);
+    if (inflight) {
+      let live = true;
+      inflight.then(
+        (d) => { if (live) setDetails(d); },
+        (e) => { if (live) setError(e instanceof Error ? e.message : String(e)); },
+      );
+      return () => { live = false; };
+    }
     let live = true;
-    Effect.runPromise(LauncherApi.getGameDetails(game))
-      .then((d) => {
-        detailsCache.set(game.id, d);
+    const p = Effect.runPromise(LauncherApi.getGameDetails(game));
+    detailsInflight.set(game.id, p);
+    p.then(
+      (d) => {
+        detailsCache.set(game.id, { details: d, version: v });
+        detailsInflight.delete(game.id);
         if (live) setDetails(d);
-      })
-      .catch((e) => live && setError(e instanceof Error ? e.message : String(e)));
+      },
+      (e) => {
+        detailsInflight.delete(game.id);
+        if (live) setError(e instanceof Error ? e.message : String(e));
+      },
+    );
     return () => { live = false; };
-    // Refetch only when the game changes, not on settings edits.
+    // Refetch when the game (or its version) changes, not on settings edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id]);
+  }, [game.id, game.version]);
   return { details, error, loading: !details && !error && hasSource };
 }
 
