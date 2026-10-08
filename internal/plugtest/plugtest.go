@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -681,4 +682,31 @@ func copyDir(src, dst string) (string, error) {
 	}
 	out, err := exec.Command("cp", "-r", src+"/.", dst+"/").CombinedOutput()
 	return string(out), err
+}
+
+// Kill ends the plugin process abruptly, the way a crash does. The manager
+// starts a new one on the next request.
+func (s *Session) Kill() {
+	s.t.Helper()
+	pid := s.m.Running(s.id)
+	if pid == 0 {
+		s.t.Fatal("plugin isn't running")
+	}
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		s.t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for s.m.Running(s.id) == pid && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// RunJob queues a job of that kind for the game and waits until it is done.
+func (s *Session) RunJob(kind string, g types.Game) types.Job {
+	s.t.Helper()
+	j, err := s.q.Add(kind, s.id, g.ID, g.StoreAppID, g.Title, s.Folder)
+	if err != nil {
+		s.t.Fatalf("queue %s: %v", kind, err)
+	}
+	return s.waitJob(j.ID, jobs.StateDone, 60*time.Second)
 }

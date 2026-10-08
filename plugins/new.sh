@@ -188,6 +188,8 @@ def start_job(params, kind):
     if kind == "uninstall":
         ev = threading.Event()
         with jobs_lock:
+            if job_id in jobs:
+                return {}  # Hydra resends a jobId after a crash: run it once
             jobs[job_id] = {"canceled": False, "event": ev}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
@@ -196,6 +198,8 @@ def start_job(params, kind):
         raise RPCError("installDir is missing or relative; Hydra always sends one")
     ev = threading.Event()
     with jobs_lock:
+        if job_id in jobs:
+            return {}  # Hydra resends a jobId after a crash: run it once
         jobs[job_id] = {"canceled": False, "event": ev}
     threading.Thread(target=follow_install, args=(job_id, app, install_dir, kind, ev), daemon=True).start()
     return {}
@@ -214,7 +218,8 @@ def follow_install(job_id, app, install_dir, kind, ev):
             if jobs.get(job_id, {}).get("canceled"):
                 break
         notify("job.progress", {"jobId": job_id, "percent": pct, "phase": "downloading",
-                                "bytes": 512 * pct // 100, "total": 512})
+                                "bytes": 512 * pct // 100, "total": 512,
+                                "speed": 2560.0})  # bytes per second
     with jobs_lock:
         canceled = jobs.pop(job_id, {}).get("canceled", False)
     if canceled:
