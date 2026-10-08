@@ -57,6 +57,10 @@ type InitResult struct {
 	// Capabilities is the subset of the manifest's that is on right now. A
 	// plugin that leaves it out offers everything it declared.
 	Capabilities []string `json:"capabilities"`
+	// Protocol is the version the plugin picked ("1.1"): the highest both
+	// sides speak. Absent in answers from before negotiation; Hydra then
+	// takes the highest version the manifest and Hydra share.
+	Protocol string `json:"protocol,omitempty"`
 	// Features are depth flags per capability, e.g.
 	// {"versions": {"channels": true, "password": false}}.
 	Features map[string]map[string]bool `json:"features,omitempty"`
@@ -66,7 +70,9 @@ type InitResult struct {
 // Runtime is what a plugin offers right now, as its last initialize said.
 // Before the plugin has ever initialized it is the manifest's promise.
 type Runtime struct {
-	Initialized  bool
+	Initialized bool
+	// Protocol is the negotiated version, "" before the first initialize.
+	Protocol     string
 	Capabilities []string
 	Features     map[string]map[string]bool
 }
@@ -106,21 +112,24 @@ func resolveInit(declared []string, res InitResult) (InitResult, []string) {
 // after a crash with exponential backoff, and gives up after maxCrashes quick
 // crashes in a row.
 type process struct {
-	id       string
-	dir      string
-	exec     string
-	hash     string       // pinned at approval
-	verify   func() error // re-checks the pinned hash before every start
-	logPath  string
-	dataDir  string      // HYDRA_PLUGIN_DATA
-	declared []string    // the manifest's capabilities
-	onExit   func(error) // unexpected exits only
-	notify   jsonrpc.NotifyFunc
-	t        timings
+	id        string
+	dir       string
+	exec      string
+	hash      string       // pinned at approval
+	verify    func() error // re-checks the pinned hash before every start
+	logPath   string
+	dataDir   string     // HYDRA_PLUGIN_DATA
+	declared  []string   // the manifest's capabilities
+	protocols []Version  // what Hydra speaks
+	offered   VersionSet // what the manifest says the plugin speaks
+	transport Transport
+	onExit    func(error) // unexpected exits only
+	notify    jsonrpc.NotifyFunc
+	t         timings
 
 	mu        sync.Mutex
 	cmd       *exec.Cmd
-	conn      *jsonrpc.Conn
+	conn      Conn
 	stdin     *os.File
 	ready     chan struct{} // closed once initialize succeeded
 	exited    chan struct{} // closed when the current run is over
@@ -201,7 +210,7 @@ func (p *process) gate(method string) (optional bool, err error) {
 // run's dead channel (closed once its process has been reaped). Concurrent
 // callers share one start and all wait for initialize. After a crash, the next
 // call waits out the backoff before starting the plugin again.
-func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, <-chan struct{}, error) {
+func (p *process) ensure(ctx context.Context) (Conn, <-chan struct{}, error) {
 	for {
 		p.mu.Lock()
 		if p.stopping {
@@ -287,7 +296,7 @@ func (p *process) ensure(ctx context.Context) (*jsonrpc.Conn, <-chan struct{}, e
 }
 
 // start launches the executable. Callers hold p.mu.
-func (p *process) start() (*jsonrpc.Conn, error) {
+func (p *process) start() (Conn, error) {
 	if err := p.verify(); err != nil {
 		return nil, err
 	}
@@ -331,7 +340,7 @@ func (p *process) start() (*jsonrpc.Conn, error) {
 		return nil, fmt.Errorf("plugin %s: %w", p.id, err)
 	}
 
-	conn := jsonrpc.NewConn(outR, inW, p.notify)
+	conn := p.transportOrDefault().Connect(outR, inW, p.notify)
 	exited := make(chan struct{})
 	dead := make(chan struct{})
 	p.cmd, p.conn, p.stdin, p.exited, p.dead, p.info = cmd, conn, inW, exited, dead, nil
@@ -400,13 +409,18 @@ func (p *process) recordCrash(err error) {
 
 // initialize performs the handshake on a fresh process. A plugin that fails it
 // is killed and counts as a crash.
-func (p *process) initialize(conn *jsonrpc.Conn) {
+func (p *process) initialize(conn Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), p.t.initTimeout)
 	defer cancel()
 	var res InitResult
-	err := conn.Call(ctx, "initialize", map[string]any{"api": APIVersion}, &res)
-	if err == nil && res.API != APIVersion {
-		err = fmt.Errorf("plugin speaks api %d, Hydra speaks %d", res.API, APIVersion)
+	supported := p.supported()
+	offer := make([]string, len(supported))
+	for i, v := range supported {
+		offer[i] = v.String()
+	}
+	err := conn.Call(ctx, "initialize", map[string]any{"api": APIVersion, "protocols": offer}, &res)
+	if err == nil {
+		err = p.settleProtocol(&res, supported)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -423,8 +437,52 @@ func (p *process) initialize(conn *jsonrpc.Conn) {
 		appendPluginLog(p.logPath, fmt.Sprintf("[warn] initialize listed capabilities the manifest doesn't declare; ignored: %s\n", strings.Join(dropped, ", ")))
 	}
 	p.info = &res
-	p.runtime = &Runtime{Initialized: true, Capabilities: res.Capabilities, Features: res.Features}
+	p.runtime = &Runtime{Initialized: true, Protocol: res.Protocol, Capabilities: res.Capabilities, Features: res.Features}
 	close(p.ready)
+}
+
+// settleProtocol checks the version the plugin picked and writes the settled
+// one back into res.Protocol. The pick must be one Hydra offered and the
+// manifest declared; an answer without one comes from a plugin that predates
+// negotiation and gets the highest version both sides list.
+func (p *process) settleProtocol(res *InitResult, supported []Version) error {
+	offered := p.offered
+	if offered.empty() { // no manifest declaration to hold the plugin to
+		offered = VersionSet{List: supported}
+	}
+	if res.Protocol == "" {
+		v, ok := Negotiate(offered, supported)
+		if !ok {
+			return fmt.Errorf("no protocol version in common (manifest %s)", offered)
+		}
+		if res.API != 0 && res.API != v.Major {
+			return fmt.Errorf("plugin answers api %d, Hydra settled on protocol %s", res.API, v)
+		}
+		res.Protocol = v.String()
+		return nil
+	}
+	v, err := ParseVersion(res.Protocol)
+	if err != nil {
+		return fmt.Errorf("plugin answered protocol: %w", err)
+	}
+	if !slices.Contains(supported, v) || !offered.Contains(v) {
+		return fmt.Errorf("plugin answered protocol %s, which Hydra didn't offer or its manifest doesn't declare", v)
+	}
+	return nil
+}
+
+func (p *process) supported() []Version {
+	if len(p.protocols) == 0 {
+		return SupportedProtocols
+	}
+	return p.protocols
+}
+
+func (p *process) transportOrDefault() Transport {
+	if p.transport == nil {
+		return stdioJSONRPC{}
+	}
+	return p.transport
 }
 
 // stop closes the plugin's stdin, which asks it to exit, and kills it if it

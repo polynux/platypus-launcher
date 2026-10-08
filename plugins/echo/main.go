@@ -31,6 +31,10 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.5); it answers the highest Hydra also offers
+//	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
+//	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
+//	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
 // initOmit} (absent keys are left alone) and `calls` returns how many times
@@ -123,6 +127,10 @@ type knobs struct {
 	InitOmit     bool                       `json:"initOmit"`
 }
 
+// defaultProtocols is what echo speaks: more than any Hydra offers yet, so
+// the negotiation has something to pick from.
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}
+
 var (
 	knobMu  sync.Mutex
 	kn      knobs
@@ -183,10 +191,46 @@ func manifestCapabilities() []string {
 	return []string{"library", "install", "launch", "auth", "discard"}
 }
 
-func initializeResult() map[string]any {
+// negotiate answers the highest protocol version that echo speaks and Hydra
+// offered ("major.minor", compared numerically).
+func negotiate(offered []string) (string, bool) {
+	speaks := csv("ECHO_PROTOCOLS")
+	if len(speaks) == 0 {
+		speaks = defaultProtocols
+	}
+	best, found := "", false
+	for _, o := range offered {
+		if slices.Contains(speaks, o) && (!found || versionLess(best, o)) {
+			best, found = o, true
+		}
+	}
+	return best, found
+}
+
+func versionLess(a, b string) bool {
+	var a1, a2, b1, b2 int
+	fmt.Sscanf(a, "%d.%d", &a1, &a2)
+	fmt.Sscanf(b, "%d.%d", &b1, &b2)
+	return a1 < b1 || (a1 == b1 && a2 < b2)
+}
+
+func initializeResult(p params) (map[string]any, error) {
 	knobMu.Lock()
 	defer knobMu.Unlock()
 	res := map[string]any{"name": "Echo (test plugin)", "version": "0.2.0", "api": 1, "missing": []any{}}
+	if os.Getenv("ECHO_NO_PROTOCOL") == "" {
+		picked, ok := negotiate(p.Protocols)
+		if v := os.Getenv("ECHO_PROTOCOL"); v != "" {
+			picked, ok = v, true
+		}
+		if !ok {
+			return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("no protocol version in common with Hydra's %v", p.Protocols)}
+		}
+		res["protocol"] = picked
+	}
+	if os.Getenv("ECHO_FUTURE") != "" {
+		res["flux"] = map[string]any{"capacitor": true}
+	}
 	if !kn.InitOmit {
 		caps := []string{}
 		for _, c := range manifestCapabilities() {
@@ -199,7 +243,7 @@ func initializeResult() map[string]any {
 	if kn.Features != nil {
 		res["features"] = kn.Features
 	}
-	return res
+	return res, nil
 }
 
 // forced says whether a test knob makes this method fail, and how.
@@ -311,6 +355,7 @@ type params struct {
 	InstallDir string            `json:"installDir"`
 	Preview    bool              `json:"preview"`
 	Fields     map[string]string `json:"fields"`
+	Protocols  []string          `json:"protocols"` // initialize: the versions Hydra speaks
 }
 
 func dispatch(method string, raw json.RawMessage) (any, error) {
@@ -329,7 +374,11 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	switch method {
 	case "initialize":
 		notify("log", map[string]string{"level": "info", "message": "echo initialized"})
-		return initializeResult(), nil
+		res, err := initializeResult(p)
+		if err == nil && os.Getenv("ECHO_FUTURE") != "" {
+			notify("future.news", map[string]any{"headline": "a newer Hydra would show this"})
+		}
+		return res, err
 	case "config":
 		configure(raw)
 		return nil, nil

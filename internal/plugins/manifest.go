@@ -15,8 +15,14 @@ import (
 	"strings"
 )
 
-// APIVersion is the protocol version Hydra speaks (docs/plans/launcher-plugins.md).
+// APIVersion is the major protocol version of the legacy "api" field and of
+// the HYDRA_PLUGIN_API variable. The versions Hydra speaks, with minors, are
+// SupportedProtocols.
 const APIVersion = 1
+
+// ManifestVersion is the manifest schema this Hydra reads. A manifest naming
+// a newer one is listed ("needs a newer Hydra") but never interpreted.
+const ManifestVersion = 1
 
 // ManifestFile is the manifest's name inside a plugin folder.
 const ManifestFile = "plugin.json"
@@ -44,9 +50,15 @@ type Manifest struct {
 	Version     string `json:"version"`
 	Author      string `json:"author"`
 	Description string `json:"description"`
-	API         int    `json:"api"`
-	Store       string `json:"store"`
-	Exec        string `json:"exec"`
+	// ManifestVersion is the schema of this file; absent means 1.
+	ManifestVersion int `json:"manifestVersion"`
+	// API is the legacy way to name the protocol: "api": N means protocol
+	// N.0 over jsonrpc-stdio. Protocol replaces it.
+	API int `json:"api"`
+	// Protocol is what the plugin speaks and over which transport.
+	Protocol *ProtocolSpec `json:"protocol"`
+	Store    string        `json:"store"`
+	Exec     string        `json:"exec"`
 	// Kind is "store" (default) or "data". A data plugin has no exec and
 	// lists its JSON files in Data.
 	Kind         string   `json:"kind"`
@@ -62,6 +74,67 @@ type Manifest struct {
 	// the plugin id.
 	InstallDir  string      `json:"install_dir"`
 	Permissions Permissions `json:"permissions"`
+}
+
+// ProtocolSpec is the manifest's protocol declaration.
+type ProtocolSpec struct {
+	// Versions the plugin speaks: a list or a {min, max} range.
+	Versions VersionSet `json:"versions"`
+	// Transport names how to talk to it; empty means DefaultTransport.
+	Transport string `json:"transport"`
+}
+
+// IncompatibleError says a plugin can't run on this Hydra, and why. Status
+// is StatusNeedsNewer or StatusTooOld; Reason is shown to the user.
+type IncompatibleError struct {
+	Status Status
+	Reason string
+}
+
+func (e *IncompatibleError) Error() string { return e.Reason }
+
+// Offered is the protocol versions and transport the manifest declares, with
+// the legacy api read as "N.0 over jsonrpc-stdio".
+func (m Manifest) Offered() (VersionSet, string) {
+	if m.Protocol != nil {
+		transport := m.Protocol.Transport
+		if transport == "" {
+			transport = DefaultTransport
+		}
+		return m.Protocol.Versions, transport
+	}
+	return VersionSet{List: []Version{{m.API, 0}}}, DefaultTransport
+}
+
+// Compatible says whether this Hydra can run the plugin: it knows the
+// transport and shares a protocol version with it. supported is the versions
+// Hydra speaks (SupportedProtocols). nil means yes.
+func (m Manifest) Compatible(supported []Version) *IncompatibleError {
+	if m.IsData() {
+		if m.API > APIVersion {
+			return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (data plugin format %d)", m.API)}
+		}
+		return nil
+	}
+	offered, transport := m.Offered()
+	if _, ok := LookupTransport(transport); !ok {
+		return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (transport %q)", transport)}
+	}
+	if _, ok := Negotiate(offered, supported); ok {
+		return nil
+	}
+	list := make([]string, len(supported))
+	oldest := supported[0]
+	for i, v := range supported {
+		list[i] = v.String()
+		if v.Less(oldest) {
+			oldest = v
+		}
+	}
+	if top, bounded := offered.Highest(); bounded && top.Less(oldest) {
+		return &IncompatibleError{StatusTooOld, fmt.Sprintf("too old for this Hydra (speaks protocol %s; Hydra speaks %s)", offered, strings.Join(list, ", "))}
+	}
+	return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (speaks protocol %s; Hydra speaks %s)", offered, strings.Join(list, ", "))}
 }
 
 // Requirement is a command-line tool the plugin wraps. Hydra never installs
@@ -86,6 +159,15 @@ func LoadManifest(dir string) (Manifest, error) {
 	data, err := os.ReadFile(filepath.Join(dir, ManifestFile))
 	if err != nil {
 		return m, err
+	}
+	// A manifest written for a newer schema is not interpreted: it may change
+	// any field's shape, which would read as "invalid" instead of "newer".
+	var head struct {
+		ManifestVersion int `json:"manifestVersion"`
+	}
+	if json.Unmarshal(data, &head) == nil && head.ManifestVersion > ManifestVersion {
+		_ = json.Unmarshal(data, &m) // whatever still reads (the id, the name) is for display
+		return m, &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (manifest format %d)", head.ManifestVersion)}
 	}
 	if err := json.Unmarshal(data, &m); err != nil {
 		return m, fmt.Errorf("%s: %w", ManifestFile, err)
@@ -147,8 +229,11 @@ func (m Manifest) validate() error {
 	if strings.TrimSpace(m.Version) == "" {
 		bad("version is required")
 	}
-	if m.API != APIVersion {
-		bad("api %d is not supported (Hydra speaks api %d)", m.API, APIVersion)
+	if m.ManifestVersion < 0 {
+		bad("manifestVersion %d is not a version", m.ManifestVersion)
+	}
+	if m.API < 0 {
+		bad("api %d is not a version", m.API)
 	}
 	if !m.IsData() && !storeRe.MatchString(m.Store) {
 		bad("store %q must be lowercase letters, digits or '-'", m.Store)
@@ -156,6 +241,19 @@ func (m Manifest) validate() error {
 	kind := m.Kind
 	if kind == "" {
 		kind = KindStore
+	}
+	if kind == KindStore {
+		switch {
+		case m.Protocol != nil:
+			if m.Protocol.Versions.empty() {
+				bad("protocol.versions is required")
+			}
+			if t := m.Protocol.Transport; t != "" && !ValidCapabilityName(t) {
+				bad("protocol.transport %q must be lowercase words joined by '-'", t)
+			}
+		case m.API == 0:
+			bad(`protocol is required (or the legacy "api": 1)`)
+		}
 	}
 	switch kind {
 	case KindStore:

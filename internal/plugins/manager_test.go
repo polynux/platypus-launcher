@@ -97,7 +97,10 @@ type env struct {
 	logs    string
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+// newEnvWith is newEnv with the Manager options adjusted first.
+func newEnvWith(t *testing.T, adjust func(*Options)) *env {
 	t.Helper()
 	root := t.TempDir()
 	trust, err := settings.Open(filepath.Join(root, "settings.json"))
@@ -105,7 +108,11 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	e := &env{plugins: filepath.Join(root, "plugins"), logs: filepath.Join(root, "logs")}
-	e.m = NewManager(Options{Dir: e.plugins, LogDir: e.logs, DataDir: filepath.Join(root, "data"), Settings: trust})
+	opts := Options{Dir: e.plugins, LogDir: e.logs, DataDir: filepath.Join(root, "data"), Settings: trust}
+	if adjust != nil {
+		adjust(&opts)
+	}
+	e.m = NewManager(opts)
 	e.m.t = timings{
 		backoffBase: 20 * time.Millisecond,
 		backoffMax:  100 * time.Millisecond,
@@ -437,7 +444,6 @@ func TestMissingRequirement(t *testing.T) {
 
 func TestInvalidManifests(t *testing.T) {
 	cases := map[string]func(m map[string]any){
-		"wrong api":            func(m map[string]any) { m["api"] = 2 },
 		"id mismatch":          func(m map[string]any) { m["id"] = "other" },
 		"exec escapes":         func(m map[string]any) { m["exec"] = "../../bin/sh" },
 		"exec absolute":        func(m map[string]any) { m["exec"] = "/bin/sh" },
