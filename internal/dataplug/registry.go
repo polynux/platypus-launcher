@@ -49,6 +49,13 @@ func (r *Registry) Add(d *Data) {
 	}
 }
 
+// Reset drops every fix and tweak so the registry can be rebuilt from the
+// current data plugins plus the built-in data (CORE-5: rescan sync).
+func (r *Registry) Reset() {
+	r.fixes = nil
+	r.tweaks = nil
+}
+
 // Fix returns the curated fix for a game, or nil. Titles match exactly; the
 // app id matches Steam's and plugin games' store ids.
 func (r *Registry) Fix(title, appID string) *types.GameFixInfo {

@@ -76,9 +76,11 @@ func (a *App) ListStorePlugins() []types.StorePlugin {
 // RescanPlugins scans the plugins folder again. Plugins that may no longer
 // run are stopped, and their running jobs fail.
 func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
-	if _, err := a.plugins.Discover(); err != nil {
+	found, err := a.plugins.Discover()
+	if err != nil {
 		return nil, err
 	}
+	a.syncDataPlugins(found)
 	a.failStoppedJobs()
 	return a.ListStorePlugins(), nil
 }

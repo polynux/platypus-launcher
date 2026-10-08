@@ -48,8 +48,9 @@ type App struct {
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
 
-	tweaksOnce sync.Once
-	tweaks     []types.Tweak
+	tweaksMu     sync.Mutex
+	tweaksCached bool
+	tweaks       []types.Tweak
 }
 
 // NewApp creates a new App application struct
@@ -106,13 +107,10 @@ func (a *App) startup(ctx context.Context) {
 			msg += " (" + p.Problem + ")"
 		}
 		wruntime.LogInfo(ctx, msg)
-		if p.Data != nil {
-			a.data.Add(p.Data)
-		}
 	}
-	// The built-in fixes and tweaks are data plugin files too, applied through
-	// the same registry.
-	a.data.Add(dataplug.Builtin())
+	// Data plugins feed the fixes/tweaks registry; rebuilt here and on
+	// every rescan so installs and removals apply without a restart.
+	a.syncDataPlugins(found)
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
@@ -288,10 +286,33 @@ func sourceOf(game types.Game) string {
 	return game.Source
 }
 
+// syncDataPlugins rebuilds the fixes/tweaks registry from the discovered
+// data plugins plus the built-in data, and invalidates the cached tweaks
+// (CORE-5). Call after every Discover.
+func (a *App) syncDataPlugins(found []plugins.Plugin) {
+	a.data.Reset()
+	for _, p := range found {
+		if p.Data != nil {
+			a.data.Add(p.Data)
+		}
+	}
+	// The built-in fixes and tweaks are data plugin files too, applied
+	// through the same registry.
+	a.data.Add(dataplug.Builtin())
+	a.tweaksMu.Lock()
+	a.tweaksCached = false
+	a.tweaksMu.Unlock()
+}
+
 // GetTweaks returns hardware-based tweaks offered for every game, from the
 // built-in data plugin and any user-installed ones.
 func (a *App) GetTweaks() []types.Tweak {
-	a.tweaksOnce.Do(func() { a.tweaks = a.data.Tweaks(dataplug.DetectSystem()) })
+	a.tweaksMu.Lock()
+	defer a.tweaksMu.Unlock()
+	if !a.tweaksCached {
+		a.tweaks = a.data.Tweaks(dataplug.DetectSystem())
+		a.tweaksCached = true
+	}
 	return a.tweaks
 }
 
