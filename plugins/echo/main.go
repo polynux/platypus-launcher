@@ -184,7 +184,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		notify("log", map[string]string{"level": "info", "message": "echo initialized"})
 		return map[string]any{
 			"name": "Echo (test plugin)", "version": "0.2.0", "api": 1,
-			"capabilities": []string{"library", "install", "launch", "auth"}, "missing": []any{},
+			"capabilities": []string{"library", "install", "launch", "auth", "discard"}, "missing": []any{},
 		}, nil
 	case "echo":
 		if len(raw) == 0 {
@@ -269,10 +269,42 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		}
 		jobsMu.Unlock()
 		return nil, nil
+	case "job.discard":
+		return discardJob(p)
 	case "game.launchSpec":
 		return launchSpec(p)
 	}
 	return nil, &rpcError{Code: -32601, Message: "method not found: " + method}
+}
+
+// discardJob throws away the data a canceled install left. For this fake
+// store that is the saved resume point (state.json's partial map) and the
+// "crashed mid-install" memory — a canceled flaky would otherwise resume from
+// its own crash rather than from what Hydra knows — as well as an install
+// folder the game never finished into. A game the store still reports as
+// installed is never touched: its folder lives inside the same map.
+func discardJob(p params) (any, error) {
+	if p.ID == "" {
+		return nil, &rpcError{Code: -32602, Message: "invalid params: id is required"}
+	}
+	stMu.Lock()
+	defer stMu.Unlock()
+	dir, installed := st.Installed[p.ID]
+	if !installed && filepath.IsAbs(p.InstallDir) {
+		dir = filepath.Join(p.InstallDir, p.ID)
+		// Only a folder the game never finished into, and never one outside
+		// the install folder (the external games'/client's path).
+		if real, err := filepath.EvalSymlinks(dir); err == nil && real == filepath.Join(p.InstallDir, p.ID) {
+			os.RemoveAll(dir)
+		}
+	}
+	if installed {
+		return nil, nil
+	}
+	delete(st.Partial, p.ID)
+	delete(st.Crashed, p.ID)
+	save()
+	return nil, nil
 }
 
 func authStatus() map[string]any {

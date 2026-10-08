@@ -7,7 +7,7 @@
   "api": 1,
   "store": "echo",
   "exec": "bin/hydra-echo",
-  "capabilities": ["library", "install", "launch", "auth"],
+  "capabilities": ["library", "install", "launch", "auth", "discard"],
   "requires": [{ "bin": "sleep", "hint": "part of coreutils" }],
   "install_dir": "echo",
   "permissions": { "network": [], "read": [], "write": [] }
