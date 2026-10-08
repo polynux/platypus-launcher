@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
+import { ArrowLeft, Download, Maximize2, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
+import { Lightbox } from './Lightbox';
 import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
@@ -116,9 +117,15 @@ function useDetails(game: Game) {
 export function GamePage(p: GamePageProps) {
   const { game, runners, activity, session, tweaks } = p;
   const [shot, setShot] = useState(0);
+  const [lightbox, setLightbox] = useState(false);
+  const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
   const hero = useHero(game, details);
-  useEffect(() => setShot(0), [game.id]);
+  useEffect(() => { setShot(0); setLightbox(false); }, [game.id]);
+  useEffect(() => {
+    const el = strip.current?.children[shot] as HTMLElement | undefined;
+    el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [shot]);
 
   const s = normalizeSettings(game.settings);
   const autoRunner = runners.find((r) => r.is_default);
@@ -171,12 +178,12 @@ export function GamePage(p: GamePageProps) {
           <div className="min-w-0">
             <div className="mb-2.5 flex flex-wrap gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.14em]">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
-              <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{storeLabel(game.store)}</span>
+              <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{storeLabel(game.store)}</span>
               {formatBytes(game.size_bytes) && (
-                <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/75">{formatBytes(game.size_bytes)}</span>
+                <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/75">{formatBytes(game.size_bytes)}</span>
               )}
-              {!game.is_installed && <span className="rounded-lg bg-black/50 px-2.5 py-1 text-white/55">not installed</span>}
-              {game.update_available && <span className="rounded-lg bg-sky-400/15 px-2.5 py-1 text-sky-200 ring-1 ring-sky-300/30">update available</span>}
+              {!game.is_installed && <span className="inline-flex h-5 items-center rounded-md bg-black/50 px-2.5 pt-px leading-none text-white/55">not installed</span>}
+              {game.update_available && <span className="inline-flex h-5 items-center rounded-md bg-sky-400/15 px-2.5 pt-px leading-none text-sky-200 ring-1 ring-sky-300/30">update available</span>}
             </div>
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
@@ -232,22 +239,34 @@ export function GamePage(p: GamePageProps) {
         <div className="min-w-0 space-y-5">
           {shots.length > 0 && (
             <div className="space-y-3">
-              <div className="overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
+              <button
+                onClick={() => setLightbox(true)}
+                aria-label="Open screenshots in slideshow"
+                className="group relative block w-full cursor-zoom-in overflow-hidden rounded-3xl bg-black/40 ring-1 ring-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+              >
                 <img key={shot} src={shots[shot]} alt={`${game.title} screenshot ${shot + 1}`} className="aspect-video w-full object-cover" />
-              </div>
-              <div className="no-scrollbar flex gap-2.5 overflow-x-auto pb-1">
+                <span aria-hidden className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-white/80 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                  <Maximize2 size={15} />
+                </span>
+              </button>
+              <div
+                ref={strip}
+                className="flex gap-2.5 overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [mask-image:linear-gradient(90deg,transparent,#000_16px,#000_calc(100%-24px),transparent)]"
+              >
                 {shots.map((src, i) => (
                   <button
                     key={src}
                     onClick={() => setShot(i)}
+                    onDoubleClick={() => setLightbox(true)}
                     aria-label={`Show screenshot ${i + 1}`}
                     aria-pressed={i === shot}
-                    className={cx('aspect-video w-[150px] flex-none overflow-hidden rounded-xl transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
+                    className={cx('aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
                   >
-                    <img src={src} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    <img src={src} alt="" loading="lazy" className="h-full w-full object-contain" />
                   </button>
                 ))}
               </div>
+              {lightbox && <Lightbox images={shots} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
             </div>
           )}
 
