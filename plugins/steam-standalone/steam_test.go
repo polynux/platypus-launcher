@@ -224,7 +224,7 @@ func (e *env) login() {
 		"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st); err != nil || !st.LoggedIn {
 		e.t.Fatalf("login: %+v, %v", st, err)
 	}
-	if !strings.Contains(st.User, "HydraUser") {
+	if !strings.Contains(st.User, "HydraUser") && !strings.Contains(st.User, "TestPersona") {
 		e.t.Fatalf("user: %+v", st)
 	}
 }
@@ -437,6 +437,22 @@ func TestSteamTokenFiles0600(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(e.pluginData(), "session.json")); err != nil {
 		t.Fatalf("session.json: %v", err)
+	}
+}
+
+// The first auth.status right after a login already shows the display
+// (persona) name, not the account name: the login path resolves and
+// stores it before reporting loggedIn (the fake CM answers TestPersona).
+// No library.list happens first.
+func TestSteamPersonaAtLogin(t *testing.T) {
+	e := setup(t)
+	e.login()
+	var st types.AuthStatus
+	if err := e.call("auth.status", nil, &st); err != nil || !st.LoggedIn {
+		t.Fatalf("status: %+v, %v", st, err)
+	}
+	if st.User != "TestPersona" {
+		t.Fatalf("want persona TestPersona right after login, got %q", st.User)
 	}
 }
 
@@ -770,6 +786,10 @@ func TestSteamQRAuth(t *testing.T) {
 	e.setCMState("auth_qr_approved", true)
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("qr complete: %+v, %v", st, err)
+	}
+	// The persona is already resolved: no library.list happened yet.
+	if st.User != "TestPersona" {
+		t.Fatalf("want persona TestPersona right after QR login, got %q", st.User)
 	}
 	// The refresh token lives inside the plugin's private data folder.
 	if _, err := os.Stat(filepath.Join(e.pluginData(), "refresh.token")); err != nil {

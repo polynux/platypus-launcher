@@ -65,6 +65,10 @@ func TestSteamCMErrorsAreHonest(t *testing.T) {
 	e := setup(t)
 	e.login()
 
+	// The login warms the access-token cache (persona resolution); force
+	// a fresh exchange so the knob flips below take effect.
+	e.expireAccessCache()
+
 	e.setCMState("logon_eresult", 27) // Expired
 	err := e.call("library.list", nil, nil)
 	if code := e.rpcCode(err); code != -32001 {
@@ -163,6 +167,10 @@ func TestSteamCMMultiAndHeartbeat(t *testing.T) {
 	e := setup(t)
 	e.login()
 
+	// The login warms the access-token cache; force a fresh exchange so
+	// the Multi-wrapped logon and heartbeat below are actually exercised.
+	e.expireAccessCache()
+
 	e.setCMState("wrap_logon_multi", true)
 	e.setCMState("send_heartbeat", true)
 	if lib := e.library(); len(lib) == 0 {
@@ -171,6 +179,19 @@ func TestSteamCMMultiAndHeartbeat(t *testing.T) {
 	if !strings.Contains(e.cmLog(), "heartbeat_reply") {
 		t.Fatalf("plugin ignored the CM heartbeat: %s", e.cmLog())
 	}
+}
+
+// expireAccessCache rewrites the cached access token with a past exp so
+// the next call forces a fresh CM exchange (logins warm the cache while
+// resolving the persona).
+func (e *env) expireAccessCache() {
+	e.t.Helper()
+	cache := readJSON(e.t, filepath.Join(e.pluginData(), "steam-access.json"))
+	expired := strings.SplitN(cache["access_token"].(string), ".", 3)
+	payload := `{"exp": ` + fmt.Sprint(time.Now().Add(-time.Minute).Unix()) + `, "sub": "76561198"}`
+	expired[1] = base64.RawURLEncoding.EncodeToString([]byte(payload))
+	cache["access_token"] = strings.Join(expired, ".")
+	writeJSON(e.t, filepath.Join(e.pluginData(), "steam-access.json"), cache)
 }
 
 func readJSON(t *testing.T, path string) map[string]any {

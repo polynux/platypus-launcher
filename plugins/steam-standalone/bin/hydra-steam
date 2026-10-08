@@ -642,7 +642,27 @@ def auth_complete(params):
         raise RPCError("login failed: the helper didn't persist a login key. "
                        "Check the account name and password, and try again with a fresh "
                        "Steam Guard code.")
+    ensure_persona()
     return auth_status()
+
+
+def ensure_persona():
+    """Resolve and store the display (persona) name right after a login,
+    so the first auth.status already shows it instead of the account
+    name. Best effort: failures keep the account name (persona_name
+    returns "" then), and a cached persona is never refetched."""
+    try:
+        if load_state("session.json", {}).get("persona"):
+            return
+        token = refresh_token()
+        if not token:
+            return
+        steamid = steam_cm.jwt_payload(token).get("sub")
+        if not steamid:
+            return
+        persona_name(steamid)
+    except Exception:
+        pass
 
 
 def wait_qr_login(timeout=300):
@@ -654,6 +674,7 @@ def wait_qr_login(timeout=300):
             state, err = qr_state["state"], qr_state["error"]
         if state == "ok":
             stop_qr_login()
+            ensure_persona()
             return auth_status()
         if state == "failed":
             stop_qr_login()
