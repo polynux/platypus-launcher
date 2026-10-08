@@ -12,7 +12,7 @@ export const cardClass =
   'group overflow-hidden rounded-2xl bg-white/[0.045] text-left ring-1 ring-white/[0.07] transition duration-300 hover:-translate-y-0.5 hover:ring-amber-300/40 focus-visible:ring-amber-300/60';
 
 export function MonoLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cx('font-mono text-[9.5px] uppercase tracking-[0.16em] text-white/40', className)}>{children}</div>;
+  return <div className={cx('font-mono text-[11px] uppercase tracking-[0.16em] text-white/40', className)}>{children}</div>;
 }
 
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
@@ -26,7 +26,7 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
 
 export function LinkButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="rounded font-mono text-[10px] uppercase tracking-widest text-white/40 transition hover:text-white/80">
+    <button onClick={onClick} className="rounded font-mono text-[11.5px] uppercase tracking-widest text-white/40 transition hover:text-white/80">
       {children}
     </button>
   );
@@ -49,7 +49,7 @@ export function SegRow<T extends string>({ options, value, onChange, label }: { 
           title={o.title}
           onClick={() => onChange(o.value)}
           className={cx(
-            'rounded-lg px-3 py-1.5 font-mono text-[11px] transition',
+            'rounded-lg px-3 py-1.5 font-mono text-[12px] transition',
             value === o.value ? 'bg-amber-300 font-bold text-[#130f0a]' : 'bg-white/[0.06] text-white/60 hover:bg-white/[0.1]'
           )}
         >
@@ -79,7 +79,7 @@ const TIER_STYLE: Record<string, string> = {
 export function TierBadge({ tier, suffix }: { tier?: string | null; suffix?: string }) {
   if (!tier) return null;
   return (
-    <span className={cx('inline-flex h-5 items-center rounded-md px-2 pt-px font-mono leading-none text-[9px] font-bold uppercase tracking-[0.14em]', TIER_STYLE[tier] ?? TIER_STYLE.silver)}>
+    <span className={cx('inline-flex h-5 items-center rounded-md px-2 pt-px font-mono leading-none text-[11px] font-bold uppercase tracking-[0.14em]', TIER_STYLE[tier] ?? TIER_STYLE.silver)}>
       {tier}
       {suffix ? ` ${suffix}` : ''}
     </span>

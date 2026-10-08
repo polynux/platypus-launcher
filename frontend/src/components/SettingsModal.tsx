@@ -18,7 +18,7 @@ interface Props {
   onCopied: () => void;
 }
 
-const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
+const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[12px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
 /** Physical pixels of the display the window is on. */
 function displayResolution(): { w: number; h: number } | undefined {
@@ -108,7 +108,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
-          <div className="font-mono text-[10px] text-white/45">{game.title}</div>
+          <div className="font-mono text-[11.5px] text-white/45">{game.title}</div>
         </div>
         <button onClick={onClose} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-lg bg-white/[0.07] text-white/70 transition hover:bg-white/[0.12] hover:text-white">
           <X className="h-4 w-4" />
@@ -122,7 +122,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             To apply these settings, paste this into Steam → Properties → Launch options:
           </p>
           <div className="mt-2.5 flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-3 py-2 font-mono text-[10.5px] text-sky-100/90 select-text">{steamLaunchOptions(backend)}</code>
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-3 py-2 font-mono text-[11.5px] text-sky-100/90 select-text">{steamLaunchOptions(backend)}</code>
             <button onClick={() => copy(steamLaunchOptions(backend))} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-2 text-[11.5px]')}>
               <Copy className="h-3.5 w-3.5" /> Copy
             </button>
@@ -152,7 +152,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                 </optgroup>
               ))}
             </SelectField>
-            <div className={cx('mt-1.5 truncate font-mono text-[9.5px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
+            <div className={cx('mt-1.5 truncate font-mono text-[11px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
               {runnerMissing
                 ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
                 : chosenRunner
@@ -187,7 +187,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                   : []),
               ] as const).map(([k, label, title]) => (
                 <button key={k} title={title} aria-pressed={!!draft[k]} onClick={() => set(k, !draft[k])} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', draft[k] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
-                  <span className="font-mono text-[10.5px] font-bold text-white/85">{label}</span>
+                  <span className="font-mono text-[11.5px] font-bold text-white/85">{label}</span>
                   <TogglePill on={!!draft[k]} />
                 </button>
               ))}
@@ -245,7 +245,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {GS_TOGGLES.map((t) => (
                     <button key={t.key} title={t.title} aria-pressed={gs.toggles[t.key]} onClick={() => setGs({ toggles: { ...gs.toggles, [t.key]: !gs.toggles[t.key] } })} className={cx('flex items-center justify-between rounded-xl px-3.5 py-2.5 transition', gs.toggles[t.key] ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
-                      <span className="font-mono text-[10.5px] font-bold text-white/85">{t.label}</span>
+                      <span className="font-mono text-[11.5px] font-bold text-white/85">{t.label}</span>
                       <TogglePill on={gs.toggles[t.key]} />
                     </button>
                   ))}
@@ -282,12 +282,12 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                      {err && <p role="status" className="mt-1 font-mono text-[10px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                      {err && <p role="status" className="mt-1 font-mono text-[11.5px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
                     </div>
                   );
                 })}
               </div>
-              <button onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className={cx(btnNeutral, 'mt-2 px-3 py-1.5 text-[11px]')}>+ Add variable</button>
+              <button onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className={cx(btnNeutral, 'mt-2 px-3 py-1.5 text-[12px]')}>+ Add variable</button>
             </div>
           </div>
         </div>
@@ -307,7 +307,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
                     onClick={() => set('proton_flags', on ? flags.filter((x) => x !== f.key) : [...flags, f.key])}
                     className={cx('flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 transition', on ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}
                   >
-                    <span className="text-left font-mono text-[10.5px] font-bold text-white/85">{f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}</span>
+                    <span className="text-left font-mono text-[11.5px] font-bold text-white/85">{f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}</span>
                     <TogglePill on={on} />
                   </button>
                 );
@@ -322,7 +322,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
               {[...new Set([...WINETRICKS_VERBS, ...(game.fix_info?.winetricks ?? [])])].map((t) => {
                 const on = tricks.includes(t);
                 return (
-                  <button key={t} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== t) : [...tricks, t])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-[10.5px] transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
+                  <button key={t} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== t) : [...tricks, t])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-[11.5px] transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
                     {on ? '✓ ' : '+ '}{t}
                   </button>
                 );
@@ -330,7 +330,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             </div>
           </div>
 
-          <div className="rounded-xl bg-black/35 p-3.5 font-mono text-[10.5px] leading-relaxed ring-1 ring-white/[0.07]">
+          <div className="rounded-xl bg-black/35 p-3.5 font-mono text-[11.5px] leading-relaxed ring-1 ring-white/[0.07]">
             <div className="mb-1 flex items-center justify-between text-white/40">
               <span>$ preview</span>
               {preview.cmd && (
@@ -349,8 +349,8 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
             <button onClick={() => onSave(current)} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
           </div>
-          {dirty && <div role="status" className="font-mono text-[10px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
-          <div className="font-mono text-[9px] leading-relaxed text-white/40">
+          {dirty && <div role="status" className="font-mono text-[11.5px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
+          <div className="font-mono text-[11px] leading-relaxed text-white/40">
             saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
           </div>
         </div>

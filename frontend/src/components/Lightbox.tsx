@@ -79,7 +79,7 @@ export function Lightbox({ images, index, alt, onIndex, onClose }: {
       <div
         aria-live="polite"
         onClick={(e) => e.stopPropagation()}
-        className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-md bg-black/60 px-2.5 py-1 font-mono text-[11px] leading-none text-white/75"
+        className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-md bg-black/60 px-2.5 py-1 font-mono text-[12px] leading-none text-white/75"
       >
         {index + 1} / {n}
       </div>

@@ -49,7 +49,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <Cover src={heroImages(hero)} title={hero.title} className="h-[290px] w-full" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
           <div className="absolute bottom-6 left-7 max-w-lg">
-            <span className="rounded-lg bg-orange-400 px-2.5 py-1 font-mono text-[9px] font-black uppercase tracking-wider text-[#130f0a]">
+            <span className="rounded-lg bg-orange-400 px-2.5 py-1 font-mono text-[11px] font-black uppercase tracking-wider text-[#130f0a]">
               {hero.fix_info?.source === 'protondb' ? 'needs attention' : 'fix available'}
             </span>
             <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
@@ -74,7 +74,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
             ].map(([k, v, c]) => (
               <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
                 <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
-                <div className="font-mono text-[9px] uppercase tracking-widest text-white/50">{k}</div>
+                <div className="font-mono text-[11px] uppercase tracking-widest text-white/50">{k}</div>
               </div>
             ))}
           </div>
@@ -100,7 +100,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                 </div>
                 <div className="px-3 py-2.5">
                   <div className="truncate text-[12px] font-bold">{g.title}</div>
-                  <div className="font-mono text-[9px] uppercase tracking-wider text-white/40">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-white/40">
                     {hoursPlayed(g) != null ? `${hoursPlayed(g)}h · ` : ''}
                     {runnerShort(g.settings.runner_id, runners)}
                   </div>
@@ -127,15 +127,15 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
-                      <span className={cx('font-mono text-[9px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-orange-300')}>
+                      <span className={cx('font-mono text-[11px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-orange-300')}>
                         {g.fix_info?.tier}
                       </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-white/50">{attentionReason(g)}</p>
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/50">{attentionReason(g)}</p>
                   </button>
                 ))}
                 {waiting.length > 3 && (
-                  <button onClick={() => onNavigate({ name: 'fixes' })} className="font-mono text-[10px] uppercase tracking-widest text-white/40 hover:text-white/80">
+                  <button onClick={() => onNavigate({ name: 'fixes' })} className="font-mono text-[11.5px] uppercase tracking-widest text-white/40 hover:text-white/80">
                     +{waiting.length - 3} more in fixes →
                   </button>
                 )}
@@ -163,7 +163,7 @@ function WelcomeBanner({ installed, owned, fixes }: { installed: number; owned: 
   return (
     <Panel as="section" className="mb-6 p-6">
       <h1 className="text-[25px] font-extrabold tracking-tight">{greeting()}</h1>
-      <p className="mt-1 font-mono text-[11px] tabular-nums text-white/50">
+      <p className="mt-1 font-mono text-[12px] tabular-nums text-white/50">
         {installed} installed{owned > installed ? ` · ${owned} owned` : ''} · {fixes} {fixes === 1 ? 'fix' : 'fixes'}
       </p>
     </Panel>
@@ -179,7 +179,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
             <Cover src={g.cover_url} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
-              <div className="font-mono text-[9px] uppercase tracking-wider text-white/40">{storeLabel(g.store)}</div>
+              <div className="font-mono text-[11px] uppercase tracking-wider text-white/40">{storeLabel(g.store)}</div>
             </div>
           </button>
         </li>

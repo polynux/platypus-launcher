@@ -43,18 +43,18 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
           <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-amber-200">
             {VERB[job.kind]} · {job.title}
           </button>
-          <div className={cx('truncate font-mono text-[10px]', STATE_STYLE[job.state])} title={detail}>
+          <div className={cx('truncate font-mono text-[11.5px]', STATE_STYLE[job.state])} title={detail}>
             {job.state}{detail ? ` · ${detail}` : ''}
             {job.attempts > 1 && active ? ` · attempt ${job.attempts}` : ''}
           </div>
           {job.state === 'canceled' && job.leftover && (
-            <div className="mt-0.5 truncate font-mono text-[9.5px] text-orange-300/80" title={job.leftover}>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-orange-300/80" title={job.leftover}>
               {job.leftover}
             </div>
           )}
         </div>
         <div className="flex flex-none items-center gap-2">
-          {pct != null && job.state === 'running' && <span className="font-mono text-[11px] tabular-nums text-white/70">{pct}%</span>}
+          {pct != null && job.state === 'running' && <span className="font-mono text-[12px] tabular-nums text-white/70">{pct}%</span>}
           {job.state === 'running' && (
             <button onClick={() => onAction('pause', job.id)} aria-label={`Pause ${job.title}`} className={cx(btnNeutral, 'flex items-center gap-1.5 px-3 py-1.5 text-[11.5px]')}>
               <Pause className="h-3 w-3" /> Pause
@@ -92,7 +92,7 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
           <div className={cx('h-full rounded-full transition-[width]', job.state === 'paused' ? 'bg-sky-300' : 'bg-amber-300', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
         </div>
       )}
-      {job.install_dir && job.kind !== 'uninstall' && <div className="mt-1.5 truncate font-mono text-[9.5px] text-white/35">{job.install_dir}</div>}
+      {job.install_dir && job.kind !== 'uninstall' && <div className="mt-1.5 truncate font-mono text-[11px] text-white/35">{job.install_dir}</div>}
     </div>
   );
 }

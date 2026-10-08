@@ -386,7 +386,7 @@ export function App() {
 
   const renderView = () => {
     if (!loaded) {
-      return <div className="p-7 font-mono text-[11px] uppercase tracking-widest text-white/40">scanning library…</div>;
+      return <div className="p-7 font-mono text-[12px] uppercase tracking-widest text-white/40">scanning library…</div>;
     }
     if (loadError && games.length === 0 && (view.name === 'dashboard' || view.name === 'library')) {
       return (
@@ -547,7 +547,7 @@ export function App() {
             // z-[60]: above the modal overlay (z-50) — a toast (e.g. a save
             // or scan failure) must stay visible over an open dialog and not
             // rely on DOM order. Shape unchanged (DESIGN.md §6.6).
-            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[11px]',
+            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[12px]',
             NOTICE_STYLE[notice.kind]
           )}
           style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}

@@ -25,7 +25,7 @@ describe('toast renders above an open modal', () => {
 
   it('keeps the DESIGN §6.6 toast shape (rounded-[3px], mono, max-w-md, auto roles)', () => {
     const app = src('App.tsx');
-    expect(app).toContain("rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[11px]");
+    expect(app).toContain("rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[12px]");
     expect(app).toContain('max-w-md');
     expect(app).toContain('role="status"');
   });

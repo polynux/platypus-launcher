@@ -62,7 +62,7 @@ const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc')
 
 function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort | null) => void }) {
   return (
-    <div className="flex items-center rounded-xl bg-white/[0.05] p-1 font-mono text-[10px] uppercase tracking-wider text-white/60">
+    <div className="flex items-center rounded-xl bg-white/[0.05] p-1 font-mono text-[11.5px] uppercase tracking-wider text-white/60">
       <select
         aria-label="Sort by"
         value={sort?.key ?? ''}
@@ -113,7 +113,7 @@ function Segmented<T extends string>({ value, options, onChange, label, mono }: 
           onClick={() => onChange(v)}
           className={cx(
             'rounded-lg px-3.5 py-1.5 transition',
-            mono ? 'font-mono text-[10px] uppercase tracking-wider' : 'text-[12px] font-bold',
+            mono ? 'font-mono text-[11.5px] uppercase tracking-wider' : 'text-[12px] font-bold',
             value === v ? 'bg-white/12 text-white' : 'text-white/45 hover:text-white/80'
           )}
         >
@@ -195,7 +195,7 @@ export function LibraryView(p: LibraryProps) {
             <div key={w.source} role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-4 py-3 ring-1 ring-amber-300/25">
               <p className="min-w-0 text-[12.5px] text-white/75">
                 <span className="font-bold text-amber-200">{pluginName(w.source)}</span>{' '}
-                {w.needs_auth ? 'is logged out, so its games are missing.' : <>couldn't list its games: <span className="font-mono text-[11px] text-white/55">{w.message}</span></>}
+                {w.needs_auth ? 'is logged out, so its games are missing.' : <>couldn't list its games: <span className="font-mono text-[12px] text-white/55">{w.message}</span></>}
               </p>
               <button onClick={() => p.onNavigate({ name: 'plugins' })} className={cx(btnPrimary, 'flex flex-none items-center gap-1.5 px-3.5 py-2 text-[12px]')}>
                 {w.needs_auth && <LogIn className="h-3.5 w-3.5" />} {w.needs_auth ? 'Log in' : 'Plugins'}
@@ -226,9 +226,9 @@ export function LibraryView(p: LibraryProps) {
                     <div className="absolute bottom-4 left-5 right-5">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="truncate text-[16px] font-extrabold tracking-tight">{g.title}</span>
-                        <span className={cx('font-mono text-[9px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-white/45')}>{g.fix_info?.tier}</span>
+                        <span className={cx('font-mono text-[11px] uppercase tracking-wider', TIER_TEXT[g.fix_info?.tier ?? ''] ?? 'text-white/45')}>{g.fix_info?.tier}</span>
                       </div>
-                      <div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-white/50">
+                      <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-white/50">
                         {hoursPlayed(g) != null && <><span>{hoursPlayed(g)}h</span><span>·</span></>}
                         <span>{lastPlayedLabel(g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
                       </div>
@@ -259,14 +259,14 @@ export function LibraryView(p: LibraryProps) {
                       {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
                       {job ? (
                         <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
-                          <div className="font-mono text-[8.5px] uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
+                          <div className="font-mono text-[11px] uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
                           <div className="mt-1 h-1 rounded-full bg-white/15">
                             <div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(job.percent, 2)}%` }} />
                           </div>
                         </div>
                       ) : (
                         !g.is_installed && (
-                          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-wider text-white/70">
+                          <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wider text-white/70">
                             {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? 'not installed' : 'owned'}
                           </span>
                         )
@@ -274,7 +274,7 @@ export function LibraryView(p: LibraryProps) {
                     </div>
                     <div className="px-2.5 py-2">
                       <div className="truncate text-[11.5px] font-bold">{g.title}</div>
-                      <div className="truncate font-mono text-[9px] uppercase tracking-wider text-white/40">
+                      <div className="truncate font-mono text-[11px] uppercase tracking-wider text-white/40">
                         {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.update_available && 'update'].filter(Boolean).join(' · ')}
                       </div>
                     </div>
@@ -297,7 +297,7 @@ export function LibraryView(p: LibraryProps) {
       ) : (
         <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
           <div role="table" aria-label="Library" className="min-w-[760px]">
-            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white/40', TABLE_COLS)}>
+            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-white/40', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">status</span></span>
               <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
               <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>
@@ -316,11 +316,11 @@ export function LibraryView(p: LibraryProps) {
                       <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
                     </button>
                   </span>
-                  <span role="cell" className={cx('font-mono text-[10px]', TIER_TEXT[tier ?? ''] ?? 'text-white/40')}>{tier ?? '—'}</span>
-                  <span role="cell" className="truncate font-mono text-[10px] text-white/45">{runnerShort(g.settings.runner_id, p.runners)}</span>
-                  <span role="cell" className="text-right font-mono text-[10.5px] tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
-                  <span role="cell" className="text-right font-mono text-[10px] text-white/45">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
-                  <span role="cell" className="text-right font-mono text-[10px] text-white/45">{lastPlayedLabel(g) ?? '—'}</span>
+                  <span role="cell" className={cx('font-mono text-[11.5px]', TIER_TEXT[tier ?? ''] ?? 'text-white/40')}>{tier ?? '—'}</span>
+                  <span role="cell" className="truncate font-mono text-[11.5px] text-white/45">{runnerShort(g.settings.runner_id, p.runners)}</span>
+                  <span role="cell" className="text-right font-mono text-[11.5px] tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
+                  <span role="cell" className="text-right font-mono text-[11.5px] text-white/45">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
+                  <span role="cell" className="text-right font-mono text-[11.5px] text-white/45">{lastPlayedLabel(g) ?? '—'}</span>
                 </div>
               );
             })}

@@ -122,15 +122,15 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
-                      <p className="font-mono text-[9.5px] text-white/45">
+                      <p className="font-mono text-[11px] text-white/45">
                         v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
                       </p>
                     </div>
-                    <span className={cx('flex-none rounded-md px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em]', st.style)}>{st.label}</span>
+                    <span className={cx('flex-none rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em]', st.style)}>{st.label}</span>
                   </div>
                   {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                   {p.problem && p.status !== 'missing-requirements' && (
-                    <p className={cx('mt-2 font-mono text-[10.5px]', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
+                    <p className={cx('mt-2 font-mono text-[11.5px]', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
                   )}
                 </div>
 
@@ -138,12 +138,12 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   <div className="rounded-xl bg-orange-400/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
                     <MonoLabel className="mb-1.5 text-orange-200/80">install first</MonoLabel>
                     {p.missing.map((r) => (
-                      <div key={r.bin} className="font-mono text-[11px] text-white/80">
+                      <div key={r.bin} className="font-mono text-[12px] text-white/80">
                         <span className="text-orange-200">{r.bin}</span>
                         {r.hint && <> · <span className="select-text">{r.hint}</span></>}
                       </div>
                     ))}
-                    <p className="mt-1.5 text-[11px] text-white/45">Then rescan.</p>
+                    <p className="mt-1.5 text-[12px] text-white/45">Then rescan.</p>
                   </div>
                 )}
 
@@ -153,7 +153,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       {!a ? (
                         <span className="flex items-center gap-2 text-white/45"><Loader2 className="h-3 w-3 animate-spin" /> checking login…</span>
                       ) : 'error' in a ? (
-                        <span className="font-mono text-[10.5px] text-red-300">{a.error}</span>
+                        <span className="font-mono text-[11.5px] text-red-300">{a.error}</span>
                       ) : a.loggedIn ? (
                         <>Logged in{a.user ? <> as <span className="font-bold text-white/90">{a.user}</span></> : ''}</>
                       ) : (
@@ -173,7 +173,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 )}
 
                 {p.capabilities.includes('install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
-                  <div className="space-y-1 font-mono text-[10.5px]">
+                  <div className="space-y-1 font-mono text-[11.5px]">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-white/45">installs into</span>
                       <span className="flex min-w-0 items-center gap-2">
@@ -250,11 +250,11 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
-                        <p className="font-mono text-[9.5px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+                        <p className="font-mono text-[11px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
                       </div>
                       <span
                         className={cx(
-                          'flex-none rounded-md px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em]',
+                          'flex-none rounded-md px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em]',
                           p.status === 'ready' ? 'bg-white/[0.06] text-white/45' : st.style
                         )}
                       >
@@ -262,9 +262,9 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       </span>
                     </div>
                     {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
-                    {p.problem && <p className="font-mono text-[10.5px] text-red-300">{p.problem}</p>}
+                    {p.problem && <p className="font-mono text-[11.5px] text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
-                      <p className="mt-auto text-[11px] text-white/45">
+                      <p className="mt-auto text-[12px] text-white/45">
                         JSON only — fix recipes and tweaks. It can't run anything, so Hydra applies it without asking.
                       </p>
                     )}
@@ -283,7 +283,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
               <div className="text-[13px] font-bold">{b.name}</div>
               <div className="text-[12px] text-white/50">{b.what}</div>
             </div>
-            <span className="flex-none rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-white/45">built in</span>
+            <span className="flex-none rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">built in</span>
           </div>
         ))}
       </div>
@@ -331,14 +331,14 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
     <Modal label={`Approve ${p.name}`} onClose={onClose} className="max-w-xl">
       <div>
         <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? `Re-approve ${p.name}` : `Approve ${p.name}`}</h2>
-        <p className="mt-1 font-mono text-[10px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
+        <p className="mt-1 font-mono text-[11.5px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
         {p.status === 'changed' && (
           <p className="mt-3 rounded-xl bg-orange-400/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
             Its program changed since you approved it. If you didn't update it yourself, don't approve it.
           </p>
         )}
 
-        <div className="mt-4 space-y-2 font-mono text-[10.5px]">
+        <div className="mt-4 space-y-2 font-mono text-[11.5px]">
           <ManifestRow label="runs" items={[`${p.dir}/${p.exec}`]} empty="" />
           <ManifestRow label="sha-256" items={[p.hash]} empty="" />
           <ManifestRow label="can" items={p.capabilities} empty="nothing declared" />
@@ -516,7 +516,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
         <p className="mt-1 text-[11.5px] text-white/45">Your login stays with {plugin.name}'s own tool; Hydra doesn't store it.</p>
         {!prompt && !error && (
-          <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-white/45"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
+          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/45"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
         )}
         {prompt && (
           <div className="mt-4 space-y-4">
@@ -526,7 +526,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
                 <button type="button" onClick={() => BrowserOpenURL(prompt.url!)} className={cx(btnNeutral, 'flex w-full items-center justify-center gap-2 py-2.5 text-[12.5px]')}>
                   <ExternalLink className="h-3.5 w-3.5" /> Open login page
                 </button>
-                <p className="mt-1.5 break-all font-mono text-[9.5px] text-white/35 select-text">{prompt.url}</p>
+                <p className="mt-1.5 break-all font-mono text-[11px] text-white/35 select-text">{prompt.url}</p>
               </div>
             )}
             {prompt.qr && (
@@ -558,7 +558,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             </div>
           </div>
         )}
-        {error && <p role="alert" className="mt-3 font-mono text-[10.5px] text-red-300">{error}</p>}
+        {error && <p role="alert" className="mt-3 font-mono text-[11.5px] text-red-300">{error}</p>}
         <div className="mt-5 flex gap-2.5">
           <button type="button" onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
           <button type="submit" disabled={!canSubmit || submitting} className={cx(btnPrimary, 'flex flex-1 items-center justify-center gap-2 py-2.5 text-[12.5px] disabled:cursor-default')}>

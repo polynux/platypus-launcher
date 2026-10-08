@@ -49,7 +49,7 @@ export function Sidebar(p: SidebarProps) {
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">H</span>
         <div>
           <div className="text-[15px] font-extrabold tracking-tight">Hydra</div>
-          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/40">game hub</div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/40">game hub</div>
         </div>
       </div>
 
@@ -82,13 +82,13 @@ export function Sidebar(p: SidebarProps) {
             )}
           >
             <span>{n.label}</span>
-            {n.count != null && <span className="rounded-full bg-white/[0.07] px-2 font-mono text-[9.5px] tabular-nums">{n.count}</span>}
+            {n.count != null && <span className="rounded-full bg-white/[0.07] px-2 font-mono text-[11px] tabular-nums">{n.count}</span>}
             {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label="needs attention" />}
           </button>
         ))}
       </nav>
 
-      <div className="px-2 pb-1.5 pt-4 font-mono text-[9px] uppercase tracking-[0.18em] text-white/40">sources</div>
+      <div className="px-2 pb-1.5 pt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-white/40">sources</div>
       {[
         ...SOURCES,
         // Stores that only plugins provide, then sideloaded games.
@@ -108,7 +108,7 @@ export function Sidebar(p: SidebarProps) {
               <span className={cx('h-1.5 w-1.5 rounded-full', count ? 'bg-amber-300/60' : 'bg-white/15')} />
               {s.label}
             </span>
-            <span className="font-mono text-[9.5px] tabular-nums text-white/40">{count || '—'}</span>
+            <span className="font-mono text-[11px] tabular-nums text-white/40">{count || '—'}</span>
           </button>
         );
       })}
@@ -126,7 +126,7 @@ export function Sidebar(p: SidebarProps) {
             >
               <span className={cx('h-2 w-2 flex-none rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-amber-300')} />
               <span className="min-w-0 flex-1">
-                <span className={cx('block font-mono text-[9px] uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
+                <span className={cx('block font-mono text-[11px] uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
                   {label}
                 </span>
                 <span className="block truncate text-[11.5px] font-semibold text-white/85">{e.title}</span>
@@ -144,7 +144,7 @@ export function Sidebar(p: SidebarProps) {
             </div>
           );
         })}
-        <div className="px-1.5 font-mono text-[9px] text-white/35">
+        <div className="px-1.5 font-mono text-[11px] text-white/35">
           hydra v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
       </div>
