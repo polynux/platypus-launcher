@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
@@ -20,19 +20,25 @@ interface Props {
 
 const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
+const GS_PLACEHOLDER = { gamescope_w: 'width', gamescope_h: 'height', gamescope_r: 'refresh' } as const;
+
 function runnerKind(r: ProtonVersion): string {
   if (r.is_system) return 'system';
   if (r.is_custom) return 'custom · compatibilitytools.d';
   return 'steam';
 }
 
-function parseEnv(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const line of text.split('\n')) {
-    const m = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-    if (m) out[m[1]] = m[2];
-  }
-  return out;
+function parseEnv(text: string): { env: Record<string, string>; ignored: { n: number; line: string }[] } {
+  const env: Record<string, string> = {};
+  const ignored: { n: number; line: string }[] = [];
+  text.split('\n').forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (m) env[m[1]] = m[2];
+    else ignored.push({ n: i + 1, line });
+  });
+  return { env, ignored };
 }
 
 export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Props) {
@@ -40,6 +46,9 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const [envText, setEnvText] = useState(() =>
     Object.entries(normalizeSettings(game.settings).env_vars).map(([k, v]) => `${k}=${v}`).join('\n')
   );
+  // Dirty = draft or env text differs from what was loaded: Esc / click-outside then stay inert.
+  const initial = useRef({ draft: JSON.stringify(draft), env: envText });
+  const dirty = JSON.stringify(draft) !== initial.current.draft || envText !== initial.current.env;
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -47,7 +56,8 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
   const native = !!game.native;
-  const current = { ...draft, env_vars: parseEnv(envText) };
+  const parsedEnv = useMemo(() => parseEnv(envText), [envText]);
+  const current = { ...draft, env_vars: parsedEnv.env };
   const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, envText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live preview from the real backend, debounced 300ms.
@@ -71,7 +81,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
   return (
-    <Modal label={`Launcher settings for ${game.title}`} onClose={onClose} className="max-w-[920px]">
+    <Modal label={`Launcher settings for ${game.title}`} onClose={onClose} dismissable={!dirty} className="max-w-[920px]">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
@@ -138,7 +148,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
             <div><MonoLabel className="mb-1.5">dx layer</MonoLabel><SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} /></div>
             <div><MonoLabel className="mb-1.5">sync</MonoLabel><SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} /></div>
-            <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler === 'integer' ? 'native' : draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
+            <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
             <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
             <div><MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel><SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} /></div>
           </div>
@@ -166,7 +176,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             {draft.use_gamescope && (
               <div className="mt-2.5 grid grid-cols-[repeat(3,4.5rem)_1fr] gap-2">
                 {(['gamescope_w', 'gamescope_h', 'gamescope_r'] as const).map((k) => (
-                  <input key={k} aria-label={k.replace('gamescope_', 'gamescope ')} type="number" min={0} value={draft[k] || ''} onChange={(e) => set(k, parseInt(e.target.value, 10) || 0)} placeholder={k.slice(-1)} className={field} />
+                  <input key={k} aria-label={k.replace('gamescope_', 'gamescope ')} type="number" min={0} value={draft[k] || ''} onChange={(e) => set(k, parseInt(e.target.value, 10) || 0)} placeholder={GS_PLACEHOLDER[k]} className={field} />
                 ))}
                 <input aria-label="gamescope args" value={draft.gamescope_args} onChange={(e) => set('gamescope_args', e.target.value)} placeholder="-f --adaptive-sync" className={field} />
               </div>
@@ -181,6 +191,11 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <label className="block">
               <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
               <textarea rows={2} value={envText} onChange={(e) => setEnvText(e.target.value)} placeholder="KEY=value (one per line)" className={cx(field, 'resize-y')} />
+              {parsedEnv.ignored.length > 0 && (
+                <p role="status" className="mt-1.5 break-all font-mono text-[10px] text-orange-300">
+                  {parsedEnv.ignored.map((l) => `Ignored line ${l.n}: ${l.line}`).join(' · ')}
+                </p>
+              )}
             </label>
           </div>
         </div>
@@ -242,6 +257,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
             <button onClick={onClose} className={cx(btnNeutral, 'flex-1 py-2.5 text-[12.5px] text-white/70')}>Cancel</button>
             <button onClick={() => onSave(current)} className={cx(btnPrimary, 'flex-1 py-2.5 text-[12.5px]')}>Save config</button>
           </div>
+          {dirty && <div role="status" className="font-mono text-[10px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[9px] leading-relaxed text-white/40">
             saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
           </div>

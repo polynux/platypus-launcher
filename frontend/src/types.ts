@@ -12,7 +12,7 @@ export interface ProtonVersion {
 
 export type SyncMode = 'default' | 'esync' | 'fsync' | 'ntsync' | 'off';
 export type DxLayer = 'dxvk' | 'wined3d';
-export type Upscaler = 'native' | 'fsr1' | 'integer';
+export type Upscaler = 'native' | 'fsr1';
 export type HudPreset = 'off' | 'fps only' | 'minimal' | 'full';
 
 export interface GameSettings {

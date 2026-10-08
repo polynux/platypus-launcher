@@ -80,7 +80,8 @@ export function normalizeSettings(s: GameSettings): GameSettings {
     proton_flags: s.proton_flags ?? PROTON_FLAGS.map((f) => f.key).filter(on),
     sync_mode: sync,
     dx_layer: s.dx_layer ?? (on('PROTON_USE_WINED3D') ? 'wined3d' : 'dxvk'),
-    upscaler: s.upscaler ?? (on('WINE_FULLSCREEN_FSR') ? 'fsr1' : 'native'),
+    // Legacy 'integer' was never applied, so it is plain native.
+    upscaler: s.upscaler === 'fsr1' ? 'fsr1' : s.upscaler ? 'native' : on('WINE_FULLSCREEN_FSR') ? 'fsr1' : 'native',
     mangohud_preset: hud,
     shader_cache: s.shader_cache ?? (env.DXVK_STATE_CACHE === '0' ? 'off' : 'on'),
     winetricks: s.winetricks ?? [],
