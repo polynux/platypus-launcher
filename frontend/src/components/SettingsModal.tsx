@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { Copy, X } from 'lucide-react';
+import { ChevronDown, Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { MonoLabel, SegRow, TogglePill, btnNeutral, btnPrimary, cx } from './ui';
@@ -21,6 +21,17 @@ interface Props {
 const field = 'w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[11px] text-white placeholder-white/30 outline-none ring-amber-300/50 focus:ring-1';
 
 const GS_PLACEHOLDER = { gamescope_w: 'width', gamescope_h: 'height', gamescope_r: 'refresh' } as const;
+
+function SelectField({ label, value, onChange, children, className }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cx('relative', className)}>
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cx(field, 'appearance-none py-2 pr-8 [color-scheme:dark]')}>
+        {children}
+      </select>
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/45" />
+    </div>
+  );
+}
 
 function runnerKind(r: ProtonVersion): string {
   if (r.is_system) return 'system';
@@ -74,9 +85,15 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const envLines = Object.entries(backend.settings.env_vars).sort(([a], [b]) => a.localeCompare(b));
   const flags = draft.proton_flags ?? [];
   const tricks = draft.winetricks ?? [];
-  const runnerOptions: ProtonVersion[] = runners;
   const selectedRunner = draft.runner_id;
   const autoPick = runners.find((r) => r.is_default);
+  const isAuto = !selectedRunner || selectedRunner === 'auto';
+  const chosenRunner = isAuto ? undefined : runners.find((r) => r.id === selectedRunner);
+  const runnerMissing = !isAuto && !chosenRunner;
+  const runnerValue = isAuto ? 'auto' : selectedRunner;
+  const runnerGroups = (['steam', 'custom', 'system'] as const)
+    .map((k) => [k, runners.filter((r) => (r.is_system ? 'system' : r.is_custom ? 'custom' : 'steam') === k)] as const)
+    .filter(([, l]) => l.length > 0);
 
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
@@ -120,27 +137,23 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           {!native && (
           <div>
             <MonoLabel className="mb-2">runner</MonoLabel>
-            <div role="radiogroup" aria-label="Runner" className="space-y-2">
-              {[{ id: 'auto', name: 'Automatic', path: autoPick ? `uses ${autoPick.name} · newest GE-Proton, then Experimental` : 'no runner installed', is_system: false, is_custom: false, is_default: false } as ProtonVersion, ...runnerOptions].map((r) => {
-                const on = selectedRunner === r.id || (r.id === 'auto' && !selectedRunner);
-                return (
-                  <button
-                    key={r.id}
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => set('runner_id', r.id)}
-                    className={cx('flex w-full items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition', on ? 'border-amber-300/50 bg-amber-300/[0.07]' : 'border-white/[0.08] hover:border-white/20')}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-bold">{r.name}</div>
-                      <div className="truncate font-mono text-[9.5px] text-white/45">{r.id === 'auto' ? r.path : `${runnerKind(r)} · ${r.path}`}</div>
-                    </div>
-                    <span className={cx('h-4 w-4 flex-none rounded-full border-2', on ? 'border-amber-300 bg-amber-300' : 'border-white/20')} />
-                  </button>
-                );
-              })}
-              {runners.length === 0 && <p className="text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
+            <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
+              <option value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</option>
+              {runnerMissing && <option value={selectedRunner}>{selectedRunner} (missing)</option>}
+              {runnerGroups.map(([kind, list]) => (
+                <optgroup key={kind} label={kind}>
+                  {list.map((r) => <option key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</option>)}
+                </optgroup>
+              ))}
+            </SelectField>
+            <div className={cx('mt-1.5 truncate font-mono text-[9.5px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
+              {runnerMissing
+                ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
+                : chosenRunner
+                  ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
+                  : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
             </div>
+            {runners.length === 0 && <p className="mt-1 text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
           </div>
           )}
 
