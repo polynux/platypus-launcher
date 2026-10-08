@@ -5,6 +5,7 @@ import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, 
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { Lightbox } from './Lightbox';
+import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, TogglePill, btnNeutral, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
@@ -123,9 +124,9 @@ export function GamePage(p: GamePageProps) {
   const hero = useHero(game, details);
   useEffect(() => { setShot(0); setLightbox(false); }, [game.id]);
   useEffect(() => {
-    const el = strip.current?.children[shot] as HTMLElement | undefined;
+    const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [shot]);
+  }, [shot, details]);
 
   const s = normalizeSettings(game.settings);
   const autoRunner = runners.find((r) => r.is_default);
@@ -249,23 +250,24 @@ export function GamePage(p: GamePageProps) {
                   <Maximize2 size={15} />
                 </span>
               </button>
-              <div
-                ref={strip}
-                className="flex gap-2.5 overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [mask-image:linear-gradient(90deg,transparent,#000_16px,#000_calc(100%-24px),transparent)]"
-              >
-                {shots.map((src, i) => (
-                  <button
-                    key={src}
-                    onClick={() => setShot(i)}
-                    onDoubleClick={() => setLightbox(true)}
-                    aria-label={`Show screenshot ${i + 1}`}
-                    aria-pressed={i === shot}
-                    className={cx('aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
-                  >
-                    <img src={src} alt="" loading="lazy" className="h-full w-full object-contain" />
-                  </button>
-                ))}
-              </div>
+              <ScrollArea orientation="horizontal" viewportRef={strip} data-testid="shot-strip">
+                {/* Padding keeps the active ring and rounded corners inside the viewport; pb leaves room for the overlay bar. */}
+                <div data-testid="shot-strip-inner" className="flex w-max gap-2.5 px-1.5 pb-3.5 pt-1.5">
+                  {shots.map((src, i) => (
+                    <button
+                      key={src}
+                      data-thumb
+                      onClick={() => setShot(i)}
+                      onDoubleClick={() => setLightbox(true)}
+                      aria-label={`Show screenshot ${i + 1}`}
+                      aria-pressed={i === shot}
+                      className={cx('aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
+                    >
+                      <img src={src} alt="" loading="lazy" className="h-full w-full object-contain" />
+                    </button>
+                  ))}
+                </div>
+              </ScrollArea>
               {lightbox && <Lightbox images={shots} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
             </div>
           )}
