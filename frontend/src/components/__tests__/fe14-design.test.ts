@@ -23,7 +23,7 @@ describe('FE-14 design drift guards', () => {
     expect(app).toContain('z-[60]');
     expect(app).toContain('rounded-[3px]');
     expect(app.includes('z-[60] flex max-w-md')).toBe(true);
-    const modal = src('components/Modal.tsx');
+    const modal = src('components/ds/dialog.tsx');
     expect(modal).toContain('z-50');
   });
 

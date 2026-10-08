@@ -24,11 +24,55 @@
   --color-text-body: #a8a29e;
   --color-text-faint: #78716c;
 
+  /* shadcn semantic tokens, mapped onto Hydra's palette so ds/ components inherit the look. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
   --animate-modal-in: modal-in 150ms ease-out;
   @keyframes modal-in {
     from { opacity: 0; transform: scale(0.96); }
     to { opacity: 1; transform: scale(1); }
   }
+}
+
+:root {
+  --background: #130f0a;
+  --foreground: #ece6da;
+  --card: #191410;
+  --card-foreground: #ece6da;
+  --popover: #191410;
+  --popover-foreground: #ece6da;
+  --primary: #fbbf24;
+  --primary-foreground: #130f0a;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: rgba(255, 255, 255, 0.8);
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: rgba(255, 255, 255, 0.55);
+  --destructive: #f87171;
+  --border: rgba(255, 255, 255, 0.07);
+  --input: rgba(255, 255, 255, 0.07);
+  --ring: rgba(252, 211, 77, 0.8);
+  --accent-foreground: #130f0a;
+  --radius: 0.75rem;
 }
 
 @layer base {
@@ -74,11 +118,26 @@
     border: 2px solid transparent;
     border-radius: 999px;
     background-clip: padding-box;
+    transition: background-color 200ms ease;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.22);
     border: 2px solid transparent;
     background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Number inputs: no native spinners (use ds/NumberField). */
+  input[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
   /* Tailwind 4 resets buttons to the default cursor; everything clickable gets the hand. */
