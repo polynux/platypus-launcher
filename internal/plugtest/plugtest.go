@@ -115,6 +115,9 @@ func (b backend) Start(ctx context.Context, j types.Job) error {
 	p := map[string]any{"id": j.StoreGameID, "jobId": j.ID}
 	if j.Kind != jobs.KindUninstall {
 		p["installDir"] = j.InstallDir
+		if j.Title != "" {
+			p["title"] = j.Title
+		}
 	}
 	return b.m.Call(ctx, j.Source, "game."+j.Kind, p, nil)
 }

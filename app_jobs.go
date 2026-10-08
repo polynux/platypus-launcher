@@ -20,11 +20,27 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 }
 
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
+	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j), nil)
+}
+
+// installParams builds the params for game.install/game.update/game.uninstall
+// from a job. Plugins may key their own records on `title` (GOG keeps it in
+// its installed index, steam-standalone names its dl request), so Hydra sends
+// the title the job already has. Branches and their passwords are plugin-side
+// choices: Hydra sends no branch key at all — an empty one must not leak into
+// the params. installDir only makes sense where files land.
+func installParams(j types.Job) map[string]any {
 	params := map[string]any{"id": j.StoreGameID, "jobId": j.ID}
-	if j.Kind != jobs.KindUninstall {
-		params["installDir"] = j.InstallDir
+	if j.Kind == jobs.KindUninstall {
+		return params
 	}
-	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, params, nil)
+	params["installDir"] = j.InstallDir
+	if j.Title != "" {
+		params["title"] = j.Title
+	}
+	// branch/branchPassword would go here per-plugin; none is set, so the
+	// params carry none: a plugin defaults to its own branch.
+	return params
 }
 
 func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {

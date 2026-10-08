@@ -85,8 +85,8 @@ other errors can contain.
 | `library.list` | | `{ games: [LibraryGame] }` |
 | `game.details` | `{ id }` | `GameDetails` |
 | `game.installSize` | `{ id }` | `{ downloadBytes, diskBytes }` |
-| `game.install` | `{ id, installDir, jobId }` | `{}` once started |
-| `game.update` | `{ id, installDir, jobId }` | `{}` once started |
+| `game.install` | `{ id, installDir, jobId, title? }` | `{}` once started |
+| `game.update` | `{ id, installDir, jobId, title? }` | `{}` once started |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `game.launchSpec` | `{ id, preview }` | `LaunchSpec` |
@@ -160,7 +160,9 @@ leave it out rather than guess. Keep `list` short (a highlight, say 10) and let
 
 Hydra creates the `jobId`, picks `installDir` (the user's Games folder plus the
 plugin's `install_dir`, or the user's override) and checks free space against
-`game.installSize` before calling `game.install`. Install into `installDir`, never
+`game.installSize` before calling `game.install`. `title` is the game's title
+as Hydra lists it; use it for your own records instead of a second lookup, and
+treat it as cosmetic: never a path component. Install into `installDir`, never
 anywhere else, and give each game its own subfolder of it (Steam uses
 `<name>_<appid>`, GOG the store's folder name): two games must never share a
 directory, and a folder recorded by an earlier version of the plugin keeps working
