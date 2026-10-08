@@ -1035,7 +1035,8 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
     except (BrokenPipeError, OSError):
         pass
     state = {"jobId": job_id, "phase": "downloading", "percent": 0} if job_id else None
-    text = []
+    import collections as _collections
+    text = _collections.deque(maxlen=20)
     result = None
     for line in proc.stdout:
         line = line.rstrip()
