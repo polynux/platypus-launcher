@@ -152,7 +152,7 @@ func setup(t *testing.T) *env {
 	os.WriteFile(cmState, []byte(`{}`), 0o644)
 	t.Setenv("FAKE_CM_STATE", cmState)
 	cmd := exec.Command("python3", "testdata/fake_cm.py")
-	var out bytes.Buffer
+	var out syncBuf
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -1100,4 +1100,22 @@ func TestSteamQRRefresh(t *testing.T) {
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("qr complete after refresh: %+v, %v", st, err)
 	}
+}
+
+// syncBuf is a bytes.Buffer safe to read while os/exec's copy goroutine writes.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }

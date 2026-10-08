@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -132,7 +133,7 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not installed")
 	}
-	var out bytes.Buffer
+	var out syncBuf
 	cmd := exec.Command("python3", path)
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
@@ -199,4 +200,22 @@ func TestConformanceSteamStandalone(t *testing.T) {
 			return pick(t, games, "4321")
 		},
 	}.Conformance(t)
+}
+
+// syncBuf is a bytes.Buffer safe to read while os/exec's copy goroutine writes.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
 }
