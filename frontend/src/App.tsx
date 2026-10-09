@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';
+import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
@@ -14,6 +15,7 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
+import { RedeemDialog } from './components/RedeemDialog';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
@@ -43,6 +45,7 @@ export function App() {
   const [plugins, setPlugins] = useState<StorePlugin[]>([]);
   const [social, setSocial] = useState<SocialView[]>([]);
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -419,6 +422,8 @@ export function App() {
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  // Redeem is one entry for every ready store that offers it (none: no entry).
+  const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
   const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
 
   const openGame = (id: string) =>
@@ -571,6 +576,8 @@ export function App() {
         friends={social}
         friendLabels={socialLabels}
         onOpenFriends={() => setFriendsOpen(true)}
+        canRedeem={redeemStores.length > 0}
+        onRedeem={() => setRedeemOpen(true)}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
@@ -591,6 +598,8 @@ export function App() {
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
       <FamilyWarningHost games={games} />
+
+      {redeemOpen && redeemStores.length > 0 && <RedeemDialog stores={redeemStores} onClose={() => setRedeemOpen(false)} />}
 
       {friendsOpen && (
         <FriendsModal

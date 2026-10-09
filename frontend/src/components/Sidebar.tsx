@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Square } from 'lucide-react';
+import { Search, Square, Ticket } from 'lucide-react';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -31,6 +31,9 @@ interface SidebarProps {
   /** Store names by plugin id. */
   friendLabels: Record<string, string>;
   onOpenFriends: () => void;
+  /** Some ready store offers redeem: the one "Redeem a code" entry shows. */
+  canRedeem: boolean;
+  onRedeem: () => void;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -125,6 +128,11 @@ export function Sidebar(p: SidebarProps) {
 
       {/* Pinned footer: fixed content, never grows. The friends block is the only part that changes size. */}
       <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
+        {p.canRedeem && (
+          <Button variant="neutral" onClick={p.onRedeem} className="w-full">
+            <Ticket className="h-3.5 w-3.5" /> Redeem a code
+          </Button>
+        )}
         <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} />
         {p.sessions.map((e) => {
           const running = e.state === 'running';

@@ -19,6 +19,8 @@ const base = {
   friends: [],
   friendLabels: {},
   onOpenFriends: () => {},
+  canRedeem: false,
+  onRedeem: () => {},
 };
 
 describe('FE-12 sidebar search does not hijack navigation', () => {
