@@ -1,11 +1,43 @@
 package plugins
 
+import (
+	"errors"
+
+	"hydra-launcher/internal/jsonrpc"
+)
+
 // Messages of protocol api 1. docs/plugins/protocol.md describes them for
 // plugin authors; keep the two in sync.
 
 // CodeAuthRequired is the error code a plugin returns when a request needs
 // the user to log in first.
 const CodeAuthRequired = -32001
+
+// CodeUnavailable is the error code for "not right now": a borrowed game in
+// use, a region lock, the store's service down. The message is for the user;
+// asking again later may work. It is not a login problem (CodeAuthRequired)
+// and not "the plugin doesn't offer this" (-32601).
+const CodeUnavailable = -32002
+
+// rpcCode is the JSON-RPC error code in err, or 0 when it isn't one.
+func rpcCode(err error) int {
+	var re *jsonrpc.Error
+	if errors.As(err, &re) {
+		return re.Code
+	}
+	return 0
+}
+
+// IsAuthRequired reports whether err is the plugin saying the user must log in.
+func IsAuthRequired(err error) bool {
+	return rpcCode(err) == CodeAuthRequired
+}
+
+// IsUnavailable reports whether err is the plugin saying "unavailable right
+// now"; its message says why.
+func IsUnavailable(err error) bool {
+	return rpcCode(err) == CodeUnavailable
+}
 
 // LibraryGame is one entry of library.list.
 type LibraryGame struct {
@@ -26,6 +58,10 @@ type LibraryGame struct {
 	CoverURL  string `json:"coverUrl,omitempty"`  // portrait
 	HeroURL   string `json:"heroUrl,omitempty"`   // wide background
 	BannerURL string `json:"bannerUrl,omitempty"` // wide card
+	// Features narrows the capabilities the plugin offers for this game
+	// (names from the registry). Absent (nil) means all of them; an empty
+	// list means none. Names the plugin doesn't offer at runtime are ignored.
+	Features []string `json:"features,omitempty"`
 }
 
 type LibraryList struct {

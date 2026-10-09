@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"hydra-launcher/internal/jobs"
@@ -19,7 +18,7 @@ import (
 // folder it names and which job it is about.
 func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 	p, ok := b.a.plugins.Plugin(j.Source)
-	if !ok || !slices.Contains(p.Manifest.Capabilities, "discard") {
+	if !ok || !b.a.plugins.Has(j.Source, "discard") {
 		return jobs.ErrDiscardUnsupported
 	}
 	params, err := discardParams(j, b.a.settings.GamesFolder())

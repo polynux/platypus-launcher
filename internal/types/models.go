@@ -84,6 +84,12 @@ type Game struct {
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
+	// Features are the plugin capabilities on offer for this game (names from
+	// the plugin capability registry): the plugin's per-game list, or every
+	// capability the plugin offers when it gave none. Never omitted for plugin
+	// games, so an empty list ("nothing") differs from null (Steam, sideloaded:
+	// not capability-driven).
+	Features []string `json:"features"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -97,30 +103,53 @@ type SourceWarning struct {
 	Source    string `json:"source"`
 	Message   string `json:"message"`
 	NeedsAuth bool   `json:"needs_auth,omitempty"`
+	// Unavailable marks a source that answered "unavailable right now"
+	// (plugin error -32002): not a login problem, worth trying again later.
+	Unavailable bool `json:"unavailable,omitempty"`
 }
 
 // StorePlugin is a discovered plugin as the Plugins view shows it. Kind is
 // "store" (a program, needs approval) or "data" (JSON only, always on).
 type StorePlugin struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name"`
-	Version      string              `json:"version"`
-	Author       string              `json:"author"`
-	Description  string              `json:"description"`
-	Store        string              `json:"store"`
-	Kind         string              `json:"kind,omitempty"`
-	Status       string              `json:"status"` // see plugins.Status
-	Problem      string              `json:"problem,omitempty"`
-	Missing      []PluginRequirement `json:"missing"`
-	Requires     []PluginRequirement `json:"requires"`
-	Capabilities []string            `json:"capabilities"`
-	Dir          string              `json:"dir"`
-	Exec         string              `json:"exec"`
-	Hash         string              `json:"hash"`
-	Network      []string            `json:"network"`
-	Read         []string            `json:"read"`
-	Write        []string            `json:"write"`
-	Running      bool                `json:"running"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Version     string              `json:"version"`
+	Author      string              `json:"author"`
+	Description string              `json:"description"`
+	Store       string              `json:"store"`
+	Kind        string              `json:"kind,omitempty"`
+	Status      string              `json:"status"` // see plugins.Status
+	Problem     string              `json:"problem,omitempty"`
+	Missing     []PluginRequirement `json:"missing"`
+	Requires    []PluginRequirement `json:"requires"`
+	// Capabilities is what the plugin offers right now: its last
+	// initialize's answer, or the declared list until it has run. UI
+	// surfaces test this, through the frontend's capability helper.
+	Capabilities []string `json:"capabilities"`
+	// Declared is the manifest's list: the promise the user approved.
+	Declared []string `json:"declared"`
+	// Offers lists every declared capability with its state and depth flags,
+	// for the Plugins view.
+	Offers []PluginCapability `json:"offers"`
+	// Needs are the capabilities Hydra must know for the plugin to run.
+	Needs []string `json:"needs"`
+	// Warnings are things that don't stop the plugin, e.g. capabilities this
+	// Hydra ignores because it doesn't know them.
+	Warnings []string `json:"warnings"`
+	// Initialized is true once the plugin has answered initialize in this
+	// session; Protocol is the negotiated version ("1.1").
+	Initialized bool   `json:"initialized"`
+	Protocol    string `json:"protocol,omitempty"`
+	// ProtocolVersions and Transport are what the manifest declares.
+	ProtocolVersions string   `json:"protocol_versions,omitempty"`
+	Transport        string   `json:"transport,omitempty"`
+	Dir              string   `json:"dir"`
+	Exec             string   `json:"exec"`
+	Hash             string   `json:"hash"`
+	Network          []string `json:"network"`
+	Read             []string `json:"read"`
+	Write            []string `json:"write"`
+	Running          bool     `json:"running"`
 	// GaveUp is true when the plugin crashed MaxCrashes times in a row: it
 	// fails fast until retried. The Plugins view offers a Retry action.
 	GaveUp bool `json:"gave_up,omitempty"`
@@ -128,6 +157,20 @@ type StorePlugin struct {
 	InstallFolder        string   `json:"install_folder"`
 	DefaultInstallFolder string   `json:"default_install_folder"`
 	ExtraFolders         []string `json:"extra_folders"` // other folders the user allowed launching from
+}
+
+// PluginCapability is one declared capability as the Plugins view shows it.
+type PluginCapability struct {
+	Name string `json:"name"`
+	// On: the plugin offers it right now (see StorePlugin.Capabilities).
+	On bool `json:"on"`
+	// Known: this Hydra has it in its registry; unknown names are ignored.
+	Known bool `json:"known"`
+	// Orchestrated: core has code that uses it. Known but not orchestrated
+	// capabilities are recognised and not used yet.
+	Orchestrated bool `json:"orchestrated"`
+	// Features are the plugin's depth flags for the capability.
+	Features map[string]bool `json:"features"`
 }
 
 type PluginRequirement struct {

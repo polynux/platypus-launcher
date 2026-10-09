@@ -212,6 +212,7 @@ export namespace types {
 	    note?: string;
 	    outside_folder?: boolean;
 	    native?: boolean;
+	    features: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -242,6 +243,7 @@ export namespace types {
 	        this.note = source["note"];
 	        this.outside_folder = source["outside_folder"];
 	        this.native = source["native"];
+	        this.features = source["features"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -378,6 +380,7 @@ export namespace types {
 	    source: string;
 	    message: string;
 	    needs_auth?: boolean;
+	    unavailable?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new SourceWarning(source);
@@ -388,6 +391,7 @@ export namespace types {
 	        this.source = source["source"];
 	        this.message = source["message"];
 	        this.needs_auth = source["needs_auth"];
+	        this.unavailable = source["unavailable"];
 	    }
 	}
 	export class Library {
@@ -421,6 +425,26 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class PluginCapability {
+	    name: string;
+	    on: boolean;
+	    known: boolean;
+	    orchestrated: boolean;
+	    features: Record<string, boolean>;
+	
+	    static createFrom(source: any = {}) {
+	        return new PluginCapability(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.on = source["on"];
+	        this.known = source["known"];
+	        this.orchestrated = source["orchestrated"];
+	        this.features = source["features"];
+	    }
 	}
 	export class PluginRequirement {
 	    bin: string;
@@ -490,6 +514,14 @@ export namespace types {
 	    missing: PluginRequirement[];
 	    requires: PluginRequirement[];
 	    capabilities: string[];
+	    declared: string[];
+	    offers: PluginCapability[];
+	    needs: string[];
+	    warnings: string[];
+	    initialized: boolean;
+	    protocol?: string;
+	    protocol_versions?: string;
+	    transport?: string;
 	    dir: string;
 	    exec: string;
 	    hash: string;
@@ -520,6 +552,14 @@ export namespace types {
 	        this.missing = this.convertValues(source["missing"], PluginRequirement);
 	        this.requires = this.convertValues(source["requires"], PluginRequirement);
 	        this.capabilities = source["capabilities"];
+	        this.declared = source["declared"];
+	        this.offers = this.convertValues(source["offers"], PluginCapability);
+	        this.needs = source["needs"];
+	        this.warnings = source["warnings"];
+	        this.initialized = source["initialized"];
+	        this.protocol = source["protocol"];
+	        this.protocol_versions = source["protocol_versions"];
+	        this.transport = source["transport"];
 	        this.dir = source["dir"];
 	        this.exec = source["exec"];
 	        this.hash = source["hash"];

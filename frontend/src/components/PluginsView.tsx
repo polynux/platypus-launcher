@@ -9,6 +9,8 @@ import { EmptyState, MonoLabel, Panel, cx } from './ui';
 import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
+import { PluginCapabilities } from './PluginCapabilities';
+import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -30,6 +32,8 @@ const STATUS: Record<PluginStatus, { label: string; variant: BadgeVariant }> = {
   disabled: { label: 'disabled', variant: 'neutral' },
   'missing-requirements': { label: 'missing a tool', variant: 'bronze' },
   invalid: { label: 'invalid', variant: 'borked' },
+  'needs-newer-hydra': { label: 'needs a newer Hydra', variant: 'bronze' },
+  'too-old': { label: 'too old for this Hydra', variant: 'bronze' },
 };
 
 const BUILT_IN = [
@@ -37,7 +41,7 @@ const BUILT_IN = [
   { name: 'ProtonDB', what: 'Compatibility ratings and community notes for Steam games.' },
 ];
 
-const hasAuth = (p: StorePlugin) => p.capabilities.includes('auth');
+const hasAuth = (p: StorePlugin) => offers(p, 'auth');
 
 export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
   const [auth, setAuth] = useState<Record<string, AuthStatus | { error: string }>>({});
@@ -139,6 +143,8 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   )}
                 </div>
 
+                {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
+
                 {p.missing.length > 0 && (
                   <div className="rounded-xl bg-orange-400/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
                     <MonoLabel className="mb-1.5 text-orange-200/80">install first</MonoLabel>
@@ -177,7 +183,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   </div>
                 )}
 
-                {p.capabilities.includes('install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
+                {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
                   <div className="space-y-1 font-mono text-[11.5px]">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-white/45">installs into</span>
@@ -344,7 +350,9 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
         <div className="mt-4 space-y-2 font-mono text-[11.5px]">
           <ManifestRow label="runs" items={[`${p.dir}/${p.exec}`]} empty="" />
           <ManifestRow label="sha-256" items={[p.hash]} empty="" />
-          <ManifestRow label="can" items={p.capabilities} empty="nothing declared" />
+          <ManifestRow label="can" items={p.declared} empty="nothing declared" />
+          <ManifestRow label="needs hydra" items={p.needs} empty="nothing in particular" />
+          {p.protocol_versions && <ManifestRow label="speaks" items={[`protocol ${p.protocol_versions} over ${p.transport ?? 'jsonrpc-stdio'}`]} empty="" />}
           <ManifestRow label="network" items={p.network} empty="no hosts declared" />
           <ManifestRow label="reads" items={p.read} empty="no paths declared" />
           <ManifestRow label="writes" items={p.write} empty="no paths declared" />

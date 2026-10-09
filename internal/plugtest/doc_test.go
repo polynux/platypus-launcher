@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/plugtest"
 )
 
@@ -56,6 +57,28 @@ func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
 	for m, src := range methods {
 		if !strings.Contains(text, "`"+m+"`") {
 			t.Errorf("%s dispatches %q, which protocol.md doesn't document", src, m)
+		}
+	}
+
+	// Every registered capability, its methods and its protocol version
+	// are in the Capabilities table.
+	for _, c := range plugins.Registry() {
+		if !strings.Contains(text, "| `"+c.Name+"` |") {
+			t.Errorf("protocol.md's capability table has no row for %q", c.Name)
+		}
+		for _, m := range append(append([]string{}, c.Methods...), c.OptionalMethods...) {
+			if !strings.Contains(text, "`"+m+"`") {
+				t.Errorf("protocol.md doesn't document %s (capability %s)", m, c.Name)
+			}
+		}
+	}
+	newest := plugins.SupportedProtocols[len(plugins.SupportedProtocols)-1]
+	if !strings.HasPrefix(text, "# Store plugin protocol ("+newest.String()+",") {
+		t.Errorf("protocol.md's title doesn't name the newest supported protocol %s", newest)
+	}
+	for _, code := range []string{"-32001", "-32002", "-32601"} {
+		if !strings.Contains(text, "`"+code+"`") {
+			t.Errorf("protocol.md doesn't document the error code %s", code)
 		}
 	}
 

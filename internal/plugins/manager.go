@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -30,6 +31,12 @@ const (
 	StatusChanged    Status = "changed"    // plugin folder changed since approval
 	StatusDisabled   Status = "disabled"   // approved, then turned off
 	StatusMissing    Status = "missing-requirements"
+	// StatusNeedsNewer: approved, but the manifest `needs` a capability this
+	// Hydra doesn't know. It is listed, never started.
+	StatusNeedsNewer Status = "needs-newer-hydra"
+	// StatusTooOld: the plugin only speaks protocol versions older than any
+	// this Hydra still supports. Listed, never started.
+	StatusTooOld Status = "too-old"
 )
 
 // Plugin is one folder under the plugins directory.
@@ -40,6 +47,9 @@ type Plugin struct {
 	Status   Status        `json:"status"`
 	Problem  string        `json:"problem,omitempty"`
 	Missing  []Requirement `json:"missing,omitempty"`
+	// Warnings are things the user should know that don't stop the plugin:
+	// capabilities this Hydra ignores because it doesn't know them.
+	Warnings []string `json:"warnings,omitempty"`
 	// Data is a data plugin's content, loaded at discovery. Store plugins
 	// have none.
 	Data *dataplug.Data `json:"-"`
@@ -58,20 +68,24 @@ type Options struct {
 	// OnExit is called when a plugin exits without being asked to (crash),
 	// so work in flight can be restarted.
 	OnExit func(pluginID string, err error)
+	// Protocols are the protocol versions Hydra offers plugins; nil means
+	// SupportedProtocols. Tests narrow it to play an older Hydra.
+	Protocols []Version
 	// Timings overrides the crash/restart timings for tests. Zero fields
 	// keep the defaults.
 	Timings *Timings
 }
 
 type Manager struct {
-	dir      string
-	logDir   string
-	dataDir  string
-	trust    *settings.Store
-	onNotify NotifyFunc
-	onExit   func(string, error)
-	lookPath func(string) (string, error)
-	t        timings
+	dir       string
+	logDir    string
+	dataDir   string
+	trust     *settings.Store
+	onNotify  NotifyFunc
+	onExit    func(string, error)
+	lookPath  func(string) (string, error)
+	t         timings
+	protocols []Version
 
 	mu      sync.Mutex
 	plugins map[string]*Plugin
@@ -82,16 +96,20 @@ type Manager struct {
 // NewManager manages the plugins in o.Dir. Call Discover before use.
 func NewManager(o Options) *Manager {
 	m := &Manager{
-		dir:      o.Dir,
-		logDir:   o.LogDir,
-		dataDir:  o.DataDir,
-		trust:    o.Settings,
-		onNotify: o.OnNotify,
-		onExit:   o.OnExit,
-		lookPath: exec.LookPath,
-		t:        defaultTimings,
-		plugins:  map[string]*Plugin{},
-		procs:    map[string]*process{},
+		dir:       o.Dir,
+		logDir:    o.LogDir,
+		dataDir:   o.DataDir,
+		trust:     o.Settings,
+		onNotify:  o.OnNotify,
+		onExit:    o.OnExit,
+		lookPath:  exec.LookPath,
+		t:         defaultTimings,
+		protocols: slices.Clone(o.Protocols),
+		plugins:   map[string]*Plugin{},
+		procs:     map[string]*process{},
+	}
+	if len(m.protocols) == 0 {
+		m.protocols = slices.Clone(SupportedProtocols)
 	}
 	if o.Timings != nil {
 		t := *o.Timings
@@ -164,6 +182,14 @@ func (m *Manager) inspect(dir string) *Plugin {
 		// Key broken plugins by folder name so each still shows up, once.
 		p.Manifest.ID = filepath.Base(dir)
 		p.Status, p.Problem = StatusInvalid, err.Error()
+		var inc *IncompatibleError
+		if errors.As(err, &inc) {
+			p.Status = inc.Status
+		}
+		return p
+	}
+	if inc := man.Compatible(m.protocols); inc != nil {
+		p.Status, p.Problem = inc.Status, inc.Reason
 		return p
 	}
 	if man.IsData() {
@@ -181,6 +207,14 @@ func (m *Manager) inspect(dir string) *Plugin {
 		return p
 	}
 	p.Missing = man.MissingRequirements(m.lookPath)
+	unmet := man.UnmetNeeds()
+	for _, c := range man.UnknownCapabilities() {
+		if slices.Contains(unmet, c) {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("needs %q, which this Hydra doesn't know: a newer Hydra is required", c))
+		} else {
+			p.Warnings = append(p.Warnings, fmt.Sprintf("offers %q, which this Hydra doesn't know; it is ignored", c))
+		}
+	}
 
 	trust, ok := m.trust.PluginState(man.ID)
 	switch {
@@ -190,6 +224,8 @@ func (m *Manager) inspect(dir string) *Plugin {
 		p.Status, p.Problem = StatusChanged, "the plugin changed since you approved it"
 	case !trust.Enabled:
 		p.Status = StatusDisabled
+	case len(unmet) > 0:
+		p.Status, p.Problem = StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (unknown capability %s)", quoteList(unmet))
 	case len(p.Missing) > 0:
 		p.Status, p.Problem = StatusMissing, fmt.Sprintf("%d required tool(s) not found", len(p.Missing))
 	default:
@@ -225,8 +261,13 @@ func (m *Manager) Approve(id string) error {
 	}
 	// Hash again: what gets approved is what is on disk now.
 	p = m.inspect(p.Dir)
-	if p.Status == StatusInvalid {
+	switch p.Status {
+	case StatusInvalid:
 		return fmt.Errorf("plugin %s is invalid: %s", id, p.Problem)
+	case StatusNeedsNewer, StatusTooOld:
+		if p.Hash == "" { // incompatible with this Hydra: there is nothing it could run
+			return fmt.Errorf("plugin %s can't run on this Hydra: %s", id, p.Problem)
+		}
 	}
 	state, _ := m.trust.PluginState(id) // keeps folder choices across re-approval
 	state.Hash, state.Enabled = p.Hash, true
@@ -333,6 +374,37 @@ func (m *Manager) Initialize(ctx context.Context, id string) (*InitResult, error
 	return &info, nil
 }
 
+// Runtime says what the plugin offers right now: what its last initialize
+// returned, or the manifest's capabilities until it has initialized. It never
+// starts the plugin.
+func (m *Manager) Runtime(id string) Runtime {
+	m.mu.Lock()
+	p, known := m.plugins[id]
+	proc := m.procs[id]
+	m.mu.Unlock()
+	if proc != nil {
+		proc.mu.Lock()
+		rt := proc.runtime
+		proc.mu.Unlock()
+		if rt != nil {
+			return Runtime{Initialized: true, Protocol: rt.Protocol, Capabilities: slices.Clone(rt.Capabilities), Features: rt.Features}
+		}
+	}
+	if !known {
+		return Runtime{}
+	}
+	caps := slices.Clone(p.Manifest.Capabilities)
+	if caps == nil {
+		caps = []string{}
+	}
+	return Runtime{Capabilities: caps}
+}
+
+// Has reports whether the plugin offers the capability right now (see Runtime).
+func (m *Manager) Has(id, capability string) bool {
+	return slices.Contains(m.Runtime(id).Capabilities, capability)
+}
+
 // process returns the plugin's process, creating it if the plugin may run.
 func (m *Manager) process(id string) (*process, error) {
 	m.mu.Lock()
@@ -380,16 +452,25 @@ func (m *Manager) process(id string) (*process, error) {
 		onExit = func(err error) { m.onExit(id, err) }
 	}
 	pinned := p.Hash
+	offered, transportName := p.Manifest.Offered()
+	transport, ok := LookupTransport(transportName)
+	if !ok { // inspect refuses these; a plugin can't change its manifest under us
+		return nil, fmt.Errorf("plugin %s: unknown transport %q", id, transportName)
+	}
 	proc := &process{
-		dataDir: dataDir,
-		onExit:  onExit,
-		id:      id,
-		dir:     p.Dir,
-		exec:    execPath,
-		hash:    pinned,
-		logPath: logPath,
-		notify:  notifyToLog(logPath, next),
-		t:       m.t,
+		dataDir:   dataDir,
+		declared:  p.Manifest.Capabilities,
+		protocols: m.protocols,
+		offered:   offered,
+		transport: transport,
+		onExit:    onExit,
+		id:        id,
+		dir:       p.Dir,
+		exec:      execPath,
+		hash:      pinned,
+		logPath:   logPath,
+		notify:    notifyToLog(logPath, next),
+		t:         m.t,
 		// The file may change between discovery and any later (re)start.
 		verify: func() error {
 			h, err := hashPlugin(p.Dir)
@@ -557,4 +638,12 @@ func (m *Manager) Shutdown() {
 		}()
 	}
 	wg.Wait()
+}
+
+func quoteList(names []string) string {
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = fmt.Sprintf("%q", n)
+	}
+	return strings.Join(q, ", ")
 }

@@ -127,12 +127,17 @@ export interface Game {
   outside_folder?: boolean;
   /** Linux build: runs without Proton, so runner and Proton-only settings don't apply. */
   native?: boolean;
+  /** Plugin capabilities on offer for this game (null for Steam and sideloaded
+   *  games). An empty list means none; see lib/capabilities. */
+  features?: string[] | null;
 }
 
 export interface SourceWarning {
   source: string;
   message: string;
   needs_auth?: boolean;
+  /** The source answered "unavailable right now" (plugin error -32002): not a login problem. */
+  unavailable?: boolean;
 }
 
 export interface Library {
@@ -140,11 +145,25 @@ export interface Library {
   warnings: SourceWarning[];
 }
 
-export type PluginStatus = 'ready' | 'invalid' | 'unapproved' | 'changed' | 'disabled' | 'missing-requirements';
+export type PluginStatus =
+  | 'ready' | 'invalid' | 'unapproved' | 'changed' | 'disabled' | 'missing-requirements'
+  | 'needs-newer-hydra' | 'too-old';
 
 export interface PluginRequirement {
   bin: string;
   hint: string;
+}
+
+/** One declared capability as the Plugins view lists it. */
+export interface PluginCapability {
+  name: string;
+  /** The plugin offers it right now. */
+  on: boolean;
+  /** This Hydra has it in its registry; unknown ones are ignored. */
+  known: boolean;
+  /** Core has code that uses it; known but not orchestrated = not used yet. */
+  orchestrated: boolean;
+  features: Record<string, boolean>;
 }
 
 /** A store plugin found in ~/.local/share/hydra/plugins. Kind "data" is a
@@ -161,7 +180,21 @@ export interface StorePlugin {
   problem?: string;
   missing: PluginRequirement[];
   requires: PluginRequirement[];
+  /** What the plugin offers right now (its last initialize), or the declared
+   *  list until it has run. UI surfaces test this through lib/capabilities. */
   capabilities: string[];
+  /** The manifest's list: the promise the user approves. */
+  declared: string[];
+  /** Every declared capability with its state and depth flags. */
+  offers: PluginCapability[];
+  needs: string[];
+  /** Things that don't stop the plugin, e.g. capabilities this Hydra ignores. */
+  warnings: string[];
+  initialized: boolean;
+  /** Negotiated protocol version ("1.1"). */
+  protocol?: string;
+  protocol_versions?: string;
+  transport?: string;
   dir: string;
   exec: string;
   hash: string;

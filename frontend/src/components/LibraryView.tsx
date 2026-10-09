@@ -196,7 +196,7 @@ export function LibraryView(p: LibraryProps) {
             <div key={w.source} role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-4 py-3 ring-1 ring-amber-300/25">
               <p className="min-w-0 text-[12.5px] text-white/75">
                 <span className="font-bold text-amber-200">{pluginName(w.source)}</span>{' '}
-                {w.needs_auth ? 'is logged out, so its games are missing.' : <>couldn't list its games: <span className="font-mono text-[12px] text-white/55">{w.message}</span></>}
+                {w.needs_auth ? 'is logged out, so its games are missing.' : w.unavailable ? <>isn't available right now: <span className="font-mono text-[12px] text-white/55">{w.message}</span></> : <>couldn't list its games: <span className="font-mono text-[12px] text-white/55">{w.message}</span></>}
               </p>
               <Button variant="primary" size="sm" className="flex-none" onClick={() => p.onNavigate({ name: 'plugins' })}>
                 {w.needs_auth && <LogIn className="h-3.5 w-3.5" />} {w.needs_auth ? 'Log in' : 'Plugins'}

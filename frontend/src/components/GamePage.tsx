@@ -13,6 +13,7 @@ import { Cover, MonoLabel, Panel, TierBadge, TogglePill, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
+import { offers } from '../lib/capabilities';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -447,7 +448,7 @@ function ManagePanel({
               <RefreshCw className="h-3.5 w-3.5" /> Update
             </Button>
           )}
-          {plugin.capabilities.includes('install') && (
+          {offers(plugin, 'install', { game }) && (
             <Button
               variant={confirm ? 'danger' : 'neutral'}
               onClick={() => (confirm ? (setConfirm(false), onJob('uninstall')) : setConfirm(true))}

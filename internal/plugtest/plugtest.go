@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sort"
 	"sync"
 	"syscall"
 	"testing"
@@ -44,6 +43,9 @@ type Suite struct {
 
 	FakeCLI map[string]string
 	Env     map[string]string
+	// EditManifest changes the copied plugin.json before the plugin is
+	// approved, to declare other capabilities or protocol versions.
+	EditManifest func(m map[string]any)
 
 	Login    func(t *testing.T, s *Session)
 	PickGame func(t *testing.T, games []types.Game) types.Game
@@ -173,6 +175,24 @@ func (s Suite) Start(t *testing.T) *Session {
 			t.Fatal(err)
 		}
 	}
+	if s.EditManifest != nil {
+		path := filepath.Join(pluginDir, "plugin.json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var man map[string]any
+		if err := json.Unmarshal(data, &man); err != nil {
+			t.Fatal(err)
+		}
+		s.EditManifest(man)
+		if data, err = json.MarshalIndent(man, "", "  "); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if len(s.FakeCLI) > 0 {
 		bin := filepath.Join(root, "fakebin")
 		os.MkdirAll(bin, 0o755)
@@ -276,32 +296,8 @@ func (s *Session) Call(method string, params, result any) error {
 func (s Suite) Conformance(t *testing.T) {
 	t.Helper()
 	sess := s.Start(t)
-	caps := func() []string {
-		p, _ := sess.m.Plugin(s.ID)
-		return p.Manifest.Capabilities
-	}
-	has := func(c string) bool {
-		for _, x := range caps() {
-			if x == c {
-				return true
-			}
-		}
-		return false
-	}
-
-	// initialize must agree with the manifest the user approved.
-	var init struct {
-		Capabilities []string `json:"capabilities"`
-	}
-	if err := sess.call("initialize", map[string]any{"api": 1}, &init); err != nil {
-		t.Fatalf("initialize: %v", err)
-	}
-	gotCaps, wantCaps := append([]string{}, init.Capabilities...), append([]string{}, caps()...)
-	sort.Strings(gotCaps)
-	sort.Strings(wantCaps)
-	if !slices.Equal(gotCaps, wantCaps) {
-		t.Fatalf("initialize capabilities %v differ from the manifest's %v", gotCaps, wantCaps)
-	}
+	sess.checkHandshake(t)
+	has := func(c string) bool { return sess.m.Has(s.ID, c) }
 
 	// Error codes: an unknown method is -32601 (missing params, -32602, is
 	// checked once logged in).
@@ -572,11 +568,107 @@ func (s Suite) Conformance(t *testing.T) {
 	}
 }
 
+// Handshake runs only the initialize checks of Conformance: protocol
+// negotiation, the capability subset rule, features, the core-side gate and a
+// probe of every method of the capabilities the plugin offers.
+func (s Suite) Handshake(t *testing.T) *Session {
+	t.Helper()
+	sess := s.Start(t)
+	sess.checkHandshake(t)
+	return sess
+}
+
+// probeSkip are the capabilities whose methods the rest of the suite already
+// drives with real params (probing them with {} could start work).
+var probeSkip = []string{"library", "install", "launch", "auth", "discard"}
+
+// checkHandshake holds the plugin to docs/plugins/protocol.md's rules for
+// initialize: it answers a protocol version Hydra offered and the manifest
+// declares, its capabilities are a subset of the manifest's, its features
+// belong to capabilities it offers, and Hydra's gate matches what it said.
+func (s *Session) checkHandshake(t *testing.T) {
+	t.Helper()
+	p, _ := s.m.Plugin(s.id)
+	declared := p.Manifest.Capabilities
+	offered, _ := p.Manifest.Offered()
+
+	offer := make([]string, len(plugins.SupportedProtocols))
+	for i, v := range plugins.SupportedProtocols {
+		offer[i] = v.String()
+	}
+	var init plugins.InitResult
+	if err := s.call("initialize", map[string]any{"api": plugins.APIVersion, "protocols": offer}, &init); err != nil {
+		t.Fatalf("initialize: %v", err)
+	}
+
+	// Negotiation: the pick is a version both sides speak. A plugin that
+	// predates negotiation leaves it out and is taken at the highest common one.
+	if init.Protocol != "" {
+		v, err := plugins.ParseVersion(init.Protocol)
+		if err != nil {
+			t.Fatalf("initialize protocol: %v", err)
+		}
+		if !slices.Contains(plugins.SupportedProtocols, v) || !offered.Contains(v) {
+			t.Fatalf("initialize answered protocol %s; Hydra offered %v and the manifest declares %s", v, offer, offered)
+		}
+		if best, _ := plugins.Negotiate(offered, plugins.SupportedProtocols); best != v {
+			t.Fatalf("initialize answered protocol %s, but the highest both sides speak is %s", v, best)
+		}
+	}
+	if rt := s.m.Runtime(s.id); !rt.Initialized || rt.Protocol == "" {
+		t.Fatalf("Hydra has no negotiated protocol after initialize: %+v", rt)
+	}
+
+	// Subset rule: initialize may switch capabilities off, never on.
+	if init.Capabilities != nil {
+		for _, c := range init.Capabilities {
+			if !slices.Contains(declared, c) {
+				t.Fatalf("initialize capabilities %v are not a subset of the manifest's %v", init.Capabilities, declared)
+			}
+		}
+	}
+	for c := range init.Features {
+		if init.Capabilities != nil && !slices.Contains(init.Capabilities, c) {
+			t.Fatalf("initialize reports features for %q, which it doesn't offer (offers %v)", c, init.Capabilities)
+		}
+		if !slices.Contains(declared, c) {
+			t.Fatalf("initialize reports features for %q, which the manifest doesn't declare", c)
+		}
+	}
+
+	// The gate follows the runtime set: a declared capability that is off
+	// never reaches the plugin, and one that is on is answered (a method may
+	// say -32601 only if the registry calls it optional).
+	rt := s.m.Runtime(s.id)
+	for _, name := range declared {
+		c, known := plugins.LookupCapability(name)
+		if !known {
+			continue
+		}
+		on := slices.Contains(rt.Capabilities, name)
+		for _, m := range c.Methods {
+			if !on {
+				s.wantCode(m, map[string]any{}, jsonrpc.CodeMethodNotFound)
+				continue
+			}
+			if slices.Contains(probeSkip, name) {
+				continue
+			}
+			var raw json.RawMessage
+			err := s.call(m, map[string]any{}, &raw)
+			var re *jsonrpc.Error
+			if errors.As(err, &re) && re.Code == jsonrpc.CodeMethodNotFound {
+				t.Errorf("%s offers %s but doesn't implement %s (-32601)", s.id, name, m)
+			}
+		}
+	}
+}
+
 // The keys docs/plugins/protocol.md defines for each payload. Extending one
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "coverUrl", "heroUrl", "bannerUrl"}
+		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",

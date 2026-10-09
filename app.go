@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/runner"
 	"hydra-launcher/internal/session"
@@ -153,7 +151,7 @@ func (a *App) pluginStores() []stores.Store {
 	}
 	var out []stores.Store
 	for _, p := range a.plugins.Plugins() {
-		if p.Status != plugins.StatusReady || !slices.Contains(p.Manifest.Capabilities, "library") {
+		if p.Status != plugins.StatusReady || !a.plugins.Has(p.Manifest.ID, "library") {
 			continue
 		}
 		id := p.Manifest.ID
@@ -269,15 +267,24 @@ func (a *App) GetLibrary() (types.Library, error) {
 			if s.ID() == types.SourceSteam {
 				return types.Library{}, fmt.Errorf("%s library scan failed: %w", s.ID(), errs[i])
 			}
-			var rpcErr *jsonrpc.Error
-			needsAuth := errors.As(errs[i], &rpcErr) && rpcErr.Code == plugins.CodeAuthRequired
-			lib.Warnings = append(lib.Warnings, types.SourceWarning{Source: s.ID(), Message: errs[i].Error(), NeedsAuth: needsAuth})
+			lib.Warnings = append(lib.Warnings, sourceWarning(s.ID(), errs[i]))
 			continue
 		}
 		lib.Games = append(lib.Games, results[i]...)
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
 	return lib, nil
+}
+
+// sourceWarning describes a source that failed to list. The plugin's message
+// is shown as is; its error code only tells a login problem (-32001) from a
+// temporary "unavailable right now" (-32002).
+func sourceWarning(source string, err error) types.SourceWarning {
+	return types.SourceWarning{
+		Source: source, Message: err.Error(),
+		NeedsAuth:   plugins.IsAuthRequired(err),
+		Unavailable: plugins.IsUnavailable(err),
+	}
 }
 
 // GetGameFix returns the curated fix from data plugins, or a live ProtonDB

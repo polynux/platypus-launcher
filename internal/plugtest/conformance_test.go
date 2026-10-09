@@ -10,11 +10,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/plugtest"
 	"hydra-launcher/internal/types"
 	"hydra-launcher/plugins/steam-standalone/fakesteam"
@@ -40,6 +42,86 @@ func TestConformanceEcho(t *testing.T) {
 			return pick(t, games, "tiny")
 		},
 	}.Conformance(t)
+}
+
+// echoAllCapabilities declares every capability in the registry (the unused
+// ones too), then lets initialize switch some off and report features.
+func echoAllCapabilities(env map[string]string) plugtest.Suite {
+	return plugtest.Suite{
+		ID:      "echo",
+		CopyDir: "../../plugins/echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
+			"hydra-launcher/plugins/echo"},
+		BuildOut: "plugins/echo/bin/hydra-echo",
+		Env:      env,
+		EditManifest: func(m map[string]any) {
+			var names []string
+			for _, c := range plugins.Registry() {
+				names = append(names, c.Name)
+			}
+			m["capabilities"] = names
+		},
+	}
+}
+
+func echoCalls(t *testing.T, s *plugtest.Session) map[string]int {
+	t.Helper()
+	var calls map[string]int
+	if err := s.Call("calls", nil, &calls); err != nil {
+		t.Fatal(err)
+	}
+	return calls
+}
+
+// With every capability on, echo answers every method the registry lists.
+func TestHandshakeEchoEveryCapabilityOn(t *testing.T) {
+	sess := echoAllCapabilities(nil).Handshake(t)
+	calls := echoCalls(t, sess)
+	for _, c := range plugins.Registry() {
+		if slices.Contains([]string{"library", "install", "launch", "auth", "discard"}, c.Name) {
+			continue
+		}
+		for _, m := range c.Methods {
+			if calls[m] == 0 {
+				t.Errorf("%s: the suite never probed %s", c.Name, m)
+			}
+		}
+	}
+}
+
+// Capabilities declared in the manifest but off at initialize are never
+// sent a request, features are reported only for what is on.
+func TestHandshakeEchoSwitchedOffCapabilities(t *testing.T) {
+	sess := echoAllCapabilities(map[string]string{
+		"ECHO_OFF":      "versions,verify,social",
+		"ECHO_FEATURES": `{"install-options":{"dlc":true,"languages":false}}`,
+	}).Handshake(t)
+	calls := echoCalls(t, sess)
+	for _, m := range []string{"versions.list", "game.verify", "social.friends"} {
+		if calls[m] != 0 {
+			t.Errorf("%s reached the plugin although its capability is off", m)
+		}
+	}
+	if calls["game.options"] == 0 {
+		t.Error("game.options (install-options is on) wasn't probed")
+	}
+}
+
+// A plugin from before negotiation: no protocol in the answer.
+func TestHandshakeEchoWithoutNegotiation(t *testing.T) {
+	echoAllCapabilities(map[string]string{"ECHO_NO_PROTOCOL": "1"}).Handshake(t)
+}
+
+// A plugin that speaks only 1.0 and says so negotiates 1.0 with a Hydra that
+// speaks 1.1 too.
+func TestHandshakeEchoOlderPlugin(t *testing.T) {
+	s := echoAllCapabilities(map[string]string{"ECHO_PROTOCOLS": "1.0"})
+	edit := s.EditManifest
+	s.EditManifest = func(m map[string]any) {
+		edit(m)
+		m["protocol"] = map[string]any{"versions": []string{"1.0"}}
+	}
+	s.Handshake(t)
 }
 
 func pick(t *testing.T, games []types.Game, storeID string) types.Game {

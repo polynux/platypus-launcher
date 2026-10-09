@@ -17,6 +17,29 @@
 //
 // Besides the store protocol it answers echo (returns its params), pid and
 // crash (exits without answering). It exits when stdin closes.
+//
+// Capability knobs: echo is the test store for the capability system
+// (docs/plugins/protocol.md, "Capabilities"), so it can declare a capability in
+// plugin.json and still switch it off, report features, narrow them per game,
+// and fail a method on demand. Each knob is an environment variable, read at
+// start, and can be changed while running with the `config` method:
+//
+//	ECHO_OFF           capabilities initialize leaves out although the manifest declares them
+//	ECHO_EXTRA         capabilities initialize adds that the manifest doesn't declare (a protocol violation)
+//	ECHO_FEATURES      JSON {"versions": {"channels": true}} - the features initialize reports
+//	ECHO_GAME_FEATURES JSON {"tiny": ["install"]} - library.list `features` for those games
+//	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
+//	ECHO_MISSING       methods that answer -32601 "method not found"
+//	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.5); it answers the highest Hydra also offers
+//	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
+//	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
+//	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
+//
+// `config` takes {off, extra, features, gameFeatures, unavailable, missing,
+// initOmit} (absent keys are left alone) and `calls` returns how many times
+// each method was received, so tests can tell a cached -32601 from a retry.
+// The methods of capabilities that core doesn't use yet answer canned data.
 package main
 
 import (
@@ -24,9 +47,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -45,7 +71,10 @@ type rpcError struct {
 	Message string `json:"message"`
 }
 
-const codeAuthRequired = -32001
+const (
+	codeAuthRequired = -32001
+	codeUnavailable  = -32002
+)
 
 type game struct {
 	title    string
@@ -86,6 +115,159 @@ var (
 	jobsMu  sync.Mutex
 	cancels = map[string]chan struct{}{}
 )
+
+// knobs are the capability test settings (see the package comment).
+type knobs struct {
+	Off          []string                   `json:"off"`
+	Extra        []string                   `json:"extra"`
+	Features     map[string]map[string]bool `json:"features"`
+	GameFeatures map[string][]string        `json:"gameFeatures"`
+	Unavailable  []string                   `json:"unavailable"`
+	Missing      []string                   `json:"missing"`
+	InitOmit     bool                       `json:"initOmit"`
+}
+
+// defaultProtocols is what echo speaks: more than any Hydra offers yet, so
+// the negotiation has something to pick from.
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}
+
+var (
+	knobMu  sync.Mutex
+	kn      knobs
+	callsMu sync.Mutex
+	calls   = map[string]int{}
+)
+
+func csv(name string) []string {
+	var out []string
+	for _, f := range strings.Split(os.Getenv(name), ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func loadKnobs() {
+	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
+		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != ""}
+	if v := os.Getenv("ECHO_FEATURES"); v != "" {
+		_ = json.Unmarshal([]byte(v), &kn.Features)
+	}
+	if v := os.Getenv("ECHO_GAME_FEATURES"); v != "" {
+		_ = json.Unmarshal([]byte(v), &kn.GameFeatures)
+	}
+}
+
+// configure applies a `config` request: only the keys present change.
+func configure(raw json.RawMessage) {
+	var present map[string]json.RawMessage
+	_ = json.Unmarshal(raw, &present)
+	knobMu.Lock()
+	defer knobMu.Unlock()
+	set := func(key string, dst any) {
+		if v, ok := present[key]; ok {
+			_ = json.Unmarshal(v, dst)
+		}
+	}
+	set("off", &kn.Off)
+	set("extra", &kn.Extra)
+	set("features", &kn.Features)
+	set("gameFeatures", &kn.GameFeatures)
+	set("unavailable", &kn.Unavailable)
+	set("missing", &kn.Missing)
+	set("initOmit", &kn.InitOmit)
+}
+
+// manifestCapabilities reads the capabilities plugin.json declares; Hydra runs
+// the plugin from its folder.
+func manifestCapabilities() []string {
+	var m struct {
+		Capabilities []string `json:"capabilities"`
+	}
+	if data, err := os.ReadFile("plugin.json"); err == nil && json.Unmarshal(data, &m) == nil {
+		return m.Capabilities
+	}
+	return []string{"library", "install", "launch", "auth", "discard"}
+}
+
+// negotiate answers the highest protocol version that echo speaks and Hydra
+// offered ("major.minor", compared numerically).
+func negotiate(offered []string) (string, bool) {
+	speaks := csv("ECHO_PROTOCOLS")
+	if len(speaks) == 0 {
+		speaks = defaultProtocols
+	}
+	best, found := "", false
+	for _, o := range offered {
+		if slices.Contains(speaks, o) && (!found || versionLess(best, o)) {
+			best, found = o, true
+		}
+	}
+	return best, found
+}
+
+func versionLess(a, b string) bool {
+	var a1, a2, b1, b2 int
+	fmt.Sscanf(a, "%d.%d", &a1, &a2)
+	fmt.Sscanf(b, "%d.%d", &b1, &b2)
+	return a1 < b1 || (a1 == b1 && a2 < b2)
+}
+
+func initializeResult(p params) (map[string]any, error) {
+	knobMu.Lock()
+	defer knobMu.Unlock()
+	res := map[string]any{"name": "Echo (test plugin)", "version": "0.2.0", "api": 1, "missing": []any{}}
+	if os.Getenv("ECHO_NO_PROTOCOL") == "" {
+		picked, ok := negotiate(p.Protocols)
+		if v := os.Getenv("ECHO_PROTOCOL"); v != "" {
+			picked, ok = v, true
+		}
+		if !ok {
+			return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("no protocol version in common with Hydra's %v", p.Protocols)}
+		}
+		res["protocol"] = picked
+	}
+	if os.Getenv("ECHO_FUTURE") != "" {
+		res["flux"] = map[string]any{"capacitor": true}
+	}
+	if !kn.InitOmit {
+		caps := []string{}
+		for _, c := range manifestCapabilities() {
+			if !slices.Contains(kn.Off, c) {
+				caps = append(caps, c)
+			}
+		}
+		res["capabilities"] = append(caps, kn.Extra...)
+	}
+	if kn.Features != nil {
+		res["features"] = kn.Features
+	}
+	return res, nil
+}
+
+// forced says whether a test knob makes this method fail, and how.
+func forced(method string) error {
+	knobMu.Lock()
+	defer knobMu.Unlock()
+	switch {
+	case slices.Contains(kn.Missing, method):
+		return &rpcError{Code: -32601, Message: "method not found: " + method}
+	case slices.Contains(kn.Unavailable, method):
+		return &rpcError{Code: codeUnavailable, Message: "Echo can't do that right now: the fake service is down (test knob)"}
+	}
+	return nil
+}
+
+func gameFeatures(id string) (list []string, set bool) {
+	knobMu.Lock()
+	defer knobMu.Unlock()
+	list, set = kn.GameFeatures[id]
+	if list == nil {
+		list = []string{}
+	}
+	return list, set
+}
 
 func send(m message) {
 	m.JSONRPC = "2.0"
@@ -134,6 +316,7 @@ func save() {
 
 func main() {
 	load()
+	loadKnobs()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
@@ -172,6 +355,7 @@ type params struct {
 	InstallDir string            `json:"installDir"`
 	Preview    bool              `json:"preview"`
 	Fields     map[string]string `json:"fields"`
+	Protocols  []string          `json:"protocols"` // initialize: the versions Hydra speaks
 }
 
 func dispatch(method string, raw json.RawMessage) (any, error) {
@@ -179,13 +363,29 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	if len(raw) > 0 {
 		_ = json.Unmarshal(raw, &p)
 	}
+	callsMu.Lock()
+	calls[method]++
+	callsMu.Unlock()
+	if method != "config" && method != "calls" {
+		if err := forced(method); err != nil {
+			return nil, err
+		}
+	}
 	switch method {
 	case "initialize":
 		notify("log", map[string]string{"level": "info", "message": "echo initialized"})
-		return map[string]any{
-			"name": "Echo (test plugin)", "version": "0.2.0", "api": 1,
-			"capabilities": []string{"library", "install", "launch", "auth", "discard"}, "missing": []any{},
-		}, nil
+		res, err := initializeResult(p)
+		if err == nil && os.Getenv("ECHO_FUTURE") != "" {
+			notify("future.news", map[string]any{"headline": "a newer Hydra would show this"})
+		}
+		return res, err
+	case "config":
+		configure(raw)
+		return nil, nil
+	case "calls":
+		callsMu.Lock()
+		defer callsMu.Unlock()
+		return maps.Clone(calls), nil
 	case "echo":
 		if len(raw) == 0 {
 			return json.RawMessage("null"), nil
@@ -274,6 +474,9 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "game.launchSpec":
 		return launchSpec(p)
 	}
+	if res, err, ok := capabilityStub(method, p); ok {
+		return res, err
+	}
 	return nil, &rpcError{Code: -32601, Message: "method not found: " + method}
 }
 
@@ -333,6 +536,9 @@ func library() (any, error) {
 		e := map[string]any{
 			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client,
 			"version": "1.0", "note": g.note, "native": g.native,
+		}
+		if f, set := gameFeatures(id); set {
+			e["features"] = f
 		}
 		if g.size > 0 {
 			e["sizeBytes"] = g.size
