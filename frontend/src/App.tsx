@@ -551,7 +551,7 @@ export function App() {
           />
         );
       case 'settings':
-        return <LauncherSettingsView onNotify={notify} />;
+        return <LauncherSettingsView onNotify={notify} plugins={plugins} />;
     }
   };
 

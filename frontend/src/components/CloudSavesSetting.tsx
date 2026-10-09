@@ -2,18 +2,28 @@ import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import type { CloudMode, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
-import { CapabilitySurface } from '../lib/capabilities';
+import { offers } from '../lib/capabilities';
 import { MODE_HELP } from '../lib/cloud';
-import { MonoLabel, SegRow } from './ui';
+import { MonoLabel, Panel, SegRow } from './ui';
 
-/** A plugin's default cloud sync mode (off, ask, auto), shown on its card in
- *  the Plugins view for plugins that offer cloud saves. Games can override it
- *  on their own page. */
-export function CloudSavesSetting({ plugin }: { plugin: StorePlugin }) {
+/** The cloud-saves default of every ready store that offers cloud saves, one
+ *  row each, in Settings. Games can override their store's default on their
+ *  own page. Nothing renders when no store offers cloud saves. */
+export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
+  const stores = plugins.filter((p) => p.status === 'ready' && offers(p, 'cloud-saves'));
+  if (stores.length === 0) return null;
   return (
-    <CapabilitySurface plugin={plugin} capability="cloud-saves">
-      <Row plugin={plugin} />
-    </CapabilitySurface>
+    <Panel as="section" className="mt-4 max-w-2xl">
+      <h2 className="mb-1 text-[14px] font-bold">Cloud saves</h2>
+      <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
+        Whether Hydra syncs each store's save files to its cloud. Each game can override its store's choice on its page.
+      </p>
+      <div className="space-y-4">
+        {stores.map((p) => (
+          <Row key={p.id} plugin={p} />
+        ))}
+      </div>
+    </Panel>
   );
 }
 
@@ -41,14 +51,16 @@ function Row({ plugin }: { plugin: StorePlugin }) {
 
   return (
     <div className="space-y-1.5">
-      <MonoLabel>cloud saves</MonoLabel>
-      <SegRow<CloudMode>
-        label={`Cloud saves for ${plugin.name}`}
-        value={mode}
-        onChange={change}
-        options={[{ value: 'off', label: 'Off' }, { value: 'ask', label: 'Ask' }, { value: 'auto', label: 'Auto' }]}
-      />
-      <p className="text-[11.5px] leading-snug text-white/45">{MODE_HELP[mode]} Each game can override this on its page.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <MonoLabel>{plugin.name}</MonoLabel>
+        <SegRow<CloudMode>
+          label={`Cloud saves for ${plugin.name}`}
+          value={mode}
+          onChange={change}
+          options={[{ value: 'off', label: 'Off' }, { value: 'ask', label: 'Ask' }, { value: 'auto', label: 'Auto' }]}
+        />
+      </div>
+      <p className="text-[11.5px] leading-snug text-white/45">{MODE_HELP[mode]}</p>
       {error && <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p>}
     </div>
   );

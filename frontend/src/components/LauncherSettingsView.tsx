@@ -2,19 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { FolderOpen } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
-import type { LauncherSettings } from '../types';
+import type { LauncherSettings, StorePlugin } from '../types';
 import { NumberField } from '@/components/ds/number-field';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel, Panel } from './ui';
+import { CloudSavesDefaults } from './CloudSavesSetting';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface LauncherSettingsViewProps {
   onNotify: (msg: string, kind?: 'ok' | 'err') => void;
+  /** The plugins list: the cloud-saves defaults come from the stores that offer them. */
+  plugins: StorePlugin[];
 }
 
-export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
+export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +151,8 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
           {cleanupError ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{cleanupError}</p> : <span />}
         </div>
       </Panel>
+
+      <CloudSavesDefaults plugins={plugins} />
     </div>
   );
 }
