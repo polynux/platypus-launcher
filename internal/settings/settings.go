@@ -76,6 +76,12 @@ type file struct {
 	RecentInstall      []string                    `json:"recent_install_folders,omitempty"`
 	PluginSettings     map[string]map[string]any   `json:"plugin_settings,omitempty"`
 	PluginGameSettings map[string]PluginGameValues `json:"plugin_game_settings,omitempty"`
+	// FetchRatings is the "Fetch ratings online" switch. A pointer: unset
+	// means on (see compat.go).
+	FetchRatings *bool `json:"fetch_ratings,omitempty"`
+	// CompatAppIDs are the Steam AppIDs the user set for ratings, by Hydra's
+	// game id (see compat.go).
+	CompatAppIDs map[string]string `json:"compat_app_ids,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra
