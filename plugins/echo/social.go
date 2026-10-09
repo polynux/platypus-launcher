@@ -24,6 +24,10 @@ import (
 //
 // `recorded` answers the setStatus and setPlaying calls Hydra made, in order.
 // ECHO_UNAVAILABLE=social.start makes the start fail, like a store that is down.
+//
+// echo-b is this same binary under another plugin.json (plugins/echo-b runs it):
+// its manifest id picks a second friends list with its own user, so Hydra can
+// show two stores at once. See manifestID.
 
 // socialFixture is the friends list echo serves.
 var socialFixture = []socialFriend{
@@ -39,6 +43,15 @@ var socialFixture = []socialFriend{
 	{ID: "7656119800000010", Name: "Jon Keller", State: "offline", LastSeen: 1791200000},
 	{ID: "7656119800000011", Name: "Kai Mensah", State: "offline", LastSeen: 1790900000},
 	{ID: "7656119800000012", Name: "Lou Petit", State: "online", Game: &socialGame{Title: "Untitled Survival"}},
+}
+
+// socialFixtureB is the friends list of echo-b, the second store. Its friends
+// play no library game, so only echo's own library ever links to a game.
+var socialFixtureB = []socialFriend{
+	{ID: "8656119800000001", Name: "Mira Vale", State: "online"},
+	{ID: "8656119800000002", Name: "Noor Haddad", State: "busy", Game: &socialGame{Title: "Echo Slow"}},
+	{ID: "8656119800000003", Name: "Pim de Vries", State: "away"},
+	{ID: "8656119800000004", Name: "Rosa Lind", State: "offline", LastSeen: 1791300000},
 }
 
 type socialFriend struct {
@@ -69,6 +82,22 @@ func loadSocial() {
 	if ms, err := strconv.Atoi(os.Getenv("ECHO_SOCIAL_TICK")); err == nil && ms > 0 {
 		socialTick = time.Duration(ms) * time.Millisecond
 	}
+	if manifestID() == "echo-b" {
+		socialFixture = socialFixtureB
+		socialSelf = map[string]string{"name": "Echo B Player", "state": "online"}
+	}
+}
+
+// manifestID is the id in the plugin.json of the working directory (Hydra runs
+// a plugin from its folder). echo's own folder, or no manifest, is "echo".
+func manifestID() string {
+	var m struct {
+		ID string `json:"id"`
+	}
+	if data, err := os.ReadFile("plugin.json"); err == nil && json.Unmarshal(data, &m) == nil && m.ID != "" {
+		return m.ID
+	}
+	return "echo"
 }
 
 // configureSocial applies the social part of a `config` request.

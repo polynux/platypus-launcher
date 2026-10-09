@@ -1,0 +1,11 @@
+#!/bin/sh
+# echo-b runs the echo test plugin's binary from the echo folder, with this
+# folder's plugin.json: its id picks the second friends list (see
+# plugins/echo/social.go). Install echo first: plugins/install.sh echo.
+here=$(cd "$(dirname "$0")" && pwd)
+echo_bin=$here/../../echo/bin/hydra-echo
+if [ ! -x "$echo_bin" ]; then
+  echo "echo-b needs the echo plugin: plugins/install.sh echo" >&2
+  exit 1
+fi
+cd "$here/.." && exec "$echo_bin"
