@@ -25,11 +25,11 @@ func settingsSchema() map[string]any {
 	return map[string]any{"groups": []any{
 		map[string]any{"id": "overlay", "label": "Overlay", "description": "Echo draws nothing; these only change the values it keeps.",
 			"fields": []any{
-				map[string]any{"id": "eos-overlay", "kind": "bool", "label": "Enable EOS overlay", "description": "Echo's stand-in for an overlay.", "default": false},
-				map[string]any{"id": "region", "kind": "select", "label": "Region", "default": "eu",
+				map[string]any{"id": "eos-overlay", "kind": "bool", "label": "Enable overlay (example)", "description": "Echo's stand-in for an overlay.", "default": false},
+				map[string]any{"id": "region", "kind": "select", "label": "Download region (example)", "default": "eu",
 					"options": []any{map[string]any{"id": "eu", "label": "Europe"}, map[string]any{"id": "us", "label": "United States"}, map[string]any{"id": "asia", "label": "Asia"}}},
-				map[string]any{"id": "note", "kind": "text", "label": "Launch note", "default": "", "placeholder": "e.g. -windowed"},
-				map[string]any{"id": "volume", "kind": "number", "label": "Volume", "default": 5, "min": 0, "max": 10},
+				map[string]any{"id": "note", "kind": "text", "label": "Extra launch arguments (example)", "default": "", "placeholder": "e.g. -windowed"},
+				map[string]any{"id": "volume", "kind": "number", "label": "Bandwidth limit, MB/s (example)", "default": 5, "min": 0, "max": 10},
 				// A kind core doesn't know: it must be dropped, not shown.
 				map[string]any{"id": "mystery", "kind": "carousel", "label": "Carousel", "default": nil},
 			}},

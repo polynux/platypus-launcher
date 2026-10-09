@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, within } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
 import { Effect } from 'effect';
 
 vi.mock('../../effect/runtime', () => ({
@@ -38,6 +38,12 @@ function plugin(o: Partial<StorePlugin> = {}): StorePlugin {
 const view = (p: StorePlugin) =>
   render(<PluginsView plugins={[p]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={() => {}} />);
 
+/** The capabilities list folds away: open it the way a user does. */
+const openCapabilities = (getByRole: ReturnType<typeof view>['getByRole']) => {
+  fireEvent.click(getByRole('button', { name: /capabilities · / }));
+  return getByRole('list', { name: 'Capabilities' });
+};
+
 describe('Plugins view lists capabilities', () => {
   it('shows each declared capability with its state', () => {
     const { getByRole } = view(plugin({
@@ -48,7 +54,7 @@ describe('Plugins view lists capabilities', () => {
         cap('hologram', { known: false, orchestrated: false }),
       ],
     }));
-    const list = getByRole('list', { name: 'Capabilities' });
+    const list = openCapabilities(getByRole);
     const rows = within(list).getAllByRole('listitem');
     const text = (name: string) => rows.find((r) => r.textContent?.startsWith(name))?.textContent ?? '';
     expect(rows).toHaveLength(4);
@@ -62,7 +68,7 @@ describe('Plugins view lists capabilities', () => {
     const { getByRole } = view(plugin({
       offers: [cap('versions', { features: { channels: true, builds: true, password: false } })],
     }));
-    const row = within(getByRole('list', { name: 'Capabilities' })).getByRole('listitem');
+    const row = within(openCapabilities(getByRole)).getByRole('listitem');
     expect(within(row).getByText('channels').getAttribute('data-on')).toBe('true');
     expect(within(row).getByText('builds').getAttribute('data-on')).toBe('true');
     expect(within(row).getByText('password').getAttribute('data-on')).toBe('false');

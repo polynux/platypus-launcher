@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useId, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import type { PluginCapability, StorePlugin } from '../types';
 import { MonoLabel, cx } from './ui';
 
@@ -12,17 +13,36 @@ function stateOf(c: PluginCapability, initialized: boolean): { text: string; ton
 
 /** What a plugin offers: every declared capability, whether it is on right
  *  now, and its depth flags. Before the plugin has run, this is only the
- *  manifest's promise. */
+ *  manifest's promise. The list folds away: the header keeps the count. */
 export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
   if (p.offers.length === 0 && p.warnings.length === 0) return null;
   return (
     <div className="space-y-2">
-      <MonoLabel>
-        capabilities{!p.initialized && p.offers.length > 0 ? ' · declared · not started yet' : ''}
-        {p.protocol ? ` · protocol ${p.protocol}` : ''}
-      </MonoLabel>
       {p.offers.length > 0 && (
-        <ul aria-label="Capabilities" className="space-y-1 font-mono text-[11.5px]">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={listId}
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center gap-1.5 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-white/40 transition hover:text-white/70"
+        >
+          <ChevronDown className={cx('h-3 w-3 flex-none transition-transform', open ? '' : '-rotate-90')} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">
+            capabilities · {p.offers.length}
+            {!p.initialized ? ' · declared · not started yet' : ''}
+            {p.protocol ? ` · protocol ${p.protocol}` : ''}
+          </span>
+        </button>
+      )}
+      {p.offers.length === 0 && (
+        <MonoLabel>
+          capabilities{p.protocol ? ` · protocol ${p.protocol}` : ''}
+        </MonoLabel>
+      )}
+      {p.offers.length > 0 && open && (
+        <ul id={listId} aria-label="Capabilities" className="space-y-1 font-mono text-[11.5px]">
           {p.offers.map((c) => {
             const s = stateOf(c, p.initialized);
             const flags = Object.entries(c.features).sort(([a], [b]) => a.localeCompare(b));

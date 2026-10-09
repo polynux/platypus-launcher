@@ -26,14 +26,17 @@ export function FriendsSummary({ views, labels, onOpen }: FriendsSummaryProps) {
         const name = labels[v.plugin] ?? v.plugin;
         const self = v.self;
         return (
-          <span key={v.plugin} className="flex items-center gap-2">
-            <span className="relative grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[10px] font-bold text-white/70">
-              {self?.avatarUrl ? <img src={self.avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(self?.name ?? name)}
+          <span key={v.plugin} className="flex min-w-0 items-center gap-2">
+            {/* The dot sits outside the clipped picture: inside it, overflow-hidden would cut it. */}
+            <span className="relative h-6 w-6 flex-none">
+              <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[9px] font-bold text-white/70">
+                {self?.avatarUrl ? <img src={self.avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(self?.name ?? name)}
+              </span>
               <span className={cx('absolute bottom-0 right-0 h-2 w-2 rounded-full ring-2 ring-[#15110d]', stateDot(self?.state ?? 'offline'))} />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12px] font-semibold text-white/85">{self?.name ?? name}</span>
-              <span className="block font-mono text-[10px] uppercase tracking-wider text-white/40">
+            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+              <span className="min-w-0 truncate text-[12px] font-semibold text-white/85">{self?.name ?? name}</span>
+              <span className="flex-none truncate font-mono text-[10px] uppercase tracking-wider text-white/40">
                 {!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
               </span>
             </span>

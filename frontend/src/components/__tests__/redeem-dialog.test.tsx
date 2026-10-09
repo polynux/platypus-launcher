@@ -45,7 +45,7 @@ beforeEach(() => {
 
 describe('redeem a code', () => {
   it('stays disabled until something is typed, and caps the length at the core limit', () => {
-    render(<RedeemDialog plugin={echo} onClose={() => {}} />);
+    render(<RedeemDialog stores={[echo]} onClose={() => {}} />);
     const submit = screen.getByRole('button', { name: 'Redeem' }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     const input = screen.getByLabelText(/Code/) as HTMLInputElement;
@@ -56,7 +56,7 @@ describe('redeem a code', () => {
 
   it('sends the trimmed code to that store only and lists what it granted', async () => {
     mocks.redeemCode.mockReturnValue(Effect.succeed({ message: 'Redeemed.', titles: ['Echo Bonus Pack'] } as never));
-    render(<RedeemDialog plugin={echo} onClose={() => {}} />);
+    render(<RedeemDialog stores={[echo]} onClose={() => {}} />);
     fireEvent.change(screen.getByLabelText(/Code/), { target: { value: '  ECHO-OK ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
     await waitFor(() => expect(screen.getByText('Redeemed.')).toBeTruthy());
@@ -67,7 +67,7 @@ describe('redeem a code', () => {
 
   it('shows the store\'s readable failure and keeps the code for another try', async () => {
     mocks.redeemCode.mockReturnValue(Effect.fail(new Error("Echo doesn't know that code. Try ECHO-OK.")));
-    render(<RedeemDialog plugin={echo} onClose={() => {}} />);
+    render(<RedeemDialog stores={[echo]} onClose={() => {}} />);
     const input = screen.getByLabelText(/Code/) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'nope' } });
     fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
@@ -78,7 +78,7 @@ describe('redeem a code', () => {
   it('refuses a second submit while the first one is still running', async () => {
     let finish: (v: unknown) => void = () => {};
     mocks.redeemCode.mockReturnValue(Effect.promise(() => new Promise((r) => (finish = r)) as never));
-    render(<RedeemDialog plugin={echo} onClose={() => {}} />);
+    render(<RedeemDialog stores={[echo]} onClose={() => {}} />);
     fireEvent.change(screen.getByLabelText(/Code/), { target: { value: 'ECHO-OK' } });
     fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
     fireEvent.click(screen.getByRole('button', { name: 'Redeeming…' }));
@@ -88,17 +88,28 @@ describe('redeem a code', () => {
   });
 });
 
-describe('plugins view offers redeem only where the store does', () => {
+describe('one redeem entry for every store that offers it', () => {
   const view = (p: StorePlugin) =>
     render(<PluginsView plugins={[p]} warnings={[]} onPlugins={() => {}} onLibraryChanged={() => {}} onNotify={() => {}} />);
 
-  it('shows Redeem a code for a ready store that offers it', async () => {
-    const { findByRole } = view(echo);
-    expect(await findByRole('button', { name: /Redeem a code/ })).toBeTruthy();
-  });
-
-  it('hides it when the store does not offer redeem', () => {
-    const { queryByRole } = view({ ...echo, offers: [], capabilities: ['library'] } as unknown as StorePlugin);
+  it('no longer puts a redeem button on a store card', async () => {
+    const { queryByRole, findByRole } = view(echo);
+    await findByRole('button', { name: /Disable/ });
     expect(queryByRole('button', { name: /Redeem a code/ })).toBeNull();
+  });
+});
+
+describe('redeem dialog store choice', () => {
+  const other = { ...echo, id: 'echo-b', name: 'Echo B' } as unknown as StorePlugin;
+
+  it('lists only the stores it is given, and sends the code to the one picked', async () => {
+    mocks.redeemCode.mockReturnValue(Effect.succeed({ message: 'Redeemed.', titles: [] } as never));
+    render(<RedeemDialog stores={[echo, other]} onClose={() => {}} />);
+    const select = screen.getByLabelText('Store') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Echo', 'Echo B']);
+    fireEvent.change(select, { target: { value: 'echo-b' } });
+    fireEvent.change(screen.getByLabelText(/Code/), { target: { value: 'ECHO-OK' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Redeem' }));
+    await waitFor(() => expect(mocks.redeemCode).toHaveBeenCalledWith('echo-b', 'ECHO-OK'));
   });
 });

@@ -23,7 +23,7 @@ vi.mock('../../effect/runtime', () => ({
 import { CloudSavesPanel } from '../CloudSavesPanel';
 import { CloudConflictDialog } from '../CloudSavesConflict';
 import { CloudSavesHost } from '../CloudSavesHost';
-import { CloudSavesSetting } from '../CloudSavesSetting';
+import { CloudSavesDefaults } from '../CloudSavesSetting';
 import type { CloudEvent, CloudInfo, CloudStatus, Game, StorePlugin } from '../../types';
 
 const emit = (e: Partial<CloudEvent>) => act(() => { h.handlers.forEach((cb) => cb({ game_id: 'p.echo.tiny', kind: 'status', ...e })); });
@@ -409,24 +409,32 @@ describe('CloudSavesHost', () => {
   });
 });
 
-describe('Plugin default', () => {
-  it('shows the saved default and saves a change', async () => {
+describe('Cloud saves defaults in Settings', () => {
+  it('shows the saved default of each store and saves a change', async () => {
     h.api.getCloudSettings = ok({ plugins: { echo: 'auto' }, games: {} });
-    render(<CloudSavesSetting plugin={plugin()} />);
+    render(<CloudSavesDefaults plugins={[plugin()]} />);
     const group = screen.getByRole('radiogroup', { name: /cloud saves for echo/i });
     await waitFor(() => expect(within(group).getByRole('radio', { name: 'Auto' })).toBeChecked());
     fireEvent.click(within(group).getByRole('radio', { name: 'Off' }));
     await waitFor(() => expect(h.api.setCloudPluginMode).toHaveBeenCalledWith('echo', 'off'));
   });
 
-  it('is absent for a plugin without cloud saves', () => {
-    const { container } = render(<CloudSavesSetting plugin={plugin(['library'])} />);
+  it('has one row per ready store that offers cloud saves, and nothing else', () => {
+    const other = { ...plugin(), id: 'echo-b', name: 'Echo B' };
+    const { container } = render(<CloudSavesDefaults plugins={[plugin(), other, plugin(['library'])]} />);
+    expect(screen.getAllByRole('radiogroup')).toHaveLength(2);
+    expect(screen.getByRole('radiogroup', { name: /cloud saves for echo b/i })).toBeTruthy();
+    expect(container.textContent).toContain('Echo B');
+  });
+
+  it('is absent when no store offers cloud saves', () => {
+    const { container } = render(<CloudSavesDefaults plugins={[plugin(['library'])]} />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('goes back to the saved value when saving fails', async () => {
     h.api.setCloudPluginMode = fail('disk full');
-    render(<CloudSavesSetting plugin={plugin()} />);
+    render(<CloudSavesDefaults plugins={[plugin()]} />);
     const group = screen.getByRole('radiogroup', { name: /cloud saves for echo/i });
     await waitFor(() => expect(within(group).getByRole('radio', { name: 'Ask' })).toBeChecked());
     fireEvent.click(within(group).getByRole('radio', { name: 'Off' }));

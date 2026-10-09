@@ -202,8 +202,11 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
 
 function Avatar({ name, url, dot }: { name: string; url?: string; dot: string }) {
   return (
-    <span className="relative grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[10px] font-bold text-white/70">
-      {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
+    // The dot sits outside the clipped picture: inside it, overflow-hidden would cut it.
+    <span className="relative h-8 w-8 flex-none">
+      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[10px] font-bold text-white/70">
+        {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
+      </span>
       <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1a140f]', dot)} />
     </span>
   );

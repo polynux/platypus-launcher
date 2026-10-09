@@ -19,6 +19,13 @@ import (
 // real plugin process.
 func socialEnv(t *testing.T) (*App, *settings.Store) {
 	t.Helper()
+	return socialEnvWith(t, false)
+}
+
+// socialEnvWith is socialEnv, and with echo-b (the second store, the same
+// program under its own manifest) installed and approved too when withB is set.
+func socialEnvWith(t *testing.T, withB bool) (*App, *settings.Store) {
+	t.Helper()
 	root := t.TempDir()
 	st, err := settings.Open(filepath.Join(root, "settings.json"))
 	if err != nil {
@@ -33,11 +40,19 @@ func socialEnv(t *testing.T) (*App, *settings.Store) {
 	t.Cleanup(a.plugins.Shutdown)
 	installEchoApp(t, pluginsDir)
 	writeEchoManifest(t, filepath.Join(pluginsDir, "echo", "plugin.json"))
+	if withB {
+		installEchoB(t, pluginsDir)
+	}
 	if _, err := a.plugins.Discover(); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.plugins.Approve("echo"); err != nil {
 		t.Fatal(err)
+	}
+	if withB {
+		if err := a.plugins.Approve("echo-b"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	a.social = social.NewManager(social.Options{
 		Backend: socialBackend{a},

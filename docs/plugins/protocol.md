@@ -834,11 +834,11 @@ settings.apply  { values, gameId? } -> {}
 { "groups": [
   { "id": "overlay", "label": "Overlay", "description": "Applied when Echo launches a game.",
     "fields": [
-      { "id": "eos-overlay", "kind": "bool", "label": "Enable EOS overlay", "default": false },
-      { "id": "region", "kind": "select", "label": "Region", "default": "eu",
+      { "id": "eos-overlay", "kind": "bool", "label": "Enable overlay (example)", "default": false },
+      { "id": "region", "kind": "select", "label": "Download region (example)", "default": "eu",
         "options": [{ "id": "eu", "label": "Europe" }, { "id": "us", "label": "United States" }] },
-      { "id": "note", "kind": "text", "label": "Launch note", "default": "", "placeholder": "-windowed" },
-      { "id": "volume", "kind": "number", "label": "Volume", "default": 5, "min": 0, "max": 10 } ] },
+      { "id": "note", "kind": "text", "label": "Extra launch arguments (example)", "default": "", "placeholder": "-windowed" },
+      { "id": "volume", "kind": "number", "label": "Bandwidth limit, MB/s (example)", "default": 5, "min": 0, "max": 10 } ] },
   { "id": "per-game", "label": "Per game",
     "fields": [ { "id": "game-overlay", "kind": "bool", "label": "Overlay for this game", "scope": "game", "default": true } ] }
 ] }
