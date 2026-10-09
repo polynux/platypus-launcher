@@ -160,7 +160,13 @@ func resolveTarget(game string, t *targetParam) (versionRec, error) {
 		}
 		return bad("Echo has no build %q", t.Build)
 	}
-	if id := t.Manual["build"]; id != "" {
+	// The UI sends what the user typed as manual.input; "build" is the
+	// structured form other callers may use.
+	id := strings.TrimSpace(t.Manual["input"])
+	if id == "" {
+		id = t.Manual["build"]
+	}
+	if id != "" {
 		if !manualBuild.MatchString(id) {
 			return bad("Echo build ids are a b and digits, like b200 (got %q).", id)
 		}
@@ -170,7 +176,7 @@ func resolveTarget(game string, t *targetParam) (versionRec, error) {
 		}
 		return versionRec{Build: id, Name: name}, nil
 	}
-	return bad("Type a build id (key \"build\").")
+	return bad("Type a build id, like b200.")
 }
 
 // installedAnswer is job.done's `installed`.

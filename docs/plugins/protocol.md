@@ -437,8 +437,10 @@ the Plugins view shows; Hydra still handles any empty list.
   `available: false` means the plugin knows the build but can't fetch it now;
   leave it out for `true`. `current` marks the installed build.
 - `manual` asks the user to type something the store doesn't list (Steam: one
-  manifest id per depot). `label` and `hint` are shown as written. What the user
-  types arrives in `target.manual` as a map of strings.
+  manifest id per depot). `label` and `hint` are shown as written next to a
+  text box (several lines allowed). Hydra's UI sends the text as it was typed,
+  in `target.manual.input`; parse it as your hint says. Other keys are allowed
+  for callers that build a target themselves.
 - `links` (optional, at most 10) point at a page that helps the user pick, such
   as a game's depots on SteamDB. Hydra only opens them in the browser (http and
   https only) and never fetches them.
@@ -454,7 +456,7 @@ the Plugins view shows; Hydra still handles any empty list.
 **Target.** `game.install` and `game.update` carry `target` when the user (or a
 pin) picked a version: `{ channel?, build?, manual? }`. A `channel` alone means
 "that branch's current build"; a `build` is exactly that build (with a
-`channel`, the build within it); `manual` is the typed values. Without `target`,
+`channel`, the build within it); `manual` is the typed values (`{ "input": "<text>" }` from Hydra's UI). Without `target`,
 install the store's default. A pin makes Hydra send the same `target` on every
 `game.update`, so `update` may be a downgrade. `game.installSize` takes the
 same `target` so the free-space check is for that version. A target for a
