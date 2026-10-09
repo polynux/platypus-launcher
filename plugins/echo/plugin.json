@@ -5,10 +5,10 @@
   "author": "Hydra",
   "description": "A fake store for trying the plugin path: login code letmein, tiny fake installs, no network.",
   "manifestVersion": 1,
-  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"], "transport": "jsonrpc-stdio" },
+  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"], "transport": "jsonrpc-stdio" },
   "store": "echo",
   "exec": "bin/hydra-echo",
-  "capabilities": ["library", "install", "launch", "auth", "discard", "cloud-saves", "versions", "verify", "move", "install-options"],
+  "capabilities": ["library", "install", "launch", "auth", "discard", "cloud-saves", "versions", "verify", "move", "install-options", "family", "settings"],
   "requires": [{ "bin": "sleep", "hint": "part of coreutils" }],
   "install_dir": "echo",
   "permissions": { "network": [], "read": [], "write": [] }

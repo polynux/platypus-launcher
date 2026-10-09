@@ -15,7 +15,6 @@ var stubs = map[string]struct {
 	"achievements.list": {true, map[string]any{"total": 0, "unlocked": 0, "list": []any{}}},
 	"playtime.list":     {false, map[string]any{"games": []any{}}},
 	"redeem.submit":     {false, map[string]any{"message": "Echo has nothing to redeem."}},
-	"family.members":    {false, []any{}},
 	"social.start":      {false, map[string]any{}},
 	"social.stop":       {false, map[string]any{}},
 	"social.state":      {false, map[string]any{}},
