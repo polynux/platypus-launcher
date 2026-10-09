@@ -13,14 +13,16 @@ import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
+import { FriendsModal } from './components/FriendsModal';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onSession } from './effect/runtime';
+import { LauncherApi, onJobs, onSession, onSocial } from './effect/runtime';
+import { upsertView } from './lib/social';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind }
@@ -38,6 +40,8 @@ export function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
   const [plugins, setPlugins] = useState<StorePlugin[]>([]);
+  const [social, setSocial] = useState<SocialView[]>([]);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -78,6 +82,13 @@ export function App() {
 
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
+
+  // Friends lists: the snapshot of every store that offers one, then each push.
+  useEffect(() => {
+    const unsubscribe = onSocial((v) => setSocial((list) => upsertView(list, v)));
+    Effect.runPromise(LauncherApi.socialViews()).then(setSocial, () => {});
+    return unsubscribe;
+  }, []);
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
@@ -381,6 +392,8 @@ export function App() {
   const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
+  const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+
   const openGame = (id: string) =>
     setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
 
@@ -528,6 +541,9 @@ export function App() {
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
         onStop={(id) => stop(id, false)}
+        friends={social}
+        friendLabels={socialLabels}
+        onOpenFriends={() => setFriendsOpen(true)}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
@@ -547,6 +563,20 @@ export function App() {
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
+
+      {friendsOpen && (
+        <FriendsModal
+          views={social}
+          labels={socialLabels}
+          inLibrary={(id) => games.some((g) => g.id === id)}
+          onClose={() => setFriendsOpen(false)}
+          onSetEnabled={(plugin, enabled) =>
+            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).catch((err) => notify(errMsg(err), 'err'))}
+          onSetStatus={(plugin, state: SocialStatus) =>
+            Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(errMsg(err), 'err'))}
+          onOpenGame={(id) => { setFriendsOpen(false); openGame(id); }}
+        />
+      )}
 
       {notice && (
         <div

@@ -493,3 +493,36 @@ export interface GameOptions {
   groups: OptionGroup[];
   chosen: InstallChoices;
 }
+
+// ---- Social: friends and own status (protocol 1.6; docs/plugins/protocol.md "Social") ----
+
+export type FriendState = 'online' | 'offline' | 'away' | 'busy' | 'snooze' | 'looking' | 'invisible';
+/** The statuses the user can set for themselves on a store. */
+export type SocialStatus = 'online' | 'away' | 'busy' | 'snooze' | 'invisible';
+export type SocialConnState = 'connecting' | 'online' | 'reconnecting' | 'replaced' | 'offline' | 'loggedOut';
+
+export interface SocialFriend {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  state: FriendState;
+  /** id is Hydra's game key when the game is in the library; absent otherwise. */
+  game?: { id?: string; title: string };
+  lastSeen?: number;
+}
+
+export interface SocialSelf {
+  name: string;
+  avatarUrl?: string;
+  state: SocialStatus;
+}
+
+/** One store's friends, as the backend last reported them (social.View). */
+export interface SocialView {
+  plugin: string;
+  enabled: boolean;
+  running: boolean;
+  connection: { state: SocialConnState; message?: string };
+  self?: SocialSelf;
+  friends: SocialFriend[];
+}

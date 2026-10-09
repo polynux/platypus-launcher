@@ -19,6 +19,8 @@ import type {
   MoveCheck,
   ProtonVersion,
   SessionEvent,
+  SocialStatus,
+  SocialView,
   StorePlugin,
   Tweak,
   VersionInfo,
@@ -242,6 +244,13 @@ export const LauncherApi = {
   // How long a canceled download's data is kept before Hydra deletes it (0 = right away).
   setCancelCleanupDays: (days: number) =>
     call<LauncherSettings>('SetCancelCleanupDays', () => App.SetCancelCleanupDays(days)),
+
+  // Friends lists of the stores that offer them (protocol 1.6).
+  socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),
+  setSocialEnabled: (plugin: string, enabled: boolean) =>
+    call<void>('SetSocialEnabled', () => App.SetSocialEnabled(plugin, enabled)),
+  setSocialStatus: (plugin: string, state: SocialStatus) =>
+    call<void>('SetSocialStatus', () => App.SetSocialStatus(plugin, state)),
 };
 
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */
@@ -260,4 +269,10 @@ export function onJobs(cb: (jobs: Job[]) => void): () => void {
 export function onCloud(cb: (e: CloudEvent) => void): () => void {
   if (!window.go?.main?.App) return () => {};
   return EventsOn('cloud', cb);
+}
+
+/** Subscribe to a store's friends list: every change carries that store's whole view. */
+export function onSocial(cb: (v: SocialView) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('social', cb);
 }

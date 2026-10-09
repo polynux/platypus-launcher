@@ -1,0 +1,174 @@
+import React, { useState } from 'react';
+import { Search } from 'lucide-react';
+import { Modal } from './Modal';
+import { cx, LinkButton } from './ui';
+import { Button } from './ds/button';
+import { Input } from './ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
+import { agoLabel } from '../lib/cloud';
+import {
+  canSetStatus,
+  connectionLine,
+  FRIEND_STATE_LABEL,
+  groupFriends,
+  initials,
+  SOCIAL_STATUSES,
+  stateDot,
+  STATUS_LABEL,
+} from '../lib/social';
+import type { SocialFriend, SocialStatus, SocialView } from '../types';
+
+interface FriendsModalProps {
+  views: SocialView[];
+  /** Store names by plugin id. */
+  labels: Record<string, string>;
+  /** Whether a Hydra game key is in the library (a friend's game links there). */
+  inLibrary: (gameId: string) => boolean;
+  onClose: () => void;
+  onSetEnabled: (plugin: string, enabled: boolean) => void;
+  onSetStatus: (plugin: string, state: SocialStatus) => void;
+  onOpenGame: (gameId: string) => void;
+}
+
+/** Every store's friends in one modal: a section per store, grouped In game /
+ *  Online / Offline, with a search over all of them. */
+export function FriendsModal(p: FriendsModalProps) {
+  const [query, setQuery] = useState('');
+  return (
+    <Modal label="Friends" onClose={p.onClose} className="max-w-2xl">
+      <div className="flex max-h-[80vh] flex-col gap-4 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[17px] font-extrabold tracking-tight">Friends</h2>
+          <label className="relative block w-64">
+            <span className="sr-only">Search friends</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search friends…"
+              className="pl-8.5 font-sans"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-col gap-5 overflow-y-auto pr-1">
+          {p.views.map((v) => (
+            <StoreSection key={v.plugin} view={v} label={p.labels[v.plugin] ?? v.plugin} query={query} {...p} />
+          ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+type SectionProps = FriendsModalProps & { view: SocialView; label: string; query: string };
+
+function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus, onOpenGame }: SectionProps) {
+  const line = connectionLine(view.connection);
+  const groups = groupFriends(view.friends, query);
+  const total = groups.inGame.length + groups.online.length + groups.offline.length;
+  return (
+    <section aria-label={`${label} friends`} className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 first:border-t-0 first:pt-0">
+      <header className="flex items-center justify-between gap-3">
+        <h3 className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/50">{label}</h3>
+        <Button variant="ghost" size="sm" onClick={() => onSetEnabled(view.plugin, !view.enabled)}>
+          {view.enabled ? 'Turn off' : 'Turn on'}
+        </Button>
+      </header>
+
+      {!view.enabled ? (
+        <p className="text-[12.5px] text-white/50">Friends are off for {label}. Turn them on to see who is online.</p>
+      ) : (
+        <>
+          {view.self && (
+            <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
+              <Avatar name={view.self.name} url={view.self.avatarUrl} dot={stateDot(view.self.state)} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold text-white/90">{view.self.name}</div>
+                {line && <div className={cx('text-[11.5px]', line.tone === 'warn' ? 'text-amber-200' : 'text-white/45')}>{line.text}</div>}
+              </div>
+              <Select
+                value={view.self.state}
+                disabled={!canSetStatus(view)}
+                onValueChange={(v) => onSetStatus(view.plugin, v as SocialStatus)}
+              >
+                <SelectTrigger aria-label={`Your status on ${label}`} className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOCIAL_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!view.self && line && <div className="text-[11.5px] text-amber-200">{line.text}</div>}
+
+          {total === 0 && (
+            <p className="text-[12.5px] text-white/50">
+              {view.friends.length === 0 ? `No friends on ${label} yet.` : `No friends match “${query.trim()}”.`}
+            </p>
+          )}
+
+          <FriendGroup title="In game" friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} />
+          <FriendGroup title="Online" friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} />
+          <FriendGroup title="Offline" friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
+  title: string;
+  friends: SocialFriend[];
+  inLibrary: (gameId: string) => boolean;
+  onOpenGame: (gameId: string) => void;
+}) {
+  if (friends.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <h4 className="px-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/40">
+        {title} · {friends.length}
+      </h4>
+      <ul className="flex flex-col">
+        {friends.map((f) => (
+          <li key={f.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
+            <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-semibold text-white/85">{f.name}</div>
+              <div className="truncate text-[11.5px] text-white/45">
+                {f.game ? (
+                  <>
+                    Playing {f.game.title}
+                    {f.game.id && inLibrary(f.game.id) && (
+                      <>
+                        {' · '}
+                        <LinkButton onClick={() => onOpenGame(f.game!.id!)}>open</LinkButton>
+                      </>
+                    )}
+                  </>
+                ) : f.state === 'offline' || f.state === 'invisible' ? (
+                  f.lastSeen ? `Last seen ${agoLabel(f.lastSeen)}` : 'Offline'
+                ) : (
+                  FRIEND_STATE_LABEL[f.state]
+                )}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Avatar({ name, url, dot }: { name: string; url?: string; dot: string }) {
+  return (
+    <span className="relative grid h-8 w-8 flex-none place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[10px] font-bold text-white/70">
+      {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
+      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1a140f]', dot)} />
+    </span>
+  );
+}
