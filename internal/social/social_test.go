@@ -136,10 +136,13 @@ func TestStartSeedsTheViewFromTheSnapshot(t *testing.T) {
 
 func TestFullPushReplacesAndIncrementalMerges(t *testing.T) {
 	f := newFake()
+	f.snapshot = map[string]any{"connection": Connection{State: ConnOnline}, "friends": []Friend{}}
 	m := newManager(f, true)
 	m.Start("echo")
 	defer m.StopAll()
-	waitFor(t, "the first view", func() bool { return len(m.View("echo").Connection.State) > 0 })
+	// Wait for the snapshot to be applied: a push made before it would be
+	// replaced by the snapshot (which is the intended order).
+	waitFor(t, "connected", func() bool { return m.View("echo").Connection.State == ConnOnline })
 
 	m.Notify("echo", NoteFriends, json.RawMessage(`{"full":true,"friends":[{"id":"1","name":"Ana","state":"online"},{"id":"2","name":"Bo","state":"offline"}]}`))
 	m.Notify("echo", NoteFriends, json.RawMessage(`{"full":false,"friends":[{"id":"2","name":"Bo","state":"online","game":{"id":"p.echo.tiny","title":"Echo Tiny"}},{"id":"3","name":"Cy","state":"away"}]}`))
