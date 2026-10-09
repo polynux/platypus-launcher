@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { Effect } from 'effect';
 import type { Game, GameOptions, OptionGroup, StorePlugin } from '../../types';
 
@@ -9,7 +9,11 @@ const api = vi.hoisted(() => ({
   getInstallFreeSpace: vi.fn(),
   getInstallSize: vi.fn(),
   installGameWithOptions: vi.fn(),
+  installGameWithOptionsTo: vi.fn(),
   updateGameWithOptions: vi.fn(),
+  getInstallLocations: vi.fn(),
+  checkInstallFolder: vi.fn(),
+  pickInstallFolder: vi.fn(),
 }));
 const openUrl = vi.hoisted(() => vi.fn());
 
@@ -63,6 +67,8 @@ const plugin = { id: 'echo', name: 'Echo', capabilities: ['install-options'], de
 function open(mode: 'install' | 'update' = 'install', g: Game = game(), o: GameOptions = options(), free = 100 * MiB, base: number | null = 0) {
   api.getGameOptions.mockResolvedValue(o);
   api.getInstallFreeSpace.mockResolvedValue(free);
+  // The store's own folder has the same room the free-space call reports.
+  api.getInstallLocations.mockResolvedValue([{ folder: '/g/echo', kind: 'default', free_bytes: free, exists: true }]);
   if (base == null) api.getInstallSize.mockRejectedValue(new Error('the store can not size it'));
   else api.getInstallSize.mockResolvedValue(base);
   const onClose = vi.fn(), onChanged = vi.fn(), onNotify = vi.fn();
@@ -78,6 +84,7 @@ beforeEach(() => {
   openUrl.mockReset();
   api.installGameWithOptions.mockResolvedValue({ id: 'j' });
   api.updateGameWithOptions.mockResolvedValue({ id: 'j' });
+  api.installGameWithOptionsTo.mockResolvedValue({ id: 'j' });
 });
 
 describe('InstallOptionsDialog', () => {
@@ -205,5 +212,55 @@ describe('InstallOptionsDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Install' }));
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith(expect.stringMatching(/not owned/), 'err'));
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('InstallOptionsDialog install location', () => {
+  it('offers the places to install to on an install, not on an update', async () => {
+    open();
+    await ready();
+    expect(await screen.findByRole('radiogroup', { name: 'Install location' })).toBeTruthy();
+    cleanup();
+    open('update', game({ is_installed: true }));
+    await ready();
+    expect(screen.queryByRole('radiogroup', { name: 'Install location' })).toBeNull();
+    expect(api.getInstallLocations).toHaveBeenCalledTimes(1);
+  });
+
+  it('installs into the store folder through the plain call', async () => {
+    open();
+    await ready();
+    await screen.findByRole('radiogroup', { name: 'Install location' });
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }));
+    await waitFor(() => expect(api.installGameWithOptions).toHaveBeenCalled());
+    expect(api.installGameWithOptionsTo).not.toHaveBeenCalled();
+  });
+
+  it('installs into a folder picked by hand, with the room there deciding if it fits', async () => {
+    // The default folder is full; the folder picked has room.
+    open('install', game(), options(), MiB / 2);
+    api.pickInstallFolder.mockResolvedValue('/mnt/ssd/Games');
+    api.checkInstallFolder.mockResolvedValue({ folder: '/mnt/ssd/Games', free_bytes: 50 * MiB, exists: false });
+    await ready();
+    fireEvent.click(screen.getByLabelText('Season Pass'));
+    expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(await screen.findByRole('button', { name: /Choose folder/ }));
+    await screen.findByText('/mnt/ssd/Games');
+    expect(screen.getByRole('radio', { name: /\/mnt\/ssd\/Games/ }).getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }));
+    await waitFor(() => expect(api.installGameWithOptionsTo).toHaveBeenCalled());
+    expect(api.installGameWithOptionsTo.mock.calls[0][2]).toBe('/mnt/ssd/Games');
+    expect(api.installGameWithOptions).not.toHaveBeenCalled();
+  });
+
+  it('shows why a folder was refused and keeps the choice', async () => {
+    open();
+    api.pickInstallFolder.mockResolvedValue('/usr/share');
+    api.checkInstallFolder.mockRejectedValue(new Error('refusing to install into system folder /usr/share'));
+    await ready();
+    fireEvent.click(await screen.findByRole('button', { name: /Choose folder/ }));
+    expect((await screen.findByText(/refusing to install into system folder/))).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /\/g\/echo/ }).getAttribute('aria-checked')).toBe('true');
   });
 });

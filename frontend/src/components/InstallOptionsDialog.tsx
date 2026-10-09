@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, TriangleAlert } from 'lucide-react';
 import type { Game, InstallChoices, OptionGroup, StorePlugin } from '../types';
-import { Modal } from './Modal';
+import { ModalOrInline } from './Modal';
+import { InstallLocationPicker } from './InstallLocationPicker';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
@@ -24,17 +25,22 @@ export interface InstallOptionsDialogProps {
   /** A job was queued: the library should reload. */
   onChanged: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  /** Show the content inline (a tab of the game settings) instead of in a dialog of its own. */
+  embedded?: boolean;
 }
 
 /** Choose what an install includes (language, add-ons, packs, toggles), and
  *  change it on an installed game. The store lists the options; Hydra remembers
  *  the choices and checks them again when the install is queued. */
-export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify }: InstallOptionsDialogProps) {
+export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify, embedded }: InstallOptionsDialogProps) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [choices, setChoices] = useState<InstallChoices>({});
   // What the choices were when the dialog opened: an update compares with it.
   const [saved, setSaved] = useState<InstallChoices>({});
   const [free, setFree] = useState<number | null>(null);
+  // Where a fresh install goes: '' is the store's own folder. The room there replaces the default's.
+  const [folder, setFolder] = useState('');
+  const [folderFree, setFolderFree] = useState<number | null>(null);
   const [baseSize, setBaseSize] = useState<number | null>(null);
   // The removal the user has already been warned about (see removed below).
   const [confirmed, setConfirmed] = useState('');
@@ -66,7 +72,8 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   const base = baseSize ?? game.size_bytes ?? null;
   const total = base == null ? null : base + added;
   const needed = installing ? total : added;
-  const short = free != null && needed != null && needed > free;
+  const room = installing && folderFree != null && folderFree >= 0 ? folderFree : free;
+  const short = room != null && needed != null && needed > room;
   // Apply does nothing for an update that changes nothing.
   const unchanged = !installing && groups != null && sameChoices(groups, saved, choices);
   // An update that switches off an add-on already on disk removes it: the
@@ -85,7 +92,9 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   const submit = async () => {
     setBusy(true);
     try {
-      if (installing) await Effect.runPromise(LauncherApi.installGameWithOptions(game, choices));
+      if (installing) {
+        await Effect.runPromise(folder ? LauncherApi.installGameWithOptionsTo(game, choices, folder) : LauncherApi.installGameWithOptions(game, choices));
+      }
       else await Effect.runPromise(LauncherApi.updateGameWithOptions(game, choices));
       onNotify(`${installing ? 'Install' : 'Update'} of ${game.title} queued`, 'busy');
       onChanged();
@@ -98,11 +107,15 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   };
 
   return (
-    <Modal label={`Install options for ${game.title}`} onClose={onClose} className="max-w-[560px]" dismissable={!busy}>
-      <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? 'Install options' : 'Add-ons & options'}</h2>
-      <p className="mt-1 text-[12.5px] text-white/50">
-        {game.title} · {plugin.name}
-      </p>
+    <ModalOrInline embedded={embedded} label={`Install options for ${game.title}`} onClose={onClose} className="max-w-[560px]" dismissable={!busy}>
+      {!embedded && (
+        <>
+          <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? 'Install options' : 'Add-ons & options'}</h2>
+          <p className="mt-1 text-[12.5px] text-white/50">
+            {game.title} · {plugin.name}
+          </p>
+        </>
+      )}
 
       {!groups && !error && <p className="mt-6 font-mono text-[11.5px] uppercase tracking-widest text-white/40">loading options…</p>}
       {error && (
@@ -134,10 +147,10 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
             <span className="text-white/45">Total size</span>
             <span className="text-white/85" data-testid="total-size">{total != null ? formatBytes(total) : 'unknown'}</span>
           </div>
-          {free != null && (
+          {room != null && room >= 0 && (
             <div className="mt-1.5 flex justify-between gap-4">
               <span className="text-white/45">Free space</span>
-              <span className={cx(short ? 'text-red-300' : 'text-white/85')} data-testid="free-space">{formatBytes(free)}</span>
+              <span className={cx(short ? 'text-red-300' : 'text-white/85')} data-testid="free-space">{formatBytes(room)}</span>
             </div>
           )}
           {short && (
@@ -145,6 +158,18 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
               <TriangleAlert className="h-3.5 w-3.5" /> Not enough space for these options.
             </p>
           )}
+        </div>
+      )}
+
+      {installing && (
+        <div className="mt-6">
+          <InstallLocationPicker
+            game={game}
+            needBytes={total}
+            value={folder}
+            onChange={(f, fr) => { setFolder(f); setFolderFree(fr); }}
+            disabled={busy}
+          />
         </div>
       )}
 
@@ -161,7 +186,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
           {installing ? 'Install' : 'Apply'}
         </Button>
       </div>
-    </Modal>
+    </ModalOrInline>
   );
 }
 
