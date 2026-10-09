@@ -47,10 +47,11 @@
 // game.relocated, which echo accepts.
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
-// initOmit, versionsOff, damage, familyInUse, familyWarn} (absent keys are left
-// alone) and answers what settings.apply last received (settings.go), so tests
-// can read the values back. `calls` returns how many times each method was
-// received, so tests can tell a cached -32601 from a retry. The methods of
+// initOmit, versionsOff, damage, familyInUse, familyWarn, settingsRefuse,
+// settingsDelayMs} (absent keys are left alone) and answers what settings.apply
+// last received (settings.go), so tests can read the values back. `calls`
+// returns how many times each method was received, so tests can tell a cached
+// -32601 from a retry. The methods of
 // capabilities that core doesn't use yet answer canned data.
 package main
 
@@ -155,6 +156,10 @@ type knobs struct {
 	// family.warning counts down from when a borrowed game launches (0: none).
 	FamilyInUse []string `json:"familyInUse"`
 	FamilyWarn  int      `json:"familyWarn"`
+	// SettingsRefuse makes settings.apply answer an error; SettingsDelayMs holds
+	// settings.apply that many milliseconds first (settings.go).
+	SettingsRefuse  bool `json:"settingsRefuse"`
+	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
@@ -212,6 +217,8 @@ func configure(raw json.RawMessage) {
 	set("versionsOff", &kn.VersionsOff)
 	set("familyInUse", &kn.FamilyInUse)
 	set("familyWarn", &kn.FamilyWarn)
+	set("settingsRefuse", &kn.SettingsRefuse)
+	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
 
 // manifestCapabilities reads the capabilities plugin.json declares; Hydra runs

@@ -8,8 +8,10 @@ package main
 // `config` answers what was last applied, so tests can read it back.
 
 import (
+	"errors"
 	"maps"
 	"sync"
+	"time"
 )
 
 var (
@@ -42,6 +44,15 @@ func settingsSchema() map[string]any {
 func settingsApply(p params) (any, error) {
 	if p.Values == nil {
 		return nil, bad("invalid params: values is required")
+	}
+	knobMu.Lock()
+	refuse, delay := kn.SettingsRefuse, kn.SettingsDelayMs
+	knobMu.Unlock()
+	if delay > 0 {
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+	}
+	if refuse {
+		return nil, errors.New("Echo can't take settings right now")
 	}
 	if p.GameID != "" {
 		if _, ok := games[p.GameID]; !ok {
