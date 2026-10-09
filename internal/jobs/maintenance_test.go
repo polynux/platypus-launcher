@@ -156,18 +156,25 @@ func (c coreBackend) RunsInCore(types.Job) bool { return c.core }
 // goroutine is still working on the folders. A plugin's own move restarts.
 func TestPluginExitLeavesACoreMoveAlone(t *testing.T) {
 	for _, core := range []bool{true, false} {
-		q, _ := newQueue(t, coreBackend{&fakeBackend{}, core})
+		b := &fakeBackend{}
+		q, _ := newQueue(t, coreBackend{b, core})
 		j, err := q.AddMove("echo", "g", "tiny", "Tiny", "/tmp/a", "/tmp/b")
 		if err != nil {
 			t.Fatal(err)
 		}
 		waitState(t, q, j.ID, StateRunning)
 		q.PluginExited("echo", errors.New("crashed"))
-		got := q.List()[0]
-		if core && got.State != StateRunning {
-			t.Fatalf("core=%v: a core move was requeued: %+v", core, got)
+		if core {
+			if got := q.List()[0]; got.State != StateRunning {
+				t.Fatalf("core=%v: a core move was requeued: %+v", core, got)
+			}
+			continue
 		}
-		if !core && got.State != StateQueued {
+		// The requeued move is started again straight away, so a queued
+		// state can't be seen. The restart shows what the crash left.
+		b.waitStarts(2, 3*time.Second)
+		got := waitState(t, q, j.ID, StateRunning)
+		if got.Attempts != 2 || got.Phase != "plugin restarted, resuming" {
 			t.Fatalf("core=%v: a plugin move was not requeued: %+v", core, got)
 		}
 	}
