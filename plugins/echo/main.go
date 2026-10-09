@@ -41,7 +41,8 @@
 //	ECHO_FAMILY_WARN   seconds: launching a borrowed game also raises family.warning with that count
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
-// social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs.
+// social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs; chat
+// (chat.go, protocol 1.9) its ECHO_CHAT_TICK and `config` chat knobs.
 // Verify and move (maintenance.go, protocol 1.4) need no env knobs: `config`
 // {damage: {"tiny": 3}} sets the damaged files a check finds. Switch `move` off
 // (ECHO_OFF=move) and Hydra moves the game folder itself and sends
@@ -399,6 +400,7 @@ func main() {
 	loadKnobs()
 	loadCloud()
 	loadSocial()
+	loadChat()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
@@ -492,6 +494,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		configureCloud(raw)
 		configureMaintenance(raw)
 		configureSocial(raw)
+		configureChat(raw)
 		return map[string]any{"settings": settingsSnapshot()}, nil
 	case "calls":
 		callsMu.Lock()
@@ -613,8 +616,16 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return socialSetStatus(p)
 	case "social.setPlaying":
 		return socialSetPlaying(raw)
+	case "chat.history":
+		return chatHistory(raw)
+	case "chat.send":
+		return chatSend(raw)
+	case "chat.markRead":
+		return chatMarkRead(raw)
 	case "recorded":
-		return socialRecorded(), nil
+		rec := socialRecorded().(map[string]any)
+		rec["chat"] = chatRecorded()
+		return rec, nil
 	case "achievements.list":
 		return achievementsList(p)
 	case "playtime.list":
