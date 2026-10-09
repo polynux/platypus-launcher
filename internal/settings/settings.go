@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"hydra-launcher/internal/types"
 )
 
 const fileVersion = 1
@@ -42,6 +44,9 @@ type file struct {
 	// kept before Hydra deletes it. A pointer: 0 (delete at once) is a
 	// choice, unset means DefaultCancelCleanupDays.
 	CancelCleanupDays *int `json:"cancel_cleanup_days,omitempty"`
+	// Pins hold a game at a version (the `versions` capability), keyed by
+	// Hydra's game id. See pins.go.
+	Pins map[string]types.VersionPin `json:"pins,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra
