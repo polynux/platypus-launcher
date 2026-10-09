@@ -227,6 +227,20 @@ describe('family warning toast', () => {
     expect(screen.queryByText(/s left/)).toBeNull();
   });
 
+  it('leaves by itself after a while when it has no countdown', () => {
+    vi.useFakeTimers();
+    render(<FamilyWarningHost games={games} />);
+    act(() => family.onWarning?.(warning({ seconds_left: 0 })));
+    act(() => { vi.advanceTimersByTime(15000); });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('is not shown for a game that is not in the library', () => {
+    render(<FamilyWarningHost games={games} />);
+    act(() => family.onWarning?.(warning({ game_id: 'p.echo.gone', seconds_left: 0 })));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('can be dismissed', () => {
     render(<FamilyWarningHost games={games} />);
     act(() => family.onWarning?.(warning({ seconds_left: 0 })));

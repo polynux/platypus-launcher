@@ -4,6 +4,9 @@ import { onFamily } from '../effect/runtime';
 import { countdownLabel } from '../lib/family';
 import { Button } from '@/components/ds/button';
 
+/** How long a warning without a countdown stays up, before it leaves by itself. */
+const UNCOUNTED_MS = 15000;
+
 interface Shown {
   warning: FamilyWarning;
   /** Seconds left on the countdown; a warning without a time has none. */
@@ -12,7 +15,8 @@ interface Shown {
 
 /** Listens for family warnings app-wide and shows the latest as a toast with a
  *  countdown. The game keeps running: the store disconnects the borrower when
- *  the owner takes the game back. It renders nothing else. */
+ *  the owner takes the game back. A warning about a game that is not in the
+ *  library is not shown, and one without a time leaves after a while. */
 export function FamilyWarningHost({ games }: { games: Game[] }) {
   const [shown, setShown] = useState<Shown | null>(null);
 
@@ -25,9 +29,17 @@ export function FamilyWarningHost({ games }: { games: Game[] }) {
     return () => clearTimeout(t);
   }, [shown]);
 
+  // A warning without a countdown has no time of its own: it leaves by itself.
+  useEffect(() => {
+    if (!shown || shown.warning.seconds_left > 0) return;
+    const t = setTimeout(() => setShown(null), UNCOUNTED_MS);
+    return () => clearTimeout(t);
+  }, [shown]);
+
   if (!shown) return null;
   const { warning, left } = shown;
-  const title = games.find((g) => g.id === warning.game_id)?.title ?? warning.game_id;
+  const title = games.find((g) => g.id === warning.game_id)?.title;
+  if (!title) return null;
   const counting = warning.seconds_left > 0;
   if (counting && left <= 0) return null;
   return (
