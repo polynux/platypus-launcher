@@ -41,7 +41,8 @@ layout with `"kind": "data"` and need no approval; see
 - `protocol` says which protocol versions the plugin speaks and over which
   transport; see [Versioning and compatibility](#versioning-and-compatibility).
   `versions` is a list (`["1.0", "1.1"]`) or an inclusive range
-  (`{ "min": "1.0", "max": "1.3" }`); `transport` defaults to `jsonrpc-stdio`.
+  (`{ "min": "1.0", "max": "1.3" }`; a range without `max` covers the later minors of
+  its own major only, never the next major); `transport` defaults to `jsonrpc-stdio`.
   The legacy `"api": 1` still works and means protocol `1.0` over
   `jsonrpc-stdio`.
 - `capabilities` lists what the plugin can do, as names from the

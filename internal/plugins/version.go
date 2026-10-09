@@ -49,6 +49,14 @@ func (s VersionSet) Contains(v Version) bool {
 		}
 		return false
 	}
+	// A half-open range stays inside its bound's major: {"min":"1.0"} means
+	// "1.0 and later 1.x", never a breaking 2.0.
+	if s.Max == nil && v.Major != s.Min.Major {
+		return false
+	}
+	if s.Min == nil && v.Major != s.Max.Major {
+		return false
+	}
 	return (s.Min == nil || !v.Less(*s.Min)) && (s.Max == nil || !s.Max.Less(v))
 }
 

@@ -42,7 +42,7 @@ func TestVersionSetJSON(t *testing.T) {
 	}{
 		"list":      {in: `["1.0","1.2"]`, contains: map[string]bool{"1.0": true, "1.1": false, "1.2": true}},
 		"range":     {in: `{"min":"1.0","max":"1.3"}`, contains: map[string]bool{"0.9": false, "1.0": true, "1.3": true, "1.4": false}},
-		"open":      {in: `{"min":"1.2"}`, contains: map[string]bool{"1.1": false, "1.2": true, "9.0": true}},
+		"open":      {in: `{"min":"1.2"}`, contains: map[string]bool{"1.1": false, "1.2": true, "1.9": true, "2.0": false}},
 		"empty":     {in: `[]`, bad: true},
 		"inverted":  {in: `{"min":"1.3","max":"1.0"}`, bad: true},
 		"no bounds": {in: `{}`, bad: true},
@@ -126,5 +126,24 @@ func TestSupportedProtocolsAreSortedAndSameMajorPerRevision(t *testing.T) {
 	}
 	if SupportedProtocols[0].Major != APIVersion {
 		t.Fatalf("the oldest supported protocol %v is not major %d", SupportedProtocols[0], APIVersion)
+	}
+}
+
+// An open-ended range stays inside its minimum's major: a plugin that says
+// {"min":"1.0"} was written for 1.x and must never negotiate a breaking 2.0.
+func TestOpenRangeStaysInItsMajor(t *testing.T) {
+	var s VersionSet
+	if err := json.Unmarshal([]byte(`{"min":"1.0"}`), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Contains(Version{2, 0}) {
+		t.Fatal(`{"min":"1.0"} must not contain 2.0`)
+	}
+	if !s.Contains(Version{1, 7}) {
+		t.Fatal(`{"min":"1.0"} must contain 1.7`)
+	}
+	got, ok := Negotiate(s, []Version{{1, 0}, {1, 1}, {2, 0}})
+	if !ok || got != (Version{1, 1}) {
+		t.Fatalf("Negotiate = %v, %v; want 1.1", got, ok)
 	}
 }
