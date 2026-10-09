@@ -101,6 +101,8 @@ export function RescanPlugins():Promise<Array<types.StorePlugin>>;
 
 export function ResolveCloudSaves(arg1:types.Game,arg2:Record<string, string>):Promise<types.CloudInfo>;
 
+export function RestartSocial(arg1:string):Promise<void>;
+
 export function ResumeAllJobs():Promise<void>;
 
 export function ResumeJob(arg1:string):Promise<void>;
@@ -124,6 +126,8 @@ export function SetPluginEnabled(arg1:string,arg2:boolean):Promise<void>;
 export function SetPluginInstallFolder(arg1:string,arg2:string):Promise<void>;
 
 export function SetSocialEnabled(arg1:string,arg2:boolean):Promise<void>;
+
+export function SetSocialPlaying(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetSocialStatus(arg1:string,arg2:string):Promise<void>;
 

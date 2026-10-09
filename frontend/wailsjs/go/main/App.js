@@ -198,6 +198,10 @@ export function ResolveCloudSaves(arg1, arg2) {
   return window['go']['main']['App']['ResolveCloudSaves'](arg1, arg2);
 }
 
+export function RestartSocial(arg1) {
+  return window['go']['main']['App']['RestartSocial'](arg1);
+}
+
 export function ResumeAllJobs() {
   return window['go']['main']['App']['ResumeAllJobs']();
 }
@@ -244,6 +248,10 @@ export function SetPluginInstallFolder(arg1, arg2) {
 
 export function SetSocialEnabled(arg1, arg2) {
   return window['go']['main']['App']['SetSocialEnabled'](arg1, arg2);
+}
+
+export function SetSocialPlaying(arg1, arg2) {
+  return window['go']['main']['App']['SetSocialPlaying'](arg1, arg2);
 }
 
 export function SetSocialStatus(arg1, arg2) {

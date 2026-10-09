@@ -86,6 +86,7 @@ export namespace social {
 	    }
 	}
 	export class View {
+	    seq: number;
 	    plugin: string;
 	    enabled: boolean;
 	    running: boolean;
@@ -99,6 +100,7 @@ export namespace social {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.seq = source["seq"];
 	        this.plugin = source["plugin"];
 	        this.enabled = source["enabled"];
 	        this.running = source["running"];
