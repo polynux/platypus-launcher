@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { byRecent, formatBytes, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
+import { sortKey } from '../lib/customize';
 
 export type LibraryMode = 'cards' | 'table';
 /** installed: what can be played now; owned: everything store plugins report too. */
@@ -44,7 +45,7 @@ type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 /** ProtonDB quality order, best first. Unknown or missing tiers have no rank and sort last. */
 export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver: 3, bronze: 2, borked: 1 };
 const sortValue = (g: Game, k: SortKey): string | number =>
-  k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? g.title.toLowerCase() : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
+  k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? sortKey(g) : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
 
 /** Source chips come from what the library really holds: no chip for a store with zero games. */
 export function sourceChips(games: Game[]): (StoreType | 'all')[] {
