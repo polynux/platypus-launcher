@@ -1,5 +1,4 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
-import { Modal } from './Modal';
 import { cx, LinkButton } from './ui';
 import { Button } from './ds/button';
 import { Textarea } from './ds/textarea';
@@ -17,12 +16,16 @@ interface ChatPanelProps {
   onLoadOlder: () => void;
   onSend: (text: string) => void;
   onResend: (clientId: string) => void;
+  /** Back to the friends list. */
+  onBack?: () => void;
+  /** Closes the friends modal. */
   onClose: () => void;
 }
 
 /** One conversation with a friend: the messages (newest at the bottom), a box to write in, and what
  *  each message's send came to. Enter sends; Shift+Enter starts a new line. Links open in the browser
- *  only when they are http or https; everything else is plain text. */
+ *  only when they are http or https; everything else is plain text. It lives inside the friends modal,
+ *  which provides the dialog and its Escape handling. */
 export function ChatPanel(p: ChatPanelProps) {
   const [text, setText] = useState('');
   const log = useRef<HTMLDivElement>(null);
@@ -59,71 +62,76 @@ export function ChatPanel(p: ChatPanelProps) {
   };
 
   return (
-    <Modal label={`Chat with ${p.friendName}`} onClose={p.onClose} className="max-w-lg">
-      <div className="flex h-[70vh] max-h-[640px] flex-col gap-3 p-5">
-        <header className="flex items-center justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <header className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {p.onBack && (
+            <Button variant="ghost" size="sm" onClick={p.onBack} className="flex-none">
+              Back
+            </Button>
+          )}
           <div className="min-w-0">
             <h2 className="truncate text-[17px] font-extrabold tracking-tight">{p.friendName}</h2>
             <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/45">{p.storeName}</div>
           </div>
-          <Button variant="ghost" size="sm" onClick={p.onClose}>
-            Close
-          </Button>
-        </header>
+        </div>
+        <Button variant="ghost" size="sm" onClick={p.onClose} className="flex-none">
+          Close
+        </Button>
+      </header>
 
-        {p.error && (
-          <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[12px] text-red-200 ring-1 ring-red-400/25">
-            {p.error}
-          </p>
+      {p.error && (
+        <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[12px] text-red-200 ring-1 ring-red-400/25">
+          {p.error}
+        </p>
+      )}
+
+      <div
+        ref={log}
+        role="log"
+        aria-label={`Messages with ${p.friendName}`}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
+      >
+        {p.view?.more && (
+          <div className="self-center">
+            <LinkButton onClick={p.onLoadOlder}>Load older messages</LinkButton>
+          </div>
         )}
-
-        <div
-          ref={log}
-          role="log"
-          aria-label={`Messages with ${p.friendName}`}
-          onScroll={(e) => {
-            const el = e.currentTarget;
-            atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-          }}
-          className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
-        >
-          {p.view?.more && (
-            <div className="self-center">
-              <LinkButton onClick={p.onLoadOlder}>Load older messages</LinkButton>
-            </div>
-          )}
-          {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/50">Loading…</p>}
-          {p.view?.loaded && messages.length === 0 && (
-            <p className="text-[12.5px] text-white/50">No messages yet. Say hello.</p>
-          )}
-          {messages.map((m) => (
-            <MessageRow key={messageKey(m)} message={m} onResend={p.onResend} />
-          ))}
-        </div>
-
-        {p.view?.typing && <p className="text-[11.5px] italic text-white/45">{p.friendName} is typing…</p>}
-
-        <div className="flex items-end gap-2">
-          <Textarea
-            aria-label={`Message ${p.friendName}`}
-            rows={2}
-            value={text}
-            placeholder="Write a message"
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            className="flex-1 font-sans"
-          />
-          <Button variant="primary" size="md" onClick={submit} disabled={!canSendChat(text)}>
-            Send
-          </Button>
-        </div>
+        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/50">Loading…</p>}
+        {p.view?.loaded && messages.length === 0 && (
+          <p className="text-[12.5px] text-white/50">No messages yet. Say hello.</p>
+        )}
+        {messages.map((m) => (
+          <MessageRow key={messageKey(m)} message={m} onResend={p.onResend} />
+        ))}
       </div>
-    </Modal>
+
+      {p.view?.typing && <p className="text-[11.5px] italic text-white/45">{p.friendName} is typing…</p>}
+
+      <div className="flex items-end gap-2">
+        <Textarea
+          aria-label={`Message ${p.friendName}`}
+          rows={2}
+          value={text}
+          placeholder="Write a message"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          className="flex-1 font-sans"
+        />
+        <Button variant="primary" size="md" onClick={submit} disabled={!canSendChat(text)}>
+          Send
+        </Button>
+      </div>
+    </div>
   );
 }
 

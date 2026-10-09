@@ -37,8 +37,12 @@ interface FriendsModalProps {
   onOpenGame: (gameId: string) => void;
   /** Unread messages from a friend on a store (the chat capability). */
   unreadOf?: (plugin: string, friendId: string) => number;
-  /** Opens the conversation with a friend (the chat capability). */
+  /** Opens the conversation with a friend (the chat capability): a click on the friend's row. */
   onOpenChat?: (plugin: string, friend: SocialFriend) => void;
+  /** The open conversation, shown in place of the list; the chat's own Back and Close drive it. */
+  chat?: React.ReactNode;
+  /** Leaves the open conversation for the list. Esc does this first, then closes the modal. */
+  onBackFromChat?: () => void;
   /** Whether a store's message alerts are on, for each store that offers chat. */
   chatAlerts?: Record<string, boolean>;
   onSetChatAlerts?: (plugin: string, on: boolean) => void;
@@ -51,6 +55,13 @@ const ROWS_PER_GROUP = 200;
  *  Online / Offline, with a search over all of them. */
 export function FriendsModal(p: FriendsModalProps) {
   const [query, setQuery] = useState('');
+  if (p.chat) {
+    return (
+      <Modal label="Friends" onClose={p.onBackFromChat ?? p.onClose} className="max-w-2xl">
+        <div className="flex h-[70vh] max-h-[640px] flex-col p-5">{p.chat}</div>
+      </Modal>
+    );
+  }
   return (
     <Modal label="Friends" onClose={p.onClose} className="max-w-2xl">
       <div className="flex max-h-[80vh] flex-col gap-4 p-5">
@@ -187,36 +198,18 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
       <ul className="flex flex-col">
         {friends.slice(0, shown).map((f) => (
           <li key={f.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
-            <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold text-white/85">{f.name}</div>
-              <div className="truncate text-[11.5px] text-white/45">
-                {f.game ? (
-                  <>
-                    Playing {f.game.title}
-                    {f.game.id && inLibrary(f.game.id) && (
-                      <>
-                        {' · '}
-                        <LinkButton onClick={() => onOpenGame(f.game!.id!)}>open</LinkButton>
-                      </>
-                    )}
-                  </>
-                ) : f.state === 'offline' || f.state === 'invisible' ? (
-                  f.lastSeen ? `Last seen ${agoLabel(f.lastSeen)}` : 'Offline'
-                ) : (
-                  FRIEND_STATE_LABEL[f.state]
-                )}
-              </div>
-            </div>
+            {/* The row opens the chat; the game's link sits beside it, since a button can't hold a link. */}
+            <FriendRowMain
+              friend={f}
+              onOpenChat={onOpenChat && (() => onOpenChat(plugin, f))}
+            />
             {unreadOf && unreadOf(plugin, f.id) > 0 && (
               <span aria-label={`${unreadOf(plugin, f.id)} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-mono text-[10px] font-bold text-[#130f0a]">
                 {unreadOf(plugin, f.id)}
               </span>
             )}
-            {onOpenChat && (
-              <Button variant="ghost" size="sm" aria-label={`Message ${f.name}`} onClick={() => onOpenChat(plugin, f)}>
-                Message
-              </Button>
+            {f.game?.id && inLibrary(f.game.id) && (
+              <LinkButton onClick={() => onOpenGame(f.game!.id!)}>open</LinkButton>
             )}
           </li>
         ))}
@@ -227,6 +220,26 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
         </LinkButton>
       )}
     </div>
+  );
+}
+
+function FriendRowMain({ friend: f, onOpenChat }: { friend: SocialFriend; onOpenChat?: () => void }) {
+  const body = (
+    <>
+      <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-semibold text-white/85">{f.name}</div>
+        <div className="truncate text-[11.5px] text-white/45">
+          {f.game ? `Playing ${f.game.title}` : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? `Last seen ${agoLabel(f.lastSeen)}` : 'Offline') : FRIEND_STATE_LABEL[f.state]}
+        </div>
+      </div>
+    </>
+  );
+  if (!onOpenChat) return <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>;
+  return (
+    <button type="button" onClick={onOpenChat} className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50">
+      {body}
+    </button>
   );
 }
 

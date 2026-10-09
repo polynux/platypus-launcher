@@ -38,7 +38,10 @@ export function FriendsSummary({ views, labels, onOpen, unread = 0 }: FriendsSum
             </span>
             <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
               <span className="min-w-0 truncate text-[12px] font-semibold text-white/85">{self?.name ?? name}</span>
-              <span className="flex-none truncate font-mono text-[10px] uppercase tracking-wider text-white/40">
+              <span
+                title={!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
+                className="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-white/40"
+              >
                 {!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
               </span>
             </span>
