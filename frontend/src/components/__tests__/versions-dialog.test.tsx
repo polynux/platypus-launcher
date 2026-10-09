@@ -241,6 +241,30 @@ describe('Pinned game', () => {
     expect(screen.queryByRole('button', { name: 'Update to pinned version' })).toBeNull();
   });
 
+  it('queues nothing when the pin cannot be set', async () => {
+    api.pinGameVersion.mockRejectedValueOnce(new Error('the store refused the pin'));
+    const { onNotify, onChanged } = open();
+    fireEvent.click(await screen.findByRole('radio', { name: '2.0.0' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Keep this version/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to this version' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch anyway' }));
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('the store refused the pin', 'err'));
+    expect(api.updateGameVersion).not.toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('puts the previous pin back when the job cannot be queued', async () => {
+    api.updateGameVersion.mockRejectedValueOnce(new Error('the store is busy'));
+    const { onNotify } = open(game(), info({ pinned: { kind: 'build', id: 'b200' }, updateAvailable: true }));
+    fireEvent.click(await screen.findByRole('radio', { name: '2.0.0' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Keep this version/ })); // untick: the pin goes
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to this version' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Switch anyway' }));
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('the store is busy', 'err'));
+    expect(api.unpinGameVersion).toHaveBeenCalledWith('p.echo.tiny');
+    expect(api.pinGameVersion).toHaveBeenCalledWith(expect.anything(), { kind: 'build', id: 'b200' });
+  });
+
   it('starts with the pin ticked and removes it when unticked', async () => {
     open(game(), pinned());
     fireEvent.click(await screen.findByRole('radio', { name: '2.0.0' }));

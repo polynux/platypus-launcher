@@ -61,16 +61,24 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify }: V
   const apply = async () => {
     if (!info || !choice) return;
     setBusy(true);
+    const before = info.pinned;
+    const pinMoves = wantPin && pin ? !samePin(before, pin) : before != null;
     try {
+      // The pin goes first: one that can't be set or cleared queues nothing,
+      // so a job never runs at a version the pin didn't take.
+      if (pinMoves) {
+        if (wantPin && pin) await Effect.runPromise(LauncherApi.pinGameVersion(game, pin));
+        else await Effect.runPromise(LauncherApi.unpinGameVersion(game.id));
+      }
       if (!current) {
         const target = targetOf(choice);
-        await Effect.runPromise(installed ? LauncherApi.updateGameVersion(game, target) : LauncherApi.installGameVersion(game, target));
+        try {
+          await Effect.runPromise(installed ? LauncherApi.updateGameVersion(game, target) : LauncherApi.installGameVersion(game, target));
+        } catch (e) {
+          if (pinMoves) await putPinBack(before);
+          throw e;
+        }
         onNotify(`${installed ? 'Switch of' : 'Install of'} ${game.title} queued`, 'busy');
-      }
-      if (wantPin && pin) {
-        if (!samePin(info.pinned, pin)) await Effect.runPromise(LauncherApi.pinGameVersion(game, pin));
-      } else if (info.pinned) {
-        await Effect.runPromise(LauncherApi.unpinGameVersion(game.id));
       }
       onChanged();
       onClose();
@@ -79,6 +87,16 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify }: V
       setStep('pick');
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Undoes a pin change whose job was not queued. */
+  const putPinBack = async (previous: VersionInfo['pinned']) => {
+    try {
+      if (previous) await Effect.runPromise(LauncherApi.pinGameVersion(game, previous));
+      else await Effect.runPromise(LauncherApi.unpinGameVersion(game.id));
+    } catch (e) {
+      onNotify(`The pin couldn't be put back: ${errMsg(e)}`, 'err');
     }
   };
 

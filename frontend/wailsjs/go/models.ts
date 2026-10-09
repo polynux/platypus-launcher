@@ -265,6 +265,7 @@ export namespace types {
 	    game_mode: string;
 	    status?: CloudStatus;
 	    busy?: string;
+	    running: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new CloudInfo(source);
@@ -277,6 +278,7 @@ export namespace types {
 	        this.game_mode = source["game_mode"];
 	        this.status = this.convertValues(source["status"], CloudStatus);
 	        this.busy = source["busy"];
+	        this.running = source["running"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -514,6 +516,7 @@ export namespace types {
 	    channel?: string;
 	    build?: string;
 	    manual?: Record<string, string>;
+	    archiveRef?: number[];
 	
 	    static createFrom(source: any = {}) {
 	        return new VersionTarget(source);
@@ -524,6 +527,7 @@ export namespace types {
 	        this.channel = source["channel"];
 	        this.build = source["build"];
 	        this.manual = source["manual"];
+	        this.archiveRef = source["archiveRef"];
 	    }
 	}
 	export class Job {
