@@ -10,8 +10,6 @@ var stubs = map[string]struct {
 	result  any
 }{
 	"game.options":      {true, map[string]any{"groups": []any{}}},
-	"versions.list":     {true, map[string]any{"channels": []any{}, "builds": []any{}, "manual": nil, "pinned": nil}},
-	"versions.unlock":   {true, map[string]any{"unlocked": false}},
 	"game.verify":       {true, map[string]any{}},
 	"game.move":         {true, map[string]any{}},
 	"achievements.list": {true, map[string]any{"total": 0, "unlocked": 0, "list": []any{}}},
