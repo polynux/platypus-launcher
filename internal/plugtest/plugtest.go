@@ -403,6 +403,9 @@ func (s Suite) Conformance(t *testing.T) {
 	var rawDetails json.RawMessage
 	if err := sess.call("game.details", map[string]any{"id": game.StoreAppID}, &rawDetails); err == nil {
 		checkKeys(t, "game.details", rawDetails, DetailsKeys)
+		if has("terms") {
+			sess.checkTerms(t, game.StoreAppID, rawDetails)
+		}
 	}
 	if !s.NoUnknownDetails {
 		// An unknown id is an error (or the method is absent), never data or
@@ -797,7 +800,7 @@ var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
 		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
-		"releaseDate", "heroUrl", "achievements"}
+		"releaseDate", "heroUrl", "achievements", "terms"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "find", "startTimeout"}
 

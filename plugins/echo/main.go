@@ -33,7 +33,7 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.8); it answers the highest Hydra also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.11); it answers the highest Hydra also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
@@ -42,6 +42,7 @@
 //	ECHO_FAMILY_WARN   seconds: launching a borrowed game also raises family.warning with that count
 //	ECHO_COPY_IN_USE   member ids whose copy of a shared game is in use (launching it answers -32002)
 //	ECHO_COPY_UNAVAILABLE member ids whose copy of a shared game can't be picked or launched
+//	ECHO_TERMS_BUMP   set: the licence term of "licensed" has its next version (terms.go)
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
 // social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs; chat
@@ -104,6 +105,7 @@ type game struct {
 	external string // always installed here, outside Hydra's folder
 	client   bool
 	details  bool   // answers game.details with store metadata
+	terms    bool   // lists terms in game.details (terms.go)
 	lentBy   string // a family member's game: installed, launched through the client (family.go)
 }
 
@@ -118,9 +120,11 @@ var games = map[string]game{
 	"ben":    {title: "Echo Borrowed Kart", lentBy: "ben", native: true},
 	// lentBy is the copy a game is played from until the user picks another.
 	"shared": {title: "Echo Shared Racer", lentBy: "ana", native: true},
+	// "licensed" lists two terms to accept before an install (terms.go).
+	"licensed": {title: "Echo Licensed", size: 4 << 20, steps: 10, stepMs: 100, native: true, details: true, terms: true},
 }
 
-var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben", "shared"}
+var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben", "shared", "licensed"}
 
 // state is persisted in $HYDRA_PLUGIN_DATA/state.json.
 type state struct {
@@ -141,6 +145,9 @@ type state struct {
 	// PreferredCopy is the member whose copy of a shared game the user picked,
 	// by game id (family.setPreferredCopy).
 	PreferredCopy map[string]string `json:"preferredCopy"`
+	// AcceptedTerms are the "id@version" terms the user accepted, by game id
+	// (game.acceptTerms, terms.go).
+	AcceptedTerms map[string][]string `json:"acceptedTerms"`
 }
 
 var (
@@ -170,15 +177,17 @@ type knobs struct {
 	// is in use, or can't be borrowed right now.
 	CopyInUse       []string `json:"copyInUse"`
 	CopyUnavailable []string `json:"copyUnavailable"`
+	// TermsBump makes the licence term of "licensed" its next version (terms.go).
+	TermsBump bool `json:"termsBump"`
 	// SettingsRefuse makes settings.apply answer an error; SettingsDelayMs holds
 	// settings.apply that many milliseconds first (settings.go).
 	SettingsRefuse  bool `json:"settingsRefuse"`
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: more than any Hydra offers yet, so
-// the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"}
+// defaultProtocols is what echo speaks: 1.0 to 1.11, so it meets the highest
+// revision Hydra offers (the negotiation picks the best both speak).
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"}
 
 var (
 	knobMu  sync.Mutex
@@ -200,7 +209,8 @@ func csv(name string) []string {
 func loadKnobs() {
 	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
 		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF"),
-		FamilyInUse: csv("ECHO_FAMILY_IN_USE"), CopyInUse: csv("ECHO_COPY_IN_USE"), CopyUnavailable: csv("ECHO_COPY_UNAVAILABLE")}
+		FamilyInUse: csv("ECHO_FAMILY_IN_USE"), CopyInUse: csv("ECHO_COPY_IN_USE"), CopyUnavailable: csv("ECHO_COPY_UNAVAILABLE"),
+		TermsBump: os.Getenv("ECHO_TERMS_BUMP") != ""}
 	kn.FamilyWarn, _ = strconv.Atoi(os.Getenv("ECHO_FAMILY_WARN"))
 	if v := os.Getenv("ECHO_FEATURES"); v != "" {
 		_ = json.Unmarshal([]byte(v), &kn.Features)
@@ -233,6 +243,7 @@ func configure(raw json.RawMessage) {
 	set("familyWarn", &kn.FamilyWarn)
 	set("copyInUse", &kn.CopyInUse)
 	set("copyUnavailable", &kn.CopyUnavailable)
+	set("termsBump", &kn.TermsBump)
 	set("settingsRefuse", &kn.SettingsRefuse)
 	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
@@ -568,7 +579,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		if !g.details {
 			return nil, &rpcError{Code: -32601, Message: "method not found: game.details"}
 		}
-		return map[string]any{
+		details := map[string]any{
 			"summary":     "A tiny fake game from the Echo test store, shown on its game page.",
 			"genres":      []string{"Test"},
 			"developers":  []string{"Echo Software"},
@@ -581,7 +592,13 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 					{"id": "played", "name": "Play it", "description": "Start the game once.", "globalPercent": 84.1},
 				},
 			},
-		}, nil
+		}
+		if g.terms {
+			details["terms"] = termsList(p.ID)
+		}
+		return details, nil
+	case "game.acceptTerms":
+		return acceptTerms(raw)
 	case "game.options":
 		return gameOptions(p)
 	case "game.installSize":
@@ -645,6 +662,9 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "recorded":
 		rec := socialRecorded().(map[string]any)
 		rec["chat"] = chatRecorded()
+		stMu.Lock()
+		rec["acceptedTerms"] = st.AcceptedTerms
+		stMu.Unlock()
 		return rec, nil
 	case "achievements.list":
 		return achievementsList(p)

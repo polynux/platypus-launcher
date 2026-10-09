@@ -166,6 +166,11 @@ func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarg
 	if !a.plugins.Has(game.Source, "install") {
 		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
 	}
+	if termsKind(kind) {
+		if err := a.termsGate(game); err != nil {
+			return types.Job{}, err
+		}
+	}
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
 	chosen, custom, err := a.installFolderFor(game, picked)
 	if err != nil {

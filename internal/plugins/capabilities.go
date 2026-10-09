@@ -30,16 +30,17 @@ type Capability struct {
 }
 
 const (
-	rev10 = "1.0" // capabilities of the first plugin releases
-	rev11 = "1.1" // parity roadmap (docs/plans/launcher-parity.md §2)
-	rev12 = "1.2" // cloud saves (docs/plans/steam-cloud-social.md)
-	rev13 = "1.3" // versions (docs/plans/launcher-parity.md §2.2)
-	rev14 = "1.4" // verify and move (docs/plans/launcher-parity.md §2.3)
-	rev15 = "1.5" // install options and DLC (docs/plans/launcher-parity.md §2.1)
-	rev16 = "1.6" // social: friends and own status (docs/plans/steam-cloud-social.md, "social.*")
-	rev17 = "1.7" // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
-	rev18 = "1.8" // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
-	rev19 = "1.9" // chat with friends (docs/plugins/protocol.md, "Chat")
+	rev10  = "1.0"  // capabilities of the first plugin releases
+	rev11  = "1.1"  // parity roadmap (docs/plans/launcher-parity.md §2)
+	rev12  = "1.2"  // cloud saves (docs/plans/steam-cloud-social.md)
+	rev13  = "1.3"  // versions (docs/plans/launcher-parity.md §2.2)
+	rev14  = "1.4"  // verify and move (docs/plans/launcher-parity.md §2.3)
+	rev15  = "1.5"  // install options and DLC (docs/plans/launcher-parity.md §2.1)
+	rev16  = "1.6"  // social: friends and own status (docs/plans/steam-cloud-social.md, "social.*")
+	rev17  = "1.7"  // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
+	rev18  = "1.8"  // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
+	rev19  = "1.9"  // chat with friends (docs/plugins/protocol.md, "Chat")
+	rev111 = "1.11" // terms to accept before an install (docs/plugins/protocol.md, "Terms")
 )
 
 var registry = []Capability{
@@ -89,6 +90,9 @@ var registry = []Capability{
 	{Name: "chat", Since: rev19, Orchestrated: true,
 		Methods:  []string{"chat.history", "chat.send", "chat.markRead"},
 		Surfaces: []string{"chat-panel", "chat-unread"}},
+	{Name: "terms", Since: rev111, Orchestrated: true,
+		OptionalMethods: []string{"game.acceptTerms"},
+		Surfaces:        []string{"terms-dialog", "legal"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:
