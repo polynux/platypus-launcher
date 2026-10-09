@@ -318,6 +318,16 @@ type VerifyReport struct {
 	Repaired int `json:"repaired"`
 }
 
+// MoveCheck is what a move would do, before it is queued: where the game ends
+// up, what it needs and what the destination has free. PluginMoves says the
+// plugin does the move itself (game.move) rather than Hydra.
+type MoveCheck struct {
+	To          string `json:"to"`
+	NeedBytes   int64  `json:"need_bytes"`
+	FreeBytes   int64  `json:"free_bytes"`
+	PluginMoves bool   `json:"plugin_moves"`
+}
+
 // Relocation says core moved a game's folder: the folder the plugin reports
 // (From) and where the game is now (To). It is kept until the plugin reports
 // the new folder itself (game.relocated) or the game is moved again.

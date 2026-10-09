@@ -35,6 +35,10 @@ type Options struct {
 	// Progress receives the bytes copied and the total, across filesystems
 	// only. It may be nil.
 	Progress func(done, total int64)
+	// Placed runs once the game is complete at to and the source is still
+	// there, before the source is removed. The caller records the move here:
+	// an error undoes the move and leaves the game at from.
+	Placed func(from, to string) error
 }
 
 // Result says what a successful move left behind.
@@ -74,7 +78,13 @@ func Move(ctx context.Context, from, to string, opts Options) (Result, error) {
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
 		}
-		return Result{}, os.Rename(from, to)
+		if err := os.Rename(from, to); err != nil {
+			return Result{}, err
+		}
+		if err := placed(opts, from, to); err != nil {
+			return Result{}, errors.Join(err, os.Rename(to, from))
+		}
+		return Result{}, nil
 	}
 
 	stage := to + StageSuffix
@@ -101,11 +111,27 @@ func Move(ctx context.Context, from, to string, opts Options) (Result, error) {
 		os.RemoveAll(stage)
 		return Result{}, err
 	}
+	if err := placed(opts, from, to); err != nil {
+		os.RemoveAll(to)
+		return Result{}, err
+	}
 	if err := os.RemoveAll(from); err != nil {
 		return Result{Leftover: from}, nil
 	}
 	return Result{}, nil
 }
+
+// placed calls the Placed hook, when there is one.
+func placed(opts Options, from, to string) error {
+	if opts.Placed == nil {
+		return nil
+	}
+	return opts.Placed(from, to)
+}
+
+// TreeSize is the bytes of the regular files under dir: what a move has to
+// fit on the destination's filesystem.
+func TreeSize(dir string) (int64, error) { return treeSize(dir) }
 
 // checkPaths refuses paths that are not absolute, are the same, or contain
 // each other.

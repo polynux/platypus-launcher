@@ -891,6 +891,9 @@ func newID() string {
 
 // freeSpace returns the bytes available to the user on the filesystem that
 // holds path, or its nearest existing parent.
+// FreeSpace is the free bytes on the filesystem of path, for a move's check.
+func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
+
 func freeSpace(path string) (uint64, error) {
 	for {
 		var st syscall.Statfs_t

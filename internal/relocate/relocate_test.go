@@ -141,6 +141,59 @@ func TestAFailedCopyRollsBackAndKeepsTheSource(t *testing.T) {
 	}
 }
 
+func TestPlacedFailureUndoesTheMove(t *testing.T) {
+	for _, same := range []bool{true, false} {
+		root := t.TempDir()
+		from := game(t, root)
+		to := filepath.Join(root, "dst", "Game")
+		must(t, os.MkdirAll(filepath.Dir(to), 0o755))
+		boom := errors.New("can't record the move")
+		_, err := Move(context.Background(), from, to, Options{
+			SameFS: sameFS(same),
+			Placed: func(a, b string) error {
+				if a != from || b != to {
+					t.Errorf("Placed got %q, %q", a, b)
+				}
+				return boom
+			},
+		})
+		if !errors.Is(err, boom) {
+			t.Fatalf("same=%v: err = %v", same, err)
+		}
+		if _, err := os.Stat(filepath.Join(from, "game.sh")); err != nil {
+			t.Fatalf("same=%v: game not back at its folder: %v", same, err)
+		}
+		if _, err := os.Stat(to); !os.IsNotExist(err) {
+			t.Fatalf("same=%v: destination left: %v", same, err)
+		}
+	}
+}
+
+func TestPlacedSeesTheGameAtTheDestinationBeforeTheSourceGoes(t *testing.T) {
+	root := t.TempDir()
+	from := game(t, root)
+	to := filepath.Join(root, "dst", "Game")
+	must(t, os.MkdirAll(filepath.Dir(to), 0o755))
+	_, err := Move(context.Background(), from, to, Options{
+		SameFS: sameFS(false),
+		Placed: func(a, b string) error {
+			if _, err := os.Stat(filepath.Join(b, "game.sh")); err != nil {
+				return err
+			}
+			if _, err := os.Stat(a); err != nil {
+				return err
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(from); !os.IsNotExist(err) {
+		t.Fatal("source kept after a successful move")
+	}
+}
+
 func TestAnInterruptedStagingFolderIsReplaced(t *testing.T) {
 	root := t.TempDir()
 	from := game(t, root)
