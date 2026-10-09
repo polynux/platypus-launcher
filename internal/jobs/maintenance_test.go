@@ -2,7 +2,9 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,5 +111,136 @@ func TestSetLeftoverKeepsTheDoneJob(t *testing.T) {
 	got := waitState(t, q, j.ID, StateDone)
 	if got.Leftover != "/tmp/a" {
 		t.Fatalf("leftover = %q", got.Leftover)
+	}
+}
+
+// Discard deletes downloads. A verify or move has none, so the queue refuses
+// it and the plugin is never asked.
+func TestDiscardRefusesVerifyAndMove(t *testing.T) {
+	clock := newClock()
+	d := &discardBackend{fakeBackend: &fakeBackend{}}
+	q := newCleanupQueue(t, d, clock)
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	v, err := q.AddVerify("echo", "g1", "tiny", "Tiny", dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := q.AddMove("echo", "g2", "tiny", "Tiny", dir, filepath.Join(t.TempDir(), "Tiny"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, j := range []types.Job{v, m} {
+		waitState(t, q, j.ID, StateRunning)
+		if err := q.Cancel(context.Background(), j.ID); err != nil {
+			t.Fatal(err)
+		}
+		if err := q.Discard(context.Background(), j.ID); !errors.Is(err, ErrNoData) {
+			t.Fatalf("%s: discard err = %v, want ErrNoData", j.Kind, err)
+		}
+	}
+	if n := len(d.discards()); n != 0 {
+		t.Fatalf("the plugin was asked to discard %d times", n)
+	}
+}
+
+// coreBackend says whether a move runs in core (its goroutine), or in the
+// plugin.
+type coreBackend struct {
+	*fakeBackend
+	core bool
+}
+
+func (c coreBackend) RunsInCore(types.Job) bool { return c.core }
+
+// A plugin that crashes must not take a core move with it: the move's
+// goroutine is still working on the folders. A plugin's own move restarts.
+func TestPluginExitLeavesACoreMoveAlone(t *testing.T) {
+	for _, core := range []bool{true, false} {
+		q, _ := newQueue(t, coreBackend{&fakeBackend{}, core})
+		j, err := q.AddMove("echo", "g", "tiny", "Tiny", "/tmp/a", "/tmp/b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitState(t, q, j.ID, StateRunning)
+		q.PluginExited("echo", errors.New("crashed"))
+		got := q.List()[0]
+		if core && got.State != StateRunning {
+			t.Fatalf("core=%v: a core move was requeued: %+v", core, got)
+		}
+		if !core && got.State != StateQueued {
+			t.Fatalf("core=%v: a plugin move was not requeued: %+v", core, got)
+		}
+	}
+}
+
+func TestHoldingFindsAVerifyOrMoveOfTheGame(t *testing.T) {
+	q, _ := newQueue(t, &fakeBackend{})
+	if _, ok := q.Holding("g", KindVerify, KindMove); ok {
+		t.Fatal("an empty queue holds a game")
+	}
+	j, err := q.AddVerify("echo", "g", "tiny", "Tiny", filepath.Join(t.TempDir(), "Games", "echo"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := q.Holding("g", KindVerify, KindMove); !ok || got.ID != j.ID {
+		t.Fatalf("Holding = %+v, %v", got, ok)
+	}
+	if _, ok := q.Holding("g", KindUninstall); ok {
+		t.Fatal("a verify was reported as an uninstall")
+	}
+	if _, ok := q.Holding("other", KindVerify, KindMove); ok {
+		t.Fatal("another game's verify is held here")
+	}
+}
+
+// A move that was placed before a cancel stays done: the game is where the
+// move put it.
+func TestFinishMoveEndsAPlacedMoveDone(t *testing.T) {
+	q, _ := newQueue(t, &fakeBackend{})
+	j, err := q.AddMove("echo", "g", "tiny", "Tiny", "/tmp/a", "/tmp/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, q, j.ID, StateRunning)
+	if err := q.Cancel(context.Background(), j.ID); err != nil {
+		t.Fatal(err)
+	}
+	q.FinishMove(j.ID)
+	got := q.List()[0]
+	if got.State != StateDone || got.CanceledAt != 0 || got.Error != "" {
+		t.Fatalf("placed move ended %+v", got)
+	}
+}
+
+// The finished hook sees installs and uninstalls, not verifies.
+func TestFinishedHookRunsForInstallsAndUninstalls(t *testing.T) {
+	b := &fakeBackend{}
+	q, _ := newQueue(t, b)
+	var mu sync.Mutex
+	var seen []string
+	q.SetOnFinished(func(j types.Job) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, j.Kind)
+	})
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	v, err := q.AddVerify("echo", "g", "tiny", "Tiny", dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.waitStarts(1, time.Second)
+	waitState(t, q, v.ID, StateRunning)
+	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: v.ID})
+	in, err := q.Add(KindInstall, "echo", "g", "tiny", "Tiny", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.waitStarts(2, time.Second)
+	waitState(t, q, in.ID, StateRunning)
+	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: in.ID})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 1 || seen[0] != KindInstall {
+		t.Fatalf("finished hook saw %v, want [install]", seen)
 	}
 }

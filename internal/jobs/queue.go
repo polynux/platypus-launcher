@@ -63,8 +63,19 @@ type Discarder interface {
 	Discard(ctx context.Context, job types.Job) error
 }
 
+// CoreRunner is the optional half of a Backend that runs some moves itself
+// (core's own move, when the plugin has none). Such a job isn't the plugin's
+// to restart when the plugin exits.
+type CoreRunner interface {
+	RunsInCore(job types.Job) bool
+}
+
 // ErrDiscardUnsupported means the job's plugin has no way to delete the data.
 var ErrDiscardUnsupported = errors.New("the plugin can't delete downloaded data")
+
+// ErrNoData means the job has no downloaded data: verify and move jobs work on
+// the installed game, so there is nothing of theirs to delete.
+var ErrNoData = errors.New("this job has no downloaded data")
 
 // DefaultCleanupAfter is how long a canceled job's partial data is kept.
 const DefaultCleanupAfter = 7 * 24 * time.Hour
@@ -90,6 +101,9 @@ type Queue struct {
 	// onInstalled is called, outside the queue's lock, when an install or
 	// update reports the version it put on disk (job.done's `installed`).
 	onInstalled func(job types.Job, installed types.Installed)
+	// onFinished is called, outside the lock, when an install or an uninstall
+	// is done: the game's folder is what the plugin says it is now.
+	onFinished func(job types.Job)
 
 	mu  sync.Mutex
 	now func() time.Time // injected by tests
@@ -300,6 +314,14 @@ func (q *Queue) SetOnInstalled(f func(job types.Job, installed types.Installed))
 	q.mu.Unlock()
 }
 
+// SetOnFinished registers the callback for installs and uninstalls that are
+// done. The job is as it was when it ended.
+func (q *Queue) SetOnFinished(f func(job types.Job)) {
+	q.mu.Lock()
+	q.onFinished = f
+	q.mu.Unlock()
+}
+
 // Add queues a job. A game has at most one active job.
 func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string) (types.Job, error) {
 	return q.AddTargeted(kind, source, gameID, storeGameID, title, installDir, nil)
@@ -378,6 +400,41 @@ func (q *Queue) enqueue(j *types.Job) (types.Job, error) {
 // ones in the queue and the paused ones, which resume later.
 func holdsGame(j *types.Job) bool {
 	return j.State == StateQueued || j.State == StateRunning || j.State == StatePaused
+}
+
+// Holding returns a job of one of kinds that holds the game (queued, running
+// or paused), if there is one.
+func (q *Queue) Holding(gameID string, kinds ...string) (types.Job, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, j := range q.jobs {
+		if j.GameID == gameID && holdsGame(j) && slices.Contains(kinds, j.Kind) {
+			return *j, true
+		}
+	}
+	return types.Job{}, false
+}
+
+// FinishMove marks a move done once the game is at its destination. A cancel
+// or pause that came after the game was placed can't undo that, so the job
+// ends done whatever state it was left in.
+func (q *Queue) FinishMove(id string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	j := q.find(id)
+	if j == nil || j.Kind != KindMove {
+		return
+	}
+	j.State, j.Error, j.Speed, j.Phase = StateDone, "", 0, ""
+	j.CanceledAt, j.CleanedAt = 0, 0
+	j.Percent = 100
+	if j.Total > 0 {
+		j.Bytes = j.Total
+	}
+	j.UpdatedAt = q.now().UnixMilli()
+	q.trim()
+	q.changed(true)
+	q.signal()
 }
 
 // Cancel stops a queued, running or paused job. Its downloaded data stays
@@ -534,10 +591,13 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 			return
 		}
 		q.mu.Lock()
-		installed := q.onInstalled
+		installed, finished := q.onInstalled, q.onFinished
 		q.mu.Unlock()
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
 			installed(job, *u.Installed)
+		}
+		if (job.Kind == KindInstall || job.Kind == KindUninstall) && finished != nil {
+			finished(job)
 		}
 		return
 	case "job.failed":
@@ -609,10 +669,14 @@ func (q *Queue) SetLeftover(id, msg string) {
 // PluginExited restarts the running job of a plugin that crashed. The plugin
 // manager waits out its restart backoff when the job starts again.
 func (q *Queue) PluginExited(source string, err error) {
+	core, _ := q.b.(CoreRunner)
 	q.mu.Lock()
 	for _, j := range q.jobs {
 		if j.Source != source || j.State != StateRunning {
 			continue
+		}
+		if core != nil && core.RunsInCore(*j) {
+			continue // core's own move: its goroutine is still at work, not the plugin
 		}
 		if j.Attempts >= maxAttempts {
 			j.State, j.Error = StateFailed, fmt.Sprintf("the plugin crashed %d times: %v", j.Attempts, err)
@@ -823,6 +887,10 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 	if j == nil {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
+	}
+	if j.Kind == KindVerify || j.Kind == KindMove {
+		q.mu.Unlock()
+		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
 	}
 	if j.State != StateCanceled {
 		q.mu.Unlock()
