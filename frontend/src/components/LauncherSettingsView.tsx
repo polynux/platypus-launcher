@@ -8,6 +8,7 @@ import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel, Panel } from './ui';
 import { CloudSavesDefaults } from './CloudSavesSetting';
+import { GameFoldersSettings } from './GameFoldersSettings';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -116,6 +117,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
           )}
         </div>
       </Panel>
+
+      <GameFoldersSettings onNotify={onNotify} />
 
       <Panel as="section" className="mt-4 max-w-2xl">
         <h2 className="text-[14px] font-bold">Canceled downloads</h2>
