@@ -737,13 +737,15 @@ Friend = { id, name, avatarUrl?, state, game?: { id?, title }, lastSeen? }
   otherwise, when only `title` says what the friend plays. Hydra links the game when the key is in the library.
 - **Playing.** When a game of this plugin starts, Hydra sends `social.setPlaying { id }` with the store's game id (the
   part after `p.<plugin id>.`); when it stops, `{ id: null }`. Only plugins that offer the capability get it, and only
-  for their own games. A plugin without the optional method answers `-32601`, which Hydra accepts. After the plugin
+  for their own games, and only while the user keeps "Show what I'm playing to friends" on for the store (on by
+  default). A game started while the friends are off is sent when they turn on. A plugin without the optional method answers `-32601`, which Hydra accepts. After the plugin
   process restarts, Hydra sends the running game again.
 - **Lifecycle.** Hydra starts the friends of every plugin that offers `social` at launcher start, unless the user
   switched them off (on by default). It sends `social.stop` when they are switched off or Hydra quits. When the plugin
-  process exits, Hydra restarts it after a backoff (2 s, doubling to 5 min) and calls `social.start` again. A
-  `replaced` or `loggedOut` connection is not fought: Hydra stops restarting until the user switches the friends off
-  and on again.
+  process exits, Hydra restarts it after a backoff (2 s, doubling to 5 min) and calls `social.start` again. The wait
+  starts again at 2 s only after a session that lasted a minute, so a plugin that crashes on start isn't restarted
+  every 2 s. A `replaced` or `loggedOut` connection is not fought: Hydra stops restarting until the plugin reports
+  `online` or `connecting` again, or the user restarts the friends (Reconnect, which switches them off and on).
 - **Errors.** A store that can't change the status answers `-32601` to `setStatus`, and Hydra tells the user so.
   Before `social.start`, `social.state` answers offline with no friends.
 
