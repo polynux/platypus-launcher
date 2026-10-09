@@ -96,6 +96,14 @@ describe('game page stats', () => {
     expect(mocks.getGameAchievements).toHaveBeenCalledTimes(1);
   });
 
+  it('shows progress with no achievements in the total rather than the catalogue', async () => {
+    mocks.getGameAchievements.mockReturnValue(Effect.succeed({ total: 0, unlocked: 0, list: [] } as never));
+    render(<GamePage game={game} plugin={echo} {...pageProps} />);
+    expect(await screen.findByLabelText('Your achievements')).toBeTruthy();
+    expect(screen.getByText('0/0 · 0%')).toBeTruthy();
+    expect(screen.queryByText('Catalogue only')).toBeNull();
+  });
+
   it('falls back to the catalogue list when progress is not offered', async () => {
     mocks.getGameAchievements.mockReturnValue(Effect.succeed(null as never));
     render(<GamePage game={game} plugin={echo} {...pageProps} />);

@@ -381,7 +381,7 @@ export function GamePage(p: GamePageProps) {
         </aside>
       </div>
 
-      {progress && progress.total > 0 ? (
+      {progress ? (
         <ProgressAchievements progress={progress} />
       ) : ach && ach.total > 0 ? (
         <AchievementsSection ach={ach} known={ach.unlocked >= 0} viaSteam={game.source === 'steam'} />
