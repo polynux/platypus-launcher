@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -72,10 +73,12 @@ type View struct {
 
 // Event is a View plus whether the change is a new message the user should be
 // told about: it came from a friend while the conversation wasn't open, and the
-// store's message notifications are on.
+// store's message notifications are on. Dropped says the conversation was
+// evicted from memory: the UI drops its view (the View has no messages).
 type Event struct {
 	View
-	Alert bool `json:"alert"`
+	Alert   bool `json:"alert"`
+	Dropped bool `json:"dropped"`
 }
 
 // Backend reaches the plugins. The app wires it to the plugin manager.
@@ -100,7 +103,7 @@ type Options struct {
 	Page int
 	// MaxMessages bounds the messages kept per conversation. Default 200.
 	MaxMessages int
-	// MaxConversations bounds the conversations kept per plugin. Default 256.
+	// MaxConversations bounds the conversations kept, across all plugins. Default 256.
 	MaxConversations int
 	// Timeout bounds one call to the plugin. Default 15 s.
 	Timeout time.Duration
@@ -114,6 +117,11 @@ type key struct{ plugin, friend string }
 // manager's mu may be held while taking a conversation's mu, never the reverse.
 type conv struct {
 	plugin, friend string
+
+	// readMu serializes the markRead calls of the conversation; readSent is the
+	// newest id the store confirmed as read, so the pointer never moves back.
+	readMu   sync.Mutex
+	readSent string
 
 	mu          sync.Mutex
 	seq         uint64
@@ -131,6 +139,10 @@ type conv struct {
 // Manager holds the conversations of every plugin.
 type Manager struct {
 	opt Options
+
+	// seq stamps every emitted change. It is manager-wide, so a conversation
+	// that was evicted and comes back never restarts below the views the UI holds.
+	seq atomic.Uint64
 
 	mu    sync.Mutex
 	convs map[key]*conv
@@ -171,9 +183,10 @@ func ValidText(text string) error {
 	return nil
 }
 
-// Open shows a conversation: it is marked open, its unread count is cleared
-// (and the store told, with the newest message), and its history is loaded the
-// first time. It returns the conversation as it is now.
+// Open shows a conversation: it is marked open, its unread count is cleared,
+// and its history is loaded the first time. The store is told it was read in
+// the background, so Open never waits on it. It returns the conversation as it
+// is now.
 func (m *Manager) Open(ctx context.Context, pluginID, friendID string) (View, error) {
 	if err := m.offers(ctx, pluginID, friendID); err != nil {
 		return View{}, err
@@ -183,21 +196,19 @@ func (m *Manager) Open(ctx context.Context, pluginID, friendID string) (View, er
 	c.open = true
 	c.unread = 0
 	loaded := c.loaded
-	upTo := newestID(c.msgs)
 	c.mu.Unlock()
 	m.emit(c, false)
-	if upTo != "" {
-		m.markRead(ctx, c, upTo)
-	}
+	var err error
 	if !loaded {
-		if err := m.history(ctx, c, ""); err != nil {
-			return c.snapshot(), err
-		}
+		err = m.history(ctx, c, "")
 	}
-	return c.snapshot(), nil
+	go m.markReadBackground(c)
+	return c.snapshot(), err
 }
 
 // Close marks a conversation not open: messages from now on count as unread.
+// It is also when the conversation is brought back to the bound, so the user
+// can page as far back as they like while it is open.
 func (m *Manager) Close(pluginID, friendID string) {
 	m.mu.Lock()
 	c, ok := m.convs[key{pluginID, friendID}]
@@ -207,6 +218,7 @@ func (m *Manager) Close(pluginID, friendID string) {
 	}
 	c.mu.Lock()
 	c.open = false
+	m.bound(c)
 	c.mu.Unlock()
 	m.emit(c, false)
 }
@@ -379,17 +391,25 @@ func (m *Manager) history(ctx context.Context, c *conv, before string) error {
 		m.logf("chat %s: history: %s", c.plugin, describe(err))
 		return err
 	}
-	in := make([]Message, 0, len(res.Messages))
-	for _, msg := range res.Messages {
+	// The store answers with at most one page, oldest first. A longer reply is
+	// cut to its newest page (the one next to the cursor), and what is cut is
+	// older, so there is more.
+	page := res.Messages
+	more := res.More
+	if len(page) > m.opt.Page {
+		page = page[len(page)-m.opt.Page:]
+		more = true
+	}
+	in := make([]Message, 0, len(page))
+	for _, msg := range page {
 		if msg, ok := cleanMessage(msg, c.friend, nowMillis()); ok {
 			in = append(in, msg)
 		}
 	}
 	c.mu.Lock()
 	c.msgs = mergeMessages(c.msgs, in)
-	c.more = res.More
+	c.more = more
 	c.loaded = true
-	m.bound(c)
 	c.mu.Unlock()
 	m.emit(c, false)
 	return nil
@@ -448,10 +468,36 @@ func (m *Manager) deliver(ctx context.Context, c *conv, clientID, text string) e
 
 // markRead tells the store the user has read up to upTo. A failure is logged;
 // the local count is already clear.
-func (m *Manager) markRead(ctx context.Context, c *conv, upTo string) {
+func (m *Manager) markRead(ctx context.Context, c *conv, upTo string) error {
 	params := map[string]any{"friendId": c.friend, "upTo": upTo}
-	if err := m.call(ctx, c.plugin, MethodMarkRead, params, nil); err != nil {
+	err := m.call(ctx, c.plugin, MethodMarkRead, params, nil)
+	if err != nil {
 		m.logf("chat %s: markRead: %s", c.plugin, describe(err))
+	}
+	return err
+}
+
+// markReadBackground tells the store the user has read the newest message of
+// an open conversation. It runs off the caller's path. Calls are serialized per
+// conversation and each one reads the newest id when it runs, so only the
+// newest id goes out and the read pointer never moves back. A conversation
+// already marked up to its newest message sends nothing.
+func (m *Manager) markReadBackground(c *conv) {
+	c.readMu.Lock()
+	defer c.readMu.Unlock()
+	c.mu.Lock()
+	upTo := ""
+	if c.open {
+		upTo = newestID(c.msgs)
+	}
+	c.mu.Unlock()
+	if upTo == "" || upTo == c.readSent {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), m.opt.Timeout)
+	defer cancel()
+	if m.markRead(ctx, c, upTo) == nil {
+		c.readSent = upTo
 	}
 }
 
@@ -483,23 +529,13 @@ func (m *Manager) incoming(pluginID, friendID string, msg Message) {
 		}
 	}
 	alert := fromFriend && !c.open && (m.opt.Alert == nil || m.opt.Alert(pluginID))
-	markUpTo := ""
-	if fromFriend && c.open {
-		markUpTo = msg.ID
-	}
+	markOpen := fromFriend && c.open
 	c.mu.Unlock()
 	m.emit(c, alert)
-	if markUpTo != "" {
-		go m.markReadBackground(c, markUpTo)
+	if markOpen {
+		// It runs off the plugin's reader, which it must not block.
+		go m.markReadBackground(c)
 	}
-}
-
-// markReadBackground tells the store about a message that arrived in an open
-// conversation. It runs off the plugin's reader, which it must not block.
-func (m *Manager) markReadBackground(c *conv, upTo string) {
-	ctx, cancel := context.WithTimeout(context.Background(), m.opt.Timeout)
-	defer cancel()
-	m.markRead(ctx, c, upTo)
 }
 
 // setUnread applies a chat.unread notification: the store's own count.
@@ -547,7 +583,7 @@ func (m *Manager) typing(pluginID, friendID string) {
 
 // conv returns a plugin's conversation with a friend. With create, it is made
 // if missing, evicting the least recently used conversation that is closed and
-// has nothing in flight when the plugin is at its bound.
+// has nothing in flight when the manager is at its bound.
 func (m *Manager) conv(pluginID, friendID string, create bool) *conv {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -562,34 +598,21 @@ func (m *Manager) conv(pluginID, friendID string, create bool) *conv {
 	if !create {
 		return nil
 	}
-	if m.countLocked(pluginID) >= m.opt.MaxConversations {
-		m.evictLocked(pluginID)
+	if len(m.convs) >= m.opt.MaxConversations {
+		m.evictLocked()
 	}
 	c := &conv{plugin: pluginID, friend: friendID, used: m.clock, msgs: []Message{}}
 	m.convs[k] = c
 	return c
 }
 
-func (m *Manager) countLocked(pluginID string) int {
-	n := 0
-	for k := range m.convs {
-		if k.plugin == pluginID {
-			n++
-		}
-	}
-	return n
-}
-
-// evictLocked drops the least recently used conversation of a plugin that
-// nothing holds open or waits on.
-func (m *Manager) evictLocked(pluginID string) {
+// evictLocked drops the least recently used conversation, of any plugin, that
+// nothing holds open or waits on, and tells the UI to drop its view.
+func (m *Manager) evictLocked() {
 	var victim key
 	var oldest uint64
 	found := false
 	for k, c := range m.convs {
-		if k.plugin != pluginID {
-			continue
-		}
 		c.mu.Lock()
 		idle := !c.open && c.sending == 0
 		used := c.used
@@ -598,8 +621,18 @@ func (m *Manager) evictLocked(pluginID string) {
 			victim, oldest, found = k, used, true
 		}
 	}
-	if found {
-		delete(m.convs, victim)
+	if !found {
+		return
+	}
+	c := m.convs[victim]
+	delete(m.convs, victim)
+	c.mu.Lock()
+	if c.typingTimer != nil {
+		c.typingTimer.Stop()
+	}
+	c.mu.Unlock()
+	if m.opt.Emit != nil {
+		m.opt.Emit(Event{View: View{Seq: m.seq.Add(1), Plugin: victim.plugin, FriendID: victim.friend, Messages: []Message{}}, Dropped: true})
 	}
 }
 
@@ -617,9 +650,14 @@ func (m *Manager) plugin(pluginID string) []*conv {
 	return out
 }
 
-// bound keeps the newest MaxMessages of a conversation; what it drops is still
-// at the store, so the conversation has more. Callers hold c.mu.
+// bound keeps the newest MaxMessages of a closed conversation; what it drops is
+// still at the store, so the conversation has more. An open conversation is
+// left as it is: the user may be paging back through it, and the page just
+// loaded must stay. Callers hold c.mu.
 func (m *Manager) bound(c *conv) {
+	if c.open {
+		return
+	}
 	if over := len(c.msgs) - m.opt.MaxMessages; over > 0 {
 		c.msgs = slices.Clone(c.msgs[over:])
 		c.more = true
@@ -645,7 +683,7 @@ func (c *conv) viewLocked() View {
 // stamp is taken under c.mu, so a later change always carries a higher Seq.
 func (m *Manager) emit(c *conv, alert bool) {
 	c.mu.Lock()
-	c.seq++
+	c.seq = m.seq.Add(1)
 	ev := Event{View: c.viewLocked(), Alert: alert}
 	c.mu.Unlock()
 	if m.opt.Emit != nil {
@@ -686,27 +724,29 @@ func cleanMessage(msg Message, friendID string, now int64) (Message, bool) {
 	return msg, true
 }
 
-// mergeMessages merges add into list: an id already there is skipped, the rest
-// go in by sentAt (equal times keep their order). Entries without an id (the
-// user's messages in flight) stay where they are.
+// mergeMessages merges add into list: an id already there, or repeated in add,
+// is skipped, and the rest go in by sentAt (equal times keep their order: the
+// list's, then add's). Entries without an id (the user's messages in flight)
+// are sorted by sentAt like the others.
 func mergeMessages(list, add []Message) []Message {
-	out := slices.Clone(list)
-	if out == nil {
-		out = []Message{}
+	have := make(map[string]bool, len(list)+len(add))
+	out := make([]Message, 0, len(list)+len(add))
+	for _, msg := range list {
+		if msg.ID != "" {
+			have[msg.ID] = true
+		}
+		out = append(out, msg)
 	}
 	for _, msg := range add {
-		if msg.ID != "" && indexID(out, msg.ID) >= 0 {
-			continue
-		}
-		i := len(out)
-		for j, x := range out {
-			if x.SentAt > msg.SentAt {
-				i = j
-				break
+		if msg.ID != "" {
+			if have[msg.ID] {
+				continue
 			}
+			have[msg.ID] = true
 		}
-		out = slices.Insert(out, i, msg)
+		out = append(out, msg)
 	}
+	slices.SortStableFunc(out, func(a, b Message) int { return cmp.Compare(a.SentAt, b.SentAt) })
 	return out
 }
 

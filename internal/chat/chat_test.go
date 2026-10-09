@@ -26,6 +26,11 @@ type fakeStore struct {
 	calls    []string
 	marks    []string
 	more     bool
+	// overLimit makes history ignore the page limit and answer everything before
+	// the cursor, oldest first.
+	overLimit bool
+	// markGate, when set, holds every markRead until it is closed.
+	markGate chan struct{}
 }
 
 func newFakeStore() *fakeStore {
@@ -39,6 +44,9 @@ func (f *fakeStore) Offers(ctx context.Context, pluginID string) bool {
 }
 
 func (f *fakeStore) Call(ctx context.Context, pluginID, method string, params, result any) error {
+	if method == MethodMarkRead && f.markGate != nil {
+		<-f.markGate
+	}
 	raw, _ := json.Marshal(params)
 	var p struct {
 		FriendID string `json:"friendId"`
@@ -62,6 +70,9 @@ func (f *fakeStore) Call(ctx context.Context, pluginID, method string, params, r
 			end = slices.IndexFunc(msgs, func(m Message) bool { return m.ID == p.Before })
 		}
 		start := max(0, end-p.Limit)
+		if f.overLimit {
+			start = 0
+		}
 		page := slices.Clone(msgs[start:end])
 		b, _ := json.Marshal(map[string]any{"messages": page, "more": start > 0})
 		return json.Unmarshal(b, result)
@@ -535,5 +546,173 @@ func TestEventsAreSequenced(t *testing.T) {
 			t.Fatalf("seq %d after %d", e.Seq, last)
 		}
 		last = e.Seq
+	}
+}
+
+// An older page loaded while the conversation is open stays whole: the bound
+// trims the oldest messages only once the conversation is closed.
+func TestOlderPageSurvivesTheBound(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.Page = 2; o.MaxMessages = 3 })
+	var hist []Message
+	for i := 1; i <= 6; i++ {
+		hist = append(hist, Message{ID: fmt.Sprintf("h%d", i), From: "ana", Text: "t", SentAt: int64(i * 10)})
+	}
+	h.store.history["ana"] = hist
+	ctx := context.Background()
+	if _, err := h.m.Open(ctx, "echo", "ana"); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := h.m.Older(ctx, "echo", "ana")
+	if got := ids(v.Messages); !slices.Equal(got, []string{"h3", "h4", "h5", "h6"}) || !v.More {
+		t.Fatalf("after one older page: %v more %v", got, v.More)
+	}
+	v, _ = h.m.Older(ctx, "echo", "ana")
+	if got := ids(v.Messages); !slices.Equal(got, []string{"h1", "h2", "h3", "h4", "h5", "h6"}) || v.More {
+		t.Fatalf("after two older pages: %v more %v", got, v.More)
+	}
+	h.m.Close("echo", "ana")
+	v = h.m.Snapshot("echo", "ana")
+	if got := ids(v.Messages); !slices.Equal(got, []string{"h4", "h5", "h6"}) || !v.More {
+		t.Fatalf("closed: %v more %v", got, v.More)
+	}
+}
+
+// A history reply longer than the page is cut to its newest page before it is
+// merged, and the cut part counts as more.
+func TestHistoryReplyIsCutToThePage(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.Page = 2 })
+	h.store.overLimit = true
+	var hist []Message
+	for i := 1; i <= 5; i++ {
+		hist = append(hist, Message{ID: fmt.Sprintf("h%d", i), From: "ana", Text: "t", SentAt: int64(i * 10)})
+	}
+	h.store.history["ana"] = hist
+	v, err := h.m.Open(context.Background(), "echo", "ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ids(v.Messages); !slices.Equal(got, []string{"h4", "h5"}) || !v.More {
+		t.Fatalf("page %v more %v", got, v.More)
+	}
+}
+
+// The sequence of a conversation goes on across its eviction: the UI keeps the
+// newest view, so a conversation that comes back must not restart below the
+// views it already holds. The eviction itself is announced so the UI drops it.
+func TestEvictionKeepsSeqAndTellsTheUI(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.MaxConversations = 2 })
+	h.incoming("ana", "n1", "t", 1)
+	var before uint64
+	for _, e := range h.events() {
+		if e.FriendID == "ana" {
+			before = max(before, e.Seq)
+		}
+	}
+	h.incoming("bo", "b1", "t", 1)
+	h.incoming("cy", "c1", "t", 1) // ana is the least recently used: she goes
+	var dropped *Event
+	for _, e := range h.events() {
+		if e.Dropped {
+			dropped = &e
+		}
+	}
+	if dropped == nil || dropped.FriendID != "ana" || len(dropped.Messages) != 0 {
+		t.Fatalf("no eviction event for ana: %+v", dropped)
+	}
+	if dropped.Seq <= before {
+		t.Fatalf("eviction seq %d not after %d", dropped.Seq, before)
+	}
+	h.incoming("ana", "n2", "back", 2)
+	v := h.m.Snapshot("echo", "ana")
+	if v.Seq <= dropped.Seq {
+		t.Fatalf("recreated conversation seq %d not after the eviction %d", v.Seq, dropped.Seq)
+	}
+}
+
+// The conversation bound is global: a conversation of another plugin makes
+// room by evicting the least recently used one, whichever plugin it is on.
+func TestConversationBoundIsGlobal(t *testing.T) {
+	h := newHarness(t, func(o *Options) { o.MaxConversations = 2 })
+	h.incoming("ana", "n1", "t", 1)
+	h.incoming("bo", "b1", "t", 1)
+	h.m.Notify("other", NoteMessage, json.RawMessage(`{"friendId":"dee","message":{"id":"d1","text":"t","sentAt":1}}`))
+	dropped := 0
+	for _, e := range h.events() {
+		if e.Dropped {
+			dropped++
+		}
+	}
+	if dropped != 1 {
+		t.Fatalf("%d evictions with two plugins at the bound, want 1", dropped)
+	}
+	if got := len(h.m.Unread("echo")) + len(h.m.Unread("other")); got != 2 {
+		t.Fatalf("%d conversations with unread kept, want 2", got)
+	}
+}
+
+// Opening a conversation does not wait for the store to take the read mark.
+func TestOpenDoesNotWaitForMarkRead(t *testing.T) {
+	h := newHarness(t)
+	h.store.markGate = make(chan struct{})
+	defer close(h.store.markGate)
+	h.store.history["ana"] = []Message{{ID: "h1", From: "ana", Text: "t", SentAt: 1}}
+	done := make(chan error, 1)
+	go func() {
+		_, err := h.m.Open(context.Background(), "echo", "ana")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Open waited for markRead")
+	}
+}
+
+// Read marks go out one at a time, only the newest id of the conversation, and
+// the pointer never moves back: messages that pile up while a mark is in
+// flight are covered by the next one.
+func TestReadMarksAreSerializedAndNewestOnly(t *testing.T) {
+	h := newHarness(t)
+	h.store.markGate = make(chan struct{})
+	h.store.history["ana"] = []Message{{ID: "h1", From: "ana", Text: "t", SentAt: 1}}
+	if _, err := h.m.Open(context.Background(), "echo", "ana"); err != nil {
+		t.Fatal(err)
+	}
+	h.incoming("ana", "n2", "t", 2)
+	h.incoming("ana", "n3", "t", 3)
+	h.incoming("ana", "n4", "t", 4)
+	close(h.store.markGate)
+	eventually(t, "the newest read mark", func() bool {
+		h.store.mu.Lock()
+		defer h.store.mu.Unlock()
+		return len(h.store.marks) > 0 && h.store.marks[len(h.store.marks)-1] == "n4"
+	})
+	h.store.mu.Lock()
+	defer h.store.mu.Unlock()
+	// Each mark is the newest id when it runs, so the first can be any of the
+	// ids behind it; the messages that wait cover one mark, and the marks never
+	// go back in the conversation's order.
+	order := []string{"h1", "n2", "n3", "n4"}
+	got := h.store.marks
+	if len(got) > 2 || got[len(got)-1] != "n4" {
+		t.Fatalf("marks %v: want at most two, the last n4", got)
+	}
+	for i := 1; i < len(got); i++ {
+		if slices.Index(order, got[i]) < slices.Index(order, got[i-1]) {
+			t.Fatalf("marks %v went back", got)
+		}
+	}
+}
+
+// Merging sorts once: an id repeated within the batch is kept once, and
+// messages that come out of order land by sentAt.
+func TestMergeIsSortedAndDeduped(t *testing.T) {
+	list := []Message{{ID: "a", SentAt: 10}, {ID: "c", SentAt: 30}}
+	add := []Message{{ID: "d", SentAt: 40}, {ID: "b", SentAt: 20}, {ID: "b", SentAt: 20}, {ID: "a", SentAt: 10}}
+	if got := ids(mergeMessages(list, add)); !slices.Equal(got, []string{"a", "b", "c", "d"}) {
+		t.Fatalf("merged %v", got)
 	}
 }
