@@ -80,8 +80,11 @@ type Friend struct {
 }
 
 // View is what the UI shows for one plugin. Every change emits a whole View,
-// so the UI replaces its copy and never merges.
+// so the UI replaces its copy and never merges. Seq rises with every View
+// made for the plugin, so a UI keeps the newest one when they arrive out of
+// order.
 type View struct {
+	Seq        uint64     `json:"seq"`
 	Plugin     string     `json:"plugin"`
 	Enabled    bool       `json:"enabled"`
 	Running    bool       `json:"running"`
@@ -134,7 +137,10 @@ type sub struct {
 	exited chan struct{} // the plugin process went away
 	kick   chan struct{} // the playing game changed
 
+	emitMu sync.Mutex // one emit at a time, each snapshot taken inside it
+
 	mu        sync.Mutex
+	seq       uint64
 	view      View
 	paused    bool   // replaced or logged out: no restart until the plugin connects again
 	started   bool   // social.start answered for this process, so it must be stopped
@@ -569,7 +575,9 @@ func (m *Manager) sendPlaying(ctx context.Context, s *sub) {
 func (m *Manager) snapshot(s *sub) View {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.seq++
 	v := s.view
+	v.Seq = s.seq
 	v.Enabled = m.enabled(s.id)
 	v.Friends = slices.Clone(s.view.Friends)
 	if v.Friends == nil {
@@ -578,10 +586,15 @@ func (m *Manager) snapshot(s *sub) View {
 	return v
 }
 
+// emit hands the plugin's view to Emit. The snapshot is taken under emitMu,
+// so the views reach Emit in the order they were made.
 func (m *Manager) emit(s *sub) {
-	if m.opt.Emit != nil {
-		m.opt.Emit(m.snapshot(s))
+	if m.opt.Emit == nil {
+		return
 	}
+	s.emitMu.Lock()
+	defer s.emitMu.Unlock()
+	m.opt.Emit(m.snapshot(s))
 }
 
 func (m *Manager) enabled(pluginID string) bool {

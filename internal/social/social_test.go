@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,6 +25,9 @@ type fakeBackend struct {
 	fail     map[string]error
 	calls    []fakeCall
 	views    chan View
+	// hook, when set, runs for every call before it is answered; a non-nil
+	// error it returns is the answer.
+	hook func(method string) error
 }
 
 type fakeCall struct {
@@ -47,6 +51,11 @@ func (f *fakeBackend) Call(_ context.Context, _, method string, params, result a
 	f.calls = append(f.calls, fakeCall{method, raw})
 	missing, fail, snap := f.missing[method], f.fail[method], f.snapshot
 	f.mu.Unlock()
+	if f.hook != nil {
+		if err := f.hook(method); err != nil {
+			return err
+		}
+	}
 	if missing {
 		return &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found: " + method}
 	}
@@ -426,7 +435,6 @@ func TestStopStopsAPluginWhoseStateFailed(t *testing.T) {
 func TestExitFromAFailedConnectDoesNotEndTheNextSession(t *testing.T) {
 	f := newFake()
 	f.snapshot = map[string]any{"connection": Connection{State: ConnOnline}}
-	f.fail[MethodState] = errors.New("store is down")
 	var mu sync.Mutex
 	var states []string
 	m := NewManager(Options{Backend: f, MinBackoff: time.Millisecond, MaxBackoff: time.Millisecond,
@@ -435,14 +443,17 @@ func TestExitFromAFailedConnectDoesNotEndTheNextSession(t *testing.T) {
 			states = append(states, v.Connection.State)
 			mu.Unlock()
 		}})
+	failed := false
+	f.hook = func(method string) error {
+		if method == MethodState && !failed {
+			failed = true
+			m.Exited("echo") // the process died while this attempt was failing
+			return errors.New("store is down")
+		}
+		return nil
+	}
 	m.Start("echo")
 	defer m.StopAll()
-	waitFor(t, "a failed attempt", func() bool { return f.count(MethodState) >= 1 })
-
-	m.Exited("echo") // the process died while the attempt was failing
-	f.mu.Lock()
-	delete(f.fail, MethodState)
-	f.mu.Unlock()
 	waitFor(t, "connected", func() bool { return m.View("echo").Connection.State == ConnOnline })
 	time.Sleep(30 * time.Millisecond)
 	mu.Lock()
@@ -465,4 +476,47 @@ func TestReconnectedPluginIsRestartedWhenItExits(t *testing.T) {
 	m.Notify("echo", NoteConnection, json.RawMessage(`{"state":"online"}`))
 	m.Exited("echo")
 	waitFor(t, "a restart", func() bool { return f.count(MethodStart) == 2 })
+}
+
+// Emits of one plugin's view never overlap: a change made while an emit is
+// running waits for it, so the UI can't receive an older view last.
+func TestEmitsOfAPluginDoNotOverlap(t *testing.T) {
+	f := newFake()
+	f.offers = false
+	var gate atomic.Bool
+	entered := make(chan struct{}, 8)
+	release := make(chan struct{})
+	m := NewManager(Options{Backend: f, Emit: func(View) {
+		if gate.Load() {
+			entered <- struct{}{}
+			<-release
+		}
+	}})
+	m.Start("echo")
+	defer m.StopAll()
+	// Runs first on failure too, so the emits held here can finish.
+	defer func() { gate.Store(false); close(release) }()
+
+	gate.Store(true)
+	go m.Notify("echo", NoteFriends, json.RawMessage(`{"full":true,"friends":[{"id":"1","name":"Ana"}]}`))
+	<-entered
+	go m.Notify("echo", NoteFriends, json.RawMessage(`{"full":false,"friends":[{"id":"2","name":"Bo"}]}`))
+	time.Sleep(20 * time.Millisecond)
+	if n := len(entered); n != 0 {
+		t.Fatalf("%d emits ran while another was still running", n)
+	}
+}
+
+// Every view made carries a sequence number that rises, so a UI can tell an
+// older view from a newer one.
+func TestViewsCarryARisingSequence(t *testing.T) {
+	f := newFake()
+	m := newManager(f, true)
+	m.Start("echo")
+	defer m.StopAll()
+	first := m.View("echo").Seq
+	second := m.View("echo").Seq
+	if first == 0 || second <= first {
+		t.Fatalf("sequence %d then %d, want rising", first, second)
+	}
 }
