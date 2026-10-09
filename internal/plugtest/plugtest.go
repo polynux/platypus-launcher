@@ -430,6 +430,7 @@ func (s Suite) Conformance(t *testing.T) {
 	if has("install-options") {
 		sess.checkOptions(t, game, !s.NoUnknownDetails)
 	}
+	sess.checkStats(t, game, has, !s.NoUnknownDetails)
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {

@@ -1,4 +1,4 @@
-# Store plugin protocol (1.5, draft)
+# Store plugin protocol (1.7, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -424,9 +424,11 @@ that doesn't know it.
   `game.launchSpec` (cloud saves). 1.3: the `versions.*` methods, `target` on installs and updates, and
   `installed` on `job.done` (versions). 1.4: the `verify` and `move` capabilities (`game.verify`, `game.move`), `verify`
   on `job.done`, and the optional `game.relocated`. 1.5: `game.options`, and `options` on installs, updates and
-  `game.installSize` (install options and DLC). A capability whose `since` is newer than the negotiated protocol
-  is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2, 1.3, 1.4 or 1.5 method.
+  `game.installSize` (install options and DLC). 1.6 is reserved by another revision and adds no methods here. 1.7:
+  `achievements.list`, `playtime.list` and `redeem.submit` (achievements, playtime and redeem, see
+  [Achievements, playtime and redeem](#achievements-playtime-and-redeem-17)). A capability whose `since` is newer than
+  the negotiated protocol is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that
+  only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5 or 1.7 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -452,9 +454,9 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `verify` | 1.4 | `game.verify` | | yes |
 | `move` | 1.4 | `game.move` | | yes |
 | `social` | 1.1 | `social.start`, `social.stop`, `social.state`, `social.self`, `social.friends` | `social.setStatus`, `social.setPlaying` | not yet |
-| `achievements` | 1.1 | `achievements.list` | | not yet |
-| `playtime` | 1.1 | `playtime.list` | | not yet |
-| `redeem` | 1.1 | `redeem.submit` | | not yet |
+| `achievements` | 1.7 | `achievements.list` | | yes |
+| `playtime` | 1.7 | `playtime.list` | | yes |
+| `redeem` | 1.7 | `redeem.submit` | | yes |
 | `family` | 1.1 | `family.members` | | not yet |
 
 "Not yet" means Hydra recognises the name (no warning, usable in `needs`) but
@@ -708,6 +710,32 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
   check counts the chosen add-ons and packs.
 - **Errors.** `-32602` for a missing `id`, or for a choice the store doesn't
   have. A game the store doesn't install gets an empty `groups` list.
+
+## Achievements, playtime and redeem (1.7)
+
+Capabilities `achievements`, `playtime` and `redeem`, protocol 1.7 and later.
+Hydra shows the user's own progress, the playtime the store records and a
+code redeemed in the store's own service. Unlocking achievements is never
+offered: that is the game's job through the store's SDK.
+
+```
+achievements.list { id } -> { total, unlocked, list: [{ id, name, description, icon, hidden, unlockedAt?, globalPercent? }] }
+playtime.list {}         -> { games: [{ id, minutes, lastPlayed? }] }
+redeem.submit { code }   -> { message, titles?: ["…"] }
+```
+
+- **achievements.list** takes the store game id (`id`, as `game.launchSpec` does). `unlockedAt` is unix seconds and
+  present only for an unlocked one; a store that can't see progress leaves it out everywhere. `globalPercent` is the
+  share of players (0 to 100) and may be left out. `hidden` achievements are masked by core until unlocked, so a plugin
+  may send their real name. When the progress is available it replaces the catalogue list of `game.details`.
+  The game's `features` must include `achievements` when they are listed. Missing `id` is `-32602`.
+- **playtime.list** covers the whole library in one call and is read at plugin start and after a play session
+  ends (debounced). Core shows `max(local, store)` in the library and the game page, sorted by it, and never writes
+  the store's value back. `lastPlayed` is accepted but not used yet.
+- **redeem.submit** takes the code as the user typed it, trimmed, at most 128 characters, with no control
+  characters. A rejected code is `-32000` with a message the user can read; a missing `code` is `-32602`. One
+  submission runs at a time; Hydra logs only the first two and last two characters and the length.
+  The `titles` are the games or items the store granted, when it names them.
 
 ## Out of scope
 

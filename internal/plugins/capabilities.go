@@ -36,6 +36,7 @@ const (
 	rev13 = "1.3" // versions (docs/plans/launcher-parity.md §2.2)
 	rev14 = "1.4" // verify and move (docs/plans/launcher-parity.md §2.3)
 	rev15 = "1.5" // install options and DLC (docs/plans/launcher-parity.md §2.1)
+	rev17 = "1.7" // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
 )
 
 var registry = []Capability{
@@ -70,11 +71,11 @@ var registry = []Capability{
 		Methods:         []string{"social.start", "social.stop", "social.state", "social.self", "social.friends"},
 		OptionalMethods: []string{"social.setStatus", "social.setPlaying"},
 		Surfaces:        []string{"friends-summary", "friends-modal"}},
-	{Name: "achievements", Since: rev11,
+	{Name: "achievements", Since: rev17, Orchestrated: true,
 		Methods: []string{"achievements.list"}, Surfaces: []string{"achievement-list"}},
-	{Name: "playtime", Since: rev11,
+	{Name: "playtime", Since: rev17, Orchestrated: true,
 		Methods: []string{"playtime.list"}, Surfaces: []string{"playtime"}},
-	{Name: "redeem", Since: rev11,
+	{Name: "redeem", Since: rev17, Orchestrated: true,
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
 	{Name: "family", Since: rev11,
 		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
