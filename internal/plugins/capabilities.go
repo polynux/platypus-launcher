@@ -35,6 +35,7 @@ const (
 	rev12 = "1.2" // cloud saves (docs/plans/steam-cloud-social.md)
 	rev13 = "1.3" // versions (docs/plans/launcher-parity.md §2.2)
 	rev14 = "1.4" // verify and move (docs/plans/launcher-parity.md §2.3)
+	rev15 = "1.5" // install options and DLC (docs/plans/launcher-parity.md §2.1)
 )
 
 var registry = []Capability{
@@ -55,8 +56,9 @@ var registry = []Capability{
 		Methods:  []string{"cloud.status", "cloud.pull", "cloud.push", "cloud.resolve"},
 		Surfaces: []string{"cloud-row", "cloud-conflict"}},
 
-	{Name: "install-options", Since: rev11,
-		Methods: []string{"game.options"}, Surfaces: []string{"install-dialog"}},
+	{Name: "install-options", Since: rev15, Orchestrated: true,
+		Methods:  []string{"game.options"},
+		Surfaces: []string{"install-dialog", "add-ons"}},
 	{Name: "versions", Since: rev13, Orchestrated: true,
 		Methods: []string{"versions.list"}, OptionalMethods: []string{"versions.unlock"},
 		Surfaces: []string{"version-picker", "version-pin"}},

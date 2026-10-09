@@ -45,6 +45,7 @@ func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 		t.Fatal(err)
 	}
 	a := &App{settings: st, ctx: context.Background()}
+	logWarning = func(context.Context, string, ...any) {} // Wails only logs through its own contexts
 	if a.ledger, err = ledger.Open(filepath.Join(root, "install-history.json")); err != nil {
 		t.Fatal(err)
 	}
@@ -547,18 +548,18 @@ func TestNormalizeVersionsCleansWhatThePluginSent(t *testing.T) {
 
 func TestInstallParamsCarryTheTarget(t *testing.T) {
 	j := types.Job{ID: "j", Kind: jobs.KindUpdate, StoreGameID: "tiny", InstallDir: "/g", Target: &types.VersionTarget{Build: "b2"}}
-	params := installParams(j)
+	params := installParams(j, nil)
 	got, ok := params["target"].(*types.VersionTarget)
 	if !ok || got.Build != "b2" {
 		t.Fatalf("target missing from game.update params: %v", params)
 	}
 	delete(params, "target")
 	j.Target = nil
-	if _, has := installParams(j)["target"]; has {
+	if _, has := installParams(j, nil)["target"]; has {
 		t.Fatal("a job without a target sent one")
 	}
 	j.Kind, j.Target = jobs.KindUninstall, &types.VersionTarget{Build: "b2"}
-	if _, has := installParams(j)["target"]; has {
+	if _, has := installParams(j, nil)["target"]; has {
 		t.Fatal("an uninstall carries no target")
 	}
 }
@@ -592,7 +593,7 @@ func TestAnArchiveBuildSendsTheLedgerReference(t *testing.T) {
 	if j.Target == nil || string(j.Target.ArchiveRef) != string(ref) {
 		t.Fatalf("the archive build must carry its reference to game.update: %+v", j.Target)
 	}
-	if got := installParams(j)["target"].(*types.VersionTarget); string(got.ArchiveRef) != string(ref) {
+	if got := installParams(j, j.Options)["target"].(*types.VersionTarget); string(got.ArchiveRef) != string(ref) {
 		t.Fatalf("the reference did not reach the params: %+v", got)
 	}
 }

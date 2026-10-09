@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -332,6 +333,13 @@ func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string)
 // retried job installs the same version; it names a channel or build and never
 // holds a password.
 func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget) (types.Job, error) {
+	return q.AddWithOptions(kind, source, gameID, storeGameID, title, installDir, target, nil)
+}
+
+// AddWithOptions queues like AddTargeted and also keeps the install-option
+// choices (the `install-options` capability) with the job. Options are copied
+// and never checked here: the caller has resolved them against the store.
+func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
 	switch kind {
 	case KindInstall, KindUpdate, KindUninstall:
 	default:
@@ -347,9 +355,13 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 		t := *target
 		target = &t
 	}
+	if kind == KindUninstall && options != nil {
+		return types.Job{}, errors.New("an uninstall has no install options")
+	}
+	options = types.NormalizeChoices(maps.Clone(options))
 	return q.enqueue(&types.Job{
 		Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
-		Title: title, InstallDir: installDir, Target: target,
+		Title: title, InstallDir: installDir, Target: target, Options: options,
 	})
 }
 
@@ -957,10 +969,13 @@ func newID() string {
 	return hex.EncodeToString(b)
 }
 
+// FreeSpace is the bytes free where path would land: the install dialog uses
+// it to say whether an install fits, and a move's check compares it with the
+// game's size. path may be a folder that doesn't exist yet.
+func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
+
 // freeSpace returns the bytes available to the user on the filesystem that
 // holds path, or its nearest existing parent.
-// FreeSpace is the free bytes on the filesystem of path, for a move's check.
-func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
 
 // HumanBytes writes a size the way the queue's messages do: 1.2 GB.
 func HumanBytes(b int64) string { return human(b) }

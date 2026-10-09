@@ -120,13 +120,15 @@ type state struct {
 	// Damage is how many files a check finds damaged, by game id (the
 	// `damage` knob; see maintenance.go).
 	Damage map[string]int `json:"damage"`
+	// Options are the install-option choices of each installed game (options.go).
+	Options map[string]optionRec `json:"options"`
 }
 
 var (
 	outMu   sync.Mutex
 	out     = json.NewEncoder(os.Stdout)
 	stMu    sync.Mutex
-	st      = state{Installed: map[string]string{}, Partial: map[string]int64{}, Crashed: map[string]bool{}}
+	st      = state{Installed: map[string]string{}, Partial: map[string]int64{}, Crashed: map[string]bool{}, Options: map[string]optionRec{}}
 	jobsMu  sync.Mutex
 	cancels = map[string]chan struct{}{}
 )
@@ -355,6 +357,9 @@ func load() {
 	if st.Damage == nil {
 		st.Damage = map[string]int{}
 	}
+	if st.Options == nil {
+		st.Options = map[string]optionRec{}
+	}
 }
 
 // save writes the state. Callers hold stMu.
@@ -423,6 +428,8 @@ type params struct {
 	Repair bool   `json:"repair"`
 	From   string `json:"from"`
 	To     string `json:"to"`
+	// options of game.installSize, game.install and game.update.
+	Options map[string]any `json:"options"`
 }
 
 func dispatch(method string, raw json.RawMessage) (any, error) {
@@ -517,6 +524,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 				},
 			},
 		}, nil
+	case "game.options":
+		return gameOptions(p)
 	case "game.installSize":
 		if p.ID == "" {
 			return nil, &rpcError{Code: -32602, Message: "invalid params: id is required"}
@@ -525,7 +534,12 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown game %q", p.ID)
 		}
-		return map[string]int64{"downloadBytes": g.size, "diskBytes": g.size}, nil
+		rec, err := parseOptions(p.ID, p.Options)
+		if err != nil {
+			return nil, err
+		}
+		size := g.size + optionsSize(rec)
+		return map[string]int64{"downloadBytes": size, "diskBytes": size}, nil
 	case "game.install", "game.update":
 		return startInstall(p)
 	case "game.uninstall":
@@ -648,6 +662,10 @@ func startInstall(p params) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	opts, err := parseOptions(p.ID, p.Options)
+	if err != nil {
+		return nil, err
+	}
 	stop := make(chan struct{})
 	jobsMu.Lock()
 	if _, running := cancels[p.JobID]; running {
@@ -707,6 +725,7 @@ func startInstall(p params) (any, error) {
 		stMu.Lock()
 		st.Installed[p.ID] = dir
 		st.Versions[p.ID] = rec
+		st.Options[p.ID] = opts
 		delete(st.Partial, p.ID)
 		save()
 		stMu.Unlock()
@@ -731,6 +750,7 @@ func startUninstall(p params) (any, error) {
 		stMu.Lock()
 		delete(st.Installed, p.ID)
 		delete(st.Versions, p.ID)
+		delete(st.Options, p.ID)
 		save()
 		stMu.Unlock()
 		notify("job.done", map[string]any{"jobId": p.JobID})

@@ -11,6 +11,8 @@ import type {
   GameDetails,
   GameFixInfo,
   GameSettings,
+  GameOptions,
+  InstallChoices,
   Job,
   LauncherSettings,
   Library,
@@ -202,6 +204,25 @@ export const LauncherApi = {
   pickMoveFolder: (start: string) => call<string>('PickMoveFolder', () => App.PickMoveFolder(start)),
   checkMove: (game: Game, parent: string) => call<MoveCheck>('CheckMove', () => App.CheckMove(backend(game), parent)),
   moveGame: (game: Game, parent: string) => call<Job>('MoveGame', () => App.MoveGame(backend(game), parent)),
+
+  // Install options (the `install-options` capability). The store lists the
+  // groups; Hydra adds the choices it would use now (saved, or the defaults).
+  getGameOptions: (game: Game) =>
+    call<GameOptions>('GetGameOptions', async () => {
+      const o = (await App.GetGameOptions(backend(game))) as unknown as GameOptions;
+      return {
+        groups: (o.groups ?? []).map((g) => ({ ...g, values: g.values ?? [] })),
+        chosen: o.chosen ?? {},
+      };
+    }),
+  installGameWithOptions: (game: Game, choices: InstallChoices) =>
+    call<Job>('InstallGameWithOptions', () => App.InstallGameWithOptions(backend(game), choices)),
+  updateGameWithOptions: (game: Game, choices: InstallChoices) =>
+    call<Job>('UpdateGameWithOptions', () => App.UpdateGameWithOptions(backend(game), choices)),
+  /** Free bytes where the game would be installed. */
+  getInstallFreeSpace: (game: Game) => call<number>('GetInstallFreeSpace', () => App.GetInstallFreeSpace(backend(game))),
+  /** Bytes a fresh install of the game needs with the store's defaults. */
+  getInstallSize: (game: Game) => call<number>('GetInstallSize', () => App.GetInstallSize(backend(game))),
 
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),

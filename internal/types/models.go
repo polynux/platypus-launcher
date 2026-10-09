@@ -305,6 +305,9 @@ type Job struct {
 	Destination string `json:"destination,omitempty"`
 	// Verify is what a verify job found, once it is done.
 	Verify *VerifyReport `json:"verify,omitempty"`
+	// Options are the install-option choices the install or update sends
+	// (the `install-options` capability), kept with the job like Target.
+	Options InstallOptions `json:"options,omitempty"`
 }
 
 // VerifyReport is what a game's files check found. Checked counts the files

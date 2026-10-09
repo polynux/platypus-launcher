@@ -50,6 +50,19 @@ func TestCapabilityIsOnOverAProtocolThatIncludesIt(t *testing.T) {
 	}
 }
 
+func TestInstallOptionsArriveWithRevision15(t *testing.T) {
+	if !slices.Contains(SupportedProtocols, Version{1, 5}) {
+		t.Fatalf("SupportedProtocols = %v, want 1.5 in it", SupportedProtocols)
+	}
+	if c, _ := LookupCapability("install-options"); c.Since != "1.5" || !c.Orchestrated {
+		t.Fatalf("install-options: %+v", c)
+	}
+	kept, later := WithinProtocol([]string{"install", "install-options"}, Version{1, 3})
+	if !slices.Equal(kept, []string{"install"}) || !slices.Equal(later, []string{"install-options"}) {
+		t.Fatalf("over 1.3: kept %v, later %v", kept, later)
+	}
+}
+
 func TestHydraSpeaksVersionsRevision(t *testing.T) {
 	if !slices.Contains(SupportedProtocols, Version{1, 3}) {
 		t.Fatalf("SupportedProtocols = %v, want 1.3 in it", SupportedProtocols)

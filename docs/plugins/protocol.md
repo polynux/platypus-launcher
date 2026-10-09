@@ -1,4 +1,4 @@
-# Store plugin protocol (1.4, draft)
+# Store plugin protocol (1.5, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -102,9 +102,9 @@ other errors can contain.
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
 | `game.details` | `{ id }` | `GameDetails` |
-| `game.installSize` | `{ id, target? }` | `{ downloadBytes, diskBytes }` |
-| `game.install` | `{ id, installDir, jobId, title?, target? }` | `{}` once started |
-| `game.update` | `{ id, installDir, jobId, title?, target? }` | `{}` once started |
+| `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
+| `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
+| `game.update` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `game.verify` | `{ id, installDir, jobId, repair }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
 | `game.move` | `{ id, from, to, jobId }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
@@ -404,7 +404,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -423,9 +423,10 @@ that doesn't know it.
   `features` in `initialize`, `-32002`. 1.2: the `cloud.*` methods, `cloud.progress` and the `via` parameter of
   `game.launchSpec` (cloud saves). 1.3: the `versions.*` methods, `target` on installs and updates, and
   `installed` on `job.done` (versions). 1.4: the `verify` and `move` capabilities (`game.verify`, `game.move`), `verify`
-  on `job.done`, and the optional `game.relocated`. A capability whose `since` is newer than the negotiated protocol
+  on `job.done`, and the optional `game.relocated`. 1.5: `game.options`, and `options` on installs, updates and
+  `game.installSize` (install options and DLC). A capability whose `since` is newer than the negotiated protocol
   is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2, 1.3 or 1.4 method.
+  receives a 1.2, 1.3, 1.4 or 1.5 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -446,7 +447,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `auth` | 1.0 | `auth.status`, `auth.begin`, `auth.complete`, `auth.logout` | | yes |
 | `discard` | 1.0 | `job.discard` | | yes |
 | `cloud-saves` | 1.2 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | yes |
-| `install-options` | 1.1 | `game.options` | | not yet |
+| `install-options` | 1.5 | `game.options` | | yes |
 | `versions` | 1.3 | `versions.list` | `versions.unlock` | yes |
 | `verify` | 1.4 | `game.verify` | | yes |
 | `move` | 1.4 | `game.move` | | yes |
@@ -661,6 +662,52 @@ backs up nothing itself.
 
 **Errors.** `-32602` for a missing `id`; `-32001` when the store needs a login;
 `-32002` (with a message) when the store can't list versions right now.
+
+## Install options (1.5)
+
+The `install-options` capability (protocol 1.5) lets the user choose what an
+install includes: a language, add-on content (DLC), optional packs, and on/off
+toggles. Hydra shows them in the install dialog before the install starts, and
+on an installed game under "Add-ons & options".
+
+```
+game.options { id } -> { groups: [
+  { id: "language", label: "Language", kind: "select", values: [{ id: "en", label: "English" }], default: "en" },
+  { id: "dlc", label: "Add-ons", kind: "multi", dlc: true,
+    values: [{ id: "123", label: "Season Pass", sizeBytes: 1048576, owned: true, installed: false },
+             { id: "456", label: "Deluxe", owned: false, storeUrl: "https://store.example/deluxe" }] },
+  { id: "packs", label: "Optional packs", kind: "multi", values: [...] },
+  { id: "subs", label: "Subtitles", kind: "bool", default: false } ] }
+game.install / game.update { ..., options: { language: "en", dlc: ["123"], packs: [], subs: true } }
+game.installSize { id, options? } -> { downloadBytes, diskBytes }
+```
+
+- **Groups.** `kind` is `select` (one value; `default` is its id), `multi` (any
+  number of values) or `bool` (on or off; `default` is true or false, no
+  `values`). A group with `dlc: true` is DLC: its values say whether the user
+  `owned` them and whether they are `installed`. An unowned value is shown
+  greyed out, with `storeUrl` (an https link) when the store has one. Core
+  ignores a group of any other `kind`, so a plugin can add kinds without
+  breaking older Hydra versions.
+- **Choices.** `options` has one entry per group: a value id for `select`, a
+  list of value ids for `multi`, a bool for `bool`. Hydra sends the complete set
+  it resolved (every group, defaults included). A value left out of a `multi`
+  list is one the user switched off, so a plugin that can remove an add-on does
+  so when it is left out of an update.
+- **Owned DLC.** Hydra never installs an unowned DLC: it refuses to queue the
+  install, and the dialog says why. A plugin refuses it too (`-32602`) if it is
+  asked anyway. An unowned value that is already installed may stay in the list.
+- **Remembered.** Hydra keeps each game's last choices and sends them on every
+  later install, reinstall and plain update. A job keeps its options; when it
+  is sized or starts, Hydra checks them against `game.options` again, so a
+  resumed job sends what the store offers now (a DLC refunded while paused is
+  left out). Options are sent only while the plugin offers them over 1.5.
+- **Changing options on an installed game** is a `game.update` with the new
+  `options` (and the pin's `target`, if any).
+- **Free space.** `game.installSize` takes the same `options`, so the free-space
+  check counts the chosen add-ons and packs.
+- **Errors.** `-32602` for a missing `id`, or for a choice the store doesn't
+  have. A game the store doesn't install gets an empty `groups` list.
 
 ## Out of scope
 

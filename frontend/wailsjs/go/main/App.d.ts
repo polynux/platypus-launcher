@@ -34,9 +34,15 @@ export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
 export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
 
+export function GetGameOptions(arg1:types.Game):Promise<types.GameOptions>;
+
 export function GetGameSettings():Promise<Record<string, Record<string, any>>>;
 
 export function GetGameVersions(arg1:types.Game):Promise<types.VersionInfo>;
+
+export function GetInstallFreeSpace(arg1:types.Game):Promise<number>;
+
+export function GetInstallSize(arg1:types.Game):Promise<number>;
 
 export function GetLauncherSettings():Promise<types.LauncherSettings>;
 
@@ -49,6 +55,8 @@ export function GetTweaks():Promise<Array<types.Tweak>>;
 export function InstallGame(arg1:types.Game):Promise<types.Job>;
 
 export function InstallGameVersion(arg1:types.Game,arg2:types.VersionTarget):Promise<types.Job>;
+
+export function InstallGameWithOptions(arg1:types.Game,arg2:Record<string, any>):Promise<types.Job>;
 
 export function LaunchGame(arg1:types.Game):Promise<string>;
 
@@ -125,5 +133,7 @@ export function UnpinGameVersion(arg1:string):Promise<void>;
 export function UpdateGame(arg1:types.Game):Promise<types.Job>;
 
 export function UpdateGameVersion(arg1:types.Game,arg2:types.VersionTarget):Promise<types.Job>;
+
+export function UpdateGameWithOptions(arg1:types.Game,arg2:Record<string, any>):Promise<types.Job>;
 
 export function VerifyGame(arg1:types.Game):Promise<types.Job>;

@@ -66,12 +66,24 @@ export function GetGameFix(arg1, arg2) {
   return window['go']['main']['App']['GetGameFix'](arg1, arg2);
 }
 
+export function GetGameOptions(arg1) {
+  return window['go']['main']['App']['GetGameOptions'](arg1);
+}
+
 export function GetGameSettings() {
   return window['go']['main']['App']['GetGameSettings']();
 }
 
 export function GetGameVersions(arg1) {
   return window['go']['main']['App']['GetGameVersions'](arg1);
+}
+
+export function GetInstallFreeSpace(arg1) {
+  return window['go']['main']['App']['GetInstallFreeSpace'](arg1);
+}
+
+export function GetInstallSize(arg1) {
+  return window['go']['main']['App']['GetInstallSize'](arg1);
 }
 
 export function GetLauncherSettings() {
@@ -96,6 +108,10 @@ export function InstallGame(arg1) {
 
 export function InstallGameVersion(arg1, arg2) {
   return window['go']['main']['App']['InstallGameVersion'](arg1, arg2);
+}
+
+export function InstallGameWithOptions(arg1, arg2) {
+  return window['go']['main']['App']['InstallGameWithOptions'](arg1, arg2);
 }
 
 export function LaunchGame(arg1) {
@@ -248,6 +264,10 @@ export function UpdateGame(arg1) {
 
 export function UpdateGameVersion(arg1, arg2) {
   return window['go']['main']['App']['UpdateGameVersion'](arg1, arg2);
+}
+
+export function UpdateGameWithOptions(arg1, arg2) {
+  return window['go']['main']['App']['UpdateGameWithOptions'](arg1, arg2);
 }
 
 export function VerifyGame(arg1) {

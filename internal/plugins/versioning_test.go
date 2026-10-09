@@ -81,8 +81,8 @@ func TestNegotiationPicksTheHighestCommon(t *testing.T) {
 	if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.m.Runtime("echo").Protocol; got != "1.4" {
-		t.Fatalf("negotiated %q, want 1.4 (the highest Hydra speaks that the plugin offers)", got)
+	if got := e.m.Runtime("echo").Protocol; got != "1.5" {
+		t.Fatalf("negotiated %q, want 1.5 (the highest Hydra speaks that the plugin offers)", got)
 	}
 }
 

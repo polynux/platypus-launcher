@@ -249,7 +249,7 @@ func (a *App) queueVersionJob(kind string, game types.Game, target types.Version
 		return types.Job{}, err
 	}
 	target = a.withArchiveRef(game.ID, target)
-	return a.queueJob(kind, game, &target)
+	return a.queueJobWith(kind, game, &target, a.savedOptions(game))
 }
 
 // pinnedTarget is the target an install or update of the game must use: its
@@ -356,10 +356,14 @@ func (a *App) recordInstall(j types.Job, in types.Installed) {
 	}
 }
 
+// logWarning writes a warning to the Wails log. A variable so tests, whose
+// contexts Wails rejects, can silence it.
+var logWarning = wruntime.LogWarningf
+
 // warnf logs to the Wails log once the app has started, and to stderr before.
 func (a *App) warnf(format string, args ...any) {
 	if a.ctx != nil {
-		wruntime.LogWarningf(a.ctx, format, args...)
+		logWarning(a.ctx, format, args...)
 		return
 	}
 	fmt.Fprintf(os.Stderr, format+"\n", args...)

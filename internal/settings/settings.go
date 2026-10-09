@@ -54,6 +54,9 @@ type file struct {
 	// Pins hold a game at a version (the `versions` capability), keyed by
 	// Hydra's game id. See pins.go.
 	Pins map[string]types.VersionPin `json:"pins,omitempty"`
+	// InstallOptions are each game's last install-option choices (the
+	// `install-options` capability), keyed by Hydra's game id. See options.go.
+	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra

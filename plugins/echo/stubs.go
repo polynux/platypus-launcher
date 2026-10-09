@@ -10,6 +10,8 @@ var stubs = map[string]struct {
 	result  any
 }{
 	"game.options":      {true, map[string]any{"groups": []any{}}},
+	"game.verify":       {true, map[string]any{}},
+	"game.move":         {true, map[string]any{}},
 	"achievements.list": {true, map[string]any{"total": 0, "unlocked": 0, "list": []any{}}},
 	"playtime.list":     {false, map[string]any{"games": []any{}}},
 	"redeem.submit":     {false, map[string]any{"message": "Echo has nothing to redeem."}},
