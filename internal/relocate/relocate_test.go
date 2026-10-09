@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -198,13 +200,171 @@ func TestAnInterruptedStagingFolderIsReplaced(t *testing.T) {
 	root := t.TempDir()
 	from := game(t, root)
 	to := filepath.Join(root, "dst", "Game")
-	must(t, os.MkdirAll(to+StageSuffix, 0o755))
-	must(t, os.WriteFile(filepath.Join(to+StageSuffix, "partial"), []byte("x"), 0o644))
+	stage := to + StageSuffix
+	must(t, os.MkdirAll(stage, 0o755))
+	must(t, writeMarker(stage, marker{From: from, To: to}))
+	must(t, os.WriteFile(filepath.Join(stage, "partial"), []byte("x"), 0o644))
 	if _, err := Move(context.Background(), from, to, Options{SameFS: sameFS(false)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(to, "partial")); !os.IsNotExist(err) {
 		t.Fatal("an earlier partial copy ended up in the game")
+	}
+}
+
+// A staging name that a move didn't make is someone's folder: it is refused,
+// not deleted.
+func TestAnUnmarkedStagingFolderIsNotDeleted(t *testing.T) {
+	root := t.TempDir()
+	from := game(t, root)
+	to := filepath.Join(root, "dst", "Game")
+	stage := to + StageSuffix
+	must(t, os.MkdirAll(stage, 0o755))
+	keep := filepath.Join(stage, "keep.txt")
+	must(t, os.WriteFile(keep, []byte("precious"), 0o644))
+	_, err := Move(context.Background(), from, to, Options{SameFS: sameFS(false)})
+	if err == nil {
+		t.Fatal("a move deleted a folder it did not make")
+	}
+	if b, err := os.ReadFile(keep); err != nil || string(b) != "precious" {
+		t.Fatalf("the folder was touched: %q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(from, "game.sh")); err != nil {
+		t.Fatalf("the game was touched: %v", err)
+	}
+}
+
+// Every copied file is flushed, and so is every folder that holds one, before
+// the move is placed and the source may go.
+func TestCopiesAreFlushedBeforeThePlacedHook(t *testing.T) {
+	var mu sync.Mutex
+	var files, dirs []string
+	oldFile, oldDir := syncFile, syncDir
+	t.Cleanup(func() { syncFile, syncDir = oldFile, oldDir })
+	syncFile = func(f *os.File) error {
+		mu.Lock()
+		defer mu.Unlock()
+		files = append(files, f.Name())
+		return f.Sync()
+	}
+	syncDir = func(dir string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		dirs = append(dirs, dir)
+		return oldDir(dir)
+	}
+	root := t.TempDir()
+	from := game(t, root)
+	to := filepath.Join(root, "dst", "Game")
+	must(t, os.MkdirAll(filepath.Dir(to), 0o755))
+	_, err := Move(context.Background(), from, to, Options{
+		SameFS: sameFS(false),
+		Placed: func(a, b string) error {
+			mu.Lock()
+			defer mu.Unlock()
+			// game.sh, a.pak, b.bin and the marker, each flushed in the copy.
+			if len(files) < 4 {
+				t.Errorf("%d files flushed before Placed, want at least 4", len(files))
+			}
+			if !slicesContainsPrefix(dirs, to+StageSuffix) {
+				t.Errorf("the staging folder was not flushed before Placed: %v", dirs)
+			}
+			if _, err := os.Stat(a); err != nil {
+				t.Errorf("the source was gone at Placed: %v", err)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !slicesContainsPrefix(dirs, filepath.Dir(to)) {
+		t.Errorf("the destination's parent was not flushed after the rename: %v", dirs)
+	}
+}
+
+func slicesContainsPrefix(paths []string, prefix string) bool {
+	for _, p := range paths {
+		if p == prefix || strings.HasPrefix(p, prefix+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// A crash after the game was placed at the destination: the next move finishes
+// it (records, removes the source) instead of failing on the folder it made.
+func TestAnInterruptedMoveIsFinishedNotCopiedAgain(t *testing.T) {
+	for _, same := range []bool{true, false} {
+		root := t.TempDir()
+		from := game(t, root)
+		to := filepath.Join(root, "dst", "Game")
+		must(t, os.MkdirAll(filepath.Dir(to), 0o755))
+		func() {
+			defer func() { recover() }() // the crash
+			Move(context.Background(), from, to, Options{
+				SameFS: sameFS(same),
+				Placed: func(a, b string) error { panic("crash") },
+			})
+		}()
+		recorded := 0
+		res, err := Move(context.Background(), from, to, Options{
+			SameFS: sameFS(same),
+			Placed: func(a, b string) error {
+				recorded++
+				return nil
+			},
+		})
+		if err != nil || res.Leftover != "" {
+			t.Fatalf("same=%v: resume: %v (leftover %q)", same, err, res.Leftover)
+		}
+		if recorded != 1 {
+			t.Fatalf("same=%v: recorded %d times, want 1", same, recorded)
+		}
+		if _, err := os.Stat(from); !os.IsNotExist(err) {
+			t.Fatalf("same=%v: source kept after resume: %v", same, err)
+		}
+		if b, err := os.ReadFile(filepath.Join(to, "data", "deep", "b.bin")); err != nil || string(b) != "bee" {
+			t.Fatalf("same=%v: game damaged by resume: %q %v", same, b, err)
+		}
+		if _, err := os.Stat(filepath.Join(to, markerName)); !os.IsNotExist(err) {
+			t.Fatalf("same=%v: marker left in the game: %v", same, err)
+		}
+	}
+}
+
+// A symlinked source is refused: the move would act on what the link points at.
+func TestALinkedSourceIsRefused(t *testing.T) {
+	root := t.TempDir()
+	from := game(t, root)
+	alias := filepath.Join(root, "alias")
+	must(t, os.Symlink(from, alias))
+	to := filepath.Join(root, "dst", "Game")
+	must(t, os.MkdirAll(filepath.Dir(to), 0o755))
+	if _, err := Move(context.Background(), alias, to, Options{SameFS: sameFS(true)}); err == nil {
+		t.Fatal("a linked source was moved")
+	}
+	if _, err := os.Stat(filepath.Join(from, "game.sh")); err != nil {
+		t.Fatalf("the game was touched: %v", err)
+	}
+}
+
+// A destination whose parent is a link into the game is inside the game, even
+// though its own path doesn't say so.
+func TestADestinationThroughALinkIntoTheGameIsRefused(t *testing.T) {
+	root := t.TempDir()
+	from := game(t, root)
+	must(t, os.MkdirAll(filepath.Join(from, "data"), 0o755))
+	alias := filepath.Join(root, "alias")
+	must(t, os.Symlink(filepath.Join(from, "data"), alias))
+	to := filepath.Join(alias, "Copy")
+	if _, err := Move(context.Background(), from, to, Options{SameFS: sameFS(true)}); err == nil {
+		t.Fatal("a move into the game through a link was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(from, "game.sh")); err != nil {
+		t.Fatalf("the game was touched: %v", err)
 	}
 }
 
