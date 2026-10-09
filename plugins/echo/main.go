@@ -36,6 +36,8 @@
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
 //
+// Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there.
+//
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
 // initOmit} (absent keys are left alone) and `calls` returns how many times
 // each method was received, so tests can tell a cached -32601 from a retry.
@@ -191,8 +193,31 @@ func manifestCapabilities() []string {
 	return []string{"library", "install", "launch", "auth", "discard"}
 }
 
-// negotiate answers the highest protocol version that echo speaks and Hydra
-// offered ("major.minor", compared numerically).
+// manifestAccepts reports whether plugin.json declares protocol version v: in
+// its list, inside its range, or (a legacy manifest with only "api") 1.0.
+func manifestAccepts(v string) bool {
+	var m struct {
+		Protocol struct {
+			Versions json.RawMessage `json:"versions"`
+		} `json:"protocol"`
+	}
+	data, err := os.ReadFile("plugin.json")
+	if err != nil || json.Unmarshal(data, &m) != nil || len(m.Protocol.Versions) == 0 {
+		return v == "1.0" || err != nil
+	}
+	var list []string
+	if json.Unmarshal(m.Protocol.Versions, &list) == nil {
+		return slices.Contains(list, v)
+	}
+	var rng struct{ Min, Max string }
+	if json.Unmarshal(m.Protocol.Versions, &rng) != nil {
+		return false
+	}
+	return (rng.Min == "" || !versionLess(v, rng.Min)) && (rng.Max == "" || !versionLess(rng.Max, v))
+}
+
+// negotiate answers the highest protocol version that echo speaks, its
+// manifest declares and Hydra offered ("major.minor", compared numerically).
 func negotiate(offered []string) (string, bool) {
 	speaks := csv("ECHO_PROTOCOLS")
 	if len(speaks) == 0 {
@@ -200,7 +225,7 @@ func negotiate(offered []string) (string, bool) {
 	}
 	best, found := "", false
 	for _, o := range offered {
-		if slices.Contains(speaks, o) && (!found || versionLess(best, o)) {
+		if slices.Contains(speaks, o) && manifestAccepts(o) && (!found || versionLess(best, o)) {
 			best, found = o, true
 		}
 	}
@@ -317,6 +342,7 @@ func save() {
 func main() {
 	load()
 	loadKnobs()
+	loadCloud()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
@@ -350,6 +376,9 @@ func handle(m message) {
 func (e *rpcError) Error() string { return e.Message }
 
 type params struct {
+	Ctx        json.RawMessage   `json:"ctx"`     // cloud.*: the CloudContext
+	Choices    map[string]string `json:"choices"` // cloud.resolve
+	Via        string            `json:"via"`     // game.launchSpec: "client"
 	ID         string            `json:"id"`
 	JobID      string            `json:"jobId"`
 	InstallDir string            `json:"installDir"`
@@ -381,6 +410,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return res, err
 	case "config":
 		configure(raw)
+		configureCloud(raw)
 		return nil, nil
 	case "calls":
 		callsMu.Lock()
@@ -473,6 +503,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return discardJob(p)
 	case "game.launchSpec":
 		return launchSpec(p)
+	case "cloud.status", "cloud.pull", "cloud.push", "cloud.resolve":
+		return cloudCall(method, p)
 	}
 	if res, err, ok := capabilityStub(method, p); ok {
 		return res, err
@@ -653,7 +685,7 @@ func launchSpec(p params) (any, error) {
 		return nil, fmt.Errorf("unknown game %q", p.ID)
 	}
 	switch {
-	case g.client:
+	case g.client || p.Via == "client":
 		return map[string]any{
 			"delegate": "store-client", "client": "Echo client",
 			"command": []string{"sleep", "5.0421"},

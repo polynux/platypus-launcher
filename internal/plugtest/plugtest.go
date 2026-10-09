@@ -76,8 +76,9 @@ type Session struct {
 	Games  string // the Games folder
 	Folder string // this plugin's install folder
 
-	evMu   sync.Mutex
-	events []event
+	evMu     sync.Mutex
+	events   []event
+	progress []json.RawMessage // cloud.progress notifications
 }
 
 // event is one job notification the plugin sent, as the host saw it.
@@ -222,6 +223,10 @@ func (s Suite) Start(t *testing.T) *Session {
 		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"),
 		DataDir: filepath.Join(root, "data"), Settings: st,
 		OnNotify: func(id, method string, params json.RawMessage) {
+			if method == "cloud.progress" {
+				sess.recordCloudProgress(params)
+				return
+			}
 			qMu.Lock()
 			qq := q
 			qMu.Unlock()
@@ -412,6 +417,9 @@ func (s Suite) Conformance(t *testing.T) {
 		t.Fatalf("install job didn't report full progress: %+v", done)
 	}
 	sess.checkProgress(done.ID, s.NoSpeed)
+	if has("cloud-saves") {
+		sess.checkCloud(t, game)
+	}
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {

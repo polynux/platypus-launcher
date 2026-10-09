@@ -109,3 +109,28 @@ func TestValidCapabilityName(t *testing.T) {
 		}
 	}
 }
+
+func TestWithinProtocolDropsCapabilitiesOfALaterRevision(t *testing.T) {
+	kept, later := WithinProtocol([]string{"library", "versions", "cloud-saves", "hologram"}, Version{1, 1})
+	if !slices.Equal(kept, []string{"library", "versions", "hologram"}) || !slices.Equal(later, []string{"cloud-saves"}) {
+		t.Fatalf("1.1: kept %v, later %v", kept, later)
+	}
+	if kept, later = WithinProtocol([]string{"library", "cloud-saves"}, Version{1, 2}); len(later) != 0 || len(kept) != 2 {
+		t.Fatalf("1.2: kept %v, later %v", kept, later)
+	}
+	if kept, _ = WithinProtocol(nil, Version{1, 0}); kept == nil {
+		t.Fatal("kept must not be nil: it is serialised")
+	}
+}
+
+func TestJobCancelIsServedToACloudOnlyPlugin(t *testing.T) {
+	if !MethodOffered("job.cancel", "install", []string{"cloud-saves"}) {
+		t.Fatal("a plugin with cloud-saves and no install must still be sent job.cancel")
+	}
+	if MethodOffered("job.cancel", "install", []string{"library"}) {
+		t.Fatal("job.cancel reached a plugin with neither install nor cloud-saves")
+	}
+	if MethodOffered("game.install", "install", []string{"cloud-saves"}) {
+		t.Fatal("only job.cancel is shared")
+	}
+}

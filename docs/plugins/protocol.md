@@ -1,4 +1,4 @@
-# Store plugin protocol (1.1, draft)
+# Store plugin protocol (1.2, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -108,7 +108,11 @@ other errors can contain.
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
-| `game.launchSpec` | `{ id, preview }` | `LaunchSpec` |
+| `game.launchSpec` | `{ id, preview, via? }` | `LaunchSpec` |
+| `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
+| `cloud.pull` | `{ id, ctx, jobId }` | `CloudStatus` |
+| `cloud.push` | `{ id, ctx, jobId }` | `CloudStatus` |
+| `cloud.resolve` | `{ id, ctx, jobId, choices }` | `CloudStatus` |
 
 `qr` (on `auth.begin`, and on `auth.status` while a QR login is pending) is a QR
 code as block-art text: `"\u2588"` is a dark module, two characters per module,
@@ -290,6 +294,99 @@ then follows the game through `find`: the game is running while some process's
 `/proc/<pid>/cmdline` (arguments separated by NUL) contains every string in
 `cmdline`. Each string must be at least 3 characters.
 
+`via` (optional, 1.2) asks for a particular launch mode. Hydra sends `"via": "client"`
+only when the plugin's `CloudStatus.client.canLaunch` said it can: the user chose
+"Launch through <client>" because the store's client is running. Answer with a
+store-client spec for the game; a plugin that has none answers `-32000` with a message.
+
+## Cloud saves (1.2)
+
+Capability `cloud-saves`, protocol 1.2 and later. A plugin that speaks only 1.0 or 1.1
+keeps working unchanged: the capability is off for it, Hydra sends no `cloud.*`
+request and the game page shows no cloud row. Revision numbers are reserved per
+feature: 1.2 is cloud saves, 1.3 is the versions capability's shapes.
+
+**Who does what.** Hydra decides *when* and what the user sees: a per-plugin
+default and a per-game override (`off`, `ask`, `auto`), a `cloud.pull` before it
+launches a game itself, a `cloud.push` after the game exits, the conflict dialog
+and the toasts. The plugin decides *how*: which files, how they compare, how
+they move. Hydra never calls these for a game the store's own client launches
+(the client syncs it) or for a game whose `features` leave out `cloud-saves`.
+
+`ctx` (`CloudContext`) describes the launch the call is for; the plugin never
+learns Hydra's prefix layout:
+
+```json
+{ "os": "linux", "home": "/home/u", "xdgData": "/home/u/.local/share", "xdgConfig": "/home/u/.config",
+  "installDir": "/home/u/Games/echo/tiny",
+  "prefixDir": "/home/u/.local/share/hydra/prefixes/p.echo.tiny/pfx", "winUser": "steamuser" }
+```
+
+`os` is `linux` for a native build and `windows` for a game run through Wine or Proton;
+`prefixDir` and `winUser` are set only for `windows` (`prefixDir` is the folder that holds
+`drive_c`, `winUser` the Windows user name inside it).
+
+| Method | Params | Does |
+|---|---|---|
+| `cloud.status` | `{ id, ctx }` | Compares both sides. Read-only: no file written, nothing uploaded |
+| `cloud.pull` | `{ id, ctx, jobId }` | Downloads what changed **only** in the cloud |
+| `cloud.push` | `{ id, ctx, jobId }` | Uploads what changed **only** on this device |
+| `cloud.resolve` | `{ id, ctx, jobId, choices: { "<path>": "local" \| "remote" } }` | Settles the listed conflicts: `remote` backs up the local file and takes the cloud copy, `local` replaces the cloud copy |
+
+All four answer a `CloudStatus` that describes the state **after** the call:
+
+```json
+{ "state": "conflict", "message": "shown to the user",
+  "counts": { "same": 3, "download": 0, "upload": 1, "conflict": 1, "unmapped": 0 },
+  "conflicts": [ { "path": "Profile/save.dat",
+      "local":  { "size": 3705, "mtime": 1791398361 },
+      "remote": { "size": 3718, "mtime": 1734286632, "machine": "Deck" } } ],
+  "checkedAt": 1791458728, "backupDir": "/home/u/.local/share/hydra/plugin-data/echo/cloud-backups/tiny",
+  "stamp": "a1b2c3", "client": { "running": true, "name": "Steam", "canLaunch": true } }
+```
+
+- `state` is one of `synced`, `pending` (something to move, no conflict), `conflict`, `unsupported`,
+  `offline` (the store could not be reached) and `error`. Hydra turns any other value into `error`.
+  Expected failures are answers with `offline` or `error` and a `message`, not JSON-RPC errors; a JSON-RPC
+  error on these methods is shown as `error` with its message. `-32602` is for missing `id`, `ctx` or `jobId`.
+- `message` is written for people and shown as is. For `unsupported` it is the reason ("no Auto-Cloud rules",
+  "encrypted cloud files", "saves go through the Steamworks API"); Hydra never invents one.
+- `counts` tallies files; `unmapped` counts cloud files the plugin could not place on this device.
+- `conflicts` lists each file changed on both sides, or with no record of a common ancestor. Hydra never
+  chooses for the user and never sends a `choices` path the last status did not list.
+- `checkedAt` is when the comparison ran (unix seconds). `backupDir` is where replaced local files were
+  copied; keeping the last few backups per game is the plugin's job, Hydra only shows the folder.
+- `stamp` (optional) is an opaque fingerprint of the local save files. After a game exits Hydra reads
+  `cloud.status` twice, 2 s apart, and pushes only when the two readings agree (the game may still be
+  writing); without a `stamp` it compares `counts` and `conflicts`.
+- `client` (optional) is the **official client policy**, the same for every store. `running` says the
+  store's own client is up; `name` is how to call it ("Steam"); `canLaunch` says the plugin can start the game
+  through it (`game.launchSpec` with `"via": "client"`). While `running` is true Hydra calls neither `cloud.pull`
+  nor `cloud.push` for that game, because two writers on one save folder produce exactly the conflicts the
+  sync exists to avoid. It offers "Launch through <name>" when `canLaunch` is true, and otherwise explains
+  on the game page. Report `client` on every answer.
+
+Rules for the plugin: never overwrite a local file that differs from the cloud and from the last state both
+sides agreed on (that is a `conflict`), never delete anything in the cloud, back up any local file a download
+replaces, keep the baseline under `HYDRA_PLUGIN_DATA`, and never log paths or tokens.
+
+**Jobs.** `cloud.pull`, `cloud.push` and `cloud.resolve` carry a `jobId` Hydra made up. They obey `job.cancel`
+(the request then ends with `-32000` "canceled"; Hydra has already given up on the answer) and are idempotent
+for a repeated `jobId`: the second request returns the first one's result without redoing the work. Hydra
+repeats a `jobId` when a push was interrupted by Hydra quitting and runs at the next start. A plugin that offers
+`cloud-saves` receives `job.cancel` even when it does not offer `install`. Progress is a notification:
+
+| Notification | Params |
+|---|---|
+| `cloud.progress` | `{ id, jobId, phase, done, total }` (`phase` is `check`, `download` or `upload`; `done` and `total` count files) |
+
+**When Hydra calls what.** Before it launches a game directly: `cloud.status`; if the client runs it stops
+there (see above); on `conflict` the launch waits for the user; on `offline` or `error` the user confirms
+"launch anyway" (`auto` skips the question once the user confirmed it for that game); a status with files to
+download is followed by `cloud.pull`. After a direct launch exits: two `cloud.status` readings, then
+`cloud.push` if there is something to upload. An `unsupported` game is launched as is. The conflict dialog
+calls `cloud.resolve`, and "Check now" calls `cloud.status`.
+
 ## Versioning and compatibility
 
 The protocol has a version, `major.minor`, and so does the manifest schema
@@ -318,6 +415,10 @@ that doesn't know it.
   (Hydra probes optional methods once per plugin run and remembers the answer).
   Unknown capability names are ignored with a warning; use `needs` for the ones
   that are hard requirements.
+- **Revisions.** 1.0: the first plugin releases. 1.1: the capability registry, runtime `capabilities` and
+  `features` in `initialize`, `-32002`. 1.2: the `cloud.*` methods, `cloud.progress` and the `via` parameter of
+  `game.launchSpec` (cloud saves). 1.3 is reserved for the versions capability. A plugin speaking only
+  1.0/1.1 never sees any of the 1.2 additions.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -337,7 +438,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `launch` | 1.0 | `game.launchSpec` | | yes |
 | `auth` | 1.0 | `auth.status`, `auth.begin`, `auth.complete`, `auth.logout` | | yes |
 | `discard` | 1.0 | `job.discard` | | yes |
-| `cloud-saves` | 1.0 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | not yet |
+| `cloud-saves` | 1.2 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | yes |
 | `install-options` | 1.1 | `game.options` | | not yet |
 | `versions` | 1.1 | `versions.list` | `versions.unlock` | not yet |
 | `verify` | 1.1 | `game.verify` | | not yet |
@@ -367,6 +468,9 @@ it out to mean all of them), and `features`, depth flags per capability:
 
 A tool that went missing or a logged-out state switches a capability or a
 feature off here without touching the manifest (whose hash the user approved).
+A capability that a later revision introduced than the one negotiated stays off
+too: a plugin that settled on 1.1 offers no `cloud-saves` (1.2), whatever its
+manifest lists, and is never sent `cloud.*`.
 Listing a capability the manifest doesn't declare is a protocol error: Hydra
 ignores it and notes it in the plugin's log, and the conformance suite fails.
 Hydra shows and gates on this runtime set: it never sends a method of a
