@@ -285,6 +285,7 @@ func (c *Orchestrator) begin(parent context.Context, g Game, kind, jobID string)
 		return nil, nil, ErrBusy
 	}
 	ctx, cancel := context.WithCancel(parent)
+	context.AfterFunc(c.ctx, cancel) // Shutdown ends every job, whoever started it
 	if jobID == "" {
 		jobID = c.o.NewJobID()
 	}

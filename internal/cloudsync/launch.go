@@ -237,8 +237,8 @@ func (c *Orchestrator) Resume() {
 func (c *Orchestrator) Wait() { c.wg.Wait() }
 
 // startPostExit claims the game for its post-exit push and returns the work,
-// or nil when there is nothing to do now (mode off, plugin unavailable, a job
-// already running, Hydra quitting). The claim is made before the work runs, so
+// or nil when there is nothing to do now (mode off, a job already running,
+// Hydra quitting). The claim is made before the work runs, so
 // a launch right after the exit already finds the push to cancel.
 func (c *Orchestrator) startPostExit(p Pending) (run func()) {
 	g := Game{ID: p.GameID, PluginID: p.PluginID, StoreID: p.StoreID, Title: p.Title}
@@ -246,15 +246,17 @@ func (c *Orchestrator) startPostExit(p Pending) (run func()) {
 		c.dropPending(g.ID)
 		return nil
 	}
-	if !c.o.Backend.Offers(c.ctx, g.PluginID) {
-		return nil // the plugin is off or can't do it now; the push stays owed
-	}
 	jctx, j, err := c.begin(c.ctx, g, "push", p.JobID)
 	if err != nil {
 		return nil
 	}
 	return func() {
 		defer c.end(g, j)
+		// Asking may start the plugin, which can take a while: it happens
+		// inside the claimed job, off the caller's goroutine.
+		if !c.o.Backend.Offers(jctx, g.PluginID) {
+			return // the plugin is off or can't do it now; the push stays owed
+		}
 		c.postExit(jctx, j, g, p.Ctx)
 	}
 }

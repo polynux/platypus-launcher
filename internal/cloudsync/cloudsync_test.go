@@ -826,3 +826,31 @@ func mustRead(t *testing.T, path string) []byte {
 	}
 	return data
 }
+
+func TestShutdownEndsAJobNoMatterWhoStartedIt(t *testing.T) {
+	r := newRig(t, fakeSettings{})
+	r.be.answer("cloud.status", status(types.CloudStatePending, types.CloudCounts{Download: 1}))
+	r.be.answer("job.cancel", map[string]any{})
+	started := make(chan struct{})
+	r.be.handlers["cloud.pull"] = func(ctx context.Context, p map[string]any) (any, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	done := make(chan Decision, 1)
+	go func() { done <- r.o.BeforeLaunch(context.Background(), game, cctx) }()
+	<-started
+	begin := time.Now()
+	r.o.Shutdown(50 * time.Millisecond)
+	select {
+	case d := <-done:
+		if d.Proceed {
+			t.Fatal("a pull cut off by shutdown still launched the game")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("shutdown left the pre-launch pull running")
+	}
+	if time.Since(begin) > 3*time.Second {
+		t.Fatal("shutdown waited far longer than its grace")
+	}
+}

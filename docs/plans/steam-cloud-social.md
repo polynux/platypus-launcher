@@ -313,7 +313,9 @@ Chat and voice, groups and clan data, friend requests and nicknames, rich presen
 - [ ] L1
 - [ ] P1 cloud read-only (mapper, listing, compare, status UI) · [ ] L2
 - [ ] P2 pull before launch (+ baseline, backups, conflict dialog, official-client policy) · [ ] L3 · [ ] L7
+  - core side done on `feat/cloud-core` (protocol 1.2, `internal/cloudsync`, UI, echo): the client policy is reported by the plugin (`CloudStatus.client`), not read from `steam.pid`; plugin-side baseline, backups and Steam mapping are still open
 - [ ] P3 push after exit · [ ] L6
+  - core side done on `feat/cloud-core` (post-exit push after two stable readings, `pendingPush` in cloud.json, cancel); the upload itself is plugin work
 - [ ] P4 hardening
 - [ ] P5 friends read-only · [ ] L4
 - [ ] P6 status and in-game · [ ] L5
