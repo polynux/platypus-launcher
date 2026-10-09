@@ -103,7 +103,7 @@ func TestPluginNeedingOnlyANewerProtocolNeedsANewerHydra(t *testing.T) {
 }
 
 func TestPluginWithTooNewMinorOfTheSameMajor(t *testing.T) {
-	_, p := approvedEnv(t, nil, useProtocol(map[string]any{"min": "1.2"}, ""))
+	_, p := approvedEnv(t, nil, useProtocol(map[string]any{"min": "1.4"}, ""))
 	if p.Status != StatusNeedsNewer {
 		t.Fatalf("%+v", p)
 	}

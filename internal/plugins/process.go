@@ -108,6 +108,30 @@ func resolveInit(declared []string, res InitResult) (InitResult, []string) {
 	return res, dropped
 }
 
+// dropNewerThanProtocol switches off the capabilities whose revision
+// (Capability.Since) is newer than the negotiated protocol, and returns their
+// names. A plugin never relies on a method it didn't negotiate.
+func dropNewerThanProtocol(res InitResult) (InitResult, []string) {
+	v, err := ParseVersion(res.Protocol)
+	if err != nil {
+		return res, nil
+	}
+	caps := []string{}
+	var dropped []string
+	for _, name := range res.Capabilities {
+		if c, ok := LookupCapability(name); ok {
+			if since, err := ParseVersion(c.Since); err == nil && v.Less(since) {
+				dropped = append(dropped, name)
+				delete(res.Features, name)
+				continue
+			}
+		}
+		caps = append(caps, name)
+	}
+	res.Capabilities = caps
+	return res, dropped
+}
+
 // process runs one plugin executable. It starts on the first call, restarts
 // after a crash with exponential backoff, and gives up after maxCrashes quick
 // crashes in a row.
@@ -435,6 +459,12 @@ func (p *process) initialize(conn Conn) {
 	res, dropped := resolveInit(p.declared, res)
 	if len(dropped) > 0 {
 		appendPluginLog(p.logPath, fmt.Sprintf("[warn] initialize listed capabilities the manifest doesn't declare; ignored: %s\n", strings.Join(dropped, ", ")))
+	}
+	// A capability newer than the negotiated protocol is off: the plugin never
+	// agreed to that revision's methods.
+	res, newer := dropNewerThanProtocol(res)
+	if len(newer) > 0 {
+		appendPluginLog(p.logPath, fmt.Sprintf("[warn] negotiated protocol %s predates capabilities %s; they are off\n", res.Protocol, strings.Join(newer, ", ")))
 	}
 	p.info = &res
 	p.runtime = &Runtime{Initialized: true, Protocol: res.Protocol, Capabilities: res.Capabilities, Features: res.Features}

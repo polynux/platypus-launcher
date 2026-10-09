@@ -32,6 +32,7 @@ type Capability struct {
 const (
 	rev10 = "1.0" // capabilities of the first plugin releases
 	rev11 = "1.1" // parity roadmap (docs/plans/launcher-parity.md §2)
+	rev13 = "1.3" // versions (1.2 is reserved for cloud saves)
 )
 
 var registry = []Capability{
@@ -54,7 +55,7 @@ var registry = []Capability{
 
 	{Name: "install-options", Since: rev11,
 		Methods: []string{"game.options"}, Surfaces: []string{"install-dialog"}},
-	{Name: "versions", Since: rev11,
+	{Name: "versions", Since: rev13, Orchestrated: true,
 		Methods: []string{"versions.list"}, OptionalMethods: []string{"versions.unlock"},
 		Surfaces: []string{"version-picker", "version-pin"}},
 	{Name: "verify", Since: rev11,

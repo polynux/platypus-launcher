@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"hydra-launcher/internal/jsonrpc"
+	"hydra-launcher/internal/types"
 )
 
 // Messages of protocol api 1. docs/plugins/protocol.md describes them for
@@ -140,4 +141,7 @@ type JobUpdate struct {
 	Speed   float64  `json:"speed,omitempty"` // bytes per second
 	Percent *float64 `json:"percent,omitempty"`
 	Error   string   `json:"error,omitempty"`
+	// Installed, on job.done of an install or update, says which version the
+	// plugin put on disk. Hydra appends it to the game's install ledger.
+	Installed *types.Installed `json:"installed,omitempty"`
 }

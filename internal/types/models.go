@@ -90,6 +90,9 @@ type Game struct {
 	// games, so an empty list ("nothing") differs from null (Steam, sideloaded:
 	// not capability-driven).
 	Features []string `json:"features"`
+	// Pinned is the version the user holds the game at (the `versions`
+	// capability): its update prompt is off and updates install this.
+	Pinned *VersionPin `json:"pinned,omitempty"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -292,4 +295,7 @@ type Job struct {
 	// Leftover says what may remain on disk after a cleanup the plugin
 	// couldn't perform, or why the last cleanup attempt failed.
 	Leftover string `json:"leftover,omitempty"`
+	// Target is the version the install or update asked for (the `versions`
+	// capability). It names a channel or build and never carries a password.
+	Target *VersionTarget `json:"target,omitempty"`
 }
