@@ -35,6 +35,13 @@ interface FriendsModalProps {
   /** Turns a store's friends off and on again, after its session was replaced or logged out. */
   onReconnect: (plugin: string) => void;
   onOpenGame: (gameId: string) => void;
+  /** Unread messages from a friend on a store (the chat capability). */
+  unreadOf?: (plugin: string, friendId: string) => number;
+  /** Opens the conversation with a friend (the chat capability). */
+  onOpenChat?: (plugin: string, friend: SocialFriend) => void;
+  /** Whether a store's message alerts are on, for each store that offers chat. */
+  chatAlerts?: Record<string, boolean>;
+  onSetChatAlerts?: (plugin: string, on: boolean) => void;
 }
 
 /** Friends shown per group before "Show more", so a long list stays light. */
@@ -74,7 +81,7 @@ export function FriendsModal(p: FriendsModalProps) {
 
 type SectionProps = FriendsModalProps & { view: SocialView; label: string; query: string };
 
-function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame }: SectionProps) {
+function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame, unreadOf, onOpenChat, chatAlerts, onSetChatAlerts }: SectionProps) {
   const line = connectionLine(view.connection);
   const storePlugin = plugins.find((x) => x.id === view.plugin);
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
@@ -111,6 +118,16 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
               onCheckedChange={(show) => onSetPlaying(view.plugin, show)}
             />
           </label>
+          {chatAlerts && onSetChatAlerts && view.plugin in chatAlerts && (
+            <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/60">
+              <span>Alert me to new messages from friends</span>
+              <Switch
+                aria-label={`Message alerts on ${label}`}
+                checked={chatAlerts[view.plugin]}
+                onCheckedChange={(on) => onSetChatAlerts(view.plugin, on)}
+              />
+            </label>
+          )}
           {view.self && (
             <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
               <Avatar name={view.self.name} url={view.self.avatarUrl} dot={stateDot(view.self.state)} />
@@ -140,9 +157,9 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
             </p>
           )}
 
-          <FriendGroup title="In game" friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} />
-          <FriendGroup title="Online" friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} />
-          <FriendGroup title="Offline" friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} />
+          <FriendGroup title="In game" friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title="Online" friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title="Offline" friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
         </>
       )}
 
@@ -151,11 +168,14 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
   );
 }
 
-function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
+function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, onOpenChat }: {
   title: string;
   friends: SocialFriend[];
   inLibrary: (gameId: string) => boolean;
   onOpenGame: (gameId: string) => void;
+  plugin: string;
+  unreadOf?: (plugin: string, friendId: string) => number;
+  onOpenChat?: (plugin: string, friend: SocialFriend) => void;
 }) {
   const [shown, setShown] = useState(ROWS_PER_GROUP);
   if (friends.length === 0) return null;
@@ -188,6 +208,16 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
                 )}
               </div>
             </div>
+            {unreadOf && unreadOf(plugin, f.id) > 0 && (
+              <span aria-label={`${unreadOf(plugin, f.id)} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-mono text-[10px] font-bold text-[#130f0a]">
+                {unreadOf(plugin, f.id)}
+              </span>
+            )}
+            {onOpenChat && (
+              <Button variant="ghost" size="sm" aria-label={`Message ${f.name}`} onClick={() => onOpenChat(plugin, f)}>
+                Message
+              </Button>
+            )}
           </li>
         ))}
       </ul>

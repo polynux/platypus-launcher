@@ -31,6 +31,8 @@ interface SidebarProps {
   /** Store names by plugin id. */
   friendLabels: Record<string, string>;
   onOpenFriends: () => void;
+  /** Unread messages from friends across the stores: the friends block's badge. */
+  friendsUnread?: number;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -125,7 +127,7 @@ export function Sidebar(p: SidebarProps) {
 
       {/* Pinned footer: fixed content, never grows. The friends block is the only part that changes size. */}
       <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
-        <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} />
+        <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
         {p.sessions.map((e) => {
           const running = e.state === 'running';
           const label = running ? 'playing' : e.state === 'stopping' ? 'stopping' : 'starting';

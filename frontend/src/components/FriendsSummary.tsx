@@ -8,11 +8,13 @@ interface FriendsSummaryProps {
   /** Store names by plugin id. */
   labels: Record<string, string>;
   onOpen: () => void;
+  /** Unread messages from friends across every store: a badge when above zero. */
+  unread?: number;
 }
 
 /** The sidebar's friends block: the user's own avatar, name and status per
  *  store, and how many friends are online and in game. Click opens the modal. */
-export function FriendsSummary({ views, labels, onOpen }: FriendsSummaryProps) {
+export function FriendsSummary({ views, labels, onOpen, unread = 0 }: FriendsSummaryProps) {
   if (views.length === 0) return null;
   const summary = describeSummary(views);
   return (
@@ -40,8 +42,13 @@ export function FriendsSummary({ views, labels, onOpen }: FriendsSummaryProps) {
           </span>
         );
       })}
-      <span className="font-mono text-[11px] tabular-nums text-white/55">
-        {!summary.text ? (views.some((v) => v.enabled) ? 'no friends online' : 'friends off') : summary.text}
+      <span className="flex items-center justify-between gap-2 font-mono text-[11px] tabular-nums text-white/55">
+        <span>{!summary.text ? (views.some((v) => v.enabled) ? 'no friends online' : 'friends off') : summary.text}</span>
+        {unread > 0 && (
+          <span aria-label={`${unread} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-bold text-[#130f0a]">
+            {unread} new
+          </span>
+        )}
       </span>
     </button>
   );
