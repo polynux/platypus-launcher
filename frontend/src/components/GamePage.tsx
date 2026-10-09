@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, Maximize2, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
+import { ArrowLeft, Download, History, Maximize2, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { Lightbox } from './Lightbox';
+import { VersionsDialog } from './VersionsDialog';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
@@ -14,6 +15,7 @@ import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, la
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
+import { pinLabel } from '../lib/versions';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -49,6 +51,10 @@ interface GamePageProps {
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
   onAllowFolder: (folder: string) => void;
   onNavigate: (v: View) => void;
+  /** Toast, for the version dialog. */
+  onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  /** A version job was queued or a pin changed: the library should reload. */
+  onVersionsChanged?: () => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -123,10 +129,11 @@ export function GamePage(p: GamePageProps) {
   const { game, runners, activity, session, tweaks } = p;
   const [shot, setShot] = useState(0);
   const [lightbox, setLightbox] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
   const hero = useHero(game, details);
-  useEffect(() => { setShot(0); setLightbox(false); }, [game.id]);
+  useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); }, [game.id]);
   useEffect(() => {
     const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -142,6 +149,7 @@ export function GamePage(p: GamePageProps) {
   const fix = game.fix_info;
   const shots = details?.screenshots ?? [];
   const ach = details?.achievements;
+  const canChooseVersion = !!plugin && game.installable !== false && offers(plugin, 'versions', { game });
   const events = activity.filter((e) => e.game === game.title).slice(0, 6);
   const hours = hoursPlayed(game);
   const last = lastPlayedLabel(game);
@@ -188,6 +196,7 @@ export function GamePage(p: GamePageProps) {
               {formatBytes(game.size_bytes) && <Badge className="bg-black/50 text-white/75">{formatBytes(game.size_bytes)}</Badge>}
               {!game.is_installed && <Badge className="bg-black/50 text-white/55">not installed</Badge>}
               {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">update available</Badge>}
+              {game.pinned && <Badge variant="accent" className="bg-amber-300/15 ring-1 ring-amber-300/30">pinned</Badge>}
             </div>
             <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
           </div>
@@ -199,7 +208,13 @@ export function GamePage(p: GamePageProps) {
               </div>
             )}
             {!game.is_installed ? (
-              <InstallButton game={game} job={job} onInstall={() => p.onJob('install')} onCancel={(id) => p.onJobAction('cancel', id)} />
+              <InstallButton
+                game={game}
+                job={job}
+                onInstall={() => p.onJob('install')}
+                onCancel={(id) => p.onJobAction('cancel', id)}
+                onChooseVersion={canChooseVersion ? () => setVersionsOpen(true) : undefined}
+              />
             ) : (
             <PlayButton session={session} launching={p.launching} disabled={game.outside_folder} onPlay={p.onPlay} onStop={p.onStop} onForceStop={p.onForceStop} />
             )}
@@ -324,7 +339,7 @@ export function GamePage(p: GamePageProps) {
           </Panel>
 
           {isPluginGame(game) && game.is_installed && plugin && (
-            <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} />
+            <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} onVersions={canChooseVersion ? () => setVersionsOpen(true) : undefined} />
           )}
 
           {tweaks.length > 0 && game.is_installed && (
@@ -349,6 +364,15 @@ export function GamePage(p: GamePageProps) {
           <MonoLabel className="mb-2">this session</MonoLabel>
           <ActivityFeed events={events} />
         </section>
+      )}
+      {versionsOpen && plugin && (
+        <VersionsDialog
+          game={game}
+          plugin={plugin}
+          onClose={() => setVersionsOpen(false)}
+          onChanged={() => p.onVersionsChanged?.()}
+          onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+        />
       )}
     </div>
     </TooltipProvider>
@@ -384,7 +408,9 @@ function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => vo
   );
 }
 
-function InstallButton({ game, job, onInstall, onCancel }: { game: Game; job?: Job; onInstall: () => void; onCancel: (id: string) => void }) {
+function InstallButton({
+  game, job, onInstall, onCancel, onChooseVersion,
+}: { game: Game; job?: Job; onInstall: () => void; onCancel: (id: string) => void; onChooseVersion?: () => void }) {
   if (job && (job.state === 'queued' || job.state === 'running')) return <JobProgress job={job} onCancel={onCancel} />;
   if (!game.installable) {
     return (
@@ -394,15 +420,22 @@ function InstallButton({ game, job, onInstall, onCancel }: { game: Game; job?: J
     );
   }
   return (
-    <Button
-      variant="primary"
-      size="none"
-      onClick={onInstall}
-      className="gap-2 rounded-2xl px-8 py-3.5 text-[15px] shadow-[0_12px_30px_rgba(252,211,77,.25)]"
-    >
-      <Download className="h-4 w-4" strokeWidth={3} />
-      {job?.state === 'failed' ? 'Retry install' : 'Install'}
-    </Button>
+    <div className="flex items-center gap-2.5">
+      {onChooseVersion && (
+        <Button variant="neutral" size="none" onClick={onChooseVersion} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-white/80 hover:bg-black/70">
+          <History className="h-4 w-4" /> Choose version
+        </Button>
+      )}
+      <Button
+        variant="primary"
+        size="none"
+        onClick={onInstall}
+        className="gap-2 rounded-2xl px-8 py-3.5 text-[15px] shadow-[0_12px_30px_rgba(252,211,77,.25)]"
+      >
+        <Download className="h-4 w-4" strokeWidth={3} />
+        {job?.state === 'failed' ? 'Retry install' : 'Install'}
+      </Button>
+    </div>
   );
 }
 
@@ -413,12 +446,15 @@ function ManagePanel({
   job,
   onJob,
   onJobAction,
+  onVersions,
 }: {
   game: Game;
   plugin: StorePlugin;
   job?: Job;
   onJob: (kind: JobKind) => void;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  /** Opens the version dialog; absent when the plugin or the game has no versions. */
+  onVersions?: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   useEffect(() => setConfirm(false), [game.id]);
@@ -431,6 +467,7 @@ function ManagePanel({
           ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
           ['Folder', game.install_dir || '—'],
           ['Version', game.version || '—'],
+          ...(game.pinned ? [['Pinned to', pinLabel(game.pinned)]] : []),
           ['Size', formatBytes(game.size_bytes) || '—'],
         ].map(([k, v]) => (
           <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
@@ -446,6 +483,11 @@ function ManagePanel({
           {game.update_available && (
             <Button onClick={() => onJob('update')} className="flex-1 text-sky-100">
               <RefreshCw className="h-3.5 w-3.5" /> Update
+            </Button>
+          )}
+          {onVersions && (
+            <Button onClick={onVersions} className="flex-1 text-white/70">
+              <History className="h-3.5 w-3.5" /> Version
             </Button>
           )}
           {offers(plugin, 'install', { game }) && (

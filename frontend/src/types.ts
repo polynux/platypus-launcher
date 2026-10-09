@@ -130,6 +130,9 @@ export interface Game {
   /** Plugin capabilities on offer for this game (null for Steam and sideloaded
    *  games). An empty list means none; see lib/capabilities. */
   features?: string[] | null;
+  /** The version the game is held at (the `versions` capability): updates
+   *  install it and the update prompt is off. */
+  pinned?: VersionPin;
 }
 
 export interface SourceWarning {
@@ -263,6 +266,76 @@ export interface Job {
   /** What may remain on disk when the plugin couldn't delete the data, or why
    *  the last cleanup attempt failed. */
   leftover?: string;
+  /** The version the install or update asked for (never a password). */
+  target?: VersionTarget;
+}
+
+/** What game.install/game.update should install: a channel (moving), a build
+ *  (immutable) or the text the user typed where the store has no list. */
+export interface VersionTarget {
+  channel?: string;
+  build?: string;
+  manual?: Record<string, string>;
+}
+
+export interface VersionChannel {
+  id: string;
+  name: string;
+  description?: string;
+  updatedAt?: string;
+  buildId?: string;
+  requires: 'none' | 'password';
+  unlocked?: boolean;
+  /** The installed game follows this channel. */
+  current?: boolean;
+}
+
+export type VersionBuildSource = 'store' | 'archive' | 'manual';
+
+export interface VersionBuild {
+  id: string;
+  name?: string;
+  publishedAt?: string;
+  channel?: string;
+  source: VersionBuildSource;
+  /** Hydra fills it in: false means the plugin can't fetch the build now. */
+  available: boolean;
+  current?: boolean;
+}
+
+export interface VersionLink {
+  label: string;
+  url: string;
+}
+
+export interface VersionPin {
+  kind: 'build' | 'channel';
+  id: string;
+}
+
+/** A row of the install history Hydra keeps for the game. */
+export interface LedgerEntry {
+  store: string;
+  game: string;
+  build: string;
+  channel?: string;
+  versionName?: string;
+  /** RFC 3339, UTC. */
+  date: string;
+  archiveRef?: unknown;
+}
+
+export interface VersionInfo {
+  channels: VersionChannel[];
+  builds: VersionBuild[];
+  /** Something the user types where the store lists nothing (Steam: manifest ids). */
+  manual: { label: string; hint?: string } | null;
+  links: VersionLink[];
+  /** The plugin's verdict relative to the pin (see the protocol doc). */
+  updateAvailable: boolean;
+  /** Hydra's own pin. */
+  pinned: VersionPin | null;
+  ledger: LedgerEntry[];
 }
 
 /** Hydra-wide settings, persisted in ~/.local/share/hydra/settings.json. */
