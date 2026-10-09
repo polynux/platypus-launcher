@@ -28,6 +28,9 @@ type VersionTarget struct {
 	Channel string            `json:"channel,omitempty"`
 	Build   string            `json:"build,omitempty"`
 	Manual  map[string]string `json:"manual,omitempty"`
+	// ArchiveRef is the install history's reference for Build, added by Hydra
+	// for a build it remembers; the UI never sends it.
+	ArchiveRef json.RawMessage `json:"archiveRef,omitempty"`
 }
 
 // VersionChannel is a moving pointer to a build.

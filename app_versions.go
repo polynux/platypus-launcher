@@ -34,13 +34,15 @@ const (
 	maxLinks       = 10
 	maxTargetField = 256
 	maxManualKeys  = 16
+	maxManualValue = 4 << 10 // a manifest list, one id per line
 	maxPassword    = 512
 )
 
 // versionsGate says whether the game's plugin offers versions for it right
 // now: the plugin is ready, the capability is on at runtime (which needs a
-// protocol that includes it), and the game's own `features` keep it. Hydra
-// sends no versions request when this fails.
+// protocol that includes it), and the game's own `features` keep it. The
+// features are read from the store's library, not from the caller's copy of
+// the game. Hydra sends no versions request when this fails.
 func (a *App) versionsGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
@@ -52,10 +54,34 @@ func (a *App) versionsGate(game types.Game) (plugins.Plugin, error) {
 	if !a.plugins.Has(game.Source, "versions") {
 		return p, fmt.Errorf("%s doesn't offer version selection", p.Manifest.Name)
 	}
-	if game.Features != nil && !slices.Contains(game.Features, "versions") {
+	listed, err := a.libraryCopy(game)
+	if err != nil {
+		return p, err
+	}
+	if listed.Features != nil && !slices.Contains(listed.Features, "versions") {
 		return p, fmt.Errorf("%s has a single version here", game.Title)
 	}
 	return p, nil
+}
+
+// libraryCopy is the game as its store's library lists it now, found by id.
+func (a *App) libraryCopy(game types.Game) (types.Game, error) {
+	s, ok := a.stores.Get(game.Source)
+	if !ok {
+		return types.Game{}, fmt.Errorf("%s isn't in your library", game.Title)
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
+	defer cancel()
+	games, err := s.Library(ctx)
+	if err != nil {
+		return types.Game{}, fmt.Errorf("couldn't check %s's library: %w", game.Title, err)
+	}
+	for _, g := range games {
+		if g.ID == game.ID {
+			return g, nil
+		}
+	}
+	return types.Game{}, fmt.Errorf("%s isn't in your library", game.Title)
 }
 
 // GetGameVersions asks the game's plugin which channels and builds it can
@@ -215,12 +241,14 @@ func (a *App) UpdateGameVersion(game types.Game, target types.VersionTarget) (ty
 }
 
 func (a *App) queueVersionJob(kind string, game types.Game, target types.VersionTarget) (types.Job, error) {
-	if err := validateTarget(target); err != nil {
+	target, err := validateTarget(target)
+	if err != nil {
 		return types.Job{}, err
 	}
 	if _, err := a.versionsGate(game); err != nil {
 		return types.Job{}, err
 	}
+	target = a.withArchiveRef(game.ID, target)
 	return a.queueJob(kind, game, &target)
 }
 
@@ -235,31 +263,64 @@ func (a *App) pinnedTarget(game types.Game) (*types.VersionTarget, error) {
 	if _, err := a.versionsGate(game); err != nil {
 		return nil, fmt.Errorf("%s is pinned to %s, which this store can't install right now (%v); unpin it to continue", game.Title, pin.ID, err)
 	}
-	t := pin.Target()
+	t := a.withArchiveRef(game.ID, pin.Target())
 	return &t, nil
 }
 
-// validateTarget bounds what the UI may ask a plugin to install. A target is a
-// channel, a build or manual values; it has no room for a password.
-func validateTarget(t types.VersionTarget) error {
+// withArchiveRef gives a build from the install history the reference the
+// history kept for it, so the plugin can fetch it again. The UI never sends
+// the reference; Hydra looks it up here, for the latest install of the build.
+func (a *App) withArchiveRef(gameID string, t types.VersionTarget) types.VersionTarget {
+	if t.Build == "" {
+		return t
+	}
+	for _, e := range a.ledger.Entries(gameID) {
+		if e.Build == t.Build && len(e.ArchiveRef) > 0 {
+			t.ArchiveRef = e.ArchiveRef
+		}
+	}
+	return t
+}
+
+// validateTarget bounds what the UI may ask a plugin to install and returns the
+// target as it is to be sent: typed values are trimmed. A target is a channel,
+// a build or manual values; it has no room for a password or an archive
+// reference, which Hydra adds itself.
+func validateTarget(t types.VersionTarget) (types.VersionTarget, error) {
 	if t.Channel == "" && t.Build == "" && len(t.Manual) == 0 {
-		return errors.New("pick a channel, a build, or type what the store asks for")
+		return t, errors.New("pick a channel, a build, or type what the store asks for")
 	}
 	bad := func(s string) bool {
 		return len(s) > maxTargetField || strings.IndexFunc(s, unicode.IsControl) >= 0
 	}
 	if bad(t.Channel) || bad(t.Build) {
-		return errors.New("that version id is not valid")
+		return t, errors.New("that version id is not valid")
+	}
+	if len(t.ArchiveRef) > 0 {
+		return t, errors.New("that version id is not valid")
 	}
 	if len(t.Manual) > maxManualKeys {
-		return fmt.Errorf("at most %d values may be typed", maxManualKeys)
+		return t, fmt.Errorf("at most %d values may be typed", maxManualKeys)
 	}
+	if len(t.Manual) == 0 {
+		return t, nil
+	}
+	// Typed values may run over lines (Steam: one manifest id per depot).
+	typedBad := func(s string) bool {
+		return len(s) > maxManualValue || strings.IndexFunc(s, func(r rune) bool {
+			return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t'
+		}) >= 0
+	}
+	manual := make(map[string]string, len(t.Manual))
 	for k, v := range t.Manual {
-		if k == "" || v == "" || bad(k) || bad(v) {
-			return errors.New("a typed value is empty or not valid")
+		v = strings.TrimSpace(v)
+		if k == "" || bad(k) || v == "" || typedBad(v) {
+			return t, errors.New("a typed value is empty or not valid")
 		}
+		manual[k] = v
 	}
-	return nil
+	t.Manual = manual
+	return t, nil
 }
 
 // applyPins marks pinned games and switches their update prompt off: while a

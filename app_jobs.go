@@ -18,6 +18,9 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 	var s plugins.InstallSize
 	params := map[string]any{"id": j.StoreGameID}
 	if j.Target != nil {
+		if err := b.a.jobTargetGate(j); err != nil {
+			return s, err
+		}
 		params["target"] = j.Target // the size of that version, not the latest
 	}
 	err := b.a.plugins.Call(ctx, j.Source, "game.installSize", params, &s)
@@ -25,7 +28,23 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 }
 
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
+	if j.Target != nil {
+		if err := b.a.jobTargetGate(j); err != nil {
+			return err
+		}
+	}
 	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j), nil)
+}
+
+// jobTargetGate runs the versions gate for a job that names a version. A job
+// resumed after the store stopped offering versions fails here, instead of
+// installing the latest while the UI says the game is pinned.
+func (a *App) jobTargetGate(j types.Job) error {
+	game := types.Game{ID: j.GameID, Source: j.Source, StoreAppID: j.StoreGameID, Title: j.Title}
+	if _, err := a.versionsGate(game); err != nil {
+		return fmt.Errorf("%s was queued for a chosen version, which the store can't install now (%v); cancel the job or unpin the game to install the latest", j.Title, err)
+	}
+	return nil
 }
 
 // installParams builds the params for game.install/game.update/game.uninstall

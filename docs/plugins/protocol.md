@@ -538,9 +538,10 @@ the Plugins view shows; Hydra still handles any empty list.
   leave it out for `true`. `current` marks the installed build.
 - `manual` asks the user to type something the store doesn't list (Steam: one
   manifest id per depot). `label` and `hint` are shown as written next to a
-  text box (several lines allowed). Hydra's UI sends the text as it was typed,
-  in `target.manual.input`; parse it as your hint says. Other keys are allowed
-  for callers that build a target themselves.
+  text box (several lines allowed). Hydra's UI sends the text in
+  `target.manual.input`, trimmed and at most 4 KiB, with its line breaks kept;
+  parse it as your hint says. Other keys are allowed for callers that build a
+  target themselves.
 - `links` (optional, at most 10) point at a page that helps the user pick, such
   as a game's depots on SteamDB. Hydra only opens them in the browser (http and
   https only) and never fetches them.
@@ -557,7 +558,10 @@ the Plugins view shows; Hydra still handles any empty list.
 pin) picked a version: `{ channel?, build?, manual? }`. A `channel` alone means
 "that branch's current build"; a `build` is exactly that build (with a
 `channel`, the build within it); `manual` is the typed values (`{ "input": "<text>" }` from Hydra's UI). Without `target`,
-install the store's default. A pin makes Hydra send the same `target` on every
+install the store's default. For a build from the install history (`source:
+"archive"`) Hydra adds `archiveRef` to the target: the reference it kept from
+that build's `installed`, as it was written there. The UI never sends it: Hydra
+refuses a target from the UI that already carries one. A pin makes Hydra send the same `target` on every
 `game.update`, so `update` may be a downgrade. `game.installSize` takes the
 same `target` so the free-space check is for that version. A target for a
 locked channel is refused (`-32000` with a message the user can act on). Hydra

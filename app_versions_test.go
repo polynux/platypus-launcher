@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -74,6 +75,11 @@ func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 	go func() { defer close(done); a.jobs.Run(runCtx) }()
 	t.Cleanup(func() { cancel(); <-done })
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
+		t.Fatal(err)
+	}
+	// The version gate reads the game from the store's library, which needs a login.
+	a.stores = stores.NewRegistry(a.pluginStores)
+	if err := a.plugins.Call(context.Background(), "echo", "auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	return &versionsEnv{a: a, m: a.plugins, root: root, game: types.Game{
@@ -484,7 +490,8 @@ func TestBadTargetsAreRefusedBeforeTheQueue(t *testing.T) {
 		"control chars": {Build: "b1\nb2"},
 		"long channel":  {Channel: long},
 		"empty value":   {Manual: map[string]string{"build": ""}},
-		"long value":    {Manual: map[string]string{"build": long}},
+		"long value":    {Manual: map[string]string{"build": strings.Repeat("x", maxManualValue+1)}},
+		"blank value":   {Manual: map[string]string{"input": " \n\t "}},
 	}
 	many := map[string]string{}
 	for i := 0; i < maxManualKeys+1; i++ {
@@ -552,5 +559,70 @@ func TestInstallParamsCarryTheTarget(t *testing.T) {
 	j.Kind, j.Target = jobs.KindUninstall, &types.VersionTarget{Build: "b2"}
 	if _, has := installParams(j)["target"]; has {
 		t.Fatal("an uninstall carries no target")
+	}
+}
+
+func TestTypedManifestIdsMayRunOverLines(t *testing.T) {
+	e := versionsApp(t, allVersions, echoCaps)
+	j, err := e.a.InstallGameVersion(e.game, types.VersionTarget{Manual: map[string]string{"input": "  481: 7845\n482: 9921\r\n"}})
+	if err != nil {
+		t.Fatalf("one id per line should be accepted: %v", err)
+	}
+	if j.Target == nil || j.Target.Manual["input"] != "481: 7845\n482: 9921" {
+		t.Fatalf("the typed value should be sent trimmed: %+v", j.Target)
+	}
+	big := strings.Repeat("1\n", maxManualValue)
+	if _, err := e.a.InstallGameVersion(e.game, types.VersionTarget{Manual: map[string]string{"input": big}}); err == nil {
+		t.Fatal("a typed value over the cap was queued")
+	}
+}
+
+func TestAnArchiveBuildSendsTheLedgerReference(t *testing.T) {
+	e := versionsApp(t, allVersions, echoCaps)
+	ref := json.RawMessage(`{"echo":true,"build":"b1"}`)
+	if err := e.a.ledger.Append(types.LedgerEntry{Store: "echo", Game: e.game.ID, Build: "b1", ArchiveRef: ref}); err != nil {
+		t.Fatal(err)
+	}
+	e.game.IsInstalled = true
+	j, err := e.a.UpdateGameVersion(e.game, types.VersionTarget{Build: "b1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Target == nil || string(j.Target.ArchiveRef) != string(ref) {
+		t.Fatalf("the archive build must carry its reference to game.update: %+v", j.Target)
+	}
+	if got := installParams(j)["target"].(*types.VersionTarget); string(got.ArchiveRef) != string(ref) {
+		t.Fatalf("the reference did not reach the params: %+v", got)
+	}
+}
+
+func TestAJobWithAVersionNeedsTheVersionsGateWhenItRuns(t *testing.T) {
+	// The store no longer offers versions for this plugin (the capability is gone).
+	e := versionsApp(t, allVersions, `["library","install","auth","discard"]`)
+	j := types.Job{ID: "j", Kind: jobs.KindUpdate, Source: "echo", GameID: e.game.ID, StoreGameID: "tiny",
+		Title: e.game.Title, InstallDir: "/g", Target: &types.VersionTarget{Build: "b2"}}
+	err := jobBackend{e.a}.Start(context.Background(), j)
+	if err == nil || !strings.Contains(err.Error(), "chosen version") {
+		t.Fatalf("a resumed job with a version must not install the latest: %v", err)
+	}
+	if e.calls(t)["game.update"] != 0 {
+		t.Fatal("game.update reached the plugin without the capability")
+	}
+}
+
+func TestTheGateTrustsTheLibraryNotTheCaller(t *testing.T) {
+	// The library says this game has a single version; the caller's copy says nothing.
+	t.Setenv("ECHO_GAME_FEATURES", `{"tiny":["install"]}`)
+	e := versionsApp(t, allVersions, echoCaps)
+	if _, err := e.a.GetGameVersions(e.game); err == nil {
+		t.Fatal("the versions list was fetched for a game the library gives a single version")
+	}
+	forged := e.game
+	forged.ID = "p.echo.nothere"
+	if _, err := e.a.GetGameVersions(forged); err == nil {
+		t.Fatal("a game the library doesn't list was accepted")
+	}
+	if e.calls(t)["versions.list"] != 0 {
+		t.Fatal("versions.list reached the plugin")
 	}
 }
