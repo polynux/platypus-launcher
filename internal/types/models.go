@@ -258,6 +258,8 @@ type LauncherSettings struct {
 	// CancelCleanupDays is how long a canceled download's partial data is
 	// kept before Hydra deletes it; 0 deletes it right away.
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
+	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
+	RatingsOnline bool `json:"ratings_online"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when
@@ -288,6 +290,20 @@ type GameDetails struct {
 	ReleaseDate  string        `json:"release_date"`
 	HeroURL      string        `json:"hero_url,omitempty"` // wide art, when the store has better than the library entry's
 	Achievements *Achievements `json:"achievements"`
+	// Compat facts from the plugin (protocol 1.10): the Steam AppID hint, the
+	// store's platforms and DRM. Nil when the plugin says nothing.
+	SteamAppID string   `json:"steam_app_id,omitempty"`
+	Platforms  []string `json:"platforms,omitempty"`
+	DRM        *DRM     `json:"drm,omitempty"`
+}
+
+// DRM is the store's protection facts for a game (see plugins.DRM).
+type DRM struct {
+	DRMFree        *bool  `json:"drm_free,omitempty"`
+	OnlineRequired *bool  `json:"online_required,omitempty"`
+	Launcher       string `json:"launcher,omitempty"`
+	DenuvoLikely   *bool  `json:"denuvo_likely,omitempty"`
+	Notes          string `json:"notes,omitempty"`
 }
 
 // Tweak is a launch setting Hydra suggests for every game, based on the

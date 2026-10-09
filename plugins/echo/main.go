@@ -42,6 +42,7 @@
 //	ECHO_FAMILY_WARN   seconds: launching a borrowed game also raises family.warning with that count
 //	ECHO_COPY_IN_USE   member ids whose copy of a shared game is in use (launching it answers -32002)
 //	ECHO_COPY_UNAVAILABLE member ids whose copy of a shared game can't be picked or launched
+//	ECHO_COMPAT        JSON {"<id>": {steamAppId, platforms, drm, ...}} - game.details compat facts (compat.go, protocol 1.10)
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
 // social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs; chat
@@ -178,7 +179,7 @@ type knobs struct {
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
 // the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"}
 
 var (
 	knobMu  sync.Mutex
@@ -418,6 +419,7 @@ func main() {
 	loadCloud()
 	loadSocial()
 	loadChat()
+	loadCompat()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
@@ -515,6 +517,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		configureMaintenance(raw)
 		configureSocial(raw)
 		configureChat(raw)
+		configureCompat(raw)
 		return map[string]any{"settings": settingsSnapshot()}, nil
 	case "calls":
 		callsMu.Lock()
@@ -565,23 +568,31 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown game %q", p.ID)
 		}
-		if !g.details {
+		facts := compatFor(p.ID)
+		if !g.details && facts == nil {
 			return nil, &rpcError{Code: -32601, Message: "method not found: game.details"}
 		}
-		return map[string]any{
-			"summary":     "A tiny fake game from the Echo test store, shown on its game page.",
-			"genres":      []string{"Test"},
-			"developers":  []string{"Echo Software"},
-			"publishers":  []string{"Echo Software"},
-			"releaseDate": "2024-01-01",
-			"achievements": map[string]any{
-				"total": 2,
-				"list": []map[string]any{
-					{"id": "installed", "name": "Get installed", "description": "Install the game.", "globalPercent": 100},
-					{"id": "played", "name": "Play it", "description": "Start the game once.", "globalPercent": 84.1},
+		out := map[string]any{}
+		if g.details {
+			out = map[string]any{
+				"summary":     "A tiny fake game from the Echo test store, shown on its game page.",
+				"genres":      []string{"Test"},
+				"developers":  []string{"Echo Software"},
+				"publishers":  []string{"Echo Software"},
+				"releaseDate": "2024-01-01",
+				"achievements": map[string]any{
+					"total": 2,
+					"list": []map[string]any{
+						{"id": "installed", "name": "Get installed", "description": "Install the game.", "globalPercent": 100},
+						{"id": "played", "name": "Play it", "description": "Start the game once.", "globalPercent": 84.1},
+					},
 				},
-			},
-		}, nil
+			}
+		}
+		for k, v := range facts {
+			out[k] = v
+		}
+		return out, nil
 	case "game.options":
 		return gameOptions(p)
 	case "game.installSize":

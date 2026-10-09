@@ -156,6 +156,17 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		Publishers:  d.Publishers,
 		ReleaseDate: d.ReleaseDate,
 	}
+	// The compat fields are protocol 1.10: an older plugin's answer has none.
+	if s.m.Runtime(s.ID()).Speaks(plugins.CompatVersion) {
+		out.SteamAppID = d.SteamAppID
+		out.Platforms = d.Platforms
+		if d.DRM != nil {
+			out.DRM = &types.DRM{
+				DRMFree: d.DRM.DRMFree, OnlineRequired: d.DRM.OnlineRequired,
+				Launcher: d.DRM.Launcher, DenuvoLikely: d.DRM.DenuvoLikely, Notes: d.DRM.Notes,
+			}
+		}
+	}
 	for _, u := range d.Screenshots {
 		if u = webURL(u); u != "" {
 			out.Screenshots = append(out.Screenshots, u)

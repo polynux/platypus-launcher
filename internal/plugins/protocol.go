@@ -134,6 +134,30 @@ type GameDetails struct {
 	ReleaseDate  string        `json:"releaseDate,omitempty"`
 	HeroURL      string        `json:"heroUrl,omitempty"` // wide background
 	Achievements *Achievements `json:"achievements,omitempty"`
+	// The compat fields below are protocol 1.10 (CompatVersion): Hydra reads
+	// them only from a plugin that speaks it.
+	SteamAppID string   `json:"steamAppId,omitempty"` // the game's Steam AppID, for ratings
+	Platforms  []string `json:"platforms,omitempty"`  // "linux", "windows", "macos"
+	DRM        *DRM     `json:"drm,omitempty"`
+}
+
+// CompatVersion is the first protocol revision whose game.details carries the
+// compat fields (SteamAppID, Platforms, DRM).
+var CompatVersion = Version{Major: 1, Minor: 10}
+
+// DRM is what the store says about a game's protection. Every field is a
+// pointer or optional: nil (or "") means the store said nothing, and Hydra
+// shows no badge for it. Plugins map their own store fields to these:
+//
+//   - Epic: OwnershipToken → DenuvoLikely; CanRunOffline=false → OnlineRequired;
+//     ThirdPartyManagedApp → Launcher (ubisoft-connect, ea-app, …).
+//   - GOG: DRMFree true by policy.
+type DRM struct {
+	DRMFree        *bool  `json:"drmFree,omitempty"`
+	OnlineRequired *bool  `json:"onlineRequired,omitempty"`
+	Launcher       string `json:"launcher,omitempty"`
+	DenuvoLikely   *bool  `json:"denuvoLikely,omitempty"`
+	Notes          string `json:"notes,omitempty"`
 }
 
 // Achievements in game.details are store-level: what the store shows about
