@@ -274,6 +274,10 @@ export function SetPluginInstallFolder(arg1, arg2) {
   return window['go']['main']['App']['SetPluginInstallFolder'](arg1, arg2);
 }
 
+export function SetPreferredCopy(arg1, arg2) {
+  return window['go']['main']['App']['SetPreferredCopy'](arg1, arg2);
+}
+
 export function SetSocialEnabled(arg1, arg2) {
   return window['go']['main']['App']['SetSocialEnabled'](arg1, arg2);
 }

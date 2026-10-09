@@ -80,7 +80,9 @@ var registry = []Capability{
 	{Name: "redeem", Since: rev17, Orchestrated: true,
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
 	{Name: "family", Since: rev18, Orchestrated: true,
-		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
+		Methods:         []string{"family.members"},
+		OptionalMethods: []string{"family.setPreferredCopy"},
+		Surfaces:        []string{"shared-badge", "shared-filter", "families-section", "copy-picker"}},
 	{Name: "settings", Since: rev18, Orchestrated: true,
 		Methods: []string{"settings.schema", "settings.apply"}, Surfaces: []string{"plugin-settings", "game-settings"}},
 }

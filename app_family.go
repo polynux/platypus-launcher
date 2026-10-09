@@ -19,7 +19,8 @@ import (
 // borrowed game is in use. Hydra shows members and warnings; it never enforces
 // exclusions or parental limits, those are the store's rules.
 
-// familyTimeout bounds family.members. The plugin may be waiting on the store.
+// familyTimeout bounds family.members and family.setPreferredCopy. The plugin
+// may be waiting on the store.
 const familyTimeout = 30 * time.Second
 
 // familyWarningMax bounds the text of a family.warning shown to the user.
@@ -66,6 +67,38 @@ func (a *App) GetFamilyMembers(source string) ([]types.FamilyMember, error) {
 	ctx, cancel := context.WithTimeout(appCtx(a), familyTimeout)
 	defer cancel()
 	return stores.NewPlugin(a.plugins, p, nil).FamilyMembers(ctx)
+}
+
+// SetPreferredCopy makes the copy owned by ownerID the one a borrowed game is
+// played from (family.setPreferredCopy, protocol 1.8). Nothing is sent unless
+// the game is borrowed in the store's current library, the family capability
+// is on for it, and the copy is listed and available there. The store keeps
+// the choice; Hydra reads it back in the library.
+func (a *App) SetPreferredCopy(game types.Game, ownerID string) error {
+	p, err := a.capabilityGate(game.Source, "family")
+	if err != nil {
+		return err
+	}
+	listed, err := a.libraryCopy(game)
+	if err != nil {
+		return err
+	}
+	if listed.Features != nil && !slices.Contains(listed.Features, "family") {
+		return fmt.Errorf("%s isn't lent here", game.Title)
+	}
+	if listed.SharedBy == nil {
+		return fmt.Errorf("%s is your own copy: there is nothing to choose", game.Title)
+	}
+	copy := slices.IndexFunc(listed.Copies, func(c types.GameCopy) bool { return c.OwnerID == ownerID })
+	switch {
+	case copy < 0:
+		return fmt.Errorf("%s has no copy from that family member", game.Title)
+	case !listed.Copies[copy].Available:
+		return fmt.Errorf("the copy from %s isn't available right now", listed.Copies[copy].OwnerName)
+	}
+	ctx, cancel := context.WithTimeout(appCtx(a), familyTimeout)
+	defer cancel()
+	return stores.NewPlugin(a.plugins, p, nil).SetPreferredCopy(ctx, game.StoreAppID, ownerID)
 }
 
 // familyOffered says whether a plugin, as its initialize settled it, offers

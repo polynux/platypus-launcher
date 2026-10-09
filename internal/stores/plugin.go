@@ -117,6 +117,8 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 	// plugin's own list (or the runtime set) decides, as for every capability.
 	if lg.SharedBy != nil && lg.SharedBy.ID != "" && slices.Contains(g.Features, "family") {
 		g.SharedBy = &types.SharedBy{ID: lg.SharedBy.ID, Name: lg.SharedBy.Name}
+		// Copies only mean something for a borrowed game: an own game has none.
+		g.Copies, g.PreferredCopy = normalizeCopies(lg.Copies, lg.PreferredCopy)
 	}
 	if lg.Installed && lg.InstallPath != "" {
 		g.InstallDir = filepath.Clean(lg.InstallPath)

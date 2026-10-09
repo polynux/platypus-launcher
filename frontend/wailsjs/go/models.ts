@@ -528,6 +528,60 @@ export namespace types {
 	        this.state = source["state"];
 	    }
 	}
+	export class GameDLC {
+	    id: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GameDLC(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	    }
+	}
+	export class GameCopy {
+	    owner_id: string;
+	    owner_name: string;
+	    dlc?: GameDLC[];
+	    note?: string;
+	    available: boolean;
+	    in_use?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GameCopy(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.owner_id = source["owner_id"];
+	        this.owner_name = source["owner_name"];
+	        this.dlc = this.convertValues(source["dlc"], GameDLC);
+	        this.note = source["note"];
+	        this.available = source["available"];
+	        this.in_use = source["in_use"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SharedBy {
 	    id: string;
 	    name: string;
@@ -645,6 +699,8 @@ export namespace types {
 	    features: string[];
 	    pinned?: VersionPin;
 	    shared_by?: SharedBy;
+	    copies?: GameCopy[];
+	    preferred_copy?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -680,6 +736,8 @@ export namespace types {
 	        this.features = source["features"];
 	        this.pinned = this.convertValues(source["pinned"], VersionPin);
 	        this.shared_by = this.convertValues(source["shared_by"], SharedBy);
+	        this.copies = this.convertValues(source["copies"], GameCopy);
+	        this.preferred_copy = source["preferred_copy"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -700,6 +758,8 @@ export namespace types {
 		    return a;
 		}
 	}
+	
+	
 	export class GameDetails {
 	    summary: string;
 	    screenshots: string[];

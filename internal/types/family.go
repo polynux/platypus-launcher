@@ -27,3 +27,21 @@ type FamilyWarning struct {
 	Message     string `json:"message"`
 	SecondsLeft int    `json:"seconds_left"`
 }
+
+// GameCopy is one family member's copy of a borrowed game (the `family`
+// capability, protocol 1.8). Copies can differ: DLC, a note, or whether the
+// copy can be borrowed now (Available) and whether it is in use (InUse).
+type GameCopy struct {
+	OwnerID   string    `json:"owner_id"`
+	OwnerName string    `json:"owner_name"`
+	DLC       []GameDLC `json:"dlc,omitempty"`
+	Note      string    `json:"note,omitempty"`
+	Available bool      `json:"available"`
+	InUse     bool      `json:"in_use,omitempty"`
+}
+
+// GameDLC is an add-on a copy has.
+type GameDLC struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}

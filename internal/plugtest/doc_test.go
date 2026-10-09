@@ -86,7 +86,7 @@ func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
 		plugtest.CloudStatusKeys, plugtest.CloudCountsKeys, plugtest.CloudConflictKeys, plugtest.CloudFileKeys, plugtest.CloudClientKeys, plugtest.CloudProgressKeys,
 		plugtest.VersionListKeys, plugtest.VersionChannelKeys, plugtest.VersionBuildKeys,
 		plugtest.VersionManualKeys, plugtest.VersionLinkKeys,
-		plugtest.FamilyMemberKeys, plugtest.SettingsKeys, plugtest.SettingGroupKeys, plugtest.SettingFieldKeys,
+		plugtest.FamilyMemberKeys, plugtest.FamilyCopyKeys, plugtest.FamilyCopyDLCKeys, plugtest.SettingsKeys, plugtest.SettingGroupKeys, plugtest.SettingFieldKeys,
 		plugtest.SettingOptionKeys} {
 		for _, k := range set {
 			if !strings.Contains(text, "`"+k+"`") && !strings.Contains(text, `"`+k+`"`) {

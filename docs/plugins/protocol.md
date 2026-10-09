@@ -119,6 +119,7 @@ other errors can contain.
 | `versions.list` | `{ id, ledger?, pinned? }` | `VersionList` (1.3, `versions` capability) |
 | `versions.unlock` | `{ id, channel, password }` | `{ unlocked }` (optional) |
 | `family.members` | `{}` | `[Member]` (1.8, [Family](#family-18)) |
+| `family.setPreferredCopy` | `{ id, ownerId }` | `{}` (1.8, optional, [Family](#family-18)) |
 | `settings.schema` | `{}` | `{ groups: [Group] }` (1.8, [Plugin settings](#plugin-settings-18)) |
 | `settings.apply` | `{ values, gameId? }` | `{}` (1.8, [Plugin settings](#plugin-settings-18)) |
 
@@ -137,7 +138,7 @@ clear error.
 browser (http and https only), then the fields. Without a URL it's a plain form.
 Credentials stay with the plugin or the tool it wraps; Hydra never stores them.
 
-`LibraryGame` (`sharedBy`, 1.8: a game borrowed from a family member, see [Family](#family-18)):
+`LibraryGame` (`sharedBy`, `copies` and `preferredCopy`, 1.8: a game borrowed from a family member, see [Family](#family-18)):
 
 ```json
 {
@@ -430,8 +431,8 @@ that doesn't know it.
   `game.installSize` (install options and DLC). 1.6: the `social` capability (`social.*`: friends and own status).
   1.7: `achievements.list`, `playtime.list` and `redeem.submit` (achievements, playtime and redeem, see
   [Achievements, playtime and redeem](#achievements-playtime-and-redeem-17)). 1.8: the `family` and `settings`
-  capabilities (`family.members`, `settings.schema`, `settings.apply`), `sharedBy` on library entries and the
-  `family.warning` notification (see [Family](#family-18) and [Plugin settings](#plugin-settings-18)). A capability
+  capabilities (`family.members`, `family.setPreferredCopy`, `settings.schema`, `settings.apply`), `sharedBy`,
+  `copies` and `preferredCopy` on library entries and the `family.warning` notification (see [Family](#family-18) and [Plugin settings](#plugin-settings-18)). A capability
   whose `since` is newer than the negotiated protocol is off for that plugin (Hydra drops it from the runtime set and
   logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7 or 1.8 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
@@ -462,7 +463,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `achievements` | 1.7 | `achievements.list` | | yes |
 | `playtime` | 1.7 | `playtime.list` | | yes |
 | `redeem` | 1.7 | `redeem.submit` | | yes |
-| `family` | 1.8 | `family.members` | | yes |
+| `family` | 1.8 | `family.members` | `family.setPreferredCopy` | yes |
 | `settings` | 1.8 | `settings.schema`, `settings.apply` | | yes |
 
 "Not yet" means Hydra recognises the name (no warning, usable in `needs`) but
@@ -790,9 +791,11 @@ to the user, and a warning while a borrowed game is in use. Steam is the first s
 with one; the others leave the capability out.
 
 ```
-family.members  {}                          -> [Member]             # a list, no params needed
-library.list    -> LibraryGame.sharedBy     -> { id, name }        # borrowed from that member
-game.launchSpec (in use)                     -> -32002 "Family member Ana is playing this game"
+family.members         {}                 -> [Member]          # a list, no params needed
+library.list           -> LibraryGame.sharedBy  -> { id, name }     # borrowed from that member
+library.list           -> LibraryGame.copies, preferredCopy        # when the members' copies differ
+family.setPreferredCopy { id, ownerId }   -> {}                 # the copy the user picks (optional)
+game.launchSpec (in use)                  -> -32002 "Family member Ana is playing this game"
 family.warning  { id, message, secondsLeft } (notification)
 ```
 
@@ -803,7 +806,26 @@ A member is `{ "id": "ana", "name": "Ana", "role": "adult", "avatarUrl": "https:
 can't be read right now.
 
 `sharedBy` marks a borrowed game (the library shows "Shared by Ana" and the "Shared with me"
-filter). Hydra uses it only while the game's `features` include `family`. A borrowed game
+filter). It names the copy the game is played from now: the one the user picked, or the store's
+default. Hydra uses it only while the game's `features` include `family`.
+
+When several members lend the same game and their copies differ (DLC, a note, in use), the
+entry also carries `copies` and `preferredCopy`. Each copy is
+`{ "ownerId": "ben", "ownerName": "Ben", "dlc": [{ "id": "soundtrack", "name": "Soundtrack" }],
+"note": "…", "available": true, "inUse": false }`. `ownerId` is required, `available` says whether the
+copy can be borrowed now (an unavailable one is shown greyed out), `inUse` says whether someone is
+playing it. `preferredCopy` is the `ownerId` the user picked, or absent/`null` for the store's
+default. Copies are read only from a borrowed game: a game the user owns has no `sharedBy`, and
+Hydra shows no picker for it, whatever `copies` it carries.
+
+`family.setPreferredCopy { id, ownerId }` records the user's pick. Hydra sends it only for a game
+that is borrowed in the library, with a copy from `ownerId` that is listed and `available`; the
+plugin answers `-32602` for an owner it doesn't list, and `-32002` for a copy that can't be picked
+right now. The store keeps the choice (Echo keeps it in `HYDRA_PLUGIN_DATA`), and the next
+`library.list` shows it. The method is optional: a plugin that lists `copies` without it gets
+`-32601`, which Hydra notes once and stops asking. Hydra refuses the pick, without sending it,
+when the family capability is off, the protocol is older than 1.8, or the game's `features` leave
+`family` out. A borrowed game
 that is in use answers `game.launchSpec` with `-32002` and a message for the user; Hydra
 shows it and does not retry.
 

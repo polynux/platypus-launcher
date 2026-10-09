@@ -68,6 +68,7 @@ func familyAppNotStarted(t *testing.T, protocols, caps string) *familyEnv {
 		OnNotify: a.pluginNotify, OnReady: a.pluginReady,
 	})
 	t.Cleanup(a.plugins.Shutdown)
+	a.stores = stores.NewRegistry(a.pluginStores)
 	installEchoApp(t, pluginsDir)
 	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
 		"protocol":{"versions":` + protocols + `},"store":"echo","exec":"bin/hydra-echo-app",
@@ -506,5 +507,113 @@ func TestFamilyWarningBeforeTheRuntimeInitializedIsIgnored(t *testing.T) {
 	e.a.familyWarning("echo", json.RawMessage(`{"id":"ben","message":"Ben is taking this game back","secondsLeft":30}`))
 	if n := len(e.warnings()); n != 0 {
 		t.Fatalf("%d warnings from a plugin that has not initialized", n)
+	}
+}
+
+// The "shared" game is lent by Ana and Ben, whose copies differ: Ana's has
+// the soundtrack, Ben's the soundtrack and the track pack.
+func TestSharedGameListsEveryCopyWithItsDLC(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	shared := e.libraryGame(t, "shared")
+	if shared.SharedBy == nil || shared.SharedBy.ID != "ana" {
+		t.Fatalf("shared by = %+v, want Ana (the default copy)", shared.SharedBy)
+	}
+	if len(shared.Copies) != 2 {
+		t.Fatalf("copies = %+v, want Ana's and Ben's", shared.Copies)
+	}
+	ana, ben := shared.Copies[0], shared.Copies[1]
+	if ana.OwnerID != "ana" || ana.OwnerName != "Ana" || !ana.Available || ana.Note == "" || len(ana.DLC) != 1 {
+		t.Errorf("ana's copy = %+v", ana)
+	}
+	if ben.OwnerID != "ben" || ben.OwnerName != "Ben" || !ben.Available || len(ben.DLC) != 2 || ben.DLC[1].Name != "Track pack" {
+		t.Errorf("ben's copy = %+v", ben)
+	}
+	if shared.PreferredCopy != "" {
+		t.Fatalf("nothing chosen yet, preferred = %q", shared.PreferredCopy)
+	}
+}
+
+func TestSettingAPreferredCopyIsSentStoredAndReadBackAfterARestart(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	if err := e.a.SetPreferredCopy(e.libraryGame(t, "shared"), "ben"); err != nil {
+		t.Fatal(err)
+	}
+	shared := e.libraryGame(t, "shared")
+	if shared.SharedBy == nil || shared.SharedBy.ID != "ben" || shared.PreferredCopy != "ben" {
+		t.Fatalf("after the pick: shared by %+v, preferred %q: the copy played is Ben's", shared.SharedBy, shared.PreferredCopy)
+	}
+
+	// The choice lives in HYDRA_PLUGIN_DATA: echo reads it back after a crash.
+	if err := e.m.Call(context.Background(), "echo", "crash", nil, nil); err == nil {
+		t.Fatal("crash answered")
+	}
+	waitFor(t, func() bool { return e.libraryGame(t, "shared").PreferredCopy == "ben" })
+}
+
+func TestSetPreferredCopyIsRefusedWithoutSendingWhenItDoesNotApply(t *testing.T) {
+	cases := []struct {
+		name     string
+		protocol string
+		caps     string
+		env      string
+		game     string
+		owner    string
+		config   map[string]any
+	}{
+		{name: "family off", protocol: familyProtocols, env: "family", game: "shared", owner: "ben"},
+		{name: "below protocol 1.8", protocol: `["1.0","1.1","1.7"]`, game: "shared", owner: "ben"},
+		{name: "the user's own game", game: "tiny", owner: "ben"},
+		{name: "a copy nobody lends", game: "shared", owner: "carl"},
+		{name: "an unavailable copy", game: "shared", owner: "ben", config: map[string]any{"copyUnavailable": []string{"ben"}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.env != "" {
+				t.Setenv("ECHO_OFF", c.env)
+			}
+			protocols := c.protocol
+			if protocols == "" {
+				protocols = familyProtocols
+			}
+			e := familyApp(t, protocols, familyCaps)
+			if c.config != nil {
+				e.config(t, c.config)
+			}
+			if err := e.a.SetPreferredCopy(e.libraryGame(t, c.game), c.owner); err == nil {
+				t.Fatal("refused, but it was accepted")
+			}
+			if n := e.calls(t)["family.setPreferredCopy"]; n != 0 {
+				t.Fatalf("family.setPreferredCopy reached echo %d times", n)
+			}
+		})
+	}
+}
+
+func TestOwnCopyHasNoPickerAndNoPreferredCopy(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	tiny := e.libraryGame(t, "tiny")
+	if tiny.SharedBy != nil || len(tiny.Copies) != 0 || tiny.PreferredCopy != "" {
+		t.Fatalf("the user's own game carries copies: %+v", tiny)
+	}
+	if err := e.a.SetPreferredCopy(tiny, "ana"); err == nil {
+		t.Fatal("a pick on the user's own game was accepted")
+	}
+}
+
+func TestAnInUseCopyRefusesLaunchOnlyWhileItIsPicked(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	e.config(t, map[string]any{"copyInUse": []string{"ben"}})
+	if err := e.a.SetPreferredCopy(e.libraryGame(t, "shared"), "ben"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := e.store().Launch(context.Background(), e.libraryGame(t, "shared"), false)
+	if !plugins.IsUnavailable(err) || !strings.Contains(err.Error(), "Family member Ben is playing this game") {
+		t.Fatalf("launch from Ben's copy in use: err = %v", err)
+	}
+	if err := e.a.SetPreferredCopy(e.libraryGame(t, "shared"), "ana"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.store().Launch(context.Background(), e.libraryGame(t, "shared"), false); err != nil {
+		t.Fatalf("launch from Ana's copy, not in use: %v", err)
 	}
 }

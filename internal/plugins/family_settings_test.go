@@ -29,6 +29,9 @@ func TestFamilyAndSettingsAreProtocol18(t *testing.T) {
 	if owner, _, ok := CapabilityForMethod("family.members"); !ok || owner != "family" {
 		t.Fatalf("family.members belongs to %q (known %v)", owner, ok)
 	}
+	if owner, optional, ok := CapabilityForMethod("family.setPreferredCopy"); !ok || owner != "family" || !optional {
+		t.Fatalf("family.setPreferredCopy belongs to %q (optional %v, known %v): a plugin without copies must not fail the family", owner, optional, ok)
+	}
 	if !slices.Contains(SupportedProtocols, Version{1, 8}) {
 		t.Fatal("1.8 is not in SupportedProtocols")
 	}
