@@ -743,7 +743,9 @@ shows it and does not retry.
 the borrower, then disconnects them). `id` is the store's game id, `message` is shown as
 it is (300 characters at most), and `secondsLeft` starts a countdown in the toast. Hydra
 doesn't stop the game; the store does. Hydra takes the notification only from a plugin
-that offers `family`.
+whose `initialize` has said it offers `family` (before that, the manifest is only a guess).
+The toast is shown only for a game in the user's library, and a warning without
+`secondsLeft` leaves by itself after 15 seconds.
 
 Owner exclusions, per-copy limits and parental limits are the store's rules. Hydra shows
 the state the store reports and enforces none of them.
@@ -784,18 +786,27 @@ settings.apply  { values, gameId? } -> {}
   store's game id.
 - **Unknown kinds are dropped**, with the group left empty, so a plugin can describe kinds
   an older Hydra doesn't show. A default of the wrong type is ignored (the field stays),
-  and a repeated field id is dropped (the first one wins).
+  and a repeated field id is dropped (the first one wins). A number default outside
+  `min`/`max` is clamped into them; `min` above `max` drops both bounds; a text default
+  over 4096 bytes is ignored.
 - **Values.** `settings.apply` carries the whole set for its scope: every value the user
   set, and a field left out is at its default. Hydra checks each value against the schema
   first and refuses a save with a message for the user when a value has the wrong kind, is
   not one of the options or is out of range. A value for an id the schema doesn't have is
-  dropped. Answer `-32602` for a missing `values` or a value you don't take.
+  dropped. Answer `-32602` for a missing `values` or a value you don't take. A save names
+  only the fields the user changed; the others keep their saved values, and a field saved
+  as nothing goes back to its default.
 - **When Hydra sends them.** After each change, and when the plugin starts (once per run,
-  after `initialize`), with the values saved so far. A plugin that persists them is fine
+  after `initialize`), with the values saved so far that the current schema still takes.
+  Saves and starts of one plugin run one after another. A plugin that persists them is fine
   too; it just answers the same way.
+- **A plugin that refuses them.** If `settings.apply` answers an error, Hydra keeps the
+  values saved and tells the user that they were saved but the plugin didn't take them. The
+  form keeps what the user chose; it is not an error on the save.
 - **No secrets.** Values are kept in Hydra's settings file as plain JSON. Passwords, tokens
   and anything else secret go through `auth.begin` and `auth.complete`, and stay in
-  `HYDRA_PLUGIN_DATA`.
+  `HYDRA_PLUGIN_DATA`. A field of kind `password` or `secret` is not rendered: core drops
+  it, and the conformance suite (`internal/plugtest`) rejects one in a plugin's schema.
 
 ## Out of scope
 

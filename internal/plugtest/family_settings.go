@@ -18,6 +18,9 @@ var (
 	SettingFieldKeys  = []string{"id", "kind", "label", "description", "scope", "default", "options", "placeholder", "min", "max"}
 	SettingOptionKeys = []string{"id", "label"}
 	settingKinds      = []string{"bool", "select", "text", "number"}
+	// secretKinds are field kinds a plugin must not describe. Core doesn't render
+	// them, so no secret is collected through settings: those go through auth.
+	secretKinds = []string{"password", "secret"}
 )
 
 // checkFamily holds a plugin offering `family` to its shape: family.members
@@ -96,6 +99,9 @@ func (s *Session) checkSettingField(t *testing.T, raw json.RawMessage) {
 	}
 	if f.ID == "" {
 		t.Errorf("settings.schema field without an id: %s", raw)
+	}
+	if slices.Contains(secretKinds, f.Kind) {
+		t.Errorf("field %q is a %s field: secrets go through auth, not settings", f.ID, f.Kind)
 	}
 	if !slices.Contains(settingKinds, f.Kind) {
 		return

@@ -217,3 +217,21 @@ func TestKeepValidDropsValuesTheSchemaNoLongerTakes(t *testing.T) {
 		t.Fatalf("kept = %v, want %v", got, want)
 	}
 }
+
+func TestParseSettingsSchemaCollectsNoSecrets(t *testing.T) {
+	// Secrets go through auth; a field of a secret kind is not rendered, so a
+	// plugin can't collect a password through settings.
+	s := mustParse(t, `{"groups":[{"id":"g","label":"G","fields":[
+	  {"id":"pw","kind":"password","label":"Password","default":""},
+	  {"id":"token","kind":"secret","label":"Token"},
+	  {"id":"user","kind":"text","label":"User","default":"ana"}
+	]}]}`)
+	for _, id := range []string{"pw", "token"} {
+		if _, ok := s.Field(id); ok {
+			t.Errorf("a %s field is shown: secret kinds must be dropped", id)
+		}
+	}
+	if _, ok := s.Field("user"); !ok {
+		t.Error("a plain text field next to them was dropped")
+	}
+}
