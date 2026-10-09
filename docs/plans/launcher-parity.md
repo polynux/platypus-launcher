@@ -233,7 +233,7 @@ Real store plugins (Steam, GOG, Epic, Ubisoft) implement them later.
 - [ ] Cloud saves P1-P4 (steam-cloud-social.md)
 - [ ] Versions: ledger + GOG · L-V1 — core, protocol 1.3, UI and echo done (feat/versions-core); the GOG plugin side is not
 - [ ] Verify, move
-- [ ] install-options + DLC
+- [ ] install-options + DLC · core, protocol 1.5, UI and echo done (feat/install-options); the store plugins' `game.options` (steam, gog, epic, amazon) are not
 - [ ] Versions: Steam · L-V2 · L-V4 — needs the core above; the Steam plugin side is not done
 - [ ] Social P5-P6 (steam-cloud-social.md)
 - [ ] Playtime, achievements, redeem

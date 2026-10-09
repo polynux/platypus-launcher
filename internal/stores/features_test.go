@@ -13,7 +13,7 @@ func TestGameFeaturesAbsentMeansEveryRuntimeCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"library", "install", "launch", "auth", "cloud-saves", "versions"}
+	want := []string{"library", "install", "launch", "auth", "cloud-saves", "versions", "install-options"}
 	for _, g := range lib {
 		if !slices.Equal(g.Features, want) {
 			t.Fatalf("%s features = %v, want every runtime capability %v", g.StoreAppID, g.Features, want)
@@ -39,7 +39,7 @@ func TestGameFeaturesNarrowAndAreClampedToTheRuntimeSet(t *testing.T) {
 	if slow.Features == nil || len(slow.Features) != 0 {
 		t.Fatalf("an explicit empty list must stay empty (not nil, which means all): %#v", slow.Features)
 	}
-	if got := e.game(t, "flaky"); len(got.Features) != 6 { // library, install, auth, discard, cloud-saves, versions
+	if got := e.game(t, "flaky"); len(got.Features) != 7 { // library, install, auth, discard, cloud-saves, versions, install-options
 		t.Fatalf("flaky features = %v", got.Features)
 	}
 	_ = lib
