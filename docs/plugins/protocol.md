@@ -1,4 +1,4 @@
-# Store plugin protocol (1.5, draft)
+# Store plugin protocol (1.8, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -118,6 +118,9 @@ other errors can contain.
 | `cloud.resolve` | `{ id, ctx, jobId, choices }` | `CloudStatus` |
 | `versions.list` | `{ id, ledger?, pinned? }` | `VersionList` (1.3, `versions` capability) |
 | `versions.unlock` | `{ id, channel, password }` | `{ unlocked }` (optional) |
+| `family.members` | `{}` | `[Member]` (1.8, [Family](#family-18)) |
+| `settings.schema` | `{}` | `{ groups: [Group] }` (1.8, [Plugin settings](#plugin-settings-18)) |
+| `settings.apply` | `{ values, gameId? }` | `{}` (1.8, [Plugin settings](#plugin-settings-18)) |
 
 `qr` (on `auth.begin`, and on `auth.status` while a QR login is pending) is a QR
 code as block-art text: `"\u2588"` is a dark module, two characters per module,
@@ -134,7 +137,7 @@ clear error.
 browser (http and https only), then the fields. Without a URL it's a plain form.
 Credentials stay with the plugin or the tool it wraps; Hydra never stores them.
 
-`LibraryGame`:
+`LibraryGame` (`sharedBy`, 1.8: a game borrowed from a family member, see [Family](#family-18)):
 
 ```json
 {
@@ -404,7 +407,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -424,9 +427,11 @@ that doesn't know it.
   `game.launchSpec` (cloud saves). 1.3: the `versions.*` methods, `target` on installs and updates, and
   `installed` on `job.done` (versions). 1.4: the `verify` and `move` capabilities (`game.verify`, `game.move`), `verify`
   on `job.done`, and the optional `game.relocated`. 1.5: `game.options`, and `options` on installs, updates and
-  `game.installSize` (install options and DLC). A capability whose `since` is newer than the negotiated protocol
-  is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2, 1.3, 1.4 or 1.5 method.
+  `game.installSize` (install options and DLC). 1.6 and 1.7: no methods yet, listed so a plugin can settle on them.
+  1.8: the `family` and `settings` capabilities (`family.members`, `settings.schema`, `settings.apply`), `sharedBy`
+  on library entries and the `family.warning` notification. A capability whose `since` is newer than the negotiated
+  protocol is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1
+  never receives a 1.2, 1.3, 1.4, 1.5 or 1.8 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -455,7 +460,8 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `achievements` | 1.1 | `achievements.list` | | not yet |
 | `playtime` | 1.1 | `playtime.list` | | not yet |
 | `redeem` | 1.1 | `redeem.submit` | | not yet |
-| `family` | 1.1 | `family.members` | | not yet |
+| `family` | 1.8 | `family.members` | | yes |
+| `settings` | 1.8 | `settings.schema`, `settings.apply` | | yes |
 
 "Not yet" means Hydra recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -708,6 +714,88 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
   check counts the chosen add-ons and packs.
 - **Errors.** `-32602` for a missing `id`, or for a choice the store doesn't
   have. A game the store doesn't install gets an empty `groups` list.
+
+## Family (1.8)
+
+The `family` capability is the store's family group: its members, the games they lend
+to the user, and a warning while a borrowed game is in use. Steam is the first store
+with one; the others leave the capability out.
+
+```
+family.members  {}                          -> [Member]             # a list, no params needed
+library.list    -> LibraryGame.sharedBy     -> { id, name }        # borrowed from that member
+game.launchSpec (in use)                     -> -32002 "Family member Ana is playing this game"
+family.warning  { id, message, secondsLeft } (notification)
+```
+
+A member is `{ "id": "ana", "name": "Ana", "role": "adult", "avatarUrl": "https://…", "state": "online" }`.
+`role` is `adult` or `child`; anything else is shown as none. `avatarUrl` must be http(s).
+`state` is the store's own words. Hydra shows members as they come; members without an
+`id` are dropped. Errors: `-32001` when the user has to log in, `-32002` when the family
+can't be read right now.
+
+`sharedBy` marks a borrowed game (the library shows "Shared by Ana" and the "Shared with me"
+filter). Hydra uses it only while the game's `features` include `family`. A borrowed game
+that is in use answers `game.launchSpec` with `-32002` and a message for the user; Hydra
+shows it and does not retry.
+
+`family.warning` is raised while the owner is taking a borrowed game back (the store warns
+the borrower, then disconnects them). `id` is the store's game id, `message` is shown as
+it is (300 characters at most), and `secondsLeft` starts a countdown in the toast. Hydra
+doesn't stop the game; the store does. Hydra takes the notification only from a plugin
+that offers `family`.
+
+Owner exclusions, per-copy limits and parental limits are the store's rules. Hydra shows
+the state the store reports and enforces none of them.
+
+## Plugin settings (1.8)
+
+The `settings` capability lets the plugin describe its own options and receive the
+values the user picked: overlays ("Enable EOS overlay"), launch options, a store's
+toggles. Core draws the form, so the plugin needn't write a UI, and it needn't persist
+what it is sent.
+
+```
+settings.schema {}                -> { groups: [Group] }
+settings.apply  { values, gameId? } -> {}
+```
+
+```json
+{ "groups": [
+  { "id": "overlay", "label": "Overlay", "description": "Applied when Echo launches a game.",
+    "fields": [
+      { "id": "eos-overlay", "kind": "bool", "label": "Enable EOS overlay", "default": false },
+      { "id": "region", "kind": "select", "label": "Region", "default": "eu",
+        "options": [{ "id": "eu", "label": "Europe" }, { "id": "us", "label": "United States" }] },
+      { "id": "note", "kind": "text", "label": "Launch note", "default": "", "placeholder": "-windowed" },
+      { "id": "volume", "kind": "number", "label": "Volume", "default": 5, "min": 0, "max": 10 } ] },
+  { "id": "per-game", "label": "Per game",
+    "fields": [ { "id": "game-overlay", "kind": "bool", "label": "Overlay for this game", "scope": "game", "default": true } ] }
+] }
+```
+
+- **Groups and fields.** A group has an `id`, a `label`, an optional `description` and its
+  `fields`. A field has an `id`, a `kind`, a `label` and an optional `description`. The
+  kinds are `bool` (`default` true or false), `select` (`options: [{ id, label }]`, `default`
+  an option id), `text` (`default`, `placeholder`) and `number` (`default`, `min`, `max`).
+- **Scope.** `scope` is `plugin` (the default) or `game`. Plugin-wide fields show in the
+  Plugins view. Game fields show on the game page of each game whose `features` include
+  `settings`, and their values go to that game only: `settings.apply` carries `gameId`, the
+  store's game id.
+- **Unknown kinds are dropped**, with the group left empty, so a plugin can describe kinds
+  an older Hydra doesn't show. A default of the wrong type is ignored (the field stays),
+  and a repeated field id is dropped (the first one wins).
+- **Values.** `settings.apply` carries the whole set for its scope: every value the user
+  set, and a field left out is at its default. Hydra checks each value against the schema
+  first and refuses a save with a message for the user when a value has the wrong kind, is
+  not one of the options or is out of range. A value for an id the schema doesn't have is
+  dropped. Answer `-32602` for a missing `values` or a value you don't take.
+- **When Hydra sends them.** After each change, and when the plugin starts (once per run,
+  after `initialize`), with the values saved so far. A plugin that persists them is fine
+  too; it just answers the same way.
+- **No secrets.** Values are kept in Hydra's settings file as plain JSON. Passwords, tokens
+  and anything else secret go through `auth.begin` and `auth.complete`, and stay in
+  `HYDRA_PLUGIN_DATA`.
 
 ## Out of scope
 
