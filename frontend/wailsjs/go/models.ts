@@ -89,6 +89,7 @@ export namespace social {
 	    seq: number;
 	    plugin: string;
 	    enabled: boolean;
+	    showPlaying: boolean;
 	    running: boolean;
 	    connection: Connection;
 	    self?: Self;
@@ -103,6 +104,7 @@ export namespace social {
 	        this.seq = source["seq"];
 	        this.plugin = source["plugin"];
 	        this.enabled = source["enabled"];
+	        this.showPlaying = source["showPlaying"];
 	        this.running = source["running"];
 	        this.connection = this.convertValues(source["connection"], Connection);
 	        this.self = this.convertValues(source["self"], Self);

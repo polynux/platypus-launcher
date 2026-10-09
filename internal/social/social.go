@@ -84,13 +84,15 @@ type Friend struct {
 // made for the plugin, so a UI keeps the newest one when they arrive out of
 // order.
 type View struct {
-	Seq        uint64     `json:"seq"`
-	Plugin     string     `json:"plugin"`
-	Enabled    bool       `json:"enabled"`
-	Running    bool       `json:"running"`
-	Connection Connection `json:"connection"`
-	Self       *Self      `json:"self,omitempty"`
-	Friends    []Friend   `json:"friends"`
+	Seq     uint64 `json:"seq"`
+	Plugin  string `json:"plugin"`
+	Enabled bool   `json:"enabled"`
+	// ShowPlaying says whether friends see the game the user plays here.
+	ShowPlaying bool       `json:"showPlaying"`
+	Running     bool       `json:"running"`
+	Connection  Connection `json:"connection"`
+	Self        *Self      `json:"self,omitempty"`
+	Friends     []Friend   `json:"friends"`
 }
 
 // Backend reaches the plugins. The app wires it to the plugin manager.
@@ -242,7 +244,7 @@ func (m *Manager) View(pluginID string) View {
 }
 
 func (m *Manager) idle(pluginID string) View {
-	return View{Plugin: pluginID, Enabled: m.enabled(pluginID), Friends: []Friend{}, Connection: Connection{State: ConnOffline}}
+	return View{Plugin: pluginID, Enabled: m.enabled(pluginID), ShowPlaying: m.showPlaying(pluginID), Friends: []Friend{}, Connection: Connection{State: ConnOffline}}
 }
 
 // Exited tells the subscription that the plugin process went away; the
@@ -607,6 +609,7 @@ func (m *Manager) snapshot(s *sub) View {
 	v := s.view
 	v.Seq = s.seq
 	v.Enabled = m.enabled(s.id)
+	v.ShowPlaying = m.showPlaying(s.id)
 	v.Friends = slices.Clone(s.view.Friends)
 	if v.Friends == nil {
 		v.Friends = []Friend{}

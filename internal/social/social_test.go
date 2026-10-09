@@ -225,6 +225,9 @@ func TestPlayingFollowsTheShowPlayingSetting(t *testing.T) {
 	if n := f.count(MethodSetPlaying); n != 0 {
 		t.Fatalf("setPlaying sent %d times with the setting off", n)
 	}
+	if m.View("echo").ShowPlaying {
+		t.Fatal("the view says the game is shown with the setting off")
+	}
 
 	show.Store(true)
 	m.Refresh("echo")
