@@ -27,6 +27,19 @@ func (s *chatSink) emit(e chat.Event) {
 	s.evs = append(s.evs, e)
 }
 
+// alertsOn counts the alerts of one store.
+func (s *chatSink) alertsOn(plugin string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, e := range s.evs {
+		if e.Alert && e.Plugin == plugin {
+			n++
+		}
+	}
+	return n
+}
+
 func (s *chatSink) alerts(friend string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -72,10 +85,16 @@ func echoChatSent(t *testing.T, a *App) []map[string]string {
 // echoConfig sets echo's chat knobs.
 func echoConfig(t *testing.T, a *App, chatKnobs map[string]any) {
 	t.Helper()
+	pluginConfig(t, a, "echo", chatKnobs)
+}
+
+// pluginConfig sets the chat knobs of one store running echo's program.
+func pluginConfig(t *testing.T, a *App, plugin string, chatKnobs map[string]any) {
+	t.Helper()
 	body, _ := json.Marshal(map[string]any{"chat": chatKnobs})
 	var out map[string]any
-	if err := a.plugins.Call(context.Background(), "echo", "config", json.RawMessage(body), &out); err != nil {
-		t.Fatalf("config: %v", err)
+	if err := a.plugins.Call(context.Background(), plugin, "config", json.RawMessage(body), &out); err != nil {
+		t.Fatalf("config %s: %v", plugin, err)
 	}
 }
 
@@ -331,6 +350,65 @@ func countText(sent []map[string]string, text string) int {
 	for _, s := range sent {
 		if s["text"] == text {
 			n++
+		}
+	}
+	return n
+}
+
+// Chat with two stores: each store keeps its own conversations, the unread
+// total counts both, and an incoming message's event carries its store.
+func TestChatWithTwoStores(t *testing.T) {
+	a, st := socialEnvWith(t, true)
+	sink := &chatSink{}
+	a.chat = chat.NewManager(chat.Options{
+		Backend: chatBackend{a},
+		Alert:   st.ChatAlerts,
+		Emit:    sink.emit,
+		Logf:    func(string, ...any) {},
+	})
+	t.Cleanup(func() {
+		a.chat.Forget("echo")
+		a.chat.Forget("echo-b")
+	})
+
+	// The same friend id exists in both stores, and each store has its own history.
+	for _, plugin := range []string{"echo", "echo-b"} {
+		v, err := a.ChatOpen(plugin, chatAna)
+		if err != nil {
+			t.Fatalf("ChatOpen %s: %v", plugin, err)
+		}
+		if !v.Loaded || len(v.Messages) != 3 {
+			t.Fatalf("%s history: %+v", plugin, v)
+		}
+		a.ChatClose(plugin, chatAna)
+	}
+
+	// Only echo-b receives messages; they count as unread and alert on echo-b alone.
+	pluginConfig(t, a, "echo-b", map[string]any{"tick": 20})
+	waitSocial(t, "echo-b has unread messages", func() bool {
+		return sink.alertsOn("echo-b") > 0 && unreadOn(a, "echo-b") > 0
+	})
+	pluginConfig(t, a, "echo-b", map[string]any{"tick": 0})
+
+	if n := sink.alertsOn("echo"); n != 0 {
+		t.Fatalf("echo alerted %d times for echo-b's messages", n)
+	}
+	total, perStore := 0, map[string]int{}
+	for _, v := range a.ChatUnread() {
+		total += v.Unread
+		perStore[v.Plugin] += v.Unread
+	}
+	if total == 0 || perStore["echo"] != 0 || perStore["echo-b"] != total {
+		t.Fatalf("unread: total %d, per store %v, want all on echo-b", total, perStore)
+	}
+}
+
+// unreadOn sums the unread messages of one store's conversations.
+func unreadOn(a *App, plugin string) int {
+	n := 0
+	for _, v := range a.ChatUnread() {
+		if v.Plugin == plugin {
+			n += v.Unread
 		}
 	}
 	return n

@@ -39,8 +39,12 @@ const messageOf = (err: unknown) => (err instanceof Error ? err.message : String
 
 /** The chat state of the launcher: the conversations the backend reports, the one on screen, alerts,
  *  and the unread badges. A new message the user should hear about raises a toast with the friend's
- *  name (never the text). */
-export function useChat(social: SocialView[], notify: (msg: string, kind?: 'ok' | 'err') => void): ChatState {
+ *  name and the store's (never the text). `storeNames` maps a plugin id to its name; the id is the fallback. */
+export function useChat(
+  social: SocialView[],
+  notify: (msg: string, kind?: 'ok' | 'err') => void,
+  storeNames: Record<string, string> = {},
+): ChatState {
   const [conversations, setConversations] = useState<ChatView[]>([]);
   const [alerts, setAlertsState] = useState<Record<string, boolean>>({});
   const [target, setTarget] = useState<ChatTarget | null>(null);
@@ -49,16 +53,21 @@ export function useChat(social: SocialView[], notify: (msg: string, kind?: 'ok' 
   // The subscription lives for the window's life, so it reads the latest friends and notify through refs.
   const socialRef = useRef(social);
   const notifyRef = useRef(notify);
+  const storeNamesRef = useRef(storeNames);
   const targetRef = useRef<ChatTarget | null>(null);
   useEffect(() => {
     socialRef.current = social;
     notifyRef.current = notify;
-  }, [social, notify]);
+    storeNamesRef.current = storeNames;
+  }, [social, notify, storeNames]);
 
   useEffect(() => {
     const unsubscribe = onChat((e) => {
       setConversations((list) => upsertConversation(list, e));
-      if (e.alert) notifyRef.current(`New message from ${friendNameOf(socialRef.current, e.plugin, e.friendId)}`);
+      if (e.alert) {
+        const store = storeNamesRef.current[e.plugin] ?? e.plugin;
+        notifyRef.current(`New message from ${friendNameOf(socialRef.current, e.plugin, e.friendId)} on ${store}`);
+      }
     });
     void Effect.runPromise(LauncherApi.chatUnread()).then(
       (vs) => setConversations((list) => vs.reduce(upsertConversation, list)),

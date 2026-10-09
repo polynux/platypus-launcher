@@ -105,8 +105,6 @@ export function App() {
     void refreshSocial();
     return unsubscribe;
   }, [refreshSocial]);
-  // Conversations with friends (chat capability): unread badges, the open chat, alerts.
-  const chat = useChat(social, notify);
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
@@ -428,6 +426,8 @@ export function App() {
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  // Conversations with friends (chat capability): unread badges, the open chat, alerts.
+  const chat = useChat(social, notify, socialLabels);
   // Redeem is one entry for every ready store that offers it (none: no entry).
   const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
   const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);

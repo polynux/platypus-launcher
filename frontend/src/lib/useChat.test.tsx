@@ -57,8 +57,27 @@ describe('useChat', () => {
     });
     expect(result.current.unread).toBe(2);
     expect(result.current.unreadOf('echo', '1')).toBe(2);
-    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz');
+    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on echo');
     expect(JSON.stringify(notify.mock.calls)).not.toContain('secret words');
+  });
+
+  it('sums the unread messages of two stores, and the toast names the store', async () => {
+    const notify = vi.fn();
+    const two: SocialView[] = [
+      ...social,
+      { seq: 1, plugin: 'echo-b', enabled: true, showPlaying: true, running: true, connection: { state: 'online' }, friends: [{ id: '1', name: 'Ben Ortiz', state: 'online' }] },
+    ];
+    const { result } = renderHook(() => useChat(two, notify, { echo: 'Echo (test plugin)', 'echo-b': 'Echo B (test plugin)' }));
+    await waitFor(() => expect(result.current.alerts).toEqual({ echo: true }));
+
+    act(() => {
+      h.listener?.({ ...conv({ unread: 2, seq: 3 }), alert: true, messages: [] } as ChatEvent);
+      h.listener?.({ ...conv({ plugin: 'echo-b', friendId: '1', unread: 3, seq: 2 }), alert: true, messages: [] } as ChatEvent);
+    });
+    expect(result.current.unread).toBe(5);
+    expect(result.current.unreadOf('echo-b', '1')).toBe(3);
+    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on Echo (test plugin)');
+    expect(notify).toHaveBeenCalledWith('New message from Ben Ortiz on Echo B (test plugin)');
   });
 
   it('does not toast a message that is not an alert', async () => {
