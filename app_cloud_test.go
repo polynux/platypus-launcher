@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"hydra-launcher/internal/cloudsync"
+	"hydra-launcher/internal/jobs"
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/session"
 	"hydra-launcher/internal/settings"
@@ -395,4 +396,28 @@ func TestGameLaunchesTakeTurns(t *testing.T) {
 	}
 	unlock()
 	<-acquired
+}
+
+// A borrowed game in use is refused by the store before the cloud step: the
+// -32002 reaches the caller as it is, and no save is pulled or pushed for it.
+func TestALaunchOfABorrowedGameInUseSkipsTheCloudStep(t *testing.T) {
+	a, _ := cloudApp(t, nil, map[string]string{"ECHO_FAMILY_IN_USE": "ana"})
+	q, err := jobs.Open(filepath.Join(t.TempDir(), "jobs.json"), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.jobs = q
+	if err := a.plugins.Call(context.Background(), "echo", "auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	game := types.Game{ID: "p.echo.ana", Source: "echo", Store: "echo", StoreAppID: "ana", Title: "Ana's Game",
+		InstallDir: t.TempDir(), IsInstalled: true, Native: true}
+	_, err = a.LaunchGame(game)
+	if err == nil || !plugins.IsUnavailable(err) {
+		t.Fatalf("launch of a game in use: err = %v, want -32002", err)
+	}
+	calls := echoCalls(t, a)
+	if calls["game.launchSpec"] != 1 || calls["cloud.pull"] != 0 || calls["cloud.push"] != 0 {
+		t.Fatalf("calls %v: the store refused the launch, so no save may move", calls)
+	}
 }

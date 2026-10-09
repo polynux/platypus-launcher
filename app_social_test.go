@@ -156,3 +156,31 @@ func TestSocialStaysOffWhenTheUserSwitchesItOff(t *testing.T) {
 		t.Fatal("status changed on a store with the friends off")
 	}
 }
+
+// A plugin's start runs two things at once: the settings are sent (pluginReady,
+// after initialize) and the friends list starts. Both reach the plugin, the
+// friends connect and the saved value is applied once, with no race.
+func TestPluginStartSettingsAndFriendsStartTogether(t *testing.T) {
+	a, st := socialEnv(t)
+	if err := st.SetPluginValues("echo", map[string]any{"eos-overlay": true}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		a.pluginReady("echo")
+		close(done)
+	}()
+	a.syncSocial()
+	<-done
+
+	waitSocial(t, "a connected friends list", func() bool {
+		return a.social.View("echo").Connection.State == "online"
+	})
+	var calls map[string]int
+	if err := a.plugins.Call(context.Background(), "echo", "calls", nil, &calls); err != nil {
+		t.Fatal(err)
+	}
+	if calls["settings.apply"] != 1 || calls["social.start"] != 1 {
+		t.Fatalf("calls %v: want the saved settings applied once and the friends started once", calls)
+	}
+}
