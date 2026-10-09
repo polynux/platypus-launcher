@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,8 +89,12 @@ func (a *App) moveTarget(game types.Game, parent string) (types.MoveCheck, error
 	if !filepath.IsAbs(parent) {
 		return check, fmt.Errorf("choose a folder to move %s into", game.Title)
 	}
-	to := filepath.Join(filepath.Clean(parent), filepath.Base(filepath.Clean(game.InstallDir)))
+	from := filepath.Clean(game.InstallDir)
+	to := filepath.Join(filepath.Clean(parent), filepath.Base(from))
 	check.To = to
+	if strings.HasPrefix(to, from+string(filepath.Separator)) {
+		return check, fmt.Errorf("%s is inside the game's folder", to)
+	}
 	if err := checkFolder(to, a.settings.GamesFolder(), "move into"); err != nil {
 		return check, err
 	}
