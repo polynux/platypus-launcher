@@ -65,7 +65,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
           </Button>
         </div>
 
-        <div className="grid gap-5 @2xl:grid-cols-[11rem_1fr]">
+        <div className="grid gap-5 @2xl:min-h-[26rem] @2xl:grid-cols-[11rem_1fr]">
           <div
             role="tablist"
             aria-label="Game settings sections"
@@ -115,7 +115,8 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
             </section>
             {shown !== 'general' && (
               <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
-                <h3 className="mb-4 text-[16px] font-bold tracking-tight">{TAB_LABELS[shown]}</h3>
+                {/* The cloud panel brings its own heading. */}
+                {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{TAB_LABELS[shown]}</h3>}
                 <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} />
               </section>
             )}

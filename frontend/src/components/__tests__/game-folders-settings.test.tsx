@@ -29,6 +29,7 @@ describe('GameFoldersSettings', () => {
     const list = await screen.findByRole('list', { name: 'Game folders' });
     expect(list).toHaveTextContent('/home/me/Games');
     expect(list).toHaveTextContent('default');
+    expect(list).toHaveTextContent(/200 GB free(?! free)/);
     expect(screen.queryByRole('button', { name: 'Remove /home/me/Games' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Remove /mnt/big/Games' })).toBeInTheDocument();
   });

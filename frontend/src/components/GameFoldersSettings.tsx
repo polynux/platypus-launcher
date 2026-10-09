@@ -48,7 +48,7 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
             <span className="min-w-0 flex-1">
               <span className="block truncate font-mono text-[12px] text-white/85" title={f.path}>{shortPath(f.path)}</span>
               <span className="block font-mono text-[11px] text-white/40">
-                {f.exists ? `${freeLabel(f.free_bytes)} free` : 'not created yet'}
+                {f.exists ? freeLabel(f.free_bytes) : 'not created yet'}
               </span>
             </span>
             {f.is_default ? (
