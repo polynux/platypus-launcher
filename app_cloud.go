@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"hydra-launcher/internal/cloudsync"
@@ -84,49 +85,78 @@ func cloudContext(game types.Game, windows bool, r types.ProtonVersion) types.Cl
 	return cloudsync.Context(windows, game.InstallDir, prefix, user)
 }
 
-// cloudContextFor is the context for a game that isn't being launched (Check
-// now, resolving): the launch spec's preview says whether Wine is involved.
-func (a *App) cloudContextFor(game types.Game) types.CloudContext {
-	if p, err := a.prepareLaunch(game, true); err == nil && p.client == nil {
-		return cloudContext(game, p.runner.Path != "", p.runner)
-	}
-	windows := !game.Native
-	var r types.ProtonVersion
-	if windows {
-		r, _ = selectRunner(game)
-	}
-	return cloudContext(game, windows, r)
+// cloudContextOf is the context for a launch that runs with runner r: through
+// Wine or Proton when the runner is set, natively otherwise. Every cloud step
+// uses this one rule, so a check and a launch of a game agree on its paths.
+func cloudContextOf(game types.Game, r types.ProtonVersion) types.CloudContext {
+	return cloudContext(game, r.Path != "", r)
 }
 
-// cloudLaunch is a launch whose exit is followed by a push.
+// cloudContextFor is the context for a game that isn't being launched (Check
+// now, resolving): the launch spec's preview says which runner it would use.
+func (a *App) cloudContextFor(game types.Game) types.CloudContext {
+	if p, err := a.prepareLaunch(game, true); err == nil && p.client == nil {
+		return cloudContextOf(game, p.runner)
+	}
+	// The launch can't be prepared: use the runner it would pick.
+	var r types.ProtonVersion
+	if !game.Native {
+		r, _ = selectRunner(game)
+	}
+	return cloudContextOf(game, r)
+}
+
+// lockGame serializes the launch and cloud steps of one game, so that a second
+// Play waits for the first to start the game and then sees it running, and a
+// resolve never runs beside a launch of the same game.
+func (a *App) lockGame(gameID string) (unlock func()) {
+	a.gameMu.Lock()
+	if a.gameLocks == nil {
+		a.gameLocks = map[string]*sync.Mutex{}
+	}
+	m := a.gameLocks[gameID]
+	if m == nil {
+		m = &sync.Mutex{}
+		a.gameLocks[gameID] = m
+	}
+	a.gameMu.Unlock()
+	m.Lock()
+	return m.Unlock
+}
+
+// cloudLaunch is a launch whose exit is followed by a push. job is the id of
+// the push record the launch wrote: its exit and its abandon find that record
+// and no other.
 type cloudLaunch struct {
-	a *App
-	g cloudsync.Game
+	a   *App
+	g   cloudsync.Game
+	job string
 }
 
 func (c *cloudLaunch) options() []session.StartOption {
 	if c == nil {
 		return nil
 	}
-	return []session.StartOption{session.WithOnExit(func(i session.ExitInfo) { c.a.cloud.Exited(c.g.ID, i.Failed) })}
+	return []session.StartOption{session.WithOnExit(func(i session.ExitInfo) { c.a.cloud.Exited(c.g.ID, c.job, i.Failed) })}
 }
 
 func (c *cloudLaunch) abandon() {
 	if c != nil {
-		c.a.cloud.Abandon(c.g.ID)
+		c.a.cloud.Abandon(c.g.ID, c.job)
 	}
 }
 
-// cloudBeforeLaunch syncs a game's cloud saves before Hydra starts it. blocked
-// means the launch waits for the user (msg says on what); otherwise sync, when
-// not nil, registers the post-exit push.
-func (a *App) cloudBeforeLaunch(game types.Game, p *prepared) (sync *cloudLaunch, msg string, blocked bool) {
+// cloudBeforeLaunch syncs a game's cloud saves before Hydra starts it. anyway
+// is the user's "launch anyway" for this launch only. blocked means the launch
+// waits for the user (msg says on what); otherwise sync, when not nil, registers
+// the post-exit push.
+func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync *cloudLaunch, msg string, blocked bool) {
 	g, ok := a.cloudGame(game)
 	if !ok {
 		return nil, "", false
 	}
-	cc := cloudContext(game, p.runner.Path != "", p.runner)
-	d := a.cloud.BeforeLaunch(a.ctx, g, cc)
+	cc := cloudContextOf(game, p.runner)
+	d := a.cloud.BeforeLaunch(a.ctx, g, cc, anyway)
 	if !d.Proceed {
 		if d.Message != "" {
 			return nil, d.Message, true
@@ -136,17 +166,20 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared) (sync *cloudLaunch
 	if !d.Sync {
 		return nil, "", false
 	}
-	a.cloud.Launching(g, cc)
-	return &cloudLaunch{a: a, g: g}, "", false
+	job := a.cloud.Launching(g, cc)
+	return &cloudLaunch{a: a, g: g, job: job}, "", false
 }
 
 // cloudInfo is the game page's view of the game's cloud saves.
 func (a *App) cloudInfo(game types.Game) types.CloudInfo {
+	running := a.sessions.Running(game.ID)
 	g, ok := a.cloudGame(game)
 	if !ok {
-		return types.CloudInfo{Mode: types.CloudOff, PluginMode: cloudsync.DefaultMode}
+		return types.CloudInfo{Mode: types.CloudOff, PluginMode: cloudsync.DefaultMode, Running: running}
 	}
-	return a.cloud.Info(g)
+	info := a.cloud.Info(g)
+	info.Running = running
+	return info
 }
 
 // GetCloudInfo returns what Hydra knows about the game's cloud saves without
@@ -173,9 +206,15 @@ func (a *App) CheckCloudSaves(game types.Game) (types.CloudInfo, error) {
 // "local" (keep this device's copy) or "remote" (keep the cloud copy, after
 // backing up the local one). Files left out stay conflicts.
 func (a *App) ResolveCloudSaves(game types.Game, choices map[string]string) (types.CloudInfo, error) {
+	unlock := a.lockGame(game.ID)
+	defer unlock()
 	g, ok := a.cloudGame(game)
 	if !ok {
 		return a.cloudInfo(game), errors.New("this game has no cloud saves Hydra can sync")
+	}
+	if a.sessions.Running(game.ID) {
+		// The game writes its saves while it runs: settle them after it exits.
+		return a.cloudInfo(game), fmt.Errorf("%s is running; choose its saves after it exits", game.Title)
 	}
 	if _, err := a.cloud.Resolve(a.ctx, g, a.cloudContextFor(game), choices); err != nil {
 		return a.cloud.Info(g), err
@@ -193,15 +232,17 @@ func (a *App) CancelCloudSync(gameID string) bool {
 // store client running. prompt is the prompt being answered; confirming an
 // unreachable store lets `auto` mode stop asking.
 func (a *App) LaunchGameAnyway(game types.Game, prompt string) (string, error) {
-	if g, ok := a.cloudGame(game); ok {
-		a.cloud.Allow(g.ID, prompt == types.CloudPromptOffline)
+	if g, ok := a.cloudGame(game); ok && prompt == types.CloudPromptOffline {
+		a.cloud.Confirm(g.ID)
 	}
-	return a.LaunchGame(game)
+	return a.launchGame(game, true)
 }
 
 // LaunchGameViaClient starts the game through the store's own client, which
 // then syncs its saves itself ("Launch through Steam").
 func (a *App) LaunchGameViaClient(game types.Game) (string, error) {
+	unlock := a.lockGame(game.ID)
+	defer unlock()
 	if a.sessions.Running(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
 	}

@@ -140,7 +140,7 @@ func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
 		t.Fatal("Check worked for a 1.1 plugin")
 	}
 	p := &prepared{}
-	if _, _, blocked := a.cloudBeforeLaunch(g, p); blocked {
+	if _, _, blocked := a.cloudBeforeLaunch(g, p, false); blocked {
 		t.Fatal("a plugin without cloud saves blocked the launch")
 	}
 	if n := echoCalls(t, a); n["cloud.status"]+n["cloud.pull"]+n["cloud.push"]+n["cloud.resolve"] != 0 {
@@ -151,7 +151,7 @@ func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
 func TestPreLaunchPullsThenTheExitPushes(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending"})
 	g := echoGame(t)
-	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{})
+	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 	if blocked || push == nil {
 		t.Fatalf("blocked %v (%s), push %v", blocked, msg, push)
 	}
@@ -187,7 +187,7 @@ func TestPreLaunchPullsThenTheExitPushes(t *testing.T) {
 func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "conflict2"})
 	g := echoGame(t)
-	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{})
+	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 	if !blocked || push != nil || msg == "" {
 		t.Fatalf("a conflict must block the launch: blocked %v, %q", blocked, msg)
 	}
@@ -205,7 +205,7 @@ func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 	if err != nil || info.Status == nil || info.Status.Counts.Conflict != 1 {
 		t.Fatalf("%+v, %v", info.Status, err)
 	}
-	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}); !blocked {
+	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); !blocked {
 		t.Fatal("one conflict left, the launch went through")
 	}
 	rest := info.Status.Conflicts[0].Path
@@ -213,7 +213,7 @@ func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 	if err != nil || info.Status.State != types.CloudStatePending || info.Status.Counts.Upload != 1 {
 		t.Fatalf("%+v, %v", info.Status, err)
 	}
-	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}); blocked {
+	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); blocked {
 		t.Fatal("still blocked after every file was settled")
 	}
 	if info.Status.BackupDir == "" {
@@ -224,15 +224,14 @@ func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "offline"})
 	g := echoGame(t)
-	if _, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}); !blocked || msg == "" {
+	if _, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); !blocked || msg == "" {
 		t.Fatalf("blocked %v %q", blocked, msg)
 	}
 	if e := ev.find(types.CloudEvPrompt); e == nil || e.Prompt != types.CloudPromptOffline {
 		t.Fatalf("%+v", e)
 	}
-	// "Launch anyway" is the same call LaunchGame makes next.
-	a.cloud.Allow(g.ID, true)
-	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}); blocked {
+	// "Launch anyway" is the same launch, granted for this one call.
+	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, true); blocked {
 		t.Fatal("launch anyway didn't launch")
 	}
 }
@@ -240,7 +239,7 @@ func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
 func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "1"})
 	g := echoGame(t)
-	_, _, blocked := a.cloudBeforeLaunch(g, &prepared{})
+	_, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 	e := ev.find(types.CloudEvPrompt)
 	if !blocked || e == nil || e.Prompt != types.CloudPromptClient || e.Client != "Echo client" {
 		t.Fatalf("blocked %v, %+v", blocked, e)
@@ -256,7 +255,7 @@ func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
 	}
 
 	a2, ev2 := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "nolaunch"})
-	if _, _, blocked := a2.cloudBeforeLaunch(g, &prepared{}); blocked {
+	if _, _, blocked := a2.cloudBeforeLaunch(g, &prepared{}, false); blocked {
 		t.Fatal("a client that can't start the game should not block it")
 	}
 	if e := ev2.find(types.CloudEvSkipped); e == nil || e.Client == "" || e.Message == "" {
@@ -269,7 +268,7 @@ func TestCancelStopsAPullInEcho(t *testing.T) {
 	g := echoGame(t)
 	done := make(chan bool, 1)
 	go func() {
-		_, _, blocked := a.cloudBeforeLaunch(g, &prepared{})
+		_, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 		done <- blocked
 	}()
 	deadline := time.Now().Add(5 * time.Second)
@@ -300,7 +299,7 @@ func TestCancelStopsAPullInEcho(t *testing.T) {
 func TestProgressReachesTheEventsWhileEchoWorks(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_DELAY_MS": "130"})
 	g := echoGame(t)
-	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}); blocked {
+	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); blocked {
 		t.Fatal("blocked")
 	}
 	e := ev.find(types.CloudEvProgress)
@@ -334,7 +333,7 @@ func TestCloudModesPerPluginAndPerGame(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 	// Off: no plugin call from the launch step.
-	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}); blocked {
+	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); blocked {
 		t.Fatal("blocked")
 	}
 	if calls := echoCalls(t, a); calls["cloud.status"] != 0 {
@@ -343,4 +342,57 @@ func TestCloudModesPerPluginAndPerGame(t *testing.T) {
 	if err := a.SetCloudGameMode(g.ID, "sometimes"); err == nil {
 		t.Fatal("accepted a nonsense mode")
 	}
+}
+
+func TestResolveRefusesWhileTheGameRuns(t *testing.T) {
+	a, _ := cloudApp(t, nil, nil)
+	g := echoGame(t)
+	if _, err := a.sessions.StartDirect(g.ID, exec.Command("sleep", "30"), "sleep 30", nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.sessions.Stop(g.ID, true) })
+	if info := a.GetCloudInfo(g); !info.Running {
+		t.Fatalf("the running game isn't reported: %+v", info)
+	}
+	if _, err := a.ResolveCloudSaves(g, map[string]string{"save.dat": "local"}); err == nil {
+		t.Fatal("resolve settled saves while the game runs")
+	}
+	if n := echoCalls(t, a); n["cloud.resolve"] != 0 {
+		t.Fatalf("cloud.resolve reached the plugin while the game runs: %v", n)
+	}
+}
+
+func TestTheCloudContextFallbackFollowsTheLaunchRule(t *testing.T) {
+	a, _ := cloudApp(t, nil, nil)
+	// A runner this machine doesn't have: no launch can use Wine, whatever is installed.
+	g := types.Game{ID: "p.ghost.x", Source: "ghost", StoreAppID: "x", Title: "Ghost", InstallDir: t.TempDir(),
+		Settings: types.GameSettings{RunnerID: "no-such-runner"}}
+	if _, err := a.prepareLaunch(g, true); err == nil {
+		t.Fatal("the test needs a launch that can't be prepared")
+	}
+	if cc := a.cloudContextFor(g); cc.OS != "linux" {
+		t.Fatalf("the fallback picked %q with no runner to launch with", cc.OS)
+	}
+	if cc := cloudContextOf(g, types.ProtonVersion{Path: "/opt/proton/proton"}); cc.OS != "windows" {
+		t.Fatalf("a launch with a runner must be windows, got %q", cc.OS)
+	}
+}
+
+func TestGameLaunchesTakeTurns(t *testing.T) {
+	a := &App{}
+	g := echoGame(t)
+	unlock := a.lockGame(g.ID)
+	acquired := make(chan struct{})
+	go func() {
+		u := a.lockGame(g.ID)
+		close(acquired)
+		u()
+	}()
+	select {
+	case <-acquired:
+		t.Fatal("a second launch of the game ran beside the first")
+	case <-time.After(50 * time.Millisecond):
+	}
+	unlock()
+	<-acquired
 }

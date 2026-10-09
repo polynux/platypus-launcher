@@ -97,6 +97,7 @@ type job struct {
 	kind     string // "pull", "push", "resolve"
 	pluginID string
 	cancel   context.CancelFunc
+	stop     func() bool // ends the watch on Shutdown; called when the job ends
 	canceled bool
 	done     chan struct{} // closed when the job has ended
 }
@@ -132,7 +133,6 @@ type Orchestrator struct {
 	closing  bool
 	last     map[string]types.CloudStatus
 	jobs     map[string]*job // by game id: at most one job per game
-	allow    map[string]bool // one-shot "launch anyway"
 	progress map[string]time.Time
 	state    fileState
 	wg       sync.WaitGroup
@@ -160,7 +160,7 @@ func New(o Options) *Orchestrator {
 	}
 	c := &Orchestrator{
 		o: o, last: map[string]types.CloudStatus{}, jobs: map[string]*job{},
-		allow: map[string]bool{}, progress: map[string]time.Time{},
+		progress: map[string]time.Time{},
 	}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	c.load()
@@ -285,11 +285,11 @@ func (c *Orchestrator) begin(parent context.Context, g Game, kind, jobID string)
 		return nil, nil, ErrBusy
 	}
 	ctx, cancel := context.WithCancel(parent)
-	context.AfterFunc(c.ctx, cancel) // Shutdown ends every job, whoever started it
+	stop := context.AfterFunc(c.ctx, cancel) // Shutdown ends every job, whoever started it
 	if jobID == "" {
 		jobID = c.o.NewJobID()
 	}
-	j := &job{id: jobID, kind: kind, pluginID: g.PluginID, cancel: cancel, done: make(chan struct{})}
+	j := &job{id: jobID, kind: kind, pluginID: g.PluginID, cancel: cancel, stop: stop, done: make(chan struct{})}
 	c.jobs[g.ID] = j
 	c.wg.Add(1)
 	return ctx, j, nil
@@ -297,6 +297,7 @@ func (c *Orchestrator) begin(parent context.Context, g Game, kind, jobID string)
 
 func (c *Orchestrator) end(g Game, j *job) {
 	j.cancel()
+	j.stop()
 	c.mu.Lock()
 	if c.jobs[g.ID] == j {
 		delete(c.jobs, g.ID)
@@ -412,6 +413,10 @@ func (c *Orchestrator) Resolve(ctx context.Context, g Game, cc types.CloudContex
 	}
 	defer c.end(g, j)
 	st, err := c.call(jctx, j, g, cc, "cloud.resolve", map[string]any{"choices": choices})
+	if errors.Is(err, ErrCanceled) {
+		// The panel and the conflict dialog wait for an end; say how it ended.
+		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvCanceled, Message: "Cloud sync canceled."})
+	}
 	if err != nil {
 		return st, err
 	}

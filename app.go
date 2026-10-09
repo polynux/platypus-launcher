@@ -54,6 +54,9 @@ type App struct {
 	tweaksMu     sync.Mutex
 	tweaksCached bool
 	tweaks       []types.Tweak
+
+	gameMu    sync.Mutex
+	gameLocks map[string]*sync.Mutex // by game id; see lockGame
 }
 
 // NewApp creates a new App application struct
@@ -509,6 +512,14 @@ func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
 // launched, the "cloud" event carries the prompt, and the answer is another
 // launch (LaunchGameAnyway, LaunchGameViaClient) or a resolve and a retry.
 func (a *App) LaunchGame(game types.Game) (string, error) {
+	return a.launchGame(game, false)
+}
+
+// launchGame starts a game. anyway is the user's "launch anyway" for this one
+// launch: it skips the cloud step and nothing after it.
+func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
+	unlock := a.lockGame(game.ID)
+	defer unlock()
 	if a.sessions.Running(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
 	}
@@ -537,17 +548,18 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 		return a.startClient(game, cmd, cl)
 	}
 	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
-	push, msg, blocked := a.cloudBeforeLaunch(game, p)
+	push, msg, blocked := a.cloudBeforeLaunch(game, p, anyway)
 	if blocked {
 		return msg, nil
 	}
 	opts = append(opts, push.options()...)
 	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, opts...)
 	if err != nil {
-		push.abandon()
 		if errors.Is(err, session.ErrAlreadyRunning) {
+			// Never abandon here: the record Launching wrote may belong to the game that runs.
 			return "", fmt.Errorf("%s is already running", game.Title)
 		}
+		push.abandon()
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil

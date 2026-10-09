@@ -69,7 +69,20 @@ func (c *Orchestrator) PendingPushes() []Pending {
 	return append([]Pending(nil), c.state.Pending...)
 }
 
-// pendingFor finds the owed push of a game. Callers hold c.mu.
+// pendingJob finds the owed push of a game recorded under jobID. Callers hold
+// c.mu. A record a later launch overwrote no longer has that job id, so the
+// earlier launch's exit and abandon find nothing.
+func (c *Orchestrator) pendingJob(gameID, jobID string) *Pending {
+	for i := range c.state.Pending {
+		if c.state.Pending[i].GameID == gameID && c.state.Pending[i].JobID == jobID {
+			return &c.state.Pending[i]
+		}
+	}
+	return nil
+}
+
+// pendingFor finds the owed push of a game, whichever launch wrote it. Callers
+// hold c.mu.
 func (c *Orchestrator) pendingFor(gameID string) *Pending {
 	for i := range c.state.Pending {
 		if c.state.Pending[i].GameID == gameID {
@@ -79,12 +92,12 @@ func (c *Orchestrator) pendingFor(gameID string) *Pending {
 	return nil
 }
 
-// dropPending forgets the owed push of a game.
-func (c *Orchestrator) dropPending(gameID string) {
+// dropPending forgets the owed push of a game recorded under jobID.
+func (c *Orchestrator) dropPending(gameID, jobID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for i := range c.state.Pending {
-		if c.state.Pending[i].GameID == gameID {
+		if c.state.Pending[i].GameID == gameID && c.state.Pending[i].JobID == jobID {
 			c.state.Pending = append(c.state.Pending[:i], c.state.Pending[i+1:]...)
 			c.persist()
 			return

@@ -107,6 +107,8 @@ type CloudInfo struct {
 	Status *CloudStatus `json:"status"`
 	// Busy names the job running for the game ("pull", "push", "resolve"), if any.
 	Busy string `json:"busy,omitempty"`
+	// Running says the game is running now: its saves are not synced until it exits.
+	Running bool `json:"running"`
 }
 
 // CloudSettings are the saved modes: the plugins' defaults and the games' own choices.
@@ -146,6 +148,8 @@ type CloudEvent struct {
 	Total   int64        `json:"total,omitempty"`
 	// Client is the store client's name, for the client-running prompt and skips.
 	Client string `json:"client,omitempty"`
+	// Title is the game's title, so a prompt can be shown without the library.
+	Title string `json:"title,omitempty"`
 }
 
 // Normalize makes a plugin's status safe to act on: a state this Hydra

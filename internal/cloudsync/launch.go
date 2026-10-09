@@ -14,13 +14,14 @@ import (
 // running, pulls what changed only in the cloud, and tells the caller whether
 // to go on. When the user has to decide (a conflict, an unreachable store, the
 // client) the decision carries the prompt and a "prompt" event went out; the
-// user's answer comes back as another launch (see Allow).
-func (c *Orchestrator) BeforeLaunch(ctx context.Context, g Game, cc types.CloudContext) Decision {
-	d := c.beforeLaunch(ctx, g, cc)
+// user's answer comes back as another launch with anyway set ("launch anyway":
+// the cloud step is skipped for this launch only).
+func (c *Orchestrator) BeforeLaunch(ctx context.Context, g Game, cc types.CloudContext, anyway bool) Decision {
+	d := c.beforeLaunch(ctx, g, cc, anyway)
 	// The prompt goes out once the job is over, so the UI's answer (resolve,
 	// another launch) never meets a busy game.
 	if !d.Proceed && d.Prompt != "" {
-		ev := types.CloudEvent{GameID: g.ID, Kind: types.CloudEvPrompt, Prompt: d.Prompt, Message: d.Message, Status: d.Status}
+		ev := types.CloudEvent{GameID: g.ID, Kind: types.CloudEvPrompt, Prompt: d.Prompt, Message: d.Message, Status: d.Status, Title: g.Title}
 		if d.Status != nil && d.Status.Client != nil {
 			ev.Client = d.Status.Client.Name
 		}
@@ -29,7 +30,7 @@ func (c *Orchestrator) BeforeLaunch(ctx context.Context, g Game, cc types.CloudC
 	return d
 }
 
-func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudContext) Decision {
+func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudContext, anyway bool) Decision {
 	mode := c.Mode(g)
 	if mode == types.CloudOff || !c.o.Backend.Offers(ctx, g.PluginID) {
 		return Decision{Proceed: true}
@@ -44,8 +45,6 @@ func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudC
 		push.canceled = true
 		push.cancel()
 	}
-	allowed := c.allow[g.ID]
-	delete(c.allow, g.ID)
 	c.mu.Unlock()
 	if push != nil {
 		c.cancelAtPlugin(push)
@@ -54,15 +53,17 @@ func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudC
 		case <-time.After(3 * time.Second):
 		}
 	}
-	if allowed {
-		return Decision{Proceed: true, Sync: true}
-	}
 
+	// Claim the game first, also for "launch anyway": a push that is still
+	// running holds its files, and the launch must not start over it.
 	jctx, j, err := c.begin(ctx, g, "pull", "")
 	if err != nil {
 		return c.prompt(g, types.CloudPromptOffline, "Cloud saves are still being synced for this game. Try again in a moment.", nil)
 	}
 	defer c.end(g, j)
+	if anyway {
+		return Decision{Proceed: true, Sync: true}
+	}
 
 	st, err := c.status(jctx, g, cc)
 	if err != nil {
@@ -151,25 +152,23 @@ func (c *Orchestrator) clientRunning(g Game, st types.CloudStatus) Decision {
 	return Decision{Proceed: true, Status: &st}
 }
 
-// Allow records the user's "launch anyway": the game's next BeforeLaunch skips
-// the cloud step. offline marks that the prompt was an unreachable store, which
-// `auto` mode remembers.
-func (c *Orchestrator) Allow(gameID string, offline bool) {
+// Confirm remembers that the user launched a game anyway while its store was
+// unreachable: `auto` mode stops asking for it from now on.
+func (c *Orchestrator) Confirm(gameID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.allow[gameID] = true
-	if offline {
-		if c.state.Confirmed == nil {
-			c.state.Confirmed = map[string]bool{}
-		}
-		c.state.Confirmed[gameID] = true
-		c.persist()
+	if c.state.Confirmed == nil {
+		c.state.Confirmed = map[string]bool{}
 	}
+	c.state.Confirmed[gameID] = true
+	c.persist()
 }
 
-// Launching records the push the game will owe when it exits. Call it before
-// the game starts, so a Hydra that quits while it runs still pushes next time.
-func (c *Orchestrator) Launching(g Game, cc types.CloudContext) {
+// Launching records the push the game will owe when it exits and returns its
+// job id: the exit and an abandoned launch name their own record by it. Call
+// it before the game starts, so a Hydra that quits while it runs still pushes
+// next time.
+func (c *Orchestrator) Launching(g Game, cc types.CloudContext) string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	p := Pending{GameID: g.ID, PluginID: g.PluginID, StoreID: g.StoreID, Title: g.Title, JobID: c.o.NewJobID(), Ctx: cc, Since: time.Now().Unix()}
@@ -179,17 +178,20 @@ func (c *Orchestrator) Launching(g Game, cc types.CloudContext) {
 		c.state.Pending = append(c.state.Pending, p)
 	}
 	c.persist()
+	return p.JobID
 }
 
-// Abandon forgets the push recorded by Launching, for a game that never started.
-func (c *Orchestrator) Abandon(gameID string) { c.dropPending(gameID) }
+// Abandon forgets the push recorded by Launching under jobID, for a launch
+// that never started. A record a later launch wrote is left alone.
+func (c *Orchestrator) Abandon(gameID, jobID string) { c.dropPending(gameID, jobID) }
 
-// Exited starts the post-exit sync of a game that ran. failed marks a launch
-// that died at once: nothing was played, so nothing is pushed. It returns
-// immediately; the work runs in the background.
-func (c *Orchestrator) Exited(gameID string, failed bool) {
+// Exited starts the post-exit sync of a game that ran, from the record the
+// launch under jobID wrote. failed marks a launch that died at once: nothing
+// was played, so nothing is pushed. It returns immediately; the work runs in
+// the background.
+func (c *Orchestrator) Exited(gameID, jobID string, failed bool) {
 	c.mu.Lock()
-	p := c.pendingFor(gameID)
+	p := c.pendingJob(gameID, jobID)
 	if p == nil {
 		c.mu.Unlock()
 		return
@@ -198,7 +200,7 @@ func (c *Orchestrator) Exited(gameID string, failed bool) {
 	closing := c.closing
 	c.mu.Unlock()
 	if failed {
-		c.dropPending(gameID)
+		c.dropPending(gameID, jobID)
 		return
 	}
 	if closing {
@@ -243,7 +245,7 @@ func (c *Orchestrator) Wait() { c.wg.Wait() }
 func (c *Orchestrator) startPostExit(p Pending) (run func()) {
 	g := Game{ID: p.GameID, PluginID: p.PluginID, StoreID: p.StoreID, Title: p.Title}
 	if c.Mode(g) == types.CloudOff {
-		c.dropPending(g.ID)
+		c.dropPending(g.ID, p.JobID)
 		return nil
 	}
 	jctx, j, err := c.begin(c.ctx, g, "push", p.JobID)
@@ -281,21 +283,26 @@ func (c *Orchestrator) postExit(jctx context.Context, j *job, g Game, cc types.C
 		fail(err)
 		return
 	}
+	if c.jobCanceled(j) {
+		// Canceled by a launch that is taking over the game: the push stays owed.
+		fail(ErrCanceled)
+		return
+	}
 	if cl := st.Client; cl != nil && cl.Running {
 		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvSkipped, Client: cl.Name, Status: &st,
 			Message: fmt.Sprintf("Not uploaded: %s is running and handles its own sync.", cl.Name)})
-		c.dropPending(g.ID)
+		c.dropPending(g.ID, j.id)
 		return
 	}
 	switch st.State {
 	case types.CloudStateUnsupported, types.CloudStateSynced:
 		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st})
-		c.dropPending(g.ID)
+		c.dropPending(g.ID, j.id)
 		return
 	case types.CloudStateConflict:
 		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvFailed, Status: &st,
 			Message: fmt.Sprintf("%s's saves changed on this device and in the cloud. Choose which to keep on the game page.", g.Title)})
-		c.dropPending(g.ID)
+		c.dropPending(g.ID, j.id)
 		return
 	case types.CloudStateOffline, types.CloudStateError:
 		msg := st.Message
@@ -307,25 +314,25 @@ func (c *Orchestrator) postExit(jctx context.Context, j *job, g Game, cc types.C
 	}
 	if st.Counts.Upload == 0 {
 		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st})
-		c.dropPending(g.ID)
+		c.dropPending(g.ID, j.id)
 		return
 	}
 
 	// A push that may have started is resent with the same job id (the plugin
 	// answers a repeated id with the first run's result); one that finished
 	// without success gets a fresh id next time.
-	c.markStarted(g.ID, true)
+	c.markStarted(g.ID, j.id, true)
 	res, err := c.call(jctx, j, g, cc, "cloud.push", nil)
 	if err != nil {
 		if !errors.Is(err, ErrCanceled) {
-			c.markStarted(g.ID, false) // it failed outright: a retry is a new job
+			c.markStarted(g.ID, j.id, false) // it failed outright: a retry is a new job
 		}
 		fail(err)
 		return
 	}
 	switch res.State {
 	case types.CloudStateOffline, types.CloudStateError:
-		c.markStarted(g.ID, false)
+		c.markStarted(g.ID, j.id, false)
 		msg := res.Message
 		if msg == "" {
 			msg = "the store couldn't be reached"
@@ -335,12 +342,12 @@ func (c *Orchestrator) postExit(jctx context.Context, j *job, g Game, cc types.C
 	case types.CloudStateConflict:
 		c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvFailed, Status: &res,
 			Message: fmt.Sprintf("%s's saves changed in the cloud meanwhile. Choose which to keep on the game page.", g.Title)})
-		c.dropPending(g.ID)
+		c.dropPending(g.ID, j.id)
 		return
 	}
 	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvPushed, Status: &res, JobID: j.id,
 		Message: fmt.Sprintf("Saved %d file%s to the cloud", st.Counts.Upload, plural(st.Counts.Upload)), Done: int64(st.Counts.Upload)})
-	c.dropPending(g.ID)
+	c.dropPending(g.ID, j.id)
 }
 
 func plural(n int) string {
@@ -358,10 +365,10 @@ func (c *Orchestrator) jobCanceled(j *job) bool {
 
 // markStarted records whether the push under the pending job id was sent. When
 // it finished without success the job id is replaced.
-func (c *Orchestrator) markStarted(gameID string, started bool) {
+func (c *Orchestrator) markStarted(gameID, jobID string, started bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if p := c.pendingFor(gameID); p != nil {
+	if p := c.pendingJob(gameID, jobID); p != nil {
 		p.Started = started
 		if !started {
 			p.JobID = c.o.NewJobID()
