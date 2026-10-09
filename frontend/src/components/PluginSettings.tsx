@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import type { Game, SettingField, SettingValue, SettingsView, StorePlugin } from '../types';
+import type { Game, SettingField, SettingValue, SettingsSaved, SettingsView, StorePlugin } from '../types';
 import { Input } from '@/components/ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
 import { Switch } from '@/components/ds/switch';
 import { MonoLabel, Panel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
-import { effectiveValue, formValues } from '../lib/pluginSettings';
+import { effectiveValue } from '../lib/pluginSettings';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -66,45 +66,57 @@ function DraftInput({ field, value, onCommit }: { field: SettingField; value: Se
 }
 
 /** The form of one scope: groups with their fields, the values the user chose
- *  (or the plugin's defaults). Every change saves the whole scope. */
+ *  (or the plugin's defaults). A change saves just that field, and the saves of
+ *  a scope run one after the other. A failed save shows the backend's values
+ *  again, so the form never keeps what the backend refused. */
 function SettingsEditor({ scopeKey, load, save, onNotify, framed }: {
   scopeKey: string;
   load: () => Effect.Effect<SettingsView, Error>;
-  save: (values: Record<string, SettingValue>) => Effect.Effect<void, Error>;
+  save: (changed: Record<string, SettingValue>) => Effect.Effect<SettingsSaved, Error>;
   onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Wrap the form in a panel of its own (the game page); the plugin view's card already is one. */
   framed?: boolean;
 }) {
   const [view, setView] = useState<SettingsView | null>(null);
+  // The values the backend holds, as the form shows them; defaults fill the rest.
   const [values, setValues] = useState<Record<string, SettingValue>>({});
   const [error, setError] = useState<string | null>(null);
+  // A save the plugin didn't take: kept, and said so, not reverted.
+  const [notice, setNotice] = useState<string | null>(null);
   // Latest functions for the async callbacks: the props change identity each render.
   const loadRef = useRef(load);
   loadRef.current = load;
   const saveRef = useRef(save);
   saveRef.current = save;
+  // Saves of this scope, one after the other: each waits for the one before.
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  // Reads the view and the values the backend holds.
+  const reload = (live: () => boolean) => Effect.runPromise(loadRef.current()).then(
+    (v) => { if (live()) { setView(v); setValues(v.values); } },
+    (e) => { if (live()) setError(errMsg(e)); },
+  );
 
   useEffect(() => {
     let live = true;
     setView(null);
     setError(null);
-    Effect.runPromise(loadRef.current()).then(
-      (v) => { if (live) { setView(v); setValues(formValues(v)); } },
-      (e) => { if (live) setError(errMsg(e)); },
-    );
+    setNotice(null);
+    void reload(() => live);
     return () => { live = false; };
   }, [scopeKey]);
 
-  // A refused value is put back: the form shows what the backend holds.
   const change = (id: string, v: SettingValue) => {
-    const prev = values;
-    const next = { ...values, [id]: v };
-    setValues(next);
+    setValues((prev) => ({ ...prev, [id]: v }));
     setError(null);
-    Effect.runPromise(saveRef.current(next)).then(
-      () => onNotify?.('Setting saved'),
-      (e) => { setValues(prev); setError(errMsg(e)); },
-    );
+    setNotice(null);
+    queue.current = queue.current.then(() => Effect.runPromise(saveRef.current({ [id]: v })).then(
+      (res) => {
+        if (res.applied) onNotify?.('Setting saved');
+        else setNotice(res.message ?? 'Saved, but the plugin did not take it yet');
+      },
+      (e) => { setError(errMsg(e)); return reload(() => true); },
+    ));
   };
 
   if (error && !view) return <SettingError message={error} />;
@@ -128,6 +140,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed }: {
           ))}
         </div>
       ))}
+      {notice && <p role="status" className="font-mono text-[11.5px] text-amber-200">{notice}</p>}
       {error && <SettingError message={error} />}
     </div>
   );
@@ -142,7 +155,7 @@ export function PluginSettingsPanel({ plugin, onNotify }: { plugin: StorePlugin;
       <SettingsEditor
         scopeKey={`plugin:${plugin.id}`}
         load={() => LauncherApi.getPluginSettings(plugin.id)}
-        save={(values) => LauncherApi.savePluginSettings(plugin.id, values)}
+        save={(changed) => LauncherApi.savePluginSettings(plugin.id, changed)}
         onNotify={onNotify}
       />
     </CapabilitySurface>
@@ -157,7 +170,7 @@ export function GameSettingsPanel({ game, plugin, onNotify }: { game: Game; plug
       <SettingsEditor
         scopeKey={`game:${game.id}`}
         load={() => LauncherApi.getGameSettingsFields(game)}
-        save={(values) => LauncherApi.saveGameSettingsFields(game, values)}
+        save={(changed) => LauncherApi.saveGameSettingsFields(game, changed)}
         onNotify={onNotify}
         framed
       />

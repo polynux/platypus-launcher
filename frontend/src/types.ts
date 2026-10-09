@@ -201,6 +201,13 @@ export interface SettingsView {
   values: Record<string, SettingValue>;
 }
 
+/** What a save of settings answers. The values are kept either way; `applied`
+ *  is false when the plugin didn't take them now, and `message` says why. */
+export interface SettingsSaved {
+  applied: boolean;
+  message?: string;
+}
+
 export interface SourceWarning {
   source: string;
   message: string;

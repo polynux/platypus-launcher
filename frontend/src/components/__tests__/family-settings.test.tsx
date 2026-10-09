@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, screen, waitFor, act } from '@testing-library/react';
 import { Effect } from 'effect';
-import type { FamilyWarning, Game, SettingsView, StorePlugin } from '../../types';
+import type { FamilyWarning, Game, SettingsSaved, SettingsView, StorePlugin } from '../../types';
 
 const api = vi.hoisted(() => ({
   getFamilyMembers: vi.fn(),
@@ -59,9 +59,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getFamilyMembers.mockResolvedValue([]);
   api.getPluginSettings.mockResolvedValue(view());
-  api.savePluginSettings.mockResolvedValue(undefined);
+  api.savePluginSettings.mockResolvedValue({ applied: true });
   api.getGameSettingsFields.mockResolvedValue({ groups: [], values: {} });
-  api.saveGameSettingsFields.mockResolvedValue(undefined);
+  api.saveGameSettingsFields.mockResolvedValue({ applied: true });
 });
 
 afterEach(() => {
@@ -107,11 +107,44 @@ describe('plugin settings', () => {
     expect(screen.getByText('Applied when Echo launches a game.')).toBeInTheDocument();
   });
 
-  it('saves the whole plugin-wide set when a switch changes', async () => {
+  it('saves only the field that changed; the defaults of the others are not user choices', async () => {
     render(<PluginSettingsPanel plugin={plugin()} />);
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable EOS overlay' }));
     await waitFor(() => expect(api.savePluginSettings).toHaveBeenCalledTimes(1));
-    expect(api.savePluginSettings).toHaveBeenCalledWith('echo', { eos: true, region: 'eu', note: '', volume: 5 });
+    expect(api.savePluginSettings).toHaveBeenCalledWith('echo', { eos: true });
+  });
+
+  it('runs the saves of a scope one after the other, and the last change wins', async () => {
+    let finishFirst: (s: SettingsSaved) => void = () => {};
+    api.savePluginSettings
+      .mockImplementationOnce(() => new Promise<SettingsSaved>((resolve) => { finishFirst = resolve; }))
+      .mockResolvedValue({ applied: true });
+    render(<PluginSettingsPanel plugin={plugin()} />);
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable EOS overlay' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable EOS overlay' }));
+    await waitFor(() => expect(api.savePluginSettings).toHaveBeenCalledTimes(1));
+    finishFirst({ applied: true });
+    await waitFor(() => expect(api.savePluginSettings).toHaveBeenCalledTimes(2));
+    expect(api.savePluginSettings).toHaveBeenLastCalledWith('echo', { eos: false });
+  });
+
+  it('after a failed save the form shows what the backend holds', async () => {
+    api.savePluginSettings.mockRejectedValue(new Error('store is down'));
+    api.getPluginSettings.mockResolvedValueOnce(view()).mockResolvedValueOnce(view({ values: { eos: false, volume: 3 } }));
+    render(<PluginSettingsPanel plugin={plugin()} />);
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable EOS overlay' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('store is down');
+    await waitFor(() => expect(api.getPluginSettings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('spinbutton', { name: 'Volume' })).toHaveValue(3);
+  });
+
+  it('keeps a value the plugin did not take, and says so', async () => {
+    api.savePluginSettings.mockResolvedValue({ applied: false, message: "saved, but Echo didn't take them: Echo can't take settings right now" });
+    render(<PluginSettingsPanel plugin={plugin()} />);
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable EOS overlay' }));
+    expect(await screen.findByRole('status')).toHaveTextContent("Echo didn't take them");
+    expect(screen.getByRole('switch', { name: 'Enable EOS overlay' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('commits a number when the box is left, not on every key', async () => {

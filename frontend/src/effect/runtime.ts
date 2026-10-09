@@ -4,6 +4,7 @@ import type {
   CloudEvent,
   FamilyMember,
   FamilyWarning,
+  SettingsSaved,
   SettingsView,
   SettingValue,
   CloudInfo,
@@ -234,16 +235,17 @@ export const LauncherApi = {
     call<FamilyMember[]>('GetFamilyMembers', async () => (await App.GetFamilyMembers(source)) ?? []),
 
   // Plugin settings (the `settings` capability, protocol 1.8). The plugin-wide
-  // scope is the Plugins view's; the game scope is one game's page. Saving sends
-  // the complete set of the scope; the backend checks it against the schema.
+  // scope is the Plugins view's; the game scope is one game's page. A save sends
+  // only the keys the user changed (null resets one); the backend checks them
+  // against the schema and keeps them with the rest.
   getPluginSettings: (source: string) =>
     call<SettingsView>('GetPluginSettings', () => App.GetPluginSettings(source)),
   savePluginSettings: (source: string, values: Record<string, SettingValue>) =>
-    call<void>('SavePluginSettings', () => App.SavePluginSettings(source, values)),
+    call<SettingsSaved>('SavePluginSettings', () => App.SavePluginSettings(source, values)),
   getGameSettingsFields: (game: Game) =>
     call<SettingsView>('GetGameSettingsFields', () => App.GetGameSettingsFields(backend(game))),
   saveGameSettingsFields: (game: Game, values: Record<string, SettingValue>) =>
-    call<void>('SaveGameSettingsFields', () => App.SaveGameSettingsFields(backend(game), values)),
+    call<SettingsSaved>('SaveGameSettingsFields', () => App.SaveGameSettingsFields(backend(game), values)),
 
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),

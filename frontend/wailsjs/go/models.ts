@@ -1039,6 +1039,20 @@ export namespace types {
 		}
 	}
 	
+	export class SettingsSaved {
+	    applied: boolean;
+	    message?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SettingsSaved(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.applied = source["applied"];
+	        this.message = source["message"];
+	    }
+	}
 	export class SettingsView {
 	    groups: SettingGroup[];
 	    values: Record<string, any>;

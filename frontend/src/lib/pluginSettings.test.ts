@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { SettingField, SettingsView } from '../types';
-import { effectiveValue, fieldsOf, formValues } from './pluginSettings';
+import type { SettingField } from '../types';
+import { effectiveValue, fieldsOf } from './pluginSettings';
 
 const field = (o: Partial<SettingField> & Pick<SettingField, 'id' | 'kind'>): SettingField =>
   ({ label: o.id, scope: 'plugin', default: null, ...o }) as SettingField;
@@ -28,20 +28,13 @@ describe('effectiveValue', () => {
   });
 });
 
-describe('formValues and fieldsOf', () => {
-  const view: SettingsView = {
-    groups: [
-      { id: 'a', label: 'A', fields: [field({ id: 'eos', kind: 'bool', default: true }), field({ id: 'note', kind: 'text' })] },
-      { id: 'b', label: 'B', fields: [field({ id: 'volume', kind: 'number', default: 5 })] },
-    ],
-    values: { note: '-windowed' },
-  };
-
-  it('holds every field of the view at its effective value', () => {
-    expect(formValues(view)).toEqual({ eos: true, note: '-windowed', volume: 5 });
-  });
+describe('fieldsOf', () => {
+  const groups = [
+    { id: 'a', label: 'A', fields: [field({ id: 'eos', kind: 'bool', default: true }), field({ id: 'note', kind: 'text' })] },
+    { id: 'b', label: 'B', fields: [field({ id: 'volume', kind: 'number', default: 5 })] },
+  ];
 
   it('lists the fields in the order the plugin sent them', () => {
-    expect(fieldsOf(view.groups).map((f) => f.id)).toEqual(['eos', 'note', 'volume']);
+    expect(fieldsOf(groups).map((f) => f.id)).toEqual(['eos', 'note', 'volume']);
   });
 });

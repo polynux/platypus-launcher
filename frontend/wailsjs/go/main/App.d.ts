@@ -116,9 +116,9 @@ export function RetryPlugin(arg1:string):Promise<void>;
 
 export function SaveGameSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
 
-export function SaveGameSettingsFields(arg1:types.Game,arg2:Record<string, any>):Promise<void>;
+export function SaveGameSettingsFields(arg1:types.Game,arg2:Record<string, any>):Promise<types.SettingsSaved>;
 
-export function SavePluginSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
+export function SavePluginSettings(arg1:string,arg2:Record<string, any>):Promise<types.SettingsSaved>;
 
 export function SetCancelCleanupDays(arg1:number):Promise<types.LauncherSettings>;
 
