@@ -9,7 +9,6 @@ var stubs = map[string]struct {
 	perGame bool
 	result  any
 }{
-	"game.options":      {true, map[string]any{"groups": []any{}}},
 	"game.verify":       {true, map[string]any{}},
 	"game.move":         {true, map[string]any{}},
 	"achievements.list": {true, map[string]any{"total": 0, "unlocked": 0, "list": []any{}}},
