@@ -146,3 +146,46 @@ func TestCorruptFileIsMovedAsideNotOverwritten(t *testing.T) {
 		t.Fatalf("moved file changed: %q", raw)
 	}
 }
+
+func TestAnUnreadableHistoryIsNeverWrittenOver(t *testing.T) {
+	// A history file that exists but can't be read (here: a directory in its place)
+	// must not turn into an empty history that the next install saves over.
+	path := filepath.Join(t.TempDir(), "h.json")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	l, err := Open(path)
+	if err == nil {
+		t.Fatal("an unreadable history should be reported")
+	}
+	if err := l.Append(entry("g", "b1", "")); err == nil {
+		t.Fatal("the read-only ledger accepted an install")
+	}
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		t.Fatalf("the history file was replaced: %v %v", info, err)
+	}
+}
+
+func TestTheHistoryOfAllGamesIsBounded(t *testing.T) {
+	l, _ := Open(filepath.Join(t.TempDir(), "h.json"))
+	l.maxTotal = 3
+	l.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	for i, g := range []string{"a", "b", "a", "b"} {
+		e := entry(g, "b"+string(rune('1'+i)), "")
+		e.Date = time.Date(2026, 1, 1+i, 0, 0, 0, 0, time.UTC).Format(time.RFC3339)
+		if err := l.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := len(l.Entries("a")) + len(l.Entries("b")); n != 3 {
+		t.Fatalf("kept %d entries, want 3", n)
+	}
+	// The first install (a, b1) was the oldest of all: it is the one that went.
+	if got := l.Entries("a"); len(got) != 1 || got[0].Build != "b3" {
+		t.Fatalf("a = %+v", got)
+	}
+	again, _ := Open(l.path)
+	if n := len(again.Entries("a")) + len(again.Entries("b")); n != 3 {
+		t.Fatalf("the bound was not saved: %d entries", n)
+	}
+}
