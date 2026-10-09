@@ -76,6 +76,23 @@ var registry = []Capability{
 		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
 }
 
+// WithinProtocol splits caps into the capabilities a plugin that settled on
+// protocol v can offer and the ones introduced by a later revision, which
+// stay off for it. Names this Hydra doesn't know pass (they do nothing).
+func WithinProtocol(caps []string, v Version) (kept, later []string) {
+	kept = []string{}
+	for _, name := range caps {
+		if c, ok := LookupCapability(name); ok {
+			if since, err := ParseVersion(c.Since); err == nil && v.Less(since) {
+				later = append(later, name)
+				continue
+			}
+		}
+		kept = append(kept, name)
+	}
+	return kept, later
+}
+
 type methodOwner struct {
 	capability string
 	optional   bool
