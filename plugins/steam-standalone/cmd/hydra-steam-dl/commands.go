@@ -387,6 +387,7 @@ type jobFlusher struct {
 	jobID   string
 	state   *depot.JobState
 	mu      sync.Mutex
+	saveMu  sync.Mutex // one write at a time; taken before mu
 	n       int
 	stopped bool
 	ticker  *time.Ticker
@@ -417,6 +418,8 @@ func (f *jobFlusher) snapshotLocked() *depot.JobState {
 // finished job already removed — found live: job.json survived a finished
 // install.
 func (f *jobFlusher) saveNow() {
+	f.saveMu.Lock()
+	defer f.saveMu.Unlock()
 	f.mu.Lock()
 	if f.stopped {
 		f.mu.Unlock()
@@ -433,6 +436,9 @@ func (f *jobFlusher) saveNow() {
 // after it never writes again. Error/cancel paths keep the STEAM-12
 // checkpoint: their deferred stop is the first one and still saves.
 func (f *jobFlusher) stop() {
+	// Waits out a timer save already writing, so none lands after this.
+	f.saveMu.Lock()
+	defer f.saveMu.Unlock()
 	f.mu.Lock()
 	if f.stopped {
 		f.mu.Unlock()
