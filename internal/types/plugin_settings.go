@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 )
 
@@ -318,4 +319,46 @@ func (f SettingField) check(v any) error {
 		}
 	}
 	return nil
+}
+
+// KeepValid returns the saved values the schema still takes: a value of a field
+// the schema lacks, or one no longer valid for its field (a removed choice, a
+// number out of a new range), is left out.
+func (s SettingsSchema) KeepValid(saved map[string]any) map[string]any {
+	out := map[string]any{}
+	for id, v := range saved {
+		f, ok := s.Field(id)
+		if ok && v != nil && f.check(v) == nil {
+			out[id] = v
+		}
+	}
+	return out
+}
+
+// MergeSettingValues applies a patch to the saved values of one scope: a key of
+// the patch is set, a nil one resets its field to the default, and the other
+// saved values stay. The patch is checked against the schema first; the result
+// holds only values the schema takes. The schema is the scope's (Scoped).
+func (s SettingsSchema) MergeSettingValues(saved, patch map[string]any) (map[string]any, error) {
+	clean, err := s.CleanSettingValues(patch)
+	if err != nil {
+		return nil, err
+	}
+	out := s.KeepValid(saved)
+	for id, v := range patch {
+		if v == nil {
+			delete(out, id)
+		}
+	}
+	maps.Copy(out, clean)
+	return out, nil
+}
+
+// SettingsSaved is what saving settings answers. The values are kept either
+// way; Applied is false when the plugin didn't take them now, and Message says
+// why, in the plugin's words. Such a save is not an error: the form keeps the
+// values it shows.
+type SettingsSaved struct {
+	Applied bool   `json:"applied"`
+	Message string `json:"message,omitempty"`
 }

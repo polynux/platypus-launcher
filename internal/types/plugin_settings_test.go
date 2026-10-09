@@ -183,3 +183,37 @@ func TestDefaultsAreAlwaysAcceptedBySave(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeSettingValuesSendsOnlyTheChangedKeys(t *testing.T) {
+	s := mustParse(t, echoSchema).Scoped(ScopePlugin)
+	saved := map[string]any{"eos": true, "region": "us", "volume": 3.0}
+	merged, err := s.MergeSettingValues(saved, map[string]any{"volume": 7.0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"eos": true, "region": "us", "volume": 7.0}
+	if !reflect.DeepEqual(merged, want) {
+		t.Fatalf("merged = %v, want %v: a key not in the patch keeps its saved value", merged, want)
+	}
+	reset, err := s.MergeSettingValues(saved, map[string]any{"region": nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reset["region"]; ok || len(reset) != 2 {
+		t.Fatalf("reset = %v, want region back to its default (not stored)", reset)
+	}
+	if _, err := s.MergeSettingValues(saved, map[string]any{"volume": 11.0}); err == nil {
+		t.Fatal("a patch value out of range must be refused, and nothing merged")
+	}
+}
+
+func TestKeepValidDropsValuesTheSchemaNoLongerTakes(t *testing.T) {
+	s := mustParse(t, echoSchema).Scoped(ScopePlugin)
+	got := s.KeepValid(map[string]any{
+		"region": "mars", "volume": 3.0, "game-overlay": false, "gone": true, "eos": true,
+	})
+	want := map[string]any{"volume": 3.0, "eos": true}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("kept = %v, want %v", got, want)
+	}
+}
