@@ -76,9 +76,11 @@ type Game struct {
 	// PlaytimeMin is the playtime shown and sorted by: max(local, store) for
 	// a plugin game with a playtime report (playtime capability, protocol 1.7),
 	// else the local value. The two parts ride along for the tooltip.
-	PlaytimeMin      int    `json:"playtime_minutes,omitempty"`
-	PlaytimeLocalMin int    `json:"playtime_local_minutes,omitempty"`
-	PlaytimeStoreMin int    `json:"playtime_store_minutes,omitempty"`
+	PlaytimeMin int `json:"playtime_minutes,omitempty"`
+	// PlaytimeLocalMin is nil when Hydra has no local record (plugin games);
+	// PlaytimeStoreMin is nil without a store report, and 0 is a real report.
+	PlaytimeLocalMin *int   `json:"playtime_local_minutes,omitempty"`
+	PlaytimeStoreMin *int   `json:"playtime_store_minutes,omitempty"`
 	SizeBytes        int64  `json:"size_bytes,omitempty"` // installed size, if known
 	Version          string `json:"version,omitempty"`
 	// Plugin games only.

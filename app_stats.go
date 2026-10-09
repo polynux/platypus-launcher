@@ -102,9 +102,12 @@ func (c *statsCache) applyPlaytime(games []types.Game) {
 		if !ok || g.StoreAppID == "" {
 			continue
 		}
-		g.PlaytimeLocalMin = g.PlaytimeMin
-		g.PlaytimeStoreMin = store
-		g.PlaytimeMin = stats.MergePlaytime(g.PlaytimeMin, store)
+		local := g.PlaytimeMin
+		g.PlaytimeLocalMin, g.PlaytimeStoreMin = nil, &store
+		if local > 0 {
+			g.PlaytimeLocalMin = &local
+		}
+		g.PlaytimeMin = stats.MergePlaytime(local, store)
 	}
 }
 

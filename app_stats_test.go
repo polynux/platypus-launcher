@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -54,18 +55,23 @@ func TestPlaytimeMergesTheStoreValueForDisplayOnly(t *testing.T) {
 		{Source: "steam", StoreAppID: "tiny", PlaytimeMin: 7},   // another source: untouched
 	}
 	a.stats.applyPlaytime(games)
-	if g := games[0]; g.PlaytimeMin != 150 || g.PlaytimeLocalMin != 30 || g.PlaytimeStoreMin != 150 {
+	if g := games[0]; g.PlaytimeMin != 150 || !sameInt(g.PlaytimeLocalMin, 30) || !sameInt(g.PlaytimeStoreMin, 150) {
 		t.Fatalf("tiny merged = %+v", g)
 	}
-	if g := games[1]; g.PlaytimeMin != 2000 || g.PlaytimeLocalMin != 2000 || g.PlaytimeStoreMin != 1200 {
+	if g := games[1]; g.PlaytimeMin != 2000 || !sameInt(g.PlaytimeLocalMin, 2000) || !sameInt(g.PlaytimeStoreMin, 1200) {
 		t.Fatalf("huge merged = %+v", g)
 	}
-	if g := games[2]; g.PlaytimeMin != 5 || g.PlaytimeStoreMin != 0 || g.PlaytimeLocalMin != 0 {
+	if g := games[2]; g.PlaytimeMin != 5 || g.PlaytimeStoreMin != nil || g.PlaytimeLocalMin != nil {
 		t.Fatalf("client changed without a report: %+v", g)
 	}
-	if g := games[3]; g.PlaytimeMin != 7 || g.PlaytimeStoreMin != 0 {
+	if g := games[3]; g.PlaytimeMin != 7 || g.PlaytimeStoreMin != nil {
 		t.Fatalf("steam game took echo's playtime: %+v", g)
 	}
+}
+
+// sameInt reports whether a pointer field holds want.
+func sameInt(got *int, want int) bool {
+	return got != nil && *got == want
 }
 
 func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
@@ -83,8 +89,14 @@ func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
 	for _, x := range got.List {
 		byID[x.ID] = x
 	}
-	if x := byID["secret"]; x.Name != stats.HiddenName || x.Description != "" || !x.Hidden || x.Unlocked {
-		t.Fatalf("a locked hidden achievement leaked its text: %+v", x)
+	var secret types.ProgressAchievement
+	for _, x := range got.List {
+		if x.Hidden && !x.Unlocked {
+			secret = x
+		}
+	}
+	if secret.Name != stats.HiddenName || secret.Description != "" || secret.Icon != "" || secret.ID == "secret" {
+		t.Fatalf("a locked hidden achievement leaked its text or store id: %+v", secret)
 	}
 	if x := byID["ninety"]; x.Name != "Ninety seconds" || !x.Unlocked || x.UnlockedAt == 0 || x.GlobalPercent != nil {
 		t.Fatalf("an unlocked hidden achievement must show, with no global share: %+v", x)
@@ -170,5 +182,31 @@ func TestSessionEndRefreshesOnlyRunningPlugins(t *testing.T) {
 	a.refreshRunningPlaytime()
 	if *changes != 1 {
 		t.Fatalf("an initialized plugin's playtime was not refreshed after a session: %d", *changes)
+	}
+}
+
+func TestPlaytimeTooltipFieldsKeepAStoreZeroAndOmitAnUnknownLocal(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	a.stats.setPlaytime("echo", map[string]int{"zero": 0, "tiny": 30})
+	games := []types.Game{
+		{Source: "echo", StoreAppID: "zero", PlaytimeMin: 0},
+		{Source: "echo", StoreAppID: "tiny", PlaytimeMin: 30},
+	}
+	a.stats.applyPlaytime(games)
+	zero, err := json.Marshal(games[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(zero), `"playtime_store_minutes":0`) {
+		t.Fatalf("a store report of 0 is missing from the JSON: %s", zero)
+	}
+	if strings.Contains(string(zero), "playtime_local_minutes") {
+		t.Fatalf("an unknown local part was sent: %s", zero)
+	}
+	if games[0].PlaytimeLocalMin != nil || !sameInt(games[0].PlaytimeStoreMin, 0) {
+		t.Fatalf("zero game fields = local %v, store %v", games[0].PlaytimeLocalMin, games[0].PlaytimeStoreMin)
+	}
+	if !sameInt(games[1].PlaytimeLocalMin, 30) {
+		t.Fatalf("a known local value was dropped: %+v", games[1])
 	}
 }
