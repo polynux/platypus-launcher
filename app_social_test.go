@@ -115,7 +115,9 @@ func TestSocialWithTheEchoPlugin(t *testing.T) {
 		t.Fatalf("setStatus calls: %v", statuses)
 	}
 
-	// Only the plugin's own games are reported as played.
+	// Only the plugin's own games are reported as played: launchGame notes the
+	// game with its source, and a session event for a game not noted is ignored.
+	a.noteSocialGame(types.Game{ID: "p.echo.tiny", Source: "echo", StoreAppID: "tiny"})
 	a.socialSession(types.SessionEvent{GameID: "p.echo.tiny", State: "running"})
 	waitSocial(t, "tiny reported as played", func() bool {
 		_, playing := echoRecorded(t, a)

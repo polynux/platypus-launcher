@@ -49,6 +49,8 @@ type App struct {
 	sessions     *session.Tracker
 	cloud        *cloudsync.Orchestrator
 	social       *social.Manager // friends lists of plugins with the social capability
+	socialMu     sync.Mutex
+	socialGames  map[string]socialGame // launched store games by Hydra game id, for "playing"
 	moves        coreMoves
 	ledger       *ledger.Ledger
 	// sessionRunning says whether a game has a session open. Nil asks the
@@ -573,6 +575,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		return "", fmt.Errorf("game %q has no launch target", game.Title)
 	}
 
+	a.noteSocialGame(game)
 	cmd := exec.Command(filtered[0], filtered[1:]...)
 	cmd.Env = os.Environ()
 	for k, v := range p.env {

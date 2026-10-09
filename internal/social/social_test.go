@@ -31,6 +31,7 @@ type fakeBackend struct {
 }
 
 type fakeCall struct {
+	plugin string
 	method string
 	params json.RawMessage
 }
@@ -45,10 +46,10 @@ func (f *fakeBackend) Offers(context.Context, string) bool {
 	return f.offers
 }
 
-func (f *fakeBackend) Call(_ context.Context, _, method string, params, result any) error {
+func (f *fakeBackend) Call(_ context.Context, plugin, method string, params, result any) error {
 	raw, _ := json.Marshal(params)
 	f.mu.Lock()
-	f.calls = append(f.calls, fakeCall{method, raw})
+	f.calls = append(f.calls, fakeCall{plugin, method, raw})
 	missing, fail, snap := f.missing[method], f.fail[method], f.snapshot
 	f.mu.Unlock()
 	if f.hook != nil {
@@ -167,17 +168,16 @@ func TestNotificationsIgnoreUnknownAndBadPayloads(t *testing.T) {
 	}
 }
 
-func TestPlayingIsSentOnlyForAPluginGame(t *testing.T) {
+func TestPlayingIsSentForTheGameOfTheRightPlugin(t *testing.T) {
 	f := newFake()
 	m := newManager(f, true)
 	m.Start("echo")
 	defer m.StopAll()
 	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
 
-	m.GameStarted("p.other.42") // another store's game
-	m.GameStarted("steam-game") // a game that isn't a plugin's
-	m.GameStarted("p.echo.")    // no store id
-	m.GameStarted("p.echo.tiny")
+	m.GameStarted("other", "p.other.42", "42") // another store: not subscribed here
+	m.GameStarted("echo", "p.echo.tiny", "")   // no store id
+	m.GameStarted("echo", "p.echo.tiny", "tiny")
 	waitFor(t, "setPlaying tiny", func() bool { return f.count(MethodSetPlaying) == 1 })
 	if got := string(f.sent(MethodSetPlaying)[0]); got != `{"id":"tiny"}` {
 		t.Fatalf("setPlaying: %s", got)
@@ -191,6 +191,51 @@ func TestPlayingIsSentOnlyForAPluginGame(t *testing.T) {
 	}
 }
 
+// A game started while friends are off is sent when they turn on.
+func TestPlayingIsSentWhenFriendsTurnOnMidGame(t *testing.T) {
+	f := newFake()
+	m := newManager(f, true)
+	m.GameStarted("echo", "p.echo.tiny", "tiny")
+	m.Start("echo")
+	defer m.StopAll()
+	waitFor(t, "setPlaying tiny", func() bool { return f.count(MethodSetPlaying) == 1 })
+	if got := string(f.sent(MethodSetPlaying)[0]); got != `{"id":"tiny"}` {
+		t.Fatalf("setPlaying: %s", got)
+	}
+}
+
+// With the per-plugin setting off, the game is not sent, and turning it off
+// while sent clears it on the plugin.
+func TestPlayingFollowsTheShowPlayingSetting(t *testing.T) {
+	f := newFake()
+	var show atomic.Bool
+	show.Store(false)
+	m := NewManager(Options{
+		Backend:     f,
+		Enabled:     func(string) bool { return true },
+		ShowPlaying: func(string) bool { return show.Load() },
+		Emit:        func(View) {},
+	})
+	m.Start("echo")
+	defer m.StopAll()
+	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
+	m.GameStarted("echo", "p.echo.tiny", "tiny")
+	time.Sleep(10 * time.Millisecond)
+	if n := f.count(MethodSetPlaying); n != 0 {
+		t.Fatalf("setPlaying sent %d times with the setting off", n)
+	}
+
+	show.Store(true)
+	m.Refresh("echo")
+	waitFor(t, "setPlaying tiny", func() bool { return f.count(MethodSetPlaying) == 1 })
+	show.Store(false)
+	m.Refresh("echo")
+	waitFor(t, "setPlaying null", func() bool { return f.count(MethodSetPlaying) == 2 })
+	if got := string(f.sent(MethodSetPlaying)[1]); got != `{"id":null}` {
+		t.Fatalf("setPlaying after the setting went off: %s", got)
+	}
+}
+
 func TestPlayingMissingOptionalMethodIsNotAnError(t *testing.T) {
 	f := newFake()
 	f.missing[MethodSetPlaying] = true
@@ -198,7 +243,7 @@ func TestPlayingMissingOptionalMethodIsNotAnError(t *testing.T) {
 	m.Start("echo")
 	defer m.StopAll()
 	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
-	m.GameStarted("p.echo.tiny")
+	m.GameStarted("echo", "p.echo.tiny", "tiny")
 	waitFor(t, "setPlaying sent", func() bool { return f.count(MethodSetPlaying) == 1 })
 	m.GameStopped("p.echo.tiny")
 	waitFor(t, "null sent", func() bool { return f.count(MethodSetPlaying) == 2 })
@@ -210,7 +255,7 @@ func TestPlayingIsReplayedAfterARestart(t *testing.T) {
 	m.Start("echo")
 	defer m.StopAll()
 	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
-	m.GameStarted("p.echo.tiny")
+	m.GameStarted("echo", "p.echo.tiny", "tiny")
 	waitFor(t, "setPlaying", func() bool { return f.count(MethodSetPlaying) == 1 })
 
 	m.Exited("echo") // the plugin process went away
@@ -343,7 +388,7 @@ func TestEnabledFollowsTheSetting(t *testing.T) {
 func TestNothingIsSentWithoutSubscription(t *testing.T) {
 	f := newFake()
 	m := newManager(f, true)
-	m.GameStarted("p.echo.tiny")
+	m.GameStarted("echo", "p.echo.tiny", "tiny")
 	m.Exited("echo")
 	m.Notify("echo", NoteFriends, json.RawMessage(`{"full":true,"friends":[]}`))
 	if len(f.calls) != 0 {
@@ -518,5 +563,24 @@ func TestViewsCarryARisingSequence(t *testing.T) {
 	second := m.View("echo").Seq
 	if first == 0 || second <= first {
 		t.Fatalf("sequence %d then %d, want rising", first, second)
+	}
+}
+
+// A game goes to the plugin it was launched from, even when another plugin's
+// id is a dotted prefix of its key.
+func TestPlayingGoesToTheOwningPlugin(t *testing.T) {
+	f := newFake()
+	m := newManager(f, true)
+	m.Start("steam")
+	m.Start("steam.beta")
+	defer m.StopAll()
+	waitFor(t, "both connected", func() bool { return f.count(MethodState) == 2 })
+
+	m.GameStarted("steam.beta", "p.steam.beta.1", "1")
+	waitFor(t, "setPlaying", func() bool { return f.count(MethodSetPlaying) == 1 })
+	for _, c := range f.calls {
+		if c.method == MethodSetPlaying && c.plugin != "steam.beta" {
+			t.Fatalf("setPlaying for steam.beta went to %s: %s", c.plugin, c.params)
+		}
 	}
 }

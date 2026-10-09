@@ -226,6 +226,9 @@ func (a *App) PluginAuthBegin(id string) (types.AuthPrompt, error) {
 func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.AuthStatus, error) {
 	var st types.AuthStatus
 	err := a.authCall(id, "auth.complete", map[string]any{"fields": fields}, &st)
+	if err == nil && st.LoggedIn {
+		a.socialLoggedIn(id)
+	}
 	return st, err
 }
 

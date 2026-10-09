@@ -35,10 +35,11 @@ func (b socialBackend) Call(ctx context.Context, pluginID, method string, params
 // syncSocial, once the plugins are known.
 func (a *App) startSocial(ctx context.Context) {
 	a.social = social.NewManager(social.Options{
-		Backend: socialBackend{a},
-		Enabled: a.settings.SocialEnabled,
-		Emit:    func(v social.View) { wruntime.EventsEmit(ctx, "social", v) },
-		Logf:    func(f string, args ...any) { wruntime.LogInfof(ctx, "social: "+f, args...) },
+		Backend:     socialBackend{a},
+		Enabled:     a.settings.SocialEnabled,
+		ShowPlaying: a.settings.SocialPlaying,
+		Emit:        func(v social.View) { wruntime.EventsEmit(ctx, "social", v) },
+		Logf:        func(f string, args ...any) { wruntime.LogInfof(ctx, "social: "+f, args...) },
 	})
 }
 
@@ -71,15 +72,41 @@ func (a *App) syncSocial() {
 	}
 }
 
-// socialSession tells the friends orchestrator when a launched game starts
-// and stops; it reports only the games of plugins with a friends list.
+// socialGame is a launched game of a store plugin with a friends list: the
+// plugin and its id for the game.
+type socialGame struct{ plugin, storeID string }
+
+// noteSocialGame remembers a launch of a game from a plugin with a friends
+// list, so that the session event for it can say which store it belongs to.
+func (a *App) noteSocialGame(game types.Game) {
+	if a.plugins == nil || game.StoreAppID == "" || !a.plugins.Has(game.Source, "social") {
+		return
+	}
+	a.socialMu.Lock()
+	defer a.socialMu.Unlock()
+	if a.socialGames == nil {
+		a.socialGames = map[string]socialGame{}
+	}
+	a.socialGames[game.ID] = socialGame{plugin: game.Source, storeID: game.StoreAppID}
+}
+
+// socialSession tells the friends orchestrator when a launched game of a
+// plugin with a friends list starts and stops.
 func (a *App) socialSession(e types.SessionEvent) {
 	if a.social == nil {
 		return
 	}
+	a.socialMu.Lock()
+	g, ok := a.socialGames[e.GameID]
+	if e.State == "stopped" || e.State == "failed" {
+		delete(a.socialGames, e.GameID)
+	}
+	a.socialMu.Unlock()
 	switch e.State {
 	case "running":
-		a.social.GameStarted(e.GameID)
+		if ok {
+			a.social.GameStarted(g.plugin, e.GameID, g.storeID)
+		}
 	case "stopped", "failed":
 		a.social.GameStopped(e.GameID)
 	}
@@ -117,6 +144,48 @@ func (a *App) SetSocialEnabled(pluginID string, enabled bool) error {
 		a.social.Stop(pluginID)
 	}
 	return nil
+}
+
+// SetSocialPlaying turns on or off whether friends see the game the user
+// plays on a plugin's store.
+func (a *App) SetSocialPlaying(pluginID string, show bool) error {
+	if !a.plugins.Has(pluginID, "social") {
+		return fmt.Errorf("%s has no friends list", pluginID)
+	}
+	if err := a.settings.SetSocialPlaying(pluginID, show); err != nil {
+		return err
+	}
+	if a.social != nil {
+		a.social.Refresh(pluginID)
+	}
+	return nil
+}
+
+// RestartSocial reconnects a plugin's friends: off and on again. The banner
+// offers it after the store replaced the session or the user logged out.
+func (a *App) RestartSocial(pluginID string) error {
+	p, ok := a.plugins.Plugin(pluginID)
+	if !ok || !a.plugins.Has(pluginID, "social") {
+		return fmt.Errorf("%s has no friends list", pluginID)
+	}
+	a.social.Stop(pluginID)
+	if a.socialWanted(p) {
+		a.social.Start(pluginID)
+	}
+	return nil
+}
+
+// socialLoggedIn brings a plugin's friends back after the user logged in: a
+// session that was logged out is reconnected at once.
+func (a *App) socialLoggedIn(pluginID string) {
+	if a.social == nil {
+		return
+	}
+	if a.social.Running(pluginID) {
+		_ = a.RestartSocial(pluginID)
+		return
+	}
+	a.syncSocial()
 }
 
 // SetSocialStatus changes the user's own status on a store, one of online,

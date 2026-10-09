@@ -40,3 +40,33 @@ func TestSocialEnabledDefaultsOnAndPersists(t *testing.T) {
 		t.Fatal("echo still off after switching on")
 	}
 }
+
+// Friends see what the user plays by default; the switch is per plugin and
+// survives a restart.
+func TestSocialPlayingDefaultsOnAndPersists(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.SocialPlaying("echo") {
+		t.Fatal("showing what the user plays should be on by default")
+	}
+	if err := s.SetSocialPlaying("echo", false); err != nil {
+		t.Fatal(err)
+	}
+	if s.SocialPlaying("echo") || !s.SocialPlaying("gog") {
+		t.Fatal("the switch is per plugin")
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.SocialPlaying("echo") {
+		t.Fatal("the choice was lost on restart")
+	}
+	if !reopened.SocialEnabled("echo") {
+		t.Fatal("hiding what the user plays turned the friends off")
+	}
+}

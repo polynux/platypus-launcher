@@ -106,6 +106,9 @@ type Options struct {
 	Backend Backend
 	// Enabled says whether the user keeps a plugin's friends list on.
 	Enabled func(pluginID string) bool
+	// ShowPlaying says whether the user lets friends see the game they play,
+	// per plugin. Nil means yes.
+	ShowPlaying func(pluginID string) bool
 	// Emit receives every change of a plugin's View.
 	Emit func(View)
 	Logf func(format string, args ...any)
@@ -124,8 +127,15 @@ const stopTimeout = 3 * time.Second
 type Manager struct {
 	opt Options
 
-	mu   sync.Mutex
-	subs map[string]*sub
+	mu      sync.Mutex
+	subs    map[string]*sub
+	playing map[string]playingGame // by plugin id, kept while friends are off too
+}
+
+// playingGame is the game the user plays on a plugin's store.
+type playingGame struct {
+	gameID  string // Hydra's key, to match the stop
+	storeID string // the plugin's id for the game, as social.setPlaying takes it
 }
 
 // sub is one plugin's subscription. Its fields are guarded by mu, except the
@@ -145,13 +155,12 @@ type sub struct {
 	paused    bool   // replaced or logged out: no restart until the plugin connects again
 	started   bool   // social.start answered for this process, so it must be stopped
 	connected bool   // social.state answered too: the friends are live
-	playing   string // store game id the user plays; "" for none
 	sent      string // what the current process was last told about playing
 }
 
 // NewManager creates a manager; nothing runs until Start.
 func NewManager(o Options) *Manager {
-	return &Manager{opt: o, subs: map[string]*sub{}}
+	return &Manager{opt: o, subs: map[string]*sub{}, playing: map[string]playingGame{}}
 }
 
 // Start subscribes to a plugin's friends. It does nothing when the plugin is
@@ -348,60 +357,74 @@ func (m *Manager) SetStatus(ctx context.Context, pluginID, state string) error {
 	return err
 }
 
-// GameStarted records that a game of a plugin with a subscription is running,
-// when its id is a plugin game key (p.<plugin>.<id>). Other games are ignored.
-// The plugin learns the store id, as social.setPlaying takes it.
-func (m *Manager) GameStarted(gameID string) {
-	pluginID, storeID, ok := m.owner(gameID)
-	if !ok {
+// GameStarted records that the user started a game of a plugin. The plugin
+// learns the store id, as social.setPlaying takes it. The game is kept while
+// the plugin's friends are off, and sent once they are on.
+func (m *Manager) GameStarted(pluginID, gameID, storeID string) {
+	if gameID == "" || storeID == "" {
 		return
 	}
-	m.setPlaying(pluginID, storeID, true)
-}
-
-// GameStopped clears the playing game of the plugin that owns gameID, when
-// that game is the one recorded.
-func (m *Manager) GameStopped(gameID string) {
-	pluginID, storeID, ok := m.owner(gameID)
-	if !ok {
-		return
-	}
-	m.setPlaying(pluginID, storeID, false)
-}
-
-// owner finds the subscribed plugin a Hydra game key belongs to.
-func (m *Manager) owner(gameID string) (pluginID, storeID string, ok bool) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	for id := range m.subs {
-		if rest, found := strings.CutPrefix(gameID, "p."+id+"."); found && rest != "" {
-			return id, rest, true
+	m.playing[pluginID] = playingGame{gameID: gameID, storeID: storeID}
+	s, ok := m.subs[pluginID]
+	m.mu.Unlock()
+	if ok {
+		kick(s)
+	}
+}
+
+// GameStopped clears the game the user plays when it is gameID: the one
+// recorded by GameStarted, on whichever plugin.
+func (m *Manager) GameStopped(gameID string) {
+	m.mu.Lock()
+	var kicked []*sub
+	for pluginID, p := range m.playing {
+		if p.gameID != gameID {
+			continue
+		}
+		delete(m.playing, pluginID)
+		if s, ok := m.subs[pluginID]; ok {
+			kicked = append(kicked, s)
 		}
 	}
-	return "", "", false
+	m.mu.Unlock()
+	for _, s := range kicked {
+		kick(s)
+	}
 }
 
-func (m *Manager) setPlaying(pluginID, storeID string, on bool) {
+// Refresh tells a plugin's subscription that a setting changed (the playing
+// game may now be sent or cleared).
+func (m *Manager) Refresh(pluginID string) {
 	m.mu.Lock()
 	s, ok := m.subs[pluginID]
 	m.mu.Unlock()
-	if !ok {
-		return
+	if ok {
+		kick(s)
 	}
-	s.mu.Lock()
-	if on {
-		s.playing = storeID
-	} else if s.playing == storeID {
-		s.playing = ""
-	} else {
-		s.mu.Unlock()
-		return
-	}
-	s.mu.Unlock()
+}
+
+func kick(s *sub) {
 	select {
 	case s.kick <- struct{}{}:
 	default:
 	}
+}
+
+// playingFor is the store id of the game to tell a plugin about: the game the
+// user plays on it, or "" for none, including when the user keeps it hidden.
+func (m *Manager) playingFor(pluginID string) string {
+	m.mu.Lock()
+	p := m.playing[pluginID]
+	m.mu.Unlock()
+	if p.storeID == "" || !m.showPlaying(pluginID) {
+		return ""
+	}
+	return p.storeID
+}
+
+func (m *Manager) showPlaying(pluginID string) bool {
+	return m.opt.ShowPlaying == nil || m.opt.ShowPlaying(pluginID)
 }
 
 // run keeps the plugin subscribed until ctx ends: connect, serve until the
@@ -550,8 +573,9 @@ func (m *Manager) endSession(s *sub) {
 // the last message to this process: the id, or null when the game stopped.
 // Plugins without the optional method answer -32601, which counts as sent.
 func (m *Manager) sendPlaying(ctx context.Context, s *sub) {
+	want := m.playingFor(s.id)
 	s.mu.Lock()
-	want, sent := s.playing, s.sent
+	sent := s.sent
 	s.mu.Unlock()
 	if want == sent {
 		return
