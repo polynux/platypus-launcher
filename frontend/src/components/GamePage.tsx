@@ -19,6 +19,8 @@ import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, la
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface, offers } from '../lib/capabilities';
+import { playtimeTooltip } from '../lib/stats';
+import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
 import { pinLabel } from '../lib/versions';
 
 /** Wide art for the hero banner: the details' hero first, then the library
@@ -142,6 +144,7 @@ export function GamePage(p: GamePageProps) {
   const [optionsMode, setOptionsMode] = useState<'install' | 'update' | null>(null);
   const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
+  const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
   const hero = useHero(game, details);
   useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); setVerifyOpen(false); setMoveOpen(false); setOptionsMode(null); }, [game.id]);
   useEffect(() => {
@@ -214,7 +217,7 @@ export function GamePage(p: GamePageProps) {
           <div className="flex flex-none items-center gap-4">
             {(hours != null || last) && (
               <div className="text-right font-mono text-[11.5px] leading-relaxed text-white/50">
-                {hours != null && <div>{hours}h logged</div>}
+                {hours != null && <div title={playtimeTooltip(game)}>{hours}h logged</div>}
                 {last && <div>last played {last}</div>}
               </div>
             )}
@@ -378,9 +381,11 @@ export function GamePage(p: GamePageProps) {
         </aside>
       </div>
 
-      {ach && ach.total > 0 && (
+      {progress && progress.total > 0 ? (
+        <ProgressAchievements progress={progress} />
+      ) : ach && ach.total > 0 ? (
         <AchievementsSection ach={ach} known={ach.unlocked >= 0} viaSteam={game.source === 'steam'} />
-      )}
+      ) : null}
 
       {events.length > 0 && (
         <section className="pb-10">

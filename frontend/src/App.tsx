@@ -16,7 +16,7 @@ import { CloudSavesHost } from './components/CloudSavesHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onSession } from './effect/runtime';
+import { LauncherApi, onJobs, onPlaytime, onSession } from './effect/runtime';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeRescannedGames } from './lib/games';
@@ -334,6 +334,10 @@ export function App() {
     Effect.runPromise(LauncherApi.listJobs()).then((l) => apply(l, true)).catch(() => {});
     return onJobs((l) => apply(l));
   }, [log, notify]);
+
+  // A plugin's playtime report changed a library value (protocol 1.7): rescan
+  // so the library, sort and game page show the merged value.
+  useEffect(() => onPlaytime(() => loadRef.current('rescan')), []);
 
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
