@@ -50,8 +50,10 @@ type App struct {
 	// familyEmit delivers family.warning notifications to the UI (the
 	// "family" event). Nil until the window exists; tests replace it.
 	familyEmit func(types.FamilyWarning)
-	moves      coreMoves
-	ledger     *ledger.Ledger
+	// settingsLocks orders the settings saves and starts of each plugin.
+	settingsLocks settingsLocks
+	moves         coreMoves
+	ledger        *ledger.Ledger
 	// sessionRunning says whether a game has a session open. Nil asks the
 	// session tracker; tests replace it.
 	sessionRunning func(gameID string) bool

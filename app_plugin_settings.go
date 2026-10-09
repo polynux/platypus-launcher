@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sync"
 
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/settings"
@@ -21,8 +22,35 @@ import (
 // settingsCall is the wait for one settings request: the store may be slow.
 const settingsCall = optionsTimeout
 
-// fetchSettingsSchema asks the plugin for its schema, normalized for core.
-func (a *App) fetchSettingsSchema(ctx context.Context, source string) (types.SettingsSchema, error) {
+// settingsLocks serializes the settings work of each plugin: saves, and the
+// values sent on plugin start. Two saves, or a save and a start, can't overtake
+// each other, and each reads the saved values inside its own turn. The zero
+// value is ready to use.
+type settingsLocks struct {
+	mu       sync.Mutex
+	byPlugin map[string]*sync.Mutex
+}
+
+// of returns the lock of one plugin.
+func (l *settingsLocks) of(source string) *sync.Mutex {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.byPlugin == nil {
+		l.byPlugin = map[string]*sync.Mutex{}
+	}
+	m, ok := l.byPlugin[source]
+	if !ok {
+		m = &sync.Mutex{}
+		l.byPlugin[source] = m
+	}
+	return m
+}
+
+// fetchSettingsSchema asks the plugin for its schema, normalized for core. The
+// call has its own timeout.
+func (a *App) fetchSettingsSchema(source string) (types.SettingsSchema, error) {
+	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
+	defer cancel()
 	var raw json.RawMessage
 	if err := a.plugins.Call(ctx, source, "settings.schema", map[string]any{}, &raw); err != nil {
 		return types.SettingsSchema{}, err
@@ -32,8 +60,10 @@ func (a *App) fetchSettingsSchema(ctx context.Context, source string) (types.Set
 
 // applySettings sends values to the plugin: the plugin-wide ones (gameID "")
 // or one game's. Core always sends the complete set for its scope, so the
-// plugin can replace what it holds.
-func (a *App) applySettings(ctx context.Context, source, gameID string, values map[string]any) error {
+// plugin can replace what it holds. The call has its own timeout.
+func (a *App) applySettings(source, gameID string, values map[string]any) error {
+	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
+	defer cancel()
 	params := map[string]any{"values": values}
 	if gameID != "" {
 		params["gameId"] = gameID
@@ -42,48 +72,53 @@ func (a *App) applySettings(ctx context.Context, source, gameID string, values m
 	return a.plugins.Call(ctx, source, "settings.apply", params, &res)
 }
 
+// savedAnswer is the answer of a save whose values are stored: applied or not.
+// A plugin that doesn't take them now keeps them saved, so that is not an error.
+func savedAnswer(p plugins.Plugin, err error) types.SettingsSaved {
+	if err == nil {
+		return types.SettingsSaved{Applied: true}
+	}
+	return types.SettingsSaved{Message: fmt.Sprintf("saved, but %s didn't take them: %v", p.Manifest.Name, err)}
+}
+
 // GetPluginSettings returns the plugin-wide settings of a store plugin, with
 // the values the user chose. The Plugins view shows them.
 func (a *App) GetPluginSettings(source string) (types.SettingsView, error) {
 	if _, err := a.capabilityGate(source, "settings"); err != nil {
 		return types.SettingsView{}, err
 	}
-	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
-	defer cancel()
-	schema, err := a.fetchSettingsSchema(ctx, source)
+	schema, err := a.fetchSettingsSchema(source)
 	if err != nil {
 		return types.SettingsView{}, err
 	}
 	return schema.ViewFor(types.ScopePlugin, a.settings.PluginValues(source)), nil
 }
 
-// SavePluginSettings stores the plugin-wide values the user chose and sends
-// them to the plugin. Values are checked against the plugin's schema first:
-// a value of the wrong kind, or out of range, refuses the save. The values are
-// kept even when the plugin can't take them now; it gets them again when it
-// starts, and the error says so.
-func (a *App) SavePluginSettings(source string, values map[string]any) error {
+// SavePluginSettings stores the plugin-wide values the user changed and sends
+// the whole set to the plugin. The patch is checked against the plugin's schema
+// first: a value of the wrong kind, or out of range, refuses the save and keeps
+// nothing. When the plugin doesn't take the values, they stay saved and the
+// answer says so (see savedAnswer).
+func (a *App) SavePluginSettings(source string, patch map[string]any) (types.SettingsSaved, error) {
 	p, err := a.capabilityGate(source, "settings")
 	if err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
-	defer cancel()
-	schema, err := a.fetchSettingsSchema(ctx, source)
+	lock := a.settingsLocks.of(source)
+	lock.Lock()
+	defer lock.Unlock()
+	schema, err := a.fetchSettingsSchema(source)
 	if err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	clean, err := schema.Scoped(types.ScopePlugin).CleanSettingValues(values)
+	merged, err := schema.Scoped(types.ScopePlugin).MergeSettingValues(a.settings.PluginValues(source), patch)
 	if err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	if err := a.settings.SetPluginValues(source, clean); err != nil {
-		return err
+	if err := a.settings.SetPluginValues(source, merged); err != nil {
+		return types.SettingsSaved{}, err
 	}
-	if err := a.applySettings(ctx, source, "", clean); err != nil {
-		return fmt.Errorf("saved, but %s didn't take them: %w", p.Manifest.Name, err)
-	}
-	return nil
+	return savedAnswer(p, a.applySettings(source, "", merged)), nil
 }
 
 // gameSettingsGate says whether a game's own settings apply: its plugin offers
@@ -105,9 +140,7 @@ func (a *App) GetGameSettingsFields(game types.Game) (types.SettingsView, error)
 	if _, err := a.gameSettingsGate(game); err != nil {
 		return types.SettingsView{}, err
 	}
-	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
-	defer cancel()
-	schema, err := a.fetchSettingsSchema(ctx, game.Source)
+	schema, err := a.fetchSettingsSchema(game.Source)
 	if err != nil {
 		return types.SettingsView{}, err
 	}
@@ -115,50 +148,60 @@ func (a *App) GetGameSettingsFields(game types.Game) (types.SettingsView, error)
 	return schema.ViewFor(types.ScopeGame, saved.Values), nil
 }
 
-// SaveGameSettingsFields stores the per-game values of a game and sends them
-// to its plugin, the same way SavePluginSettings does for the plugin-wide ones.
-func (a *App) SaveGameSettingsFields(game types.Game, values map[string]any) error {
+// SaveGameSettingsFields stores the per-game values of a game the user changed
+// and sends them to its plugin, the same way SavePluginSettings does for the
+// plugin-wide ones.
+func (a *App) SaveGameSettingsFields(game types.Game, patch map[string]any) (types.SettingsSaved, error) {
 	p, err := a.gameSettingsGate(game)
 	if err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
-	defer cancel()
-	schema, err := a.fetchSettingsSchema(ctx, game.Source)
+	lock := a.settingsLocks.of(game.Source)
+	lock.Lock()
+	defer lock.Unlock()
+	schema, err := a.fetchSettingsSchema(game.Source)
 	if err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	clean, err := schema.Scoped(types.ScopeGame).CleanSettingValues(values)
+	saved, _ := a.settings.PluginGameSettings(game.ID)
+	merged, err := schema.Scoped(types.ScopeGame).MergeSettingValues(saved.Values, patch)
 	if err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	record := settings.PluginGameValues{Source: game.Source, StoreID: game.StoreAppID, Values: clean}
+	record := settings.PluginGameValues{Source: game.Source, StoreID: game.StoreAppID, Values: merged}
 	if err := a.settings.SetPluginGameSettings(game.ID, record); err != nil {
-		return err
+		return types.SettingsSaved{}, err
 	}
-	if err := a.applySettings(ctx, game.Source, game.StoreAppID, clean); err != nil {
-		return fmt.Errorf("saved, but %s didn't take them: %w", p.Manifest.Name, err)
-	}
-	return nil
+	return savedAnswer(p, a.applySettings(game.Source, game.StoreAppID, merged)), nil
 }
 
 // pluginReady sends a plugin its saved settings when it has initialized (the
-// manager calls it on its own goroutine, once per run). A plugin that doesn't
-// offer settings, or has nothing saved, gets nothing. A failure is logged: the
-// values stay saved and the next start tries again.
+// manager calls it on its own goroutine, once per run). It takes the plugin's
+// settings lock, reads the current schema and sends only the saved values the
+// schema still takes. A plugin that doesn't offer settings, or has nothing
+// saved, gets nothing. A failure is logged: the values stay saved and the next
+// start tries again.
 func (a *App) pluginReady(source string) {
 	if !a.plugins.Has(source, "settings") {
 		return
 	}
-	ctx, cancel := context.WithTimeout(appCtx(a), settingsCall)
-	defer cancel()
-	if values := a.settings.PluginValues(source); len(values) > 0 {
-		if err := a.applySettings(ctx, source, "", values); err != nil {
+	lock := a.settingsLocks.of(source)
+	lock.Lock()
+	defer lock.Unlock()
+	schema, err := a.fetchSettingsSchema(source)
+	if err != nil {
+		a.warnf("%s: settings not read on start: %v", source, err)
+		return
+	}
+	if values := schema.Scoped(types.ScopePlugin).KeepValid(a.settings.PluginValues(source)); len(values) > 0 {
+		if err := a.applySettings(source, "", values); err != nil {
 			a.warnf("%s: plugin settings not applied on start: %v", source, err)
 		}
 	}
+	perGame := schema.Scoped(types.ScopeGame)
 	for _, g := range a.settings.PluginGameSettingsFor(source) {
-		if err := a.applySettings(ctx, source, g.StoreID, g.Values); err != nil {
+		values := perGame.KeepValid(g.Values)
+		if err := a.applySettings(source, g.StoreID, values); err != nil {
 			a.warnf("%s: settings of game %s not applied on start: %v", source, g.StoreID, err)
 		}
 	}

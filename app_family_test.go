@@ -246,7 +246,7 @@ func TestPluginSettingsShowOnlyThePluginScopeAndDropUnknownKinds(t *testing.T) {
 
 func TestSavedPluginSettingsReachThePluginAndSurviveARestart(t *testing.T) {
 	e := familyApp(t, familyProtocols, familyCaps)
-	err := e.a.SavePluginSettings("echo", map[string]any{"eos-overlay": true, "region": "us", "volume": 7.0, "game-overlay": false})
+	_, err := e.a.SavePluginSettings("echo", map[string]any{"eos-overlay": true, "region": "us", "volume": 7.0, "game-overlay": false})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestSavedPluginSettingsReachThePluginAndSurviveARestart(t *testing.T) {
 
 func TestPluginSettingsRefuseWrongValuesAndKeepNothing(t *testing.T) {
 	e := familyApp(t, familyProtocols, familyCaps)
-	if err := e.a.SavePluginSettings("echo", map[string]any{"volume": 11.0}); err == nil || !strings.Contains(err.Error(), "out of range") {
+	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 11.0}); err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("out of range: err = %v", err)
 	}
 	if got := e.a.settings.PluginValues("echo"); len(got) != 0 {
@@ -292,7 +292,7 @@ func TestGameSettingsOnlyForAGameWhoseFeaturesIncludeThem(t *testing.T) {
 	if len(view.Groups) != 1 || view.Groups[0].Fields[0].ID != "game-overlay" {
 		t.Fatalf("game view = %+v", view.Groups)
 	}
-	if err := e.a.SaveGameSettingsFields(tiny, map[string]any{"game-overlay": false, "eos-overlay": true}); err != nil {
+	if _, err := e.a.SaveGameSettingsFields(tiny, map[string]any{"game-overlay": false, "eos-overlay": true}); err != nil {
 		t.Fatal(err)
 	}
 	snap := e.config(t, nil)["settings"].(map[string]any)["games"].(map[string]any)
@@ -312,7 +312,7 @@ func TestGameSettingsOffWhenTheGameDoesNotOfferThem(t *testing.T) {
 	if _, err := e.a.GetGameSettingsFields(tiny); err == nil {
 		t.Fatal("a game whose features leave out settings shows its settings")
 	}
-	if err := e.a.SaveGameSettingsFields(tiny, map[string]any{"game-overlay": true}); err == nil {
+	if _, err := e.a.SaveGameSettingsFields(tiny, map[string]any{"game-overlay": true}); err == nil {
 		t.Fatal("a game whose features leave out settings saved them")
 	}
 	if n := e.calls(t)["settings.apply"]; n != 0 {
@@ -325,7 +325,7 @@ func TestSettingsBelowProtocol18AreNeverSent(t *testing.T) {
 	if _, err := e.a.GetPluginSettings("echo"); err == nil {
 		t.Fatal("settings over 1.7: want an error")
 	}
-	if err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err == nil {
+	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err == nil {
 		t.Fatal("saving settings over 1.7: want an error")
 	}
 	if n := e.calls(t)["settings.apply"]; n != 0 {
@@ -343,5 +343,100 @@ func waitFor(t *testing.T, cond func() bool) {
 			t.Fatal("condition not reached in time")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestASaveKeepsTheKeysItDoesNotSend(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	if _, err := e.a.SavePluginSettings("echo", map[string]any{"eos-overlay": true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err != nil {
+		t.Fatal(err)
+	}
+	got := e.a.settings.PluginValues("echo")
+	if got["eos-overlay"] != true || got["volume"] != 3.0 || len(got) != 2 {
+		t.Fatalf("saved = %v: a save sends only what changed and keeps the rest", got)
+	}
+	if plug := e.config(t, nil)["settings"].(map[string]any)["plugin"].(map[string]any); plug["eos-overlay"] != true || plug["volume"] != 3.0 {
+		t.Fatalf("echo got %v, want the whole saved set", plug)
+	}
+}
+
+func TestAPluginThatRefusesSettingsKeepsThemSavedAndSaysSo(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	e.config(t, map[string]any{"settingsRefuse": true})
+	res, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0})
+	if err != nil {
+		t.Fatalf("a refused apply is not an error, the values are saved: %v", err)
+	}
+	if res.Applied || !strings.Contains(res.Message, "saved, but Echo didn't take them") {
+		t.Fatalf("result = %+v, want not applied with the saved-but-not-applied message", res)
+	}
+	if got := e.a.settings.PluginValues("echo"); got["volume"] != 3.0 {
+		t.Fatalf("saved = %v, want the refused values kept", got)
+	}
+	e.config(t, map[string]any{"settingsRefuse": false})
+	res, err = e.a.SavePluginSettings("echo", map[string]any{"volume": 4.0})
+	if err != nil || !res.Applied || res.Message != "" {
+		t.Fatalf("after the plugin takes settings again: res = %+v, err = %v", res, err)
+	}
+}
+
+func TestSavesAndStartsOfAPluginAreOrdered(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	e.config(t, map[string]any{"settingsDelayMs": 30})
+	var wg sync.WaitGroup
+	for v := 1; v <= 8; v++ {
+		wg.Add(1)
+		go func(v float64) {
+			defer wg.Done()
+			if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": v}); err != nil {
+				t.Error(err)
+			}
+		}(float64(v))
+	}
+	wg.Wait()
+	saved := e.a.settings.PluginValues("echo")["volume"]
+	plug := e.config(t, nil)["settings"].(map[string]any)["plugin"].(map[string]any)
+	if plug["volume"] != saved {
+		t.Fatalf("echo holds volume %v, saved %v: the last applied value must be the last saved one", plug["volume"], saved)
+	}
+}
+
+func TestPluginStartReadsTheValuesInsideItsTurn(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err != nil {
+		t.Fatal(err)
+	}
+	// A save holds the plugin's settings turn; the start waits for it and must
+	// send what the save stored, not the values it saw before.
+	lock := e.a.settingsLocks.of("echo")
+	lock.Lock()
+	done := make(chan struct{})
+	go func() {
+		e.a.pluginReady("echo")
+		close(done)
+	}()
+	if err := e.a.settings.SetPluginValues("echo", map[string]any{"volume": 9.0}); err != nil {
+		t.Fatal(err)
+	}
+	lock.Unlock()
+	<-done
+	plug := e.config(t, nil)["settings"].(map[string]any)["plugin"].(map[string]any)
+	if plug["volume"] != 9.0 {
+		t.Fatalf("echo got volume %v, want 9 (the value stored inside the turn)", plug["volume"])
+	}
+}
+
+func TestPluginStartSendsOnlyValuesTheSchemaStillTakes(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	if err := e.a.settings.SetPluginValues("echo", map[string]any{"region": "mars", "volume": 3.0, "gone": true}); err != nil {
+		t.Fatal(err)
+	}
+	e.a.pluginReady("echo")
+	plug := e.config(t, nil)["settings"].(map[string]any)["plugin"].(map[string]any)
+	if len(plug) != 1 || plug["volume"] != 3.0 {
+		t.Fatalf("echo got %v, want only volume: region is no choice of the schema, gone is no field", plug)
 	}
 }
