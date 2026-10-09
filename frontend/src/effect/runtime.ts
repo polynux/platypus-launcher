@@ -212,6 +212,8 @@ export const LauncherApi = {
     call<Job>('UpdateGameWithOptions', () => App.UpdateGameWithOptions(backend(game), choices)),
   /** Free bytes where the game would be installed. */
   getInstallFreeSpace: (game: Game) => call<number>('GetInstallFreeSpace', () => App.GetInstallFreeSpace(backend(game))),
+  /** Bytes a fresh install of the game needs with the store's defaults. */
+  getInstallSize: (game: Game) => call<number>('GetInstallSize', () => App.GetInstallSize(backend(game))),
 
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),

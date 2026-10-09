@@ -17,14 +17,40 @@ export function chosenIds(group: OptionGroup, choices: InstallChoices): string[]
 export const canPick = (group: OptionGroup, value: OptionValue): boolean =>
   !group.dlc || value.owned || !!value.installed;
 
-/** Bytes the chosen values add to the install. */
+/** Bytes the chosen values add to the install. An add-on already on disk adds
+ *  nothing: it is not downloaded again. */
 export function addedBytes(groups: OptionGroup[], choices: InstallChoices): number {
   let total = 0;
   for (const g of groups) {
     const ids = chosenIds(g, choices);
-    for (const v of g.values ?? []) if (ids.includes(v.id)) total += v.sizeBytes ?? 0;
+    for (const v of g.values ?? []) if (!v.installed && ids.includes(v.id)) total += v.sizeBytes ?? 0;
   }
   return total;
+}
+
+/** Whether two sets of choices name the same values, group by group. */
+export function sameChoices(groups: OptionGroup[], a: InstallChoices, b: InstallChoices): boolean {
+  return groups.every((g) => {
+    if (g.kind === 'bool') return (a[g.id] === true) === (b[g.id] === true);
+    const x = [...chosenIds(g, a)].sort();
+    const y = [...chosenIds(g, b)].sort();
+    return x.length === y.length && x.every((id, i) => id === y[i]);
+  });
+}
+
+/** The add-ons already on disk that the choices switch off: an update would
+ *  remove them. Named by label. */
+export function removedAddOns(groups: OptionGroup[], before: InstallChoices, after: InstallChoices): string[] {
+  const names: string[] = [];
+  for (const g of groups) {
+    if (g.kind !== 'multi') continue;
+    const was = chosenIds(g, before);
+    const now = chosenIds(g, after);
+    for (const v of g.values ?? []) {
+      if (v.installed && was.includes(v.id) && !now.includes(v.id)) names.push(v.label ?? v.id);
+    }
+  }
+  return names;
 }
 
 /** The choices with one multi value switched on or off. */

@@ -7,6 +7,7 @@ import type { Game, GameOptions, OptionGroup, StorePlugin } from '../../types';
 const api = vi.hoisted(() => ({
   getGameOptions: vi.fn(),
   getInstallFreeSpace: vi.fn(),
+  getInstallSize: vi.fn(),
   installGameWithOptions: vi.fn(),
   updateGameWithOptions: vi.fn(),
 }));
@@ -55,9 +56,12 @@ const game = (o: Partial<Game> = {}): Game => ({
 }) as Game;
 const plugin = { id: 'echo', name: 'Echo', capabilities: ['install-options'], declared: ['install-options'] } as StorePlugin;
 
-function open(mode: 'install' | 'update' = 'install', g: Game = game(), o: GameOptions = options(), free = 100 * MiB) {
+// base is the store's size of the game before any add-on; null means unknown.
+function open(mode: 'install' | 'update' = 'install', g: Game = game(), o: GameOptions = options(), free = 100 * MiB, base: number | null = 0) {
   api.getGameOptions.mockResolvedValue(o);
   api.getInstallFreeSpace.mockResolvedValue(free);
+  if (base == null) api.getInstallSize.mockRejectedValue(new Error('the store can not size it'));
+  else api.getInstallSize.mockResolvedValue(base);
   const onClose = vi.fn(), onChanged = vi.fn(), onNotify = vi.fn();
   render(<InstallOptionsDialog game={g} plugin={plugin} mode={mode} onClose={onClose} onChanged={onChanged} onNotify={onNotify} />);
   return { onClose, onChanged, onNotify };
@@ -95,19 +99,36 @@ describe('InstallOptionsDialog', () => {
   });
 
   it('keeps the live total of the chosen add-ons and warns when the space is short', async () => {
-    // 2 MiB free: the soundtrack (2 MiB, chosen at start) fits, and the season pass doesn't.
-    open('install', game(), options(), 2 * MiB);
+    // Half a MiB free: nothing is short until the season pass (1 MiB) is picked.
+    open('install', game(), options(), MiB / 2);
     await ready();
-    expect(screen.getByTestId('added-size').textContent).toBe('+' + formatBytes(2 * MiB));
+    expect(screen.getByTestId('added-size').textContent).toBe('—');
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(screen.getByLabelText('Season Pass'));
-    expect(screen.getByTestId('added-size').textContent).toBe('+' + formatBytes(3 * MiB));
+    expect(screen.getByTestId('added-size').textContent).toBe('+' + formatBytes(1 * MiB));
     expect(screen.getByTestId('free-space').className).toMatch(/text-red/);
     expect(screen.getByRole('alert').textContent).toMatch(/Not enough space/);
     expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByLabelText('Soundtrack'));
+    fireEvent.click(screen.getByLabelText('Season Pass'));
     expect(screen.queryByRole('alert')).toBeNull();
     expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('counts an add-on already on disk as nothing to download', async () => {
+    // The soundtrack is installed and chosen: it adds no bytes.
+    open('install', game(), options(), 100 * MiB, 10 * MiB);
+    await ready();
+    expect(screen.getByTestId('added-size').textContent).toBe('—');
+    expect(screen.getByTestId('total-size').textContent).toBe(formatBytes(10 * MiB));
+  });
+
+  it('does not block an install when the base size is unknown', async () => {
+    open('install', game(), options(), 0, null);
+    await ready();
+    expect(screen.getByTestId('total-size').textContent).toBe('unknown');
+    fireEvent.click(screen.getByLabelText('Season Pass'));
+    expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('installs with the choices, unowned DLC never among them', async () => {
@@ -129,11 +150,34 @@ describe('InstallOptionsDialog', () => {
     open('update', game({ is_installed: true }));
     await ready();
     expect(screen.getByRole('heading', { name: 'Add-ons & options' })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Season Pass'));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(api.updateGameWithOptions).toHaveBeenCalledTimes(1));
+    expect(api.updateGameWithOptions.mock.calls[0][1]).toEqual({ language: 'en', dlc: ['soundtrack', 'season'], subtitles: false });
+    expect(api.installGameWithOptions).not.toHaveBeenCalled();
+  });
+
+  it('keeps Apply off until an update changes something', async () => {
+    open('update', game({ is_installed: true }));
+    await ready();
+    const apply = () => screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
+    expect(apply().disabled).toBe(true);
+    fireEvent.click(screen.getByRole('switch', { name: 'Subtitles' }));
+    expect(apply().disabled).toBe(false);
+    fireEvent.click(screen.getByRole('switch', { name: 'Subtitles' }));
+    expect(apply().disabled).toBe(true);
+  });
+
+  it('asks once more before an update removes an add-on already on disk', async () => {
+    open('update', game({ is_installed: true }));
+    await ready();
     fireEvent.click(screen.getByLabelText('Soundtrack'));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(screen.getByRole('alert').textContent).toMatch(/removes Soundtrack from Echo Tiny/);
+    expect(api.updateGameWithOptions).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(api.updateGameWithOptions).toHaveBeenCalledTimes(1));
     expect(api.updateGameWithOptions.mock.calls[0][1]).toEqual({ language: 'en', dlc: [], subtitles: false });
-    expect(api.installGameWithOptions).not.toHaveBeenCalled();
   });
 
   it('picks a language from the dropdown', async () => {

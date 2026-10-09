@@ -633,8 +633,10 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
   install, and the dialog says why. A plugin refuses it too (`-32602`) if it is
   asked anyway. An unowned value that is already installed may stay in the list.
 - **Remembered.** Hydra keeps each game's last choices and sends them on every
-  later install, reinstall and plain update. A job keeps its options, so a
-  resumed job sends the same ones.
+  later install, reinstall and plain update. A job keeps its options; when it
+  is sized or starts, Hydra checks them against `game.options` again, so a
+  resumed job sends what the store offers now (a DLC refunded while paused is
+  left out). Options are sent only while the plugin offers them over 1.5.
 - **Changing options on an installed game** is a `game.update` with the new
   `options` (and the pin's `target`, if any).
 - **Free space.** `game.installSize` takes the same `options`, so the free-space

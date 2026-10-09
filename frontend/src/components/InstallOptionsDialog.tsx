@@ -11,7 +11,7 @@ import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { formatBytes } from '../lib/games';
-import { addedBytes, canPick, chosenIds, pickValue, setFlag, toggleValue } from '../lib/options';
+import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -32,31 +32,55 @@ export interface InstallOptionsDialogProps {
 export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify }: InstallOptionsDialogProps) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [choices, setChoices] = useState<InstallChoices>({});
+  // What the choices were when the dialog opened: an update compares with it.
+  const [saved, setSaved] = useState<InstallChoices>({});
   const [free, setFree] = useState<number | null>(null);
+  const [baseSize, setBaseSize] = useState<number | null>(null);
+  // The removal the user has already been warned about (see removed below).
+  const [confirmed, setConfirmed] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let live = true;
     Effect.runPromise(LauncherApi.getGameOptions(game)).then(
-      (o) => { if (live) { setGroups(o.groups); setChoices(o.chosen); } },
+      (o) => { if (live) { setGroups(o.groups); setChoices(o.chosen); setSaved(o.chosen); } },
       (e) => { if (live) setError(errMsg(e)); },
     );
     Effect.runPromise(LauncherApi.getInstallFreeSpace(game)).then(
       (bytes) => { if (live) setFree(bytes); },
       () => { /* the free space is a hint: the install checks it again */ },
     );
+    Effect.runPromise(LauncherApi.getInstallSize(game)).then(
+      (bytes) => { if (live) setBaseSize(bytes); },
+      () => { /* unknown: the total says so, and the install isn't blocked on it */ },
+    );
     return () => { live = false; };
   }, [game]);
 
   const installing = mode === 'install';
   const added = groups ? addedBytes(groups, choices) : 0;
-  // The game's own size is known for an installed game; a fresh install adds
-  // the options to what the store reports, which the queue checks again. An
-  // installed game already has its own files on disk, so only the add-ons need room.
-  const total = added + (game.size_bytes ?? 0);
+  // The base is the store's figure, or the library's. An installed game already
+  // has its own files on disk, so only the add-ons need room. While the base
+  // is unknown the total is unknown too, and a fresh install isn't blocked.
+  const base = baseSize ?? game.size_bytes ?? null;
+  const total = base == null ? null : base + added;
   const needed = installing ? total : added;
-  const short = free != null && needed > free;
+  const short = free != null && needed != null && needed > free;
+  // Apply does nothing for an update that changes nothing.
+  const unchanged = !installing && groups != null && sameChoices(groups, saved, choices);
+  // An update that switches off an add-on already on disk removes it: the
+  // user confirms that with a second Apply, and the warning goes if they change the choice again.
+  const removed = !installing && groups ? removedAddOns(groups, saved, choices) : [];
+  const removedKey = removed.join('\n');
+
+  const apply = () => {
+    if (removed.length > 0 && confirmed !== removedKey) {
+      setConfirmed(removedKey);
+      return;
+    }
+    void submit();
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -106,12 +130,10 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
             <span className="text-white/45">Add-ons & packs</span>
             <span className="text-white/85" data-testid="added-size">{added > 0 ? `+${formatBytes(added)}` : '—'}</span>
           </div>
-          {game.size_bytes != null && (
-            <div className="mt-1.5 flex justify-between gap-4">
-              <span className="text-white/45">Total size</span>
-              <span className="text-white/85" data-testid="total-size">{formatBytes(total)}</span>
-            </div>
-          )}
+          <div className="mt-1.5 flex justify-between gap-4">
+            <span className="text-white/45">Total size</span>
+            <span className="text-white/85" data-testid="total-size">{total != null ? formatBytes(total) : 'unknown'}</span>
+          </div>
           {free != null && (
             <div className="mt-1.5 flex justify-between gap-4">
               <span className="text-white/45">Free space</span>
@@ -126,9 +148,16 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
         </div>
       )}
 
+      {removed.length > 0 && (
+        <p role="alert" className="mt-5 flex items-start gap-1.5 text-[12.5px] text-amber-200">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>Applying removes {removed.join(', ')} from {game.title}. Apply again to confirm.</span>
+        </p>
+      )}
+
       <div className="mt-6 flex justify-end gap-2.5">
         <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>Cancel</Button>
-        <Button variant="primary" size="sm" disabled={busy || !groups || short} onClick={submit}>
+        <Button variant="primary" size="sm" disabled={busy || !groups || short || unchanged} onClick={apply}>
           {installing ? 'Install' : 'Apply'}
         </Button>
       </div>
