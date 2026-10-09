@@ -25,6 +25,8 @@ vi.mock('../../effect/runtime', () => ({
   },
   onJobs: () => () => {},
   onSession: () => () => {},
+  onSocial: () => () => {},
+  onPlaytime: () => () => {},
 }));
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({

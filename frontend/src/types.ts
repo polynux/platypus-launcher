@@ -70,6 +70,31 @@ export interface Achievements {
   list: Achievement[]; // may be a subset of total
 }
 
+/** One achievement with the user's own state (protocol 1.7). A hidden, locked
+ *  one comes with its name, description and icon already blanked by core. */
+export interface ProgressAchievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  hidden: boolean;
+  unlocked: boolean;
+  unlocked_at: number; // unix seconds, 0 when locked or the store doesn't say
+  global_percent?: number; // share of all players; absent when the store doesn't say
+}
+
+export interface AchievementProgress {
+  total: number;
+  unlocked: number;
+  list: ProgressAchievement[];
+}
+
+/** What a store says about a redeemed code (protocol 1.7). */
+export interface RedeemResult {
+  message: string;
+  titles: string[];
+}
+
 export interface GameDetails {
   summary: string;
   screenshots: string[] | null;
@@ -116,7 +141,11 @@ export interface Game {
   settings: GameSettings;
   fix_info?: GameFixInfo;
   last_played_at?: number; // unix seconds, from Steam's localconfig.vdf
+  /** Playtime shown and sorted by: max(local, store) for plugin games with a report. */
   playtime_minutes?: number;
+  /** The local record and the store's report, when a plugin reported (playtime, protocol 1.7). */
+  playtime_local_minutes?: number;
+  playtime_store_minutes?: number;
   size_bytes?: number;
   version?: string;
   // Plugin games only.

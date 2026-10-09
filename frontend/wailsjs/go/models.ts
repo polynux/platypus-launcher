@@ -158,6 +158,66 @@ export namespace types {
 	        this.global_percent = source["global_percent"];
 	    }
 	}
+	export class ProgressAchievement {
+	    id: string;
+	    name: string;
+	    description: string;
+	    icon: string;
+	    hidden: boolean;
+	    unlocked: boolean;
+	    unlocked_at: number;
+	    global_percent?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProgressAchievement(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.icon = source["icon"];
+	        this.hidden = source["hidden"];
+	        this.unlocked = source["unlocked"];
+	        this.unlocked_at = source["unlocked_at"];
+	        this.global_percent = source["global_percent"];
+	    }
+	}
+	export class AchievementProgress {
+	    total: number;
+	    unlocked: number;
+	    list: ProgressAchievement[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AchievementProgress(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.total = source["total"];
+	        this.unlocked = source["unlocked"];
+	        this.list = this.convertValues(source["list"], ProgressAchievement);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Achievements {
 	    total: number;
 	    unlocked: number;
@@ -539,6 +599,8 @@ export namespace types {
 	    fix_info?: GameFixInfo;
 	    last_played_at?: number;
 	    playtime_minutes?: number;
+	    playtime_local_minutes?: number;
+	    playtime_store_minutes?: number;
 	    size_bytes?: number;
 	    version?: string;
 	    update_available?: boolean;
@@ -571,6 +633,8 @@ export namespace types {
 	        this.fix_info = this.convertValues(source["fix_info"], GameFixInfo);
 	        this.last_played_at = source["last_played_at"];
 	        this.playtime_minutes = source["playtime_minutes"];
+	        this.playtime_local_minutes = source["playtime_local_minutes"];
+	        this.playtime_store_minutes = source["playtime_store_minutes"];
 	        this.size_bytes = source["size_bytes"];
 	        this.version = source["version"];
 	        this.update_available = source["update_available"];
@@ -998,6 +1062,7 @@ export namespace types {
 	        this.hint = source["hint"];
 	    }
 	}
+	
 	export class ProtonVersion {
 	    id: string;
 	    name: string;
@@ -1018,6 +1083,20 @@ export namespace types {
 	        this.is_system = source["is_system"];
 	        this.is_custom = source["is_custom"];
 	        this.is_default = source["is_default"];
+	    }
+	}
+	export class RedeemResult {
+	    message: string;
+	    titles: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RedeemResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.message = source["message"];
+	        this.titles = source["titles"];
 	    }
 	}
 	export class SessionEvent {

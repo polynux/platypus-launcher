@@ -31,6 +31,8 @@ export function GetCloudInfo(arg1:types.Game):Promise<types.CloudInfo>;
 
 export function GetCloudSettings():Promise<types.CloudSettings>;
 
+export function GetGameAchievements(arg1:types.Game):Promise<types.AchievementProgress>;
+
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
 export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
@@ -92,6 +94,8 @@ export function PluginAuthStatus(arg1:string):Promise<types.AuthStatus>;
 export function PluginLogout(arg1:string):Promise<types.AuthStatus>;
 
 export function PreviewLaunchCommand(arg1:types.Game):Promise<string>;
+
+export function RedeemCode(arg1:string,arg2:string):Promise<types.RedeemResult>;
 
 export function RemoveCustomGame(arg1:string):Promise<void>;
 

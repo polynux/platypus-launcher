@@ -31,7 +31,7 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.6); it answers the highest Hydra also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.7); it answers the highest Hydra also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
@@ -148,7 +148,7 @@ type knobs struct {
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
 // the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"}
 
 var (
 	knobMu  sync.Mutex
@@ -426,6 +426,9 @@ type params struct {
 	Ledger   []ledgerParam `json:"ledger"`
 	Pinned   *pinParam     `json:"pinned"`
 
+	// redeem.submit (protocol 1.7).
+	Code string `json:"code"`
+
 	// game.verify and game.move (protocol 1.4).
 	Repair bool   `json:"repair"`
 	From   string `json:"from"`
@@ -585,6 +588,12 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return socialSetPlaying(raw)
 	case "recorded":
 		return socialRecorded(), nil
+	case "achievements.list":
+		return achievementsList(p)
+	case "playtime.list":
+		return playtimeList()
+	case "redeem.submit":
+		return redeemSubmit(p)
 	}
 	if res, err, ok := capabilityStub(method, p); ok {
 		return res, err

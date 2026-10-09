@@ -15,6 +15,8 @@ vi.mock('../../effect/runtime', () => ({
     return () => h.handlers.delete(cb);
   },
   onSession: () => () => {},
+  onSocial: () => () => {},
+  onPlaytime: () => () => {},
 }));
 
 import { CloudSavesPanel } from '../CloudSavesPanel';

@@ -433,6 +433,7 @@ func (s Suite) Conformance(t *testing.T) {
 	if has("social") {
 		sess.checkSocial(t)
 	}
+	sess.checkStats(t, game, has, !s.NoUnknownDetails)
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {

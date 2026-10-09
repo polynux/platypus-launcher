@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck, Ticket } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
@@ -10,6 +10,7 @@ import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
 import { PluginCapabilities } from './PluginCapabilities';
+import { RedeemDialog } from './RedeemDialog';
 import { CloudSavesSetting } from './CloudSavesSetting';
 import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
@@ -47,6 +48,7 @@ const hasAuth = (p: StorePlugin) => offers(p, 'auth');
 export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
   const [auth, setAuth] = useState<Record<string, AuthStatus | { error: string }>>({});
   const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
+  const [redeeming, setRedeeming] = useState<StorePlugin | null>(null);
   const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -235,6 +237,11 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       Enable
                     </Button>
                   )}
+                  {offers(p, 'redeem') && p.status === 'ready' && (
+                    <Button variant="neutral" className="flex-1" onClick={() => setRedeeming(p)}>
+                      <Ticket className="h-3.5 w-3.5" /> Redeem a code
+                    </Button>
+                  )}
                   {/* CORE-10: a plugin that gave up after repeated crashes
                       fails fast until its crash count is cleared. */}
                   {p.gave_up && p.status === 'ready' && (
@@ -299,6 +306,8 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           </div>
         ))}
       </div>
+
+      {redeeming && <RedeemDialog plugin={redeeming} onClose={() => setRedeeming(null)} />}
 
       {reviewing && (
         <ApproveModal

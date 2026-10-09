@@ -94,3 +94,28 @@ export function mergeRescannedGames(
     return fix && !withSettings.fix_info ? { ...withSettings, fix_info: fix } : withSettings;
   });
 }
+
+/** Take only the playtime fields from a fresh library read (protocol 1.7), so a
+ *  playtime report updates the library without a rescan. Returns `prev` itself
+ *  when nothing changed. */
+export function mergePlaytime(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same =
+      g.playtime_minutes === f.playtime_minutes &&
+      g.playtime_local_minutes === f.playtime_local_minutes &&
+      g.playtime_store_minutes === f.playtime_store_minutes;
+    if (same) return g;
+    changed = true;
+    return {
+      ...g,
+      playtime_minutes: f.playtime_minutes,
+      playtime_local_minutes: f.playtime_local_minutes,
+      playtime_store_minutes: f.playtime_store_minutes,
+    };
+  });
+  return changed ? next : prev;
+}

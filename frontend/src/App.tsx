@@ -17,11 +17,11 @@ import { FriendsModal } from './components/FriendsModal';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onJobs, onPlaytime, onSession, onSocial } from './effect/runtime';
 import { reconcileViews, upsertView } from './lib/social';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { needsAttention, mergeRescannedGames } from './lib/games';
+import { needsAttention, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
@@ -356,6 +356,20 @@ export function App() {
     Effect.runPromise(LauncherApi.listJobs()).then((l) => apply(l, true)).catch(() => {});
     return onJobs((l) => apply(l));
   }, [log, notify]);
+
+  // A plugin's playtime report changed a library value (protocol 1.7). Only
+  // the playtime fields are taken from a fresh read: no rescan notice, and the
+  // game details cache stays as it is.
+  useEffect(
+    () =>
+      onPlaytime(() => {
+        Effect.runPromise(LauncherApi.getLibrary()).then(
+          (lib) => setGames((prev) => mergePlaytime(prev, lib.games)),
+          () => {},
+        );
+      }),
+    [],
+  );
 
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;

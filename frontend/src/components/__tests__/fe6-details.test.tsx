@@ -22,6 +22,8 @@ vi.mock('../../effect/runtime', () => ({
   },
   onJobs: () => () => {},
   onSession: () => () => {},
+  onSocial: () => () => {},
+  onPlaytime: () => () => {},
 }));
 
 import { GamePage, invalidateGameDetailsCache } from '../GamePage';

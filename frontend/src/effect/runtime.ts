@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
 import type {
+  AchievementProgress,
   AuthPrompt,
   CloudEvent,
   CloudInfo,
@@ -9,6 +10,7 @@ import type {
   AuthStatus,
   Game,
   GameDetails,
+  RedeemResult,
   GameFixInfo,
   GameSettings,
   GameOptions,
@@ -199,6 +201,20 @@ export const LauncherApi = {
   updateGameVersion: (game: Game, target: VersionTarget) =>
     call<Job>('UpdateGameVersion', () => App.UpdateGameVersion(backend(game), target as never)),
 
+  // Achievements and redeem (protocol 1.7). Null when the plugin doesn't offer
+  // the user's progress for this game; the game page then shows the catalogue.
+  getGameAchievements: (game: Game) =>
+    call<AchievementProgress | null>('GetGameAchievements', async () => {
+      const a = (await App.GetGameAchievements(backend(game))) as unknown as AchievementProgress | null;
+      return a ? { ...a, list: a.list ?? [] } : null;
+    }),
+  // The code goes to the store's plugin only; one submission at a time (Go refuses a second).
+  redeemCode: (source: string, code: string) =>
+    call<RedeemResult>('RedeemCode', async () => {
+      const r = (await App.RedeemCode(source, code)) as unknown as RedeemResult;
+      return { message: r.message ?? '', titles: r.titles ?? [] };
+    }),
+
   // Verify files and move (protocol 1.4). A check only reports; a repair is a
   // second run, asked for after a check found damage.
   verifyGame: (game: Game) => call<Job>('VerifyGame', () => App.VerifyGame(backend(game))),
@@ -266,6 +282,12 @@ export function onSession(cb: (e: SessionEvent) => void): () => void {
 export function onJobs(cb: (jobs: Job[]) => void): () => void {
   if (!window.go?.main?.App) return () => {};
   return EventsOn('jobs', cb);
+}
+
+/** Subscribe to playtime changes: a plugin's report changed a library value. */
+export function onPlaytime(cb: () => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('playtime', cb);
 }
 
 /** Subscribe to cloud sync events: progress, new statuses, prompts, results. */
