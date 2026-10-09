@@ -5,6 +5,7 @@ import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJ
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CloudSavesPanel } from './CloudSavesPanel';
+import { CopyPicker } from './CopyPicker';
 import { GameSettingsPanel } from './PluginSettings';
 import { Lightbox } from './Lightbox';
 import { VersionsDialog } from './VersionsDialog';
@@ -64,6 +65,8 @@ interface GamePageProps {
   onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** A version job was queued or a pin changed: the library should reload. */
   onVersionsChanged?: () => void;
+  /** The family copy a borrowed game is played from changed: the library should reload. */
+  onCopyChanged?: () => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -367,6 +370,7 @@ export function GamePage(p: GamePageProps) {
             />
           )}
 
+          {isPluginGame(game) && plugin && <CopyPicker game={game} plugin={plugin} onChanged={() => p.onCopyChanged?.()} />}
           {isPluginGame(game) && game.is_installed && plugin && <CloudSavesPanel game={game} plugin={plugin} />}
 
           {isPluginGame(game) && plugin && (

@@ -251,6 +251,9 @@ export const LauncherApi = {
   // Shown only; Hydra enforces none of its rules.
   getFamilyMembers: (source: string) =>
     call<FamilyMember[]>('GetFamilyMembers', async () => (await App.GetFamilyMembers(source)) ?? []),
+  // The lender whose copy a borrowed game is played from (family.setPreferredCopy).
+  setPreferredCopy: (game: Game, ownerId: string) =>
+    call<void>('SetPreferredCopy', () => App.SetPreferredCopy(backend(game), ownerId)),
 
   // Plugin settings (the `settings` capability, protocol 1.8). The plugin-wide
   // scope is the Plugins view's; the game scope is one game's page. A save sends

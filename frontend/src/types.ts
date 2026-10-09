@@ -162,12 +162,34 @@ export interface Game {
   /** The version the game is held at (the `versions` capability): updates
    *  install it and the update prompt is off. */
   pinned?: VersionPin;
-  /** The family member who lends the game (the `family` capability). */
+  /** The family member who lends the game (the `family` capability): the copy it is played from. */
   shared_by?: SharedBy | null;
+  /** The lenders' copies of a borrowed game, when they differ. Absent for the user's own games. */
+  copies?: GameCopy[] | null;
+  /** The owner id of the copy the user picked; empty for the store's default (shared_by). */
+  preferred_copy?: string;
 }
 
 /** The family member a borrowed game comes from. */
 export interface SharedBy {
+  id: string;
+  name: string;
+}
+
+/** One lender's copy of a borrowed game (the `family` capability). */
+export interface GameCopy {
+  owner_id: string;
+  owner_name: string;
+  dlc?: GameDLC[] | null;
+  note?: string;
+  /** Whether the copy can be borrowed now. */
+  available: boolean;
+  /** Whether someone is playing the copy now. */
+  in_use?: boolean;
+}
+
+/** An add-on one copy has. */
+export interface GameDLC {
   id: string;
   name: string;
 }

@@ -506,6 +506,7 @@ export function App() {
             onNavigate={setView}
             onNotify={notify}
             onVersionsChanged={() => loadData('rescan')}
+            onCopyChanged={() => loadData('rescan')}
           />
         ) : (
           <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>
