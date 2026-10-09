@@ -128,6 +128,190 @@ export namespace types {
 	        this.qr = source["qr"];
 	    }
 	}
+	export class CloudClient {
+	    running: boolean;
+	    name: string;
+	    canLaunch?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudClient(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.running = source["running"];
+	        this.name = source["name"];
+	        this.canLaunch = source["canLaunch"];
+	    }
+	}
+	export class CloudFile {
+	    size: number;
+	    mtime: number;
+	    machine?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.size = source["size"];
+	        this.mtime = source["mtime"];
+	        this.machine = source["machine"];
+	    }
+	}
+	export class CloudConflict {
+	    path: string;
+	    local: CloudFile;
+	    remote: CloudFile;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudConflict(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.local = this.convertValues(source["local"], CloudFile);
+	        this.remote = this.convertValues(source["remote"], CloudFile);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CloudCounts {
+	    same: number;
+	    download: number;
+	    upload: number;
+	    conflict: number;
+	    unmapped: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudCounts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.same = source["same"];
+	        this.download = source["download"];
+	        this.upload = source["upload"];
+	        this.conflict = source["conflict"];
+	        this.unmapped = source["unmapped"];
+	    }
+	}
+	
+	export class CloudStatus {
+	    state: string;
+	    message?: string;
+	    counts: CloudCounts;
+	    conflicts?: CloudConflict[];
+	    checkedAt?: number;
+	    backupDir?: string;
+	    stamp?: string;
+	    client?: CloudClient;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.message = source["message"];
+	        this.counts = this.convertValues(source["counts"], CloudCounts);
+	        this.conflicts = this.convertValues(source["conflicts"], CloudConflict);
+	        this.checkedAt = source["checkedAt"];
+	        this.backupDir = source["backupDir"];
+	        this.stamp = source["stamp"];
+	        this.client = this.convertValues(source["client"], CloudClient);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CloudInfo {
+	    mode: string;
+	    plugin_mode: string;
+	    game_mode: string;
+	    status?: CloudStatus;
+	    busy?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.plugin_mode = source["plugin_mode"];
+	        this.game_mode = source["game_mode"];
+	        this.status = this.convertValues(source["status"], CloudStatus);
+	        this.busy = source["busy"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CloudSettings {
+	    plugins: Record<string, string>;
+	    games: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloudSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.plugins = source["plugins"];
+	        this.games = source["games"];
+	    }
+	}
+	
 	export class GameFixInfo {
 	    source: string;
 	    tier: string;

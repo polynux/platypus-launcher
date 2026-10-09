@@ -244,14 +244,17 @@ func (c *Orchestrator) status(ctx context.Context, g Game, cc types.CloudContext
 	return st, nil
 }
 
-// Check is "Check now": a read-only comparison, remembered and shown.
+// Check is "Check now": a read-only comparison, remembered and shown. A plugin
+// that fails to answer is an error status, like any other unreachable store.
 func (c *Orchestrator) Check(ctx context.Context, g Game, cc types.CloudContext) (types.CloudStatus, error) {
 	if !c.o.Backend.Offers(ctx, g.PluginID) {
 		return types.CloudStatus{}, errors.New("this plugin doesn't offer cloud saves")
 	}
 	st, err := c.status(ctx, g, cc)
 	if err != nil {
-		return st, err
+		st = types.CloudStatus{State: types.CloudStateError, CheckedAt: time.Now().Unix(),
+			Message: fmt.Sprintf("Cloud saves couldn't be checked: %v", err)}
+		c.remember(g.ID, st)
 	}
 	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st})
 	return st, nil

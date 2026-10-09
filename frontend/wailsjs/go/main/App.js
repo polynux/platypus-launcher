@@ -14,8 +14,16 @@ export function ApprovePlugin(arg1) {
   return window['go']['main']['App']['ApprovePlugin'](arg1);
 }
 
+export function CancelCloudSync(arg1) {
+  return window['go']['main']['App']['CancelCloudSync'](arg1);
+}
+
 export function CancelJob(arg1) {
   return window['go']['main']['App']['CancelJob'](arg1);
+}
+
+export function CheckCloudSaves(arg1) {
+  return window['go']['main']['App']['CheckCloudSaves'](arg1);
 }
 
 export function ChooseGamesFolder() {
@@ -36,6 +44,14 @@ export function DiscardJob(arg1) {
 
 export function ForceStopGame(arg1) {
   return window['go']['main']['App']['ForceStopGame'](arg1);
+}
+
+export function GetCloudInfo(arg1) {
+  return window['go']['main']['App']['GetCloudInfo'](arg1);
+}
+
+export function GetCloudSettings() {
+  return window['go']['main']['App']['GetCloudSettings']();
 }
 
 export function GetGameDetails(arg1) {
@@ -72,6 +88,14 @@ export function InstallGame(arg1) {
 
 export function LaunchGame(arg1) {
   return window['go']['main']['App']['LaunchGame'](arg1);
+}
+
+export function LaunchGameAnyway(arg1, arg2) {
+  return window['go']['main']['App']['LaunchGameAnyway'](arg1, arg2);
+}
+
+export function LaunchGameViaClient(arg1) {
+  return window['go']['main']['App']['LaunchGameViaClient'](arg1);
 }
 
 export function ListJobs() {
@@ -126,6 +150,10 @@ export function RescanPlugins() {
   return window['go']['main']['App']['RescanPlugins']();
 }
 
+export function ResolveCloudSaves(arg1, arg2) {
+  return window['go']['main']['App']['ResolveCloudSaves'](arg1, arg2);
+}
+
 export function ResumeAllJobs() {
   return window['go']['main']['App']['ResumeAllJobs']();
 }
@@ -148,6 +176,14 @@ export function SaveGameSettings(arg1, arg2) {
 
 export function SetCancelCleanupDays(arg1) {
   return window['go']['main']['App']['SetCancelCleanupDays'](arg1);
+}
+
+export function SetCloudGameMode(arg1, arg2) {
+  return window['go']['main']['App']['SetCloudGameMode'](arg1, arg2);
+}
+
+export function SetCloudPluginMode(arg1, arg2) {
+  return window['go']['main']['App']['SetCloudPluginMode'](arg1, arg2);
 }
 
 export function SetGamesFolder(arg1) {
