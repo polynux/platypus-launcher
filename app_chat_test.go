@@ -217,6 +217,22 @@ func TestChatNeedsSocial(t *testing.T) {
 	}
 }
 
+// A plugin that doesn't offer the chat capability at runtime gets no chat
+// method, even with social on.
+func TestChatOffWhenTheCapabilityIsOff(t *testing.T) {
+	t.Setenv("ECHO_OFF", "chat")
+	a, _ := chatEnv(t)
+	if _, err := a.ChatOpen("echo", chatAna); err == nil {
+		t.Fatal("chat opened on a plugin with the chat capability off")
+	}
+	if n := echoCallCount(t, a, "chat.history"); n != 0 {
+		t.Fatalf("the plugin received chat.history %d time(s)", n)
+	}
+	if !a.plugins.Has("echo", "social") {
+		t.Fatal("social should still be on: only chat was switched off")
+	}
+}
+
 // A plugin that settled on 1.8 never gets a chat method, whatever its manifest
 // says, and has no chat in its alerts.
 func TestChatStaysOffForAProtocol18Plugin(t *testing.T) {
