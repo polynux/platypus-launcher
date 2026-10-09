@@ -76,9 +76,12 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
               <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={`Resume ${job.title}`}>
                 <Play className="h-3 w-3" /> Resume
               </Button>
-              <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={`Discard downloaded data of ${job.title}`}>
-                <Trash2 className="h-3 w-3" /> Discard data
-              </Button>
+              {/* A check or a move works on the installed game: there is no download to discard. */}
+              {job.kind !== 'verify' && job.kind !== 'move' && (
+                <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={`Discard downloaded data of ${job.title}`}>
+                  <Trash2 className="h-3 w-3" /> Discard data
+                </Button>
+              )}
             </>
           )}
           {(job.state === 'failed' || job.state === 'canceled') && (
