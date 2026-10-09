@@ -124,6 +124,9 @@ export function LibraryView(p: LibraryProps) {
   // Family: the games borrowed from a family member, when the library has any.
   const [lending, setLending] = useState<'all' | 'with-me'>('all');
   const hasBorrowed = p.games.some((g) => g.shared_by != null);
+  // The filter is only in effect while the control shows: once the borrowed
+  // games are gone (uninstalled, logged out) it would hide the whole library.
+  const lendingFilter = hasBorrowed ? lending : 'all';
   const q = p.search.trim().toLowerCase();
   const owned = p.games.length;
   const installedCount = p.games.filter((g) => g.is_installed).length;
@@ -131,7 +134,7 @@ export function LibraryView(p: LibraryProps) {
   // A store can drop to zero games (logout, uninstall) while selected: its chip is gone, so show all.
   const source = sources.includes(p.source) ? p.source : 'all';
   const filtered = p.games.filter(
-    (g) => (p.ownership === 'owned' || g.is_installed) && (source === 'all' || g.store === source) && (lending === 'all' || g.shared_by != null) && g.title.toLowerCase().includes(q)
+    (g) => (p.ownership === 'owned' || g.is_installed) && (source === 'all' || g.store === source) && (lendingFilter === 'all' || g.shared_by != null) && g.title.toLowerCase().includes(q)
   );
   const jobOf = (g: Game) => p.jobs.find((j) => j.game_id === g.id);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
@@ -186,7 +189,7 @@ export function LibraryView(p: LibraryProps) {
           )}
           <SegRow label="Source" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
           {hasBorrowed && (
-            <SegRow label="Family" value={lending} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
+            <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
           )}
           <SortControl sort={sort} onChange={setSort} />
           <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />

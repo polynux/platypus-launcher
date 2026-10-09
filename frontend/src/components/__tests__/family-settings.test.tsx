@@ -239,11 +239,11 @@ describe('library family filter and badge', () => {
   const mk = (id: string, o: Partial<Game> = {}): Game =>
     ({ id, source: 'echo', store: 'echo', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
 
-  const library = (games: Game[]) => render(
+  const libraryView = (games: Game[]) => (
     <LibraryView games={games} runners={[]} activity={[]} search="" onSearch={() => {}} source="all" onSource={() => {}} mode="cards" onMode={() => {}}
-      ownership="owned" onOwnership={() => {}} warnings={[]} plugins={[]} jobs={[]} lastScan={null} onOpenGame={() => {}} onAddGame={() => {}} onNavigate={() => {}} />,
-    { wrapper: TooltipProvider },
+      ownership="owned" onOwnership={() => {}} warnings={[]} plugins={[]} jobs={[]} lastScan={null} onOpenGame={() => {}} onAddGame={() => {}} onNavigate={() => {}} />
   );
+  const library = (games: Game[]) => render(libraryView(games), { wrapper: TooltipProvider });
 
   it('marks borrowed games and filters to the ones shared with the user', () => {
     library([mk('own'), mk('lent', { shared_by: { id: 'ana', name: 'Ana' } })]);
@@ -256,5 +256,14 @@ describe('library family filter and badge', () => {
   it('has no family filter when nothing is borrowed', () => {
     library([mk('own')]);
     expect(screen.queryByRole('radiogroup', { name: 'Family' })).toBeNull();
+  });
+
+  it('does not keep the shared filter once no game is borrowed', () => {
+    const r = library([mk('own'), mk('lent', { shared_by: { id: 'ana', name: 'Ana' } })]);
+    fireEvent.click(screen.getByRole('radio', { name: 'shared with me' }));
+    expect(screen.queryByText('own')).toBeNull();
+    r.rerender(libraryView([mk('own')]));
+    expect(screen.queryByRole('radiogroup', { name: 'Family' })).toBeNull();
+    expect(screen.getAllByText('own').length).toBeGreaterThan(0);
   });
 });
