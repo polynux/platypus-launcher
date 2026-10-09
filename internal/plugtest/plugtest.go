@@ -433,6 +433,9 @@ func (s Suite) Conformance(t *testing.T) {
 	if has("social") {
 		sess.checkSocial(t)
 	}
+	if has("chat") && has("social") {
+		sess.checkChat(t)
+	}
 	sess.checkStats(t, game, has, !s.NoUnknownDetails)
 	if has("family") {
 		sess.checkFamily(t)

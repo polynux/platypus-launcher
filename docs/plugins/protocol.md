@@ -902,7 +902,7 @@ Message = { id, from: "self" | friendId, text, sentAt }
   to 4096 characters rather than dropping the message.
 - **Times.** `sentAt` is Unix time in milliseconds. Hydra shows messages in `sentAt` order, so a notification that
   arrives late is put in its place.
-- **History.** `chat.history` answers the messages of the conversation, oldest first. `before` is a message id: the
+- **History.** `chat.history` answers `messages` of the conversation, oldest first. `before` is a message id: the
   page holds the messages older than it. `more` is true when older messages exist. `limit` defaults to 50; a plugin may
   answer fewer than asked.
 - **Sending.** Hydra gives every message a fresh `clientId`. A plugin that gets a `clientId` it has already seen answers
