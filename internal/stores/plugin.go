@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 
 	"hydra-launcher/internal/jsonrpc"
 	"hydra-launcher/internal/plugins"
@@ -22,10 +23,28 @@ type Plugin struct {
 	// folders returns where the plugin's games may be launched from: its
 	// install folder plus folders the user allowed.
 	folders func() []string
+	// moved says where core moved a game's folder, when it did (see
+	// WithRelocations). Nil means core moved nothing.
+	moved func(gameID string) (types.Relocation, bool)
 }
 
 func NewPlugin(m *plugins.Manager, p plugins.Plugin, folders func() []string) *Plugin {
 	return &Plugin{m: m, p: p, folders: folders}
+}
+
+// WithRelocations tells the store where core moved its games' folders. A
+// plugin that doesn't know about the move still reports the old folder; the
+// library shows the new one and launches run from it.
+func (s *Plugin) WithRelocations(moved func(gameID string) (types.Relocation, bool)) *Plugin {
+	s.moved = moved
+	return s
+}
+
+func (s *Plugin) relocation(gameID string) (types.Relocation, bool) {
+	if s.moved == nil {
+		return types.Relocation{}, false
+	}
+	return s.moved(gameID)
 }
 
 func (s *Plugin) ID() string { return s.p.Manifest.ID }
@@ -96,6 +115,10 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 	}
 	if lg.Installed && lg.InstallPath != "" {
 		g.InstallDir = filepath.Clean(lg.InstallPath)
+		if rel, ok := s.relocation(g.ID); ok && g.InstallDir == rel.From {
+			g.InstallDir = rel.To
+			folders = append(slices.Clip(folders), rel.To)
+		}
 		real := g.InstallDir
 		if r, err := filepath.EvalSymlinks(real); err == nil {
 			real = r
@@ -155,7 +178,40 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 	if err := s.m.Call(ctx, s.ID(), "game.launchSpec", params, &spec); err != nil {
 		return nil, err
 	}
-	return ValidateSpec(spec, s.p.Manifest, s.folders())
+	folders := s.folders()
+	if rel, ok := s.relocation(game.ID); ok {
+		// The plugin may still name the folder core moved the game from.
+		spec = rebaseSpec(spec, rel.From, rel.To)
+		folders = append(slices.Clip(folders), rel.To)
+	}
+	return ValidateSpec(spec, s.p.Manifest, folders)
+}
+
+// rebaseSpec points the paths of a launch spec that are inside from at to.
+// Arguments are left alone: they are the game's own.
+func rebaseSpec(spec plugins.LaunchSpec, from, to string) plugins.LaunchSpec {
+	spec.Exe = rebasePath(spec.Exe, from, to)
+	spec.Cwd = rebasePath(spec.Cwd, from, to)
+	if spec.Command != nil {
+		command := slices.Clone(spec.Command)
+		for i, c := range command {
+			command[i] = rebasePath(c, from, to)
+		}
+		spec.Command = command
+	}
+	return spec
+}
+
+// rebasePath returns p with the from folder replaced by to, when p is inside
+// from; any other path comes back as it is.
+func rebasePath(p, from, to string) string {
+	if p == from {
+		return to
+	}
+	if rest, ok := strings.CutPrefix(p, from+string(filepath.Separator)); ok {
+		return filepath.Join(to, rest)
+	}
+	return p
 }
 
 var unsafeIDChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)

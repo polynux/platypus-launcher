@@ -38,9 +38,13 @@
 //	ECHO_VERSIONS_OFF  parts of versions.list to leave out: channels, builds, manual, links (see versions.go)
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there.
+// Verify and move (maintenance.go, protocol 1.4) need no env knobs: `config`
+// {damage: {"tiny": 3}} sets the damaged files a check finds. Switch `move` off
+// (ECHO_OFF=move) and Hydra moves the game folder itself and sends
+// game.relocated, which echo accepts.
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
-// initOmit, versionsOff} (absent keys are left alone) and `calls` returns how many times
+// initOmit, versionsOff, damage} (absent keys are left alone) and `calls` returns how many times
 // each method was received, so tests can tell a cached -32601 from a retry.
 // The methods of capabilities that core doesn't use yet answer canned data.
 package main
@@ -113,6 +117,9 @@ type state struct {
 	// itself is not kept: echo only compares it.
 	Versions map[string]versionRec `json:"versions"`
 	Unlocked map[string]bool       `json:"unlocked"`
+	// Damage is how many files a check finds damaged, by game id (the
+	// `damage` knob; see maintenance.go).
+	Damage map[string]int `json:"damage"`
 }
 
 var (
@@ -345,6 +352,9 @@ func load() {
 	if st.Unlocked == nil {
 		st.Unlocked = map[string]bool{}
 	}
+	if st.Damage == nil {
+		st.Damage = map[string]int{}
+	}
 }
 
 // save writes the state. Callers hold stMu.
@@ -408,6 +418,11 @@ type params struct {
 	Password string        `json:"password"`
 	Ledger   []ledgerParam `json:"ledger"`
 	Pinned   *pinParam     `json:"pinned"`
+
+	// game.verify and game.move (protocol 1.4).
+	Repair bool   `json:"repair"`
+	From   string `json:"from"`
+	To     string `json:"to"`
 }
 
 func dispatch(method string, raw json.RawMessage) (any, error) {
@@ -434,6 +449,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "config":
 		configure(raw)
 		configureCloud(raw)
+		configureMaintenance(raw)
 		return nil, nil
 	case "calls":
 		callsMu.Lock()
@@ -514,6 +530,12 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return startInstall(p)
 	case "game.uninstall":
 		return startUninstall(p)
+	case "game.verify":
+		return startVerify(p)
+	case "game.move":
+		return startMove(p)
+	case "game.relocated":
+		return relocated(p)
 	case "job.cancel":
 		jobsMu.Lock()
 		if c, ok := cancels[p.JobID]; ok {

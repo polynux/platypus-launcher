@@ -451,7 +451,7 @@ func TestInvalidManifests(t *testing.T) {
 		"no name":              func(m map[string]any) { delete(m, "name") },
 		"malformed capability": func(m map[string]any) { m["capabilities"] = []string{"Root!"} },
 		"duplicate capability": func(m map[string]any) { m["capabilities"] = []string{"library", "library"} },
-		"needs not declared":   func(m map[string]any) { m["needs"] = []string{"verify"} },
+		"needs not declared":   func(m map[string]any) { m["needs"] = []string{"social"} },
 		"malformed need": func(m map[string]any) {
 			m["capabilities"] = []string{"library", "No Way"}
 			m["needs"] = []string{"No Way"}

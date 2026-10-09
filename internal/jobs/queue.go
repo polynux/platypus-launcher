@@ -26,6 +26,11 @@ const (
 	KindInstall   = "install"
 	KindUpdate    = "update"
 	KindUninstall = "uninstall"
+	// KindVerify checks an installed game's files (game.verify); with Repair
+	// set it restores the damaged ones. KindMove takes an installed game to
+	// another folder (game.move, or core's own move when the plugin has none).
+	KindVerify = "verify"
+	KindMove   = "move"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -58,8 +63,19 @@ type Discarder interface {
 	Discard(ctx context.Context, job types.Job) error
 }
 
+// CoreRunner is the optional half of a Backend that runs some moves itself
+// (core's own move, when the plugin has none). Such a job isn't the plugin's
+// to restart when the plugin exits.
+type CoreRunner interface {
+	RunsInCore(job types.Job) bool
+}
+
 // ErrDiscardUnsupported means the job's plugin has no way to delete the data.
 var ErrDiscardUnsupported = errors.New("the plugin can't delete downloaded data")
+
+// ErrNoData means the job has no downloaded data: verify and move jobs work on
+// the installed game, so there is nothing of theirs to delete.
+var ErrNoData = errors.New("this job has no downloaded data")
 
 // DefaultCleanupAfter is how long a canceled job's partial data is kept.
 const DefaultCleanupAfter = 7 * 24 * time.Hour
@@ -85,6 +101,9 @@ type Queue struct {
 	// onInstalled is called, outside the queue's lock, when an install or
 	// update reports the version it put on disk (job.done's `installed`).
 	onInstalled func(job types.Job, installed types.Installed)
+	// onFinished is called, outside the lock, when an install or an uninstall
+	// is done: the game's folder is what the plugin says it is now.
+	onFinished func(job types.Job)
 
 	mu  sync.Mutex
 	now func() time.Time // injected by tests
@@ -246,8 +265,8 @@ func (q *Queue) next(ctx context.Context) {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall {
-		return nil
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove {
+		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -295,6 +314,14 @@ func (q *Queue) SetOnInstalled(f func(job types.Job, installed types.Installed))
 	q.mu.Unlock()
 }
 
+// SetOnFinished registers the callback for installs and uninstalls that are
+// done. The job is as it was when it ended.
+func (q *Queue) SetOnFinished(f func(job types.Job)) {
+	q.mu.Lock()
+	q.onFinished = f
+	q.mu.Unlock()
+}
+
 // Add queues a job. A game has at most one active job.
 func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string) (types.Job, error) {
 	return q.AddTargeted(kind, source, gameID, storeGameID, title, installDir, nil)
@@ -320,19 +347,49 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 		t := *target
 		target = &t
 	}
+	return q.enqueue(&types.Job{
+		Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Target: target,
+	})
+}
+
+// AddVerify queues a check of an installed game's files in installDir. With
+// repair set, the plugin restores the files it found damaged; the report of
+// the check is kept on the job (Verify).
+func (q *Queue) AddVerify(source, gameID, storeGameID, title, installDir string, repair bool) (types.Job, error) {
+	if !filepath.IsAbs(installDir) {
+		return types.Job{}, fmt.Errorf("install folder %q is not an absolute path", installDir)
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindVerify, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Repair: repair,
+	})
+}
+
+// AddMove queues moving an installed game from installDir to destination.
+// Both must be absolute; the move itself checks what the folders hold.
+func (q *Queue) AddMove(source, gameID, storeGameID, title, installDir, destination string) (types.Job, error) {
+	if !filepath.IsAbs(installDir) || !filepath.IsAbs(destination) {
+		return types.Job{}, errors.New("a move needs absolute folders")
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindMove, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Destination: destination,
+	})
+}
+
+// enqueue queues a new job. A game has at most one job holding it.
+func (q *Queue) enqueue(j *types.Job) (types.Job, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	for _, j := range q.jobs {
-		if j.GameID == gameID && holdsGame(j) {
-			return types.Job{}, fmt.Errorf("%s already has a %s queued", title, j.Kind)
+	for _, o := range q.jobs {
+		if o.GameID == j.GameID && holdsGame(o) {
+			return types.Job{}, fmt.Errorf("%s already has a %s queued", j.Title, o.Kind)
 		}
 	}
 	now := time.Now().UnixMilli()
-	j := &types.Job{
-		ID: newID(), Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
-		Title: title, State: StateQueued, InstallDir: installDir, Percent: -1,
-		CreatedAt: now, UpdatedAt: now, Target: target,
-	}
+	j.ID, j.State, j.Percent = newID(), StateQueued, -1
+	j.CreatedAt, j.UpdatedAt = now, now
 	q.jobs = append(q.jobs, j)
 	q.changed(true)
 	q.signal()
@@ -343,6 +400,41 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 // ones in the queue and the paused ones, which resume later.
 func holdsGame(j *types.Job) bool {
 	return j.State == StateQueued || j.State == StateRunning || j.State == StatePaused
+}
+
+// Holding returns a job of one of kinds that holds the game (queued, running
+// or paused), if there is one.
+func (q *Queue) Holding(gameID string, kinds ...string) (types.Job, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, j := range q.jobs {
+		if j.GameID == gameID && holdsGame(j) && slices.Contains(kinds, j.Kind) {
+			return *j, true
+		}
+	}
+	return types.Job{}, false
+}
+
+// FinishMove marks a move done once the game is at its destination. A cancel
+// or pause that came after the game was placed can't undo that, so the job
+// ends done whatever state it was left in.
+func (q *Queue) FinishMove(id string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	j := q.find(id)
+	if j == nil || j.Kind != KindMove {
+		return
+	}
+	j.State, j.Error, j.Speed, j.Phase = StateDone, "", 0, ""
+	j.CanceledAt, j.CleanedAt = 0, 0
+	j.Percent = 100
+	if j.Total > 0 {
+		j.Bytes = j.Total
+	}
+	j.UpdatedAt = q.now().UnixMilli()
+	q.trim()
+	q.changed(true)
+	q.signal()
 }
 
 // Cancel stops a queued, running or paused job. Its downloaded data stays
@@ -468,7 +560,7 @@ func (q *Queue) ClearFinished() {
 // holdsData is true for a canceled download whose partial data is still on
 // disk. Callers hold q.mu.
 func (q *Queue) holdsData(j *types.Job) bool {
-	return j.State == StateCanceled && j.CleanedAt == 0 && j.Kind != KindUninstall
+	return j.State == StateCanceled && j.CleanedAt == 0 && (j.Kind == KindInstall || j.Kind == KindUpdate)
 }
 
 func (q *Queue) List() []types.Job {
@@ -491,13 +583,21 @@ func (q *Queue) list() []types.Job {
 func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	switch method {
 	case "job.done":
-		if job, ok := q.finishFrom(source, u.JobID, StateDone, ""); ok && u.Installed != nil && job.Kind != KindUninstall {
-			q.mu.Lock()
-			f := q.onInstalled
-			q.mu.Unlock()
-			if f != nil {
-				f(job, *u.Installed)
-			}
+		if u.Verify != nil {
+			q.setVerify(source, u.JobID, *u.Verify)
+		}
+		job, ok := q.finishFrom(source, u.JobID, StateDone, "")
+		if !ok {
+			return
+		}
+		q.mu.Lock()
+		installed, finished := q.onInstalled, q.onFinished
+		q.mu.Unlock()
+		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
+			installed(job, *u.Installed)
+		}
+		if (job.Kind == KindInstall || job.Kind == KindUninstall) && finished != nil {
+			finished(job)
 		}
 		return
 	case "job.failed":
@@ -546,13 +646,37 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	q.mu.Unlock()
 }
 
+// setVerify keeps what a verify job found, for the job's running source.
+func (q *Queue) setVerify(source, id string, report types.VerifyReport) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if j := q.find(id); j != nil && j.Source == source && j.State == StateRunning {
+		j.Verify = &report
+	}
+}
+
+// SetLeftover notes what a finished move could not clean up: the old folder,
+// still on disk after the game was moved. The job stays done.
+func (q *Queue) SetLeftover(id, msg string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if j := q.find(id); j != nil {
+		j.Leftover = msg
+		q.changed(true)
+	}
+}
+
 // PluginExited restarts the running job of a plugin that crashed. The plugin
 // manager waits out its restart backoff when the job starts again.
 func (q *Queue) PluginExited(source string, err error) {
+	core, _ := q.b.(CoreRunner)
 	q.mu.Lock()
 	for _, j := range q.jobs {
 		if j.Source != source || j.State != StateRunning {
 			continue
+		}
+		if core != nil && core.RunsInCore(*j) {
+			continue // core's own move: its goroutine is still at work, not the plugin
 		}
 		if j.Attempts >= maxAttempts {
 			j.State, j.Error = StateFailed, fmt.Sprintf("the plugin crashed %d times: %v", j.Attempts, err)
@@ -764,6 +888,10 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
 	}
+	if j.Kind == KindVerify || j.Kind == KindMove {
+		q.mu.Unlock()
+		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
+	}
 	if j.State != StateCanceled {
 		q.mu.Unlock()
 		return fmt.Errorf("%s isn't canceled; cancel it before discarding its data", j.Title)
@@ -831,6 +959,12 @@ func newID() string {
 
 // freeSpace returns the bytes available to the user on the filesystem that
 // holds path, or its nearest existing parent.
+// FreeSpace is the free bytes on the filesystem of path, for a move's check.
+func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
+
+// HumanBytes writes a size the way the queue's messages do: 1.2 GB.
+func HumanBytes(b int64) string { return human(b) }
+
 func freeSpace(path string) (uint64, error) {
 	for {
 		var st syscall.Statfs_t

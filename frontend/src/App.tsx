@@ -459,6 +459,7 @@ export function App() {
             onOpenSettings={() => setSettingsFor(currentGame.id)}
             plugin={plugins.find((x) => x.id === currentGame.source)}
             job={jobFor(currentGame.id)}
+            jobs={jobs}
             onJob={(kind) => runJob(kind, currentGame)}
             onJobAction={jobAction}
             onAllowFolder={(folder) => allowFolder(currentGame, folder)}

@@ -144,4 +144,6 @@ type JobUpdate struct {
 	// Installed, on job.done of an install or update, says which version the
 	// plugin put on disk. Hydra appends it to the game's install ledger.
 	Installed *types.Installed `json:"installed,omitempty"`
+	// Verify, on job.done of a game.verify job, is what the check found.
+	Verify *types.VerifyReport `json:"verify,omitempty"`
 }

@@ -172,7 +172,7 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 
 // cloudInfo is the game page's view of the game's cloud saves.
 func (a *App) cloudInfo(game types.Game) types.CloudInfo {
-	running := a.sessions.Running(game.ID)
+	running := a.isRunning(game.ID)
 	g, ok := a.cloudGame(game)
 	if !ok {
 		return types.CloudInfo{Mode: types.CloudOff, PluginMode: cloudsync.DefaultMode, Running: running}
@@ -212,7 +212,7 @@ func (a *App) ResolveCloudSaves(game types.Game, choices map[string]string) (typ
 	if !ok {
 		return a.cloudInfo(game), errors.New("this game has no cloud saves Hydra can sync")
 	}
-	if a.sessions.Running(game.ID) {
+	if a.isRunning(game.ID) {
 		// The game writes its saves while it runs: settle them after it exits.
 		return a.cloudInfo(game), fmt.Errorf("%s is running; choose its saves after it exits", game.Title)
 	}
@@ -243,8 +243,11 @@ func (a *App) LaunchGameAnyway(game types.Game, prompt string) (string, error) {
 func (a *App) LaunchGameViaClient(game types.Game) (string, error) {
 	unlock := a.lockGame(game.ID)
 	defer unlock()
-	if a.sessions.Running(game.ID) {
+	if a.isRunning(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
+	}
+	if err := a.heldByJob(game); err != nil {
+		return "", err
 	}
 	s, ok := a.stores.Get(sourceOf(game))
 	cl, isCl := s.(stores.ClientLauncher)

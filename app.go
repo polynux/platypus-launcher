@@ -47,7 +47,11 @@ type App struct {
 	stores       *stores.Registry
 	sessions     *session.Tracker
 	cloud        *cloudsync.Orchestrator
+	moves        coreMoves
 	ledger       *ledger.Ledger
+	// sessionRunning says whether a game has a session open. Nil asks the
+	// session tracker; tests replace it.
+	sessionRunning func(gameID string) bool
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
 
@@ -96,6 +100,7 @@ func (a *App) startup(ctx context.Context) {
 		wruntime.LogErrorf(ctx, "install history: %v", err)
 	}
 	a.jobs.SetOnInstalled(a.recordInstall)
+	a.jobs.SetOnFinished(a.jobFinished)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -177,12 +182,25 @@ func (a *App) pluginStores() []stores.Store {
 		if p.Status != plugins.StatusReady || !a.plugins.Has(p.Manifest.ID, "library") {
 			continue
 		}
-		id := p.Manifest.ID
-		out = append(out, stores.NewPlugin(a.plugins, p, func() []string {
-			return a.plugins.Folders(id, a.settings.GamesFolder())
-		}))
+		out = append(out, a.pluginStore(p))
 	}
 	return out
+}
+
+// pluginStore is the library of one store plugin, with core's moves applied.
+func (a *App) pluginStore(p plugins.Plugin) *stores.Plugin {
+	id := p.Manifest.ID
+	return stores.NewPlugin(a.plugins, p, func() []string {
+		return a.plugins.Folders(id, a.settings.GamesFolder())
+	}).WithRelocations(a.settings.Relocation)
+}
+
+// isRunning says whether the game has a session open.
+func (a *App) isRunning(gameID string) bool {
+	if a.sessionRunning != nil {
+		return a.sessionRunning(gameID)
+	}
+	return a.sessions.Running(gameID)
 }
 
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
@@ -520,8 +538,11 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	unlock := a.lockGame(game.ID)
 	defer unlock()
-	if a.sessions.Running(game.ID) {
+	if a.isRunning(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
+	}
+	if err := a.heldByJob(game); err != nil {
+		return "", err
 	}
 	p, err := a.prepareLaunch(game, false)
 	if err != nil {

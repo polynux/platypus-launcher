@@ -437,6 +437,13 @@ func (s Suite) Conformance(t *testing.T) {
 		t.Fatalf("game not installed inside the folder: %+v", installed)
 	}
 
+	if has("verify") {
+		sess.checkVerify(t, *installed)
+	}
+	if has("move") {
+		sess.checkMoveParams(t, *installed)
+	}
+
 	if has("launch") {
 		if _, err := sess.Store.Launch(ctx, *installed, true); err != nil {
 			t.Fatalf("launchSpec preview: %v", err)

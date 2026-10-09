@@ -512,6 +512,24 @@ export namespace types {
 	}
 	
 	
+	export class VerifyReport {
+	    checked: number;
+	    damaged: number;
+	    missing: number;
+	    repaired: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new VerifyReport(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.checked = source["checked"];
+	        this.damaged = source["damaged"];
+	        this.missing = source["missing"];
+	        this.repaired = source["repaired"];
+	    }
+	}
 	export class VersionTarget {
 	    channel?: string;
 	    build?: string;
@@ -552,6 +570,9 @@ export namespace types {
 	    cleaned_at?: number;
 	    leftover?: string;
 	    target?: VersionTarget;
+	    repair?: boolean;
+	    destination?: string;
+	    verify?: VerifyReport;
 	
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
@@ -580,6 +601,9 @@ export namespace types {
 	        this.cleaned_at = source["cleaned_at"];
 	        this.leftover = source["leftover"];
 	        this.target = this.convertValues(source["target"], VersionTarget);
+	        this.repair = source["repair"];
+	        this.destination = source["destination"];
+	        this.verify = this.convertValues(source["verify"], VerifyReport);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -689,6 +713,24 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class MoveCheck {
+	    to: string;
+	    need_bytes: number;
+	    free_bytes: number;
+	    plugin_moves: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MoveCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.to = source["to"];
+	        this.need_bytes = source["need_bytes"];
+	        this.free_bytes = source["free_bytes"];
+	        this.plugin_moves = source["plugin_moves"];
+	    }
 	}
 	export class PluginCapability {
 	    name: string;
@@ -877,6 +919,7 @@ export namespace types {
 	        this.wrappers = source["wrappers"];
 	    }
 	}
+	
 	export class VersionBuild {
 	    id: string;
 	    name?: string;

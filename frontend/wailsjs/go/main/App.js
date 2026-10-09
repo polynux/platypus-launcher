@@ -26,6 +26,10 @@ export function CheckCloudSaves(arg1) {
   return window['go']['main']['App']['CheckCloudSaves'](arg1);
 }
 
+export function CheckMove(arg1, arg2) {
+  return window['go']['main']['App']['CheckMove'](arg1, arg2);
+}
+
 export function ChooseGamesFolder() {
   return window['go']['main']['App']['ChooseGamesFolder']();
 }
@@ -118,6 +122,10 @@ export function ListStorePlugins() {
   return window['go']['main']['App']['ListStorePlugins']();
 }
 
+export function MoveGame(arg1, arg2) {
+  return window['go']['main']['App']['MoveGame'](arg1, arg2);
+}
+
 export function OpenPluginsFolder() {
   return window['go']['main']['App']['OpenPluginsFolder']();
 }
@@ -128,6 +136,10 @@ export function PauseAllJobs() {
 
 export function PauseJob(arg1) {
   return window['go']['main']['App']['PauseJob'](arg1);
+}
+
+export function PickMoveFolder(arg1) {
+  return window['go']['main']['App']['PickMoveFolder'](arg1);
 }
 
 export function PinGameVersion(arg1, arg2) {
@@ -156,6 +168,10 @@ export function PreviewLaunchCommand(arg1) {
 
 export function RemoveCustomGame(arg1) {
   return window['go']['main']['App']['RemoveCustomGame'](arg1);
+}
+
+export function RepairGame(arg1) {
+  return window['go']['main']['App']['RepairGame'](arg1);
 }
 
 export function RescanPlugins() {
@@ -232,4 +248,8 @@ export function UpdateGame(arg1) {
 
 export function UpdateGameVersion(arg1, arg2) {
   return window['go']['main']['App']['UpdateGameVersion'](arg1, arg2);
+}
+
+export function VerifyGame(arg1) {
+  return window['go']['main']['App']['VerifyGame'](arg1);
 }

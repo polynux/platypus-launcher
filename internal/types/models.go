@@ -298,4 +298,40 @@ type Job struct {
 	// Target is the version the install or update asked for (the `versions`
 	// capability). It names a channel or build and never carries a password.
 	Target *VersionTarget `json:"target,omitempty"`
+	// Repair says a verify job restores the damaged files it finds (the
+	// second run, after the user agreed to it).
+	Repair bool `json:"repair,omitempty"`
+	// Destination is where a move takes the game (InstallDir is where it is).
+	Destination string `json:"destination,omitempty"`
+	// Verify is what a verify job found, once it is done.
+	Verify *VerifyReport `json:"verify,omitempty"`
+}
+
+// VerifyReport is what a game's files check found. Checked counts the files
+// looked at; Damaged and Missing are the ones that were wrong or absent (in a
+// repair run, what is still wrong afterwards); Repaired is what a repair run
+// restored.
+type VerifyReport struct {
+	Checked  int `json:"checked"`
+	Damaged  int `json:"damaged"`
+	Missing  int `json:"missing"`
+	Repaired int `json:"repaired"`
+}
+
+// MoveCheck is what a move would do, before it is queued: where the game ends
+// up, what it needs and what the destination has free. PluginMoves says the
+// plugin does the move itself (game.move) rather than Hydra.
+type MoveCheck struct {
+	To          string `json:"to"`
+	NeedBytes   int64  `json:"need_bytes"`
+	FreeBytes   int64  `json:"free_bytes"`
+	PluginMoves bool   `json:"plugin_moves"`
+}
+
+// Relocation says core moved a game's folder: the folder the plugin reports
+// (From) and where the game is now (To). It is kept until the plugin reports
+// the new folder itself (game.relocated) or the game is moved again.
+type Relocation struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }

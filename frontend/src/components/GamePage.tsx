@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, History, Maximize2, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
-import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
+import { ArrowLeft, Download, FolderInput, History, Maximize2, FolderCheck, Loader2, Play, RefreshCw, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react';
+import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CloudSavesPanel } from './CloudSavesPanel';
 import { Lightbox } from './Lightbox';
 import { VersionsDialog } from './VersionsDialog';
+import { VerifyDialog } from './VerifyDialog';
+import { MoveDialog } from './MoveDialog';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
@@ -15,7 +17,7 @@ import { Cover, MonoLabel, Panel, TierBadge, TogglePill, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
-import { offers } from '../lib/capabilities';
+import { CapabilitySurface, offers } from '../lib/capabilities';
 import { pinLabel } from '../lib/versions';
 
 /** Wide art for the hero banner: the details' hero first, then the library
@@ -48,8 +50,10 @@ interface GamePageProps {
   onOpenSettings: () => void;
   plugin?: StorePlugin; // plugin games only
   job?: Job; // the game's active job, or its last failed one
-  onJob: (kind: JobKind) => void;
+  onJob: (kind: GameJobKind) => void;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  /** Every job in the queue: the verify dialog follows its own. */
+  jobs?: Job[];
   onAllowFolder: (folder: string) => void;
   onNavigate: (v: View) => void;
   /** Toast, for the version dialog. */
@@ -131,10 +135,12 @@ export function GamePage(p: GamePageProps) {
   const [shot, setShot] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
   const hero = useHero(game, details);
-  useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); }, [game.id]);
+  useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); setVerifyOpen(false); setMoveOpen(false); }, [game.id]);
   useEffect(() => {
     const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -340,7 +346,16 @@ export function GamePage(p: GamePageProps) {
           </Panel>
 
           {isPluginGame(game) && game.is_installed && plugin && (
-            <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} onVersions={canChooseVersion ? () => setVersionsOpen(true) : undefined} />
+            <ManagePanel
+              game={game}
+              plugin={plugin}
+              job={job}
+              onJob={p.onJob}
+              onJobAction={p.onJobAction}
+              onVersions={canChooseVersion ? () => setVersionsOpen(true) : undefined}
+              onVerify={() => setVerifyOpen(true)}
+              onMove={() => setMoveOpen(true)}
+            />
           )}
 
           {isPluginGame(game) && game.is_installed && plugin && <CloudSavesPanel game={game} plugin={plugin} />}
@@ -375,6 +390,20 @@ export function GamePage(p: GamePageProps) {
           onClose={() => setVersionsOpen(false)}
           onChanged={() => p.onVersionsChanged?.()}
           onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+        />
+      )}
+      {verifyOpen && plugin && (
+        <VerifyDialog game={game} jobs={p.jobs ?? []} onClose={() => setVerifyOpen(false)} />
+      )}
+      {moveOpen && (
+        <MoveDialog
+          game={game}
+          startFolder={parentFolder(game.install_dir)}
+          onClose={() => setMoveOpen(false)}
+          onQueued={() => {
+            setMoveOpen(false);
+            p.onNotify?.(`Moving ${game.title} — see Downloads`, 'busy');
+          }}
         />
       )}
     </div>
@@ -442,6 +471,13 @@ function InstallButton({
   );
 }
 
+/** The folder a game folder sits in ("" when there is none). */
+function parentFolder(dir?: string): string {
+  if (!dir) return '';
+  const i = dir.search(/[/\\][^/\\]*$/);
+  return i > 0 ? dir.slice(0, i) : dir;
+}
+
 /** Where a plugin game lives and what can be done with it. */
 function ManagePanel({
   game,
@@ -450,14 +486,20 @@ function ManagePanel({
   onJob,
   onJobAction,
   onVersions,
+  onVerify,
+  onMove,
 }: {
   game: Game;
   plugin: StorePlugin;
   job?: Job;
-  onJob: (kind: JobKind) => void;
+  onJob: (kind: GameJobKind) => void;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
   /** Opens the version dialog; absent when the plugin or the game has no versions. */
   onVersions?: () => void;
+  /** Opens the verify dialog (shown only where the plugin offers verify). */
+  onVerify: () => void;
+  /** Opens the move dialog. Core can move any installed plugin game. */
+  onMove: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   useEffect(() => setConfirm(false), [game.id]);
@@ -493,6 +535,14 @@ function ManagePanel({
               <History className="h-3.5 w-3.5" /> Version
             </Button>
           )}
+          <CapabilitySurface plugin={plugin} capability="verify" game={game}>
+            <Button onClick={onVerify} className="flex-1 text-white/70">
+              <ShieldCheck className="h-3.5 w-3.5" /> Verify files
+            </Button>
+          </CapabilitySurface>
+          <Button onClick={onMove} className="flex-1 text-white/70">
+            <FolderInput className="h-3.5 w-3.5" /> Move…
+          </Button>
           {offers(plugin, 'install', { game }) && (
             <Button
               variant={confirm ? 'danger' : 'neutral'}

@@ -12,7 +12,7 @@ interface DownloadsViewProps {
   onOpenGame: (gameId: string) => void;
 }
 
-const VERB: Record<Job['kind'], string> = { install: 'Install', update: 'Update', uninstall: 'Uninstall' };
+const VERB: Record<Job['kind'], string> = { install: 'Install', update: 'Update', uninstall: 'Uninstall', verify: 'Verify', move: 'Move' };
 
 const STATE_STYLE: Record<Job['state'], string> = {
   queued: 'text-white/50',
@@ -76,9 +76,12 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
               <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={`Resume ${job.title}`}>
                 <Play className="h-3 w-3" /> Resume
               </Button>
-              <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={`Discard downloaded data of ${job.title}`}>
-                <Trash2 className="h-3 w-3" /> Discard data
-              </Button>
+              {/* A check or a move works on the installed game: there is no download to discard. */}
+              {job.kind !== 'verify' && job.kind !== 'move' && (
+                <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={`Discard downloaded data of ${job.title}`}>
+                  <Trash2 className="h-3 w-3" /> Discard data
+                </Button>
+              )}
             </>
           )}
           {(job.state === 'failed' || job.state === 'canceled') && (
@@ -93,7 +96,8 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
           <div className={cx('h-full rounded-full transition-[width]', job.state === 'paused' ? 'bg-sky-300' : 'bg-amber-300', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
         </div>
       )}
-      {job.install_dir && job.kind !== 'uninstall' && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir}</div>}
+      {job.install_dir && job.kind !== 'uninstall' && job.kind !== 'move' && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir}</div>}
+      {job.kind === 'move' && job.destination && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir} → {job.destination}</div>}
     </div>
   );
 }
