@@ -431,3 +431,35 @@ export interface CloudEvent {
   /** The store client's name ("Steam"), for the client prompt and skips. */
   client?: string;
 }
+
+// The install-options capability (protocol 1.5, docs/plugins/protocol.md,
+// "Install options"). Core ignores groups of kinds it doesn't know.
+export type OptionKind = 'select' | 'multi' | 'bool';
+
+export interface OptionValue {
+  id: string;
+  label?: string;
+  sizeBytes?: number;
+  /** DLC the user doesn't own is shown greyed out and never installed. */
+  owned: boolean;
+  installed?: boolean;
+  storeUrl?: string;
+}
+
+export interface OptionGroup {
+  id: string;
+  label?: string;
+  kind: OptionKind;
+  dlc?: boolean;
+  values?: OptionValue[];
+  /** A select's value id, or a bool's flag. */
+  default?: string | boolean | null;
+}
+
+/** One entry per group: a value id (select), value ids (multi) or a flag (bool). */
+export type InstallChoices = Record<string, string | string[] | boolean>;
+
+export interface GameOptions {
+  groups: OptionGroup[];
+  chosen: InstallChoices;
+}

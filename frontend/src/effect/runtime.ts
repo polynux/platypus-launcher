@@ -11,6 +11,8 @@ import type {
   GameDetails,
   GameFixInfo,
   GameSettings,
+  GameOptions,
+  InstallChoices,
   Job,
   LauncherSettings,
   Library,
@@ -193,6 +195,23 @@ export const LauncherApi = {
     call<Job>('InstallGameVersion', () => App.InstallGameVersion(backend(game), target as never)),
   updateGameVersion: (game: Game, target: VersionTarget) =>
     call<Job>('UpdateGameVersion', () => App.UpdateGameVersion(backend(game), target as never)),
+
+  // Install options (the `install-options` capability). The store lists the
+  // groups; Hydra adds the choices it would use now (saved, or the defaults).
+  getGameOptions: (game: Game) =>
+    call<GameOptions>('GetGameOptions', async () => {
+      const o = (await App.GetGameOptions(backend(game))) as unknown as GameOptions;
+      return {
+        groups: (o.groups ?? []).map((g) => ({ ...g, values: g.values ?? [] })),
+        chosen: o.chosen ?? {},
+      };
+    }),
+  installGameWithOptions: (game: Game, choices: InstallChoices) =>
+    call<Job>('InstallGameWithOptions', () => App.InstallGameWithOptions(backend(game), choices)),
+  updateGameWithOptions: (game: Game, choices: InstallChoices) =>
+    call<Job>('UpdateGameWithOptions', () => App.UpdateGameWithOptions(backend(game), choices)),
+  /** Free bytes where the game would be installed. */
+  getInstallFreeSpace: (game: Game) => call<number>('GetInstallFreeSpace', () => App.GetInstallFreeSpace(backend(game))),
 
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),

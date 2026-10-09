@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, History, Maximize2, FolderCheck, Loader2, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
+import { ArrowLeft, Download, History, Maximize2, FolderCheck, Loader2, Package, Play, RefreshCw, Settings2, Trash2, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CloudSavesPanel } from './CloudSavesPanel';
 import { Lightbox } from './Lightbox';
 import { VersionsDialog } from './VersionsDialog';
+import { InstallOptionsDialog } from './InstallOptionsDialog';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
@@ -131,10 +132,12 @@ export function GamePage(p: GamePageProps) {
   const [shot, setShot] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  // The install-options dialog: 'install' before the first install, 'update' for an installed game's add-ons.
+  const [optionsMode, setOptionsMode] = useState<'install' | 'update' | null>(null);
   const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
   const hero = useHero(game, details);
-  useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); }, [game.id]);
+  useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); setOptionsMode(null); }, [game.id]);
   useEffect(() => {
     const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -151,6 +154,7 @@ export function GamePage(p: GamePageProps) {
   const shots = details?.screenshots ?? [];
   const ach = details?.achievements;
   const canChooseVersion = !!plugin && game.installable !== false && offers(plugin, 'versions', { game });
+  const canChooseOptions = !!plugin && game.installable !== false && offers(plugin, 'install-options', { game });
   const events = activity.filter((e) => e.game === game.title).slice(0, 6);
   const hours = hoursPlayed(game);
   const last = lastPlayedLabel(game);
@@ -212,7 +216,7 @@ export function GamePage(p: GamePageProps) {
               <InstallButton
                 game={game}
                 job={job}
-                onInstall={() => p.onJob('install')}
+                onInstall={() => (canChooseOptions ? setOptionsMode('install') : p.onJob('install'))}
                 onCancel={(id) => p.onJobAction('cancel', id)}
                 onChooseVersion={canChooseVersion ? () => setVersionsOpen(true) : undefined}
               />
@@ -340,7 +344,7 @@ export function GamePage(p: GamePageProps) {
           </Panel>
 
           {isPluginGame(game) && game.is_installed && plugin && (
-            <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} onVersions={canChooseVersion ? () => setVersionsOpen(true) : undefined} />
+            <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} onVersions={canChooseVersion ? () => setVersionsOpen(true) : undefined} onOptions={canChooseOptions ? () => setOptionsMode('update') : undefined} />
           )}
 
           {isPluginGame(game) && game.is_installed && plugin && <CloudSavesPanel game={game} plugin={plugin} />}
@@ -373,6 +377,16 @@ export function GamePage(p: GamePageProps) {
           game={game}
           plugin={plugin}
           onClose={() => setVersionsOpen(false)}
+          onChanged={() => p.onVersionsChanged?.()}
+          onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+        />
+      )}
+      {optionsMode && plugin && (
+        <InstallOptionsDialog
+          game={game}
+          plugin={plugin}
+          mode={optionsMode}
+          onClose={() => setOptionsMode(null)}
           onChanged={() => p.onVersionsChanged?.()}
           onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
         />
@@ -450,6 +464,7 @@ function ManagePanel({
   onJob,
   onJobAction,
   onVersions,
+  onOptions,
 }: {
   game: Game;
   plugin: StorePlugin;
@@ -458,6 +473,8 @@ function ManagePanel({
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
   /** Opens the version dialog; absent when the plugin or the game has no versions. */
   onVersions?: () => void;
+  /** Opens the add-ons and options dialog; absent when the plugin offers no install options. */
+  onOptions?: () => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   useEffect(() => setConfirm(false), [game.id]);
@@ -491,6 +508,11 @@ function ManagePanel({
           {onVersions && (
             <Button onClick={onVersions} className="flex-1 text-white/70">
               <History className="h-3.5 w-3.5" /> Version
+            </Button>
+          )}
+          {onOptions && (
+            <Button onClick={onOptions} className="flex-1 text-white/70">
+              <Package className="h-3.5 w-3.5" /> Add-ons & options
             </Button>
           )}
           {offers(plugin, 'install', { game }) && (
