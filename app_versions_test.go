@@ -45,7 +45,6 @@ func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 		t.Fatal(err)
 	}
 	a := &App{settings: st, ctx: context.Background()}
-	logWarning = func(context.Context, string, ...any) {} // Wails only logs through its own contexts
 	if a.ledger, err = ledger.Open(filepath.Join(root, "install-history.json")); err != nil {
 		t.Fatal(err)
 	}

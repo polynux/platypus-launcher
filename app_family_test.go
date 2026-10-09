@@ -17,6 +17,10 @@ import (
 	"hydra-launcher/internal/types"
 )
 
+// Wails only logs through its own contexts, so the tests drop the warnings. It
+// is set once: plugins of an earlier test may still be reading it.
+func init() { logWarning = func(context.Context, string, ...any) {} }
+
 // Family and plugin settings (protocol 1.8) around the echo test plugin. The
 // echo manifest offers both; the protocol list decides whether they are on.
 
@@ -53,7 +57,6 @@ func familyAppNotStarted(t *testing.T, protocols, caps string) *familyEnv {
 	}
 	e := &familyEnv{st: st}
 	a := &App{settings: st, ctx: context.Background()}
-	logWarning = func(context.Context, string, ...any) {} // Wails only logs through its own contexts
 	a.familyEmit = func(w types.FamilyWarning) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
