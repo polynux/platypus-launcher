@@ -434,6 +434,8 @@ export function App() {
 
   const openGame = (id: string) =>
     setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
+  // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
+  const closeFriends = () => { chat.close(); setFriendsOpen(false); };
 
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
   const settingsGame = settingsFor ? games.find((g) => g.id === settingsFor) : undefined;
@@ -615,7 +617,7 @@ export function App() {
           labels={socialLabels}
           plugins={plugins}
           inLibrary={(id) => libraryIds.has(id)}
-          onClose={() => setFriendsOpen(false)}
+          onClose={closeFriends}
           onSetEnabled={(plugin, enabled) =>
             Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
           onSetStatus={(plugin, state: SocialStatus) =>
@@ -624,24 +626,25 @@ export function App() {
             Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
           onReconnect={(plugin) =>
             Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
-          onOpenGame={(id) => { setFriendsOpen(false); openGame(id); }}
+          onOpenGame={(id) => { closeFriends(); openGame(id); }}
           unreadOf={chat.unreadOf}
-          onOpenChat={(plugin, friend) => { setFriendsOpen(false); chat.open(plugin, friend.id); }}
+          onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
           chatAlerts={chat.alerts}
           onSetChatAlerts={chat.setAlerts}
-        />
-      )}
-
-      {chat.target && (
-        <ChatPanel
-          view={chat.conversation}
-          friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
-          storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
-          error={chat.error}
-          onLoadOlder={chat.loadOlder}
-          onSend={chat.send}
-          onResend={chat.resend}
-          onClose={chat.close}
+          chat={chat.target && (
+            <ChatPanel
+              view={chat.conversation}
+              friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
+              storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
+              error={chat.error}
+              onLoadOlder={chat.loadOlder}
+              onSend={chat.send}
+              onResend={chat.resend}
+              onBack={chat.close}
+              onClose={closeFriends}
+            />
+          )}
+          onBackFromChat={chat.close}
         />
       )}
 

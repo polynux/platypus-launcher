@@ -58,15 +58,16 @@ describe('friends modal chat controls', () => {
     expect(within(boRow).queryByLabelText(/unread/)).toBeNull();
   });
 
-  it('opens the conversation with the friend from the Message action', () => {
+  it('opens the conversation with the friend when their row is clicked', () => {
     const props = modal({ onOpenChat: vi.fn() });
-    fireEvent.click(screen.getByRole('button', { name: 'Message Bo Lindqvist' }));
+    fireEvent.click(screen.getByRole('button', { name: /Bo Lindqvist/ }));
     expect(props.onOpenChat).toHaveBeenCalledWith('echo', expect.objectContaining({ id: '2', name: 'Bo Lindqvist' }));
   });
 
-  it('hides the Message action when the modal has no chat', () => {
+  it('has no Message action, and no row button, when the modal has no chat', () => {
     modal();
-    expect(screen.queryByRole('button', { name: 'Message Ana Ruiz' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Message/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Ana Ruiz/ })).toBeNull();
   });
 
   it('switches a store\'s message alerts, for a store that offers chat only', () => {
