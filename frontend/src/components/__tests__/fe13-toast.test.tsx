@@ -17,6 +17,7 @@ vi.mock('../../effect/runtime', () => ({
     listJobs: () => Effect.succeed([] as never),
   },
   onJobs: () => () => {},
+  onFamily: () => () => {},
   onSession: () => () => {},
   onCloud: () => () => {},
 }));

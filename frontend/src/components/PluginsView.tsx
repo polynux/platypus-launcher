@@ -10,6 +10,8 @@ import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
 import { PluginCapabilities } from './PluginCapabilities';
+import { PluginSettingsPanel } from './PluginSettings';
+import { FamiliesPanel } from './FamiliesPanel';
 import { CloudSavesSetting } from './CloudSavesSetting';
 import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
@@ -145,6 +147,9 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 </div>
 
                 {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
+
+                {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
+                {p.status === 'ready' && <FamiliesPanel plugin={p} />}
 
                 {p.missing.length > 0 && (
                   <div className="rounded-xl bg-orange-400/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">

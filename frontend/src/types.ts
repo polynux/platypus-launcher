@@ -133,6 +133,72 @@ export interface Game {
   /** The version the game is held at (the `versions` capability): updates
    *  install it and the update prompt is off. */
   pinned?: VersionPin;
+  /** The family member who lends the game (the `family` capability). */
+  shared_by?: SharedBy | null;
+}
+
+/** The family member a borrowed game comes from. */
+export interface SharedBy {
+  id: string;
+  name: string;
+}
+
+/** A member of a store's family group (the `family` capability). */
+export interface FamilyMember {
+  id: string;
+  name: string;
+  /** 'adult' or 'child'; '' when the plugin said neither. */
+  role: string;
+  avatar_url?: string;
+  /** The store's own words, e.g. 'online'. */
+  state?: string;
+}
+
+/** A family.warning: a borrowed game is about to be taken back. */
+export interface FamilyWarning {
+  source: string;
+  game_id: string;
+  message: string;
+  seconds_left: number;
+}
+
+/** A plugin setting's kind. Core drops kinds it doesn't know. */
+export type SettingKind = 'bool' | 'select' | 'text' | 'number';
+export type SettingScope = 'plugin' | 'game';
+/** A value of a plugin setting: on/off, text, a number, or an option id. */
+export type SettingValue = boolean | string | number;
+
+export interface SettingOption {
+  id: string;
+  label: string;
+}
+
+/** One option a plugin offers (the `settings` capability). `default` is null
+ *  when the plugin gave none. */
+export interface SettingField {
+  id: string;
+  kind: SettingKind;
+  label: string;
+  description?: string;
+  scope: SettingScope;
+  default: SettingValue | null;
+  options?: SettingOption[];
+  placeholder?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface SettingGroup {
+  id: string;
+  label: string;
+  description?: string;
+  fields: SettingField[];
+}
+
+/** One scope of a plugin's settings, with the values the user chose. */
+export interface SettingsView {
+  groups: SettingGroup[];
+  values: Record<string, SettingValue>;
 }
 
 export interface SourceWarning {

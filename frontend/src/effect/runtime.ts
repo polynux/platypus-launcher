@@ -2,6 +2,10 @@ import { Effect } from 'effect';
 import type {
   AuthPrompt,
   CloudEvent,
+  FamilyMember,
+  FamilyWarning,
+  SettingsView,
+  SettingValue,
   CloudInfo,
   CloudMode,
   CloudPrompt,
@@ -224,6 +228,23 @@ export const LauncherApi = {
   /** Bytes a fresh install of the game needs with the store's defaults. */
   getInstallSize: (game: Game) => call<number>('GetInstallSize', () => App.GetInstallSize(backend(game))),
 
+  // Family (the `family` capability, protocol 1.8): the store's family group.
+  // Shown only; Hydra enforces none of its rules.
+  getFamilyMembers: (source: string) =>
+    call<FamilyMember[]>('GetFamilyMembers', async () => (await App.GetFamilyMembers(source)) ?? []),
+
+  // Plugin settings (the `settings` capability, protocol 1.8). The plugin-wide
+  // scope is the Plugins view's; the game scope is one game's page. Saving sends
+  // the complete set of the scope; the backend checks it against the schema.
+  getPluginSettings: (source: string) =>
+    call<SettingsView>('GetPluginSettings', () => App.GetPluginSettings(source)),
+  savePluginSettings: (source: string, values: Record<string, SettingValue>) =>
+    call<void>('SavePluginSettings', () => App.SavePluginSettings(source, values)),
+  getGameSettingsFields: (game: Game) =>
+    call<SettingsView>('GetGameSettingsFields', () => App.GetGameSettingsFields(backend(game))),
+  saveGameSettingsFields: (game: Game, values: Record<string, SettingValue>) =>
+    call<void>('SaveGameSettingsFields', () => App.SaveGameSettingsFields(backend(game), values)),
+
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),
   installGame: (game: Game) => call<Job>('InstallGame', () => App.InstallGame(backend(game))),
@@ -254,6 +275,12 @@ export function onSession(cb: (e: SessionEvent) => void): () => void {
 export function onJobs(cb: (jobs: Job[]) => void): () => void {
   if (!window.go?.main?.App) return () => {};
   return EventsOn('jobs', cb);
+}
+
+/** Subscribe to family warnings: a borrowed game is about to be taken back. */
+export function onFamily(cb: (w: FamilyWarning) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('family', cb);
 }
 
 /** Subscribe to cloud sync events: progress, new statuses, prompts, results. */

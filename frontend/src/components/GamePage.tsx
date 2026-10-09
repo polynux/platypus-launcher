@@ -5,6 +5,7 @@ import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJ
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CloudSavesPanel } from './CloudSavesPanel';
+import { GameSettingsPanel } from './PluginSettings';
 import { Lightbox } from './Lightbox';
 import { VersionsDialog } from './VersionsDialog';
 import { VerifyDialog } from './VerifyDialog';
@@ -364,6 +365,10 @@ export function GamePage(p: GamePageProps) {
           )}
 
           {isPluginGame(game) && game.is_installed && plugin && <CloudSavesPanel game={game} plugin={plugin} />}
+
+          {isPluginGame(game) && plugin && (
+            <GameSettingsPanel game={game} plugin={plugin} onNotify={(msg, kind) => p.onNotify?.(msg, kind)} />
+          )}
 
           {tweaks.length > 0 && game.is_installed && (
             <TweaksPanel

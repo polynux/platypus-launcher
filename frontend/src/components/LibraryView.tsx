@@ -121,6 +121,9 @@ function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string
 
 export function LibraryView(p: LibraryProps) {
   const [sort, setSort] = useState<Sort | null>(null);
+  // Family: the games borrowed from a family member, when the library has any.
+  const [lending, setLending] = useState<'all' | 'with-me'>('all');
+  const hasBorrowed = p.games.some((g) => g.shared_by != null);
   const q = p.search.trim().toLowerCase();
   const owned = p.games.length;
   const installedCount = p.games.filter((g) => g.is_installed).length;
@@ -128,7 +131,7 @@ export function LibraryView(p: LibraryProps) {
   // A store can drop to zero games (logout, uninstall) while selected: its chip is gone, so show all.
   const source = sources.includes(p.source) ? p.source : 'all';
   const filtered = p.games.filter(
-    (g) => (p.ownership === 'owned' || g.is_installed) && (source === 'all' || g.store === source) && g.title.toLowerCase().includes(q)
+    (g) => (p.ownership === 'owned' || g.is_installed) && (source === 'all' || g.store === source) && (lending === 'all' || g.shared_by != null) && g.title.toLowerCase().includes(q)
   );
   const jobOf = (g: Game) => p.jobs.find((j) => j.game_id === g.id);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
@@ -182,6 +185,9 @@ export function LibraryView(p: LibraryProps) {
             <SegRow label="Ownership" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
           )}
           <SegRow label="Source" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
+          {hasBorrowed && (
+            <SegRow label="Family" value={lending} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
+          )}
           <SortControl sort={sort} onChange={setSort} />
           <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
           <Button variant="primary" onClick={p.onAddGame}>
@@ -258,6 +264,9 @@ export function LibraryView(p: LibraryProps) {
                     <div className="relative">
                       <Cover src={g.cover_url} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
                       {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
+                      {g.shared_by && (
+                        <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">Shared by {g.shared_by.name}</Badge>
+                      )}
                       {job ? (
                         <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
                           <div className="font-mono text-[11px] uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
@@ -315,6 +324,7 @@ export function LibraryView(p: LibraryProps) {
                     <button onClick={() => p.onOpenGame(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
                       <Cover src={g.cover_url} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
                       <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
+                      {g.shared_by && <Badge variant="neutral" className="flex-none">Shared by {g.shared_by.name}</Badge>}
                     </button>
                   </span>
                   <span role="cell" className={cx('font-mono text-[11.5px]', TIER_TEXT[tier ?? ''] ?? 'text-white/40')}>{tier ?? '—'}</span>
