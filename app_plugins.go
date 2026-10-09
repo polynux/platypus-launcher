@@ -108,6 +108,7 @@ func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
 	}
 	a.syncDataPlugins(found)
 	a.failStoppedJobs()
+	a.syncSocial()
 	return a.ListStorePlugins(), nil
 }
 
@@ -136,6 +137,7 @@ func (a *App) ApprovePlugin(id string) error {
 		return err
 	}
 	a.failStoppedJobs()
+	a.syncSocial()
 	return nil
 }
 
@@ -145,6 +147,7 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 		return err
 	}
 	a.failStoppedJobs()
+	a.syncSocial()
 	return nil
 }
 
