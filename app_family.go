@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,6 +68,13 @@ func (a *App) GetFamilyMembers(source string) ([]types.FamilyMember, error) {
 	return stores.NewPlugin(a.plugins, p, nil).FamilyMembers(ctx)
 }
 
+// familyOffered says whether a plugin, as its initialize settled it, offers
+// family. Before that the manifest is only a guess, so a notification from a
+// plugin that has not initialized is not taken.
+func familyOffered(rt plugins.Runtime) bool {
+	return rt.Initialized && slices.Contains(rt.Capabilities, "family")
+}
+
 // familyWarningParams is the params of a family.warning notification.
 type familyWarningParams struct {
 	ID          string `json:"id"`
@@ -84,7 +92,7 @@ func (a *App) familyWarning(source string, params json.RawMessage) {
 		return
 	}
 	message := strings.TrimSpace(w.Message)
-	if message == "" || !a.plugins.Has(source, "family") || a.familyEmit == nil {
+	if message == "" || !familyOffered(a.plugins.Runtime(source)) || a.familyEmit == nil {
 		return
 	}
 	if r := []rune(message); len(r) > familyWarningMax {

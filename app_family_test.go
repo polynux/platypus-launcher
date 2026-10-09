@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -34,6 +35,17 @@ type familyEnv struct {
 
 func familyApp(t *testing.T, protocols, caps string) *familyEnv {
 	t.Helper()
+	e := familyAppNotStarted(t, protocols, caps)
+	if err := e.a.plugins.Call(context.Background(), "echo", "auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+// familyAppNotStarted is familyApp before echo has logged in or started: its
+// manifest says what it offers, but nothing has initialized yet.
+func familyAppNotStarted(t *testing.T, protocols, caps string) *familyEnv {
+	t.Helper()
 	root := t.TempDir()
 	st, err := settings.Open(filepath.Join(root, "settings.json"))
 	if err != nil {
@@ -64,9 +76,6 @@ func familyApp(t *testing.T, protocols, caps string) *familyEnv {
 		t.Fatal(err)
 	}
 	if err := a.plugins.Approve("echo"); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.plugins.Call(context.Background(), "echo", "auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	e.a, e.m = a, a.plugins
@@ -481,5 +490,18 @@ func TestSettingsOfAPluginThatIsGoneAreForgotten(t *testing.T) {
 	}
 	if _, ok := e.a.settings.PluginGameSettings(tiny.ID); ok {
 		t.Fatal("per-game values of a removed plugin kept")
+	}
+}
+
+func TestFamilyWarningBeforeTheRuntimeInitializedIsIgnored(t *testing.T) {
+	e := familyAppNotStarted(t, familyProtocols, familyCaps)
+	if rt := e.m.Runtime("echo"); rt.Initialized {
+		t.Fatalf("echo is initialized before anything started it: %+v", rt)
+	}
+	// The manifest says echo offers family, but its own initialize has not
+	// said so yet: a notification from it then is not taken.
+	e.a.familyWarning("echo", json.RawMessage(`{"id":"ben","message":"Ben is taking this game back","secondsLeft":30}`))
+	if n := len(e.warnings()); n != 0 {
+		t.Fatalf("%d warnings from a plugin that has not initialized", n)
 	}
 }
