@@ -173,3 +173,28 @@ func TestUninstallClearsAMovedGamesRecord(t *testing.T) {
 		t.Fatal("the record outlived the uninstall")
 	}
 }
+
+// An update of an installed game goes to the folder the game is in now: after
+// a move, that is the new folder, not the plugin's default install folder.
+func TestAnUpdateOfAMovedGameStaysInItsNewFolder(t *testing.T) {
+	e := maintenanceEnv(t, protocol14, maintenanceCaps)
+	game := e.installedTiny(t)
+	parent := filepath.Join(t.TempDir(), "Moved")
+	mustDir(t, parent)
+	m, err := e.a.MoveGame(game, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.waitJobDone(t, m.ID)
+
+	moved := game
+	moved.InstallDir = filepath.Join(parent, "tiny")
+	u, err := e.a.UpdateGame(moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.InstallDir != moved.InstallDir {
+		t.Fatalf("the update runs in %q, want the moved game's %q", u.InstallDir, moved.InstallDir)
+	}
+	e.waitJobDone(t, u.ID)
+}

@@ -160,6 +160,9 @@ func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTa
 		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
 	}
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
+	if game.IsInstalled && game.InstallDir != "" {
+		folder = game.InstallDir // an installed game updates where it is, moved or not
+	}
 	return a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.Title, folder, target, options)
 }
 
