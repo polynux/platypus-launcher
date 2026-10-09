@@ -77,19 +77,21 @@ func TestStorePluginGaveUp(t *testing.T) {
 		t.Fatalf("healthy plugin: gave_up = %+v", got)
 	}
 
-	// Crash until give-up; accounting lands asynchronously after each call.
+	// Crash until give-up. Each call waits for its process to be reaped:
+	// a call can land on a process still dying from the crash before it,
+	// which is the same crash, so the count would fall short.
 	for range 3 {
 		_ = m.Call(context.Background(), "echo", "crash", nil, nil)
+		deadline := time.Now().Add(5 * time.Second)
+		for m.Running("echo") != 0 {
+			if time.Now().After(deadline) {
+				t.Fatal("crashed plugin was never reaped")
+			}
+			time.Sleep(time.Millisecond)
+		}
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if m.GaveUp("echo") {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("plugin never reached give-up")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if !m.GaveUp("echo") {
+		t.Fatal("plugin did not give up after 3 crashes")
 	}
 
 	got := a.ListStorePlugins()
