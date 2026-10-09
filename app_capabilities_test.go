@@ -50,7 +50,7 @@ func TestStorePluginListsCapabilitiesWithRuntimeAndFeatures(t *testing.T) {
 	t.Setenv("ECHO_OFF", "discard")
 	t.Setenv("ECHO_FEATURES", `{"versions":{"channels":true,"password":false}}`)
 	a, m := echoApp(t, `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-		"protocol":{"versions":["1.0","1.1"]},"store":"echo","exec":"bin/hydra-echo-app",
+		"protocol":{"versions":["1.0","1.1","1.3"]},"store":"echo","exec":"bin/hydra-echo-app",
 		"capabilities":["library","install","discard","versions","hologram"]}`)
 	if err := m.Approve("echo"); err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestStorePluginListsCapabilitiesWithRuntimeAndFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := a.ListStorePlugins()[0]
-	if !p.Initialized || p.Protocol != "1.1" {
+	if !p.Initialized || p.Protocol != "1.3" {
 		t.Fatalf("initialized %v, protocol %q", p.Initialized, p.Protocol)
 	}
 	if got := p.Declared; len(got) != 5 {
@@ -82,7 +82,7 @@ func TestStorePluginListsCapabilitiesWithRuntimeAndFeatures(t *testing.T) {
 	if c, ok := offer(p, "discard"); !ok || c.On || !c.Known {
 		t.Fatalf("discard: %+v", c)
 	}
-	if c, _ := offer(p, "versions"); !c.On || !c.Known || c.Orchestrated || !c.Features["channels"] || c.Features["password"] {
+	if c, _ := offer(p, "versions"); !c.On || !c.Known || !c.Orchestrated || !c.Features["channels"] || c.Features["password"] {
 		t.Fatalf("versions: %+v", c)
 	}
 	if c, ok := offer(p, "hologram"); !ok || c.Known || c.Orchestrated {

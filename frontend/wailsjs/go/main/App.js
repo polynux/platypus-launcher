@@ -66,6 +66,10 @@ export function GetGameSettings() {
   return window['go']['main']['App']['GetGameSettings']();
 }
 
+export function GetGameVersions(arg1) {
+  return window['go']['main']['App']['GetGameVersions'](arg1);
+}
+
 export function GetLauncherSettings() {
   return window['go']['main']['App']['GetLauncherSettings']();
 }
@@ -84,6 +88,10 @@ export function GetTweaks() {
 
 export function InstallGame(arg1) {
   return window['go']['main']['App']['InstallGame'](arg1);
+}
+
+export function InstallGameVersion(arg1, arg2) {
+  return window['go']['main']['App']['InstallGameVersion'](arg1, arg2);
 }
 
 export function LaunchGame(arg1) {
@@ -120,6 +128,10 @@ export function PauseAllJobs() {
 
 export function PauseJob(arg1) {
   return window['go']['main']['App']['PauseJob'](arg1);
+}
+
+export function PinGameVersion(arg1, arg2) {
+  return window['go']['main']['App']['PinGameVersion'](arg1, arg2);
 }
 
 export function PluginAuthBegin(arg1) {
@@ -206,6 +218,18 @@ export function UninstallGame(arg1) {
   return window['go']['main']['App']['UninstallGame'](arg1);
 }
 
+export function UnlockVersionChannel(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UnlockVersionChannel'](arg1, arg2, arg3);
+}
+
+export function UnpinGameVersion(arg1) {
+  return window['go']['main']['App']['UnpinGameVersion'](arg1);
+}
+
 export function UpdateGame(arg1) {
   return window['go']['main']['App']['UpdateGame'](arg1);
+}
+
+export function UpdateGameVersion(arg1, arg2) {
+  return window['go']['main']['App']['UpdateGameVersion'](arg1, arg2);
 }

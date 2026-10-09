@@ -18,6 +18,9 @@ import type {
   SessionEvent,
   StorePlugin,
   Tweak,
+  VersionInfo,
+  VersionPin,
+  VersionTarget,
 } from '../types';
 import { toBackendGame } from '../lib/settings';
 import * as App from '../../wailsjs/go/main/App';
@@ -165,6 +168,31 @@ export const LauncherApi = {
   // '' restores the default (plugin: ask; game: follow its plugin).
   setCloudPluginMode: (pluginId: string, mode: CloudMode | '') => call<void>('SetCloudPluginMode', () => App.SetCloudPluginMode(pluginId, mode)),
   setCloudGameMode: (gameId: string, mode: CloudMode | '') => call<void>('SetCloudGameMode', () => App.SetCloudGameMode(gameId, mode)),
+  // Game versions (the `versions` capability). The plugin lists channels and
+  // builds; Hydra adds the install history and its pin.
+  getGameVersions: (game: Game) =>
+    call<VersionInfo>('GetGameVersions', async () => {
+      const v = (await App.GetGameVersions(backend(game))) as unknown as VersionInfo;
+      return {
+        ...v,
+        channels: v.channels ?? [],
+        builds: v.builds ?? [],
+        links: v.links ?? [],
+        ledger: v.ledger ?? [],
+        manual: v.manual ?? null,
+        pinned: v.pinned ?? null,
+      };
+    }),
+  // The password goes to the plugin and nowhere else; resolves whether it was accepted.
+  unlockVersionChannel: (game: Game, channel: string, password: string) =>
+    call<boolean>('UnlockVersionChannel', () => App.UnlockVersionChannel(backend(game), channel, password)),
+  pinGameVersion: (game: Game, pin: VersionPin) =>
+    call<void>('PinGameVersion', () => App.PinGameVersion(backend(game), pin as never)),
+  unpinGameVersion: (gameId: string) => call<void>('UnpinGameVersion', () => App.UnpinGameVersion(gameId)),
+  installGameVersion: (game: Game, target: VersionTarget) =>
+    call<Job>('InstallGameVersion', () => App.InstallGameVersion(backend(game), target as never)),
+  updateGameVersion: (game: Game, target: VersionTarget) =>
+    call<Job>('UpdateGameVersion', () => App.UpdateGameVersion(backend(game), target as never)),
 
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),

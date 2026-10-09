@@ -35,11 +35,12 @@
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
+//	ECHO_VERSIONS_OFF  parts of versions.list to leave out: channels, builds, manual, links (see versions.go)
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there.
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
-// initOmit} (absent keys are left alone) and `calls` returns how many times
+// initOmit, versionsOff} (absent keys are left alone) and `calls` returns how many times
 // each method was received, so tests can tell a cached -32601 from a retry.
 // The methods of capabilities that core doesn't use yet answer canned data.
 package main
@@ -107,6 +108,11 @@ type state struct {
 	Installed map[string]string `json:"installed"` // id → install path
 	Partial   map[string]int64  `json:"partial"`   // id → bytes done (resume)
 	Crashed   map[string]bool   `json:"crashed"`
+	// Versions is the version echo installed, by game id; Unlocked remembers
+	// the channels whose password was accepted ("game/channel"). The password
+	// itself is not kept: echo only compares it.
+	Versions map[string]versionRec `json:"versions"`
+	Unlocked map[string]bool       `json:"unlocked"`
 }
 
 var (
@@ -127,6 +133,7 @@ type knobs struct {
 	Unavailable  []string                   `json:"unavailable"`
 	Missing      []string                   `json:"missing"`
 	InitOmit     bool                       `json:"initOmit"`
+	VersionsOff  []string                   `json:"versionsOff"`
 }
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
@@ -152,7 +159,7 @@ func csv(name string) []string {
 
 func loadKnobs() {
 	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
-		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != ""}
+		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF")}
 	if v := os.Getenv("ECHO_FEATURES"); v != "" {
 		_ = json.Unmarshal([]byte(v), &kn.Features)
 	}
@@ -179,6 +186,7 @@ func configure(raw json.RawMessage) {
 	set("unavailable", &kn.Unavailable)
 	set("missing", &kn.Missing)
 	set("initOmit", &kn.InitOmit)
+	set("versionsOff", &kn.VersionsOff)
 }
 
 // manifestCapabilities reads the capabilities plugin.json declares; Hydra runs
@@ -242,7 +250,7 @@ func versionLess(a, b string) bool {
 func initializeResult(p params) (map[string]any, error) {
 	knobMu.Lock()
 	defer knobMu.Unlock()
-	res := map[string]any{"name": "Echo (test plugin)", "version": "0.2.0", "api": 1, "missing": []any{}}
+	res := map[string]any{"name": "Echo (test plugin)", "version": "0.3.0", "api": 1, "missing": []any{}}
 	if os.Getenv("ECHO_NO_PROTOCOL") == "" {
 		picked, ok := negotiate(p.Protocols)
 		if v := os.Getenv("ECHO_PROTOCOL"); v != "" {
@@ -267,6 +275,8 @@ func initializeResult(p params) (map[string]any, error) {
 	}
 	if kn.Features != nil {
 		res["features"] = kn.Features
+	} else if caps, _ := res["capabilities"].([]string); slices.Contains(caps, "versions") {
+		res["features"] = map[string]map[string]bool{"versions": versionsFeatures()}
 	}
 	return res, nil
 }
@@ -329,6 +339,12 @@ func load() {
 	if st.Crashed == nil {
 		st.Crashed = map[string]bool{}
 	}
+	if st.Versions == nil {
+		st.Versions = map[string]versionRec{}
+	}
+	if st.Unlocked == nil {
+		st.Unlocked = map[string]bool{}
+	}
 }
 
 // save writes the state. Callers hold stMu.
@@ -385,6 +401,13 @@ type params struct {
 	Preview    bool              `json:"preview"`
 	Fields     map[string]string `json:"fields"`
 	Protocols  []string          `json:"protocols"` // initialize: the versions Hydra speaks
+
+	// versions.* and the target of game.install/game.update.
+	Target   *targetParam  `json:"target"`
+	Channel  string        `json:"channel"`
+	Password string        `json:"password"`
+	Ledger   []ledgerParam `json:"ledger"`
+	Pinned   *pinParam     `json:"pinned"`
 }
 
 func dispatch(method string, raw json.RawMessage) (any, error) {
@@ -505,6 +528,10 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return launchSpec(p)
 	case "cloud.status", "cloud.pull", "cloud.push", "cloud.resolve":
 		return cloudCall(method, p)
+	case "versions.list":
+		return versionsList(p)
+	case "versions.unlock":
+		return versionsUnlock(p)
 	}
 	if res, err, ok := capabilityStub(method, p); ok {
 		return res, err
@@ -569,6 +596,10 @@ func library() (any, error) {
 			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client,
 			"version": "1.0", "note": g.note, "native": g.native,
 		}
+		if rec, ok := st.Versions[id]; ok && installed {
+			e["version"] = rec.Name
+			e["updateAvailable"] = rec.Build != latestBuild
+		}
 		if f, set := gameFeatures(id); set {
 			e["features"] = f
 		}
@@ -590,6 +621,10 @@ func startInstall(p params) (any, error) {
 	}
 	if !filepath.IsAbs(p.InstallDir) {
 		return nil, fmt.Errorf("installDir %q is not absolute", p.InstallDir)
+	}
+	rec, err := resolveTarget(p.ID, p.Target)
+	if err != nil {
+		return nil, err
 	}
 	stop := make(chan struct{})
 	jobsMu.Lock()
@@ -638,7 +673,7 @@ func startInstall(p params) (any, error) {
 			})
 		}
 		dir := filepath.Join(p.InstallDir, p.ID)
-		script := "#!/bin/sh\necho \"echo game $*\"\nsleep \"${ECHO_GAME_SECONDS:-3}\"\n"
+		script := "#!/bin/sh\necho \"echo game " + rec.Build + " $*\"\nsleep \"${ECHO_GAME_SECONDS:-3}\"\n"
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			notify("job.failed", map[string]any{"jobId": p.JobID, "error": err.Error()})
 			return
@@ -649,10 +684,11 @@ func startInstall(p params) (any, error) {
 		}
 		stMu.Lock()
 		st.Installed[p.ID] = dir
+		st.Versions[p.ID] = rec
 		delete(st.Partial, p.ID)
 		save()
 		stMu.Unlock()
-		notify("job.done", map[string]any{"jobId": p.JobID})
+		notify("job.done", map[string]any{"jobId": p.JobID, "installed": installedAnswer(rec)})
 	}()
 	return nil, nil
 }
@@ -672,6 +708,7 @@ func startUninstall(p params) (any, error) {
 		}
 		stMu.Lock()
 		delete(st.Installed, p.ID)
+		delete(st.Versions, p.ID)
 		save()
 		stMu.Unlock()
 		notify("job.done", map[string]any{"jobId": p.JobID})

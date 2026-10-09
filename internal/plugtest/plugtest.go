@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -120,6 +121,9 @@ func (b backend) Start(ctx context.Context, j types.Job) error {
 		p["installDir"] = j.InstallDir
 		if j.Title != "" {
 			p["title"] = j.Title
+		}
+		if j.Target != nil {
+			p["target"] = j.Target
 		}
 	}
 	return b.m.Call(ctx, j.Source, "game."+j.Kind, p, nil)
@@ -420,6 +424,9 @@ func (s Suite) Conformance(t *testing.T) {
 	if has("cloud-saves") {
 		sess.checkCloud(t, game)
 	}
+	if has("versions") {
+		sess.checkVersions(t, game, done.ID, !s.NoUnknownDetails)
+	}
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {
@@ -586,6 +593,88 @@ func (s Suite) Handshake(t *testing.T) *Session {
 	return sess
 }
 
+// checkVersions holds a plugin offering `versions` to the shapes in
+// docs/plugins/protocol.md ("Versions"): versions.list needs an id and answers
+// only documented keys, with the documented vocabulary; versions.unlock needs
+// its params (or is absent); job.done's `installed`, when sent, names a build.
+func (s *Session) checkVersions(t *testing.T, game types.Game, doneJob string, unknownIDErrors bool) {
+	t.Helper()
+	s.wantCode("versions.list", map[string]any{}, jsonrpc.CodeInvalidParams)
+	var raw json.RawMessage
+	params := map[string]any{"id": game.StoreAppID, "ledger": []any{}}
+	if err := s.call("versions.list", params, &raw); err != nil {
+		t.Fatalf("versions.list: %v", err)
+	}
+	checkKeys(t, "versions.list", raw, VersionListKeys)
+	var list struct {
+		Channels []json.RawMessage `json:"channels"`
+		Builds   []json.RawMessage `json:"builds"`
+		Manual   json.RawMessage   `json:"manual"`
+		Links    []json.RawMessage `json:"links"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		t.Fatalf("versions.list result: %v", err)
+	}
+	oneOf := func(what string, v string, ok ...string) {
+		if v != "" && !slices.Contains(ok, v) {
+			t.Errorf("%s is %q, want one of %v", what, v, ok)
+		}
+	}
+	for _, c := range list.Channels {
+		checkKeys(t, "versions.list channel", c, VersionChannelKeys)
+		var ch struct{ ID, Requires string }
+		_ = json.Unmarshal(c, &ch)
+		if ch.ID == "" {
+			t.Errorf("versions.list channel without an id: %s", c)
+		}
+		oneOf("channel requires", ch.Requires, "none", "password")
+	}
+	for _, b := range list.Builds {
+		checkKeys(t, "versions.list build", b, VersionBuildKeys)
+		var bd struct{ ID, Source string }
+		_ = json.Unmarshal(b, &bd)
+		if bd.ID == "" {
+			t.Errorf("versions.list build without an id: %s", b)
+		}
+		oneOf("build source", bd.Source, "store", "archive", "manual")
+	}
+	if len(list.Manual) > 0 && string(list.Manual) != "null" {
+		checkKeys(t, "versions.list manual", list.Manual, VersionManualKeys)
+	}
+	for _, l := range list.Links {
+		checkKeys(t, "versions.list link", l, VersionLinkKeys)
+		var link struct{ URL string }
+		_ = json.Unmarshal(l, &link)
+		if !strings.HasPrefix(link.URL, "https://") && !strings.HasPrefix(link.URL, "http://") {
+			t.Errorf("versions.list link %q is not http(s)", link.URL)
+		}
+	}
+	if unknownIDErrors {
+		var junk json.RawMessage
+		err := s.call("versions.list", map[string]any{"id": "no-such-game-0xdead"}, &junk)
+		var re *jsonrpc.Error
+		if err == nil || !errors.As(err, &re) {
+			t.Errorf("versions.list on an unknown id answered %s (err %v), want an RPC error", junk, err)
+		}
+	}
+	// versions.unlock is optional; if present it checks its params before it
+	// looks at any password.
+	var unlock json.RawMessage
+	if err := s.call("versions.unlock", map[string]any{}, &unlock); err != nil {
+		var re *jsonrpc.Error
+		if !errors.As(err, &re) || (re.Code != jsonrpc.CodeInvalidParams && re.Code != jsonrpc.CodeMethodNotFound) {
+			t.Errorf("versions.unlock without params: %v, want -32602 (or -32601 when the store has no passwords)", err)
+		}
+	} else {
+		t.Errorf("versions.unlock without params succeeded: %s", unlock)
+	}
+	for _, e := range s.Events(doneJob) {
+		if e.Method == "job.done" && e.Update.Installed != nil && e.Update.Installed.Build == "" {
+			t.Errorf("job.done `installed` has no build: %+v", e.Update.Installed)
+		}
+	}
+}
+
 // probeSkip are the capabilities whose methods the rest of the suite already
 // drives with real params (probing them with {} could start work).
 var probeSkip = []string{"library", "install", "launch", "auth", "discard"}
@@ -681,6 +770,13 @@ var (
 		"releaseDate", "heroUrl", "achievements"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "find", "startTimeout"}
+
+	// The versions capability (docs/plugins/protocol.md, "Versions").
+	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}
+	VersionChannelKeys = []string{"id", "name", "description", "updatedAt", "buildId", "requires", "unlocked", "current"}
+	VersionBuildKeys   = []string{"id", "name", "publishedAt", "channel", "source", "available", "current"}
+	VersionManualKeys  = []string{"label", "hint"}
+	VersionLinkKeys    = []string{"label", "url"}
 )
 
 func checkKeys(t *testing.T, what string, raw json.RawMessage, allowed []string) {

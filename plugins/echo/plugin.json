@@ -1,14 +1,14 @@
 {
   "id": "echo",
   "name": "Echo (test plugin)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Hydra",
   "description": "A fake store for trying the plugin path: login code letmein, tiny fake installs, no network.",
   "manifestVersion": 1,
-  "protocol": { "versions": ["1.0", "1.1", "1.2"], "transport": "jsonrpc-stdio" },
+  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3"], "transport": "jsonrpc-stdio" },
   "store": "echo",
   "exec": "bin/hydra-echo",
-  "capabilities": ["library", "install", "launch", "auth", "discard", "cloud-saves"],
+  "capabilities": ["library", "install", "launch", "auth", "discard", "cloud-saves", "versions"],
   "requires": [{ "bin": "sleep", "hint": "part of coreutils" }],
   "install_dir": "echo",
   "permissions": { "network": [], "read": [], "write": [] }

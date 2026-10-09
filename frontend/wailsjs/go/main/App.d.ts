@@ -34,6 +34,8 @@ export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
 
 export function GetGameSettings():Promise<Record<string, Record<string, any>>>;
 
+export function GetGameVersions(arg1:types.Game):Promise<types.VersionInfo>;
+
 export function GetLauncherSettings():Promise<types.LauncherSettings>;
 
 export function GetLibrary():Promise<types.Library>;
@@ -43,6 +45,8 @@ export function GetProtonVersions():Promise<Array<types.ProtonVersion>>;
 export function GetTweaks():Promise<Array<types.Tweak>>;
 
 export function InstallGame(arg1:types.Game):Promise<types.Job>;
+
+export function InstallGameVersion(arg1:types.Game,arg2:types.VersionTarget):Promise<types.Job>;
 
 export function LaunchGame(arg1:types.Game):Promise<string>;
 
@@ -61,6 +65,8 @@ export function OpenPluginsFolder():Promise<void>;
 export function PauseAllJobs():Promise<void>;
 
 export function PauseJob(arg1:string):Promise<void>;
+
+export function PinGameVersion(arg1:types.Game,arg2:types.VersionPin):Promise<void>;
 
 export function PluginAuthBegin(arg1:string):Promise<types.AuthPrompt>;
 
@@ -104,4 +110,10 @@ export function StopGame(arg1:string):Promise<void>;
 
 export function UninstallGame(arg1:types.Game):Promise<types.Job>;
 
+export function UnlockVersionChannel(arg1:types.Game,arg2:string,arg3:string):Promise<boolean>;
+
+export function UnpinGameVersion(arg1:string):Promise<void>;
+
 export function UpdateGame(arg1:types.Game):Promise<types.Job>;
+
+export function UpdateGameVersion(arg1:types.Game,arg2:types.VersionTarget):Promise<types.Job>;

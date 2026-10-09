@@ -1,4 +1,4 @@
-# Store plugin protocol (1.2, draft)
+# Store plugin protocol (1.3, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -102,9 +102,9 @@ other errors can contain.
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
 | `game.details` | `{ id }` | `GameDetails` |
-| `game.installSize` | `{ id }` | `{ downloadBytes, diskBytes }` |
-| `game.install` | `{ id, installDir, jobId, title? }` | `{}` once started |
-| `game.update` | `{ id, installDir, jobId, title? }` | `{}` once started |
+| `game.installSize` | `{ id, target? }` | `{ downloadBytes, diskBytes }` |
+| `game.install` | `{ id, installDir, jobId, title?, target? }` | `{}` once started |
+| `game.update` | `{ id, installDir, jobId, title?, target? }` | `{}` once started |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
@@ -113,6 +113,8 @@ other errors can contain.
 | `cloud.pull` | `{ id, ctx, jobId }` | `CloudStatus` |
 | `cloud.push` | `{ id, ctx, jobId }` | `CloudStatus` |
 | `cloud.resolve` | `{ id, ctx, jobId, choices }` | `CloudStatus` |
+| `versions.list` | `{ id, ledger?, pinned? }` | `VersionList` (1.3, `versions` capability) |
+| `versions.unlock` | `{ id, channel, password }` | `{ unlocked }` (optional) |
 
 `qr` (on `auth.begin`, and on `auth.status` while a QR login is pending) is a QR
 code as block-art text: `"\u2588"` is a dark module, two characters per module,
@@ -201,7 +203,7 @@ place; it is not a fresh `game.install`. `installSize.downloadBytes` is what
 | Notification | Params |
 |---|---|
 | `job.progress` | `{ jobId, phase?, bytes?, total?, speed?, percent? }` (`speed` in bytes/s; send it whenever the tool reports one) |
-| `job.done` | `{ jobId }` |
+| `job.done` | `{ jobId, installed? }` (`installed` only with the `versions` capability, see [Versions](#versions)) |
 | `job.failed` | `{ jobId, error }` |
 | `log` | `{ level, message }` (goes to the plugin's log file) |
 
@@ -303,8 +305,7 @@ store-client spec for the game; a plugin that has none answers `-32000` with a m
 
 Capability `cloud-saves`, protocol 1.2 and later. A plugin that speaks only 1.0 or 1.1
 keeps working unchanged: the capability is off for it, Hydra sends no `cloud.*`
-request and the game page shows no cloud row. Revision numbers are reserved per
-feature: 1.2 is cloud saves, 1.3 is the versions capability's shapes.
+request and the game page shows no cloud row.
 
 **Who does what.** Hydra decides *when* and what the user sees: a per-plugin
 default and a per-game override (`off`, `ask`, `auto`), a `cloud.pull` before it
@@ -400,7 +401,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -417,8 +418,10 @@ that doesn't know it.
   that are hard requirements.
 - **Revisions.** 1.0: the first plugin releases. 1.1: the capability registry, runtime `capabilities` and
   `features` in `initialize`, `-32002`. 1.2: the `cloud.*` methods, `cloud.progress` and the `via` parameter of
-  `game.launchSpec` (cloud saves). 1.3 is reserved for the versions capability. A plugin speaking only
-  1.0/1.1 never sees any of the 1.2 additions.
+  `game.launchSpec` (cloud saves). 1.3: the `versions.*` methods, `target` on installs and updates, and
+  `installed` on `job.done` (versions). A capability whose `since` is newer than the negotiated protocol is off
+  for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
+  receives a 1.2 or 1.3 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -440,7 +443,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `discard` | 1.0 | `job.discard` | | yes |
 | `cloud-saves` | 1.2 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | yes |
 | `install-options` | 1.1 | `game.options` | | not yet |
-| `versions` | 1.1 | `versions.list` | `versions.unlock` | not yet |
+| `versions` | 1.3 | `versions.list` | `versions.unlock` | yes |
 | `verify` | 1.1 | `game.verify` | | not yet |
 | `move` | 1.1 | `game.move` | | not yet |
 | `social` | 1.1 | `social.start`, `social.stop`, `social.state`, `social.self`, `social.friends` | `social.setStatus`, `social.setPlaying` | not yet |
@@ -461,7 +464,7 @@ returns `capabilities`, the subset of the manifest's that is on right now (leave
 it out to mean all of them), and `features`, depth flags per capability:
 
 ```json
-{ "protocol": "1.1",
+{ "protocol": "1.3",
   "capabilities": ["library", "install", "versions"],
   "features": { "versions": { "channels": true, "builds": true, "password": false } } }
 ```
@@ -490,6 +493,109 @@ invents one.
 **Optional methods.** The first `-32601` for an optional method is remembered
 until the plugin process exits; Hydra doesn't ask again in that run. `-32002` is
 never remembered.
+
+## Versions
+
+The `versions` capability (protocol 1.3) lets the user choose which version of
+a game to install, hold it there, and go back to one they had. It is for stores
+where that is possible: GOG's builds and branches, Steam's branches and
+manifest ids, Epic's previously saved manifests. A store with one build leaves
+it out, or leaves it off for a game through `LibraryGame.features`.
+
+```
+versions.list   { id, ledger?, pinned? } -> VersionList
+versions.unlock { id, channel, password } -> { unlocked }    # optional
+game.installSize / game.install / game.update { …, target? }
+job.done { jobId, installed? }
+```
+
+`channel` is a moving pointer (a Steam or GOG branch); `build` is immutable.
+The `features` flags for the capability are `channels`, `builds`, `password` and
+`manual`: what this store can list, unlock and take typed. They only say what
+the Plugins view shows; Hydra still handles any empty list.
+
+```json
+{
+  "channels": [{ "id": "beta", "name": "beta", "description": "Release candidates.",
+                 "updatedAt": "2026-09-30", "buildId": "25240193",
+                 "requires": "none", "unlocked": true, "current": false }],
+  "builds":   [{ "id": "58076094395251196", "name": "1.5 (CS) GOG 0.2", "publishedAt": "2024-11-05",
+                 "channel": "beta", "source": "store", "available": true, "current": false }],
+  "manual":   { "label": "Steam manifest ids", "hint": "one per depot, from SteamDB" },
+  "links":    [{ "label": "Depots on SteamDB", "url": "https://steamdb.info/app/480/depots/" }],
+  "updateAvailable": false,
+  "pinned":   { "kind": "build", "id": "58076094395251196" }
+}
+```
+
+- `channels[].requires` is `"none"` or `"password"`; `unlocked` says whether the
+  password was accepted (Hydra shows a password form for the locked ones).
+  `current` marks the channel the installed game follows. Both are optional.
+- `builds[].source` is `"store"` (the store lists it), `"archive"` (it comes
+  from Hydra's install history, `ledger`) or `"manual"`. Hydra marks them in the
+  UI as "from the store", "from your install history" and "typed by you".
+  `available: false` means the plugin knows the build but can't fetch it now;
+  leave it out for `true`. `current` marks the installed build.
+- `manual` asks the user to type something the store doesn't list (Steam: one
+  manifest id per depot). `label` and `hint` are shown as written next to a
+  text box (several lines allowed). Hydra's UI sends the text as it was typed,
+  in `target.manual.input`; parse it as your hint says. Other keys are allowed
+  for callers that build a target themselves.
+- `links` (optional, at most 10) point at a page that helps the user pick, such
+  as a game's depots on SteamDB. Hydra only opens them in the browser (http and
+  https only) and never fetches them.
+- `updateAvailable` is relative to the pin: with a `pinned` in the request, whether
+  the installed version differs from it; without one, whether a newer build
+  exists. `pinned` in the answer is ignored: Hydra's own pin is authoritative.
+- `ledger` (request) is Hydra's install history for the game, oldest first:
+  `[{ store, game, build, channel?, versionName?, date, archiveRef? }]`. List the
+  entries your store no longer lists as `source: "archive"` and say whether they
+  can still be fetched. `archiveRef` is whatever you put in `installed`; Hydra
+  never reads it (Epic: the saved manifest's name; Steam: depot → manifest ids).
+
+**Target.** `game.install` and `game.update` carry `target` when the user (or a
+pin) picked a version: `{ channel?, build?, manual? }`. A `channel` alone means
+"that branch's current build"; a `build` is exactly that build (with a
+`channel`, the build within it); `manual` is the typed values (`{ "input": "<text>" }` from Hydra's UI). Without `target`,
+install the store's default. A pin makes Hydra send the same `target` on every
+`game.update`, so `update` may be a downgrade. `game.installSize` takes the
+same `target` so the free-space check is for that version. A target for a
+locked channel is refused (`-32000` with a message the user can act on). Hydra
+resends the same `target` with the same `jobId` when it resumes a job.
+
+**Passwords.** `versions.unlock` validates a password and the plugin keeps it
+in `HYDRA_PLUGIN_DATA`; answer `{ "unlocked": false }` (or `-32000` with a
+message) for a wrong one. Hydra holds a password only for the length of that
+call: it is never written to a job, the settings or the install history, never
+logged, and a target never names one. A resumed job re-uses the stored unlock.
+Don't write the password to your log either. Don't implement the method when the
+store has no passwords: it is optional and the first `-32601` is remembered.
+
+**Ledger.** After a `job.done` that carries `installed`, Hydra appends
+`{ store, game, build, channel, versionName, date, archiveRef }` to the game's
+history (`install-history.json` in Hydra's data folder), so installing the same
+build twice in a row refreshes one entry rather than adding two:
+
+```json
+{ "jobId": "…", "installed": { "build": "58076094395251196", "channel": "beta",
+  "versionName": "1.5", "archiveRef": { "depots": { "481": "7845…" } } } }
+```
+
+Send `installed` for every install and update when the capability is on;
+`build` is required, the rest optional. `archiveRef` is any JSON, at most 64 KiB.
+
+**Pinning.** Hydra stores the pin per game (a `build` or a `channel`), passes it
+as `target` on `game.update` (and on a reinstall), and hides the game's update
+prompt while it is set. It does not ask you to know about pins, except through
+`versions.list`'s `pinned` request field so you can compute `updateAvailable`.
+"Return to latest" clears the pin; the next update installs the default.
+
+**Safety.** Before installing a version other than the store's default, the UI
+warns that cloud saves or online play may not match, and asks to confirm. Hydra
+backs up nothing itself.
+
+**Errors.** `-32602` for a missing `id`; `-32001` when the store needs a login;
+`-32002` (with a message) when the store can't list versions right now.
 
 ## Out of scope
 

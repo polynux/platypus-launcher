@@ -312,6 +312,20 @@ export namespace types {
 	    }
 	}
 	
+	export class VersionPin {
+	    kind: string;
+	    id: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionPin(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.id = source["id"];
+	    }
+	}
 	export class GameFixInfo {
 	    source: string;
 	    tier: string;
@@ -397,6 +411,7 @@ export namespace types {
 	    outside_folder?: boolean;
 	    native?: boolean;
 	    features: string[];
+	    pinned?: VersionPin;
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -428,6 +443,7 @@ export namespace types {
 	        this.outside_folder = source["outside_folder"];
 	        this.native = source["native"];
 	        this.features = source["features"];
+	        this.pinned = this.convertValues(source["pinned"], VersionPin);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -494,6 +510,22 @@ export namespace types {
 	}
 	
 	
+	export class VersionTarget {
+	    channel?: string;
+	    build?: string;
+	    manual?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionTarget(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.channel = source["channel"];
+	        this.build = source["build"];
+	        this.manual = source["manual"];
+	    }
+	}
 	export class Job {
 	    id: string;
 	    kind: string;
@@ -515,6 +547,7 @@ export namespace types {
 	    canceled_at?: number;
 	    cleaned_at?: number;
 	    leftover?: string;
+	    target?: VersionTarget;
 	
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
@@ -542,7 +575,26 @@ export namespace types {
 	        this.canceled_at = source["canceled_at"];
 	        this.cleaned_at = source["cleaned_at"];
 	        this.leftover = source["leftover"];
+	        this.target = this.convertValues(source["target"], VersionTarget);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class LauncherSettings {
 	    games_folder: string;
@@ -558,6 +610,30 @@ export namespace types {
 	        this.games_folder = source["games_folder"];
 	        this.default_games_folder = source["default_games_folder"];
 	        this.cancel_cleanup_days = source["cancel_cleanup_days"];
+	    }
+	}
+	export class LedgerEntry {
+	    store: string;
+	    game: string;
+	    build: string;
+	    channel?: string;
+	    versionName?: string;
+	    date: string;
+	    archiveRef?: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new LedgerEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.store = source["store"];
+	        this.game = source["game"];
+	        this.build = source["build"];
+	        this.channel = source["channel"];
+	        this.versionName = source["versionName"];
+	        this.date = source["date"];
+	        this.archiveRef = source["archiveRef"];
 	    }
 	}
 	export class SourceWarning {
@@ -797,6 +873,129 @@ export namespace types {
 	        this.wrappers = source["wrappers"];
 	    }
 	}
+	export class VersionBuild {
+	    id: string;
+	    name?: string;
+	    publishedAt?: string;
+	    channel?: string;
+	    source?: string;
+	    available?: boolean;
+	    current?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionBuild(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.publishedAt = source["publishedAt"];
+	        this.channel = source["channel"];
+	        this.source = source["source"];
+	        this.available = source["available"];
+	        this.current = source["current"];
+	    }
+	}
+	export class VersionChannel {
+	    id: string;
+	    name?: string;
+	    description?: string;
+	    updatedAt?: string;
+	    buildId?: string;
+	    requires?: string;
+	    unlocked?: boolean;
+	    current?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionChannel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.updatedAt = source["updatedAt"];
+	        this.buildId = source["buildId"];
+	        this.requires = source["requires"];
+	        this.unlocked = source["unlocked"];
+	        this.current = source["current"];
+	    }
+	}
+	export class VersionLink {
+	    label: string;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionLink(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.url = source["url"];
+	    }
+	}
+	export class VersionManual {
+	    label: string;
+	    hint?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionManual(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.hint = source["hint"];
+	    }
+	}
+	export class VersionInfo {
+	    channels: VersionChannel[];
+	    builds: VersionBuild[];
+	    manual?: VersionManual;
+	    links: VersionLink[];
+	    updateAvailable: boolean;
+	    pinned?: VersionPin;
+	    ledger: LedgerEntry[];
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.channels = this.convertValues(source["channels"], VersionChannel);
+	        this.builds = this.convertValues(source["builds"], VersionBuild);
+	        this.manual = this.convertValues(source["manual"], VersionManual);
+	        this.links = this.convertValues(source["links"], VersionLink);
+	        this.updateAvailable = source["updateAvailable"];
+	        this.pinned = this.convertValues(source["pinned"], VersionPin);
+	        this.ledger = this.convertValues(source["ledger"], LedgerEntry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
 
 }
 

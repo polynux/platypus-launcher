@@ -82,6 +82,9 @@ type Queue struct {
 	b         Backend
 	emit      func([]types.Job)
 	freeSpace func(path string) (uint64, error)
+	// onInstalled is called, outside the queue's lock, when an install or
+	// update reports the version it put on disk (job.done's `installed`).
+	onInstalled func(job types.Job, installed types.Installed)
 
 	mu  sync.Mutex
 	now func() time.Time // injected by tests
@@ -284,8 +287,24 @@ func (q *Queue) prepare(ctx context.Context, job types.Job) error {
 	return nil
 }
 
+// SetOnInstalled registers the callback for finished installs and updates that
+// report the version they installed (the install ledger).
+func (q *Queue) SetOnInstalled(f func(job types.Job, installed types.Installed)) {
+	q.mu.Lock()
+	q.onInstalled = f
+	q.mu.Unlock()
+}
+
 // Add queues a job. A game has at most one active job.
 func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string) (types.Job, error) {
+	return q.AddTargeted(kind, source, gameID, storeGameID, title, installDir, nil)
+}
+
+// AddTargeted queues an install or update of a specific version (the
+// `versions` capability). The target is kept with the job, so a resumed or
+// retried job installs the same version; it names a channel or build and never
+// holds a password.
+func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget) (types.Job, error) {
 	switch kind {
 	case KindInstall, KindUpdate, KindUninstall:
 	default:
@@ -293,6 +312,13 @@ func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string)
 	}
 	if kind != KindUninstall && !filepath.IsAbs(installDir) {
 		return types.Job{}, fmt.Errorf("install folder %q is not an absolute path", installDir)
+	}
+	if target != nil && kind == KindUninstall {
+		return types.Job{}, errors.New("an uninstall has no version target")
+	}
+	if target != nil {
+		t := *target
+		target = &t
 	}
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -305,7 +331,7 @@ func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string)
 	j := &types.Job{
 		ID: newID(), Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
 		Title: title, State: StateQueued, InstallDir: installDir, Percent: -1,
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt: now, UpdatedAt: now, Target: target,
 	}
 	q.jobs = append(q.jobs, j)
 	q.changed(true)
@@ -465,7 +491,14 @@ func (q *Queue) list() []types.Job {
 func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	switch method {
 	case "job.done":
-		q.finishFrom(source, u.JobID, StateDone, "")
+		if job, ok := q.finishFrom(source, u.JobID, StateDone, ""); ok && u.Installed != nil && job.Kind != KindUninstall {
+			q.mu.Lock()
+			f := q.onInstalled
+			q.mu.Unlock()
+			if f != nil {
+				f(job, *u.Installed)
+			}
+		}
 		return
 	case "job.failed":
 		msg := u.Error
@@ -550,14 +583,21 @@ func (q *Queue) FailSource(source, msg string) {
 	}
 }
 
-func (q *Queue) finishFrom(source, id, state, msg string) {
+// finishFrom ends a running job that source owns and returns it (as it was
+// when it ended).
+func (q *Queue) finishFrom(source, id, state, msg string) (types.Job, bool) {
 	q.mu.Lock()
 	j := q.find(id)
 	ok := j != nil && j.Source == source && j.State == StateRunning
+	var snapshot types.Job
+	if ok {
+		snapshot = *j
+	}
 	q.mu.Unlock()
 	if ok {
 		q.finish(id, state, msg)
 	}
+	return snapshot, ok
 }
 
 func (q *Queue) finish(id, state, msg string) {

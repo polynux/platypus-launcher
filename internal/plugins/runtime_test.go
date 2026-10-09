@@ -141,7 +141,7 @@ func TestRuntimeSurvivesACrashUntilTheNextInitialize(t *testing.T) {
 func TestCallsToASwitchedOffCapabilityNeverReachThePlugin(t *testing.T) {
 	t.Setenv("ECHO_OFF", "install")
 	e := capsEnv(t, "library", "install", "auth")
-	err := e.m.Call(ctx(t), "echo", "game.installSize", map[string]any{"id": "tiny"}, nil)
+	err := e.m.Call(ctx(t), "echo", "game.installSize", map[string]any{"id": "tiny", "channel": "beta"}, nil)
 	if rpcCode(err) != jsonrpc.CodeMethodNotFound || !strings.Contains(err.Error(), "install") {
 		t.Fatalf("game.installSize with install off: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestOptionalMethodIsProbedOncePerRun(t *testing.T) {
 	t.Setenv("ECHO_MISSING", "versions.unlock")
 	e := capsEnv(t, "library", "versions")
 	for i := 0; i < 3; i++ {
-		err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny"}, nil)
+		err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny", "channel": "beta"}, nil)
 		if rpcCode(err) != jsonrpc.CodeMethodNotFound {
 			t.Fatalf("call %d: %v, want -32601", i, err)
 		}
@@ -173,7 +173,7 @@ func TestOptionalMethodIsProbedOncePerRun(t *testing.T) {
 	if err := e.m.Call(ctx(t), "echo", "config", map[string]any{"missing": []string{}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny"}, nil)
+	err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny", "channel": "beta"}, nil)
 	if rpcCode(err) != jsonrpc.CodeMethodNotFound {
 		t.Fatalf("cached refusal was dropped within one run: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestOptionalMethodIsProbedOncePerRun(t *testing.T) {
 func TestOptionalMethodProbeIsForgottenWhenThePluginRestarts(t *testing.T) {
 	t.Setenv("ECHO_MISSING", "versions.unlock")
 	e := capsEnv(t, "library", "versions")
-	if err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny"}, nil); rpcCode(err) != jsonrpc.CodeMethodNotFound {
+	if err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny", "channel": "beta"}, nil); rpcCode(err) != jsonrpc.CodeMethodNotFound {
 		t.Fatalf("first run: %v", err)
 	}
 	pid := e.m.Running("echo")
@@ -191,7 +191,7 @@ func TestOptionalMethodProbeIsForgottenWhenThePluginRestarts(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Setenv("ECHO_MISSING", "") // the new run answers it
-	if err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny"}, nil); err != nil {
+	if err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny", "channel": "beta"}, nil); err != nil {
 		t.Fatalf("after a restart the method must be asked again: %v", err)
 	}
 }
@@ -200,7 +200,7 @@ func TestRequiredMethodRefusalIsNotCached(t *testing.T) {
 	t.Setenv("ECHO_MISSING", "versions.list")
 	e := capsEnv(t, "library", "versions")
 	for i := 0; i < 2; i++ {
-		if err := e.m.Call(ctx(t), "echo", "versions.list", map[string]any{"id": "tiny"}, nil); rpcCode(err) != jsonrpc.CodeMethodNotFound {
+		if err := e.m.Call(ctx(t), "echo", "versions.list", map[string]any{"id": "tiny", "channel": "beta"}, nil); rpcCode(err) != jsonrpc.CodeMethodNotFound {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -213,7 +213,7 @@ func TestUnavailableIsDistinctFromLoginAndNotCached(t *testing.T) {
 	t.Setenv("ECHO_UNAVAILABLE", "versions.unlock")
 	e := capsEnv(t, "library", "versions")
 	for i := 0; i < 2; i++ {
-		err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny"}, nil)
+		err := e.m.Call(ctx(t), "echo", "versions.unlock", map[string]any{"id": "tiny", "channel": "beta"}, nil)
 		if rpcCode(err) != CodeUnavailable || !IsUnavailable(err) || IsAuthRequired(err) {
 			t.Fatalf("call %d: %v", i, err)
 		}

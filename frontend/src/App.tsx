@@ -463,6 +463,8 @@ export function App() {
             onJobAction={jobAction}
             onAllowFolder={(folder) => allowFolder(currentGame, folder)}
             onNavigate={setView}
+            onNotify={notify}
+            onVersionsChanged={() => loadData('rescan')}
           />
         ) : (
           <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>
