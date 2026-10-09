@@ -34,6 +34,7 @@ const (
 	rev11 = "1.1" // parity roadmap (docs/plans/launcher-parity.md §2)
 	rev12 = "1.2" // cloud saves (docs/plans/steam-cloud-social.md)
 	rev13 = "1.3" // versions (docs/plans/launcher-parity.md §2.2)
+	rev14 = "1.4" // verify and move (docs/plans/launcher-parity.md §2.3)
 )
 
 var registry = []Capability{
@@ -59,9 +60,9 @@ var registry = []Capability{
 	{Name: "versions", Since: rev13, Orchestrated: true,
 		Methods: []string{"versions.list"}, OptionalMethods: []string{"versions.unlock"},
 		Surfaces: []string{"version-picker", "version-pin"}},
-	{Name: "verify", Since: rev11,
+	{Name: "verify", Since: rev14, Orchestrated: true,
 		Methods: []string{"game.verify"}, Surfaces: []string{"verify-button"}},
-	{Name: "move", Since: rev11,
+	{Name: "move", Since: rev14, Orchestrated: true,
 		Methods: []string{"game.move"}, Surfaces: []string{"move-dialog"}},
 	{Name: "social", Since: rev11,
 		Methods:         []string{"social.start", "social.stop", "social.state", "social.self", "social.friends"},
@@ -75,6 +76,18 @@ var registry = []Capability{
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
 	{Name: "family", Since: rev11,
 		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
+}
+
+// capabilityFreeOptional are optional methods that belong to no capability:
+// Hydra sends them to any plugin that speaks the revision that defines them,
+// and remembers a -32601 answer like any optional method. game.relocated
+// (protocol 1.4) tells a plugin that core moved its game folder.
+var capabilityFreeOptional = []string{"game.relocated"}
+
+// OptionalWithoutCapability reports whether method is an optional method that
+// no capability owns (see capabilityFreeOptional).
+func OptionalWithoutCapability(method string) bool {
+	return slices.Contains(capabilityFreeOptional, method)
 }
 
 // sharedMethods are requests that more than one capability uses besides the

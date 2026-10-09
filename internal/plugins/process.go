@@ -77,6 +77,13 @@ type Runtime struct {
 	Features     map[string]map[string]bool
 }
 
+// Speaks reports whether the negotiated protocol is v or later. Before the
+// first initialize there is none, so nothing is spoken.
+func (r Runtime) Speaks(v Version) bool {
+	got, err := ParseVersion(r.Protocol)
+	return err == nil && !got.Less(v)
+}
+
 // resolveInit applies the subset rule: the runtime capabilities are what
 // initialize returned, limited to what the manifest declared. It returns the
 // result with Capabilities and Features clamped, and the names it dropped.
@@ -192,7 +199,16 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 func (p *process) gate(method string) (optional bool, err error) {
 	capability, optional, ok := CapabilityForMethod(method)
 	if !ok {
-		return false, nil
+		if !OptionalWithoutCapability(method) {
+			return false, nil
+		}
+		optional = true
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.absent[method] {
+			return optional, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found: " + method}
+		}
+		return optional, nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()

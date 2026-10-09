@@ -77,12 +77,12 @@ func TestPluginOffering1To5NegotiatesWhatHydraSpeaks(t *testing.T) {
 }
 
 func TestNegotiationPicksTheHighestCommon(t *testing.T) {
-	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.1", "1.4"}, ""))
+	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.1", "1.4", "1.5"}, ""))
 	if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.m.Runtime("echo").Protocol; got != "1.1" {
-		t.Fatalf("negotiated %q, want 1.1 (Hydra speaks 1.0 and 1.1)", got)
+	if got := e.m.Runtime("echo").Protocol; got != "1.4" {
+		t.Fatalf("negotiated %q, want 1.4 (the highest Hydra speaks that the plugin offers)", got)
 	}
 }
 
