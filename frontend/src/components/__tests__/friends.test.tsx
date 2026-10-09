@@ -1,9 +1,20 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { Effect } from 'effect';
 import { FriendsModal } from '../FriendsModal';
 import { FriendsSummary } from '../FriendsSummary';
-import type { SocialFriend, SocialView } from '../../types';
+import type { FamilyMember, SocialFriend, SocialView, StorePlugin } from '../../types';
+
+const api = vi.hoisted(() => ({ getFamilyMembers: vi.fn() }));
+
+vi.mock('../../effect/runtime', () => ({
+  LauncherApi: {
+    getFamilyMembers: (source: string) => Effect.promise(() => api.getFamilyMembers(source)),
+  },
+  onJobs: () => () => {},
+  onSession: () => () => {},
+}));
 
 const friend = (id: string, name: string, state: SocialFriend['state'], game?: SocialFriend['game'], lastSeen?: number): SocialFriend =>
   ({ id, name, state, game, lastSeen });
@@ -36,10 +47,14 @@ const other: SocialView = {
 
 const labels = { echo: 'Echo', gog: 'GOG' };
 
+const plugin = (id: string, capabilities: string[]): StorePlugin =>
+  ({ id, name: labels[id as keyof typeof labels], status: 'ready', capabilities, declared: capabilities }) as unknown as StorePlugin;
+
 function modal(over: Partial<React.ComponentProps<typeof FriendsModal>> = {}) {
   const props = {
     views: [echo, other],
     labels,
+    plugins: [] as StorePlugin[],
     inLibrary: (id: string) => id === 'p.echo.tiny',
     onClose: vi.fn(),
     onSetEnabled: vi.fn(),
@@ -53,6 +68,23 @@ function modal(over: Partial<React.ComponentProps<typeof FriendsModal>> = {}) {
 }
 
 describe('FriendsModal', () => {
+  beforeEach(() => {
+    api.getFamilyMembers.mockReset();
+    api.getFamilyMembers.mockResolvedValue([]);
+  });
+
+  it('shows the family inside the section of a store that offers it, and not elsewhere', async () => {
+    const members: FamilyMember[] = [{ id: 'ana', name: 'Ana', role: 'adult', state: 'online' } as FamilyMember];
+    api.getFamilyMembers.mockResolvedValue(members);
+    modal({ plugins: [plugin('echo', ['social', 'family']), plugin('gog', ['social'])] });
+    const echoSection = screen.getByRole('region', { name: 'Echo friends' });
+    expect(await within(echoSection).findByRole('list', { name: 'Family members' })).toHaveTextContent('Ana');
+    const gogSection = screen.getByRole('region', { name: 'GOG friends' });
+    expect(within(gogSection).queryByRole('list', { name: 'Family members' })).toBeNull();
+    expect(api.getFamilyMembers).toHaveBeenCalledTimes(1);
+    expect(api.getFamilyMembers).toHaveBeenCalledWith('echo');
+  });
+
   it('shows one section per store with the groups In game, Online and Offline', () => {
     modal();
     const section = screen.getByRole('region', { name: 'Echo friends' });

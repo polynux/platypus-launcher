@@ -7,6 +7,7 @@ import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Switch } from './ds/switch';
 import { agoLabel } from '../lib/cloud';
+import { FamiliesPanel } from './FamiliesPanel';
 import {
   canSetStatus,
   connectionLine,
@@ -17,12 +18,14 @@ import {
   stateDot,
   STATUS_LABEL,
 } from '../lib/social';
-import type { SocialFriend, SocialStatus, SocialView } from '../types';
+import type { SocialFriend, SocialStatus, SocialView, StorePlugin } from '../types';
 
 interface FriendsModalProps {
   views: SocialView[];
   /** Store names by plugin id. */
   labels: Record<string, string>;
+  /** The store plugins, for the family of each store that offers it. */
+  plugins: StorePlugin[];
   /** Whether a Hydra game key is in the library (a friend's game links there). */
   inLibrary: (gameId: string) => boolean;
   onClose: () => void;
@@ -71,8 +74,9 @@ export function FriendsModal(p: FriendsModalProps) {
 
 type SectionProps = FriendsModalProps & { view: SocialView; label: string; query: string };
 
-function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame }: SectionProps) {
+function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame }: SectionProps) {
   const line = connectionLine(view.connection);
+  const storePlugin = plugins.find((x) => x.id === view.plugin);
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
   const total = groups.inGame.length + groups.online.length + groups.offline.length;
   const canReconnect = view.connection.state === 'replaced' || view.connection.state === 'loggedOut';
@@ -141,6 +145,8 @@ function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus
           <FriendGroup title="Offline" friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} />
         </>
       )}
+
+      {storePlugin && <FamiliesPanel plugin={storePlugin} />}
     </section>
   );
 }

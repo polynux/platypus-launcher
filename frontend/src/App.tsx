@@ -596,6 +596,7 @@ export function App() {
         <FriendsModal
           views={social}
           labels={socialLabels}
+          plugins={plugins}
           inLibrary={(id) => libraryIds.has(id)}
           onClose={() => setFriendsOpen(false)}
           onSetEnabled={(plugin, enabled) =>
