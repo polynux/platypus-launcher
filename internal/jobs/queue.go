@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -305,6 +306,13 @@ func (q *Queue) Add(kind, source, gameID, storeGameID, title, installDir string)
 // retried job installs the same version; it names a channel or build and never
 // holds a password.
 func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget) (types.Job, error) {
+	return q.AddWithOptions(kind, source, gameID, storeGameID, title, installDir, target, nil)
+}
+
+// AddWithOptions queues like AddTargeted and also keeps the install-option
+// choices (the `install-options` capability) with the job. Options are copied
+// and never checked here: the caller has resolved them against the store.
+func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, installDir string, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
 	switch kind {
 	case KindInstall, KindUpdate, KindUninstall:
 	default:
@@ -320,6 +328,10 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 		t := *target
 		target = &t
 	}
+	if kind == KindUninstall && options != nil {
+		return types.Job{}, errors.New("an uninstall has no install options")
+	}
+	options = maps.Clone(options)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for _, j := range q.jobs {
@@ -331,7 +343,7 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 	j := &types.Job{
 		ID: newID(), Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
 		Title: title, State: StateQueued, InstallDir: installDir, Percent: -1,
-		CreatedAt: now, UpdatedAt: now, Target: target,
+		CreatedAt: now, UpdatedAt: now, Target: target, Options: options,
 	}
 	q.jobs = append(q.jobs, j)
 	q.changed(true)
@@ -828,6 +840,10 @@ func newID() string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+// FreeSpace is freeSpace for the UI: the bytes free where an install into
+// path would land, so the install dialog can say whether it fits.
+func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
 
 // freeSpace returns the bytes available to the user on the filesystem that
 // holds path, or its nearest existing parent.

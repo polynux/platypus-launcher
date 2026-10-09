@@ -20,6 +20,9 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 	if j.Target != nil {
 		params["target"] = j.Target // the size of that version, not the latest
 	}
+	if j.Options != nil {
+		params["options"] = j.Options // the size of the chosen add-ons and packs
+	}
 	err := b.a.plugins.Call(ctx, j.Source, "game.installSize", params, &s)
 	return s, err
 }
@@ -49,6 +52,11 @@ func installParams(j types.Job) map[string]any {
 	if j.Target != nil {
 		params["target"] = j.Target
 	}
+	// The install-option choices (the install-options capability) are the
+	// ones the job was queued with; a resumed job sends the same ones.
+	if j.Options != nil {
+		params["options"] = j.Options
+	}
 	return params
 }
 
@@ -60,6 +68,12 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 // version in target (nil = the plugin's own default). Hydra picks the install
 // folder; plugins never choose paths.
 func (a *App) queueJob(kind string, game types.Game, target *types.VersionTarget) (types.Job, error) {
+	return a.queueJobWith(kind, game, target, nil)
+}
+
+// queueJobWith is queueJob for an install or update that also carries the
+// install-option choices (nil means the store's defaults).
+func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
 		return types.Job{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
@@ -71,7 +85,7 @@ func (a *App) queueJob(kind string, game types.Game, target *types.VersionTarget
 		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
 	}
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
-	return a.jobs.AddTargeted(kind, game.Source, game.ID, game.StoreAppID, game.Title, folder, target)
+	return a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.Title, folder, target, options)
 }
 
 // InstallGame queues an install into the plugin's install folder. A game held
@@ -87,7 +101,11 @@ func (a *App) InstallGame(game types.Game) (types.Job, error) {
 	if err != nil {
 		return types.Job{}, err
 	}
-	return a.queueJob(jobs.KindInstall, game, target)
+	options, err := a.savedOptions(game)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return a.queueJobWith(jobs.KindInstall, game, target, options)
 }
 
 // UpdateGame queues an update of an installed plugin game. A pinned game is
@@ -100,7 +118,11 @@ func (a *App) UpdateGame(game types.Game) (types.Job, error) {
 	if err != nil {
 		return types.Job{}, err
 	}
-	return a.queueJob(jobs.KindUpdate, game, target)
+	options, err := a.savedOptions(game)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return a.queueJobWith(jobs.KindUpdate, game, target, options)
 }
 
 // UninstallGame queues removal of an installed plugin game.

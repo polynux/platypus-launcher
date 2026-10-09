@@ -298,4 +298,7 @@ type Job struct {
 	// Target is the version the install or update asked for (the `versions`
 	// capability). It names a channel or build and never carries a password.
 	Target *VersionTarget `json:"target,omitempty"`
+	// Options are the install-option choices the install or update sends
+	// (the `install-options` capability), kept with the job like Target.
+	Options InstallOptions `json:"options,omitempty"`
 }
