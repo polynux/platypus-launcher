@@ -78,7 +78,9 @@ func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudC
 	case types.CloudStateOffline, types.CloudStateError:
 		return c.unreachable(g, mode, st)
 	}
+	note := ""
 	if st.Counts.Download > 0 {
+		downloads := st.Counts.Download
 		pulled, err := c.call(jctx, j, g, cc, "cloud.pull", nil)
 		if errors.Is(err, ErrCanceled) {
 			c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvCanceled, Message: "Cloud sync canceled."})
@@ -94,8 +96,9 @@ func (c *Orchestrator) beforeLaunch(ctx context.Context, g Game, cc types.CloudC
 		if st.State == types.CloudStateOffline || st.State == types.CloudStateError {
 			return c.unreachable(g, mode, st)
 		}
+		note = fmt.Sprintf("Downloaded %d file%s from the cloud", downloads, plural(downloads))
 	}
-	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st})
+	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st, Message: note})
 	if st.State == types.CloudStateConflict {
 		return c.prompt(g, types.CloudPromptConflict, st.Message, &st)
 	}

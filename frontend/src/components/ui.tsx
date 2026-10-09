@@ -126,6 +126,7 @@ export const EVENT_TEXT: Record<ActivityType, string> = {
   add: 'text-white/60',
   download: 'text-violet-400',
   tweak: 'text-orange-300',
+  cloud: 'text-sky-300',
 };
 
 export const EVENT_DOT: Record<ActivityType, string> = {
@@ -136,6 +137,7 @@ export const EVENT_DOT: Record<ActivityType, string> = {
   add: 'bg-white/30',
   download: 'bg-[#a78bfa]',
   tweak: 'bg-orange-400',
+  cloud: 'bg-[#7dd3fc]',
 };
 
 export function EmptyState({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {

@@ -56,6 +56,7 @@ vi.mock('../../effect/runtime', () => ({
   },
   onJobs: () => () => {},
   onSession: () => () => {},
+  onCloud: () => () => {},
 }));
 
 import { App } from '../../App';

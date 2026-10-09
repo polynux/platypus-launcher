@@ -202,6 +202,9 @@ func TestPullHappensBeforeLaunchWhenTheCloudHasNewerFiles(t *testing.T) {
 	if st := r.o.Last(game.ID); st == nil || st.State != types.CloudStateSynced {
 		t.Fatalf("last status %+v", st)
 	}
+	if ev := r.ev.find(types.CloudEvStatus); ev == nil || ev.Message != "Downloaded 2 files from the cloud" {
+		t.Fatalf("the user should hear what the pull did: %+v", ev)
+	}
 }
 
 func TestACleanGameLaunchesWithoutAPull(t *testing.T) {
