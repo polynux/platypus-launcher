@@ -14,6 +14,8 @@ export function CancelJob(arg1:string):Promise<void>;
 
 export function CheckCloudSaves(arg1:types.Game):Promise<types.CloudInfo>;
 
+export function CheckMove(arg1:types.Game,arg2:string):Promise<types.MoveCheck>;
+
 export function ChooseGamesFolder():Promise<string>;
 
 export function ChoosePluginInstallFolder(arg1:string):Promise<string>;
@@ -60,11 +62,15 @@ export function ListSessions():Promise<Array<types.SessionEvent>>;
 
 export function ListStorePlugins():Promise<Array<types.StorePlugin>>;
 
+export function MoveGame(arg1:types.Game,arg2:string):Promise<types.Job>;
+
 export function OpenPluginsFolder():Promise<void>;
 
 export function PauseAllJobs():Promise<void>;
 
 export function PauseJob(arg1:string):Promise<void>;
+
+export function PickMoveFolder(arg1:string):Promise<string>;
 
 export function PinGameVersion(arg1:types.Game,arg2:types.VersionPin):Promise<void>;
 
@@ -79,6 +85,8 @@ export function PluginLogout(arg1:string):Promise<types.AuthStatus>;
 export function PreviewLaunchCommand(arg1:types.Game):Promise<string>;
 
 export function RemoveCustomGame(arg1:string):Promise<void>;
+
+export function RepairGame(arg1:types.Game):Promise<types.Job>;
 
 export function RescanPlugins():Promise<Array<types.StorePlugin>>;
 
@@ -117,3 +125,5 @@ export function UnpinGameVersion(arg1:string):Promise<void>;
 export function UpdateGame(arg1:types.Game):Promise<types.Job>;
 
 export function UpdateGameVersion(arg1:types.Game,arg2:types.VersionTarget):Promise<types.Job>;
+
+export function VerifyGame(arg1:types.Game):Promise<types.Job>;
