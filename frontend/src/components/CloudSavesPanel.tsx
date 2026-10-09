@@ -21,15 +21,15 @@ interface Progress { phase?: string; done: number; total: number }
 /** The "Cloud saves" panel of a game page: state, counts, the plugin's reason
  *  when it can't sync, Check now, the conflict dialog and the sync mode. It
  *  renders only for a game whose plugin offers the cloud-saves capability. */
-export function CloudSavesPanel({ game, plugin }: { game: Game; plugin: StorePlugin | undefined }) {
+export function CloudSavesPanel({ game, plugin, framed = true }: { game: Game; plugin: StorePlugin | undefined; framed?: boolean }) {
   return (
     <CapabilitySurface plugin={plugin} capability="cloud-saves" game={game}>
-      <CloudSavesRow game={game} />
+      <CloudSavesRow game={game} framed={framed} />
     </CapabilitySurface>
   );
 }
 
-function CloudSavesRow({ game }: { game: Game }) {
+function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
   const [info, setInfo] = useState<CloudInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -120,8 +120,9 @@ function CloudSavesRow({ game }: { game: Game }) {
   const when = st?.checkedAt ? agoLabel(st.checkedAt) : '';
   const running = !!info?.running;
 
+  const Frame = framed ? CloudFrame : React.Fragment;
   return (
-    <Panel className="bg-white/[0.05]">
+    <Frame>
       <div className="mb-2 flex items-center justify-between gap-3">
         <h2 className="text-[15px] font-bold">Cloud saves</h2>
         {chip ? (
@@ -220,6 +221,8 @@ function CloudSavesRow({ game }: { game: Game }) {
           }}
         />
       )}
-    </Panel>
+    </Frame>
   );
 }
+
+const CloudFrame = ({ children }: { children: React.ReactNode }) => <Panel className="bg-white/[0.05]">{children}</Panel>;
