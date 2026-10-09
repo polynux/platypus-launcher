@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Modal } from './Modal';
 import { cx, LinkButton } from './ui';
 import { Button } from './ds/button';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
+import { Switch } from './ds/switch';
 import { agoLabel } from '../lib/cloud';
 import {
   canSetStatus,
@@ -27,8 +28,14 @@ interface FriendsModalProps {
   onClose: () => void;
   onSetEnabled: (plugin: string, enabled: boolean) => void;
   onSetStatus: (plugin: string, state: SocialStatus) => void;
+  onSetPlaying: (plugin: string, show: boolean) => void;
+  /** Turns a store's friends off and on again, after its session was replaced or logged out. */
+  onReconnect: (plugin: string) => void;
   onOpenGame: (gameId: string) => void;
 }
+
+/** Friends shown per group before "Show more", so a long list stays light. */
+const ROWS_PER_GROUP = 200;
 
 /** Every store's friends in one modal: a section per store, grouped In game /
  *  Online / Offline, with a search over all of them. */
@@ -64,10 +71,11 @@ export function FriendsModal(p: FriendsModalProps) {
 
 type SectionProps = FriendsModalProps & { view: SocialView; label: string; query: string };
 
-function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus, onOpenGame }: SectionProps) {
+function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame }: SectionProps) {
   const line = connectionLine(view.connection);
-  const groups = groupFriends(view.friends, query);
+  const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
   const total = groups.inGame.length + groups.online.length + groups.offline.length;
+  const canReconnect = view.connection.state === 'replaced' || view.connection.state === 'loggedOut';
   return (
     <section aria-label={`${label} friends`} className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 first:border-t-0 first:pt-0">
       <header className="flex items-center justify-between gap-3">
@@ -82,10 +90,23 @@ function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus
       ) : (
         <>
           {line && (
-            <div role="status" className="rounded-lg bg-amber-300/[0.08] px-3 py-2 text-[12px] text-amber-100 ring-1 ring-amber-300/25">
-              {line}
+            <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-amber-300/[0.08] px-3 py-2 text-[12px] text-amber-100 ring-1 ring-amber-300/25">
+              <span>{line}</span>
+              {canReconnect && (
+                <Button variant="ghost" size="sm" onClick={() => onReconnect(view.plugin)}>
+                  Reconnect
+                </Button>
+              )}
             </div>
           )}
+          <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/60">
+            <span>Show what I&apos;m playing to friends</span>
+            <Switch
+              aria-label={`Show what I'm playing to friends on ${label}`}
+              checked={view.showPlaying}
+              onCheckedChange={(show) => onSetPlaying(view.plugin, show)}
+            />
+          </label>
           {view.self && (
             <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
               <Avatar name={view.self.name} url={view.self.avatarUrl} dot={stateDot(view.self.state)} />
@@ -130,6 +151,7 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
   inLibrary: (gameId: string) => boolean;
   onOpenGame: (gameId: string) => void;
 }) {
+  const [shown, setShown] = useState(ROWS_PER_GROUP);
   if (friends.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
@@ -137,7 +159,7 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
         {title} · {friends.length}
       </h4>
       <ul className="flex flex-col">
-        {friends.map((f) => (
+        {friends.slice(0, shown).map((f) => (
           <li key={f.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
             <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
             <div className="min-w-0 flex-1">
@@ -163,6 +185,11 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame }: {
           </li>
         ))}
       </ul>
+      {friends.length > shown && (
+        <LinkButton onClick={() => setShown((n) => n + ROWS_PER_GROUP)}>
+          Show {Math.min(ROWS_PER_GROUP, friends.length - shown)} more
+        </LinkButton>
+      )}
     </div>
   );
 }

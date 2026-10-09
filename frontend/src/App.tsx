@@ -18,7 +18,7 @@ import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
 import { LauncherApi, onJobs, onSession, onSocial } from './effect/runtime';
-import { upsertView } from './lib/social';
+import { reconcileViews, upsertView } from './lib/social';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeRescannedGames } from './lib/games';
@@ -84,11 +84,21 @@ export function App() {
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
 
   // Friends lists: the snapshot of every store that offers one, then each push.
+  // A snapshot is merged with what the pushes already brought in, and it drops
+  // the stores that are no longer ready (refreshSocial runs on a plugin change).
+  const refreshSocial = useCallback(
+    () => Effect.runPromise(LauncherApi.socialViews()).then((vs) => setSocial((list) => reconcileViews(list, vs)), () => {}),
+    [],
+  );
+  const onPluginsChanged = useCallback((list: StorePlugin[]) => {
+    setPlugins(list);
+    void refreshSocial();
+  }, [refreshSocial]);
   useEffect(() => {
     const unsubscribe = onSocial((v) => setSocial((list) => upsertView(list, v)));
-    Effect.runPromise(LauncherApi.socialViews()).then(setSocial, () => {});
+    void refreshSocial();
     return unsubscribe;
-  }, []);
+  }, [refreshSocial]);
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
@@ -144,6 +154,7 @@ export function App() {
           }
           if (pR.ok) {
             setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
+            void refreshSocial();
           } else {
             failures.push(`Plugins: ${errMsg((pR as { ok: false; error: Error }).error)}`);
           }
@@ -187,7 +198,7 @@ export function App() {
           setScanning(false);
         });
     },
-    [log, notify]
+    [log, notify, refreshSocial]
   );
 
   // StrictMode mounts effects twice in dev; scan only once on startup.
@@ -393,6 +404,7 @@ export function App() {
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
 
   const openGame = (id: string) =>
     setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
@@ -494,7 +506,7 @@ export function App() {
           <PluginsView
             plugins={plugins}
             warnings={warnings}
-            onPlugins={setPlugins}
+            onPlugins={onPluginsChanged}
             onLibraryChanged={() => loadData('rescan')}
             onNotify={notify}
           />
@@ -568,12 +580,16 @@ export function App() {
         <FriendsModal
           views={social}
           labels={socialLabels}
-          inLibrary={(id) => games.some((g) => g.id === id)}
+          inLibrary={(id) => libraryIds.has(id)}
           onClose={() => setFriendsOpen(false)}
           onSetEnabled={(plugin, enabled) =>
-            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).catch((err) => notify(errMsg(err), 'err'))}
+            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
           onSetStatus={(plugin, state: SocialStatus) =>
             Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(errMsg(err), 'err'))}
+          onSetPlaying={(plugin, show) =>
+            Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onReconnect={(plugin) =>
+            Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
           onOpenGame={(id) => { setFriendsOpen(false); openGame(id); }}
         />
       )}

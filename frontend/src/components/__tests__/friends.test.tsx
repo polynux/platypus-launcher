@@ -44,6 +44,8 @@ function modal(over: Partial<React.ComponentProps<typeof FriendsModal>> = {}) {
     onClose: vi.fn(),
     onSetEnabled: vi.fn(),
     onSetStatus: vi.fn(),
+    onSetPlaying: vi.fn(),
+    onReconnect: vi.fn(),
     onOpenGame: vi.fn(),
     ...over,
   };
@@ -112,6 +114,37 @@ describe('FriendsModal', () => {
   it('explains a replaced session in the store section', () => {
     modal({ views: [{ ...echo, connection: { state: 'replaced' } }, other] });
     expect(screen.getByText('Another session replaced this one.')).toBeInTheDocument();
+  });
+
+  it('lets the user hide what they play, per store', () => {
+    const onSetPlaying = vi.fn();
+    modal({ onSetPlaying });
+    const sw = screen.getByRole('switch', { name: "Show what I'm playing to friends on Echo" });
+    expect(sw).toBeChecked();
+    fireEvent.click(sw);
+    expect(onSetPlaying).toHaveBeenCalledWith('echo', false);
+  });
+
+  it('offers to reconnect after the session was replaced, and not while online', () => {
+    const onReconnect = vi.fn();
+    const { rerender, props } = modal({ onReconnect });
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+
+    rerender(<FriendsModal {...props} views={[{ ...echo, connection: { state: 'replaced' } }, other]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+    expect(onReconnect).toHaveBeenCalledWith('echo');
+  });
+
+  it('shows the first 200 friends of a group and more on request', () => {
+    const many = Array.from({ length: 250 }, (_, i) => friend(`n${i}`, `Friend ${String(i).padStart(3, '0')}`, 'online'));
+    modal({ views: [{ ...echo, friends: many }, other] });
+    const section = screen.getByRole('region', { name: 'Echo friends' });
+    expect(within(section).getByText('Online · 250')).toBeInTheDocument();
+    expect(within(section).getByText('Friend 199')).toBeInTheDocument();
+    expect(within(section).queryByText('Friend 200')).toBeNull();
+    fireEvent.click(within(section).getByRole('button', { name: 'Show 50 more' }));
+    expect(within(section).getByText('Friend 249')).toBeInTheDocument();
+    expect(within(section).queryByRole('button', { name: /Show .* more/ })).toBeNull();
   });
 
   it('says so when a store has no friends yet', () => {
