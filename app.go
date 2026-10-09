@@ -47,6 +47,7 @@ type App struct {
 	stores       *stores.Registry
 	sessions     *session.Tracker
 	cloud        *cloudsync.Orchestrator
+	moves        coreMoves
 	ledger       *ledger.Ledger
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
@@ -177,7 +178,7 @@ func (a *App) pluginStores() []stores.Store {
 		id := p.Manifest.ID
 		out = append(out, stores.NewPlugin(a.plugins, p, func() []string {
 			return a.plugins.Folders(id, a.settings.GamesFolder())
-		}))
+		}).WithRelocations(a.settings.Relocation))
 	}
 	return out
 }

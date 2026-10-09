@@ -894,6 +894,9 @@ func newID() string {
 // FreeSpace is the free bytes on the filesystem of path, for a move's check.
 func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
 
+// HumanBytes writes a size the way the queue's messages do: 1.2 GB.
+func HumanBytes(b int64) string { return human(b) }
+
 func freeSpace(path string) (uint64, error) {
 	for {
 		var st syscall.Statfs_t

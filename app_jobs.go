@@ -25,6 +25,16 @@ func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize,
 }
 
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
+	switch j.Kind {
+	case jobs.KindVerify:
+		return b.a.plugins.Call(ctx, j.Source, "game.verify", verifyParams(j), nil)
+	case jobs.KindMove:
+		if !b.a.plugins.Has(j.Source, "move") {
+			b.a.startCoreMove(j) // runs on its own; reports through the queue
+			return nil
+		}
+		return b.a.plugins.Call(ctx, j.Source, "game.move", moveParams(j), nil)
+	}
 	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j), nil)
 }
 
@@ -53,6 +63,9 @@ func installParams(j types.Job) map[string]any {
 }
 
 func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
+	if b.a.moves.stop(j.ID) {
+		return nil // a core move: it stops and puts the game back
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
