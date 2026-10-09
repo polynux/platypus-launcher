@@ -16,7 +16,11 @@ type jobBackend struct{ a *App }
 
 func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize, error) {
 	var s plugins.InstallSize
-	err := b.a.plugins.Call(ctx, j.Source, "game.installSize", map[string]any{"id": j.StoreGameID}, &s)
+	params := map[string]any{"id": j.StoreGameID}
+	if j.Target != nil {
+		params["target"] = j.Target // the size of that version, not the latest
+	}
+	err := b.a.plugins.Call(ctx, j.Source, "game.installSize", params, &s)
 	return s, err
 }
 
@@ -40,7 +44,11 @@ func installParams(j types.Job) map[string]any {
 		params["title"] = j.Title
 	}
 	// branch/branchPassword would go here per-plugin; none is set, so the
-	// params carry none: a plugin defaults to its own branch.
+	// params carry none: a plugin defaults to its own branch. A version target
+	// (the `versions` capability) names a channel or build, never a password.
+	if j.Target != nil {
+		params["target"] = j.Target
+	}
 	return params
 }
 
@@ -48,9 +56,10 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
-// queueJob checks the game's plugin can run the job and queues it. Hydra picks
-// the install folder; plugins never choose paths.
-func (a *App) queueJob(kind string, game types.Game) (types.Job, error) {
+// queueJob checks the game's plugin can run the job and queues it, for the
+// version in target (nil = the plugin's own default). Hydra picks the install
+// folder; plugins never choose paths.
+func (a *App) queueJob(kind string, game types.Game, target *types.VersionTarget) (types.Job, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
 		return types.Job{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
@@ -62,10 +71,11 @@ func (a *App) queueJob(kind string, game types.Game) (types.Job, error) {
 		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
 	}
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
-	return a.jobs.Add(kind, game.Source, game.ID, game.StoreAppID, game.Title, folder)
+	return a.jobs.AddTargeted(kind, game.Source, game.ID, game.StoreAppID, game.Title, folder, target)
 }
 
-// InstallGame queues an install into the plugin's install folder.
+// InstallGame queues an install into the plugin's install folder. A game held
+// at a version (pinned) installs that version.
 func (a *App) InstallGame(game types.Game) (types.Job, error) {
 	if game.IsInstalled {
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
@@ -73,15 +83,24 @@ func (a *App) InstallGame(game types.Game) (types.Job, error) {
 	if !game.Installable {
 		return types.Job{}, fmt.Errorf("%s can't be installed by Hydra", game.Title)
 	}
-	return a.queueJob(jobs.KindInstall, game)
+	target, err := a.pinnedTarget(game)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return a.queueJob(jobs.KindInstall, game, target)
 }
 
-// UpdateGame queues an update of an installed plugin game.
+// UpdateGame queues an update of an installed plugin game. A pinned game is
+// updated to its pin, not to the latest version.
 func (a *App) UpdateGame(game types.Game) (types.Job, error) {
 	if !game.IsInstalled {
 		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
 	}
-	return a.queueJob(jobs.KindUpdate, game)
+	target, err := a.pinnedTarget(game)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return a.queueJob(jobs.KindUpdate, game, target)
 }
 
 // UninstallGame queues removal of an installed plugin game.
@@ -92,7 +111,7 @@ func (a *App) UninstallGame(game types.Game) (types.Job, error) {
 	if a.sessions.Running(game.ID) {
 		return types.Job{}, fmt.Errorf("%s is running", game.Title)
 	}
-	return a.queueJob(jobs.KindUninstall, game)
+	return a.queueJob(jobs.KindUninstall, game, nil)
 }
 
 // ListJobs returns the download queue and recent history.

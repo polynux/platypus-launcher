@@ -17,6 +17,7 @@ import (
 	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/jobs"
+	"hydra-launcher/internal/ledger"
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/runner"
 	"hydra-launcher/internal/session"
@@ -44,6 +45,7 @@ type App struct {
 	fixesService *fixes.Service
 	stores       *stores.Registry
 	sessions     *session.Tracker
+	ledger       *ledger.Ledger
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
 
@@ -83,6 +85,12 @@ func (a *App) startup(ctx context.Context) {
 		wruntime.LogErrorf(ctx, "jobs: %v", err)
 	}
 	a.jobs.SetCleanupAfter(cleanupAfter(a.settings.CancelCleanupDays()))
+
+	a.ledger, err = ledger.Open(filepath.Join(dataDir, "install-history.json"))
+	if err != nil {
+		wruntime.LogErrorf(ctx, "install history: %v", err)
+	}
+	a.jobs.SetOnInstalled(a.recordInstall)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -273,6 +281,7 @@ func (a *App) GetLibrary() (types.Library, error) {
 		lib.Games = append(lib.Games, results[i]...)
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
+	a.applyPins(&lib)
 	return lib, nil
 }
 
