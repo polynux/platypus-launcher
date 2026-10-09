@@ -26,7 +26,7 @@ import { reconcileViews, upsertView } from './lib/social';
 import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { needsAttention, mergePlaytime, mergeRescannedGames } from './lib/games';
+import { needsAttention, mergeCopies, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
@@ -365,19 +365,21 @@ export function App() {
     return onJobs((l) => apply(l));
   }, [log, notify]);
 
-  // A plugin's playtime report changed a library value (protocol 1.7). Only
-  // the playtime fields are taken from a fresh read: no rescan notice, and the
-  // game details cache stays as it is.
-  useEffect(
-    () =>
-      onPlaytime(() => {
-        Effect.runPromise(LauncherApi.getLibrary()).then(
-          (lib) => setGames((prev) => mergePlaytime(prev, lib.games)),
-          () => {},
-        );
-      }),
+  // A silent library read: no rescan notice and no details-cache eviction.
+  // Only the fields `merge` names are taken from the fresh read. A failed read
+  // keeps what is shown; the next rescan reconciles it.
+  const refreshLibraryQuietly = useCallback(
+    (merge: (prev: Game[], fresh: Game[]) => Game[]) => {
+      Effect.runPromise(LauncherApi.getLibrary()).then(
+        (lib) => setGames((prev) => merge(prev, lib.games)),
+        () => {},
+      );
+    },
     [],
   );
+
+  // A plugin's playtime report changed a library value (protocol 1.7).
+  useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
 
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
@@ -515,7 +517,7 @@ export function App() {
             onNavigate={setView}
             onNotify={notify}
             onVersionsChanged={() => loadData('rescan')}
-            onCopyChanged={() => loadData('rescan')}
+            onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
           />
         ) : (
           <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>

@@ -119,3 +119,23 @@ export function mergePlaytime(prev: Game[], fresh: Game[]): Game[] {
   });
   return changed ? next : prev;
 }
+
+/** Take only the family fields (who shares a borrowed game, its copies and the
+ *  preferred copy) from a fresh library read, so a copy pick shows without a
+ *  rescan. Returns `prev` itself when nothing changed. */
+export function mergeCopies(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same =
+      g.preferred_copy === f.preferred_copy &&
+      JSON.stringify(g.copies ?? null) === JSON.stringify(f.copies ?? null) &&
+      JSON.stringify(g.shared_by ?? null) === JSON.stringify(f.shared_by ?? null);
+    if (same) return g;
+    changed = true;
+    return { ...g, copies: f.copies, preferred_copy: f.preferred_copy, shared_by: f.shared_by };
+  });
+  return changed ? next : prev;
+}
