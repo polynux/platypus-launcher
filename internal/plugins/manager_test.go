@@ -125,6 +125,19 @@ func newEnvWith(t *testing.T, adjust func(*Options)) *env {
 	return e
 }
 
+// waitReaped waits until the plugin's process has exited and its crash is
+// recorded (Running reports no process only after that).
+func (e *env) waitReaped(t *testing.T, id string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for e.m.Running(id) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("plugin %s was never reaped", id)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func (e *env) discover(t *testing.T) map[string]Plugin {
 	t.Helper()
 	list, err := e.m.Discover()
@@ -259,6 +272,10 @@ func TestGivesUpAfterRepeatedCrashes(t *testing.T) {
 		if err := e.m.Call(ctx(t), "echo", "crash", nil, nil); err == nil {
 			t.Fatalf("crash %d returned no error", i)
 		}
+		// A call can land on a process that is still dying from the crash
+		// before it: that is the same crash, not a new one. Wait until the
+		// exit is recorded, so each call below is one crash.
+		e.waitReaped(t, "echo")
 	}
 	err := e.m.Call(ctx(t), "echo", "echo", nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "crashed 3 times") {
