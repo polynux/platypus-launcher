@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canSendChat, chatKey, clockLabel, messageKey, splitLinks, unreadFor, unreadTotal, upsertConversation } from './chat';
+import { alertText, canSendChat, chatKey, clockLabel, dropConversation, messageKey, splitLinks, unreadFor, unreadTotal, upsertConversation } from './chat';
 import type { ChatView } from '../types';
 
 const conv = (over: Partial<ChatView> = {}): ChatView => ({
@@ -47,6 +47,24 @@ describe('upsertConversation', () => {
     expect(unreadFor(list, 'gog', 'ana')).toBe(2);
     expect(unreadTotal(list)).toBe(7);
     expect(chatKey('echo', 'ana')).not.toBe(chatKey('echo', 'an'));
+  });
+});
+
+describe('dropConversation', () => {
+  it('removes the evicted conversation, and keeps a newer view of it', () => {
+    const list = [conv({ friendId: 'a', seq: 5 }), conv({ friendId: 'b', seq: 2 })];
+    expect(dropConversation(list, { plugin: 'echo', friendId: 'b', seq: 3 }).map((v) => v.friendId)).toEqual(['a']);
+    expect(dropConversation(list, { plugin: 'echo', friendId: 'a', seq: 4 }).map((v) => v.friendId)).toEqual(['a', 'b']);
+    expect(dropConversation(list, { plugin: 'other', friendId: 'b', seq: 9 })).toHaveLength(2);
+  });
+});
+
+describe('alertText', () => {
+  it('names the friend of one message, and the friends and the count of several', () => {
+    expect(alertText(1, ['Ana'], 'Steam')).toBe('New message from Ana on Steam');
+    expect(alertText(3, ['Ana'], 'Steam')).toBe('3 new messages from Ana on Steam');
+    expect(alertText(4, ['Ana', 'Bo'], 'Steam')).toBe('4 new messages from Ana and Bo on Steam');
+    expect(alertText(5, ['Ana', 'Bo', 'Cy'], 'Steam')).toBe('5 new messages from Ana and 2 others on Steam');
   });
 });
 

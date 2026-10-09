@@ -25,6 +25,13 @@ export function upsertConversation(list: ChatView[], view: ChatView): ChatView[]
   return next;
 }
 
+/** Drops a conversation the backend evicted from memory. A view held that is newer than the eviction
+ *  (a later change of the same conversation) stays. */
+export function dropConversation(list: ChatView[], e: Pick<ChatView, 'plugin' | 'friendId' | 'seq'>): ChatView[] {
+  const key = chatKey(e.plugin, e.friendId);
+  return list.filter((v) => chatKey(v.plugin, v.friendId) !== key || v.seq > e.seq);
+}
+
 /** Unread messages from one friend on one store. */
 export function unreadFor(list: ChatView[], plugin: string, friendId: string): number {
   return list.find((v) => v.plugin === plugin && v.friendId === friendId)?.unread ?? 0;
@@ -63,6 +70,14 @@ export function splitLinks(text: string): TextPart[] {
   }
   if (last < text.length) parts.push({ text: text.slice(last) });
   return parts;
+}
+
+/** The toast for the new messages of one store that arrived together: the one message names its friend,
+ *  several name the friends they came from (never their text). */
+export function alertText(count: number, names: string[], store: string): string {
+  if (count <= 1) return `New message from ${names[0] ?? 'a friend'} on ${store}`;
+  const who = names.length <= 2 ? names.join(' and ') : `${names[0]} and ${names.length - 1} others`;
+  return `${count} new messages from ${who} on ${store}`;
 }
 
 /** Local time of day, HH:MM, for a message's sentAt (Unix milliseconds). */

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { LauncherApi, onChat } from '../effect/runtime';
-import { chatKey, unreadFor, unreadTotal, upsertConversation } from './chat';
+import { alertText, chatKey, dropConversation, unreadFor, unreadTotal, upsertConversation } from './chat';
+import { createAlertCoalescer } from './chatAlerts';
 import type { ChatView, SocialFriend, SocialView } from '../types';
 
 /** The conversation on screen: a store and a friend. */
@@ -62,19 +63,28 @@ export function useChat(
   }, [social, notify, storeNames]);
 
   useEffect(() => {
+    // A store's new messages within a few seconds become one toast.
+    const alerts = createAlertCoalescer((plugin, batch) => {
+      const store = storeNamesRef.current[plugin] ?? plugin;
+      notifyRef.current(alertText(batch.count, batch.names, store));
+    });
     const unsubscribe = onChat((e) => {
-      setConversations((list) => upsertConversation(list, e));
-      if (e.alert) {
-        const store = storeNamesRef.current[e.plugin] ?? e.plugin;
-        notifyRef.current(`New message from ${friendNameOf(socialRef.current, e.plugin, e.friendId)} on ${store}`);
+      if (e.dropped) {
+        setConversations((list) => dropConversation(list, e));
+        return;
       }
+      setConversations((list) => upsertConversation(list, e));
+      if (e.alert) alerts.add(e.plugin, friendNameOf(socialRef.current, e.plugin, e.friendId));
     });
     void Effect.runPromise(LauncherApi.chatUnread()).then(
       (vs) => setConversations((list) => vs.reduce(upsertConversation, list)),
       () => {},
     );
     void Effect.runPromise(LauncherApi.chatAlerts()).then(setAlertsState, () => {});
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      alerts.dispose();
+    };
   }, []);
 
   const apply = useCallback((view: ChatView) => setConversations((list) => upsertConversation(list, view)), []);
@@ -82,6 +92,12 @@ export function useChat(
   const open = useCallback(
     (plugin: string, friendId: string) => {
       const next = { plugin, friendId };
+      // Opening another friend closes the one on screen: the backend keeps it open (and its new
+      // messages read) until it is told otherwise.
+      const previous = targetRef.current;
+      if (previous && (previous.plugin !== plugin || previous.friendId !== friendId)) {
+        void Effect.runPromise(LauncherApi.chatClose(previous.plugin, previous.friendId)).catch(() => {});
+      }
       targetRef.current = next;
       setTarget(next);
       setError(null);

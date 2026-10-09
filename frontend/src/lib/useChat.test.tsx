@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect } from 'effect';
 import type { ChatEvent, ChatView, SocialView } from '../types';
@@ -46,29 +46,37 @@ beforeEach(() => {
   };
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('useChat', () => {
   it('counts unread messages across the stores, and toasts a new message by the friend\'s name, never its text', async () => {
+    vi.useFakeTimers();
     const notify = vi.fn();
     const { result } = renderHook(() => useChat(social, notify));
-    await waitFor(() => expect(result.current.alerts).toEqual({ echo: true }));
+    await act(async () => {});
+    expect(result.current.alerts).toEqual({ echo: true });
 
     act(() => {
       h.listener?.({ ...conv({ unread: 2, seq: 3 }), alert: true, messages: [{ id: 'm1', from: '1', text: 'secret words', sentAt: 1 }] } as ChatEvent);
     });
     expect(result.current.unread).toBe(2);
     expect(result.current.unreadOf('echo', '1')).toBe(2);
+    act(() => vi.advanceTimersByTime(3000));
     expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on echo');
     expect(JSON.stringify(notify.mock.calls)).not.toContain('secret words');
   });
 
-  it('sums the unread messages of two stores, and the toast names the store', async () => {
+  it('sums the unread messages of two stores, and each store\'s toast names the store', async () => {
+    vi.useFakeTimers();
     const notify = vi.fn();
     const two: SocialView[] = [
       ...social,
       { seq: 1, plugin: 'echo-b', enabled: true, showPlaying: true, running: true, connection: { state: 'online' }, friends: [{ id: '1', name: 'Ben Ortiz', state: 'online' }] },
     ];
     const { result } = renderHook(() => useChat(two, notify, { echo: 'Echo (test plugin)', 'echo-b': 'Echo B (test plugin)' }));
-    await waitFor(() => expect(result.current.alerts).toEqual({ echo: true }));
+    await act(async () => {});
 
     act(() => {
       h.listener?.({ ...conv({ unread: 2, seq: 3 }), alert: true, messages: [] } as ChatEvent);
@@ -76,16 +84,66 @@ describe('useChat', () => {
     });
     expect(result.current.unread).toBe(5);
     expect(result.current.unreadOf('echo-b', '1')).toBe(3);
+    act(() => vi.advanceTimersByTime(3000));
     expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on Echo (test plugin)');
     expect(notify).toHaveBeenCalledWith('New message from Ben Ortiz on Echo B (test plugin)');
   });
 
+  it('coalesces the messages of one store that arrive together into one toast', async () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const two: SocialView[] = [{ ...social[0], friends: [...social[0].friends, { id: '2', name: 'Bo Lindqvist', state: 'away' }] }];
+    renderHook(() => useChat(two, notify));
+    await act(async () => {});
+
+    act(() => {
+      h.listener?.({ ...conv({ friendId: '1', unread: 1, seq: 3 }), alert: true, messages: [] } as ChatEvent);
+      h.listener?.({ ...conv({ friendId: '1', unread: 2, seq: 4 }), alert: true, messages: [] } as ChatEvent);
+      h.listener?.({ ...conv({ friendId: '2', unread: 1, seq: 5 }), alert: true, messages: [] } as ChatEvent);
+    });
+    expect(notify).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(3000));
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('3 new messages from Ana Ruiz and Bo Lindqvist on echo');
+  });
+
+  it('drops a conversation the backend evicted, and keeps a newer one', async () => {
+    const { result } = renderHook(() => useChat(social, vi.fn()));
+    await act(async () => {});
+    act(() => {
+      h.listener?.({ ...conv({ unread: 1, seq: 5 }), alert: false } as ChatEvent);
+    });
+    expect(result.current.unreadOf('echo', '1')).toBe(1);
+    act(() => {
+      h.listener?.({ ...conv({ seq: 4, messages: [] }), alert: false, dropped: true } as ChatEvent);
+    });
+    expect(result.current.unreadOf('echo', '1')).toBe(1);
+    act(() => {
+      h.listener?.({ ...conv({ seq: 6, messages: [] }), alert: false, dropped: true } as ChatEvent);
+    });
+    expect(result.current.unreadOf('echo', '1')).toBe(0);
+  });
+
+  it('closes the conversation on screen when another one opens', async () => {
+    const close = vi.fn(() => Effect.succeed(undefined));
+    h.api.chatClose = close;
+    const { result } = renderHook(() => useChat(social, vi.fn()));
+    act(() => result.current.open('echo', '1'));
+    await waitFor(() => expect(result.current.conversation?.open).toBe(true));
+    expect(close).not.toHaveBeenCalled();
+    act(() => result.current.open('echo', '2'));
+    expect(close).toHaveBeenCalledWith('echo', '1');
+    expect(close).not.toHaveBeenCalledWith('echo', '2');
+  });
+
   it('does not toast a message that is not an alert', async () => {
+    vi.useFakeTimers();
     const notify = vi.fn();
     renderHook(() => useChat(social, notify));
     act(() => {
       h.listener?.({ ...conv({ unread: 0, seq: 4 }), alert: false } as ChatEvent);
     });
+    act(() => vi.advanceTimersByTime(3000));
     expect(notify).not.toHaveBeenCalled();
   });
 

@@ -685,4 +685,6 @@ export interface ChatView {
 /** A conversation change; alert is true for a new message from a friend the user should hear about. */
 export interface ChatEvent extends ChatView {
   alert: boolean;
+  /** The backend evicted the conversation from memory: the UI drops its view. */
+  dropped?: boolean;
 }
