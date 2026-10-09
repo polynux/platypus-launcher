@@ -68,6 +68,10 @@ type Options struct {
 	// OnExit is called when a plugin exits without being asked to (crash),
 	// so work in flight can be restarted.
 	OnExit func(pluginID string, err error)
+	// OnReady is called when a plugin has initialized (its protocol and
+	// capabilities are settled) and is about to take requests. It runs on
+	// its own goroutine, so it may call the plugin.
+	OnReady func(pluginID string)
 	// Protocols are the protocol versions Hydra offers plugins; nil means
 	// SupportedProtocols. Tests narrow it to play an older Hydra.
 	Protocols []Version
@@ -83,6 +87,7 @@ type Manager struct {
 	trust     *settings.Store
 	onNotify  NotifyFunc
 	onExit    func(string, error)
+	onReady   func(string)
 	lookPath  func(string) (string, error)
 	t         timings
 	protocols []Version
@@ -102,6 +107,7 @@ func NewManager(o Options) *Manager {
 		trust:     o.Settings,
 		onNotify:  o.OnNotify,
 		onExit:    o.OnExit,
+		onReady:   o.OnReady,
 		lookPath:  exec.LookPath,
 		t:         defaultTimings,
 		protocols: slices.Clone(o.Protocols),
@@ -451,6 +457,10 @@ func (m *Manager) process(id string) (*process, error) {
 	if m.onExit != nil {
 		onExit = func(err error) { m.onExit(id, err) }
 	}
+	var onReady func()
+	if m.onReady != nil {
+		onReady = func() { go m.onReady(id) }
+	}
 	pinned := p.Hash
 	offered, transportName := p.Manifest.Offered()
 	transport, ok := LookupTransport(transportName)
@@ -464,6 +474,7 @@ func (m *Manager) process(id string) (*process, error) {
 		offered:   offered,
 		transport: transport,
 		onExit:    onExit,
+		onReady:   onReady,
 		id:        id,
 		dir:       p.Dir,
 		exec:      execPath,

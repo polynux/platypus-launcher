@@ -40,6 +40,7 @@ vi.mock('../../effect/runtime', () => ({
   },
   onJobs: () => () => {},
   onSession: () => () => {},
+  onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: (cb: () => void) => {
     state.onPlaytime = cb;

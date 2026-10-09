@@ -38,6 +38,7 @@ const (
 	rev15 = "1.5" // install options and DLC (docs/plans/launcher-parity.md §2.1)
 	rev16 = "1.6" // social: friends and own status (docs/plans/steam-cloud-social.md, "social.*")
 	rev17 = "1.7" // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
+	rev18 = "1.8" // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
 )
 
 var registry = []Capability{
@@ -78,8 +79,10 @@ var registry = []Capability{
 		Methods: []string{"playtime.list"}, Surfaces: []string{"playtime"}},
 	{Name: "redeem", Since: rev17, Orchestrated: true,
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
-	{Name: "family", Since: rev11,
+	{Name: "family", Since: rev18, Orchestrated: true,
 		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
+	{Name: "settings", Since: rev18, Orchestrated: true,
+		Methods: []string{"settings.schema", "settings.apply"}, Surfaces: []string{"plugin-settings", "game-settings"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:

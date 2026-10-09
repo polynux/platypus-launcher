@@ -434,6 +434,12 @@ func (s Suite) Conformance(t *testing.T) {
 		sess.checkSocial(t)
 	}
 	sess.checkStats(t, game, has, !s.NoUnknownDetails)
+	if has("family") {
+		sess.checkFamily(t)
+	}
+	if has("settings") {
+		sess.checkSettings(t)
+	}
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {
@@ -779,7 +785,7 @@ func (s *Session) checkHandshake(t *testing.T) {
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl"}
+		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",

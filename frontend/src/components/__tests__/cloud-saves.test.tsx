@@ -15,6 +15,7 @@ vi.mock('../../effect/runtime', () => ({
     return () => h.handlers.delete(cb);
   },
   onSession: () => () => {},
+  onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
 }));

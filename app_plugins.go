@@ -107,6 +107,7 @@ func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
 		return nil, err
 	}
 	a.syncDataPlugins(found)
+	a.forgetSettingsOfRemoved(found)
 	a.failStoppedJobs()
 	a.syncSocial()
 	return a.ListStorePlugins(), nil

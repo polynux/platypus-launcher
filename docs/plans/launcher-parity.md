@@ -238,6 +238,6 @@ Real store plugins (Steam, GOG, Epic, Ubisoft) implement them later.
 - [ ] Social P5-P6 (steam-cloud-social.md)
 - [ ] Playtime, achievements, redeem
 - [ ] wine-client launch + Ubisoft phase A · L-U1 · L-U2
-- [ ] Steam Families · L-F1
+- [ ] Steam Families · L-F1 — core, protocol 1.8 (`family`, plugin `settings`), UI and echo done (feat/family-settings); the Steam plugin side is not
 - [ ] Epic versions via archive · L-V3
 - [ ] Ubisoft phase B (only if Q-U1 allows)

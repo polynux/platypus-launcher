@@ -63,6 +63,9 @@ type LibraryGame struct {
 	// (names from the registry). Absent (nil) means all of them; an empty
 	// list means none. Names the plugin doesn't offer at runtime are ignored.
 	Features []string `json:"features,omitempty"`
+	// SharedBy marks a game the user borrows from a family member (1.8,
+	// the `family` capability). Absent for the user's own games.
+	SharedBy *types.SharedBy `json:"sharedBy,omitempty"`
 }
 
 type LibraryList struct {

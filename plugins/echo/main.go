@@ -14,6 +14,7 @@
 //	flaky    the plugin crashes once mid-install, then resumes
 //	client   always installed; "launches" through a store client (sleep 5.0421)
 //	escape   always installed outside the install folder; Hydra must refuse it
+//	ana, ben borrowed from the family (family.go): installed, launched through a store client
 //
 // Besides the store protocol it answers echo (returns its params), pid and
 // crash (exits without answering). It exits when stdin closes.
@@ -31,11 +32,13 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.7); it answers the highest Hydra also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.8); it answers the highest Hydra also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
 //	ECHO_VERSIONS_OFF  parts of versions.list to leave out: channels, builds, manual, links (see versions.go)
+//	ECHO_FAMILY_IN_USE borrowed game ids that are in use: launching them answers -32002 (see family.go)
+//	ECHO_FAMILY_WARN   seconds: launching a borrowed game also raises family.warning with that count
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
 // social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs.
@@ -45,9 +48,12 @@
 // game.relocated, which echo accepts.
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
-// initOmit, versionsOff, damage} (absent keys are left alone) and `calls` returns how many times
-// each method was received, so tests can tell a cached -32601 from a retry.
-// The methods of capabilities that core doesn't use yet answer canned data.
+// initOmit, versionsOff, damage, familyInUse, familyWarn, settingsRefuse,
+// settingsDelayMs} (absent keys are left alone) and answers what settings.apply
+// last received (settings.go), so tests can read the values back. `calls`
+// returns how many times each method was received, so tests can tell a cached
+// -32601 from a retry. The methods of
+// capabilities that core doesn't use yet answer canned data.
 package main
 
 import (
@@ -93,7 +99,8 @@ type game struct {
 	note     string
 	external string // always installed here, outside Hydra's folder
 	client   bool
-	details  bool // answers game.details with store metadata
+	details  bool   // answers game.details with store metadata
+	lentBy   string // a family member's game: installed, launched through the client (family.go)
 }
 
 var games = map[string]game{
@@ -103,9 +110,11 @@ var games = map[string]game{
 	"flaky":  {title: "Echo Flaky", size: 8 << 20, steps: 20, stepMs: 100, native: true, note: "The plugin crashes once while installing this."},
 	"client": {title: "Echo Client", client: true, note: "Launches through a store client (a 5 s sleep)."},
 	"escape": {title: "Echo Escape", external: "/usr/bin", note: "Installed outside the plugin's folder: Hydra must refuse to launch it."},
+	"ana":    {title: "Echo Borrowed Quest", lentBy: "ana", native: true},
+	"ben":    {title: "Echo Borrowed Kart", lentBy: "ben", native: true},
 }
 
-var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape"}
+var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben"}
 
 // state is persisted in $HYDRA_PLUGIN_DATA/state.json.
 type state struct {
@@ -144,11 +153,19 @@ type knobs struct {
 	Missing      []string                   `json:"missing"`
 	InitOmit     bool                       `json:"initOmit"`
 	VersionsOff  []string                   `json:"versionsOff"`
+	// FamilyInUse are borrowed game ids in use; FamilyWarn is the seconds a
+	// family.warning counts down from when a borrowed game launches (0: none).
+	FamilyInUse []string `json:"familyInUse"`
+	FamilyWarn  int      `json:"familyWarn"`
+	// SettingsRefuse makes settings.apply answer an error; SettingsDelayMs holds
+	// settings.apply that many milliseconds first (settings.go).
+	SettingsRefuse  bool `json:"settingsRefuse"`
+	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
 // the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"}
 
 var (
 	knobMu  sync.Mutex
@@ -169,7 +186,9 @@ func csv(name string) []string {
 
 func loadKnobs() {
 	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
-		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF")}
+		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF"),
+		FamilyInUse: csv("ECHO_FAMILY_IN_USE")}
+	kn.FamilyWarn, _ = strconv.Atoi(os.Getenv("ECHO_FAMILY_WARN"))
 	if v := os.Getenv("ECHO_FEATURES"); v != "" {
 		_ = json.Unmarshal([]byte(v), &kn.Features)
 	}
@@ -197,6 +216,10 @@ func configure(raw json.RawMessage) {
 	set("missing", &kn.Missing)
 	set("initOmit", &kn.InitOmit)
 	set("versionsOff", &kn.VersionsOff)
+	set("familyInUse", &kn.FamilyInUse)
+	set("familyWarn", &kn.FamilyWarn)
+	set("settingsRefuse", &kn.SettingsRefuse)
+	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
 
 // manifestCapabilities reads the capabilities plugin.json declares; Hydra runs
@@ -419,6 +442,10 @@ type params struct {
 	Fields     map[string]string `json:"fields"`
 	Protocols  []string          `json:"protocols"` // initialize: the versions Hydra speaks
 
+	// settings.apply: the values, and the store's game id for a per-game one.
+	Values map[string]any `json:"values"`
+	GameID string         `json:"gameId"`
+
 	// versions.* and the target of game.install/game.update.
 	Target   *targetParam  `json:"target"`
 	Channel  string        `json:"channel"`
@@ -465,7 +492,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		configureCloud(raw)
 		configureMaintenance(raw)
 		configureSocial(raw)
-		return nil, nil
+		return map[string]any{"settings": settingsSnapshot()}, nil
 	case "calls":
 		callsMu.Lock()
 		defer callsMu.Unlock()
@@ -594,6 +621,12 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return playtimeList()
 	case "redeem.submit":
 		return redeemSubmit(p)
+	case "family.members":
+		return familyMembers()
+	case "settings.schema":
+		return settingsSchema(), nil
+	case "settings.apply":
+		return settingsApply(p)
 	}
 	if res, err, ok := capabilityStub(method, p); ok {
 		return res, err
@@ -654,9 +687,16 @@ func library() (any, error) {
 		if g.client {
 			installed = true
 		}
+		if g.lentBy != "" {
+			installed = true
+		}
 		e := map[string]any{
-			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client,
+			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client && g.lentBy == "",
 			"version": "1.0", "note": g.note, "native": g.native,
+		}
+		if g.lentBy != "" {
+			e["sharedBy"] = map[string]any{"id": g.lentBy, "name": familyName(g.lentBy)}
+			e["note"] = "Lent to you by " + familyName(g.lentBy)
 		}
 		if rec, ok := st.Versions[id]; ok && installed {
 			e["version"] = rec.Name
@@ -789,8 +829,13 @@ func launchSpec(p params) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown game %q", p.ID)
 	}
+	if g.lentBy != "" {
+		if err := borrowedLaunch(p.ID); err != nil {
+			return nil, err
+		}
+	}
 	switch {
-	case g.client || p.Via == "client":
+	case g.client || g.lentBy != "" || p.Via == "client":
 		return map[string]any{
 			"delegate": "store-client", "client": "Echo client",
 			"command": []string{"sleep", "5.0421"},

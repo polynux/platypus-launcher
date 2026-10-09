@@ -23,17 +23,8 @@ func TestRegistryHoldsTheExistingCapabilities(t *testing.T) {
 	}
 }
 
-func TestRegistryHoldsThePlannedCapabilitiesWithoutOrchestrators(t *testing.T) {
-	for _, name := range []string{"family"} {
-		c, ok := LookupCapability(name)
-		if !ok {
-			t.Fatalf("planned capability %q is not registered", name)
-		}
-		if c.Orchestrated {
-			t.Errorf("%s has no orchestrator yet but is marked orchestrated", name)
-		}
-	}
-	for _, name := range []string{"library", "install", "launch", "auth", "discard", "versions", "verify", "move", "install-options", "social", "achievements", "playtime", "redeem"} {
+func TestRegistryMarksTheCoreCapabilitiesOrchestrated(t *testing.T) {
+	for _, name := range []string{"library", "install", "launch", "auth", "discard", "versions", "verify", "move", "install-options", "social", "achievements", "playtime", "redeem", "family", "settings"} {
 		if c, _ := LookupCapability(name); !c.Orchestrated {
 			t.Errorf("%s is used by core today but is not marked orchestrated", name)
 		}

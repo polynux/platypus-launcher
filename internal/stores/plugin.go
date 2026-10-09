@@ -113,6 +113,11 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Features:        s.gameFeatures(lg.Features),
 		Settings:        types.GameSettings{UseGameMode: true},
 	}
+	// A borrowed game is only marked while the game offers `family`: the
+	// plugin's own list (or the runtime set) decides, as for every capability.
+	if lg.SharedBy != nil && lg.SharedBy.ID != "" && slices.Contains(g.Features, "family") {
+		g.SharedBy = &types.SharedBy{ID: lg.SharedBy.ID, Name: lg.SharedBy.Name}
+	}
 	if lg.Installed && lg.InstallPath != "" {
 		g.InstallDir = filepath.Clean(lg.InstallPath)
 		if rel, ok := s.relocation(g.ID); ok && g.InstallDir == rel.From {
@@ -168,6 +173,43 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		// Progress is store-level data: unlocked stays false and UnlockedAt 0,
 		// so the game page says "highlighted by the store".
 		out.Achievements = &types.Achievements{Total: d.Achievements.Total, Unlocked: -1, List: list}
+	}
+	return out, nil
+}
+
+// familyRoles are the member roles the Families section names; any other
+// role the plugin sends is shown as none.
+var familyRoles = []string{"adult", "child"}
+
+// FamilyMembers asks the plugin for the family group (protocol 1.8). Members
+// without an id are dropped; roles and avatars are normalized like the rest
+// of the plugin's data. Hydra shows them and enforces nothing.
+func (s *Plugin) FamilyMembers(ctx context.Context) ([]types.FamilyMember, error) {
+	var wire []struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Role      string `json:"role"`
+		AvatarURL string `json:"avatarUrl"`
+		State     string `json:"state"`
+	}
+	if err := s.m.Call(ctx, s.ID(), "family.members", map[string]any{}, &wire); err != nil {
+		return nil, err
+	}
+	out := []types.FamilyMember{}
+	seen := map[string]bool{}
+	for _, w := range wire {
+		if w.ID == "" || seen[w.ID] {
+			continue
+		}
+		seen[w.ID] = true
+		m := types.FamilyMember{ID: w.ID, Name: w.Name, AvatarURL: webURL(w.AvatarURL), State: w.State}
+		if m.Name == "" {
+			m.Name = w.ID
+		}
+		if slices.Contains(familyRoles, w.Role) {
+			m.Role = w.Role
+		}
+		out = append(out, m)
 	}
 	return out, nil
 }

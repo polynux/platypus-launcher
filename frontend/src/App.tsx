@@ -14,6 +14,7 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
+import { FamilyWarningHost } from './components/FamilyWarningHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
@@ -589,6 +590,7 @@ export function App() {
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
+      <FamilyWarningHost games={games} />
 
       {friendsOpen && (
         <FriendsModal

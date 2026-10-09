@@ -51,8 +51,13 @@ type App struct {
 	social       *social.Manager // friends lists of plugins with the social capability
 	socialMu     sync.Mutex
 	socialGames  map[string]socialGame // launched store games by Hydra game id, for "playing"
-	moves        coreMoves
-	ledger       *ledger.Ledger
+	// familyEmit delivers family.warning notifications to the UI (the
+	// "family" event). Nil until the window exists; tests replace it.
+	familyEmit func(types.FamilyWarning)
+	// settingsLocks orders the settings saves and starts of each plugin.
+	settingsLocks settingsLocks
+	moves         coreMoves
+	ledger        *ledger.Ledger
 	// sessionRunning says whether a game has a session open. Nil asks the
 	// session tracker; tests replace it.
 	sessionRunning func(gameID string) bool
@@ -130,10 +135,15 @@ func (a *App) startup(ctx context.Context) {
 				a.social.Exited(id)
 			}
 		},
+		OnReady: a.pluginReady,
 	})
+	a.familyEmit = func(w types.FamilyWarning) { wruntime.EventsEmit(ctx, "family", w) }
 	found, err := a.plugins.Discover()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "plugins: %v", err)
+	}
+	if err == nil {
+		a.forgetSettingsOfRemoved(found)
 	}
 	for _, p := range found {
 		msg := fmt.Sprintf("plugin %s: %s", p.Manifest.ID, p.Status)
@@ -185,6 +195,10 @@ func (a *App) pluginNotify(id, method string, params json.RawMessage) {
 	}
 	if a.social != nil && strings.HasPrefix(method, "social.") {
 		a.social.Notify(id, method, params)
+		return
+	}
+	if method == "family.warning" {
+		a.familyWarning(id, params)
 		return
 	}
 	if !strings.HasPrefix(method, "job.") {
@@ -339,6 +353,7 @@ func (a *App) GetLibrary() (types.Library, error) {
 		lib.Games = append(lib.Games, results[i]...)
 		a.startPlaytimeOnce(s.ID())
 	}
+	a.forgetRemovedGameSettings(all, results, errs)
 	lib.Games = append(lib.Games, a.customGames()...)
 	a.stats.applyPlaytime(lib.Games)
 	a.applyPins(&lib)

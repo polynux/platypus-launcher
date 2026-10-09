@@ -63,6 +63,11 @@ type file struct {
 	// SocialPlaying: whether friends see the game the user plays, per plugin.
 	// A plugin is on until the user switches it off (social.go).
 	SocialPlaying map[string]bool `json:"social_playing,omitempty"`
+	// PluginSettings are each plugin's plugin-wide settings values, and
+	// PluginGameSettings each game's per-game values (the `settings`
+	// capability, see plugin_settings.go). Values never hold secrets.
+	PluginSettings     map[string]map[string]any   `json:"plugin_settings,omitempty"`
+	PluginGameSettings map[string]PluginGameValues `json:"plugin_game_settings,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra

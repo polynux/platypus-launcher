@@ -9,10 +9,9 @@ var stubs = map[string]struct {
 	perGame bool
 	result  any
 }{
-	"game.options":      {true, map[string]any{"groups": []any{}}},
-	"game.verify":       {true, map[string]any{}},
-	"game.move":         {true, map[string]any{}},
-	"family.members":    {false, []any{}},
+	"game.options": {true, map[string]any{"groups": []any{}}},
+	"game.verify":  {true, map[string]any{}},
+	"game.move":    {true, map[string]any{}},
 }
 
 func capabilityStub(method string, p params) (res any, err error, ok bool) {
