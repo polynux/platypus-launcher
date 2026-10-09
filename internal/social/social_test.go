@@ -3,7 +3,9 @@ package social
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -402,5 +404,50 @@ func TestLongSessionResetsBackoff(t *testing.T) {
 	defer mu.Unlock()
 	if got := strings.Join(waits, " "); got != "1ms 1ms 1ms" {
 		t.Fatalf("restart waits: %q, want the minimum after stable sessions", got)
+	}
+}
+
+// A plugin that started but whose snapshot failed is still stopped when the
+// subscription ends: social.start succeeded, so the process has social on.
+func TestStopStopsAPluginWhoseStateFailed(t *testing.T) {
+	f := newFake()
+	f.fail[MethodState] = errors.New("store is down")
+	m := newManager(f, true)
+	m.Start("echo")
+	waitFor(t, "a start", func() bool { return f.count(MethodStart) >= 1 })
+	m.Stop("echo")
+	if n := f.count(MethodStop); n != 1 {
+		t.Fatalf("social.stop sent %d times after a failed social.state, want 1", n)
+	}
+}
+
+// A crash during a failed connect leaves an exit behind. It must not end the
+// next session, which is healthy.
+func TestExitFromAFailedConnectDoesNotEndTheNextSession(t *testing.T) {
+	f := newFake()
+	f.snapshot = map[string]any{"connection": Connection{State: ConnOnline}}
+	f.fail[MethodState] = errors.New("store is down")
+	var mu sync.Mutex
+	var states []string
+	m := NewManager(Options{Backend: f, MinBackoff: time.Millisecond, MaxBackoff: time.Millisecond,
+		Emit: func(v View) {
+			mu.Lock()
+			states = append(states, v.Connection.State)
+			mu.Unlock()
+		}})
+	m.Start("echo")
+	defer m.StopAll()
+	waitFor(t, "a failed attempt", func() bool { return f.count(MethodState) >= 1 })
+
+	m.Exited("echo") // the process died while the attempt was failing
+	f.mu.Lock()
+	delete(f.fail, MethodState)
+	f.mu.Unlock()
+	waitFor(t, "connected", func() bool { return m.View("echo").Connection.State == ConnOnline })
+	time.Sleep(30 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if slices.Contains(states, ConnReconnecting) {
+		t.Fatalf("the healthy session ended by a stale exit; states %v", states)
 	}
 }

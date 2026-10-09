@@ -136,8 +136,9 @@ type sub struct {
 
 	mu        sync.Mutex
 	view      View
-	paused    bool   // replaced or logged out: no restart until the user starts it again
-	connected bool   // social.start answered for this process
+	paused    bool   // replaced or logged out: no restart until the plugin connects again
+	started   bool   // social.start answered for this process, so it must be stopped
+	connected bool   // social.state answered too: the friends are live
 	playing   string // store game id the user plays; "" for none
 	sent      string // what the current process was last told about playing
 }
@@ -451,12 +452,21 @@ func (m *Manager) run(ctx context.Context, s *sub) {
 
 // connect starts the plugin's social and seeds the view from its snapshot.
 func (m *Manager) connect(ctx context.Context, s *sub) error {
+	// An exit left by an earlier attempt (the process died while it failed)
+	// must not end this session.
+	select {
+	case <-s.exited:
+	default:
+	}
 	if !m.opt.Backend.Offers(ctx, s.id) {
 		return errors.New("the plugin doesn't offer social right now")
 	}
 	if err := m.opt.Backend.Call(ctx, s.id, MethodStart, struct{}{}, nil); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.started = true
+	s.mu.Unlock()
 	var snap struct {
 		Connection *Connection `json:"connection"`
 		Self       *Self       `json:"self"`
@@ -500,9 +510,10 @@ func (m *Manager) serve(ctx context.Context, s *sub) bool {
 // stopPlugin asks a connected plugin to stop, bounded by stopTimeout.
 func (m *Manager) stopPlugin(s *sub) {
 	s.mu.Lock()
-	connected := s.connected
+	started := s.started
+	s.started = false
 	s.mu.Unlock()
-	if !connected {
+	if !started {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), stopTimeout)
@@ -518,6 +529,7 @@ func (m *Manager) stopPlugin(s *sub) {
 func (m *Manager) endSession(s *sub) {
 	s.mu.Lock()
 	s.connected = false
+	s.started = false
 	if !s.paused {
 		s.view.Connection = Connection{State: ConnReconnecting, Message: "the store plugin stopped"}
 	}
