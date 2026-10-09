@@ -158,6 +158,11 @@ func (a *App) runCoreMove(ctx context.Context, j types.Job) {
 		},
 	})
 	if err != nil {
+		// Hydra is stopping: the job stays running in the queue and resumes
+		// from the same folders at the next start (relocate left no copy).
+		if a.ctx.Err() != nil {
+			return
+		}
 		// A cancel ends the job as canceled already; the note is for the rest.
 		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
 		return
