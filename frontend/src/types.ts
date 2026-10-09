@@ -235,7 +235,9 @@ export interface AuthPrompt {
   fields: AuthField[];
 }
 
-export type JobKind = 'install' | 'update' | 'uninstall';
+export type JobKind = 'install' | 'update' | 'uninstall' | 'verify' | 'move';
+/** The jobs a game page starts from its install panel (the rest have their own actions). */
+export type GameJobKind = 'install' | 'update' | 'uninstall';
 export type JobState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
 
 export interface Job {
@@ -268,6 +270,30 @@ export interface Job {
   leftover?: string;
   /** The version the install or update asked for (never a password). */
   target?: VersionTarget;
+  /** A verify job's second run: it restores what the check found damaged. */
+  repair?: boolean;
+  /** Where a move takes the game (install_dir is where it is now). */
+  destination?: string;
+  /** What a verify job found, once it is done. */
+  verify?: VerifyReport;
+}
+
+/** What a files check found (protocol 1.4). A repair run reports what it
+ *  restored, and what is still wrong afterwards. */
+export interface VerifyReport {
+  checked: number;
+  damaged: number;
+  missing: number;
+  repaired: number;
+}
+
+/** What a move would do, before it is queued. */
+export interface MoveCheck {
+  to: string;
+  need_bytes: number;
+  free_bytes: number;
+  /** The plugin moves the game itself (game.move); otherwise Hydra does. */
+  plugin_moves: boolean;
 }
 
 /** What game.install/game.update should install: a channel (moving), a build

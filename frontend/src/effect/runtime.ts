@@ -14,6 +14,7 @@ import type {
   Job,
   LauncherSettings,
   Library,
+  MoveCheck,
   ProtonVersion,
   SessionEvent,
   StorePlugin,
@@ -193,6 +194,14 @@ export const LauncherApi = {
     call<Job>('InstallGameVersion', () => App.InstallGameVersion(backend(game), target as never)),
   updateGameVersion: (game: Game, target: VersionTarget) =>
     call<Job>('UpdateGameVersion', () => App.UpdateGameVersion(backend(game), target as never)),
+
+  // Verify files and move (protocol 1.4). A check only reports; a repair is a
+  // second run, asked for after a check found damage.
+  verifyGame: (game: Game) => call<Job>('VerifyGame', () => App.VerifyGame(backend(game))),
+  repairGame: (game: Game) => call<Job>('RepairGame', () => App.RepairGame(backend(game))),
+  pickMoveFolder: (start: string) => call<string>('PickMoveFolder', () => App.PickMoveFolder(start)),
+  checkMove: (game: Game, parent: string) => call<MoveCheck>('CheckMove', () => App.CheckMove(backend(game), parent)),
+  moveGame: (game: Game, parent: string) => call<Job>('MoveGame', () => App.MoveGame(backend(game), parent)),
 
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),
