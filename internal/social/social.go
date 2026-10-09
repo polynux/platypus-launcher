@@ -289,6 +289,7 @@ func (m *Manager) Notify(pluginID, method string, params json.RawMessage) {
 			s.mu.Unlock()
 			return
 		}
+		self.clean()
 		s.view.Self = &self
 	case NoteFriends:
 		var push struct {
@@ -313,19 +314,19 @@ func (m *Manager) Notify(pluginID, method string, params json.RawMessage) {
 }
 
 // merge applies friends to list: an entry with a known id replaces it, a new
-// one is appended. The result is never nil.
+// one is appended while the list has room. The result is never nil.
 func merge(list, friends []Friend) []Friend {
 	if list == nil {
 		list = []Friend{}
 	}
 	for _, f := range friends {
-		if f.ID == "" {
+		if !f.clean() {
 			continue
 		}
 		i := slices.IndexFunc(list, func(x Friend) bool { return x.ID == f.ID })
 		if i >= 0 {
 			list[i] = f
-		} else {
+		} else if len(list) < maxFriends {
 			list = append(list, f)
 		}
 	}
@@ -513,6 +514,9 @@ func (m *Manager) connect(ctx context.Context, s *sub) error {
 	s.view.Connection = Connection{State: ConnConnecting}
 	if snap.Connection != nil && snap.Connection.State != "" {
 		s.view.Connection = *snap.Connection
+	}
+	if snap.Self != nil {
+		snap.Self.clean()
 	}
 	s.view.Self = snap.Self
 	s.view.Friends = merge(nil, snap.Friends)

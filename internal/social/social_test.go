@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"hydra-launcher/internal/jsonrpc"
 )
@@ -582,5 +583,64 @@ func TestPlayingGoesToTheOwningPlugin(t *testing.T) {
 		if c.method == MethodSetPlaying && c.plugin != "steam.beta" {
 			t.Fatalf("setPlaying for steam.beta went to %s: %s", c.plugin, c.params)
 		}
+	}
+}
+
+// A store's avatar is shown as a web image only: other schemes are dropped,
+// and names, ids and titles are cut to their limits.
+func TestPushedFriendsAreCleaned(t *testing.T) {
+	f := newFake()
+	m := newManager(f, true)
+	m.Start("echo")
+	defer m.StopAll()
+	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
+
+	long := strings.Repeat("x", 300)
+	m.Notify("echo", NoteSelf, json.RawMessage(`{"name":"me","state":"online","avatarUrl":"file:///etc/passwd"}`))
+	m.Notify("echo", NoteFriends, json.RawMessage(`{"full":true,"friends":[`+
+		`{"id":"1","name":"Ana","state":"online","avatarUrl":"javascript:alert(1)"},`+
+		`{"id":"2","name":"Bo","state":"online","avatarUrl":"https://cdn.example/bo.png"},`+
+		`{"id":"`+long+`","name":"`+long+`","state":"away","game":{"id":"p.echo.x","title":"`+long+`"}},`+
+		`{"id":"4","name":"Cy","state":"away","avatarUrl":"data:image/png;base64,AAAA"}`+
+		`]}`))
+	v := m.View("echo")
+	if v.Self == nil || v.Self.AvatarURL != "" {
+		t.Fatalf("self avatar kept: %+v", v.Self)
+	}
+	if len(v.Friends) != 4 {
+		t.Fatalf("friends: %d", len(v.Friends))
+	}
+	if v.Friends[0].AvatarURL != "" || v.Friends[1].AvatarURL != "https://cdn.example/bo.png" || v.Friends[3].AvatarURL != "" {
+		t.Fatalf("avatars: %q %q %q", v.Friends[0].AvatarURL, v.Friends[1].AvatarURL, v.Friends[3].AvatarURL)
+	}
+	long3 := v.Friends[2]
+	if utf8.RuneCountInString(long3.ID) != 64 || utf8.RuneCountInString(long3.Name) != 128 {
+		t.Fatalf("id %d runes, name %d runes", utf8.RuneCountInString(long3.ID), utf8.RuneCountInString(long3.Name))
+	}
+	if utf8.RuneCountInString(long3.Game.Title) != 256 {
+		t.Fatalf("title %d runes", utf8.RuneCountInString(long3.Game.Title))
+	}
+}
+
+// The friends list holds at most 5000 entries; a store sending more keeps the first.
+func TestFriendsListIsCapped(t *testing.T) {
+	f := newFake()
+	m := newManager(f, true)
+	m.Start("echo")
+	defer m.StopAll()
+	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
+
+	var b strings.Builder
+	b.WriteString(`{"full":true,"friends":[`)
+	for i := 0; i < 5001; i++ {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, `{"id":"%d","name":"n%d","state":"online"}`, i, i)
+	}
+	b.WriteString(`]}`)
+	m.Notify("echo", NoteFriends, json.RawMessage(b.String()))
+	if v := m.View("echo"); len(v.Friends) != 5000 || v.Friends[4999].ID != "4999" {
+		t.Fatalf("friends: %d, last %q", len(v.Friends), v.Friends[len(v.Friends)-1].ID)
 	}
 }
