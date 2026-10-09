@@ -108,6 +108,34 @@ type Game struct {
 	// the store's default (SharedBy).
 	Copies        []GameCopy `json:"copies,omitempty"`
 	PreferredCopy string     `json:"preferred_copy,omitempty"`
+	// What the user changed about the game's look (Hydra's own customization,
+	// never the plugin's): StoreTitle is the title the store gave when Title is
+	// the user's, SortTitle orders the library, the *URL fields are the user's
+	// images and Customized names every part that is theirs (title, sort_title
+	// and the kinds of art). Plugins only ever see StoreTitle.
+	StoreTitle    string   `json:"store_title,omitempty"`
+	SortTitle     string   `json:"sort_title,omitempty"`
+	LogoURL       string   `json:"logo_url,omitempty"`
+	IconURL       string   `json:"icon_url,omitempty"`
+	BackgroundURL string   `json:"background_url,omitempty"`
+	Customized    []string `json:"customized,omitempty"`
+}
+
+// OriginalTitle is the title the store gave the game: what a plugin is sent
+// and what the user's own title replaces.
+func (g Game) OriginalTitle() string {
+	if g.StoreTitle != "" {
+		return g.StoreTitle
+	}
+	return g.Title
+}
+
+// Customization is the user's look for one game, as the editor shows it: the
+// title and sort title they set, and the address of each image they set.
+type Customization struct {
+	Title     string            `json:"title"`
+	SortTitle string            `json:"sort_title"`
+	Art       map[string]string `json:"art"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that

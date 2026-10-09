@@ -163,7 +163,7 @@ func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTa
 	if game.IsInstalled && game.InstallDir != "" {
 		folder = game.InstallDir // an installed game updates where it is, moved or not
 	}
-	return a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.Title, folder, target, options)
+	return a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.OriginalTitle(), folder, target, options)
 }
 
 // InstallGame queues an install into the plugin's install folder. A game held
