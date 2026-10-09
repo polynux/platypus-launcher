@@ -81,12 +81,16 @@ function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus
         <p className="text-[12.5px] text-white/50">Friends are off for {label}. Turn them on to see who is online.</p>
       ) : (
         <>
+          {line && (
+            <div role="status" className="rounded-lg bg-amber-300/[0.08] px-3 py-2 text-[12px] text-amber-100 ring-1 ring-amber-300/25">
+              {line}
+            </div>
+          )}
           {view.self && (
             <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
               <Avatar name={view.self.name} url={view.self.avatarUrl} dot={stateDot(view.self.state)} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold text-white/90">{view.self.name}</div>
-                {line && <div className={cx('text-[11.5px]', line.tone === 'warn' ? 'text-amber-200' : 'text-white/45')}>{line.text}</div>}
               </div>
               <Select
                 value={view.self.state}
@@ -104,7 +108,6 @@ function StoreSection({ view, label, query, inLibrary, onSetEnabled, onSetStatus
               </Select>
             </div>
           )}
-          {!view.self && line && <div className="text-[11.5px] text-amber-200">{line.text}</div>}
 
           {total === 0 && (
             <p className="text-[12.5px] text-white/50">

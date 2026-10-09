@@ -79,12 +79,11 @@ export function describeSummary(views: SocialView[]): { online: number; inGame: 
   return { online, inGame, text: parts.join(' · ') };
 }
 
-/** The line that explains a store's connection, or null when it is online. */
-export function connectionLine(conn: SocialView['connection']): { text: string; tone: 'info' | 'warn' } | null {
+/** The banner text that explains a store's connection, or null when it is online. */
+export function connectionLine(conn: SocialView['connection']): string | null {
   const text = CONNECTION_TEXT[conn.state];
   if (!text) return null;
-  const detail = conn.message ? ` ${conn.message}` : '';
-  return { text: `${text}${detail}`, tone: conn.state === 'online' ? 'info' : 'warn' };
+  return conn.message ? `${text} ${conn.message}` : text;
 }
 
 const CONNECTION_TEXT: Partial<Record<SocialConnState, string>> = {

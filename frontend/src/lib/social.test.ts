@@ -60,9 +60,9 @@ describe('describeSummary', () => {
 describe('connectionLine', () => {
   it('is quiet while online and explains every other state', () => {
     expect(connectionLine({ state: 'online' })).toBeNull();
-    expect(connectionLine({ state: 'replaced' })).toEqual({ text: 'Another session replaced this one.', tone: 'warn' });
-    expect(connectionLine({ state: 'loggedOut' })?.text).toBe('Signed out of the store.');
-    expect(connectionLine({ state: 'reconnecting', message: 'the store plugin stopped' })?.text).toBe(
+    expect(connectionLine({ state: 'replaced' })).toBe('Another session replaced this one.');
+    expect(connectionLine({ state: 'loggedOut' })).toBe('Signed out of the store.');
+    expect(connectionLine({ state: 'reconnecting', message: 'the store plugin stopped' })).toBe(
       'Reconnecting… the store plugin stopped',
     );
   });
