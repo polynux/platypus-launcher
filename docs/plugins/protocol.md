@@ -1,4 +1,4 @@
-# Store plugin protocol (1.3, draft)
+# Store plugin protocol (1.4, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -106,6 +106,9 @@ other errors can contain.
 | `game.install` | `{ id, installDir, jobId, title?, target? }` | `{}` once started |
 | `game.update` | `{ id, installDir, jobId, title?, target? }` | `{}` once started |
 | `game.uninstall` | `{ id, jobId }` | `{}` once started |
+| `game.verify` | `{ id, installDir, jobId, repair }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
+| `game.move` | `{ id, from, to, jobId }` | `{}` once started (1.4, [Verify and move](#verify-and-move-14)) |
+| `game.relocated` | `{ id, from, to }` | `{}` (optional, 1.4, [Verify and move](#verify-and-move-14)) |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
 | `game.launchSpec` | `{ id, preview, via? }` | `LaunchSpec` |
@@ -203,7 +206,7 @@ place; it is not a fresh `game.install`. `installSize.downloadBytes` is what
 | Notification | Params |
 |---|---|
 | `job.progress` | `{ jobId, phase?, bytes?, total?, speed?, percent? }` (`speed` in bytes/s; send it whenever the tool reports one) |
-| `job.done` | `{ jobId, installed? }` (`installed` only with the `versions` capability, see [Versions](#versions)) |
+| `job.done` | `{ jobId, installed?, verify? }` (`installed` only with the `versions` capability, see [Versions](#versions); `verify` only for a `game.verify` job, see [Verify and move](#verify-and-move-14)) |
 | `job.failed` | `{ jobId, error }` |
 | `log` | `{ level, message }` (goes to the plugin's log file) |
 
@@ -401,7 +404,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -419,9 +422,10 @@ that doesn't know it.
 - **Revisions.** 1.0: the first plugin releases. 1.1: the capability registry, runtime `capabilities` and
   `features` in `initialize`, `-32002`. 1.2: the `cloud.*` methods, `cloud.progress` and the `via` parameter of
   `game.launchSpec` (cloud saves). 1.3: the `versions.*` methods, `target` on installs and updates, and
-  `installed` on `job.done` (versions). A capability whose `since` is newer than the negotiated protocol is off
-  for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2 or 1.3 method.
+  `installed` on `job.done` (versions). 1.4: the `verify` and `move` capabilities (`game.verify`, `game.move`), `verify`
+  on `job.done`, and the optional `game.relocated`. A capability whose `since` is newer than the negotiated protocol
+  is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
+  receives a 1.2, 1.3 or 1.4 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -444,8 +448,8 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `cloud-saves` | 1.2 | `cloud.status`, `cloud.pull`, `cloud.push`, `cloud.resolve` | | yes |
 | `install-options` | 1.1 | `game.options` | | not yet |
 | `versions` | 1.3 | `versions.list` | `versions.unlock` | yes |
-| `verify` | 1.1 | `game.verify` | | not yet |
-| `move` | 1.1 | `game.move` | | not yet |
+| `verify` | 1.4 | `game.verify` | | yes |
+| `move` | 1.4 | `game.move` | | yes |
 | `social` | 1.1 | `social.start`, `social.stop`, `social.state`, `social.self`, `social.friends` | `social.setStatus`, `social.setPlaying` | not yet |
 | `achievements` | 1.1 | `achievements.list` | | not yet |
 | `playtime` | 1.1 | `playtime.list` | | not yet |
@@ -493,6 +497,63 @@ invents one.
 **Optional methods.** The first `-32601` for an optional method is remembered
 until the plugin process exits; Hydra doesn't ask again in that run. `-32002` is
 never remembered.
+
+## Verify and move (1.4)
+
+Capabilities `verify` and `move`, protocol 1.4 and later. They were registered
+for 1.1 before they shipped, so a plugin that settled on 1.3 or older is never
+sent them. Both work on an installed game's folder: `installDir`, `from` and
+`to` are the game's own folder, the one `library.list` reports as `installPath`.
+
+### Verify
+
+```
+game.verify { id, installDir, jobId, repair }   -> {}   # job
+job.done    { jobId, verify: { checked, damaged, missing, repaired } }
+```
+
+A check (`repair: false`) only reads. It counts the files it looked at
+(`checked`), those that differ from the store's copies (`damaged`) and those
+that are gone (`missing`). Hydra shows that report and asks the user; a repair
+(`repair: true`) restores the damaged and missing files from the store and
+reports what it restored (`repaired`) and what is still wrong after it
+(`damaged`, `missing`). Hydra only sends a repair after a check found damage, so
+a plugin may assume the user saw the report. `job.progress` reports the check
+(`phase: "checking"`); `job.cancel` stops it, sending neither `job.done` nor
+`job.failed`. The game must not be running (Hydra refuses otherwise).
+
+### Move
+
+```
+game.move { id, from, to, jobId }   -> {}   # job
+job.done  { jobId }
+```
+
+`to` does not exist yet; its parent folder does. Hydra has already checked that
+the destination has room for the game, that it is not inside `from` and not a
+system, home or Games folder, and that the game is not running. The plugin
+moves the folder and rebases its own records, and sends `job.progress` while it
+works. `job.cancel` before the folder is moved leaves the game where it was.
+
+A plugin without `move` (or with the capability switched off) gets nothing: Hydra
+moves the folder itself, then tells the plugin with `game.relocated` if it speaks
+1.4. Hydra's copy goes to a staging folder next to `to` (`<to>.hydra-move`),
+is checked name by name, kind by kind and size by size, and is renamed into
+place. Only then is the old folder removed. A failure or a cancel removes the
+staging copy and leaves the game where it was.
+
+### Relocated
+
+```
+game.relocated { id, from, to }   -> {}   # optional, no capability
+```
+
+Sent after Hydra moved a game's folder itself, to a plugin that speaks 1.4. The
+plugin rebases its records (its install path, its launch paths) from `from` to
+`to` and answers `{}`; `-32602` means its records don't match `from`. A plugin
+that doesn't implement it answers `-32601`, and Hydra keeps the move itself:
+it still reports the old `installPath`, the library shows the new folder, and
+launch paths are rebased on the way out. The method is not capability-gated.
 
 ## Versions
 
