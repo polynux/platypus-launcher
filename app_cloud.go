@@ -202,8 +202,11 @@ func (a *App) LaunchGameAnyway(game types.Game, prompt string) (string, error) {
 // LaunchGameViaClient starts the game through the store's own client, which
 // then syncs its saves itself ("Launch through Steam").
 func (a *App) LaunchGameViaClient(game types.Game) (string, error) {
-	if a.sessions.Running(game.ID) {
+	if a.isRunning(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
+	}
+	if err := a.heldByJob(game); err != nil {
+		return "", err
 	}
 	s, ok := a.stores.Get(sourceOf(game))
 	cl, isCl := s.(stores.ClientLauncher)

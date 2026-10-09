@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -29,37 +30,84 @@ const moveSpaceMargin = 1.02
 // relocatedTimeout bounds the game.relocated call after a core move.
 const relocatedTimeout = 30 * time.Second
 
-// coreMoves tracks the core moves that are running, so a cancel can stop
-// them. The zero value is ready to use.
+var (
+	errMoveStoppedEarly = errors.New("the move was canceled before it started")
+	errMoveStillStops   = errors.New("the earlier move of this game is still stopping; try again in a moment")
+)
+
+// coreMoves tracks the core moves that run in a goroutine: one run per job,
+// until the goroutine has unwound. The zero value is ready to use.
 type coreMoves struct {
 	mu      sync.Mutex
-	cancels map[string]context.CancelFunc
+	runs    map[string]*coreRun
+	stopped map[string]bool // canceled before its run started; the start refuses
 }
 
-func (m *coreMoves) add(id string, cancel context.CancelFunc) {
+// coreRun is one move core runs. done is closed once its goroutine is over.
+type coreRun struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+// begin registers a run of job id. A second run of the same job is refused
+// while the first is still unwinding, so two runs never share the folders.
+func (m *coreMoves) begin(id string, cancel context.CancelFunc) (*coreRun, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cancels == nil {
-		m.cancels = map[string]context.CancelFunc{}
+	if m.stopped[id] {
+		delete(m.stopped, id)
+		return nil, errMoveStoppedEarly
 	}
-	m.cancels[id] = cancel
+	if _, busy := m.runs[id]; busy {
+		return nil, errMoveStillStops
+	}
+	if m.runs == nil {
+		m.runs = map[string]*coreRun{}
+	}
+	r := &coreRun{cancel: cancel, done: make(chan struct{})}
+	m.runs[id] = r
+	return r, nil
 }
 
-// stop cancels a running core move and reports whether there was one.
-func (m *coreMoves) stop(id string) bool {
+// end unregisters a run and wakes whoever waits for it.
+func (m *coreMoves) end(id string, r *coreRun) {
 	m.mu.Lock()
-	cancel, ok := m.cancels[id]
+	if m.runs[id] == r {
+		delete(m.runs, id)
+	}
 	m.mu.Unlock()
-	if ok {
-		cancel()
-	}
-	return ok
+	close(r.done)
 }
 
-func (m *coreMoves) forget(id string) {
+// stop cancels a running core move and waits, until ctx ends, for its
+// goroutine to unwind. Without a run the job is marked, so a start that comes
+// after the cancel refuses.
+func (m *coreMoves) stop(ctx context.Context, id string) {
+	m.mu.Lock()
+	r, ok := m.runs[id]
+	if !ok {
+		if m.stopped == nil {
+			m.stopped = map[string]bool{}
+		}
+		m.stopped[id] = true
+	}
+	m.mu.Unlock()
+	if !ok {
+		return
+	}
+	r.cancel()
+	select {
+	case <-r.done:
+	case <-ctx.Done():
+	}
+}
+
+// active reports whether core is running the move of job id.
+func (m *coreMoves) active(id string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.cancels, id)
+	_, ok := m.runs[id]
+	return ok
 }
 
 // moveParams are the params of game.move for a job.
@@ -67,85 +115,166 @@ func moveParams(j types.Job) map[string]any {
 	return map[string]any{"id": j.StoreGameID, "from": j.InstallDir, "to": j.Destination, "jobId": j.ID}
 }
 
-// moveTarget checks a move of game into parent (the folder the user picked):
+// currentFolder is the folder the game is installed in, as its store's library
+// reports it (core's moves applied). The folder the frontend holds is never
+// trusted: moves, checks and repairs act on this one.
+func (a *App) currentFolder(game types.Game) (string, error) {
+	p, ok := a.plugins.Plugin(game.Source)
+	if !ok {
+		return "", fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
+	defer cancel()
+	lib, err := a.pluginStore(p).Library(ctx)
+	if err != nil {
+		return "", fmt.Errorf("reading %s's library: %w", p.Manifest.Name, err)
+	}
+	for _, g := range lib {
+		if g.ID != game.ID {
+			continue
+		}
+		if !g.IsInstalled || g.InstallDir == "" {
+			return "", fmt.Errorf("%s is not installed", game.Title)
+		}
+		return g.InstallDir, nil
+	}
+	return "", fmt.Errorf("%s is not in %s's library", game.Title, p.Manifest.Name)
+}
+
+// moveSpace is what a move from → to needs and what the destination has free.
+func moveSpace(from, to string) (need, free int64, err error) {
+	size, err := relocate.TreeSize(from)
+	if err != nil {
+		return 0, 0, fmt.Errorf("measuring the game: %w", err)
+	}
+	need = int64(float64(size) * moveSpaceMargin)
+	dir := filepath.Dir(to)
+	f, err := jobs.FreeSpace(dir)
+	if err != nil {
+		return need, 0, fmt.Errorf("free space in %s: %w", dir, err)
+	}
+	return need, int64(f), nil
+}
+
+// noRoom is the refusal for a move that doesn't fit.
+func noRoom(dir string, need, free int64) error {
+	return fmt.Errorf("not enough space in %s: the game needs %s, %s is free",
+		dir, jobs.HumanBytes(need), jobs.HumanBytes(free))
+}
+
+// planMove checks a move of game into parent (the folder the user picked):
 // the game is installed, not running, the target is free, outside the
 // protected folders and not the game's own, and the destination has room.
-// The game ends up in parent/<its folder name>.
-func (a *App) moveTarget(game types.Game, parent string) (types.MoveCheck, error) {
+// It returns the folder the game is in now. The game ends up in
+// parent/<its folder name>.
+func (a *App) planMove(game types.Game, parent string) (string, types.MoveCheck, error) {
 	check := types.MoveCheck{PluginMoves: a.plugins.Has(game.Source, "move")}
-	if !game.IsInstalled || game.InstallDir == "" {
-		return check, fmt.Errorf("%s is not installed", game.Title)
+	if !game.IsInstalled {
+		return "", check, fmt.Errorf("%s is not installed", game.Title)
 	}
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return check, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return "", check, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
 	}
 	if p.Status != plugins.StatusReady {
-		return check, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return "", check, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
 	}
-	if a.sessions.Running(game.ID) {
-		return check, fmt.Errorf("%s is running", game.Title)
+	if a.isRunning(game.ID) {
+		return "", check, fmt.Errorf("%s is running", game.Title)
 	}
 	if !filepath.IsAbs(parent) {
-		return check, fmt.Errorf("choose a folder to move %s into", game.Title)
+		return "", check, fmt.Errorf("choose a folder to move %s into", game.Title)
 	}
-	from := filepath.Clean(game.InstallDir)
-	to := filepath.Join(filepath.Clean(parent), filepath.Base(from))
+	from, err := a.currentFolder(game)
+	if err != nil {
+		return "", check, err
+	}
+	if err := checkFolder(from, a.settings.GamesFolder(), "move"); err != nil {
+		return "", check, err
+	}
+	parent = filepath.Clean(parent)
+	to := filepath.Join(parent, filepath.Base(from))
 	check.To = to
 	if strings.HasPrefix(to, from+string(filepath.Separator)) {
-		return check, fmt.Errorf("%s is inside the game's folder", to)
+		return "", check, fmt.Errorf("%s is inside the game's folder", to)
 	}
 	if err := checkFolder(to, a.settings.GamesFolder(), "move into"); err != nil {
-		return check, err
+		return "", check, err
 	}
 	if _, err := os.Lstat(to); err == nil {
-		return check, fmt.Errorf("%s already exists; choose another folder", to)
+		return "", check, fmt.Errorf("%s already exists; choose another folder", to)
 	}
-	if info, err := os.Stat(filepath.Clean(parent)); err != nil || !info.IsDir() {
-		return check, fmt.Errorf("%s is not a folder", parent)
+	if info, err := os.Stat(parent); err != nil || !info.IsDir() {
+		return "", check, fmt.Errorf("%s is not a folder", parent)
 	}
-	size, err := relocate.TreeSize(game.InstallDir)
+	if _, _, err := relocate.Check(from, to); err != nil {
+		return "", check, err
+	}
+	need, free, err := moveSpace(from, to)
 	if err != nil {
-		return check, fmt.Errorf("measuring %s: %w", game.Title, err)
+		return "", check, err
 	}
-	check.NeedBytes = int64(float64(size) * moveSpaceMargin)
-	free, err := jobs.FreeSpace(filepath.Clean(parent))
-	if err != nil {
-		return check, fmt.Errorf("free space in %s: %w", parent, err)
+	check.NeedBytes, check.FreeBytes = need, free
+	if need > free {
+		return "", check, noRoom(parent, need, free)
 	}
-	check.FreeBytes = int64(free)
-	if check.NeedBytes > check.FreeBytes {
-		return check, fmt.Errorf("not enough space in %s: the game needs %s, %s is free",
-			parent, jobs.HumanBytes(check.NeedBytes), jobs.HumanBytes(check.FreeBytes))
-	}
-	return check, nil
+	return from, check, nil
 }
 
 // CheckMove says where a game would go and whether there is room, before the
 // user confirms. Refusals come back as the error.
 func (a *App) CheckMove(game types.Game, parent string) (types.MoveCheck, error) {
-	return a.moveTarget(game, parent)
+	_, check, err := a.planMove(game, parent)
+	return check, err
 }
 
 // MoveGame queues moving an installed game into parent (see CheckMove).
 func (a *App) MoveGame(game types.Game, parent string) (types.Job, error) {
-	check, err := a.moveTarget(game, parent)
+	from, check, err := a.planMove(game, parent)
 	if err != nil {
 		return types.Job{}, err
 	}
-	return a.jobs.AddMove(game.Source, game.ID, game.StoreAppID, game.Title, game.InstallDir, check.To)
+	return a.jobs.AddMove(game.Source, game.ID, game.StoreAppID, game.Title, from, check.To)
 }
 
 // startCoreMove runs a move core does itself. It returns at once; the copy
 // runs in its own goroutine and reports through the queue like a plugin job.
-func (a *App) startCoreMove(j types.Job) {
+// A move that starts fresh checks the room again: the queue checked when the
+// game was queued, and the disk may have filled since.
+func (a *App) startCoreMove(j types.Job) error {
+	if !movePartlyDone(j.Destination) {
+		need, free, err := moveSpace(j.InstallDir, j.Destination)
+		if err != nil {
+			return err
+		}
+		if need > free {
+			return noRoom(filepath.Dir(j.Destination), need, free)
+		}
+	}
 	ctx, cancel := context.WithCancel(a.ctx)
-	a.moves.add(j.ID, cancel)
+	run, err := a.moves.begin(j.ID, cancel)
+	if err != nil {
+		cancel()
+		return err
+	}
 	go func() {
-		defer a.moves.forget(j.ID)
+		defer a.moves.end(j.ID, run)
 		defer cancel()
 		a.runCoreMove(ctx, j)
 	}()
+	return nil
+}
+
+// movePartlyDone is true when a move to dest was started before (a copy, a
+// staging folder or a placed game is there), so the room it needs is partly
+// used already.
+func movePartlyDone(dest string) bool {
+	for _, p := range []string{dest, dest + relocate.StageSuffix} {
+		if _, err := os.Lstat(p); !errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) runCoreMove(ctx context.Context, j types.Job) {
@@ -171,7 +300,9 @@ func (a *App) runCoreMove(ctx context.Context, j types.Job) {
 		a.jobs.SetLeftover(j.ID, fmt.Sprintf("the game moved, but the old folder %s could not be removed", res.Leftover))
 	}
 	a.tellPluginRelocated(j)
-	a.jobs.Notify(j.Source, "job.done", plugins.JobUpdate{JobID: j.ID})
+	// The game is at its destination: the job is done whatever the queue
+	// was told meanwhile (a cancel after the move was placed is too late).
+	a.jobs.FinishMove(j.ID)
 }
 
 // recordMove writes where the game is now, before the old folder goes. A

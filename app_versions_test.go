@@ -69,6 +69,7 @@ func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 		t.Fatal(err)
 	}
 	a.jobs.SetOnInstalled(a.recordInstall)
+	a.jobs.SetOnFinished(a.jobFinished)
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { defer close(done); a.jobs.Run(runCtx) }()

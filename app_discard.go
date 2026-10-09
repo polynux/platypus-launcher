@@ -35,10 +35,14 @@ func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 // discardParams builds job.discard's params: the job to forget, what it was
 // (a canceled update must never take the installed game with it) and the
 // plugin install folder it ran in. The plugin finds the game's own subfolder
-// itself.
+// itself. Verify and move jobs have no downloaded data, so they have none.
 func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
 	if j.Kind == jobs.KindUninstall {
 		return nil, fmt.Errorf("an uninstall has no downloaded data")
+	}
+	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindMove {
+		// These work on the installed game: discarding would delete it.
+		return nil, jobs.ErrNoData
 	}
 	if err := checkDiscardDir(j.InstallDir, gamesRoot); err != nil {
 		return nil, err

@@ -38,36 +38,48 @@ func (a *App) verifyGate(game types.Game) (plugins.Plugin, error) {
 // VerifyGame queues a check of an installed game's files. It only reports;
 // nothing is changed until RepairGame.
 func (a *App) VerifyGame(game types.Game) (types.Job, error) {
-	if !game.IsInstalled || game.InstallDir == "" {
-		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
-	}
-	if _, err := a.verifyGate(game); err != nil {
+	folder, err := a.verifyFolder(game)
+	if err != nil {
 		return types.Job{}, err
 	}
-	if a.sessions.Running(game.ID) {
-		return types.Job{}, fmt.Errorf("%s is running", game.Title)
-	}
-	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, game.InstallDir, false)
+	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, folder, false)
 }
 
 // RepairGame queues the second run of a check, which restores the files the
 // last check found damaged or missing. Hydra refuses it unless that check
 // reported some, so a repair always follows a report the user saw.
 func (a *App) RepairGame(game types.Game) (types.Job, error) {
-	if !game.IsInstalled || game.InstallDir == "" {
-		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
-	}
-	if _, err := a.verifyGate(game); err != nil {
+	folder, err := a.verifyFolder(game)
+	if err != nil {
 		return types.Job{}, err
-	}
-	if a.sessions.Running(game.ID) {
-		return types.Job{}, fmt.Errorf("%s is running", game.Title)
 	}
 	last, ok := a.lastVerify(game.ID)
 	if !ok || last.Verify == nil || last.Verify.Damaged+last.Verify.Missing == 0 {
 		return types.Job{}, fmt.Errorf("check %s first: there is no damage report to repair from", game.Title)
 	}
-	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, game.InstallDir, true)
+	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, folder, true)
+}
+
+// verifyFolder checks a check or repair of game can run now, and returns the
+// folder it runs in: the one the library reports, not the frontend's copy.
+func (a *App) verifyFolder(game types.Game) (string, error) {
+	if !game.IsInstalled {
+		return "", fmt.Errorf("%s is not installed", game.Title)
+	}
+	if _, err := a.verifyGate(game); err != nil {
+		return "", err
+	}
+	if a.isRunning(game.ID) {
+		return "", fmt.Errorf("%s is running", game.Title)
+	}
+	folder, err := a.currentFolder(game)
+	if err != nil {
+		return "", err
+	}
+	if err := checkFolder(folder, a.settings.GamesFolder(), "check"); err != nil {
+		return "", err
+	}
+	return folder, nil
 }
 
 // lastVerify is the most recent finished check of a game (the queue's list

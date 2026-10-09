@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"hydra-launcher/internal/jobs"
@@ -30,8 +31,7 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 		return b.a.plugins.Call(ctx, j.Source, "game.verify", verifyParams(j), nil)
 	case jobs.KindMove:
 		if !b.a.plugins.Has(j.Source, "move") {
-			b.a.startCoreMove(j) // runs on its own; reports through the queue
-			return nil
+			return b.a.startCoreMove(j) // runs on its own; reports through the queue
 		}
 		return b.a.plugins.Call(ctx, j.Source, "game.move", moveParams(j), nil)
 	}
@@ -62,11 +62,47 @@ func installParams(j types.Job) map[string]any {
 	return params
 }
 
+// Cancel stops a job. A core move stops and puts the game back; it is waited
+// for, so the folders are free when Cancel returns.
 func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
-	if b.a.moves.stop(j.ID) {
-		return nil // a core move: it stops and puts the game back
+	if j.Kind == jobs.KindMove && !b.a.plugins.Has(j.Source, "move") {
+		b.a.moves.stop(ctx, j.ID)
+		return nil
 	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
+}
+
+// RunsInCore says whether core is running the job's move itself, in a
+// goroutine of its own (see CoreRunner in the queue).
+func (b jobBackend) RunsInCore(j types.Job) bool {
+	return b.a.moves.active(j.ID)
+}
+
+// heldByJob refuses a launch while a move or a check holds the game's folder:
+// the game would start from files that are being moved or checked.
+func (a *App) heldByJob(game types.Game) error {
+	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify)
+	if !ok {
+		return nil
+	}
+	what := "checked"
+	if j.Kind == jobs.KindMove {
+		what = "moved"
+	}
+	return fmt.Errorf("%s is being %s; launch it once that finishes", game.Title, what)
+}
+
+// jobFinished keeps the relocation record true to the folders. A finished
+// uninstall leaves nothing at the moved folder for it to name, and a finished
+// install puts the game where the plugin says it belongs: either way an old
+// record must not send the library and launches to the stale copy.
+func (a *App) jobFinished(j types.Job) {
+	if _, ok := a.settings.Relocation(j.GameID); !ok {
+		return
+	}
+	if err := a.settings.ClearRelocation(j.GameID); err != nil {
+		log.Printf("moves: clearing the record for %s: %v", j.Title, err)
+	}
 }
 
 // queueJob checks the game's plugin can run the job and queues it, for the
@@ -121,7 +157,7 @@ func (a *App) UninstallGame(game types.Game) (types.Job, error) {
 	if !game.IsInstalled {
 		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
 	}
-	if a.sessions.Running(game.ID) {
+	if a.isRunning(game.ID) {
 		return types.Job{}, fmt.Errorf("%s is running", game.Title)
 	}
 	return a.queueJob(jobs.KindUninstall, game, nil)
