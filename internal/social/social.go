@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"hydra-launcher/internal/jsonrpc"
@@ -129,6 +130,11 @@ const stopTimeout = 3 * time.Second
 type Manager struct {
 	opt Options
 
+	// seq numbers every View the manager makes. It belongs to the manager,
+	// not to a subscription: a plugin switched off and on again gets a new
+	// subscription, and its views must still rise past the old ones.
+	seq atomic.Uint64
+
 	mu      sync.Mutex
 	subs    map[string]*sub
 	playing map[string]playingGame // by plugin id, kept while friends are off too
@@ -152,7 +158,6 @@ type sub struct {
 	emitMu sync.Mutex // one emit at a time, each snapshot taken inside it
 
 	mu        sync.Mutex
-	seq       uint64
 	view      View
 	paused    bool   // replaced or logged out: no restart until the plugin connects again
 	started   bool   // social.start answered for this process, so it must be stopped
@@ -244,7 +249,7 @@ func (m *Manager) View(pluginID string) View {
 }
 
 func (m *Manager) idle(pluginID string) View {
-	return View{Plugin: pluginID, Enabled: m.enabled(pluginID), ShowPlaying: m.showPlaying(pluginID), Friends: []Friend{}, Connection: Connection{State: ConnOffline}}
+	return View{Seq: m.seq.Add(1), Plugin: pluginID, Enabled: m.enabled(pluginID), ShowPlaying: m.showPlaying(pluginID), Friends: []Friend{}, Connection: Connection{State: ConnOffline}}
 }
 
 // Exited tells the subscription that the plugin process went away; the
@@ -605,9 +610,8 @@ func (m *Manager) sendPlaying(ctx context.Context, s *sub) {
 func (m *Manager) snapshot(s *sub) View {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.seq++
 	v := s.view
-	v.Seq = s.seq
+	v.Seq = m.seq.Add(1)
 	v.Enabled = m.enabled(s.id)
 	v.ShowPlaying = m.showPlaying(s.id)
 	v.Friends = slices.Clone(s.view.Friends)
