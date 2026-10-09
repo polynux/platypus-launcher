@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"hydra-launcher/internal/chat"
 	"hydra-launcher/internal/cloudsync"
 	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/fixes"
@@ -49,6 +50,7 @@ type App struct {
 	sessions     *session.Tracker
 	cloud        *cloudsync.Orchestrator
 	social       *social.Manager // friends lists of plugins with the social capability
+	chat         *chat.Manager   // conversations with friends (the chat capability, protocol 1.9)
 	socialMu     sync.Mutex
 	socialGames  map[string]socialGame // launched store games by Hydra game id, for "playing"
 	// familyEmit delivers family.warning notifications to the UI (the
@@ -157,6 +159,7 @@ func (a *App) startup(ctx context.Context) {
 	a.syncDataPlugins(found)
 	a.startCloud(ctx, dataDir)
 	a.startSocial(ctx)
+	a.startChat(ctx)
 	a.syncSocial()
 
 	runCtx, stop := context.WithCancel(ctx)
@@ -195,6 +198,9 @@ func (a *App) pluginNotify(id, method string, params json.RawMessage) {
 	}
 	if a.social != nil && strings.HasPrefix(method, "social.") {
 		a.social.Notify(id, method, params)
+		return
+	}
+	if a.chatNotify(id, method, params) {
 		return
 	}
 	if method == "family.warning" {

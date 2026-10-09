@@ -34,6 +34,8 @@ interface SidebarProps {
   /** Some ready store offers redeem: the one "Redeem a code" entry shows. */
   canRedeem: boolean;
   onRedeem: () => void;
+  /** Unread messages from friends across the stores: the friends block's badge. */
+  friendsUnread?: number;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -133,7 +135,7 @@ export function Sidebar(p: SidebarProps) {
             <Ticket className="h-3.5 w-3.5" /> Redeem a code
           </Button>
         )}
-        <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} />
+        <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
         {p.sessions.map((e) => {
           const running = e.state === 'running';
           const label = running ? 'playing' : e.state === 'stopping' ? 'stopping' : 'starting';

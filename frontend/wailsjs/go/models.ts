@@ -1,3 +1,76 @@
+export namespace chat {
+	
+	export class Message {
+	    id: string;
+	    from: string;
+	    text: string;
+	    sentAt: number;
+	    status?: string;
+	    clientId?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Message(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.from = source["from"];
+	        this.text = source["text"];
+	        this.sentAt = source["sentAt"];
+	        this.status = source["status"];
+	        this.clientId = source["clientId"];
+	    }
+	}
+	export class View {
+	    seq: number;
+	    plugin: string;
+	    friendId: string;
+	    open: boolean;
+	    loaded: boolean;
+	    more: boolean;
+	    unread: number;
+	    typing: boolean;
+	    messages: Message[];
+	
+	    static createFrom(source: any = {}) {
+	        return new View(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.seq = source["seq"];
+	        this.plugin = source["plugin"];
+	        this.friendId = source["friendId"];
+	        this.open = source["open"];
+	        this.loaded = source["loaded"];
+	        this.more = source["more"];
+	        this.unread = source["unread"];
+	        this.typing = source["typing"];
+	        this.messages = this.convertValues(source["messages"], Message);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace social {
 	
 	export class Connection {

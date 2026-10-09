@@ -86,8 +86,9 @@ func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
 		plugtest.CloudStatusKeys, plugtest.CloudCountsKeys, plugtest.CloudConflictKeys, plugtest.CloudFileKeys, plugtest.CloudClientKeys, plugtest.CloudProgressKeys,
 		plugtest.VersionListKeys, plugtest.VersionChannelKeys, plugtest.VersionBuildKeys,
 		plugtest.VersionManualKeys, plugtest.VersionLinkKeys,
-		plugtest.FamilyMemberKeys, plugtest.FamilyCopyKeys, plugtest.FamilyCopyDLCKeys, plugtest.SettingsKeys, plugtest.SettingGroupKeys, plugtest.SettingFieldKeys,
-		plugtest.SettingOptionKeys} {
+		plugtest.FamilyMemberKeys, plugtest.FamilyCopyKeys, plugtest.FamilyCopyDLCKeys, plugtest.SettingsKeys,
+		plugtest.SettingGroupKeys, plugtest.SettingFieldKeys, plugtest.SettingOptionKeys,
+		plugtest.ChatHistoryKeys, plugtest.ChatMessageKeys, plugtest.ChatSendKeys} {
 		for _, k := range set {
 			if !strings.Contains(text, "`"+k+"`") && !strings.Contains(text, `"`+k+`"`) {
 				t.Errorf("protocol.md doesn't mention the key %q", k)

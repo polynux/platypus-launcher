@@ -39,6 +39,7 @@ const (
 	rev16 = "1.6" // social: friends and own status (docs/plans/steam-cloud-social.md, "social.*")
 	rev17 = "1.7" // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
 	rev18 = "1.8" // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
+	rev19 = "1.9" // chat with friends (docs/plugins/protocol.md, "Chat")
 )
 
 var registry = []Capability{
@@ -85,6 +86,9 @@ var registry = []Capability{
 		Surfaces:        []string{"shared-badge", "shared-filter", "families-section", "copy-picker"}},
 	{Name: "settings", Since: rev18, Orchestrated: true,
 		Methods: []string{"settings.schema", "settings.apply"}, Surfaces: []string{"plugin-settings", "game-settings"}},
+	{Name: "chat", Since: rev19, Orchestrated: true,
+		Methods:  []string{"chat.history", "chat.send", "chat.markRead"},
+		Surfaces: []string{"chat-panel", "chat-unread"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:

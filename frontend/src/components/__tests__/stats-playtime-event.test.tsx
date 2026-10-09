@@ -37,11 +37,14 @@ vi.mock('../../effect/runtime', () => ({
     getTweaks: () => Effect.succeed([] as never),
     listJobs: () => Effect.succeed([] as never),
     socialViews: () => Effect.succeed([] as never),
+    chatUnread: () => Effect.succeed([] as never),
+    chatAlerts: () => Effect.succeed({} as never),
   },
   onJobs: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
   onSocial: () => () => {},
+  onChat: () => () => {},
   onPlaytime: (cb: () => void) => {
     state.onPlaytime = cb;
     return () => {};

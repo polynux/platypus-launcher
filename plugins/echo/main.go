@@ -44,7 +44,8 @@
 //	ECHO_COPY_UNAVAILABLE member ids whose copy of a shared game can't be picked or launched
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
-// social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs.
+// social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs; chat
+// (chat.go, protocol 1.9) its ECHO_CHAT_TICK and `config` chat knobs.
 // Verify and move (maintenance.go, protocol 1.4) need no env knobs: `config`
 // {damage: {"tiny": 3}} sets the damaged files a check finds. Switch `move` off
 // (ECHO_OFF=move) and Hydra moves the game folder itself and sends
@@ -177,7 +178,7 @@ type knobs struct {
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
 // the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"}
 
 var (
 	knobMu  sync.Mutex
@@ -416,6 +417,7 @@ func main() {
 	loadKnobs()
 	loadCloud()
 	loadSocial()
+	loadChat()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
@@ -512,6 +514,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		configureCloud(raw)
 		configureMaintenance(raw)
 		configureSocial(raw)
+		configureChat(raw)
 		return map[string]any{"settings": settingsSnapshot()}, nil
 	case "calls":
 		callsMu.Lock()
@@ -633,8 +636,16 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return socialSetStatus(p)
 	case "social.setPlaying":
 		return socialSetPlaying(raw)
+	case "chat.history":
+		return chatHistory(raw)
+	case "chat.send":
+		return chatSend(raw)
+	case "chat.markRead":
+		return chatMarkRead(raw)
 	case "recorded":
-		return socialRecorded(), nil
+		rec := socialRecorded().(map[string]any)
+		rec["chat"] = chatRecorded()
+		return rec, nil
 	case "achievements.list":
 		return achievementsList(p)
 	case "playtime.list":
