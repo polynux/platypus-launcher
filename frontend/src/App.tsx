@@ -19,7 +19,7 @@ import { TooltipProvider } from './components/ds/tooltip';
 import { LauncherApi, onJobs, onPlaytime, onSession } from './effect/runtime';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { needsAttention, mergeRescannedGames } from './lib/games';
+import { needsAttention, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
@@ -335,9 +335,19 @@ export function App() {
     return onJobs((l) => apply(l));
   }, [log, notify]);
 
-  // A plugin's playtime report changed a library value (protocol 1.7): rescan
-  // so the library, sort and game page show the merged value.
-  useEffect(() => onPlaytime(() => loadRef.current('rescan')), []);
+  // A plugin's playtime report changed a library value (protocol 1.7). Only
+  // the playtime fields are taken from a fresh read: no rescan notice, and the
+  // game details cache stays as it is.
+  useEffect(
+    () =>
+      onPlaytime(() => {
+        Effect.runPromise(LauncherApi.getLibrary()).then(
+          (lib) => setGames((prev) => mergePlaytime(prev, lib.games)),
+          () => {},
+        );
+      }),
+    [],
+  );
 
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
