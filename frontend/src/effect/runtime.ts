@@ -251,6 +251,9 @@ export const LauncherApi = {
     call<void>('SetSocialEnabled', () => App.SetSocialEnabled(plugin, enabled)),
   setSocialStatus: (plugin: string, state: SocialStatus) =>
     call<void>('SetSocialStatus', () => App.SetSocialStatus(plugin, state)),
+  setSocialPlaying: (plugin: string, show: boolean) =>
+    call<void>('SetSocialPlaying', () => App.SetSocialPlaying(plugin, show)),
+  restartSocial: (plugin: string) => call<void>('RestartSocial', () => App.RestartSocial(plugin)),
 };
 
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */

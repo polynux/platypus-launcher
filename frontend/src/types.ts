@@ -519,8 +519,12 @@ export interface SocialSelf {
 
 /** One store's friends, as the backend last reported them (social.View). */
 export interface SocialView {
+  /** Rises with every view the backend makes for the plugin; an older one is ignored. */
+  seq: number;
   plugin: string;
   enabled: boolean;
+  /** Whether friends see the game the user plays on this store. */
+  showPlaying: boolean;
   running: boolean;
   connection: { state: SocialConnState; message?: string };
   self?: SocialSelf;

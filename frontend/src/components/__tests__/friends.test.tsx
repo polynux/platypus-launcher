@@ -9,8 +9,10 @@ const friend = (id: string, name: string, state: SocialFriend['state'], game?: S
   ({ id, name, state, game, lastSeen });
 
 const echo: SocialView = {
+  seq: 1,
   plugin: 'echo',
   enabled: true,
+  showPlaying: true,
   running: true,
   connection: { state: 'online' },
   self: { name: 'Echo Player', state: 'online' },
@@ -23,8 +25,10 @@ const echo: SocialView = {
 };
 
 const other: SocialView = {
+  seq: 1,
   plugin: 'gog',
   enabled: false,
+  showPlaying: true,
   running: false,
   connection: { state: 'offline' },
   friends: [],

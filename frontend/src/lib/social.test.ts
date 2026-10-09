@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import type { SocialFriend, SocialView } from '../types';
-import { canSetStatus, connectionLine, describeSummary, groupFriends, initials, upsertView } from './social';
+import { canSetStatus, connectionLine, describeSummary, groupFriends, initials, reconcileViews, upsertView } from './social';
 
 const f = (id: string, name: string, state: SocialFriend['state'], game?: SocialFriend['game']): SocialFriend => ({ id, name, state, game });
 
 const view = (plugin: string, over: Partial<SocialView> = {}): SocialView => ({
+  seq: 1,
   plugin,
   enabled: true,
+  showPlaying: true,
   running: true,
   connection: { state: 'online' },
   self: { name: 'Me', state: 'online' },
@@ -93,5 +95,19 @@ describe('initials and upsertView', () => {
     expect(replaced).toHaveLength(2);
     expect(replaced[0].running).toBe(false);
     expect(list[0].running).toBe(true);
+  });
+
+  it('ignores a view older than the one held, whatever arrives last', () => {
+    const newer = view('echo', { seq: 7, running: false });
+    const list = upsertView([newer], view('echo', { seq: 6 }));
+    expect(list).toEqual([newer]);
+    expect(upsertView(list, view('echo', { seq: 8 }))[0].seq).toBe(8);
+  });
+
+  it('reconciles with a snapshot: keeps newer events, and drops stores the snapshot leaves out', () => {
+    const current = [view('echo', { seq: 9, running: true }), view('gone', { seq: 3 })];
+    const merged = reconcileViews(current, [view('echo', { seq: 4, running: false }), view('new', { seq: 1 })]);
+    expect(merged.map((v) => v.plugin)).toEqual(['echo', 'new']);
+    expect(merged[0]).toEqual(current[0]);
   });
 });

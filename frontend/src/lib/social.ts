@@ -108,11 +108,20 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-/** Replaces (or adds) one store's view. Every event carries the whole view. */
+/** Replaces (or adds) one store's view. Every event carries the whole view;
+ *  one older than the view held (a lower seq, arrived late) is ignored. */
 export function upsertView(list: SocialView[], view: SocialView): SocialView[] {
   const i = list.findIndex((v) => v.plugin === view.plugin);
   if (i < 0) return [...list, view];
+  if (list[i].seq > view.seq) return list;
   const next = list.slice();
   next[i] = view;
   return next;
+}
+
+/** Brings the list in line with a fresh snapshot: each store's view is upserted,
+ *  and a store the snapshot leaves out (no longer ready) is dropped. */
+export function reconcileViews(list: SocialView[], snapshot: SocialView[]): SocialView[] {
+  const plugins = new Set(snapshot.map((v) => v.plugin));
+  return snapshot.reduce((acc, view) => upsertView(acc, view), list.filter((v) => plugins.has(v.plugin)));
 }
