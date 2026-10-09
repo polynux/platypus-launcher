@@ -78,6 +78,10 @@ export function GetInstallFreeSpace(arg1) {
   return window['go']['main']['App']['GetInstallFreeSpace'](arg1);
 }
 
+export function GetInstallSize(arg1) {
+  return window['go']['main']['App']['GetInstallSize'](arg1);
+}
+
 export function GetLauncherSettings() {
   return window['go']['main']['App']['GetLauncherSettings']();
 }

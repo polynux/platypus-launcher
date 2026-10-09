@@ -201,6 +201,18 @@ func (a *App) queueWithOptions(kind string, game types.Game, choices types.Insta
 	return job, nil
 }
 
+// GetInstallSize is the disk space a fresh install of the game needs with the
+// store's default choices, the figure the free-space check compares with. The
+// dialog adds the chosen add-ons to it. An error means the store can't say.
+func (a *App) GetInstallSize(game types.Game) (int64, error) {
+	target, err := a.pinnedTarget(game)
+	if err != nil {
+		return 0, err
+	}
+	s, err := jobBackend{a}.Size(a.ctx, types.Job{Kind: jobs.KindInstall, Source: game.Source, StoreGameID: game.StoreAppID, Target: target})
+	return s.DiskBytes, err
+}
+
 // GetInstallFreeSpace is the free space, in bytes, where the game would be
 // installed. The dialog compares it with the size of the chosen options.
 func (a *App) GetInstallFreeSpace(game types.Game) (int64, error) {

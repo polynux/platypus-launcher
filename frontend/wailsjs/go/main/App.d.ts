@@ -40,6 +40,8 @@ export function GetGameVersions(arg1:types.Game):Promise<types.VersionInfo>;
 
 export function GetInstallFreeSpace(arg1:types.Game):Promise<number>;
 
+export function GetInstallSize(arg1:types.Game):Promise<number>;
+
 export function GetLauncherSettings():Promise<types.LauncherSettings>;
 
 export function GetLibrary():Promise<types.Library>;

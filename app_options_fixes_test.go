@@ -169,3 +169,20 @@ func TestSizeUsesTheChosenAddOns(t *testing.T) {
 		t.Fatalf("the job's size adds %d bytes, want the 6 MiB of its add-ons", extra)
 	}
 }
+
+func TestInstallSizeIsTheBaseSize(t *testing.T) {
+	e := optionsEnv(t)
+	var base struct {
+		DiskBytes int64 `json:"diskBytes"`
+	}
+	if err := e.m.Call(context.Background(), "echo", "game.installSize", map[string]any{"id": "tiny"}, &base); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.a.GetInstallSize(e.game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != base.DiskBytes || got == 0 {
+		t.Fatalf("install size = %d, want the store's base size %d", got, base.DiskBytes)
+	}
+}
