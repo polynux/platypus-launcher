@@ -632,3 +632,35 @@ export interface SocialView {
   self?: SocialSelf;
   friends: SocialFriend[];
 }
+
+// ---- Chat: one-to-one messages with friends (protocol 1.9; docs/plugins/protocol.md "Chat") ----
+
+/** One message of a conversation. A message the user sent that the store hasn't confirmed has no
+ *  id yet: it is "sending", or "failed" (the user can send it again under its clientId). */
+export interface ChatMessage {
+  id: string;
+  from: 'self' | string;
+  text: string;
+  /** Unix time in milliseconds. */
+  sentAt: number;
+  status?: 'sending' | 'failed';
+  clientId?: string;
+}
+
+/** One conversation, as the backend last reported it (chat.View). Seq rises with every change. */
+export interface ChatView {
+  seq: number;
+  plugin: string;
+  friendId: string;
+  open: boolean;
+  loaded: boolean;
+  more: boolean;
+  unread: number;
+  typing: boolean;
+  messages: ChatMessage[];
+}
+
+/** A conversation change; alert is true for a new message from a friend the user should hear about. */
+export interface ChatEvent extends ChatView {
+  alert: boolean;
+}

@@ -13,6 +13,8 @@ import type {
   CloudPrompt,
   CloudSettings,
   AuthStatus,
+  ChatEvent,
+  ChatView,
   Game,
   GameDetails,
   RedeemResult,
@@ -293,6 +295,17 @@ export const LauncherApi = {
   setSocialPlaying: (plugin: string, show: boolean) =>
     call<void>('SetSocialPlaying', () => App.SetSocialPlaying(plugin, show)),
   restartSocial: (plugin: string) => call<void>('RestartSocial', () => App.RestartSocial(plugin)),
+
+  // Conversations with friends (protocol 1.9, docs/plugins/protocol.md "Chat").
+  chatOpen: (plugin: string, friendId: string) => call<ChatView>('ChatOpen', () => App.ChatOpen(plugin, friendId)),
+  chatClose: (plugin: string, friendId: string) => call<void>('ChatClose', () => App.ChatClose(plugin, friendId)),
+  chatOlder: (plugin: string, friendId: string) => call<ChatView>('ChatOlder', () => App.ChatOlder(plugin, friendId)),
+  chatSend: (plugin: string, friendId: string, text: string) => call<void>('ChatSend', () => App.ChatSend(plugin, friendId, text)),
+  chatResend: (plugin: string, friendId: string, clientId: string) =>
+    call<void>('ChatResend', () => App.ChatResend(plugin, friendId, clientId)),
+  chatUnread: () => call<ChatView[]>('ChatUnread', async () => (await App.ChatUnread()) ?? []),
+  chatAlerts: () => call<Record<string, boolean>>('ChatAlerts', async () => (await App.ChatAlerts()) ?? {}),
+  setChatAlerts: (plugin: string, on: boolean) => call<void>('SetChatAlerts', () => App.SetChatAlerts(plugin, on)),
 };
 
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */
@@ -329,4 +342,10 @@ export function onCloud(cb: (e: CloudEvent) => void): () => void {
 export function onSocial(cb: (v: SocialView) => void): () => void {
   if (!window.go?.main?.App) return () => {};
   return EventsOn('social', cb);
+}
+
+/** Subscribe to chat changes: a conversation's messages, unread count or typing. Returns the unsubscribe function. */
+export function onChat(cb: (e: ChatEvent) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('chat', cb);
 }
