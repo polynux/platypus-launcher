@@ -90,7 +90,7 @@ func TestCleanCode(t *testing.T) {
 
 func TestMaskCodeNeverShowsTheMiddle(t *testing.T) {
 	got := MaskCode("ABCD-1234-WXYZ")
-	if got != "AB…YZ (14 characters)" {
+	if got != "(14 characters)" {
 		t.Fatalf("MaskCode = %q", got)
 	}
 	if strings.Contains(got, "1234") {
@@ -115,5 +115,49 @@ func TestTitlesOfTrimsDropsEmptyAndBounds(t *testing.T) {
 	}
 	if len(TitlesOf(many)) != MaxTitles {
 		t.Fatal("titles are not bounded")
+	}
+}
+
+func TestHiddenLockedEntriesGetAnOpaqueID(t *testing.T) {
+	out := NormalizeAchievements(AchievementsReply{Total: 2, List: []Achievement{
+		{ID: "SECRET_BOSS_NAME", Name: "Secret", Hidden: true},
+		{ID: "open", Name: "Open"},
+	}})
+	if got := out.List[0].ID; got == "SECRET_BOSS_NAME" || got == "" {
+		t.Fatalf("hidden locked entry kept the store id: %q", got)
+	}
+	if out.List[1].ID != "open" {
+		t.Fatalf("a visible entry's id changed: %q", out.List[1].ID)
+	}
+	again := NormalizeAchievements(AchievementsReply{Total: 2, List: []Achievement{
+		{ID: "SECRET_BOSS_NAME", Name: "Secret", Hidden: true},
+		{ID: "open", Name: "Open"},
+	}})
+	if again.List[0].ID != out.List[0].ID {
+		t.Fatalf("opaque id is not stable: %q then %q", out.List[0].ID, again.List[0].ID)
+	}
+}
+
+func TestUnlockedIsClampedToTotal(t *testing.T) {
+	out := NormalizeAchievements(AchievementsReply{Total: 3, Unlocked: 7, List: []Achievement{{ID: "a", Name: "a"}}})
+	if out.Unlocked != 3 {
+		t.Fatalf("unlocked = %d, want clamped to total 3", out.Unlocked)
+	}
+	neg := NormalizeAchievements(AchievementsReply{Total: 3, Unlocked: -2, List: []Achievement{{ID: "a", Name: "a"}}})
+	if neg.Unlocked != 0 {
+		t.Fatalf("negative unlocked = %d, want 0", neg.Unlocked)
+	}
+}
+
+func TestIconsAreHTTPSOnly(t *testing.T) {
+	out := NormalizeAchievements(AchievementsReply{Total: 2, List: []Achievement{
+		{ID: "plain", Name: "p", Icon: "http://cdn.example/a.png"},
+		{ID: "secure", Name: "s", Icon: "https://cdn.example/a.png"},
+	}})
+	if out.List[0].Icon != "" {
+		t.Fatalf("an http icon was kept: %q", out.List[0].Icon)
+	}
+	if out.List[1].Icon == "" {
+		t.Fatal("an https icon was dropped")
 	}
 }

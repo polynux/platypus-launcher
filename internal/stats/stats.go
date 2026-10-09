@@ -57,7 +57,8 @@ type PlaytimeGame struct {
 
 // NormalizeAchievements makes a plugin's answer safe and complete for the UI:
 // entries without an id are dropped, the list is bounded, a locked hidden
-// achievement loses its name, description and icon, icons must be http(s),
+// achievement loses its name, description, icon and store id, the unlocked
+// count stays within the total, icons must be https,
 // and a global percentage outside 0-100 counts as missing.
 func NormalizeAchievements(in AchievementsReply) types.AchievementProgress {
 	out := types.AchievementProgress{Total: in.Total, Unlocked: in.Unlocked, List: []types.ProgressAchievement{}}
@@ -74,6 +75,8 @@ func NormalizeAchievements(in AchievementsReply) types.AchievementProgress {
 			pa.Name = a.ID
 		}
 		if a.Hidden && !unlocked {
+			// The store id is often the secret's own name: hand out a position instead.
+			pa.ID = fmt.Sprintf("hidden-%d", len(out.List))
 			pa.Name, pa.Description, pa.Icon = HiddenName, "", ""
 		}
 		if g := a.GlobalPercent; g != nil && *g >= 0 && *g <= 100 {
@@ -85,6 +88,7 @@ func NormalizeAchievements(in AchievementsReply) types.AchievementProgress {
 	if out.Total < len(out.List) {
 		out.Total = len(out.List)
 	}
+	out.Unlocked = min(max(out.Unlocked, 0), out.Total)
 	return out
 }
 
@@ -132,14 +136,11 @@ func CleanCode(raw string) (string, error) {
 	return code, nil
 }
 
-// MaskCode is the form of a code that may appear in a log: its first and last
-// two characters and its length. A short code shows only its length.
+// MaskCode is the form of a code that may appear in a log: its length only.
+// Any characters shown would be a guess at the code's shape, and a short code
+// would give most of itself away.
 func MaskCode(code string) string {
-	r := []rune(code)
-	if len(r) < 8 {
-		return fmt.Sprintf("(%d characters)", len(r))
-	}
-	return fmt.Sprintf("%s…%s (%d characters)", string(r[:2]), string(r[len(r)-2:]), len(r))
+	return fmt.Sprintf("(%d characters)", len([]rune(code)))
 }
 
 // TitlesOf keeps the non-empty granted titles of a redeem answer, bounded.
@@ -153,10 +154,10 @@ func TitlesOf(in []string) []string {
 	return out
 }
 
-// httpURL keeps http(s) URLs with a host, "" for anything else.
+// httpURL keeps https URLs with a host, "" for anything else.
 func httpURL(raw string) string {
 	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return ""
 	}
 	return u.String()
