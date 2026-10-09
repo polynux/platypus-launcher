@@ -167,7 +167,7 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // SupportedProtocols are the protocol versions this Hydra speaks, oldest
 // first. The first entry is the oldest major kept alive; Hydra keeps
 // supporting the previous major for a deprecation period after a new one.
-var SupportedProtocols = []Version{{1, 0}, {1, 1}}
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

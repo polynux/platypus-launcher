@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"hydra-launcher/internal/cloudsync"
 	"hydra-launcher/internal/dataplug"
 	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/jobs"
@@ -44,6 +45,7 @@ type App struct {
 	fixesService *fixes.Service
 	stores       *stores.Registry
 	sessions     *session.Tracker
+	cloud        *cloudsync.Orchestrator
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
 
@@ -111,6 +113,7 @@ func (a *App) startup(ctx context.Context) {
 	// Data plugins feed the fixes/tweaks registry; rebuilt here and on
 	// every rescan so installs and removals apply without a restart.
 	a.syncDataPlugins(found)
+	a.startCloud(ctx, dataDir)
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
@@ -124,6 +127,11 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.stop != nil {
 		a.stop()
 	}
+	// Syncs get a few seconds to finish; a push cut short stays owed and runs
+	// at the next start.
+	if a.cloud != nil {
+		a.cloud.Shutdown(cloudShutdownGrace)
+	}
 	if a.sessions != nil {
 		a.sessions.StopAll()
 	}
@@ -134,6 +142,10 @@ func (a *App) shutdown(ctx context.Context) {
 
 // pluginNotify routes plugin notifications: job updates to the queue.
 func (a *App) pluginNotify(id, method string, params json.RawMessage) {
+	if method == "cloud.progress" && a.cloud != nil {
+		a.cloud.Progress(id, params)
+		return
+	}
 	if !strings.HasPrefix(method, "job.") {
 		return
 	}
@@ -482,7 +494,11 @@ func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
 }
 
 // LaunchGame starts the game. Progress (running, stopped, failed) arrives on
-// the "session" event; the returned string is only a status line.
+// the "session" event; the returned string is only a status line. For a game
+// with cloud saves it first syncs them: when the user has to decide (a
+// conflict, an unreachable store, the store's client running) nothing is
+// launched, the "cloud" event carries the prompt, and the answer is another
+// launch (LaunchGameAnyway, LaunchGameViaClient) or a resolve and a retry.
 func (a *App) LaunchGame(game types.Game) (string, error) {
 	if a.sessions.Running(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
@@ -509,26 +525,38 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	cmd.Dir = p.dir
 
 	if cl := p.client; cl != nil {
-		// With the client running, the command forwards the request and
-		// exits; if not, it becomes the client and keeps running. Either way,
-		// follow the game itself (Steam: its reaper process), not this PID.
-		if err := cmd.Start(); err != nil {
-			return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
-		}
-		go func() { _ = cmd.Wait() }()
-		if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
-			return "", fmt.Errorf("%s is already running", game.Title)
-		}
-		return "Asked " + cl.Client + " to start " + game.Title, nil
+		return a.startClient(game, cmd, cl)
 	}
-	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, session.WithStopHook(p.stopHook()))
+	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
+	push, msg, blocked := a.cloudBeforeLaunch(game, p)
+	if blocked {
+		return msg, nil
+	}
+	opts = append(opts, push.options()...)
+	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, opts...)
 	if err != nil {
+		push.abandon()
 		if errors.Is(err, session.ErrAlreadyRunning) {
 			return "", fmt.Errorf("%s is already running", game.Title)
 		}
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
+}
+
+// startClient runs the command that asks the store's client to start the game
+// and follows the game itself. With the client running, the command forwards
+// the request and exits; if not, it becomes the client and keeps running.
+// Either way, follow the game itself (Steam: its reaper process), not this PID.
+func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunch) (string, error) {
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
+	}
+	go func() { _ = cmd.Wait() }()
+	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
+		return "", fmt.Errorf("%s is already running", game.Title)
+	}
+	return "Asked " + cl.Client + " to start " + game.Title, nil
 }
 
 // StopGame asks a running game to quit: SIGTERM to its processes (and the

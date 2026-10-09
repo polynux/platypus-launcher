@@ -25,6 +25,15 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion, preview boo
 	return BuildCommand(game, runner, Target{Exe: game.Executable}, preview)
 }
 
+// PrefixPath is the game's Wine prefix (Proton's compat data folder): the one
+// the user set for it, else a folder of its own under Hydra's data.
+func PrefixPath(game types.Game, home string) string {
+	if game.Settings.WinePrefix != "" {
+		return game.Settings.WinePrefix
+	}
+	return filepath.Join(home, ".local/share/hydra/prefixes", game.ID)
+}
+
 // BuildCommand constructs, for games Hydra starts itself (see
 // steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
 // When preview is true, no on-disk state is created: the Proton prefix is
@@ -41,10 +50,7 @@ func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, pr
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	prefixPath := game.Settings.WinePrefix
-	if prefixPath == "" {
-		prefixPath = filepath.Join(home, ".local/share/hydra/prefixes", game.ID)
-	}
+	prefixPath := PrefixPath(game, home)
 
 	if !target.Native {
 		// Proton assumes Steam created the compat data dir; it crashes with a

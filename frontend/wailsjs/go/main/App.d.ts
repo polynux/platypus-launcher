@@ -8,7 +8,11 @@ export function AllowGameFolder(arg1:string,arg2:string):Promise<void>;
 
 export function ApprovePlugin(arg1:string):Promise<void>;
 
+export function CancelCloudSync(arg1:string):Promise<boolean>;
+
 export function CancelJob(arg1:string):Promise<void>;
+
+export function CheckCloudSaves(arg1:types.Game):Promise<types.CloudInfo>;
 
 export function ChooseGamesFolder():Promise<string>;
 
@@ -19,6 +23,10 @@ export function ClearFinishedJobs():Promise<void>;
 export function DiscardJob(arg1:string):Promise<void>;
 
 export function ForceStopGame(arg1:string):Promise<void>;
+
+export function GetCloudInfo(arg1:types.Game):Promise<types.CloudInfo>;
+
+export function GetCloudSettings():Promise<types.CloudSettings>;
 
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
@@ -37,6 +45,10 @@ export function GetTweaks():Promise<Array<types.Tweak>>;
 export function InstallGame(arg1:types.Game):Promise<types.Job>;
 
 export function LaunchGame(arg1:types.Game):Promise<string>;
+
+export function LaunchGameAnyway(arg1:types.Game,arg2:string):Promise<string>;
+
+export function LaunchGameViaClient(arg1:types.Game):Promise<string>;
 
 export function ListJobs():Promise<Array<types.Job>>;
 
@@ -64,6 +76,8 @@ export function RemoveCustomGame(arg1:string):Promise<void>;
 
 export function RescanPlugins():Promise<Array<types.StorePlugin>>;
 
+export function ResolveCloudSaves(arg1:types.Game,arg2:Record<string, string>):Promise<types.CloudInfo>;
+
 export function ResumeAllJobs():Promise<void>;
 
 export function ResumeJob(arg1:string):Promise<void>;
@@ -75,6 +89,10 @@ export function RetryPlugin(arg1:string):Promise<void>;
 export function SaveGameSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function SetCancelCleanupDays(arg1:number):Promise<types.LauncherSettings>;
+
+export function SetCloudGameMode(arg1:string,arg2:string):Promise<void>;
+
+export function SetCloudPluginMode(arg1:string,arg2:string):Promise<void>;
 
 export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;
 

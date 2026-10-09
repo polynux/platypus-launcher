@@ -4,6 +4,7 @@ import { ArrowLeft, Download, Maximize2, FolderCheck, Loader2, Play, RefreshCw, 
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, Job, JobKind, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
+import { CloudSavesPanel } from './CloudSavesPanel';
 import { Lightbox } from './Lightbox';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
@@ -326,6 +327,8 @@ export function GamePage(p: GamePageProps) {
           {isPluginGame(game) && game.is_installed && plugin && (
             <ManagePanel game={game} plugin={plugin} job={job} onJob={p.onJob} onJobAction={p.onJobAction} />
           )}
+
+          {isPluginGame(game) && game.is_installed && plugin && <CloudSavesPanel game={game} plugin={plugin} />}
 
           {tweaks.length > 0 && game.is_installed && (
             <TweaksPanel

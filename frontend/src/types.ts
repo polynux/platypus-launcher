@@ -274,7 +274,7 @@ export interface LauncherSettings {
   cancel_cleanup_days: number;
 }
 
-export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak';
+export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak' | 'cloud';
 
 export interface ActivityEvent {
   id: number;
@@ -295,3 +295,66 @@ export type View =
   | { name: 'plugins' }
   | { name: 'downloads' }
   | { name: 'settings' };
+
+// ---- Cloud saves (protocol 1.2; docs/plugins/protocol.md "Cloud saves") ----
+
+export type CloudState = 'synced' | 'pending' | 'conflict' | 'unsupported' | 'offline' | 'error';
+export type CloudMode = 'off' | 'ask' | 'auto';
+
+export interface CloudFile {
+  size: number;
+  mtime: number; // unix seconds
+  machine?: string;
+}
+
+export interface CloudConflict {
+  path: string;
+  local: CloudFile;
+  remote: CloudFile;
+}
+
+export interface CloudStatus {
+  state: CloudState;
+  /** Written by the plugin for people; for `unsupported` it is the reason. */
+  message?: string;
+  counts: { same: number; download: number; upload: number; conflict: number; unmapped: number };
+  conflicts?: CloudConflict[] | null;
+  checkedAt?: number; // unix seconds
+  backupDir?: string;
+  /** The store's own client, when the plugin reports it. Hydra doesn't sync while it runs. */
+  client?: { running: boolean; name: string; canLaunch?: boolean } | null;
+}
+
+/** The game page's view: modes plus the last status of this session. */
+export interface CloudInfo {
+  /** Effective mode. */
+  mode: CloudMode;
+  plugin_mode: CloudMode;
+  /** The game's own choice; '' = follow the plugin. */
+  game_mode: CloudMode | '';
+  status: CloudStatus | null;
+  /** The job running for the game ("pull", "push", "resolve"), if any. */
+  busy?: string;
+}
+
+export interface CloudSettings {
+  plugins: Record<string, CloudMode>;
+  games: Record<string, CloudMode>;
+}
+
+export type CloudPrompt = 'conflict' | 'offline' | 'client-running';
+
+/** The "cloud" Wails event. */
+export interface CloudEvent {
+  game_id: string;
+  kind: 'progress' | 'status' | 'prompt' | 'pushed' | 'skipped' | 'failed' | 'canceled';
+  prompt?: CloudPrompt;
+  message?: string;
+  status?: CloudStatus;
+  job_id?: string;
+  phase?: 'check' | 'download' | 'upload';
+  done?: number;
+  total?: number;
+  /** The store client's name ("Steam"), for the client prompt and skips. */
+  client?: string;
+}

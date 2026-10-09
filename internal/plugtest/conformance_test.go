@@ -311,3 +311,54 @@ func (s *syncBuf) String() string {
 	defer s.mu.Unlock()
 	return s.b.String()
 }
+
+// Every state echo's cloud can be put in answers the shapes the protocol defines.
+func TestConformanceEchoCloudStates(t *testing.T) {
+	for _, state := range []string{"synced", "pending", "conflict", "conflict2", "unsupported", "offline", "error"} {
+		t.Run(state, func(t *testing.T) {
+			s := echoCloudSuite(map[string]string{"ECHO_CLOUD": state})
+			s.CloudConformance(t)
+		})
+	}
+	t.Run("client running", func(t *testing.T) {
+		echoCloudSuite(map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "1"}).CloudConformance(t)
+	})
+}
+
+func echoCloudSuite(env map[string]string) plugtest.Suite {
+	return plugtest.Suite{
+		ID:      "echo",
+		CopyDir: "../../plugins/echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
+			"hydra-launcher/plugins/echo"},
+		BuildOut: "plugins/echo/bin/hydra-echo",
+		Env:      env,
+		Login: func(t *testing.T, s *plugtest.Session) {
+			var st types.AuthStatus
+			if err := s.Call("auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, &st); err != nil || !st.LoggedIn {
+				t.Fatalf("login: %+v, %v", st, err)
+			}
+		},
+		PickGame: func(t *testing.T, games []types.Game) types.Game { return pick(t, games, "tiny") },
+	}
+}
+
+// A plugin that speaks only 1.1 is never sent cloud.*: the capability stays
+// off at runtime although the manifest lists it.
+func TestCloudSavesStayOffForAProtocol11Plugin(t *testing.T) {
+	s := echoCloudSuite(map[string]string{"ECHO_PROTOCOLS": "1.0,1.1"})
+	s.EditManifest = func(m map[string]any) {
+		m["protocol"] = map[string]any{"versions": []string{"1.0", "1.1"}}
+	}
+	sess := s.Handshake(t)
+	if sess.Has("cloud-saves") {
+		t.Fatal("cloud-saves is on for a plugin that settled on 1.1")
+	}
+	var raw map[string]any
+	if err := sess.Call("cloud.status", map[string]any{"id": "tiny", "ctx": types.CloudContext{OS: "linux", InstallDir: "/x"}}, &raw); err == nil {
+		t.Fatal("cloud.status reached a 1.1 plugin")
+	}
+	if n := echoCalls(t, sess)["cloud.status"]; n != 0 {
+		t.Fatalf("the plugin received cloud.status %d time(s)", n)
+	}
+}

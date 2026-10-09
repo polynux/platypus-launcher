@@ -196,7 +196,7 @@ func (p *process) gate(method string) (optional bool, err error) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.runtime != nil && !slices.Contains(p.runtime.Capabilities, capability) {
+	if p.runtime != nil && !MethodOffered(method, capability, p.runtime.Capabilities) {
 		return optional, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound,
 			Message: fmt.Sprintf("plugin %s doesn't offer %s right now (%s)", p.id, capability, method)}
 	}
@@ -435,6 +435,18 @@ func (p *process) initialize(conn Conn) {
 	res, dropped := resolveInit(p.declared, res)
 	if len(dropped) > 0 {
 		appendPluginLog(p.logPath, fmt.Sprintf("[warn] initialize listed capabilities the manifest doesn't declare; ignored: %s\n", strings.Join(dropped, ", ")))
+	}
+	// A capability introduced after the revision the plugin settled on is off
+	// for it: it never agreed to speak those methods.
+	if v, err := ParseVersion(res.Protocol); err == nil {
+		var later []string
+		res.Capabilities, later = WithinProtocol(res.Capabilities, v)
+		if len(later) > 0 {
+			appendPluginLog(p.logPath, fmt.Sprintf("[info] capabilities newer than the negotiated protocol %s stay off: %s\n", v, strings.Join(later, ", ")))
+			for _, c := range later {
+				delete(res.Features, c)
+			}
+		}
 	}
 	p.info = &res
 	p.runtime = &Runtime{Initialized: true, Protocol: res.Protocol, Capabilities: res.Capabilities, Features: res.Features}

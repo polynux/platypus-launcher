@@ -1,6 +1,11 @@
 import { Effect } from 'effect';
 import type {
   AuthPrompt,
+  CloudEvent,
+  CloudInfo,
+  CloudMode,
+  CloudPrompt,
+  CloudSettings,
   AuthStatus,
   Game,
   GameDetails,
@@ -143,6 +148,24 @@ export const LauncherApi = {
   authComplete: (id: string, fields: Record<string, string>) => call<AuthStatus>('PluginAuthComplete', () => App.PluginAuthComplete(id, fields)),
   logout: (id: string) => call<AuthStatus>('PluginLogout', () => App.PluginLogout(id)),
 
+  // Cloud saves. LaunchGame syncs first and may answer with a prompt (the "cloud"
+  // event) instead of launching; the answers are the calls below or a retry.
+  getCloudInfo: (game: Game) => call<CloudInfo>('GetCloudInfo', () => App.GetCloudInfo(backend(game))),
+  checkCloudSaves: (game: Game) => call<CloudInfo>('CheckCloudSaves', () => App.CheckCloudSaves(backend(game))),
+  // choices: file path → 'local' (keep this device's copy) or 'remote' (keep the cloud's).
+  resolveCloudSaves: (game: Game, choices: Record<string, 'local' | 'remote'>) =>
+    call<CloudInfo>('ResolveCloudSaves', () => App.ResolveCloudSaves(backend(game), choices)),
+  cancelCloudSync: (gameId: string) => call<boolean>('CancelCloudSync', () => App.CancelCloudSync(gameId)),
+  launchGameAnyway: (game: Game, prompt: CloudPrompt) => call<string>('LaunchGameAnyway', () => App.LaunchGameAnyway(backend(game), prompt)),
+  launchGameViaClient: (game: Game) => call<string>('LaunchGameViaClient', () => App.LaunchGameViaClient(backend(game))),
+  getCloudSettings: () => call<CloudSettings>('GetCloudSettings', async () => {
+    const s = (await App.GetCloudSettings()) as unknown as Partial<CloudSettings>;
+    return { plugins: s?.plugins ?? {}, games: s?.games ?? {} };
+  }),
+  // '' restores the default (plugin: ask; game: follow its plugin).
+  setCloudPluginMode: (pluginId: string, mode: CloudMode | '') => call<void>('SetCloudPluginMode', () => App.SetCloudPluginMode(pluginId, mode)),
+  setCloudGameMode: (gameId: string, mode: CloudMode | '') => call<void>('SetCloudGameMode', () => App.SetCloudGameMode(gameId, mode)),
+
   // Install queue.
   listJobs: () => call<Job[]>('ListJobs', async () => (await App.ListJobs()) ?? []),
   installGame: (game: Game) => call<Job>('InstallGame', () => App.InstallGame(backend(game))),
@@ -173,4 +196,10 @@ export function onSession(cb: (e: SessionEvent) => void): () => void {
 export function onJobs(cb: (jobs: Job[]) => void): () => void {
   if (!window.go?.main?.App) return () => {};
   return EventsOn('jobs', cb);
+}
+
+/** Subscribe to cloud sync events: progress, new statuses, prompts, results. */
+export function onCloud(cb: (e: CloudEvent) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('cloud', cb);
 }

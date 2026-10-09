@@ -10,6 +10,7 @@ import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
 import { PluginCapabilities } from './PluginCapabilities';
+import { CloudSavesSetting } from './CloudSavesSetting';
 import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
 
@@ -205,6 +206,8 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     ))}
                   </div>
                 )}
+
+                {p.status === 'ready' && <CloudSavesSetting plugin={p} />}
 
                 <div className="mt-auto flex gap-2">
                   {(p.status === 'unapproved' || p.status === 'changed') && (

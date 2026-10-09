@@ -45,6 +45,23 @@ func WithStopHook(hook func(force bool)) StartOption {
 	return func(e *entry) { e.hook = hook }
 }
 
+// ExitInfo says how a direct launch ended.
+type ExitInfo struct {
+	// Stopped: the user asked Hydra to stop it.
+	Stopped bool
+	// Failed: it died within moments of starting with an error, so it never
+	// really ran.
+	Failed bool
+}
+
+// WithOnExit registers a callback for when the launch's process has ended and
+// the game is no longer tracked. It runs on the tracker's goroutine after the
+// final session event, so it must return quickly (start a goroutine for real
+// work). It does not run when the process never started.
+func WithOnExit(fn func(ExitInfo)) StartOption {
+	return func(e *entry) { e.onExit = fn }
+}
+
 // prepareForStop puts the launch in its own process group (so a stop reaches
 // wrappers, Wine and the game, and never Hydra) and tags its environment.
 func prepareForStop(cmd *exec.Cmd, e *entry) {

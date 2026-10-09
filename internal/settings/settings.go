@@ -42,6 +42,10 @@ type file struct {
 	// kept before Hydra deletes it. A pointer: 0 (delete at once) is a
 	// choice, unset means DefaultCancelCleanupDays.
 	CancelCleanupDays *int `json:"cancel_cleanup_days,omitempty"`
+	// Cloud saves: each plugin's default mode and each game's own choice
+	// (see cloud.go).
+	CloudPlugins map[string]string `json:"cloud_plugins,omitempty"`
+	CloudGames   map[string]string `json:"cloud_games,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra

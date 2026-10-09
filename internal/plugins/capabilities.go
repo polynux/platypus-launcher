@@ -32,6 +32,7 @@ type Capability struct {
 const (
 	rev10 = "1.0" // capabilities of the first plugin releases
 	rev11 = "1.1" // parity roadmap (docs/plans/launcher-parity.md §2)
+	rev12 = "1.2" // cloud saves (docs/plans/steam-cloud-social.md)
 )
 
 var registry = []Capability{
@@ -48,7 +49,7 @@ var registry = []Capability{
 		Surfaces: []string{"login", "logout"}},
 	{Name: "discard", Since: rev10, Orchestrated: true,
 		Methods: []string{"job.discard"}, Surfaces: []string{"downloads-discard"}},
-	{Name: "cloud-saves", Since: rev10,
+	{Name: "cloud-saves", Since: rev12, Orchestrated: true,
 		Methods:  []string{"cloud.status", "cloud.pull", "cloud.push", "cloud.resolve"},
 		Surfaces: []string{"cloud-row", "cloud-conflict"}},
 
@@ -73,6 +74,41 @@ var registry = []Capability{
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
 	{Name: "family", Since: rev11,
 		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
+}
+
+// sharedMethods are requests that more than one capability uses besides the
+// one that owns them: job.cancel stops an install, and also a cloud sync.
+var sharedMethods = map[string][]string{"job.cancel": {"cloud-saves"}}
+
+// MethodOffered reports whether a plugin offering caps serves method, which
+// belongs to capability (see CapabilityForMethod).
+func MethodOffered(method, capability string, caps []string) bool {
+	if slices.Contains(caps, capability) {
+		return true
+	}
+	for _, c := range sharedMethods[method] {
+		if slices.Contains(caps, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// WithinProtocol splits caps into the capabilities a plugin that settled on
+// protocol v can offer and the ones introduced by a later revision, which
+// stay off for it. Names this Hydra doesn't know pass (they do nothing).
+func WithinProtocol(caps []string, v Version) (kept, later []string) {
+	kept = []string{}
+	for _, name := range caps {
+		if c, ok := LookupCapability(name); ok {
+			if since, err := ParseVersion(c.Since); err == nil && v.Less(since) {
+				later = append(later, name)
+				continue
+			}
+		}
+		kept = append(kept, name)
+	}
+	return kept, later
 }
 
 type methodOwner struct {
