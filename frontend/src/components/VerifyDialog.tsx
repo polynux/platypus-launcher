@@ -87,7 +87,7 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
   }
 
   return (
-    <Modal label={title} onClose={onClose}>
+    <Modal label={title} onClose={onClose} size="md">
       <div className="p-6">
         <MonoLabel className="mb-2">verify files</MonoLabel>
         <h2 className="mb-4 text-[18px] font-bold">{title}</h2>

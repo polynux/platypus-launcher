@@ -61,7 +61,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
   };
 
   return (
-    <Modal label={`Move ${game.title}`} onClose={onClose}>
+    <Modal label={`Move ${game.title}`} onClose={onClose} size="md">
       <div className="p-6">
         <MonoLabel className="mb-2">move</MonoLabel>
         <h2 className="mb-2 text-[18px] font-bold">Move {game.title}</h2>
