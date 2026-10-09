@@ -1,4 +1,4 @@
-# Store plugin protocol (1.8, draft)
+# Store plugin protocol (1.9, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -407,7 +407,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -431,9 +431,10 @@ that doesn't know it.
   1.7: `achievements.list`, `playtime.list` and `redeem.submit` (achievements, playtime and redeem, see
   [Achievements, playtime and redeem](#achievements-playtime-and-redeem-17)). 1.8: the `family` and `settings`
   capabilities (`family.members`, `settings.schema`, `settings.apply`), `sharedBy` on library entries and the
-  `family.warning` notification (see [Family](#family-18) and [Plugin settings](#plugin-settings-18)). A capability
-  whose `since` is newer than the negotiated protocol is off for that plugin (Hydra drops it from the runtime set and
-  logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7 or 1.8 method.
+  `family.warning` notification (see [Family](#family-18) and [Plugin settings](#plugin-settings-18)). 1.9: the `chat`
+  capability (`chat.history`, `chat.send`, `chat.markRead`) and the `chat.*` notifications (see [Chat](#chat-19)). A
+  capability whose `since` is newer than the negotiated protocol is off for that plugin (Hydra drops it from the runtime
+  set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8 or 1.9 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -464,6 +465,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `redeem` | 1.7 | `redeem.submit` | | yes |
 | `family` | 1.8 | `family.members` | | yes |
 | `settings` | 1.8 | `settings.schema`, `settings.apply` | | yes |
+| `chat` | 1.9 | `chat.history`, `chat.send`, `chat.markRead` | | yes |
 
 "Not yet" means Hydra recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -721,7 +723,8 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
 
 The `social` capability (protocol 1.6) gives the user the friends of the store's account: who is online, away or
 playing what, and their own status. Hydra shows them in a small summary in the sidebar and, on click, a friends modal
-with one section per store (In game, Online, Offline). Chat, groups, friend requests and rich presence are not part of it.
+with one section per store (In game, Online, Offline). Chat is the next section ([Chat](#chat-19)). Groups, friend
+requests and rich presence are not part of it.
 
 ```
 social.start {} -> {}                              turn the friends on: connect, then push as below
@@ -875,6 +878,44 @@ settings.apply  { values, gameId? } -> {}
   and anything else secret go through `auth.begin` and `auth.complete`, and stay in
   `HYDRA_PLUGIN_DATA`. A field of kind `password` or `secret` is not rendered: core drops
   it, and the conformance suite (`internal/plugtest`) rejects one in a plugin's schema.
+
+## Chat (1.9)
+
+The `chat` capability (protocol 1.9) lets the user read and answer the messages of friends, one to one. It needs the
+`social` capability too: Hydra calls chat methods only on a plugin that offers both. Group chats, voice, images and
+attachments, and searching the history are not part of it.
+
+```
+chat.history { friendId, before?, limit } -> { messages: [Message], more }
+chat.send { friendId, text, clientId } -> { id, sentAt }   idempotent per clientId
+chat.markRead { friendId, upTo } -> {}                      upTo is a message id
+
+chat.message { friendId, message: Message }   plugin -> Hydra: a new message from a friend (or sent by the user elsewhere)
+chat.typing { friendId }                       plugin -> Hydra: the friend is typing (optional, may be left out)
+chat.unread { friendId, count }                plugin -> Hydra: unread messages from a friend, whenever it changes
+Message = { id, from: "self" | friendId, text, sentAt }
+```
+
+- **Text.** `text` is plain UTF-8 and at most 4096 characters. Hydra refuses an empty or longer message before it reaches
+  the plugin, and a plugin answers `-32602` to the same. Hydra shows text as plain text, never as HTML. A link is shown
+  as text: only `http` and `https` links open in the browser, other schemes stay plain. Hydra cuts an incoming text down
+  to 4096 characters rather than dropping the message.
+- **Times.** `sentAt` is Unix time in milliseconds. Hydra shows messages in `sentAt` order, so a notification that
+  arrives late is put in its place.
+- **History.** `chat.history` answers the messages of the conversation, oldest first. `before` is a message id: the
+  page holds the messages older than it. `more` is true when older messages exist. `limit` defaults to 50; a plugin may
+  answer fewer than asked.
+- **Sending.** Hydra gives every message a fresh `clientId`. A plugin that gets a `clientId` it has already seen answers
+  with the id and time of the first send, and does not send twice. Hydra reuses the `clientId` when it retries.
+- **Retries.** A send that fails with a transport error (the plugin went away, the call timed out) is retried once. A
+  JSON-RPC error answer is not retried: the message stays on screen as failed, and the user can send it again.
+- **Read state.** Hydra clears a conversation's unread count when the user opens it and calls `chat.markRead` with the
+  newest message it shows. `chat.unread` is the store's own count and replaces Hydra's.
+- **Storage.** The store keeps the history. Hydra keeps the conversations the user opened in memory only, a bounded
+  number of messages each, and nothing is written to disk. Message text never goes to the launcher's logs.
+- **Gating.** Hydra sends no chat method when `chat` is off for the plugin, when the negotiated protocol is older than
+  1.9, or when the plugin doesn't offer `social`.
+- **Errors.** An unknown friend is `-32602`. A store that can't reach the friend answers an error, which Hydra shows.
 
 ## Out of scope
 

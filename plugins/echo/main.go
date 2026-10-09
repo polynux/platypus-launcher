@@ -165,7 +165,7 @@ type knobs struct {
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
 // the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"}
 
 var (
 	knobMu  sync.Mutex
