@@ -650,15 +650,29 @@ func TestConversationBoundIsGlobal(t *testing.T) {
 	}
 }
 
-// Opening a conversation does not wait for the store to take the read mark.
+// Opening a conversation does not wait for the store to take the read mark:
+// reopening one with a message that arrived while it was closed returns while
+// the store holds the mark.
 func TestOpenDoesNotWaitForMarkRead(t *testing.T) {
 	h := newHarness(t)
+	ctx := context.Background()
+	h.store.history["ana"] = []Message{{ID: "h1", From: "ana", Text: "t", SentAt: 1}}
+	if _, err := h.m.Open(ctx, "echo", "ana"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the first read mark", func() bool {
+		h.store.mu.Lock()
+		defer h.store.mu.Unlock()
+		return len(h.store.marks) == 1
+	})
+	h.m.Close("echo", "ana")
+	h.incoming("ana", "n2", "t", 2)
+
 	h.store.markGate = make(chan struct{})
 	defer close(h.store.markGate)
-	h.store.history["ana"] = []Message{{ID: "h1", From: "ana", Text: "t", SentAt: 1}}
 	done := make(chan error, 1)
 	go func() {
-		_, err := h.m.Open(context.Background(), "echo", "ana")
+		_, err := h.m.Open(ctx, "echo", "ana")
 		done <- err
 	}()
 	select {
