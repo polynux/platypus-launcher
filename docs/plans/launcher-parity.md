@@ -231,10 +231,10 @@ Real store plugins (Steam, GOG, Epic, Ubisoft) implement them later.
 
 - [ ] C1-C6 capability system (registry, `needs`, tolerant unknowns, initialize subset, per-game `features`, `-32002`) · protocol.md + plugtest
 - [ ] Cloud saves P1-P4 (steam-cloud-social.md)
-- [ ] Versions: ledger + GOG · L-V1
+- [ ] Versions: ledger + GOG · L-V1 — core, protocol 1.3, UI and echo done (feat/versions-core); the GOG plugin side is not
 - [ ] Verify, move
 - [ ] install-options + DLC
-- [ ] Versions: Steam · L-V2 · L-V4
+- [ ] Versions: Steam · L-V2 · L-V4 — needs the core above; the Steam plugin side is not done
 - [ ] Social P5-P6 (steam-cloud-social.md)
 - [ ] Playtime, achievements, redeem
 - [ ] wine-client launch + Ubisoft phase A · L-U1 · L-U2
