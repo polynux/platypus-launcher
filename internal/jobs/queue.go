@@ -598,11 +598,17 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if u.Verify != nil {
 			q.setVerify(source, u.JobID, *u.Verify)
 		}
-		job, ok := q.finishFrom(source, u.JobID, StateDone, "")
-		if !ok {
+		// The hooks run before the job reads as done, so anyone who sees
+		// Done (the UI, a refresh) also sees the ledger entry and the
+		// cleared relocation. They get the job as it ends.
+		q.mu.Lock()
+		j := q.find(u.JobID)
+		if j == nil || j.Source != source || j.State != StateRunning {
+			q.mu.Unlock()
 			return
 		}
-		q.mu.Lock()
+		job := *j
+		end(&job, StateDone, "")
 		installed, finished := q.onInstalled, q.onFinished
 		q.mu.Unlock()
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
@@ -611,6 +617,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if (job.Kind == KindInstall || job.Kind == KindUninstall) && finished != nil {
 			finished(job)
 		}
+		q.finish(job.ID, StateDone, "")
 		return
 	case "job.failed":
 		msg := u.Error
@@ -739,19 +746,24 @@ func (q *Queue) finishFrom(source, id, state, msg string) (types.Job, bool) {
 func (q *Queue) finish(id, state, msg string) {
 	q.mu.Lock()
 	if j := q.find(id); j != nil && j.State == StateRunning {
-		j.State, j.Error, j.Speed = state, msg, 0
-		if state == StateDone {
-			j.Percent, j.Phase = 100, ""
-			if j.Total > 0 {
-				j.Bytes = j.Total
-			}
-		}
-		j.UpdatedAt = time.Now().UnixMilli()
+		end(j, state, msg)
 	}
 	q.trim()
 	q.changed(true)
 	q.mu.Unlock()
 	q.signal()
+}
+
+// end sets a running job's final state and the fields that go with it.
+func end(j *types.Job, state, msg string) {
+	j.State, j.Error, j.Speed = state, msg, 0
+	if state == StateDone {
+		j.Percent, j.Phase = 100, ""
+		if j.Total > 0 {
+			j.Bytes = j.Total
+		}
+	}
+	j.UpdatedAt = time.Now().UnixMilli()
 }
 
 // trim drops the oldest finished jobs beyond keepFinished. Callers hold q.mu.

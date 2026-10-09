@@ -130,6 +130,32 @@ func TestNoHookWithoutInstalledOrFromAnotherPluginOrOnFailure(t *testing.T) {
 	}
 }
 
+// Whoever sees a job Done must also see what it left behind: the ledger entry
+// is written before the job reads as done, not after.
+func TestTheHookRunsBeforeTheJobReadsDone(t *testing.T) {
+	b := &fakeBackend{}
+	q, _ := newQueue(t, b)
+	hookRan, readsDone := false, false
+	q.SetOnInstalled(func(job types.Job, _ types.Installed) {
+		hookRan = true
+		for _, j := range q.List() {
+			if j.ID == job.ID && j.State == StateDone {
+				readsDone = true
+			}
+		}
+	})
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	j, _ := q.AddTargeted(KindInstall, "echo", "g", "tiny", "Tiny", dir, nil)
+	waitState(t, q, j.ID, StateRunning)
+	b.waitStarts(1, 3*time.Second)
+
+	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: j.ID, Installed: &types.Installed{Build: "b1"}})
+	if !hookRan || readsDone {
+		t.Fatalf("hook ran = %v, job read as done first = %v", hookRan, readsDone)
+	}
+	waitState(t, q, j.ID, StateDone)
+}
+
 // A job's saved record can never hold a password: the target has no field for
 // one and the unlock goes to the plugin alone. This pins the saved shape.
 func TestSavedJobCarriesNoSecret(t *testing.T) {
