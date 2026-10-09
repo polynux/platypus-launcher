@@ -77,7 +77,7 @@ func TestPluginOffering1To5NegotiatesWhatHydraSpeaks(t *testing.T) {
 }
 
 func TestNegotiationPicksTheHighestCommon(t *testing.T) {
-	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.1", "1.4"}, ""))
+	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.1", "1.6"}, ""))
 	if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
 		t.Fatal(err)
 	}
