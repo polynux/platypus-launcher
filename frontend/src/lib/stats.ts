@@ -6,10 +6,12 @@ export function hoursOf(minutes: number): number {
 }
 
 /** The playtime tooltip: the local record next to the store's report. Only
- *  shown when a plugin reported; without one the library value is all there is. */
+ *  shown when a plugin reported; without one the library value is all there is.
+ *  The local part is left out when core has no local record (plugin games). */
 export function playtimeTooltip(g: Game): string | undefined {
   if (g.playtime_store_minutes === undefined) return undefined;
-  return `local ${hoursOf(g.playtime_local_minutes ?? 0)} h · store ${hoursOf(g.playtime_store_minutes)} h`;
+  const store = `store ${hoursOf(g.playtime_store_minutes)} h`;
+  return g.playtime_local_minutes === undefined ? store : `local ${hoursOf(g.playtime_local_minutes)} h · ${store}`;
 }
 
 /** Second line under an achievement: when it was unlocked, else the global share. */
