@@ -47,8 +47,11 @@ type App struct {
 	stores       *stores.Registry
 	sessions     *session.Tracker
 	cloud        *cloudsync.Orchestrator
-	moves        coreMoves
-	ledger       *ledger.Ledger
+	// familyEmit delivers family.warning notifications to the UI (the
+	// "family" event). Nil until the window exists; tests replace it.
+	familyEmit func(types.FamilyWarning)
+	moves      coreMoves
+	ledger     *ledger.Ledger
 	// sessionRunning says whether a game has a session open. Nil asks the
 	// session tracker; tests replace it.
 	sessionRunning func(gameID string) bool
@@ -114,7 +117,9 @@ func (a *App) startup(ctx context.Context) {
 			wruntime.LogWarningf(ctx, "plugin %s exited: %v", id, err)
 			a.jobs.PluginExited(id, err)
 		},
+		OnReady: a.pluginReady,
 	})
+	a.familyEmit = func(w types.FamilyWarning) { wruntime.EventsEmit(ctx, "family", w) }
 	found, err := a.plugins.Discover()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "plugins: %v", err)
@@ -160,6 +165,10 @@ func (a *App) shutdown(ctx context.Context) {
 func (a *App) pluginNotify(id, method string, params json.RawMessage) {
 	if method == "cloud.progress" && a.cloud != nil {
 		a.cloud.Progress(id, params)
+		return
+	}
+	if method == "family.warning" {
+		a.familyWarning(id, params)
 		return
 	}
 	if !strings.HasPrefix(method, "job.") {

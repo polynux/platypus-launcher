@@ -58,6 +58,10 @@ export function GetCloudSettings() {
   return window['go']['main']['App']['GetCloudSettings']();
 }
 
+export function GetFamilyMembers(arg1) {
+  return window['go']['main']['App']['GetFamilyMembers'](arg1);
+}
+
 export function GetGameDetails(arg1) {
   return window['go']['main']['App']['GetGameDetails'](arg1);
 }
@@ -72,6 +76,10 @@ export function GetGameOptions(arg1) {
 
 export function GetGameSettings() {
   return window['go']['main']['App']['GetGameSettings']();
+}
+
+export function GetGameSettingsFields(arg1) {
+  return window['go']['main']['App']['GetGameSettingsFields'](arg1);
 }
 
 export function GetGameVersions(arg1) {
@@ -92,6 +100,10 @@ export function GetLauncherSettings() {
 
 export function GetLibrary() {
   return window['go']['main']['App']['GetLibrary']();
+}
+
+export function GetPluginSettings(arg1) {
+  return window['go']['main']['App']['GetPluginSettings'](arg1);
 }
 
 export function GetProtonVersions() {
@@ -216,6 +228,14 @@ export function RetryPlugin(arg1) {
 
 export function SaveGameSettings(arg1, arg2) {
   return window['go']['main']['App']['SaveGameSettings'](arg1, arg2);
+}
+
+export function SaveGameSettingsFields(arg1, arg2) {
+  return window['go']['main']['App']['SaveGameSettingsFields'](arg1, arg2);
+}
+
+export function SavePluginSettings(arg1, arg2) {
+  return window['go']['main']['App']['SavePluginSettings'](arg1, arg2);
 }
 
 export function SetCancelCleanupDays(arg1) {

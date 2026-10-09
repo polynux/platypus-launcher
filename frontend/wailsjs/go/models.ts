@@ -314,6 +314,40 @@ export namespace types {
 	    }
 	}
 	
+	export class FamilyMember {
+	    id: string;
+	    name: string;
+	    role: string;
+	    avatar_url?: string;
+	    state?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FamilyMember(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.role = source["role"];
+	        this.avatar_url = source["avatar_url"];
+	        this.state = source["state"];
+	    }
+	}
+	export class SharedBy {
+	    id: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SharedBy(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	    }
+	}
 	export class VersionPin {
 	    kind: string;
 	    id: string;
@@ -414,6 +448,7 @@ export namespace types {
 	    native?: boolean;
 	    features: string[];
 	    pinned?: VersionPin;
+	    shared_by?: SharedBy;
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -446,6 +481,7 @@ export namespace types {
 	        this.native = source["native"];
 	        this.features = source["features"];
 	        this.pinned = this.convertValues(source["pinned"], VersionPin);
+	        this.shared_by = this.convertValues(source["shared_by"], SharedBy);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -904,6 +940,138 @@ export namespace types {
 	        this.message = source["message"];
 	    }
 	}
+	export class SettingOption {
+	    id: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SettingOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	    }
+	}
+	export class SettingField {
+	    id: string;
+	    kind: string;
+	    label: string;
+	    description?: string;
+	    scope: string;
+	    default: any;
+	    options?: SettingOption[];
+	    placeholder?: string;
+	    min?: number;
+	    max?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SettingField(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.scope = source["scope"];
+	        this.default = source["default"];
+	        this.options = this.convertValues(source["options"], SettingOption);
+	        this.placeholder = source["placeholder"];
+	        this.min = source["min"];
+	        this.max = source["max"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SettingGroup {
+	    id: string;
+	    label: string;
+	    description?: string;
+	    fields: SettingField[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SettingGroup(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.description = source["description"];
+	        this.fields = this.convertValues(source["fields"], SettingField);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class SettingsView {
+	    groups: SettingGroup[];
+	    values: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new SettingsView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.groups = this.convertValues(source["groups"], SettingGroup);
+	        this.values = source["values"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	
 	export class StorePlugin {
 	    id: string;

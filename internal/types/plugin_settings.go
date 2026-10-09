@@ -203,24 +203,36 @@ func present(raw json.RawMessage) bool { return len(raw) > 0 && string(raw) != "
 
 func finite(n float64) bool { return !math.IsNaN(n) && !math.IsInf(n, 0) }
 
-// ViewFor returns the groups of one scope with the fields of that scope, and
-// the saved values among them (values of other scopes are left out).
-func (s SettingsSchema) ViewFor(scope string, saved map[string]any) SettingsView {
-	v := SettingsView{Groups: []SettingGroup{}, Values: map[string]any{}}
+// Scoped returns the schema with only the fields of one scope. Groups left
+// without fields are dropped.
+func (s SettingsSchema) Scoped(scope string) SettingsSchema {
+	out := SettingsSchema{Groups: []SettingGroup{}}
 	for _, g := range s.Groups {
 		fields := []SettingField{}
 		for _, f := range g.Fields {
-			if f.Scope != scope {
-				continue
-			}
-			fields = append(fields, f)
-			if val, ok := saved[f.ID]; ok {
-				v.Values[f.ID] = val
+			if f.Scope == scope {
+				fields = append(fields, f)
 			}
 		}
 		if len(fields) > 0 {
 			g.Fields = fields
-			v.Groups = append(v.Groups, g)
+			out.Groups = append(out.Groups, g)
+		}
+	}
+	return out
+}
+
+// ViewFor returns the groups of one scope with the saved values among their
+// fields (values of other scopes, and of fields the schema no longer has, are
+// left out).
+func (s SettingsSchema) ViewFor(scope string, saved map[string]any) SettingsView {
+	scoped := s.Scoped(scope)
+	v := SettingsView{Groups: scoped.Groups, Values: map[string]any{}}
+	for _, g := range scoped.Groups {
+		for _, f := range g.Fields {
+			if val, ok := saved[f.ID]; ok {
+				v.Values[f.ID] = val
+			}
 		}
 	}
 	return v

@@ -30,6 +30,8 @@ export function GetCloudInfo(arg1:types.Game):Promise<types.CloudInfo>;
 
 export function GetCloudSettings():Promise<types.CloudSettings>;
 
+export function GetFamilyMembers(arg1:string):Promise<Array<types.FamilyMember>>;
+
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
 export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
@@ -37,6 +39,8 @@ export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
 export function GetGameOptions(arg1:types.Game):Promise<types.GameOptions>;
 
 export function GetGameSettings():Promise<Record<string, Record<string, any>>>;
+
+export function GetGameSettingsFields(arg1:types.Game):Promise<types.SettingsView>;
 
 export function GetGameVersions(arg1:types.Game):Promise<types.VersionInfo>;
 
@@ -47,6 +51,8 @@ export function GetInstallSize(arg1:types.Game):Promise<number>;
 export function GetLauncherSettings():Promise<types.LauncherSettings>;
 
 export function GetLibrary():Promise<types.Library>;
+
+export function GetPluginSettings(arg1:string):Promise<types.SettingsView>;
 
 export function GetProtonVersions():Promise<Array<types.ProtonVersion>>;
 
@@ -109,6 +115,10 @@ export function RetryJob(arg1:string):Promise<void>;
 export function RetryPlugin(arg1:string):Promise<void>;
 
 export function SaveGameSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
+
+export function SaveGameSettingsFields(arg1:types.Game,arg2:Record<string, any>):Promise<void>;
+
+export function SavePluginSettings(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function SetCancelCleanupDays(arg1:number):Promise<types.LauncherSettings>;
 
