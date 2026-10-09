@@ -250,9 +250,11 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify }: V
                 <span>
                   Keep this version (pin)
                   <span className="block text-[12px] text-white/45">
-                    {pin == null
-                      ? `Typed values can’t be pinned. Pick a build or channel to pin.${info.pinned ? ' Installing this removes the current pin.' : ''}`
-                      : 'Updates install it, and the update prompt stays off.'}
+                    {pin != null
+                      ? 'Updates install it, and the update prompt stays off.'
+                      : choice == null
+                        ? 'Pick a build or channel to pin it.'
+                        : `Typed values can’t be pinned.${info.pinned ? ' Installing this removes the current pin.' : ''}`}
                   </span>
                 </span>
               </label>
