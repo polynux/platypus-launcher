@@ -14,12 +14,14 @@ import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
+import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
 import { LauncherApi, onJobs, onPlaytime, onSession, onSocial } from './effect/runtime';
 import { reconcileViews, upsertView } from './lib/social';
+import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergePlaytime, mergeRescannedGames } from './lib/games';
@@ -100,6 +102,8 @@ export function App() {
     void refreshSocial();
     return unsubscribe;
   }, [refreshSocial]);
+  // Conversations with friends (chat capability): unread badges, the open chat, alerts.
+  const chat = useChat(social, notify);
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
@@ -571,6 +575,7 @@ export function App() {
         friends={social}
         friendLabels={socialLabels}
         onOpenFriends={() => setFriendsOpen(true)}
+        friendsUnread={chat.unread}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
@@ -608,6 +613,23 @@ export function App() {
           onReconnect={(plugin) =>
             Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
           onOpenGame={(id) => { setFriendsOpen(false); openGame(id); }}
+          unreadOf={chat.unreadOf}
+          onOpenChat={(plugin, friend) => { setFriendsOpen(false); chat.open(plugin, friend.id); }}
+          chatAlerts={chat.alerts}
+          onSetChatAlerts={chat.setAlerts}
+        />
+      )}
+
+      {chat.target && (
+        <ChatPanel
+          view={chat.conversation}
+          friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
+          storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
+          error={chat.error}
+          onLoadOlder={chat.loadOlder}
+          onSend={chat.send}
+          onResend={chat.resend}
+          onClose={chat.close}
         />
       )}
 

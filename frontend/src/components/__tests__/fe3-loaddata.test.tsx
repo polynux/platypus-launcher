@@ -8,6 +8,8 @@ const calls = { library: 0, plugins: 0 };
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
     socialViews: () => Effect.succeed([] as never),
+    chatUnread: () => Effect.succeed([] as never),
+    chatAlerts: () => Effect.succeed({} as never),
     getLibrary: () => {
       calls.library += 1;
       return Effect.succeed({
@@ -61,6 +63,7 @@ vi.mock('../../effect/runtime', () => ({
   onPlaytime: () => () => {},
   onCloud: () => () => {},
   onSocial: () => () => {},
+  onChat: () => () => {},
 }));
 
 import { App } from '../../App';
