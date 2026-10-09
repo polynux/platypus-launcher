@@ -108,6 +108,9 @@ type Game struct {
 	// the store's default (SharedBy).
 	Copies        []GameCopy `json:"copies,omitempty"`
 	PreferredCopy string     `json:"preferred_copy,omitempty"`
+	// CopyCompare sets the borrowed game's copies against the baseline copy
+	// (nil with fewer than two copies). Computed by core, see stores/copydiff.go.
+	CopyCompare *CopyComparison `json:"copy_compare,omitempty"`
 	// What the user changed about the game's look (Hydra's own customization,
 	// never the plugin's): StoreTitle is the title the store gave when Title is
 	// the user's, SortTitle orders the library, the *URL fields are the user's

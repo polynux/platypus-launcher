@@ -511,7 +511,8 @@ func TestFamilyWarningBeforeTheRuntimeInitializedIsIgnored(t *testing.T) {
 }
 
 // The "shared" game is lent by Ana and Ben, whose copies differ: Ana's has
-// the soundtrack, Ben's the soundtrack and the track pack.
+// the expansion and the soundtrack, Ben's the track pack, an art book and the
+// soundtrack. Ben's copy leaves the expansion out (its exclusion text).
 func TestSharedGameListsEveryCopyWithItsDLC(t *testing.T) {
 	e := familyApp(t, familyProtocols, familyCaps)
 	shared := e.libraryGame(t, "shared")
@@ -522,11 +523,14 @@ func TestSharedGameListsEveryCopyWithItsDLC(t *testing.T) {
 		t.Fatalf("copies = %+v, want Ana's and Ben's", shared.Copies)
 	}
 	ana, ben := shared.Copies[0], shared.Copies[1]
-	if ana.OwnerID != "ana" || ana.OwnerName != "Ana" || !ana.Available || ana.Note == "" || len(ana.DLC) != 1 {
+	if ana.OwnerID != "ana" || ana.OwnerName != "Ana" || !ana.Available || ana.Note == "" || len(ana.DLC) != 2 || ana.Exclude != "" {
 		t.Errorf("ana's copy = %+v", ana)
 	}
-	if ben.OwnerID != "ben" || ben.OwnerName != "Ben" || !ben.Available || len(ben.DLC) != 2 || ben.DLC[1].Name != "Track pack" {
+	if ben.OwnerID != "ben" || ben.OwnerName != "Ben" || !ben.Available || len(ben.DLC) != 3 || ben.DLC[0].Name != "Track pack" || ben.Exclude == "" {
 		t.Errorf("ben's copy = %+v", ben)
+	}
+	if ben.DLC[2].Kind != "other" || ana.DLC[1].Kind != "soundtrack" || ana.DLC[0].Kind != "dlc" {
+		t.Errorf("DLC kinds: ben %+v, ana %+v", ben.DLC, ana.DLC)
 	}
 	if shared.PreferredCopy != "" {
 		t.Fatalf("nothing chosen yet, preferred = %q", shared.PreferredCopy)

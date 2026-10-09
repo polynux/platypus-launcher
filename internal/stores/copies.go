@@ -13,7 +13,8 @@ import (
 // "Family"): when several members lend the same game, each lends its own copy,
 // and the copies can differ (DLC, a note, in use). The user picks one with
 // family.setPreferredCopy. Hydra shows the copies and sends the choice; the
-// store decides what a copy allows.
+// store decides what a copy allows. Protocol 1.11 adds the DLC kinds and the
+// exclusion text; Hydra sets each copy against the baseline (copydiff.go).
 
 const (
 	maxCopies   = 16
@@ -36,6 +37,7 @@ func normalizeCopies(in []plugins.LibraryCopy, preferred string) ([]types.GameCo
 			Note:      clipText(c.Note, maxCopyText),
 			Available: c.Available,
 			InUse:     c.InUse,
+			Exclude:   clipText(c.Exclude, maxCopyText),
 		}
 		if cp.OwnerName == "" {
 			cp.OwnerName = c.OwnerID
@@ -48,7 +50,7 @@ func normalizeCopies(in []plugins.LibraryCopy, preferred string) ([]types.GameCo
 			if name == "" {
 				name = d.ID
 			}
-			cp.DLC = append(cp.DLC, types.GameDLC{ID: d.ID, Name: name})
+			cp.DLC = append(cp.DLC, types.GameDLC{ID: d.ID, Name: name, Kind: dlcKind(d.Kind)})
 		}
 		out = append(out, cp)
 	}
@@ -56,6 +58,15 @@ func normalizeCopies(in []plugins.LibraryCopy, preferred string) ([]types.GameCo
 		preferred = ""
 	}
 	return out, preferred
+}
+
+// dlcKind is the kind of an add-on the UI knows. Anything else, or none, is
+// game DLC: a plugin that sends a kind this Hydra doesn't know is still read.
+func dlcKind(k string) string {
+	if k == "soundtrack" || k == "other" {
+		return k
+	}
+	return "dlc"
 }
 
 // clipText trims s and cuts it to max runes.

@@ -56,23 +56,28 @@ func familyMembers() (any, error) {
 	return out, nil
 }
 
-// echoCopy is one member's copy of a shared game: its DLC, a note, and
-// whether it can be borrowed now.
+// echoCopy is one member's copy of a shared game: its add-ons, a note, an
+// exclusion text (1.11), and whether it can be borrowed now.
 type echoCopy struct {
 	owner     string
 	dlc       []copyDLC
 	note      string
+	exclude   string
 	available bool
 }
 
-type copyDLC struct{ id, name string }
+// copyDLC is an add-on of a copy; kind is "dlc", "soundtrack" or "other".
+type copyDLC struct{ id, name, kind string }
 
-// sharedCopies are the copies of the "shared" game, by game id. Ana's copy
-// has the soundtrack, Ben's has the soundtrack and the track pack.
+// sharedCopies are the copies of the "shared" game, by game id. The two copies
+// differ: Ana's has an expansion and the soundtrack, Ben's has the track pack,
+// an art book and the soundtrack too. Ben's excludes the expansion from lending.
 var sharedCopies = map[string][]echoCopy{
 	"shared": {
-		{owner: "ana", dlc: []copyDLC{{"soundtrack", "Soundtrack"}}, note: "Ana's copy has the soundtrack", available: true},
-		{owner: "ben", dlc: []copyDLC{{"soundtrack", "Soundtrack"}, {"track-pack", "Track pack"}}, available: true},
+		{owner: "ana", dlc: []copyDLC{{"expansion", "Expansion One", "dlc"}, {"soundtrack", "Soundtrack", "soundtrack"}},
+			note: "Ana's copy has the expansion", available: true},
+		{owner: "ben", dlc: []copyDLC{{"track-pack", "Track pack", "dlc"}, {"soundtrack", "Soundtrack", "soundtrack"}, {"art-book", "Art book", "other"}},
+			note: "Ben's copy has the track pack", exclude: "The expansion isn't lent from this copy", available: true},
 	},
 }
 
@@ -106,7 +111,7 @@ func copiesList(gameID string) []map[string]any {
 	for _, c := range sharedCopies[gameID] {
 		dlc := []map[string]any{}
 		for _, d := range c.dlc {
-			dlc = append(dlc, map[string]any{"id": d.id, "name": d.name})
+			dlc = append(dlc, map[string]any{"id": d.id, "name": d.name, "kind": d.kind})
 		}
 		e := map[string]any{
 			"ownerId": c.owner, "ownerName": familyName(c.owner), "dlc": dlc,
@@ -115,6 +120,9 @@ func copiesList(gameID string) []map[string]any {
 		}
 		if c.note != "" {
 			e["note"] = c.note
+		}
+		if c.exclude != "" {
+			e["exclude"] = c.exclude
 		}
 		out = append(out, e)
 	}
