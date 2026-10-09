@@ -26,6 +26,11 @@ const (
 	KindInstall   = "install"
 	KindUpdate    = "update"
 	KindUninstall = "uninstall"
+	// KindVerify checks an installed game's files (game.verify); with Repair
+	// set it restores the damaged ones. KindMove takes an installed game to
+	// another folder (game.move, or core's own move when the plugin has none).
+	KindVerify = "verify"
+	KindMove   = "move"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -246,8 +251,8 @@ func (q *Queue) next(ctx context.Context) {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall {
-		return nil
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove {
+		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
@@ -320,19 +325,49 @@ func (q *Queue) AddTargeted(kind, source, gameID, storeGameID, title, installDir
 		t := *target
 		target = &t
 	}
+	return q.enqueue(&types.Job{
+		Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Target: target,
+	})
+}
+
+// AddVerify queues a check of an installed game's files in installDir. With
+// repair set, the plugin restores the files it found damaged; the report of
+// the check is kept on the job (Verify).
+func (q *Queue) AddVerify(source, gameID, storeGameID, title, installDir string, repair bool) (types.Job, error) {
+	if !filepath.IsAbs(installDir) {
+		return types.Job{}, fmt.Errorf("install folder %q is not an absolute path", installDir)
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindVerify, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Repair: repair,
+	})
+}
+
+// AddMove queues moving an installed game from installDir to destination.
+// Both must be absolute; the move itself checks what the folders hold.
+func (q *Queue) AddMove(source, gameID, storeGameID, title, installDir, destination string) (types.Job, error) {
+	if !filepath.IsAbs(installDir) || !filepath.IsAbs(destination) {
+		return types.Job{}, errors.New("a move needs absolute folders")
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindMove, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Destination: destination,
+	})
+}
+
+// enqueue queues a new job. A game has at most one job holding it.
+func (q *Queue) enqueue(j *types.Job) (types.Job, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	for _, j := range q.jobs {
-		if j.GameID == gameID && holdsGame(j) {
-			return types.Job{}, fmt.Errorf("%s already has a %s queued", title, j.Kind)
+	for _, o := range q.jobs {
+		if o.GameID == j.GameID && holdsGame(o) {
+			return types.Job{}, fmt.Errorf("%s already has a %s queued", j.Title, o.Kind)
 		}
 	}
 	now := time.Now().UnixMilli()
-	j := &types.Job{
-		ID: newID(), Kind: kind, Source: source, GameID: gameID, StoreGameID: storeGameID,
-		Title: title, State: StateQueued, InstallDir: installDir, Percent: -1,
-		CreatedAt: now, UpdatedAt: now, Target: target,
-	}
+	j.ID, j.State, j.Percent = newID(), StateQueued, -1
+	j.CreatedAt, j.UpdatedAt = now, now
 	q.jobs = append(q.jobs, j)
 	q.changed(true)
 	q.signal()
@@ -468,7 +503,7 @@ func (q *Queue) ClearFinished() {
 // holdsData is true for a canceled download whose partial data is still on
 // disk. Callers hold q.mu.
 func (q *Queue) holdsData(j *types.Job) bool {
-	return j.State == StateCanceled && j.CleanedAt == 0 && j.Kind != KindUninstall
+	return j.State == StateCanceled && j.CleanedAt == 0 && (j.Kind == KindInstall || j.Kind == KindUpdate)
 }
 
 func (q *Queue) List() []types.Job {
@@ -491,13 +526,18 @@ func (q *Queue) list() []types.Job {
 func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	switch method {
 	case "job.done":
-		if job, ok := q.finishFrom(source, u.JobID, StateDone, ""); ok && u.Installed != nil && job.Kind != KindUninstall {
-			q.mu.Lock()
-			f := q.onInstalled
-			q.mu.Unlock()
-			if f != nil {
-				f(job, *u.Installed)
-			}
+		if u.Verify != nil {
+			q.setVerify(source, u.JobID, *u.Verify)
+		}
+		job, ok := q.finishFrom(source, u.JobID, StateDone, "")
+		if !ok {
+			return
+		}
+		q.mu.Lock()
+		installed := q.onInstalled
+		q.mu.Unlock()
+		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
+			installed(job, *u.Installed)
 		}
 		return
 	case "job.failed":
@@ -544,6 +584,26 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	j.UpdatedAt = time.Now().UnixMilli()
 	q.changed(false)
 	q.mu.Unlock()
+}
+
+// setVerify keeps what a verify job found, for the job's running source.
+func (q *Queue) setVerify(source, id string, report types.VerifyReport) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if j := q.find(id); j != nil && j.Source == source && j.State == StateRunning {
+		j.Verify = &report
+	}
+}
+
+// SetLeftover notes what a finished move could not clean up: the old folder,
+// still on disk after the game was moved. The job stays done.
+func (q *Queue) SetLeftover(id, msg string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if j := q.find(id); j != nil {
+		j.Leftover = msg
+		q.changed(true)
+	}
 }
 
 // PluginExited restarts the running job of a plugin that crashed. The plugin
