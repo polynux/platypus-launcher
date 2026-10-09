@@ -37,6 +37,9 @@ type file struct {
 	// doesn't model (sync mode, winetricks, …) survive a restart.
 	Games   map[string]map[string]any `json:"games,omitempty"`
 	Plugins map[string]PluginState    `json:"plugins,omitempty"`
+	// Relocations are the game folders core moved, by game id (see
+	// types.Relocation): the plugin's own records still name the old folder.
+	Relocations map[string]types.Relocation `json:"relocations,omitempty"`
 	// Games the user added by hand (sideloaded executables), with their
 	// per-game settings in Games like every other game's.
 	CustomGames []CustomGame `json:"custom_games,omitempty"`
