@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   moveGame: vi.fn(),
   getGameDetails: vi.fn(),
   getGameVersions: vi.fn(),
+  getInstallSize: vi.fn(),
 }));
 
 vi.mock('../../effect/runtime', () => ({
@@ -50,7 +51,7 @@ const plugin = (caps: string[]): StorePlugin =>
 
 const base = {
   runners: [], activity: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {}, launching: false, tweaks: [],
-  onChangeSettings() {}, onOpenSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {}, jobs: [],
+  onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {}, jobs: [],
 };
 
 beforeEach(() => {
@@ -59,18 +60,56 @@ beforeEach(() => {
   api.getGameVersions.mockResolvedValue({ channels: [], builds: [], manual: null, links: [], updateAvailable: false, pinned: null, ledger: [] });
 });
 
-describe('Verify and move on the game page', () => {
+/** Opens the game settings from the page's gear, then a tab by its name. */
+const openTab = (name: RegExp | string) => {
+  fireEvent.click(screen.getByRole('button', { name: 'Game settings' }));
+  fireEvent.click(screen.getByRole('tab', { name }));
+};
+
+describe('Verify and move in the game settings', () => {
   it('offers Verify files only when the plugin offers verify', () => {
     const { unmount } = render(<GamePage game={game()} plugin={plugin(['install', 'verify'])} {...base} />);
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull(); // not on the page itself
+    openTab('Maintenance');
     expect(screen.getByRole('button', { name: /Verify files/ })).toBeTruthy();
     unmount();
     render(<GamePage game={game({ features: null })} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
     expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
   });
 
   it('offers Move for an installed plugin game, whatever the plugin offers', () => {
     render(<GamePage game={game()} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
     expect(screen.getByRole('button', { name: /Move…/ })).toBeTruthy();
+  });
+
+  it('opens the verify dialog above the settings, no wider than a dialog should be', async () => {
+    api.verifyGame.mockResolvedValue(job({ id: 'check-9' }));
+    render(<GamePage game={game()} plugin={plugin(['install', 'verify'])} {...base} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: /Verify files/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Verify Echo Tiny' });
+    expect(dialog.className).toMatch(/max-w-\[560px\]/);
+    expect(api.verifyGame).toHaveBeenCalledOnce();
+  });
+
+  it('asks twice before uninstalling and closes the settings', () => {
+    const onJob = vi.fn();
+    render(<GamePage game={game()} plugin={plugin(['install', 'verify'])} {...base} onJob={onJob} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }));
+    expect(onJob).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete game files?' }));
+    expect(onJob).toHaveBeenCalledWith('uninstall');
+    expect(screen.queryByRole('dialog', { name: 'Settings for Echo Tiny' })).toBeNull();
+  });
+
+  it('shows the running job instead of the actions', () => {
+    render(<GamePage game={game()} plugin={plugin(['install', 'verify'])} {...base} job={job({ kind: 'update', state: 'running', percent: 40 })} />);
+    openTab('Maintenance');
+    expect(screen.getByRole('progressbar')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
   });
 });
 

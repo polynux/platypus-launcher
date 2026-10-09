@@ -1,41 +1,43 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, FolderInput, History, Maximize2, FolderCheck, Loader2, Package, Play, RefreshCw, Settings2, ShieldCheck, Trash2, Trophy, X } from 'lucide-react';
+import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, RefreshCw, Settings2, Trophy } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
-import { CloudSavesPanel } from './CloudSavesPanel';
 import { CopyPicker } from './CopyPicker';
-import { GameSettingsPanel } from './PluginSettings';
 import { Lightbox } from './Lightbox';
-import { VersionsDialog } from './VersionsDialog';
-import { VerifyDialog } from './VerifyDialog';
-import { MoveDialog } from './MoveDialog';
 import { InstallOptionsDialog } from './InstallOptionsDialog';
+import { InstallDialog } from './InstallDialog';
+import { GameSettingsModal } from './GameSettingsModal';
+import { JobProgress } from './JobProgress';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { ScrollArea } from '@/components/ds/scroll-area';
-import { Cover, MonoLabel, Panel, TierBadge, TogglePill, cx } from './ui';
+import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
-import { normalizeSettings, setTweak, tweakApplied } from '../lib/settings';
+import { normalizeSettings } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
-import { CapabilitySurface, offers } from '../lib/capabilities';
+import { offers } from '../lib/capabilities';
 import { playtimeTooltip } from '../lib/stats';
 import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
 import { pinLabel } from '../lib/versions';
+import { isCustomized } from '../lib/customize';
+import { useInstallSize, type InstallSize } from '../lib/installSize';
+import type { GameSettingsTab } from '../lib/gameSettingsTabs';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
 function useHero(game: Game, details: GameDetails | null): string[] {
-  const hero = details?.hero_url;
+  // The user's own banner wins over the store's hero.
+  const hero = isCustomized(game, 'banner') ? undefined : details?.hero_url;
   return useMemo(() => {
     const list = [];
     if (hero) list.push(hero);
     return [...list, ...heroImages(game)];
     // Only recompute when the game or its fetched hero changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id, hero]);
+  }, [game.id, hero, game.hero_url, game.banner_url, game.cover_url]);
 }
 
 interface GamePageProps {
@@ -51,8 +53,12 @@ interface GamePageProps {
   session?: SessionEvent;
   refreshing?: boolean;
   tweaks: Tweak[];
+  /** A tweak was switched on or off. */
   onChangeSettings: (s: GameSettings, what: string) => void;
-  onOpenSettings: () => void;
+  /** The general settings form was saved. */
+  onSaveSettings: (s: GameSettings) => void;
+  /** The game's customization changed: the library should reload to carry it. */
+  onCustomized?: () => void;
   plugin?: StorePlugin; // plugin games only
   job?: Job; // the game's active job, or its last failed one
   onJob: (kind: GameJobKind) => void;
@@ -141,16 +147,17 @@ export function GamePage(p: GamePageProps) {
   const { game, runners, activity, session, tweaks } = p;
   const [shot, setShot] = useState(0);
   const [lightbox, setLightbox] = useState(false);
-  const [versionsOpen, setVersionsOpen] = useState(false);
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  const [moveOpen, setMoveOpen] = useState(false);
-  // The install-options dialog: 'install' before the first install, 'update' for an installed game's add-ons.
-  const [optionsMode, setOptionsMode] = useState<'install' | 'update' | null>(null);
+  // The game settings dialog, and the tab it opens on.
+  const [settingsTab, setSettingsTab] = useState<GameSettingsTab | null>(null);
+  // "Install to…": the install dialog for a game without install options.
+  const [installTo, setInstallTo] = useState(false);
+  // The install-options dialog before the first install; an installed game's add-ons are a settings tab.
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
   const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
   const hero = useHero(game, details);
-  useEffect(() => { setShot(0); setLightbox(false); setVersionsOpen(false); setVerifyOpen(false); setMoveOpen(false); setOptionsMode(null); }, [game.id]);
+  useEffect(() => { setShot(0); setLightbox(false); setSettingsTab(null); setInstallTo(false); setOptionsOpen(false); }, [game.id]);
   useEffect(() => {
     const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -168,6 +175,8 @@ export function GamePage(p: GamePageProps) {
   const ach = details?.achievements;
   const canChooseVersion = !!plugin && game.installable !== false && offers(plugin, 'versions', { game });
   const canChooseOptions = !!plugin && game.installable !== false && offers(plugin, 'install-options', { game });
+  const installing = !game.is_installed && !!plugin && !!game.installable;
+  const installSize = useInstallSize(game, plugin, installing);
   const events = activity.filter((e) => e.game === game.title).slice(0, 6);
   const hours = hoursPlayed(game);
   const last = lastPlayedLabel(game);
@@ -198,16 +207,24 @@ export function GamePage(p: GamePageProps) {
 
   return (
     <TooltipProvider>
-    <div className="p-7">
+    <div className="relative isolate p-7">
+      {game.background_url && (
+        <div
+          aria-hidden
+          data-testid="game-background"
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-cover bg-top opacity-[.2]"
+          style={{ backgroundImage: `url("${game.background_url}")`, maskImage: 'linear-gradient(180deg, #000 30%, transparent)', WebkitMaskImage: 'linear-gradient(180deg, #000 30%, transparent)' }}
+        />
+      )}
       <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-white/50 hover:bg-transparent hover:text-white">
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
       </Button>
 
-      <section className="relative mb-6 mt-4 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
-        <Cover src={hero} title={game.title} className="h-[280px] w-full" />
+      <section className="relative mb-6 mt-4 flex min-h-[280px] flex-col justify-end overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
+        <Cover src={hero} title={game.title} className="absolute inset-0 h-full w-full" />
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.98) 10%, rgba(19,15,10,.35) 62%, rgba(19,15,10,.25) 100%)' }} />
-        <div className="absolute bottom-6 left-8 right-8 flex items-end justify-between gap-6">
-          <div className="min-w-0">
+        <div className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4 px-8 pb-6 pt-16">
+          <div className="min-w-0 flex-1 basis-72">
             <div className="mb-2.5 flex flex-wrap gap-2">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
               <Badge className="bg-black/50 text-white/75">{storeLabel(game.store)}</Badge>
@@ -216,26 +233,41 @@ export function GamePage(p: GamePageProps) {
               {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">update available</Badge>}
               {game.pinned && <Badge variant="accent" className="bg-amber-300/15 ring-1 ring-amber-300/30">pinned</Badge>}
             </div>
-            <h1 className="truncate text-[36px] font-extrabold leading-none tracking-tight">{game.title}</h1>
+            <GameHeading game={game} />
           </div>
-          <div className="flex flex-none items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
             {(hours != null || last) && (
               <div className="text-right font-mono text-[11.5px] leading-relaxed text-white/50">
                 {hours != null && <div title={playtimeTooltip(game)}>{hours}h logged</div>}
                 {last && <div>last played {last}</div>}
               </div>
             )}
-            {!game.is_installed ? (
-              <InstallButton
-                game={game}
-                job={job}
-                onInstall={() => (canChooseOptions ? setOptionsMode('install') : p.onJob('install'))}
-                onCancel={(id) => p.onJobAction('cancel', id)}
-                onChooseVersion={canChooseVersion ? () => setVersionsOpen(true) : undefined}
-              />
-            ) : (
-            <PlayButton session={session} launching={p.launching} disabled={game.outside_folder} onPlay={p.onPlay} onStop={p.onStop} onForceStop={p.onForceStop} />
-            )}
+            <div className="flex flex-wrap items-center justify-end gap-2.5">
+              {game.is_installed && plugin && game.update_available && !active && (
+                <Button variant="neutral" size="none" onClick={() => p.onJob('update')} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-sky-100 hover:bg-black/70">
+                  <RefreshCw className="h-4 w-4" /> Update
+                </Button>
+              )}
+              {!game.is_installed ? (
+                <InstallButton
+                  game={game}
+                  job={job}
+                  onInstall={() => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install'))}
+                  onInstallTo={plugin && !canChooseOptions ? () => setInstallTo(true) : undefined}
+                  onCancel={(id) => p.onJobAction('cancel', id)}
+                />
+              ) : (
+                <PlayButton session={session} launching={p.launching} disabled={game.outside_folder} onPlay={p.onPlay} onStop={p.onStop} onForceStop={p.onForceStop} />
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="neutral" size="none" onClick={() => setSettingsTab('general')} aria-label="Game settings" className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70">
+                    <Settings2 className="h-[18px] w-[18px]" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Game settings</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </div>
       </section>
@@ -255,14 +287,18 @@ export function GamePage(p: GamePageProps) {
         </div>
       )}
 
-      {!active && (game.note || (!game.is_installed && plugin && game.installable)) && (
+      {!active && (game.note || installing) && (
         <div className="mb-6 rounded-2xl bg-white/[0.04] px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-white/[0.07]">
           {game.note && <p>{game.note}</p>}
-          {!game.is_installed && plugin && game.installable && (
-            <p className="font-mono text-[12px] text-white/55">
-              installs into {plugin.install_folder} ·{' '}
-              <Button variant="ghost" size="none" onClick={() => p.onNavigate({ name: 'plugins' })} className="inline-flex rounded-none px-0 font-mono text-[12px] font-normal underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/80">change</Button>
-            </p>
+          {installing && plugin && (
+            <>
+              <InstallSizeLine size={installSize} />
+              <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-white/55">
+                <span>installs into {plugin.install_folder}</span>
+                {canChooseVersion && <><span aria-hidden>·</span><NoteLink onClick={() => setSettingsTab('versions')}>Choose version</NoteLink></>}
+                <span aria-hidden>·</span><NoteLink onClick={() => p.onNavigate({ name: 'plugins' })}>change default</NoteLink>
+              </p>
+            </>
           )}
           {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[11.5px] text-red-300">last attempt failed: {job.error}</p>}
         </div>
@@ -344,9 +380,6 @@ export function GamePage(p: GamePageProps) {
                 </div>
               ))}
             </div>
-            <Button onClick={p.onOpenSettings} className="mt-4 w-full rounded-2xl border border-white/[0.1]">
-              <Settings2 className="h-4 w-4" /> Launcher settings
-            </Button>
             {game.source === 'steam' && (
               <Button asChild variant="link" size="sm" className="mt-3 flex w-full">
                 <a href={`https://www.protondb.com/app/${game.store_app_id}`} target="_blank" rel="noreferrer">
@@ -357,36 +390,10 @@ export function GamePage(p: GamePageProps) {
           </Panel>
 
           {isPluginGame(game) && game.is_installed && plugin && (
-            <ManagePanel
-              game={game}
-              plugin={plugin}
-              job={job}
-              onJob={p.onJob}
-              onJobAction={p.onJobAction}
-              onVersions={canChooseVersion ? () => setVersionsOpen(true) : undefined}
-              onVerify={() => setVerifyOpen(true)}
-              onMove={() => setMoveOpen(true)}
-              onOptions={canChooseOptions ? () => setOptionsMode('update') : undefined}
-            />
+            <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} />
           )}
 
           {isPluginGame(game) && plugin && <CopyPicker game={game} plugin={plugin} onChanged={() => p.onCopyChanged?.()} />}
-          {isPluginGame(game) && game.is_installed && plugin && <CloudSavesPanel game={game} plugin={plugin} />}
-
-          {isPluginGame(game) && plugin && (
-            <GameSettingsPanel game={game} plugin={plugin} onNotify={(msg, kind) => p.onNotify?.(msg, kind)} />
-          )}
-
-          {tweaks.length > 0 && game.is_installed && (
-            <TweaksPanel
-              game={game}
-              // Proton-only env tweaks do nothing for a native build.
-              tweaks={game.native ? tweaks.filter((t) => !Object.keys(t.env ?? {}).some((k) => /^(PROTON_|WINE_)/.test(k))) : tweaks}
-              viaSteam={viaSteam}
-              onChange={p.onChangeSettings}
-              onOpenSettings={p.onOpenSettings}
-            />
-          )}
         </aside>
       </div>
 
@@ -402,35 +409,41 @@ export function GamePage(p: GamePageProps) {
           <ActivityFeed events={events} />
         </section>
       )}
-      {versionsOpen && plugin && (
-        <VersionsDialog
+      {settingsTab && (
+        <GameSettingsModal
           game={game}
           plugin={plugin}
-          onClose={() => setVersionsOpen(false)}
+          runners={runners}
+          tweaks={tweaks}
+          jobs={p.jobs ?? []}
+          job={job}
+          initialTab={settingsTab}
+          onClose={() => setSettingsTab(null)}
+          onSaveSettings={p.onSaveSettings}
+          onChangeSettings={p.onChangeSettings}
+          onJob={p.onJob}
+          onJobAction={p.onJobAction}
+          onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+          onChanged={() => p.onVersionsChanged?.()}
+          onCustomized={() => p.onCustomized?.()}
+          onCopied={() => p.onNotify?.('Copied to clipboard')}
+        />
+      )}
+      {installTo && plugin && (
+        <InstallDialog
+          game={game}
+          plugin={plugin}
+          onClose={() => setInstallTo(false)}
           onChanged={() => p.onVersionsChanged?.()}
           onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
         />
       )}
-      {verifyOpen && plugin && (
-        <VerifyDialog game={game} jobs={p.jobs ?? []} onClose={() => setVerifyOpen(false)} />
-      )}
-      {moveOpen && (
-        <MoveDialog
-          game={game}
-          startFolder={parentFolder(game.install_dir)}
-          onClose={() => setMoveOpen(false)}
-          onQueued={() => {
-            setMoveOpen(false);
-            p.onNotify?.(`Moving ${game.title} — see Downloads`, 'busy');
-          }}
-          />
-        )}
-      {optionsMode && plugin && (
+      {optionsOpen && plugin && (
         <InstallOptionsDialog
           game={game}
           plugin={plugin}
-          mode={optionsMode}
-          onClose={() => setOptionsMode(null)}
+          mode="install"
+          onClose={() => setOptionsOpen(false)}
           onChanged={() => p.onVersionsChanged?.()}
           onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
         />
@@ -440,38 +453,9 @@ export function GamePage(p: GamePageProps) {
   );
 }
 
-function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string) => void }) {
-  const pct = job.percent >= 0 ? Math.round(job.percent) : null;
-  const what = job.state === 'queued' ? 'queued' : job.phase || job.kind;
-  return (
-    <div className="w-72 rounded-2xl bg-black/70 px-4 py-3 ring-1 ring-white/10">
-      <div className="flex items-center justify-between gap-3 font-mono text-[11.5px] uppercase tracking-wider">
-        <span className="truncate text-amber-200">{what}{pct != null && job.state === 'running' ? ` · ${pct}%` : ''}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="none" onClick={() => onCancel(job.id)} aria-label={`Cancel ${job.kind}`} className="rounded p-0.5 hover:bg-transparent">
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Cancel {job.kind}</TooltipContent>
-        </Tooltip>
-      </div>
-      <div className="mt-2 h-1.5 rounded-full bg-white/15" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
-        <div className={cx('h-full rounded-full bg-amber-300 transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
-      </div>
-      {job.state === 'running' && job.total > 0 && (
-        <div className="mt-1.5 font-mono text-[11px] tabular-nums text-white/45">
-          {formatBytes(job.bytes) || '0 B'} of {formatBytes(job.total)}
-          {job.speed > 0 && ` · ${formatBytes(job.speed)}/s`}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function InstallButton({
-  game, job, onInstall, onCancel, onChooseVersion,
-}: { game: Game; job?: Job; onInstall: () => void; onCancel: (id: string) => void; onChooseVersion?: () => void }) {
+  game, job, onInstall, onInstallTo, onCancel,
+}: { game: Game; job?: Job; onInstall: () => void; onInstallTo?: () => void; onCancel: (id: string) => void }) {
   if (job && (job.state === 'queued' || job.state === 'running')) return <JobProgress job={job} onCancel={onCancel} />;
   if (!game.installable) {
     return (
@@ -481,10 +465,10 @@ function InstallButton({
     );
   }
   return (
-    <div className="flex items-center gap-2.5">
-      {onChooseVersion && (
-        <Button variant="neutral" size="none" onClick={onChooseVersion} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-white/80 hover:bg-black/70">
-          <History className="h-4 w-4" /> Choose version
+    <>
+      {onInstallTo && (
+        <Button variant="neutral" size="none" onClick={onInstallTo} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-white/80 hover:bg-black/70">
+          <FolderInput className="h-4 w-4" /> Install to…
         </Button>
       )}
       <Button
@@ -496,45 +480,62 @@ function InstallButton({
         <Download className="h-4 w-4" strokeWidth={3} />
         {job?.state === 'failed' ? 'Retry install' : 'Install'}
       </Button>
-    </div>
+    </>
   );
 }
 
-/** The folder a game folder sits in ("" when there is none). */
-function parentFolder(dir?: string): string {
-  if (!dir) return '';
-  const i = dir.search(/[/\\][^/\\]*$/);
-  return i > 0 ? dir.slice(0, i) : dir;
+/** The game's name over the banner: the user's logo when they set one (the
+ *  title stays as its accessible name), else the title in type. */
+function GameHeading({ game }: { game: Game }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  const logo = game.logo_url && game.logo_url !== broken ? game.logo_url : null;
+  return (
+    <h1 className={cx(logo ? 'flex' : 'truncate text-[36px] font-extrabold leading-none tracking-tight')}>
+      {logo ? (
+        <img src={logo} alt={game.title} onError={() => setBroken(logo)} className="max-h-[96px] max-w-full object-contain object-left" />
+      ) : (
+        game.title
+      )}
+    </h1>
+  );
 }
 
-/** Where a plugin game lives and what can be done with it. */
-function ManagePanel({
+/** The size of a fresh install, said before it is queued. */
+function InstallSizeLine({ size }: { size: InstallSize }) {
+  return (
+    <p className="mb-1 font-mono text-[12px] text-white/75" data-testid="install-size-line">
+      {size.state === 'loading' && <span className="text-white/45">checking the install size…</span>}
+      {size.state === 'unknown' && <span title="The store can't tell how big this is">Size unknown</span>}
+      {size.state === 'known' && (
+        <>
+          Install size {formatBytes(size.total)}
+          {size.added > 0 && <span className="text-white/45"> · includes {formatBytes(size.added)} of add-ons</span>}
+        </>
+      )}
+    </p>
+  );
+}
+
+function NoteLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <Button variant="ghost" size="none" onClick={onClick} className="inline-flex rounded-none px-0 font-mono text-[12px] font-normal underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/80">
+      {children}
+    </Button>
+  );
+}
+
+/** Where a plugin game lives: key facts only. What can be done with it is in the game settings. */
+function InstallationPanel({
   game,
   plugin,
   job,
-  onJob,
   onJobAction,
-  onVersions,
-  onVerify,
-  onMove,
-  onOptions,
 }: {
   game: Game;
   plugin: StorePlugin;
   job?: Job;
-  onJob: (kind: GameJobKind) => void;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
-  /** Opens the version dialog; absent when the plugin or the game has no versions. */
-  onVersions?: () => void;
-  /** Opens the verify dialog (shown only where the plugin offers verify). */
-  onVerify: () => void;
-  /** Opens the move dialog. Core can move any installed plugin game. */
-  onMove: () => void;
-  /** Opens the add-ons and options dialog; absent when the plugin offers no install options. */
-  onOptions?: () => void;
 }) {
-  const [confirm, setConfirm] = useState(false);
-  useEffect(() => setConfirm(false), [game.id]);
   const active = job && (job.state === 'queued' || job.state === 'running');
   return (
     <Panel className="bg-white/[0.05]">
@@ -553,116 +554,12 @@ function ManagePanel({
           </div>
         ))}
       </div>
-      {active ? (
-        <div className="mt-4"><JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} /></div>
-      ) : (
-        <div className="mt-4 flex gap-2">
-          {game.update_available && (
-            <Button onClick={() => onJob('update')} className="flex-1 text-sky-100">
-              <RefreshCw className="h-3.5 w-3.5" /> Update
-            </Button>
-          )}
-          {onVersions && (
-            <Button onClick={onVersions} className="flex-1 text-white/70">
-              <History className="h-3.5 w-3.5" /> Version
-            </Button>
-          )}
-          <CapabilitySurface plugin={plugin} capability="verify" game={game}>
-            <Button onClick={onVerify} className="flex-1 text-white/70">
-              <ShieldCheck className="h-3.5 w-3.5" /> Verify files
-            </Button>
-          </CapabilitySurface>
-          <Button onClick={onMove} className="flex-1 text-white/70">
-            <FolderInput className="h-3.5 w-3.5" /> Move…
-          </Button>
-          {onOptions && (
-            <Button onClick={onOptions} className="flex-1 text-white/70">
-              <Package className="h-3.5 w-3.5" /> Add-ons & options
-            </Button>
-          )}
-          {offers(plugin, 'install', { game }) && (
-            <Button
-              variant={confirm ? 'danger' : 'neutral'}
-              onClick={() => (confirm ? (setConfirm(false), onJob('uninstall')) : setConfirm(true))}
-              onBlur={() => setConfirm(false)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setConfirm(false); }}
-              className={cx('flex-1', confirm ? 'bg-red-500/80 text-white hover:bg-red-500' : 'text-white/70')}
-            >
-              <Trash2 className="h-3.5 w-3.5" /> {confirm ? 'Delete game files?' : 'Uninstall'}
-            </Button>
-          )}
-        </div>
-      )}
+      {active && <div className="mt-4"><JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} /></div>}
       {job?.state === 'failed' && !active && (
         <p className="mt-2 font-mono text-[11.5px] text-red-300">
           {job.kind} failed: {job.error}{' '}
           <Button variant="ghost" size="none" onClick={() => onJobAction('retry', job.id)} className="inline-flex rounded-none px-0 font-mono text-[11.5px] font-normal text-red-300 underline underline-offset-2 hover:bg-transparent hover:text-red-200">retry</Button>
         </p>
-      )}
-    </Panel>
-  );
-}
-
-function TweaksPanel({
-  game,
-  tweaks,
-  viaSteam,
-  onChange,
-  onOpenSettings,
-}: {
-  game: Game;
-  tweaks: Tweak[];
-  viaSteam: boolean;
-  onChange: (s: GameSettings, what: string) => void;
-  onOpenSettings: () => void;
-}) {
-  const groups: [string, Tweak[]][] = [
-    ['recommended', tweaks.filter((t) => t.kind === 'recommended')],
-    ['if something breaks', tweaks.filter((t) => t.kind === 'troubleshoot')],
-  ];
-  return (
-    <Panel className="bg-white/[0.05]">
-      <h2 className="text-[15px] font-bold">Suggested tweaks</h2>
-      <p className="mt-1 text-[12px] leading-relaxed text-white/55">
-        Based on this machine, not the game's rating: a platinum game can still need them on your GPU.
-        {viaSteam && (
-          <>
-            {' '}Steam applies these only through the game's{' '}
-            <Button variant="ghost" size="none" onClick={onOpenSettings} className="inline-flex rounded-none px-0 text-[12px] font-normal text-inherit underline decoration-white/30 underline-offset-2 hover:bg-transparent hover:text-white/80">launch options</Button>.
-          </>
-        )}
-      </p>
-      {groups.map(([label, list]) =>
-        list.length === 0 ? null : (
-          <div key={label} className="mt-3">
-            <MonoLabel className="mb-1.5">{label}</MonoLabel>
-            <div className="space-y-1.5">
-              {list.map((t) => {
-                const on = tweakApplied(game.settings, t);
-                return (
-                  <button
-                    key={t.id}
-                    role="switch"
-                    aria-checked={on}
-                    onClick={() => onChange(setTweak(game.settings, t, !on), `${on ? 'Removed' : 'Applied'} "${t.title}"`)}
-                    className={cx('flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ring-1 transition', on ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06] hover:bg-white/[0.04]')}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[12.5px] font-semibold text-white/90">{t.title}</span>
-                      <span className="block text-[12px] leading-snug text-white/50">{t.reason}</span>
-                      {t.env && Object.keys(t.env).length > 0 && (
-                        <span className="mt-1 block truncate font-mono text-[11px] text-sky-200/60">
-                          {Object.entries(t.env).map(([k, v]) => `${k}=${v}`).join(' ')}
-                        </span>
-                      )}
-                    </span>
-                    <span className="flex flex-none pt-0.5"><TogglePill on={on} /></span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )
       )}
     </Panel>
   );

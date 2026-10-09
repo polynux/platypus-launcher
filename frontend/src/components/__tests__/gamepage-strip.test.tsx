@@ -23,7 +23,7 @@ import type { Game } from '../../types';
 const game = { id: 'strip-1', source: 'steam', store: 'steam', store_app_id: '1', title: 'Strip', cover_url: '', banner_url: '', install_dir: '/g', executable: '', is_installed: true, settings: { runner_id: 'auto', wine_prefix: '', launch_arguments: '', env_vars: {}, use_gamemode: false, use_mangohud: false, use_gamescope: false, gamescope_w: 0, gamescope_h: 0, gamescope_r: 0, gamescope_args: '', eac_runtime: false, battleye_runtime: false, working_dir: '' } } as unknown as Game;
 const props = {
   runners: [], activity: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {}, launching: false, tweaks: [],
-  onChangeSettings() {}, onOpenSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {},
+  onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {},
 };
 
 describe('screenshot strip', () => {
