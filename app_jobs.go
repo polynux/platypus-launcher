@@ -149,6 +149,13 @@ func (a *App) queueJob(kind string, game types.Game, target *types.VersionTarget
 // queueJobWith is queueJob for an install or update that also carries the
 // install-option choices (nil means the store's defaults).
 func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions) (types.Job, error) {
+	return a.queueJobIn(kind, game, target, options, "")
+}
+
+// queueJobIn is queueJobWith for a fresh install into a folder the user picked
+// ("" is the plugin's own install folder). The folder is checked first and,
+// once the job is queued, remembered and allowed for the plugin's launches.
+func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions, picked string) (types.Job, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
 		return types.Job{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
@@ -160,10 +167,21 @@ func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTa
 		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
 	}
 	folder, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
+	chosen, custom, err := a.installFolderFor(game, picked)
+	if err != nil {
+		return types.Job{}, err
+	}
+	if chosen != "" {
+		folder = chosen
+	}
 	if game.IsInstalled && game.InstallDir != "" {
 		folder = game.InstallDir // an installed game updates where it is, moved or not
 	}
-	return a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.OriginalTitle(), folder, target, options)
+	job, err := a.jobs.AddWithOptions(kind, game.Source, game.ID, game.StoreAppID, game.OriginalTitle(), folder, target, options)
+	if err == nil && custom {
+		a.rememberInstallFolder(game.Source, folder)
+	}
+	return job, err
 }
 
 // InstallGame queues an install into the plugin's install folder. A game held

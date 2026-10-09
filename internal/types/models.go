@@ -381,3 +381,32 @@ type Relocation struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 }
+
+// InstallLocation is a place the install dialog offers: Folder is the install
+// folder the plugin is sent (games land in a folder of their own inside it).
+// Kind is "default" (the store's install folder), "library" (inside one of the
+// user's game folders; Root names it) or "recent" (a folder picked by hand
+// before). FreeBytes is -1 when the disk can't be read.
+type InstallLocation struct {
+	Folder    string `json:"folder"`
+	Kind      string `json:"kind"`
+	Root      string `json:"root,omitempty"`
+	FreeBytes int64  `json:"free_bytes"`
+	Exists    bool   `json:"exists"`
+}
+
+// InstallFolderCheck is what Hydra found out about a folder the user picked
+// to install into, before anything is queued.
+type InstallFolderCheck struct {
+	Folder    string `json:"folder"`
+	FreeBytes int64  `json:"free_bytes"`
+	Exists    bool   `json:"exists"`
+}
+
+// GameFolder is one of the user's library folders (Settings → Game folders).
+type GameFolder struct {
+	Path      string `json:"path"`
+	IsDefault bool   `json:"is_default"`
+	Exists    bool   `json:"exists"`
+	FreeBytes int64  `json:"free_bytes"` // -1 when the disk can't be read
+}

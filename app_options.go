@@ -176,6 +176,12 @@ func (a *App) UpdateGameWithOptions(game types.Game, options map[string]any) (ty
 // groups, keeps the game's version pin, queues the job with the resolved
 // options and remembers them for later installs and updates.
 func (a *App) queueWithOptions(kind string, game types.Game, choices types.InstallOptions) (types.Job, error) {
+	return a.queueWithOptionsIn(kind, game, choices, "")
+}
+
+// queueWithOptionsIn is queueWithOptions for a fresh install into a folder the
+// user picked ("" is the plugin's own).
+func (a *App) queueWithOptionsIn(kind string, game types.Game, choices types.InstallOptions, folder string) (types.Job, error) {
 	if _, err := a.optionsGate(game); err != nil {
 		return types.Job{}, err
 	}
@@ -191,7 +197,7 @@ func (a *App) queueWithOptions(kind string, game types.Game, choices types.Insta
 	if err != nil {
 		return types.Job{}, err
 	}
-	job, err := a.queueJobWith(kind, game, target, resolved)
+	job, err := a.queueJobIn(kind, game, target, resolved, folder)
 	if err != nil {
 		return job, err
 	}
@@ -203,14 +209,18 @@ func (a *App) queueWithOptions(kind string, game types.Game, choices types.Insta
 
 // GetInstallSize is the disk space a fresh install of the game needs with the
 // store's default choices, the figure the free-space check compares with. The
-// dialog adds the chosen add-ons to it. An error means the store can't say.
+// dialog adds the chosen add-ons to it. An error means the store can't say. The
+// answer is cached for a while (see sizeCache), so the game page can ask on
+// every visit.
 func (a *App) GetInstallSize(game types.Game) (int64, error) {
 	target, err := a.pinnedTarget(game)
 	if err != nil {
 		return 0, err
 	}
-	s, err := jobBackend{a}.Size(a.ctx, types.Job{Kind: jobs.KindInstall, Source: game.Source, StoreGameID: game.StoreAppID, Target: target})
-	return s.DiskBytes, err
+	return a.sizes.get(game.ID, target, func() (int64, error) {
+		s, err := jobBackend{a}.Size(a.ctx, types.Job{Kind: jobs.KindInstall, Source: game.Source, StoreGameID: game.StoreAppID, Target: target})
+		return s.DiskBytes, err
+	})
 }
 
 // GetInstallFreeSpace is the free space, in bytes, where the game would be

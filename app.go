@@ -72,6 +72,8 @@ type App struct {
 	tweaks       []types.Tweak
 	// stats caches the store playtime and the achievement progress (protocol 1.7).
 	stats statsCache
+	// sizes caches what the store says an install needs (app_installsize.go).
+	sizes sizeCache
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
