@@ -58,6 +58,10 @@ export function GetCloudSettings() {
   return window['go']['main']['App']['GetCloudSettings']();
 }
 
+export function GetGameAchievements(arg1) {
+  return window['go']['main']['App']['GetGameAchievements'](arg1);
+}
+
 export function GetGameDetails(arg1) {
   return window['go']['main']['App']['GetGameDetails'](arg1);
 }
@@ -180,6 +184,10 @@ export function PluginLogout(arg1) {
 
 export function PreviewLaunchCommand(arg1) {
   return window['go']['main']['App']['PreviewLaunchCommand'](arg1);
+}
+
+export function RedeemCode(arg1, arg2) {
+  return window['go']['main']['App']['RedeemCode'](arg1, arg2);
 }
 
 export function RemoveCustomGame(arg1) {

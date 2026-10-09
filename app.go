@@ -58,6 +58,8 @@ type App struct {
 	tweaksMu     sync.Mutex
 	tweaksCached bool
 	tweaks       []types.Tweak
+	// stats caches the store playtime and the achievement progress (protocol 1.7).
+	stats statsCache
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
@@ -73,8 +75,14 @@ func NewApp() *App {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.stats.changed = func() { wruntime.EventsEmit(ctx, "playtime") }
+	a.stats.info = func(format string, args ...any) { wruntime.LogInfof(ctx, format, args...) }
+	a.stats.warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, format, args...) }
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
 		wruntime.EventsEmit(ctx, "session", e)
+		if e.State == "stopped" || e.State == "failed" {
+			a.schedulePlaytimeRefresh()
+		}
 	})
 
 	dataDir, err := settings.DataDir()
@@ -312,8 +320,10 @@ func (a *App) GetLibrary() (types.Library, error) {
 			continue
 		}
 		lib.Games = append(lib.Games, results[i]...)
+		a.startPlaytimeOnce(s.ID())
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
+	a.stats.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
 	return lib, nil
 }

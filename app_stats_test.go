@@ -1,0 +1,174 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+	"testing"
+
+	"hydra-launcher/internal/stats"
+	"hydra-launcher/internal/types"
+)
+
+// statsManifest declares the 1.7 stats capabilities over protocols that include 1.7.
+const statsManifest = `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
+	"protocol":{"versions":["1.0","1.1","1.2","1.3","1.4","1.5","1.6","1.7"]},"store":"echo","exec":"bin/hydra-echo-app",
+	"capabilities":["library","install","launch","auth","achievements","playtime","redeem"]}`
+
+// statsApp is an approved, initialized echo offering the stats capabilities.
+// changes counts the playtime notifications the UI would get.
+func statsApp(t *testing.T, manifest string) (a *App, changes *int) {
+	t.Helper()
+	a, m := echoApp(t, manifest)
+	if err := m.Approve("echo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Initialize(context.Background(), "echo"); err != nil {
+		t.Fatal(err)
+	}
+	a.ctx = context.Background()
+	n := 0
+	a.stats.changed = func() { n++ }
+	return a, &n
+}
+
+func TestPlaytimeMergesTheStoreValueForDisplayOnly(t *testing.T) {
+	a, changes := statsApp(t, statsManifest)
+	a.refreshPlaytime("echo")
+	if *changes != 1 {
+		t.Fatalf("first report notified %d times, want 1", *changes)
+	}
+	a.refreshPlaytime("echo")
+	if *changes != 1 {
+		t.Fatalf("an unchanged report notified the UI again: %d", *changes)
+	}
+	if !a.stats.isFresh("echo") {
+		t.Fatal("playtime wasn't marked as read for this run")
+	}
+
+	games := []types.Game{
+		{Source: "echo", StoreAppID: "tiny", PlaytimeMin: 30},   // store 150 is more
+		{Source: "echo", StoreAppID: "huge", PlaytimeMin: 2000}, // local is more
+		{Source: "echo", StoreAppID: "client", PlaytimeMin: 5},  // no report: untouched
+		{Source: "steam", StoreAppID: "tiny", PlaytimeMin: 7},   // another source: untouched
+	}
+	a.stats.applyPlaytime(games)
+	if g := games[0]; g.PlaytimeMin != 150 || g.PlaytimeLocalMin != 30 || g.PlaytimeStoreMin != 150 {
+		t.Fatalf("tiny merged = %+v", g)
+	}
+	if g := games[1]; g.PlaytimeMin != 2000 || g.PlaytimeLocalMin != 2000 || g.PlaytimeStoreMin != 1200 {
+		t.Fatalf("huge merged = %+v", g)
+	}
+	if g := games[2]; g.PlaytimeMin != 5 || g.PlaytimeStoreMin != 0 || g.PlaytimeLocalMin != 0 {
+		t.Fatalf("client changed without a report: %+v", g)
+	}
+	if g := games[3]; g.PlaytimeMin != 7 || g.PlaytimeStoreMin != 0 {
+		t.Fatalf("steam game took echo's playtime: %+v", g)
+	}
+}
+
+func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	g := echoGame(t)
+
+	got, err := a.GetGameAchievements(g)
+	if err != nil || got == nil {
+		t.Fatalf("GetGameAchievements = %v, %v", got, err)
+	}
+	if got.Total != 5 || got.Unlocked != 2 || len(got.List) != 5 {
+		t.Fatalf("progress = %+v", got)
+	}
+	byID := map[string]types.ProgressAchievement{}
+	for _, x := range got.List {
+		byID[x.ID] = x
+	}
+	if x := byID["secret"]; x.Name != stats.HiddenName || x.Description != "" || !x.Hidden || x.Unlocked {
+		t.Fatalf("a locked hidden achievement leaked its text: %+v", x)
+	}
+	if x := byID["ninety"]; x.Name != "Ninety seconds" || !x.Unlocked || x.UnlockedAt == 0 || x.GlobalPercent != nil {
+		t.Fatalf("an unlocked hidden achievement must show, with no global share: %+v", x)
+	}
+	if x := byID["installed"]; x.GlobalPercent == nil || *x.GlobalPercent != 100 {
+		t.Fatalf("installed global share = %v", x.GlobalPercent)
+	}
+
+	again, err := a.GetGameAchievements(g)
+	if err != nil || again == nil || again.Total != 5 {
+		t.Fatalf("second read = %+v, %v", again, err)
+	}
+	if n := echoCalls(t, a)["achievements.list"]; n != 1 {
+		t.Fatalf("achievements.list reached the plugin %d times, want 1 (cached)", n)
+	}
+}
+
+func TestAchievementsAreAbsentWhenTheGameOrPluginDoesNotOfferThem(t *testing.T) {
+	// Protocol 1.5 is the last this plugin agrees to: achievements (1.7) stay off.
+	a, _ := statsApp(t, strings.Replace(statsManifest, `,"1.6","1.7"`, "", 1))
+	if got, err := a.GetGameAchievements(echoGame(t)); got != nil || err != nil {
+		t.Fatalf("over 1.5: %v, %v; want nil and no error (the page uses the catalogue)", got, err)
+	}
+	if n := echoCalls(t, a)["achievements.list"]; n != 0 {
+		t.Fatalf("achievements.list was sent over 1.5: %d", n)
+	}
+
+	b, _ := statsApp(t, statsManifest)
+	g := echoGame(t)
+	g.Features = []string{"library", "launch"}
+	if got, _ := b.GetGameAchievements(g); got != nil {
+		t.Fatalf("a game whose features leave out achievements got progress: %+v", got)
+	}
+	if n := echoCalls(t, b)["achievements.list"]; n != 0 {
+		t.Fatalf("achievements.list reached the plugin for a game without the feature: %d", n)
+	}
+}
+
+func TestRedeemGrantsTheTitleForTheEchoCode(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	res, err := a.RedeemCode("echo", "  ECHO-OK \n")
+	if err != nil {
+		t.Fatalf("redeem: %v", err)
+	}
+	if res.Message == "" || !slices.Equal(res.Titles, []string{"Echo Bonus Pack"}) {
+		t.Fatalf("result = %+v", res)
+	}
+	if _, err := a.RedeemCode("echo", "ECHO-NOPE"); err == nil || !strings.Contains(err.Error(), "doesn't know that code") {
+		t.Fatalf("a wrong code: %v, want the plugin's readable message", err)
+	}
+	if _, err := a.RedeemCode("echo", "   "); !errors.Is(err, stats.ErrCodeEmpty) {
+		t.Fatalf("an empty code: %v", err)
+	}
+	if _, err := a.RedeemCode("echo", strings.Repeat("A", stats.MaxCodeLen+1)); !errors.Is(err, stats.ErrCodeTooLong) {
+		t.Fatalf("a long code: %v", err)
+	}
+	if _, err := a.RedeemCode("echo", "ECHO\tOK"); !errors.Is(err, stats.ErrCodeControl) {
+		t.Fatalf("a code with a tab: %v", err)
+	}
+}
+
+func TestRedeemRefusesASecondSubmissionWhileOneRuns(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	a.stats.redeemMu.Lock()
+	defer a.stats.redeemMu.Unlock()
+	if _, err := a.RedeemCode("echo", "ECHO-OK"); err == nil || !strings.Contains(err.Error(), "already being redeemed") {
+		t.Fatalf("a second submission: %v", err)
+	}
+}
+
+func TestRedeemIsNotSentToAPluginWithoutTheCapability(t *testing.T) {
+	a, _ := statsApp(t, strings.Replace(statsManifest, `,"1.6","1.7"`, "", 1))
+	if _, err := a.RedeemCode("echo", "ECHO-OK"); err == nil || !strings.Contains(err.Error(), "doesn't redeem codes") {
+		t.Fatalf("over 1.5: %v", err)
+	}
+	if n := echoCalls(t, a)["redeem.submit"]; n != 0 {
+		t.Fatalf("redeem.submit was sent over 1.5: %d", n)
+	}
+}
+
+func TestSessionEndRefreshesOnlyRunningPlugins(t *testing.T) {
+	a, changes := statsApp(t, statsManifest)
+	a.refreshRunningPlaytime()
+	if *changes != 1 {
+		t.Fatalf("an initialized plugin's playtime was not refreshed after a session: %d", *changes)
+	}
+}
