@@ -10,7 +10,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const valid = title.trim() && exe.trim();
 
   return (
-    <Modal label="Add game" onClose={onClose} className="max-w-[520px]">
+    <Modal label="Add game" onClose={onClose} size="md">
       <form
         onSubmit={(e) => {
           e.preventDefault();

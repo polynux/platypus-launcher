@@ -96,6 +96,7 @@ describe('FE-15 pause/resume/discard buttons and states', () => {
 // Effect.runPromise, like every other view here.
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getGameFolders: () => Effect.succeed([]),
     getLauncherSettings: () =>
       Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),
     setGamesFolder: () => Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),

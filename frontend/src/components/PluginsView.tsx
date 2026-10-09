@@ -340,7 +340,7 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
 /** Shows what the plugin runs and declares before the user trusts it. */
 function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
   return (
-    <Modal label={`Approve ${p.name}`} onClose={onClose} className="max-w-xl">
+    <Modal label={`Approve ${p.name}`} onClose={onClose} size="md">
       <div>
         <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? `Re-approve ${p.name}` : `Approve ${p.name}`}</h2>
         <p className="mt-1 font-mono text-[11.5px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
@@ -517,7 +517,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
   const canSubmit = (prompt?.qr && !filled) || filled;
 
   return (
-    <Modal label={`Log in to ${plugin.name}`} onClose={onClose} className="max-w-lg">
+    <Modal label={`Log in to ${plugin.name}`} onClose={onClose} size="md">
       <form
         onSubmit={(e) => {
           e.preventDefault();

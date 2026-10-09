@@ -48,7 +48,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
   };
 
   return (
-    <Modal label="Cloud save conflict" onClose={onClose} className="max-w-2xl">
+    <Modal label="Cloud save conflict" onClose={onClose} size="lg">
       <h2 className="text-[19px] font-extrabold tracking-tight">Saves changed on both sides</h2>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">
         {game.title} has {conflicts.length === 1 ? 'a save file' : `${conflicts.length} save files`} that changed on this device and in the cloud.

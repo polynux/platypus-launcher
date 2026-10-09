@@ -5,7 +5,6 @@ import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
-import { SettingsModal } from './components/SettingsModal';
 import { AddGameModal } from './components/AddGameModal';
 import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
@@ -26,7 +25,7 @@ import { reconcileViews, upsertView } from './lib/social';
 import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { needsAttention, mergeCopies, mergePlaytime, mergeRescannedGames } from './lib/games';
+import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
@@ -62,7 +61,6 @@ export function App() {
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
   const [ownership, setOwnership] = useState<Ownership>('installed');
 
-  const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   // Games Hydra launched that are starting or running, keyed by game id.
@@ -318,7 +316,6 @@ export function App() {
   const saveSettings = (id: string, settings: GameSettings, what = 'Launcher settings changed') => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
-    setSettingsFor(null);
     if (!g) return;
     Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
@@ -438,7 +435,6 @@ export function App() {
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
 
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
-  const settingsGame = settingsFor ? games.find((g) => g.id === settingsFor) : undefined;
 
   const renderView = () => {
     if (!loaded) {
@@ -509,7 +505,8 @@ export function App() {
             refreshing={scanning}
             tweaks={tweaks}
             onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
-            onOpenSettings={() => setSettingsFor(currentGame.id)}
+            onSaveSettings={(st) => saveSettings(currentGame.id, st)}
+            onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
             plugin={plugins.find((x) => x.id === currentGame.source)}
             job={jobFor(currentGame.id)}
             jobs={jobs}
@@ -593,16 +590,6 @@ export function App() {
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
         {renderView()}
       </main>
-
-      {settingsGame && (
-        <SettingsModal
-          game={settingsGame}
-          runners={runners}
-          onClose={() => setSettingsFor(null)}
-          onSave={(s) => saveSettings(settingsGame.id, s)}
-          onCopied={() => notify('Copied to clipboard')}
-        />
-      )}
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
 

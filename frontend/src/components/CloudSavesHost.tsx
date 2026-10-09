@@ -65,7 +65,7 @@ export function CloudSavesHost({
   // dialog that only says what is pending.
   if (!game) {
     return (
-      <Modal label="Cloud saves need a decision" onClose={close} className="max-w-md">
+      <Modal label="Cloud saves need a decision" onClose={close}>
         <h2 className="text-[19px] font-extrabold tracking-tight">{title}</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
         <p className="mt-2 text-[12.5px] leading-relaxed text-white/50">Open the game's page to decide.</p>
@@ -98,7 +98,7 @@ export function CloudSavesHost({
   if (pending.kind === 'client-running') {
     const name = pending.client || 'the store client';
     return (
-      <Modal label="Store client running" onClose={close} className="max-w-md">
+      <Modal label="Store client running" onClose={close}>
         <h2 className="text-[19px] font-extrabold tracking-tight">{name} is running</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -111,7 +111,7 @@ export function CloudSavesHost({
   }
 
   return (
-    <Modal label="Cloud saves not synced" onClose={close} className="max-w-md">
+    <Modal label="Cloud saves not synced" onClose={close}>
       <h2 className="text-[19px] font-extrabold tracking-tight">Cloud saves aren't synced</h2>
       <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
       <p className="mt-2 text-[12.5px] leading-relaxed text-white/50">

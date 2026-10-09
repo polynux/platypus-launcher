@@ -69,13 +69,15 @@ function DraftInput({ field, value, onCommit }: { field: SettingField; value: Se
  *  (or the plugin's defaults). A change saves just that field, and the saves of
  *  a scope run one after the other. A failed save shows the backend's values
  *  again, so the form never keeps what the backend refused. */
-function SettingsEditor({ scopeKey, load, save, onNotify, framed }: {
+function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   scopeKey: string;
   load: () => Effect.Effect<SettingsView, Error>;
   save: (changed: Record<string, SettingValue>) => Effect.Effect<SettingsSaved, Error>;
   onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Wrap the form in a panel of its own (the game page); the plugin view's card already is one. */
   framed?: boolean;
+  /** Said where the form would be when the plugin has no fields in this scope (the game settings tab). */
+  emptyText?: string;
 }) {
   const [view, setView] = useState<SettingsView | null>(null);
   // The values the backend holds, as the form shows them; defaults fill the rest.
@@ -120,7 +122,8 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed }: {
   };
 
   if (error && !view) return <SettingError message={error} />;
-  if (!view || view.groups.length === 0) return null;
+  if (!view) return null;
+  if (view.groups.length === 0) return emptyText ? <p className="text-[12.5px] text-white/55">{emptyText}</p> : null;
   const body = (
     <div className="space-y-4">
       {view.groups.map((g) => (
@@ -164,7 +167,7 @@ export function PluginSettingsPanel({ plugin, onNotify }: { plugin: StorePlugin;
 
 /** The settings of one game, on its page. Only for a game whose features include
  *  `settings`; a game without any scope-game field shows nothing. */
-export function GameSettingsPanel({ game, plugin, onNotify }: { game: Game; plugin: StorePlugin; onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void }) {
+export function GameSettingsPanel({ game, plugin, onNotify, framed = true }: { game: Game; plugin: StorePlugin; onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; framed?: boolean }) {
   return (
     <CapabilitySurface plugin={plugin} capability="settings" game={game}>
       <SettingsEditor
@@ -172,7 +175,8 @@ export function GameSettingsPanel({ game, plugin, onNotify }: { game: Game; plug
         load={() => LauncherApi.getGameSettingsFields(game)}
         save={(changed) => LauncherApi.saveGameSettingsFields(game, changed)}
         onNotify={onNotify}
-        framed
+        framed={framed}
+        emptyText={framed ? undefined : `${plugin.name} has no settings for ${game.title}.`}
       />
     </CapabilitySurface>
   );

@@ -108,6 +108,34 @@ type Game struct {
 	// the store's default (SharedBy).
 	Copies        []GameCopy `json:"copies,omitempty"`
 	PreferredCopy string     `json:"preferred_copy,omitempty"`
+	// What the user changed about the game's look (Hydra's own customization,
+	// never the plugin's): StoreTitle is the title the store gave when Title is
+	// the user's, SortTitle orders the library, the *URL fields are the user's
+	// images and Customized names every part that is theirs (title, sort_title
+	// and the kinds of art). Plugins only ever see StoreTitle.
+	StoreTitle    string   `json:"store_title,omitempty"`
+	SortTitle     string   `json:"sort_title,omitempty"`
+	LogoURL       string   `json:"logo_url,omitempty"`
+	IconURL       string   `json:"icon_url,omitempty"`
+	BackgroundURL string   `json:"background_url,omitempty"`
+	Customized    []string `json:"customized,omitempty"`
+}
+
+// OriginalTitle is the title the store gave the game: what a plugin is sent
+// and what the user's own title replaces.
+func (g Game) OriginalTitle() string {
+	if g.StoreTitle != "" {
+		return g.StoreTitle
+	}
+	return g.Title
+}
+
+// Customization is the user's look for one game, as the editor shows it: the
+// title and sort title they set, and the address of each image they set.
+type Customization struct {
+	Title     string            `json:"title"`
+	SortTitle string            `json:"sort_title"`
+	Art       map[string]string `json:"art"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -352,4 +380,33 @@ type MoveCheck struct {
 type Relocation struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+}
+
+// InstallLocation is a place the install dialog offers: Folder is the install
+// folder the plugin is sent (games land in a folder of their own inside it).
+// Kind is "default" (the store's install folder), "library" (inside one of the
+// user's game folders; Root names it) or "recent" (a folder picked by hand
+// before). FreeBytes is -1 when the disk can't be read.
+type InstallLocation struct {
+	Folder    string `json:"folder"`
+	Kind      string `json:"kind"`
+	Root      string `json:"root,omitempty"`
+	FreeBytes int64  `json:"free_bytes"`
+	Exists    bool   `json:"exists"`
+}
+
+// InstallFolderCheck is what Hydra found out about a folder the user picked
+// to install into, before anything is queued.
+type InstallFolderCheck struct {
+	Folder    string `json:"folder"`
+	FreeBytes int64  `json:"free_bytes"`
+	Exists    bool   `json:"exists"`
+}
+
+// GameFolder is one of the user's library folders (Settings → Game folders).
+type GameFolder struct {
+	Path      string `json:"path"`
+	IsDefault bool   `json:"is_default"`
+	Exists    bool   `json:"exists"`
+	FreeBytes int64  `json:"free_bytes"` // -1 when the disk can't be read
 }

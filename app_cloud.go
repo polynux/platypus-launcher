@@ -67,7 +67,7 @@ func (a *App) cloudGame(game types.Game) (cloudsync.Game, bool) {
 	if game.Features != nil && !slices.Contains(game.Features, "cloud-saves") {
 		return cloudsync.Game{}, false
 	}
-	return cloudsync.Game{ID: game.ID, PluginID: game.Source, StoreID: game.StoreAppID, Title: game.Title}, true
+	return cloudsync.Game{ID: game.ID, PluginID: game.Source, StoreID: game.StoreAppID, Title: game.OriginalTitle()}, true
 }
 
 // cloudContext describes a launch to the plugin. windows says the game runs

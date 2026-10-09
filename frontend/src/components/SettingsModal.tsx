@@ -23,6 +23,13 @@ interface Props {
   onCopied: () => void;
 }
 
+interface GeneralProps extends Props {
+  /** Reports whether there are unsaved edits, so the owner can keep Esc and click-outside inert. */
+  onDirty?: (dirty: boolean) => void;
+  /** Inside a tab of the game settings: no title row or close button of its own. */
+  embedded?: boolean;
+}
+
 /** Physical pixels of the display the window is on. */
 function displayResolution(): { w: number; h: number } | undefined {
   if (typeof window === 'undefined' || !window.screen?.width) return undefined;
@@ -60,14 +67,17 @@ function runnerKind(r: ProtonVersion): string {
   return 'steam';
 }
 
-export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Props) {
+/** The launcher's own settings for one game (runner, wrappers, env…): the form
+ *  of the "General" tab, and of the standalone settings dialog. */
+export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded }: GeneralProps) {
   const [draft, setDraft] = useState<GameSettings>(() => normalizeSettings(game.settings));
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => envToRows(normalizeSettings(game.settings).env_vars));
   const nextRowId = useRef(envRows.length);
   // Dirty = draft or env rows differ from what was loaded: Esc / click-outside then stay inert.
   const envSig = JSON.stringify(envRows.map((r) => [r.key, r.value]));
-  const initial = useRef({ draft: JSON.stringify(draft), env: envSig });
-  const dirty = JSON.stringify(draft) !== initial.current.draft || envSig !== initial.current.env;
+  const [initial, setInitial] = useState({ draft: JSON.stringify(draft), env: envSig });
+  const dirty = JSON.stringify(draft) !== initial.draft || envSig !== initial.env;
+  useEffect(() => { onDirty?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -120,16 +130,18 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
   return (
-    <Modal label={`Launcher settings for ${game.title}`} onClose={onClose} dismissable={!dirty} className="max-w-[920px]">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
-          <div className="font-mono text-[11.5px] text-white/45">{game.title}</div>
+    <div className="@container">
+      {!embedded && (
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
+            <div className="font-mono text-[11.5px] text-white/45">{game.title}</div>
+          </div>
+          <Button variant="neutral" size="icon" onClick={onClose} aria-label="Close" className="size-8">
+            <X className="size-4" />
+          </Button>
         </div>
-        <Button variant="neutral" size="icon" onClick={onClose} aria-label="Close" className="size-8">
-          <X className="size-4" />
-        </Button>
-      </div>
+      )}
 
       {isSteamClient && (
         <div className="mb-6 rounded-2xl bg-sky-300/[0.07] p-4 ring-1 ring-sky-300/25">
@@ -146,7 +158,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid gap-6 @3xl:grid-cols-[1.5fr_1fr]">
         <div className="min-w-0 space-y-6">
           {native && (
             <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
@@ -355,7 +367,7 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
 
           <div className="flex gap-2.5">
             <Button variant="neutral" onClick={onClose} className="flex-1">Cancel</Button>
-            <Button variant="primary" onClick={() => onSave(current)} className="flex-1">Save config</Button>
+            <Button variant="primary" onClick={() => { onSave(current); setInitial({ draft: JSON.stringify(draft), env: envSig }); }} className="flex-1">Save config</Button>
           </div>
           {dirty && <div role="status" className="font-mono text-[11.5px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
@@ -363,6 +375,17 @@ export function SettingsModal({ game, runners, onClose, onSave, onCopied }: Prop
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The standalone dialog around the general settings (the game page's own tab
+ *  shell uses GeneralSettings directly). */
+export function SettingsModal(p: Props) {
+  const [dirty, setDirty] = useState(false);
+  return (
+    <Modal label={`Launcher settings for ${p.game.title}`} onClose={p.onClose} dismissable={!dirty} size="xl">
+      <GeneralSettings {...p} onDirty={setDirty} />
     </Modal>
   );
 }

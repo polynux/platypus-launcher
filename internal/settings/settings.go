@@ -69,6 +69,11 @@ type file struct {
 	// PluginSettings are each plugin's plugin-wide settings values, and
 	// PluginGameSettings each game's per-game values (the `settings`
 	// capability, see plugin_settings.go). Values never hold secrets.
+	// GameFolders are extra library folders to install into, besides the Games
+	// folder; RecentInstall the folders games were last installed into by hand,
+	// newest first (see installfolders.go).
+	GameFolders        []string                    `json:"game_folders,omitempty"`
+	RecentInstall      []string                    `json:"recent_install_folders,omitempty"`
 	PluginSettings     map[string]map[string]any   `json:"plugin_settings,omitempty"`
 	PluginGameSettings map[string]PluginGameValues `json:"plugin_game_settings,omitempty"`
 }

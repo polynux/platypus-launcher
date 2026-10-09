@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { Check, ExternalLink, KeyRound, Lock, Pin, TriangleAlert } from 'lucide-react';
 import type { Game, StorePlugin, VersionBuild, VersionChannel, VersionInfo } from '../types';
-import { Modal } from './Modal';
+import { ModalOrInline } from './Modal';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
@@ -23,12 +23,14 @@ export interface VersionsDialogProps {
   /** Something changed that the library shows (a job queued, a pin set or cleared). */
   onChanged: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  /** Show the content inline (a tab of the game settings) instead of in a dialog of its own. */
+  embedded?: boolean;
 }
 
 /** Pick which version of a game to install or switch to, hold it there (pin),
  *  or return to the latest. The plugin supplies channels, builds and the typed
  *  input; Hydra adds the install history and the pin. */
-export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify }: VersionsDialogProps) {
+export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, embedded }: VersionsDialogProps) {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [choice, setChoice] = useState<VersionChoice | null>(null);
@@ -131,11 +133,15 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify }: V
   const last = info ? lastInstall(info.ledger) : undefined;
 
   return (
-    <Modal label={`Version of ${game.title}`} onClose={onClose} className="max-w-[640px]" dismissable={!busy}>
-      <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? 'Version' : 'Choose a version'}</h2>
-      <p className="mt-1 text-[12.5px] text-white/50">
-        {game.title} · {plugin.name}
-      </p>
+    <ModalOrInline embedded={embedded} label={`Version of ${game.title}`} onClose={onClose} size="lg" dismissable={!busy}>
+      {!embedded && (
+        <>
+          <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? 'Version' : 'Choose a version'}</h2>
+          <p className="mt-1 text-[12.5px] text-white/50">
+            {game.title} · {plugin.name}
+          </p>
+        </>
+      )}
 
       {!info && !error && <p className="mt-6 font-mono text-[11.5px] uppercase tracking-widest text-white/40">loading versions…</p>}
       {error && (
@@ -295,7 +301,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify }: V
           <Button variant="neutral" onClick={onClose}>Close</Button>
         </div>
       )}
-    </Modal>
+    </ModalOrInline>
   );
 }
 

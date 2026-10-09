@@ -168,6 +168,51 @@ export interface Game {
   copies?: GameCopy[] | null;
   /** The owner id of the copy the user picked; empty for the store's default (shared_by). */
   preferred_copy?: string;
+  /** What the user changed about the game's look (Hydra's customization): when
+   *  `title` is theirs, `store_title` is the store's. The *_url fields are their
+   *  images; `customized` names every part that is theirs. */
+  store_title?: string;
+  sort_title?: string;
+  logo_url?: string;
+  icon_url?: string;
+  background_url?: string;
+  customized?: string[];
+}
+
+/** The kinds of art a game can be customized with. */
+export type ArtKind = 'cover' | 'banner' | 'logo' | 'icon' | 'background';
+
+/** The user's own look for one game, as the customization form shows it. */
+export interface Customization {
+  title: string;
+  sort_title: string;
+  /** Address of each image the user set, by kind. */
+  art: Partial<Record<ArtKind, string>>;
+}
+
+/** A place the install dialog offers (Kind: the store's own folder, one of the
+ *  user's game folders, or a folder picked before). free_bytes is -1 when unreadable. */
+export interface InstallLocation {
+  folder: string;
+  kind: 'default' | 'library' | 'recent';
+  root?: string;
+  free_bytes: number;
+  exists: boolean;
+}
+
+/** What Hydra found out about a folder picked to install into. */
+export interface InstallFolderCheck {
+  folder: string;
+  free_bytes: number;
+  exists: boolean;
+}
+
+/** One of the user's game folders (Settings → Game folders). */
+export interface GameFolder {
+  path: string;
+  is_default: boolean;
+  exists: boolean;
+  free_bytes: number;
 }
 
 /** The family member a borrowed game comes from. */

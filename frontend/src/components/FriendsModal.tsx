@@ -57,13 +57,13 @@ export function FriendsModal(p: FriendsModalProps) {
   const [query, setQuery] = useState('');
   if (p.chat) {
     return (
-      <Modal label="Friends" onClose={p.onBackFromChat ?? p.onClose} className="max-w-2xl">
+      <Modal label="Friends" onClose={p.onBackFromChat ?? p.onClose} size="lg">
         <div className="flex h-[70vh] max-h-[640px] flex-col p-5">{p.chat}</div>
       </Modal>
     );
   }
   return (
-    <Modal label="Friends" onClose={p.onClose} className="max-w-2xl">
+    <Modal label="Friends" onClose={p.onClose} size="lg">
       <div className="flex max-h-[80vh] flex-col gap-4 p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-[17px] font-extrabold tracking-tight">Friends</h2>

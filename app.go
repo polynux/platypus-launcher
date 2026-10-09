@@ -59,6 +59,7 @@ type App struct {
 	// settingsLocks orders the settings saves and starts of each plugin.
 	settingsLocks settingsLocks
 	moves         coreMoves
+	custom        customStore // the user's titles and art (app_customize.go)
 	ledger        *ledger.Ledger
 	// sessionRunning says whether a game has a session open. Nil asks the
 	// session tracker; tests replace it.
@@ -71,6 +72,8 @@ type App struct {
 	tweaks       []types.Tweak
 	// stats caches the store playtime and the achievement progress (protocol 1.7).
 	stats statsCache
+	// sizes caches what the store says an install needs (app_installsize.go).
+	sizes sizeCache
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
@@ -105,6 +108,10 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		// Open still returns usable defaults.
 		wruntime.LogErrorf(ctx, "settings: %v", err)
+	}
+
+	if err := a.openCustomization(dataDir); err != nil {
+		wruntime.LogErrorf(ctx, "customization: %v", err)
 	}
 
 	a.jobs, err = jobs.Open(filepath.Join(dataDir, "jobs.json"), jobBackend{a}, func(list []types.Job) {
@@ -363,6 +370,7 @@ func (a *App) GetLibrary() (types.Library, error) {
 	lib.Games = append(lib.Games, a.customGames()...)
 	a.stats.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
+	a.applyCustomization(lib.Games)
 	return lib, nil
 }
 
