@@ -15,6 +15,7 @@
 //	client   always installed; "launches" through a store client (sleep 5.0421)
 //	escape   always installed outside the install folder; Hydra must refuse it
 //	ana, ben borrowed from the family (family.go): installed, launched through a store client
+//	shared   lent by ana and ben, whose copies differ (family.go): the user picks one
 //
 // Besides the store protocol it answers echo (returns its params), pid and
 // crash (exits without answering). It exits when stdin closes.
@@ -39,6 +40,8 @@
 //	ECHO_VERSIONS_OFF  parts of versions.list to leave out: channels, builds, manual, links (see versions.go)
 //	ECHO_FAMILY_IN_USE borrowed game ids that are in use: launching them answers -32002 (see family.go)
 //	ECHO_FAMILY_WARN   seconds: launching a borrowed game also raises family.warning with that count
+//	ECHO_COPY_IN_USE   member ids whose copy of a shared game is in use (launching it answers -32002)
+//	ECHO_COPY_UNAVAILABLE member ids whose copy of a shared game can't be picked or launched
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
 // social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs.
@@ -48,8 +51,8 @@
 // game.relocated, which echo accepts.
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
-// initOmit, versionsOff, damage, familyInUse, familyWarn, settingsRefuse,
-// settingsDelayMs} (absent keys are left alone) and answers what settings.apply
+// initOmit, versionsOff, damage, familyInUse, familyWarn, copyInUse,
+// copyUnavailable, settingsRefuse, settingsDelayMs} (absent keys are left alone) and answers what settings.apply
 // last received (settings.go), so tests can read the values back. `calls`
 // returns how many times each method was received, so tests can tell a cached
 // -32601 from a retry. The methods of
@@ -112,9 +115,11 @@ var games = map[string]game{
 	"escape": {title: "Echo Escape", external: "/usr/bin", note: "Installed outside the plugin's folder: Hydra must refuse to launch it."},
 	"ana":    {title: "Echo Borrowed Quest", lentBy: "ana", native: true},
 	"ben":    {title: "Echo Borrowed Kart", lentBy: "ben", native: true},
+	// lentBy is the copy a game is played from until the user picks another.
+	"shared": {title: "Echo Shared Racer", lentBy: "ana", native: true},
 }
 
-var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben"}
+var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben", "shared"}
 
 // state is persisted in $HYDRA_PLUGIN_DATA/state.json.
 type state struct {
@@ -132,6 +137,9 @@ type state struct {
 	Damage map[string]int `json:"damage"`
 	// Options are the install-option choices of each installed game (options.go).
 	Options map[string]optionRec `json:"options"`
+	// PreferredCopy is the member whose copy of a shared game the user picked,
+	// by game id (family.setPreferredCopy).
+	PreferredCopy map[string]string `json:"preferredCopy"`
 }
 
 var (
@@ -157,6 +165,10 @@ type knobs struct {
 	// family.warning counts down from when a borrowed game launches (0: none).
 	FamilyInUse []string `json:"familyInUse"`
 	FamilyWarn  int      `json:"familyWarn"`
+	// CopyInUse and CopyUnavailable are member ids whose copy of a shared game
+	// is in use, or can't be borrowed right now.
+	CopyInUse       []string `json:"copyInUse"`
+	CopyUnavailable []string `json:"copyUnavailable"`
 	// SettingsRefuse makes settings.apply answer an error; SettingsDelayMs holds
 	// settings.apply that many milliseconds first (settings.go).
 	SettingsRefuse  bool `json:"settingsRefuse"`
@@ -187,7 +199,7 @@ func csv(name string) []string {
 func loadKnobs() {
 	kn = knobs{Off: csv("ECHO_OFF"), Extra: csv("ECHO_EXTRA"), Unavailable: csv("ECHO_UNAVAILABLE"),
 		Missing: csv("ECHO_MISSING"), InitOmit: os.Getenv("ECHO_INIT_OMIT") != "", VersionsOff: csv("ECHO_VERSIONS_OFF"),
-		FamilyInUse: csv("ECHO_FAMILY_IN_USE")}
+		FamilyInUse: csv("ECHO_FAMILY_IN_USE"), CopyInUse: csv("ECHO_COPY_IN_USE"), CopyUnavailable: csv("ECHO_COPY_UNAVAILABLE")}
 	kn.FamilyWarn, _ = strconv.Atoi(os.Getenv("ECHO_FAMILY_WARN"))
 	if v := os.Getenv("ECHO_FEATURES"); v != "" {
 		_ = json.Unmarshal([]byte(v), &kn.Features)
@@ -218,6 +230,8 @@ func configure(raw json.RawMessage) {
 	set("versionsOff", &kn.VersionsOff)
 	set("familyInUse", &kn.FamilyInUse)
 	set("familyWarn", &kn.FamilyWarn)
+	set("copyInUse", &kn.CopyInUse)
+	set("copyUnavailable", &kn.CopyUnavailable)
 	set("settingsRefuse", &kn.SettingsRefuse)
 	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
@@ -384,6 +398,9 @@ func load() {
 	if st.Options == nil {
 		st.Options = map[string]optionRec{}
 	}
+	if st.PreferredCopy == nil {
+		st.PreferredCopy = map[string]string{}
+	}
 }
 
 // save writes the state. Callers hold stMu.
@@ -441,6 +458,9 @@ type params struct {
 	Preview    bool              `json:"preview"`
 	Fields     map[string]string `json:"fields"`
 	Protocols  []string          `json:"protocols"` // initialize: the versions Hydra speaks
+
+	// family.setPreferredCopy: the owner whose copy of the game is picked.
+	OwnerID string `json:"ownerId"`
 
 	// settings.apply: the values, and the store's game id for a per-game one.
 	Values map[string]any `json:"values"`
@@ -623,6 +643,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return redeemSubmit(p)
 	case "family.members":
 		return familyMembers()
+	case "family.setPreferredCopy":
+		return setPreferredCopy(p)
 	case "settings.schema":
 		return settingsSchema(), nil
 	case "settings.apply":
@@ -695,8 +717,15 @@ func library() (any, error) {
 			"version": "1.0", "note": g.note, "native": g.native,
 		}
 		if g.lentBy != "" {
-			e["sharedBy"] = map[string]any{"id": g.lentBy, "name": familyName(g.lentBy)}
-			e["note"] = "Lent to you by " + familyName(g.lentBy)
+			owner := effectiveOwnerLocked(id)
+			e["sharedBy"] = map[string]any{"id": owner, "name": familyName(owner)}
+			e["note"] = "Lent to you by " + familyName(owner)
+			if copies := copiesList(id); copies != nil {
+				e["copies"] = copies
+				if pref := st.PreferredCopy[id]; pref != "" {
+					e["preferredCopy"] = pref
+				}
+			}
 		}
 		if rec, ok := st.Versions[id]; ok && installed {
 			e["version"] = rec.Name
@@ -830,7 +859,10 @@ func launchSpec(p params) (any, error) {
 		return nil, fmt.Errorf("unknown game %q", p.ID)
 	}
 	if g.lentBy != "" {
-		if err := borrowedLaunch(p.ID); err != nil {
+		stMu.Lock()
+		owner := effectiveOwnerLocked(p.ID)
+		stMu.Unlock()
+		if err := borrowedLaunch(p.ID, owner); err != nil {
 			return nil, err
 		}
 	}
