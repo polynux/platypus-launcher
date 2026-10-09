@@ -262,8 +262,11 @@ func (m *Manager) Notify(pluginID, method string, params json.RawMessage) {
 			return
 		}
 		s.view.Connection = c
-		if c.State == ConnReplaced || c.State == ConnLoggedOut {
-			s.paused = true // stop fighting for the session: the user starts it again
+		switch c.State {
+		case ConnReplaced, ConnLoggedOut:
+			s.paused = true // stop fighting for the session until the plugin connects again
+		case ConnOnline, ConnConnecting:
+			s.paused = false
 		}
 	case NoteSelf:
 		var self Self

@@ -451,3 +451,18 @@ func TestExitFromAFailedConnectDoesNotEndTheNextSession(t *testing.T) {
 		t.Fatalf("the healthy session ended by a stale exit; states %v", states)
 	}
 }
+
+// A plugin that reports replaced and then comes back online is restarted when
+// it exits: the pause lasts only until the plugin connects again.
+func TestReconnectedPluginIsRestartedWhenItExits(t *testing.T) {
+	f := newFake()
+	m := newManager(f, true)
+	m.Start("echo")
+	defer m.StopAll()
+	waitFor(t, "connected", func() bool { return f.count(MethodState) == 1 })
+
+	m.Notify("echo", NoteConnection, json.RawMessage(`{"state":"replaced"}`))
+	m.Notify("echo", NoteConnection, json.RawMessage(`{"state":"online"}`))
+	m.Exited("echo")
+	waitFor(t, "a restart", func() bool { return f.count(MethodStart) == 2 })
+}
