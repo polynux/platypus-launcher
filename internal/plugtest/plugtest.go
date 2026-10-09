@@ -386,6 +386,13 @@ func (s Suite) Conformance(t *testing.T) {
 	}
 	for _, g := range rawLib.Games {
 		checkKeys(t, "library.list game", g, LibraryKeys)
+		if has("family") {
+			var gid struct {
+				ID string `json:"id"`
+			}
+			_ = json.Unmarshal(g, &gid)
+			sess.checkCopies(t, gid.ID, g)
+		}
 	}
 
 	d, err := sess.Store.Details(ctx, game)
@@ -785,7 +792,7 @@ func (s *Session) checkHandshake(t *testing.T) {
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy"}
+		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",

@@ -66,6 +66,29 @@ type LibraryGame struct {
 	// SharedBy marks a game the user borrows from a family member (1.8,
 	// the `family` capability). Absent for the user's own games.
 	SharedBy *types.SharedBy `json:"sharedBy,omitempty"`
+	// Copies lists the family copies of a borrowed game, when members differ
+	// (1.8, the `family` capability: docs/plugins/protocol.md, "Family"). Read
+	// only for a game with SharedBy; the user's own copy means no SharedBy.
+	Copies []LibraryCopy `json:"copies,omitempty"`
+	// PreferredCopy is the owner id of the copy the user chose ("" for the
+	// store's default, SharedBy).
+	PreferredCopy string `json:"preferredCopy,omitempty"`
+}
+
+// LibraryCopy is one family member's copy of a borrowed game (LibraryGame.copies).
+type LibraryCopy struct {
+	OwnerID   string       `json:"ownerId"`
+	OwnerName string       `json:"ownerName"`
+	DLC       []LibraryDLC `json:"dlc,omitempty"`
+	Note      string       `json:"note,omitempty"`
+	Available bool         `json:"available"`
+	InUse     bool         `json:"inUse,omitempty"`
+}
+
+// LibraryDLC is an add-on one copy has (LibraryCopy.dlc).
+type LibraryDLC struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type LibraryList struct {

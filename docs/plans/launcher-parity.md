@@ -129,6 +129,9 @@ display only and never writes it back (Steam's in-game reporting belongs to `soc
 - `family.members {}` -> `[{ id, name, role: "adult"|"child", avatarUrl, state }]` for a small Families
   section. Exclusions and parental limits are shown, not enforced by core.
 - Steam-only details (which games are excluded, per-copy limits) stay in the Steam plugin.
+- **Later:** some families have a locking mechanism: a family member or parent can lock games or the whole
+  library (Steam Families' restrictions and "locked" state). Display only, for later: core would show the
+  locked state the store reports and enforce nothing. It needs live discovery first (L-F1); not implemented.
 
 ### 2.6 Launch spec for store clients under Wine (needed for Ubisoft)
 

@@ -103,6 +103,11 @@ type Game struct {
 	// SharedBy is the family member who lends the game (the `family`
 	// capability). Nil for the user's own games.
 	SharedBy *SharedBy `json:"shared_by,omitempty"`
+	// Copies are the family copies of a borrowed game, when they differ
+	// (protocol 1.8). PreferredCopy is the owner id the user chose, "" for
+	// the store's default (SharedBy).
+	Copies        []GameCopy `json:"copies,omitempty"`
+	PreferredCopy string     `json:"preferred_copy,omitempty"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that

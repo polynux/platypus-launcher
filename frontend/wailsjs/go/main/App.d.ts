@@ -139,6 +139,8 @@ export function SetPluginEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetPluginInstallFolder(arg1:string,arg2:string):Promise<void>;
 
+export function SetPreferredCopy(arg1:types.Game,arg2:string):Promise<void>;
+
 export function SetSocialEnabled(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetSocialPlaying(arg1:string,arg2:boolean):Promise<void>;

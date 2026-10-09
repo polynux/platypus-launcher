@@ -2,6 +2,7 @@ package plugtest
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 // rules core relies on. Unknown kinds in a schema are allowed; core drops them.
 var (
 	FamilyMemberKeys  = []string{"id", "name", "role", "avatarUrl", "state"}
+	FamilyCopyKeys    = []string{"ownerId", "ownerName", "dlc", "note", "available", "inUse"}
+	FamilyCopyDLCKeys = []string{"id", "name"}
 	SettingsKeys      = []string{"groups"}
 	SettingGroupKeys  = []string{"id", "label", "description", "fields"}
 	SettingFieldKeys  = []string{"id", "kind", "label", "description", "scope", "default", "options", "placeholder", "min", "max"}
@@ -43,6 +46,39 @@ func (s *Session) checkFamily(t *testing.T) {
 		if err := json.Unmarshal(m, &v); err != nil || v.ID == "" {
 			t.Errorf("family.members member without an id: %s", m)
 		}
+	}
+}
+
+// checkCopies holds a borrowed game's `copies` (family, protocol 1.8) to its
+// shape: each copy names its owner and says whether it is available, its DLC
+// has ids. A plugin that lists copies must answer family.setPreferredCopy with
+// -32602 for an empty pick (or -32601 when it doesn't implement it: optional).
+func (s *Session) checkCopies(t *testing.T, storeAppID string, raw json.RawMessage) {
+	t.Helper()
+	var g struct {
+		Copies []json.RawMessage `json:"copies"`
+	}
+	if err := json.Unmarshal(raw, &g); err != nil || len(g.Copies) == 0 {
+		return
+	}
+	for _, c := range g.Copies {
+		checkKeys(t, "library.list copy", c, FamilyCopyKeys)
+		var v struct {
+			OwnerID   string            `json:"ownerId"`
+			Available *bool             `json:"available"`
+			DLC       []json.RawMessage `json:"dlc"`
+		}
+		if err := json.Unmarshal(c, &v); err != nil || v.OwnerID == "" || v.Available == nil {
+			t.Errorf("library.list copy without an ownerId or available: %s", c)
+		}
+		for _, d := range v.DLC {
+			checkKeys(t, "library.list copy dlc", d, FamilyCopyDLCKeys)
+		}
+	}
+	var rpcErr *jsonrpc.Error
+	err := s.call("family.setPreferredCopy", map[string]any{"id": storeAppID, "ownerId": ""}, nil)
+	if !errors.As(err, &rpcErr) || (rpcErr.Code != jsonrpc.CodeInvalidParams && rpcErr.Code != jsonrpc.CodeMethodNotFound) {
+		t.Errorf("family.setPreferredCopy with no owner: %v, want -32602 (or -32601 when not implemented)", err)
 	}
 }
 
