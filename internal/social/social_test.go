@@ -3,6 +3,8 @@ package social
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -335,5 +337,70 @@ func TestNothingIsSentWithoutSubscription(t *testing.T) {
 	m.Notify("echo", NoteFriends, json.RawMessage(`{"full":true,"friends":[]}`))
 	if len(f.calls) != 0 {
 		t.Fatalf("calls without a subscription: %v", f.calls)
+	}
+}
+
+// restartWaits records the wait before each restart after a session ends.
+func restartWaits(m *Manager, waits *[]string, mu *sync.Mutex) {
+	m.opt.Logf = func(format string, args ...any) {
+		if strings.HasPrefix(format, "social %s: restarting") {
+			mu.Lock()
+			*waits = append(*waits, fmt.Sprint(args[1]))
+			mu.Unlock()
+		}
+	}
+}
+
+// Short sessions back off: the wait doubles from one restart to the next.
+func TestShortSessionsBackOff(t *testing.T) {
+	f := newFake()
+	var mu sync.Mutex
+	var waits []string
+	m := NewManager(Options{
+		Backend:    f,
+		Emit:       func(View) {},
+		MinBackoff: time.Millisecond,
+		MaxBackoff: 8 * time.Millisecond,
+	})
+	restartWaits(m, &waits, &mu)
+	m.Start("echo")
+	defer m.StopAll()
+	for n := 2; n <= 4; n++ {
+		waitFor(t, "a connected session", func() bool { return f.count(MethodState) == n-1 })
+		m.Exited("echo")
+		waitFor(t, "a restart", func() bool { return f.count(MethodStart) == n })
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if got := strings.Join(waits, " "); got != "1ms 2ms 4ms" {
+		t.Fatalf("restart waits: %q, want doubling from 1ms", got)
+	}
+}
+
+// A session that lasted past StableAfter counts as healthy: the wait starts again at the minimum.
+func TestLongSessionResetsBackoff(t *testing.T) {
+	f := newFake()
+	var mu sync.Mutex
+	var waits []string
+	m := NewManager(Options{
+		Backend:     f,
+		Emit:        func(View) {},
+		MinBackoff:  time.Millisecond,
+		MaxBackoff:  8 * time.Millisecond,
+		StableAfter: time.Nanosecond,
+	})
+	restartWaits(m, &waits, &mu)
+	m.Start("echo")
+	defer m.StopAll()
+	for n := 2; n <= 4; n++ {
+		waitFor(t, "a connected session", func() bool { return f.count(MethodState) == n-1 })
+		time.Sleep(time.Millisecond)
+		m.Exited("echo")
+		waitFor(t, "a restart", func() bool { return f.count(MethodStart) == n })
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if got := strings.Join(waits, " "); got != "1ms 1ms 1ms" {
+		t.Fatalf("restart waits: %q, want the minimum after stable sessions", got)
 	}
 }

@@ -109,6 +109,9 @@ type Options struct {
 	// MinBackoff and MaxBackoff bound the wait before a restart. Zero means
 	// 2 s and 5 min.
 	MinBackoff, MaxBackoff time.Duration
+	// StableAfter is how long a session must last to count as healthy: only
+	// then does the next restart wait MinBackoff again. Zero means 60 s.
+	StableAfter time.Duration
 }
 
 // stopTimeout bounds social.stop when the subscription ends.
@@ -395,32 +398,42 @@ func (m *Manager) setPlaying(pluginID, storeID string, on bool) {
 // plugin goes away, back off, repeat.
 func (m *Manager) run(ctx context.Context, s *sub) {
 	defer close(s.done)
-	minB, maxB := m.opt.MinBackoff, m.opt.MaxBackoff
+	minB, maxB, stable := m.opt.MinBackoff, m.opt.MaxBackoff, m.opt.StableAfter
 	if minB <= 0 {
 		minB = 2 * time.Second
 	}
 	if maxB <= 0 {
 		maxB = 5 * time.Minute
 	}
+	if stable <= 0 {
+		stable = time.Minute
+	}
 	backoff := minB
 	for {
 		if err := m.connect(ctx, s); err != nil {
 			if ctx.Err() != nil {
+				m.stopPlugin(s)
 				return
 			}
 			m.logf("social %s: %v; retrying in %s", s.id, err, backoff)
 			if !sleep(ctx, backoff) {
+				m.stopPlugin(s)
 				return
 			}
 			backoff = min(backoff*2, maxB)
 			continue
 		}
-		backoff = minB
+		began := time.Now()
 		if !m.serve(ctx, s) {
 			m.endSession(s)
 			return
 		}
 		m.endSession(s)
+		// A session that connected and then dropped at once doesn't reset the
+		// wait: a plugin that crashes on start would otherwise restart every 2 s.
+		if time.Since(began) > stable {
+			backoff = minB
+		}
 		s.mu.Lock()
 		paused := s.paused
 		s.mu.Unlock()
@@ -428,6 +441,7 @@ func (m *Manager) run(ctx context.Context, s *sub) {
 			<-ctx.Done()
 			return
 		}
+		m.logf("social %s: restarting in %s", s.id, backoff)
 		if !sleep(ctx, backoff) {
 			return
 		}
