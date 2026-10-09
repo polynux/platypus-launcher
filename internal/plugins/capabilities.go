@@ -36,6 +36,7 @@ const (
 	rev13 = "1.3" // versions (docs/plans/launcher-parity.md §2.2)
 	rev14 = "1.4" // verify and move (docs/plans/launcher-parity.md §2.3)
 	rev15 = "1.5" // install options and DLC (docs/plans/launcher-parity.md §2.1)
+	rev16 = "1.6" // social: friends and own status (docs/plans/steam-cloud-social.md, "social.*")
 )
 
 var registry = []Capability{
@@ -66,8 +67,8 @@ var registry = []Capability{
 		Methods: []string{"game.verify"}, Surfaces: []string{"verify-button"}},
 	{Name: "move", Since: rev14, Orchestrated: true,
 		Methods: []string{"game.move"}, Surfaces: []string{"move-dialog"}},
-	{Name: "social", Since: rev11,
-		Methods:         []string{"social.start", "social.stop", "social.state", "social.self", "social.friends"},
+	{Name: "social", Since: rev16, Orchestrated: true,
+		Methods:         []string{"social.start", "social.stop", "social.state"},
 		OptionalMethods: []string{"social.setStatus", "social.setPlaying"},
 		Surfaces:        []string{"friends-summary", "friends-modal"}},
 	{Name: "achievements", Since: rev11,

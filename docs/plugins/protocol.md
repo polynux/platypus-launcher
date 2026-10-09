@@ -1,4 +1,4 @@
-# Store plugin protocol (1.5, draft)
+# Store plugin protocol (1.6, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -404,7 +404,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -424,9 +424,9 @@ that doesn't know it.
   `game.launchSpec` (cloud saves). 1.3: the `versions.*` methods, `target` on installs and updates, and
   `installed` on `job.done` (versions). 1.4: the `verify` and `move` capabilities (`game.verify`, `game.move`), `verify`
   on `job.done`, and the optional `game.relocated`. 1.5: `game.options`, and `options` on installs, updates and
-  `game.installSize` (install options and DLC). A capability whose `since` is newer than the negotiated protocol
-  is off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2, 1.3, 1.4 or 1.5 method.
+  `game.installSize` (install options and DLC). 1.6: the `social` capability (`social.*`: friends and own status).
+  A capability whose `since` is newer than the negotiated protocol is off for that plugin (Hydra drops it from the
+  runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5 or 1.6 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -451,7 +451,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `versions` | 1.3 | `versions.list` | `versions.unlock` | yes |
 | `verify` | 1.4 | `game.verify` | | yes |
 | `move` | 1.4 | `game.move` | | yes |
-| `social` | 1.1 | `social.start`, `social.stop`, `social.state`, `social.self`, `social.friends` | `social.setStatus`, `social.setPlaying` | not yet |
+| `social` | 1.6 | `social.start`, `social.stop`, `social.state` | `social.setStatus`, `social.setPlaying` | yes |
 | `achievements` | 1.1 | `achievements.list` | | not yet |
 | `playtime` | 1.1 | `playtime.list` | | not yet |
 | `redeem` | 1.1 | `redeem.submit` | | not yet |
@@ -708,6 +708,46 @@ game.installSize { id, options? } -> { downloadBytes, diskBytes }
   check counts the chosen add-ons and packs.
 - **Errors.** `-32602` for a missing `id`, or for a choice the store doesn't
   have. A game the store doesn't install gets an empty `groups` list.
+
+## Social (1.6)
+
+The `social` capability (protocol 1.6) gives the user the friends of the store's account: who is online, away or
+playing what, and their own status. Hydra shows them in a small summary in the sidebar and, on click, a friends modal
+with one section per store (In game, Online, Offline). Chat, groups, friend requests and rich presence are not part of it.
+
+```
+social.start {} -> {}                              turn the friends on: connect, then push as below
+social.stop {} -> {}                               disconnect (idempotent)
+social.state {} -> { connection, self, friends }   the current snapshot, as the pushes would have it
+social.setStatus { state } -> {}                   the user's own status (optional)
+social.setPlaying { id | null } -> {}              the game the user plays, null for none (optional)
+
+social.connection { state, message? }              plugin -> Hydra notification
+social.self { name, avatarUrl?, state }            the user's own profile and status
+social.friends { full, friends: [Friend] }         the whole list (full: true) or changed friends (full: false)
+Friend = { id, name, avatarUrl?, state, game?: { id?, title }, lastSeen? }
+```
+
+- **States.** A friend's `state` is `online`, `offline`, `away`, `busy`, `snooze`, `looking` or `invisible`. A
+  connection is `connecting`, `online`, `reconnecting`, `replaced` (another session took the account), `offline` or
+  `loggedOut`. `setStatus` takes `online`, `away`, `busy`, `snooze` or `invisible`; anything else is `-32602`.
+- **Pushes.** The first push after `social.start` is `full`. An incremental push replaces the friends it names (by
+  `id`) and adds new ones. It never removes a friend: a plugin that drops one sends the full list.
+- **Games.** `game.id` is Hydra's key (`p.<plugin id>.<game id>`) when the game is in the user's library, and left out
+  otherwise, when only `title` says what the friend plays. Hydra links the game when the key is in the library.
+- **Playing.** When a game of this plugin starts, Hydra sends `social.setPlaying { id }` with the store's game id (the
+  part after `p.<plugin id>.`); when it stops, `{ id: null }`. Only plugins that offer the capability get it, and only
+  for their own games, and only while the user keeps "Show what I'm playing to friends" on for the store (on by
+  default). A game started while the friends are off is sent when they turn on. A plugin without the optional method answers `-32601`, which Hydra accepts. After the plugin
+  process restarts, Hydra sends the running game again.
+- **Lifecycle.** Hydra starts the friends of every plugin that offers `social` at launcher start, unless the user
+  switched them off (on by default). It sends `social.stop` when they are switched off or Hydra quits. When the plugin
+  process exits, Hydra restarts it after a backoff (2 s, doubling to 5 min) and calls `social.start` again. The wait
+  starts again at 2 s only after a session that lasted a minute, so a plugin that crashes on start isn't restarted
+  every 2 s. A `replaced` or `loggedOut` connection is not fought: Hydra stops restarting until the plugin reports
+  `online` or `connecting` again, or the user restarts the friends (Reconnect, which switches them off and on).
+- **Errors.** A store that can't change the status answers `-32601` to `setStatus`, and Hydra tells the user so.
+  Before `social.start`, `social.state` answers offline with no friends.
 
 ## Out of scope
 

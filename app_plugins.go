@@ -108,6 +108,7 @@ func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
 	}
 	a.syncDataPlugins(found)
 	a.failStoppedJobs()
+	a.syncSocial()
 	return a.ListStorePlugins(), nil
 }
 
@@ -136,6 +137,7 @@ func (a *App) ApprovePlugin(id string) error {
 		return err
 	}
 	a.failStoppedJobs()
+	a.syncSocial()
 	return nil
 }
 
@@ -145,6 +147,7 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 		return err
 	}
 	a.failStoppedJobs()
+	a.syncSocial()
 	return nil
 }
 
@@ -223,6 +226,9 @@ func (a *App) PluginAuthBegin(id string) (types.AuthPrompt, error) {
 func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.AuthStatus, error) {
 	var st types.AuthStatus
 	err := a.authCall(id, "auth.complete", map[string]any{"fields": fields}, &st)
+	if err == nil && st.LoggedIn {
+		a.socialLoggedIn(id)
+	}
 	return st, err
 }
 

@@ -97,13 +97,33 @@ func TestHandshakeEchoSwitchedOffCapabilities(t *testing.T) {
 		"ECHO_FEATURES": `{"install-options":{"dlc":true,"languages":false}}`,
 	}).Handshake(t)
 	calls := echoCalls(t, sess)
-	for _, m := range []string{"versions.list", "game.verify", "social.friends"} {
+	for _, m := range []string{"versions.list", "game.verify", "social.start"} {
 		if calls[m] != 0 {
 			t.Errorf("%s reached the plugin although its capability is off", m)
 		}
 	}
 	if calls["game.options"] == 0 {
 		t.Error("game.options (install-options is on) wasn't probed")
+	}
+}
+
+// A plugin that speaks only 1.5 is never sent social.*: the capability is
+// introduced by 1.6, so it stays off at runtime although the manifest lists it.
+func TestSocialStaysOffForAProtocol15Plugin(t *testing.T) {
+	s := echoAllCapabilities(map[string]string{"ECHO_PROTOCOLS": "1.0,1.1,1.2,1.3,1.4,1.5"})
+	s.EditManifest = func(m map[string]any) {
+		m["protocol"] = map[string]any{"versions": []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}}
+	}
+	sess := s.Handshake(t)
+	if sess.Has("social") {
+		t.Fatal("social is on for a plugin that settled on 1.5")
+	}
+	var raw map[string]any
+	if err := sess.Call("social.start", map[string]any{}, &raw); err == nil {
+		t.Fatal("social.start reached a 1.5 plugin")
+	}
+	if n := echoCalls(t, sess)["social.start"]; n != 0 {
+		t.Fatalf("the plugin received social.start %d time(s)", n)
 	}
 }
 

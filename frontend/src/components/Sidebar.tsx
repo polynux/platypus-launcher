@@ -6,7 +6,8 @@ import { Badge } from './ds/badge';
 import { Input } from './ds/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { storeLabel } from '../lib/games';
-import type { SessionEvent, StoreType, View } from '../types';
+import { FriendsSummary } from './FriendsSummary';
+import type { SessionEvent, SocialView, StoreType, View } from '../types';
 
 type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'settings';
 
@@ -25,6 +26,11 @@ interface SidebarProps {
   lastScan: number | null;
   sessions: (SessionEvent & { title: string })[];
   onStop: (gameId: string) => void;
+  /** Friends lists of the stores that offer them (none: no block). */
+  friends: SocialView[];
+  /** Store names by plugin id. */
+  friendLabels: Record<string, string>;
+  onOpenFriends: () => void;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -117,8 +123,9 @@ export function Sidebar(p: SidebarProps) {
         );
       })}
 
-      {/* Pinned footer: fixed content, never grows (friends panel omitted until presence is real). */}
+      {/* Pinned footer: fixed content, never grows. The friends block is the only part that changes size. */}
       <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
+        <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} />
         {p.sessions.map((e) => {
           const running = e.state === 'running';
           const label = running ? 'playing' : e.state === 'stopping' ? 'stopping' : 'starting';

@@ -57,6 +57,12 @@ type file struct {
 	// InstallOptions are each game's last install-option choices (the
 	// `install-options` capability), keyed by Hydra's game id. See options.go.
 	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`
+	// Social: whether each plugin's friends list is on, by plugin id. A plugin
+	// that offers social is on until the user switches it off (social.go).
+	SocialPlugins map[string]bool `json:"social_plugins,omitempty"`
+	// SocialPlaying: whether friends see the game the user plays, per plugin.
+	// A plugin is on until the user switches it off (social.go).
+	SocialPlaying map[string]bool `json:"social_playing,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra

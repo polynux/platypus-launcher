@@ -23,6 +23,7 @@ import (
 	"hydra-launcher/internal/runner"
 	"hydra-launcher/internal/session"
 	"hydra-launcher/internal/settings"
+	"hydra-launcher/internal/social"
 	"hydra-launcher/internal/stores"
 	"hydra-launcher/internal/types"
 
@@ -47,6 +48,9 @@ type App struct {
 	stores       *stores.Registry
 	sessions     *session.Tracker
 	cloud        *cloudsync.Orchestrator
+	social       *social.Manager // friends lists of plugins with the social capability
+	socialMu     sync.Mutex
+	socialGames  map[string]socialGame // launched store games by Hydra game id, for "playing"
 	moves        coreMoves
 	ledger       *ledger.Ledger
 	// sessionRunning says whether a game has a session open. Nil asks the
@@ -75,6 +79,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
 		wruntime.EventsEmit(ctx, "session", e)
+		a.socialSession(e)
 	})
 
 	dataDir, err := settings.DataDir()
@@ -113,6 +118,9 @@ func (a *App) startup(ctx context.Context) {
 		OnExit: func(id string, err error) {
 			wruntime.LogWarningf(ctx, "plugin %s exited: %v", id, err)
 			a.jobs.PluginExited(id, err)
+			if a.social != nil {
+				a.social.Exited(id)
+			}
 		},
 	})
 	found, err := a.plugins.Discover()
@@ -130,6 +138,8 @@ func (a *App) startup(ctx context.Context) {
 	// every rescan so installs and removals apply without a restart.
 	a.syncDataPlugins(found)
 	a.startCloud(ctx, dataDir)
+	a.startSocial(ctx)
+	a.syncSocial()
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
@@ -151,6 +161,9 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.sessions != nil {
 		a.sessions.StopAll()
 	}
+	if a.social != nil {
+		a.social.StopAll()
+	}
 	if a.plugins != nil {
 		a.plugins.Shutdown()
 	}
@@ -160,6 +173,10 @@ func (a *App) shutdown(ctx context.Context) {
 func (a *App) pluginNotify(id, method string, params json.RawMessage) {
 	if method == "cloud.progress" && a.cloud != nil {
 		a.cloud.Progress(id, params)
+		return
+	}
+	if a.social != nil && strings.HasPrefix(method, "social.") {
+		a.social.Notify(id, method, params)
 		return
 	}
 	if !strings.HasPrefix(method, "job.") {
@@ -558,6 +575,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		return "", fmt.Errorf("game %q has no launch target", game.Title)
 	}
 
+	a.noteSocialGame(game)
 	cmd := exec.Command(filtered[0], filtered[1:]...)
 	cmd.Env = os.Environ()
 	for k, v := range p.env {

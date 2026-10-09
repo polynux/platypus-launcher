@@ -31,13 +31,14 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.5); it answers the highest Hydra also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.6); it answers the highest Hydra also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
 //	ECHO_VERSIONS_OFF  parts of versions.list to leave out: channels, builds, manual, links (see versions.go)
 //
-// Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there.
+// Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
+// social (social.go) its ECHO_SOCIAL_TICK and `config` social knobs.
 // Verify and move (maintenance.go, protocol 1.4) need no env knobs: `config`
 // {damage: {"tiny": 3}} sets the damaged files a check finds. Switch `move` off
 // (ECHO_OFF=move) and Hydra moves the game folder itself and sends
@@ -147,7 +148,7 @@ type knobs struct {
 
 // defaultProtocols is what echo speaks: more than any Hydra offers yet, so
 // the negotiation has something to pick from.
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6"}
 
 var (
 	knobMu  sync.Mutex
@@ -374,6 +375,7 @@ func main() {
 	load()
 	loadKnobs()
 	loadCloud()
+	loadSocial()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
@@ -430,6 +432,8 @@ type params struct {
 	To     string `json:"to"`
 	// options of game.installSize, game.install and game.update.
 	Options map[string]any `json:"options"`
+	// social.setStatus: the status to set.
+	State string `json:"state"`
 }
 
 func dispatch(method string, raw json.RawMessage) (any, error) {
@@ -457,6 +461,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		configure(raw)
 		configureCloud(raw)
 		configureMaintenance(raw)
+		configureSocial(raw)
 		return nil, nil
 	case "calls":
 		callsMu.Lock()
@@ -568,6 +573,18 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return versionsList(p)
 	case "versions.unlock":
 		return versionsUnlock(p)
+	case "social.start":
+		return socialStart()
+	case "social.stop":
+		return socialStopped()
+	case "social.state":
+		return socialSnapshot()
+	case "social.setStatus":
+		return socialSetStatus(p)
+	case "social.setPlaying":
+		return socialSetPlaying(raw)
+	case "recorded":
+		return socialRecorded(), nil
 	}
 	if res, err, ok := capabilityStub(method, p); ok {
 		return res, err

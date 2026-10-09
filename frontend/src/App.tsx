@@ -13,14 +13,16 @@ import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
+import { FriendsModal } from './components/FriendsModal';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onSession } from './effect/runtime';
+import { LauncherApi, onJobs, onSession, onSocial } from './effect/runtime';
+import { reconcileViews, upsertView } from './lib/social';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind }
@@ -38,6 +40,8 @@ export function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
   const [plugins, setPlugins] = useState<StorePlugin[]>([]);
+  const [social, setSocial] = useState<SocialView[]>([]);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -78,6 +82,23 @@ export function App() {
 
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
+
+  // Friends lists: the snapshot of every store that offers one, then each push.
+  // A snapshot is merged with what the pushes already brought in, and it drops
+  // the stores that are no longer ready (refreshSocial runs on a plugin change).
+  const refreshSocial = useCallback(
+    () => Effect.runPromise(LauncherApi.socialViews()).then((vs) => setSocial((list) => reconcileViews(list, vs)), () => {}),
+    [],
+  );
+  const onPluginsChanged = useCallback((list: StorePlugin[]) => {
+    setPlugins(list);
+    void refreshSocial();
+  }, [refreshSocial]);
+  useEffect(() => {
+    const unsubscribe = onSocial((v) => setSocial((list) => upsertView(list, v)));
+    void refreshSocial();
+    return unsubscribe;
+  }, [refreshSocial]);
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
@@ -133,6 +154,7 @@ export function App() {
           }
           if (pR.ok) {
             setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
+            void refreshSocial();
           } else {
             failures.push(`Plugins: ${errMsg((pR as { ok: false; error: Error }).error)}`);
           }
@@ -176,7 +198,7 @@ export function App() {
           setScanning(false);
         });
     },
-    [log, notify]
+    [log, notify, refreshSocial]
   );
 
   // StrictMode mounts effects twice in dev; scan only once on startup.
@@ -381,6 +403,9 @@ export function App() {
   const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
+  const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
+
   const openGame = (id: string) =>
     setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
 
@@ -481,7 +506,7 @@ export function App() {
           <PluginsView
             plugins={plugins}
             warnings={warnings}
-            onPlugins={setPlugins}
+            onPlugins={onPluginsChanged}
             onLibraryChanged={() => loadData('rescan')}
             onNotify={notify}
           />
@@ -528,6 +553,9 @@ export function App() {
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
         onStop={(id) => stop(id, false)}
+        friends={social}
+        friendLabels={socialLabels}
+        onOpenFriends={() => setFriendsOpen(true)}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
@@ -547,6 +575,24 @@ export function App() {
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
+
+      {friendsOpen && (
+        <FriendsModal
+          views={social}
+          labels={socialLabels}
+          inLibrary={(id) => libraryIds.has(id)}
+          onClose={() => setFriendsOpen(false)}
+          onSetEnabled={(plugin, enabled) =>
+            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onSetStatus={(plugin, state: SocialStatus) =>
+            Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(errMsg(err), 'err'))}
+          onSetPlaying={(plugin, show) =>
+            Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onReconnect={(plugin) =>
+            Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onOpenGame={(id) => { setFriendsOpen(false); openGame(id); }}
+        />
+      )}
 
       {notice && (
         <div

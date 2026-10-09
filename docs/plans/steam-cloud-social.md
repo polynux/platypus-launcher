@@ -34,7 +34,7 @@ CM connection.
 | D6 | **Own baseline, never the official client's files.** Per game: `path -> last SHA-1 identical on both sides`, stored under the plugin's `HYDRA_PLUGIN_DATA`. Rules: changed on one side = copy; changed on both or no record = conflict, ask; never delete in the cloud; back up any local file a download replaces. | Madeira's proven model (§1.3) and the only safe one, since `remotecache.vdf` is the official client's private state. |
 | D7 | **When the official Steam client is running and a Hydra-launched game would attach to it, Hydra does not sync that game itself.** It shows why and offers "Launch through Steam". Otherwise Hydra syncs. (Needs the user's agreement, Q-B.) | Two writers on one save folder produce exactly the error seen (§2.3). |
 | D8 | **Unique logon ID per role and a stable machine ID** before any persistent session exists. | The fixed `LoginID = 2718281` makes two overlapping Hydra sessions kick each other (§3.2, R1). |
-| D9 | **Presence is opt-in and conservative**: friends list read-only first; own status control second; "in game" reporting last and off by default. | Aggregation with the official client's status is unknown (R10), and `ClientGamesPlayed` credits playtime and blocks the official client from playing (R11). |
+| D9 | **Presence is opt-in and conservative**: friends list read-only first; own status control second; "in game" reporting last. Reporting is on by default, with a per-store switch "Show what I'm playing to friends" (superseded: the user decided on 2026-10-08, Q-D, to report "in game" like Steam does). | Aggregation with the official client's status is unknown (R10), and `ClientGamesPlayed` credits playtime and blocks the official client from playing (R11). The per-store switch keeps the choice in the user's hands. |
 | D10 | **API-only (non-Auto-Cloud) games are out of scope** for direct launch. They keep working through "Launch through Steam". | They need the Steamworks IPC to write `userdata/…/remote` (R8). |
 
 ## Protocol additions (documented in `docs/plugins/protocol.md` and enforced by `internal/plugtest`)
@@ -277,7 +277,7 @@ Answers to the open questions below; they override the recommendations where the
 | Q-A API-only games (e.g. Terraria) | Launch them through the official Steam client. Making Hydra answer for the Steam client (Steamworks IPC) is deferred; if ever done: only with real account data, no game file changes, its own droppable plugin. |
 | Q-B Official client running | D7 as recommended: Hydra does not sync that game and offers "Launch through Steam". |
 | Q-C Automatic vs ask | Auto-sync clean cases; dialog only on conflicts. |
-| Q-D In-game reporting | Report "in game" like Steam does (playtime credited). Goal is to replicate Steam's behaviour. Overrides D9's "off by default". |
+| Q-D In-game reporting | Report "in game" like Steam does (playtime credited). Goal is to replicate Steam's behaviour. Overrides D9's "off by default": on by default, switchable per store ("Show what I'm playing to friends"). |
 | Q-E Status and connection | Follow Steam's status (not Invisible); connect at launcher start. |
 | Q-F UI | Small friends summary section in the sidebar; clicking it opens a friends modal, like Steam. |
 | Q-G SUPERHOT conflict | Skip. |
