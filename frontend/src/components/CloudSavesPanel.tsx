@@ -5,7 +5,7 @@ import type { CloudInfo, CloudMode, Game, StorePlugin } from '../types';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
 import { CapabilitySurface } from '../lib/capabilities';
-import { LauncherApi, onCloud } from '../effect/runtime';
+import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { MODE_HELP, STATE_CHIP, agoLabel, describeCounts } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { MonoLabel, Panel, SegRow, cx } from './ui';
@@ -48,7 +48,10 @@ function CloudSavesRow({ game }: { game: Game }) {
     return Effect.runPromise(LauncherApi.checkCloudSaves(gameRef.current))
       .then(setInfo)
       .catch((e) => setError(errMsg(e)))
-      .finally(() => setChecking(false));
+      .finally(() => {
+        setChecking(false);
+        setProgress(null);
+      });
   }, []);
 
   // Load the last known state; look once per session when there is none yet.
@@ -86,6 +89,15 @@ function CloudSavesRow({ game }: { game: Game }) {
     [game.id, refresh],
   );
 
+  // Starting and stopping the game change whether its saves can be settled.
+  useEffect(
+    () =>
+      onSession((e) => {
+        if (e.game_id === game.id) void refresh();
+      }),
+    [game.id, refresh],
+  );
+
   const setMode = (v: CloudMode | 'default') => {
     Effect.runPromise(LauncherApi.setCloudGameMode(game.id, v === 'default' ? '' : v))
       .then(refresh)
@@ -106,6 +118,7 @@ function CloudSavesRow({ game }: { game: Game }) {
   const chip = st ? STATE_CHIP[st.state] : null;
   const client = st?.client?.running ? st.client : null;
   const when = st?.checkedAt ? agoLabel(st.checkedAt) : '';
+  const running = !!info?.running;
 
   return (
     <Panel className="bg-white/[0.05]">
@@ -171,9 +184,12 @@ function CloudSavesRow({ game }: { game: Game }) {
           <RefreshCw className={cx('h-3.5 w-3.5', checking && 'animate-spin')} /> Check now
         </Button>
         {st?.state === 'conflict' && (st.conflicts?.length ?? 0) > 0 && (
-          <Button variant="primary" size="sm" onClick={() => setResolving(true)}>Choose which saves to keep…</Button>
+          <Button variant="primary" size="sm" disabled={running} onClick={() => setResolving(true)}>Choose which saves to keep…</Button>
         )}
       </div>
+      {running && st?.state === 'conflict' && (
+        <p className="mt-2 text-[11.5px] text-white/45">{game.title} is running. Choose its saves after it exits.</p>
+      )}
 
       {info && (
         <div className="mt-4 border-t border-white/[0.05] pt-3">

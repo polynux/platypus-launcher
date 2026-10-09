@@ -11,7 +11,8 @@ type Notify = (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface Pending {
-  game: Game;
+  gameId: string;
+  title: string;
   kind: CloudPrompt;
   message: string;
   status?: CloudStatus;
@@ -39,25 +40,41 @@ export function CloudSavesHost({
   useEffect(
     () =>
       onCloud((e) => {
-        const game = gamesRef.current.find((g) => g.id === e.game_id);
-        const title = game?.title ?? e.game_id;
+        const title = gamesRef.current.find((g) => g.id === e.game_id)?.title ?? e.title ?? e.game_id;
         const n = cloudNotice(e, title);
         if (n?.toast) notifyRef.current(n.toast.msg, n.toast.kind);
         if (n?.activity) logRef.current({ type: 'cloud', game: title, ...n.activity });
-        if (e.kind === 'prompt' && e.prompt && game) {
-          setPending({ game, kind: e.prompt, message: e.message ?? '', status: e.status, client: e.client });
+        // Keyed by id: a prompt is never dropped because the library lacks its game.
+        if (e.kind === 'prompt' && e.prompt) {
+          setPending({ gameId: e.game_id, title, kind: e.prompt, message: e.message ?? '', status: e.status, client: e.client });
         }
       }),
     [],
   );
 
   if (!pending) return null;
-  const { game } = pending;
   const close = () => setPending(null);
+  const game = games.find((g) => g.id === pending.gameId);
+  const { title } = pending;
   const run = (op: Effect.Effect<string, Error>) => {
     close();
     Effect.runPromise(op).then((m) => m && notifyRef.current(m, 'busy')).catch((e) => notifyRef.current(errMsg(e), 'err'));
   };
+
+  // Every action needs the game itself. One that left the library gets a
+  // dialog that only says what is pending.
+  if (!game) {
+    return (
+      <Modal label="Cloud saves need a decision" onClose={close} className="max-w-md">
+        <h2 className="text-[19px] font-extrabold tracking-tight">{title}</h2>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-white/50">Open the game's page to decide.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={close}>Close</Button>
+        </div>
+      </Modal>
+    );
+  }
 
   if (pending.kind === 'conflict' && pending.status) {
     return (

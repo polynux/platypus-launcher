@@ -14,6 +14,7 @@ vi.mock('../../effect/runtime', () => ({
     h.handlers.add(cb);
     return () => h.handlers.delete(cb);
   },
+  onSession: () => () => {},
 }));
 
 import { CloudSavesPanel } from '../CloudSavesPanel';
@@ -183,6 +184,16 @@ describe('Cloud saves row: working', () => {
     await screen.findByTestId('cloud-state');
     emit({ game_id: 'p.echo.other', kind: 'progress', phase: 'upload', done: 1, total: 2 });
     expect(screen.queryByRole('status')).toBeNull();
+  });
+});
+
+describe('Cloud saves row: running game', () => {
+  it('does not offer to settle conflicts while the game runs', async () => {
+    const g = fresh();
+    h.api.getCloudInfo = ok(info({ status: conflictStatus(), running: true }));
+    render(<CloudSavesPanel game={g} plugin={plugin()} />);
+    expect(await screen.findByRole('button', { name: /choose which saves to keep/i })).toBeDisabled();
+    expect(screen.getByText(/choose its saves after it exits/i)).toBeInTheDocument();
   });
 });
 
@@ -365,6 +376,15 @@ describe('CloudSavesHost', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
     expect(h.api.launchGameAnyway).not.toHaveBeenCalled();
     expect(h.api.launchGame).not.toHaveBeenCalled();
+  });
+
+  it('still asks about a game the library no longer lists, under its title', async () => {
+    setup([]);
+    emit({ kind: 'prompt', prompt: 'offline', message: 'The store is not reachable', title: 'Echo Tiny' });
+    const dialog = await screen.findByRole('dialog', { name: /cloud saves need a decision/i });
+    expect(dialog).toHaveTextContent('Echo Tiny');
+    expect(dialog).toHaveTextContent('The store is not reachable');
+    expect(h.api.launchGameAnyway).not.toHaveBeenCalled();
   });
 
   it('offers launching through the store client, or without cloud sync', async () => {

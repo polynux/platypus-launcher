@@ -408,6 +408,8 @@ export interface CloudInfo {
   status: CloudStatus | null;
   /** The job running for the game ("pull", "push", "resolve"), if any. */
   busy?: string;
+  /** The game is running: its saves are settled after it exits. */
+  running?: boolean;
 }
 
 export interface CloudSettings {
@@ -430,4 +432,6 @@ export interface CloudEvent {
   total?: number;
   /** The store client's name ("Steam"), for the client prompt and skips. */
   client?: string;
+  /** The game's title, for a prompt about a game the library may not list. */
+  title?: string;
 }
