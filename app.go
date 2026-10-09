@@ -81,7 +81,7 @@ func (a *App) startup(ctx context.Context) {
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
 		wruntime.EventsEmit(ctx, "session", e)
 		if e.State == "stopped" || e.State == "failed" {
-			a.schedulePlaytimeRefresh()
+			a.schedulePlaytimeRefresh(e.GameID)
 		}
 	})
 
@@ -546,6 +546,9 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 // launchGame starts a game. anyway is the user's "launch anyway" for this one
 // launch: it skips the cloud step and nothing after it.
 func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
+	if _, ok := a.plugins.Plugin(game.Source); ok {
+		a.stats.noteSource(game.ID, game.Source)
+	}
 	unlock := a.lockGame(game.ID)
 	defer unlock()
 	if a.isRunning(game.ID) {

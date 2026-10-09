@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"hydra-launcher/internal/stats"
 	"hydra-launcher/internal/types"
@@ -177,12 +178,68 @@ func TestRedeemIsNotSentToAPluginWithoutTheCapability(t *testing.T) {
 	}
 }
 
-func TestSessionEndRefreshesOnlyRunningPlugins(t *testing.T) {
-	a, changes := statsApp(t, statsManifest)
-	a.refreshRunningPlaytime()
-	if *changes != 1 {
-		t.Fatalf("an initialized plugin's playtime was not refreshed after a session: %d", *changes)
+func TestSessionEndRefreshesOnlyTheEndedGamesPlugin(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	a.stats.delay = 10 * time.Millisecond
+	a.stats.noteSource("p.echo.tiny", "echo")
+
+	// Three ends in a burst make one read; a game of an unknown store makes none.
+	a.schedulePlaytimeRefresh("p.echo.tiny")
+	a.schedulePlaytimeRefresh("p.echo.tiny")
+	a.schedulePlaytimeRefresh("p.echo.tiny")
+	a.schedulePlaytimeRefresh("p.other.game")
+	time.Sleep(300 * time.Millisecond)
+
+	if n := echoCalls(t, a)["playtime.list"]; n != 1 {
+		t.Fatalf("playtime.list reached echo %d times after a burst of session ends, want 1", n)
 	}
+	a.stats.mu.Lock()
+	defer a.stats.mu.Unlock()
+	if _, ok := a.stats.playtime["echo"]; !ok {
+		t.Fatal("the ended game's store playtime was not read")
+	}
+}
+
+func TestPlaytimeReadIsNotStartedTwiceAtOnce(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	a.startPlaytimeOnce("echo")
+	a.startPlaytimeOnce("echo")
+	deadline := time.Now().Add(5 * time.Second)
+	for !a.stats.isFresh("echo") && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := echoCalls(t, a)["playtime.list"]; n != 1 {
+		t.Fatalf("playtime.list reached echo %d times for two listings at once, want 1", n)
+	}
+}
+
+func TestPlaytimeClaimIsExclusiveAndAFailureBacksOff(t *testing.T) {
+	var c statsCache
+	if !c.claim("echo") {
+		t.Fatal("first claim refused")
+	}
+	if c.claim("echo") {
+		t.Fatal("a second claim got through while the first was in flight")
+	}
+	c.release("echo", true)
+	if !c.backingOff("echo") {
+		t.Fatal("a failed read is retried at once")
+	}
+	c.retryAt["echo"] = time.Now().Add(-time.Second)
+	if c.backingOff("echo") || !c.claim("echo") {
+		t.Fatal("the read is not retried once the backoff has passed")
+	}
+}
+
+func TestFailedPlaytimeReadIsNotRetriedOnEveryListing(t *testing.T) {
+	a, _ := statsApp(t, statsManifest)
+	a.stats.release("echo", true)
+	a.startPlaytimeOnce("echo")
+	if !a.stats.claim("echo") {
+		t.Fatal("a listing started a read during the backoff after a failure")
+	}
+	a.stats.release("echo", false)
 }
 
 func TestPlaytimeTooltipFieldsKeepAStoreZeroAndOmitAnUnknownLocal(t *testing.T) {

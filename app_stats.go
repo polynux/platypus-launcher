@@ -27,6 +27,8 @@ const (
 	redeemTimeout       = 45 * time.Second
 	// A burst of sessions ending (or a quick restart) refreshes playtime once.
 	playtimeDebounce = 3 * time.Second
+	// A failed read waits this long before a library listing tries it again.
+	playtimeBackoff = 5 * time.Minute
 	// Progress is cached this long per game; the page reopens without a call.
 	achievementsTTL = 5 * time.Minute
 )
@@ -38,8 +40,17 @@ type statsCache struct {
 	// playtime is the store's minutes per store game id, by plugin id.
 	playtime map[string]map[string]int
 	// fresh marks plugins whose playtime was read at least once this run.
-	fresh        map[string]bool
-	debounce     *time.Timer
+	fresh map[string]bool
+	// inflight marks plugins with a playtime read on its way; retryAt is when
+	// a failed read may be tried again.
+	inflight map[string]bool
+	retryAt  map[string]time.Time
+	// sources maps a launched game's Hydra id to its store, so a session end
+	// refreshes only that store. debounces holds the pending refresh per store.
+	sources   map[string]string
+	debounces map[string]*time.Timer
+	// delay is the session-end debounce; zero means playtimeDebounce.
+	delay        time.Duration
 	achievements map[string]achievementsEntry // by Hydra game id
 	redeemMu     sync.Mutex                   // one submission at a time
 	// changed tells the UI that a playtime report changed a library value.
@@ -131,49 +142,116 @@ func (c *statsCache) putAchievements(gameID string, p types.AchievementProgress)
 }
 
 // startPlaytimeOnce reads a plugin's playtime the first time its library is
-// listed this run: listing starts the plugin, so this is "at plugin start".
+// listed this run: listing starts the plugin, so this is "at plugin start". A
+// read already on its way, or one that failed a moment ago, isn't repeated.
 func (a *App) startPlaytimeOnce(plugin string) {
-	if !a.stats.isFresh(plugin) {
-		go a.refreshPlaytime(plugin)
+	if a.stats.isFresh(plugin) || a.stats.backingOff(plugin) {
+		return
 	}
+	a.readPlaytime(plugin)
+}
+
+// readPlaytime reads a plugin's playtime in the background, unless a read of
+// that plugin is already in flight.
+func (a *App) readPlaytime(plugin string) {
+	if !a.stats.claim(plugin) {
+		return
+	}
+	go func() {
+		err := a.refreshPlaytime(plugin)
+		if err != nil {
+			a.stats.logWarn("playtime %s: %v", plugin, err)
+		}
+		a.stats.release(plugin, err != nil)
+	}()
 }
 
 // refreshPlaytime asks one plugin for its playtime. It does nothing unless the
 // plugin is ready and offers playtime. A changed report tells the UI to rescan.
-func (a *App) refreshPlaytime(plugin string) {
+func (a *App) refreshPlaytime(plugin string) error {
 	p, ok := a.plugins.Plugin(plugin)
 	if !ok || p.Status != plugins.StatusReady || !a.plugins.Has(plugin, "playtime") {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, playtimeTimeout)
 	defer cancel()
 	var reply stats.PlaytimeReply
 	if err := a.plugins.Call(ctx, plugin, "playtime.list", map[string]any{}, &reply); err != nil {
-		a.stats.logWarn("playtime %s: %v", plugin, err)
-		return
+		return err
 	}
 	if a.stats.setPlaytime(plugin, stats.PlaytimeByGame(reply)) && a.stats.changed != nil {
 		a.stats.changed()
 	}
+	return nil
 }
 
-// schedulePlaytimeRefresh runs after a session ends. Several ends close
-// together cause one refresh, of the plugins that are running right now.
-func (a *App) schedulePlaytimeRefresh() {
+// noteSource remembers the store of a game Hydra launched.
+func (c *statsCache) noteSource(gameID, source string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sources == nil {
+		c.sources = map[string]string{}
+	}
+	c.sources[gameID] = source
+}
+
+// schedulePlaytimeRefresh runs after a session of a game ends. Several ends of
+// the same store close together make one read, of that store only.
+func (a *App) schedulePlaytimeRefresh(gameID string) {
 	a.stats.mu.Lock()
 	defer a.stats.mu.Unlock()
-	if a.stats.debounce != nil {
-		a.stats.debounce.Stop()
+	plugin, ok := a.stats.sources[gameID]
+	if !ok {
+		return
 	}
-	a.stats.debounce = time.AfterFunc(playtimeDebounce, a.refreshRunningPlaytime)
+	if t := a.stats.debounces[plugin]; t != nil {
+		t.Stop()
+	}
+	if a.stats.debounces == nil {
+		a.stats.debounces = map[string]*time.Timer{}
+	}
+	delay := a.stats.delay
+	if delay == 0 {
+		delay = playtimeDebounce
+	}
+	a.stats.debounces[plugin] = time.AfterFunc(delay, func() { a.readPlaytime(plugin) })
 }
 
-func (a *App) refreshRunningPlaytime() {
-	for _, p := range a.plugins.Plugins() {
-		if id := p.Manifest.ID; a.plugins.Runtime(id).Initialized {
-			a.refreshPlaytime(id)
-		}
+// claim marks a playtime read of the plugin as on its way. It fails when one is.
+func (c *statsCache) claim(plugin string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.inflight[plugin] {
+		return false
 	}
+	if c.inflight == nil {
+		c.inflight = map[string]bool{}
+	}
+	c.inflight[plugin] = true
+	return true
+}
+
+// release ends the read claimed for the plugin. A failed read waits
+// playtimeBackoff before the next library listing tries it again.
+func (c *statsCache) release(plugin string, failed bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.inflight, plugin)
+	if !failed {
+		delete(c.retryAt, plugin)
+		return
+	}
+	if c.retryAt == nil {
+		c.retryAt = map[string]time.Time{}
+	}
+	c.retryAt[plugin] = time.Now().Add(playtimeBackoff)
+}
+
+// backingOff says whether a failed read of the plugin is still waiting to retry.
+func (c *statsCache) backingOff(plugin string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return time.Now().Before(c.retryAt[plugin])
 }
 
 // GetGameAchievements returns the user's own progress for a plugin game. It
