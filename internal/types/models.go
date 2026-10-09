@@ -93,6 +93,9 @@ type Game struct {
 	// Pinned is the version the user holds the game at (the `versions`
 	// capability): its update prompt is off and updates install this.
 	Pinned *VersionPin `json:"pinned,omitempty"`
+	// SharedBy is the family member who lends the game (the `family`
+	// capability). Nil for the user's own games.
+	SharedBy *SharedBy `json:"shared_by,omitempty"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that

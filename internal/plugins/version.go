@@ -169,8 +169,9 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // supporting the previous major for a deprecation period after a new one.
 //
 // 1.2 adds cloud saves; 1.3 adds versions; 1.4 adds verify and move (and
-// game.relocated); 1.5 adds install options and DLC.
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}}
+// game.relocated); 1.5 adds install options and DLC; 1.6 and 1.7 add nothing
+// this Hydra uses yet; 1.8 adds family and plugin settings.
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

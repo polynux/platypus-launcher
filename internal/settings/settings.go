@@ -57,6 +57,11 @@ type file struct {
 	// InstallOptions are each game's last install-option choices (the
 	// `install-options` capability), keyed by Hydra's game id. See options.go.
 	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`
+	// PluginSettings are each plugin's plugin-wide settings values, and
+	// PluginGameSettings each game's per-game values (the `settings`
+	// capability, see plugin_settings.go). Values never hold secrets.
+	PluginSettings     map[string]map[string]any   `json:"plugin_settings,omitempty"`
+	PluginGameSettings map[string]PluginGameValues `json:"plugin_game_settings,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Hydra

@@ -131,6 +131,7 @@ type process struct {
 	offered   VersionSet // what the manifest says the plugin speaks
 	transport Transport
 	onExit    func(error) // unexpected exits only
+	onReady   func()      // after a successful initialize, once per run
 	notify    jsonrpc.NotifyFunc
 	t         timings
 
@@ -467,6 +468,9 @@ func (p *process) initialize(conn Conn) {
 	p.info = &res
 	p.runtime = &Runtime{Initialized: true, Protocol: res.Protocol, Capabilities: res.Capabilities, Features: res.Features}
 	close(p.ready)
+	if p.onReady != nil {
+		p.onReady()
+	}
 }
 
 // settleProtocol checks the version the plugin picked and writes the settled

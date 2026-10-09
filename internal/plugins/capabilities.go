@@ -36,6 +36,7 @@ const (
 	rev13 = "1.3" // versions (docs/plans/launcher-parity.md §2.2)
 	rev14 = "1.4" // verify and move (docs/plans/launcher-parity.md §2.3)
 	rev15 = "1.5" // install options and DLC (docs/plans/launcher-parity.md §2.1)
+	rev18 = "1.8" // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
 )
 
 var registry = []Capability{
@@ -76,8 +77,10 @@ var registry = []Capability{
 		Methods: []string{"playtime.list"}, Surfaces: []string{"playtime"}},
 	{Name: "redeem", Since: rev11,
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
-	{Name: "family", Since: rev11,
+	{Name: "family", Since: rev18, Orchestrated: true,
 		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
+	{Name: "settings", Since: rev18, Orchestrated: true,
+		Methods: []string{"settings.schema", "settings.apply"}, Surfaces: []string{"plugin-settings", "game-settings"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:
