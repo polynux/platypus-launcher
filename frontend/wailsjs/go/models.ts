@@ -581,6 +581,22 @@ export namespace types {
 	    }
 	}
 	
+	export class Customization {
+	    title: string;
+	    sort_title: string;
+	    art: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new Customization(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.sort_title = source["sort_title"];
+	        this.art = source["art"];
+	    }
+	}
 	export class FamilyMember {
 	    id: string;
 	    name: string;
@@ -774,6 +790,12 @@ export namespace types {
 	    shared_by?: SharedBy;
 	    copies?: GameCopy[];
 	    preferred_copy?: string;
+	    store_title?: string;
+	    sort_title?: string;
+	    logo_url?: string;
+	    icon_url?: string;
+	    background_url?: string;
+	    customized?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Game(source);
@@ -811,6 +833,12 @@ export namespace types {
 	        this.shared_by = this.convertValues(source["shared_by"], SharedBy);
 	        this.copies = this.convertValues(source["copies"], GameCopy);
 	        this.preferred_copy = source["preferred_copy"];
+	        this.store_title = source["store_title"];
+	        this.sort_title = source["sort_title"];
+	        this.logo_url = source["logo_url"];
+	        this.icon_url = source["icon_url"];
+	        this.background_url = source["background_url"];
+	        this.customized = source["customized"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -878,6 +906,24 @@ export namespace types {
 		}
 	}
 	
+	export class GameFolder {
+	    path: string;
+	    is_default: boolean;
+	    exists: boolean;
+	    free_bytes: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GameFolder(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.is_default = source["is_default"];
+	        this.exists = source["exists"];
+	        this.free_bytes = source["free_bytes"];
+	    }
+	}
 	export class OptionValue {
 	    id: string;
 	    label?: string;
@@ -973,6 +1019,42 @@ export namespace types {
 		}
 	}
 	
+	export class InstallFolderCheck {
+	    folder: string;
+	    free_bytes: number;
+	    exists: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstallFolderCheck(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.folder = source["folder"];
+	        this.free_bytes = source["free_bytes"];
+	        this.exists = source["exists"];
+	    }
+	}
+	export class InstallLocation {
+	    folder: string;
+	    kind: string;
+	    root?: string;
+	    free_bytes: number;
+	    exists: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstallLocation(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.folder = source["folder"];
+	        this.kind = source["kind"];
+	        this.root = source["root"];
+	        this.free_bytes = source["free_bytes"];
+	        this.exists = source["exists"];
+	    }
+	}
 	export class VerifyReport {
 	    checked: number;
 	    damaged: number;

@@ -12,6 +12,11 @@ import type {
   CloudMode,
   CloudPrompt,
   CloudSettings,
+  ArtKind,
+  Customization,
+  GameFolder,
+  InstallFolderCheck,
+  InstallLocation,
   AuthStatus,
   ChatEvent,
   ChatView,
@@ -77,6 +82,12 @@ function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error
 
 // Games cross to Go with their structured settings folded into env_vars.
 const backend = (g: Game) => toBackendGame(g) as never;
+
+/** A customization with every field present, whatever Go sent. */
+function normalizeCustomization(c: unknown): Customization {
+  const x = (c ?? {}) as Partial<Customization>;
+  return { title: x.title ?? '', sort_title: x.sort_title ?? '', art: x.art ?? {} };
+}
 
 export const LauncherApi = {
   // Every source merged; plugin failures arrive as warnings, not errors.
@@ -248,6 +259,33 @@ export const LauncherApi = {
   getInstallFreeSpace: (game: Game) => call<number>('GetInstallFreeSpace', () => App.GetInstallFreeSpace(backend(game))),
   /** Bytes a fresh install of the game needs with the store's defaults. */
   getInstallSize: (game: Game) => call<number>('GetInstallSize', () => App.GetInstallSize(backend(game))),
+
+  // Install location: where a fresh install goes. "" is the store's own folder.
+  getInstallLocations: (game: Game) =>
+    call<InstallLocation[]>('GetInstallLocations', async () => (await App.GetInstallLocations(backend(game))) ?? []),
+  checkInstallFolder: (folder: string) => call<InstallFolderCheck>('CheckInstallFolder', () => App.CheckInstallFolder(folder)),
+  pickInstallFolder: (start: string) => call<string>('PickInstallFolder', () => App.PickInstallFolder(start)),
+  installGameTo: (game: Game, folder: string) => call<Job>('InstallGameTo', () => App.InstallGameTo(backend(game), folder)),
+  installGameWithOptionsTo: (game: Game, choices: InstallChoices, folder: string) =>
+    call<Job>('InstallGameWithOptionsTo', () => App.InstallGameWithOptionsTo(backend(game), choices, folder)),
+  // Settings → Game folders: the user's libraries (the default one first).
+  getGameFolders: () => call<GameFolder[]>('GetGameFolders', async () => (await App.GetGameFolders()) ?? []),
+  addGameFolder: (path: string) => call<GameFolder[]>('AddGameFolder', async () => (await App.AddGameFolder(path)) ?? []),
+  removeGameFolder: (path: string) => call<GameFolder[]>('RemoveGameFolder', async () => (await App.RemoveGameFolder(path)) ?? []),
+  chooseGameFolder: () => call<string>('ChooseGameFolder', () => App.ChooseGameFolder()),
+
+  // Customization: the user's title and art for a game. Core only; a game's
+  // plugin never sees it.
+  getCustomization: (gameId: string) => call<Customization>('GetCustomization', async () => normalizeCustomization(await App.GetCustomization(gameId))),
+  setCustomTitle: (gameId: string, title: string, sortTitle: string) =>
+    call<Customization>('SetCustomTitle', async () => normalizeCustomization(await App.SetCustomTitle(gameId, title, sortTitle))),
+  setCustomArt: (gameId: string, kind: ArtKind, path: string) =>
+    call<Customization>('SetCustomArt', async () => normalizeCustomization(await App.SetCustomArt(gameId, kind, path))),
+  resetCustomArt: (gameId: string, kind: ArtKind) =>
+    call<Customization>('ResetCustomArt', async () => normalizeCustomization(await App.ResetCustomArt(gameId, kind))),
+  resetCustomization: (gameId: string) =>
+    call<Customization>('ResetCustomization', async () => normalizeCustomization(await App.ResetCustomization(gameId))),
+  pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
 
   // Family (the `family` capability, protocol 1.8): the store's family group.
   // Shown only; Hydra enforces none of its rules.

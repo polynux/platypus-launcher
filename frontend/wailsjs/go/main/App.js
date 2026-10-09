@@ -6,6 +6,10 @@ export function AddCustomGame(arg1, arg2) {
   return window['go']['main']['App']['AddCustomGame'](arg1, arg2);
 }
 
+export function AddGameFolder(arg1) {
+  return window['go']['main']['App']['AddGameFolder'](arg1);
+}
+
 export function AllowGameFolder(arg1, arg2) {
   return window['go']['main']['App']['AllowGameFolder'](arg1, arg2);
 }
@@ -54,8 +58,16 @@ export function CheckCloudSaves(arg1) {
   return window['go']['main']['App']['CheckCloudSaves'](arg1);
 }
 
+export function CheckInstallFolder(arg1) {
+  return window['go']['main']['App']['CheckInstallFolder'](arg1);
+}
+
 export function CheckMove(arg1, arg2) {
   return window['go']['main']['App']['CheckMove'](arg1, arg2);
+}
+
+export function ChooseGameFolder() {
+  return window['go']['main']['App']['ChooseGameFolder']();
 }
 
 export function ChooseGamesFolder() {
@@ -86,6 +98,10 @@ export function GetCloudSettings() {
   return window['go']['main']['App']['GetCloudSettings']();
 }
 
+export function GetCustomization(arg1) {
+  return window['go']['main']['App']['GetCustomization'](arg1);
+}
+
 export function GetFamilyMembers(arg1) {
   return window['go']['main']['App']['GetFamilyMembers'](arg1);
 }
@@ -100,6 +116,10 @@ export function GetGameDetails(arg1) {
 
 export function GetGameFix(arg1, arg2) {
   return window['go']['main']['App']['GetGameFix'](arg1, arg2);
+}
+
+export function GetGameFolders() {
+  return window['go']['main']['App']['GetGameFolders']();
 }
 
 export function GetGameOptions(arg1) {
@@ -120,6 +140,10 @@ export function GetGameVersions(arg1) {
 
 export function GetInstallFreeSpace(arg1) {
   return window['go']['main']['App']['GetInstallFreeSpace'](arg1);
+}
+
+export function GetInstallLocations(arg1) {
+  return window['go']['main']['App']['GetInstallLocations'](arg1);
 }
 
 export function GetInstallSize(arg1) {
@@ -150,12 +174,20 @@ export function InstallGame(arg1) {
   return window['go']['main']['App']['InstallGame'](arg1);
 }
 
+export function InstallGameTo(arg1, arg2) {
+  return window['go']['main']['App']['InstallGameTo'](arg1, arg2);
+}
+
 export function InstallGameVersion(arg1, arg2) {
   return window['go']['main']['App']['InstallGameVersion'](arg1, arg2);
 }
 
 export function InstallGameWithOptions(arg1, arg2) {
   return window['go']['main']['App']['InstallGameWithOptions'](arg1, arg2);
+}
+
+export function InstallGameWithOptionsTo(arg1, arg2, arg3) {
+  return window['go']['main']['App']['InstallGameWithOptionsTo'](arg1, arg2, arg3);
 }
 
 export function LaunchGame(arg1) {
@@ -198,6 +230,14 @@ export function PauseJob(arg1) {
   return window['go']['main']['App']['PauseJob'](arg1);
 }
 
+export function PickImage(arg1) {
+  return window['go']['main']['App']['PickImage'](arg1);
+}
+
+export function PickInstallFolder(arg1) {
+  return window['go']['main']['App']['PickInstallFolder'](arg1);
+}
+
 export function PickMoveFolder(arg1) {
   return window['go']['main']['App']['PickMoveFolder'](arg1);
 }
@@ -234,12 +274,24 @@ export function RemoveCustomGame(arg1) {
   return window['go']['main']['App']['RemoveCustomGame'](arg1);
 }
 
+export function RemoveGameFolder(arg1) {
+  return window['go']['main']['App']['RemoveGameFolder'](arg1);
+}
+
 export function RepairGame(arg1) {
   return window['go']['main']['App']['RepairGame'](arg1);
 }
 
 export function RescanPlugins() {
   return window['go']['main']['App']['RescanPlugins']();
+}
+
+export function ResetCustomArt(arg1, arg2) {
+  return window['go']['main']['App']['ResetCustomArt'](arg1, arg2);
+}
+
+export function ResetCustomization(arg1) {
+  return window['go']['main']['App']['ResetCustomization'](arg1);
 }
 
 export function ResolveCloudSaves(arg1, arg2) {
@@ -292,6 +344,14 @@ export function SetCloudGameMode(arg1, arg2) {
 
 export function SetCloudPluginMode(arg1, arg2) {
   return window['go']['main']['App']['SetCloudPluginMode'](arg1, arg2);
+}
+
+export function SetCustomArt(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetCustomArt'](arg1, arg2, arg3);
+}
+
+export function SetCustomTitle(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetCustomTitle'](arg1, arg2, arg3);
 }
 
 export function SetGamesFolder(arg1) {

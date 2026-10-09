@@ -6,6 +6,8 @@ import {social} from '../models';
 
 export function AddCustomGame(arg1:string,arg2:string):Promise<types.Game>;
 
+export function AddGameFolder(arg1:string):Promise<Array<types.GameFolder>>;
+
 export function AllowGameFolder(arg1:string,arg2:string):Promise<void>;
 
 export function ApprovePlugin(arg1:string):Promise<void>;
@@ -30,7 +32,11 @@ export function ChatUnread():Promise<Array<chat.View>>;
 
 export function CheckCloudSaves(arg1:types.Game):Promise<types.CloudInfo>;
 
+export function CheckInstallFolder(arg1:string):Promise<types.InstallFolderCheck>;
+
 export function CheckMove(arg1:types.Game,arg2:string):Promise<types.MoveCheck>;
+
+export function ChooseGameFolder():Promise<string>;
 
 export function ChooseGamesFolder():Promise<string>;
 
@@ -46,6 +52,8 @@ export function GetCloudInfo(arg1:types.Game):Promise<types.CloudInfo>;
 
 export function GetCloudSettings():Promise<types.CloudSettings>;
 
+export function GetCustomization(arg1:string):Promise<types.Customization>;
+
 export function GetFamilyMembers(arg1:string):Promise<Array<types.FamilyMember>>;
 
 export function GetGameAchievements(arg1:types.Game):Promise<types.AchievementProgress>;
@@ -53,6 +61,8 @@ export function GetGameAchievements(arg1:types.Game):Promise<types.AchievementPr
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
 export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
+
+export function GetGameFolders():Promise<Array<types.GameFolder>>;
 
 export function GetGameOptions(arg1:types.Game):Promise<types.GameOptions>;
 
@@ -63,6 +73,8 @@ export function GetGameSettingsFields(arg1:types.Game):Promise<types.SettingsVie
 export function GetGameVersions(arg1:types.Game):Promise<types.VersionInfo>;
 
 export function GetInstallFreeSpace(arg1:types.Game):Promise<number>;
+
+export function GetInstallLocations(arg1:types.Game):Promise<Array<types.InstallLocation>>;
 
 export function GetInstallSize(arg1:types.Game):Promise<number>;
 
@@ -78,9 +90,13 @@ export function GetTweaks():Promise<Array<types.Tweak>>;
 
 export function InstallGame(arg1:types.Game):Promise<types.Job>;
 
+export function InstallGameTo(arg1:types.Game,arg2:string):Promise<types.Job>;
+
 export function InstallGameVersion(arg1:types.Game,arg2:types.VersionTarget):Promise<types.Job>;
 
 export function InstallGameWithOptions(arg1:types.Game,arg2:Record<string, any>):Promise<types.Job>;
+
+export function InstallGameWithOptionsTo(arg1:types.Game,arg2:Record<string, any>,arg3:string):Promise<types.Job>;
 
 export function LaunchGame(arg1:types.Game):Promise<string>;
 
@@ -102,6 +118,10 @@ export function PauseAllJobs():Promise<void>;
 
 export function PauseJob(arg1:string):Promise<void>;
 
+export function PickImage(arg1:string):Promise<string>;
+
+export function PickInstallFolder(arg1:string):Promise<string>;
+
 export function PickMoveFolder(arg1:string):Promise<string>;
 
 export function PinGameVersion(arg1:types.Game,arg2:types.VersionPin):Promise<void>;
@@ -120,9 +140,15 @@ export function RedeemCode(arg1:string,arg2:string):Promise<types.RedeemResult>;
 
 export function RemoveCustomGame(arg1:string):Promise<void>;
 
+export function RemoveGameFolder(arg1:string):Promise<Array<types.GameFolder>>;
+
 export function RepairGame(arg1:types.Game):Promise<types.Job>;
 
 export function RescanPlugins():Promise<Array<types.StorePlugin>>;
+
+export function ResetCustomArt(arg1:string,arg2:string):Promise<types.Customization>;
+
+export function ResetCustomization(arg1:string):Promise<types.Customization>;
 
 export function ResolveCloudSaves(arg1:types.Game,arg2:Record<string, string>):Promise<types.CloudInfo>;
 
@@ -149,6 +175,10 @@ export function SetChatAlerts(arg1:string,arg2:boolean):Promise<void>;
 export function SetCloudGameMode(arg1:string,arg2:string):Promise<void>;
 
 export function SetCloudPluginMode(arg1:string,arg2:string):Promise<void>;
+
+export function SetCustomArt(arg1:string,arg2:string,arg3:string):Promise<types.Customization>;
+
+export function SetCustomTitle(arg1:string,arg2:string,arg3:string):Promise<types.Customization>;
 
 export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;
 
