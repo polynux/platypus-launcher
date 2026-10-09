@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Modal } from './Modal';
 import { cx, LinkButton } from './ui';
 import { Button } from './ds/button';
@@ -26,20 +26,38 @@ interface ChatPanelProps {
 export function ChatPanel(p: ChatPanelProps) {
   const [text, setText] = useState('');
   const log = useRef<HTMLDivElement>(null);
-  const count = p.view?.messages.length ?? 0;
+  // Whether the log is at its newest end as the user left it: only then does a new message follow it down.
+  const atEnd = useRef(true);
+  // The ends of the messages and the log's height when it last settled, to tell older messages (added
+  // above) from new ones (added below).
+  const settled = useRef<{ first: string; last: string; height: number } | null>(null);
 
-  // Keep the newest message in view, as a conversation does.
-  useEffect(() => {
-    if (log.current) log.current.scrollTop = log.current.scrollHeight;
-  }, [count]);
+  const messages = p.view?.messages ?? [];
+
+  // Keep the newest message in view while the user is at the bottom; when older messages come in above,
+  // keep the messages the user is reading where they were.
+  useLayoutEffect(() => {
+    const el = log.current;
+    if (!el) return;
+    const first = messages.length ? messageKey(messages[0]) : '';
+    const last = messages.length ? messageKey(messages[messages.length - 1]) : '';
+    const before = settled.current;
+    if (before && before.first !== '' && first !== before.first && last === before.last) {
+      el.scrollTop += el.scrollHeight - before.height;
+    } else if (atEnd.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+    settled.current = { first, last, height: el.scrollHeight };
+  }, [p.view]);
 
   const submit = () => {
     if (!canSendChat(text)) return;
+    // What the user sends is theirs to see: the log follows it down.
+    atEnd.current = true;
     p.onSend(text);
     setText('');
   };
 
-  const messages = p.view?.messages ?? [];
   return (
     <Modal label={`Chat with ${p.friendName}`} onClose={p.onClose} className="max-w-lg">
       <div className="flex h-[70vh] max-h-[640px] flex-col gap-3 p-5">
@@ -59,7 +77,16 @@ export function ChatPanel(p: ChatPanelProps) {
           </p>
         )}
 
-        <div ref={log} role="log" aria-label={`Messages with ${p.friendName}`} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+        <div
+          ref={log}
+          role="log"
+          aria-label={`Messages with ${p.friendName}`}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          }}
+          className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
+        >
           {p.view?.more && (
             <div className="self-center">
               <LinkButton onClick={p.onLoadOlder}>Load older messages</LinkButton>
@@ -110,7 +137,7 @@ function MessageRow({ message, onResend }: {
     <div className={cx('flex max-w-[82%] flex-col gap-0.5', mine ? 'self-end items-end' : 'self-start items-start')}>
       <div
         className={cx(
-          'whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-[13px] leading-snug',
+          'whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-snug [overflow-wrap:anywhere]',
           mine ? 'bg-amber-300/15 text-amber-50' : 'bg-white/[0.06] text-white/85',
           message.status === 'failed' && 'ring-1 ring-red-400/40',
         )}

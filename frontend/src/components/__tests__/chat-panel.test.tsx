@@ -120,3 +120,49 @@ describe('ChatPanel', () => {
     expect(screen.getByRole('alert').textContent).toBe('chat is off for Echo');
   });
 });
+
+describe('ChatPanel layout', () => {
+  it('lets a long unbroken word wrap inside its bubble', () => {
+    panel({ view: view({ messages: [msg({ text: 'x'.repeat(300) })] }) });
+    const bubble = screen.getByText('x'.repeat(300));
+    expect(bubble.className).toContain('[overflow-wrap:anywhere]');
+  });
+
+  it('follows new messages only from the bottom, and keeps the place when older ones come in above', () => {
+    let height = 500;
+    const { rerender } = render(<ChatPanel {...panelProps(view({ messages: [msg({ id: 'm2', text: 'two' })] }))} />);
+    const log = screen.getByRole('log');
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => height });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, get: () => 0 });
+    log.scrollTop = 500;
+
+    // At the bottom: a new message follows it down.
+    height = 600;
+    rerender(<ChatPanel {...panelProps(view({ messages: [msg({ id: 'm2', text: 'two' }), msg({ id: 'm3', text: 'three' })] }))} />);
+    expect(log.scrollTop).toBe(600);
+
+    // Scrolled up: a new message leaves the place where it is.
+    log.scrollTop = 100;
+    fireEvent.scroll(log);
+    height = 700;
+    rerender(<ChatPanel {...panelProps(view({ messages: [msg({ id: 'm2', text: 'two' }), msg({ id: 'm3', text: 'three' }), msg({ id: 'm4', text: 'four' })] }))} />);
+    expect(log.scrollTop).toBe(100);
+
+    // An older message comes in above: the messages the user reads stay where they were.
+    height = 800;
+    rerender(<ChatPanel {...panelProps(view({ messages: [msg({ id: 'm1', text: 'one' }), msg({ id: 'm2', text: 'two' }), msg({ id: 'm3', text: 'three' }), msg({ id: 'm4', text: 'four' })] }))} />);
+    expect(log.scrollTop).toBe(200);
+  });
+});
+
+function panelProps(v: ChatView): React.ComponentProps<typeof ChatPanel> {
+  return {
+    view: v,
+    friendName: 'Ana Ruiz',
+    storeName: 'Echo',
+    onLoadOlder: vi.fn(),
+    onSend: vi.fn(),
+    onResend: vi.fn(),
+    onClose: vi.fn(),
+  };
+}
