@@ -440,3 +440,46 @@ func TestPluginStartSendsOnlyValuesTheSchemaStillTakes(t *testing.T) {
 		t.Fatalf("echo got %v, want only volume: region is no choice of the schema, gone is no field", plug)
 	}
 }
+
+func TestSettingsOfGamesTheLibraryLostAreForgotten(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	tiny := e.libraryGame(t, "tiny")
+	if err := e.a.settings.SetPluginGameSettings(tiny.ID, settings.PluginGameValues{Source: "echo", StoreID: "tiny", Values: map[string]any{"game-overlay": false}}); err != nil {
+		t.Fatal(err)
+	}
+	gone := stores.GameID("echo", "gone")
+	if err := e.a.settings.SetPluginGameSettings(gone, settings.PluginGameValues{Source: "echo", StoreID: "gone", Values: map[string]any{"game-overlay": false}}); err != nil {
+		t.Fatal(err)
+	}
+	all := []stores.Store{e.store()}
+	// A listing that failed says nothing about its games: their values stay.
+	e.a.forgetRemovedGameSettings(all, [][]types.Game{nil}, []error{context.DeadlineExceeded})
+	if _, ok := e.a.settings.PluginGameSettings(gone); !ok {
+		t.Fatal("a failed library listing forgot a game's settings")
+	}
+	e.a.forgetRemovedGameSettings(all, [][]types.Game{{tiny}}, []error{nil})
+	if _, ok := e.a.settings.PluginGameSettings(gone); ok {
+		t.Fatal("a game the library no longer lists kept its settings")
+	}
+	if _, ok := e.a.settings.PluginGameSettings(tiny.ID); !ok {
+		t.Fatal("a game the library still lists lost its settings")
+	}
+}
+
+func TestSettingsOfAPluginThatIsGoneAreForgotten(t *testing.T) {
+	e := familyApp(t, familyProtocols, familyCaps)
+	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err != nil {
+		t.Fatal(err)
+	}
+	tiny := e.libraryGame(t, "tiny")
+	if _, err := e.a.SaveGameSettingsFields(tiny, map[string]any{"game-overlay": false}); err != nil {
+		t.Fatal(err)
+	}
+	e.a.forgetSettingsOfRemoved(nil) // a scan with no plugins: echo is gone
+	if got := e.a.settings.PluginValues("echo"); len(got) != 0 {
+		t.Fatalf("plugin values of a removed plugin kept: %v", got)
+	}
+	if _, ok := e.a.settings.PluginGameSettings(tiny.ID); ok {
+		t.Fatal("per-game values of a removed plugin kept")
+	}
+}

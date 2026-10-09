@@ -9,6 +9,7 @@ import (
 
 	"hydra-launcher/internal/plugins"
 	"hydra-launcher/internal/settings"
+	"hydra-launcher/internal/stores"
 	"hydra-launcher/internal/types"
 )
 
@@ -203,6 +204,37 @@ func (a *App) pluginReady(source string) {
 		values := perGame.KeepValid(g.Values)
 		if err := a.applySettings(source, g.StoreID, values); err != nil {
 			a.warnf("%s: settings of game %s not applied on start: %v", source, g.StoreID, err)
+		}
+	}
+}
+
+// forgetSettingsOfRemoved drops the settings of plugins the scan no longer
+// finds: a removed plugin takes its values with it. Call it after a scan that
+// succeeded; a failed one says nothing about what is gone.
+func (a *App) forgetSettingsOfRemoved(found []plugins.Plugin) {
+	present := map[string]bool{}
+	for _, p := range found {
+		present[p.Manifest.ID] = true
+	}
+	if err := a.settings.PrunePlugins(func(id string) bool { return present[id] }); err != nil {
+		a.warnf("plugin settings of removed plugins not forgotten: %v", err)
+	}
+}
+
+// forgetRemovedGameSettings drops the per-game settings of games a store no
+// longer lists. A store whose listing failed keeps its values: the games may
+// still be there.
+func (a *App) forgetRemovedGameSettings(all []stores.Store, results [][]types.Game, errs []error) {
+	for i, s := range all {
+		if errs[i] != nil {
+			continue
+		}
+		keep := map[string]bool{}
+		for _, g := range results[i] {
+			keep[g.ID] = true
+		}
+		if err := a.settings.PruneGames(s.ID(), keep); err != nil {
+			a.warnf("%s: settings of removed games not forgotten: %v", s.ID(), err)
 		}
 	}
 }

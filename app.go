@@ -126,6 +126,9 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		wruntime.LogErrorf(ctx, "plugins: %v", err)
 	}
+	if err == nil {
+		a.forgetSettingsOfRemoved(found)
+	}
 	for _, p := range found {
 		msg := fmt.Sprintf("plugin %s: %s", p.Manifest.ID, p.Status)
 		if p.Problem != "" {
@@ -324,6 +327,7 @@ func (a *App) GetLibrary() (types.Library, error) {
 		}
 		lib.Games = append(lib.Games, results[i]...)
 	}
+	a.forgetRemovedGameSettings(all, results, errs)
 	lib.Games = append(lib.Games, a.customGames()...)
 	a.applyPins(&lib)
 	return lib, nil
