@@ -22,6 +22,34 @@ export function CancelJob(arg1) {
   return window['go']['main']['App']['CancelJob'](arg1);
 }
 
+export function ChatAlerts() {
+  return window['go']['main']['App']['ChatAlerts']();
+}
+
+export function ChatClose(arg1, arg2) {
+  return window['go']['main']['App']['ChatClose'](arg1, arg2);
+}
+
+export function ChatOlder(arg1, arg2) {
+  return window['go']['main']['App']['ChatOlder'](arg1, arg2);
+}
+
+export function ChatOpen(arg1, arg2) {
+  return window['go']['main']['App']['ChatOpen'](arg1, arg2);
+}
+
+export function ChatResend(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ChatResend'](arg1, arg2, arg3);
+}
+
+export function ChatSend(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ChatSend'](arg1, arg2, arg3);
+}
+
+export function ChatUnread() {
+  return window['go']['main']['App']['ChatUnread']();
+}
+
 export function CheckCloudSaves(arg1) {
   return window['go']['main']['App']['CheckCloudSaves'](arg1);
 }
@@ -252,6 +280,10 @@ export function SavePluginSettings(arg1, arg2) {
 
 export function SetCancelCleanupDays(arg1) {
   return window['go']['main']['App']['SetCancelCleanupDays'](arg1);
+}
+
+export function SetChatAlerts(arg1, arg2) {
+  return window['go']['main']['App']['SetChatAlerts'](arg1, arg2);
 }
 
 export function SetCloudGameMode(arg1, arg2) {
