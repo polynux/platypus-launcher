@@ -16,19 +16,27 @@ type jobBackend struct{ a *App }
 
 func (b jobBackend) Size(ctx context.Context, j types.Job) (plugins.InstallSize, error) {
 	var s plugins.InstallSize
+	options, err := b.a.optionsForJob(ctx, j)
+	if err != nil {
+		return s, err
+	}
 	params := map[string]any{"id": j.StoreGameID}
 	if j.Target != nil {
 		params["target"] = j.Target // the size of that version, not the latest
 	}
-	if j.Options != nil {
-		params["options"] = j.Options // the size of the chosen add-ons and packs
+	if options != nil {
+		params["options"] = options // the size of the chosen add-ons and packs
 	}
-	err := b.a.plugins.Call(ctx, j.Source, "game.installSize", params, &s)
+	err = b.a.plugins.Call(ctx, j.Source, "game.installSize", params, &s)
 	return s, err
 }
 
 func (b jobBackend) Start(ctx context.Context, j types.Job) error {
-	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j), nil)
+	options, err := b.a.optionsForJob(ctx, j)
+	if err != nil {
+		return err
+	}
+	return b.a.plugins.Call(ctx, j.Source, "game."+j.Kind, installParams(j, options), nil)
 }
 
 // installParams builds the params for game.install/game.update/game.uninstall
@@ -36,8 +44,9 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 // its installed index, steam-standalone names its dl request), so Hydra sends
 // the title the job already has. Branches and their passwords are plugin-side
 // choices: Hydra sends no branch key at all — an empty one must not leak into
-// the params. installDir only makes sense where files land.
-func installParams(j types.Job) map[string]any {
+// the params. installDir only makes sense where files land. options are the
+// install-option choices as optionsForJob checked them (nil sends none).
+func installParams(j types.Job, options types.InstallOptions) map[string]any {
 	params := map[string]any{"id": j.StoreGameID, "jobId": j.ID}
 	if j.Kind == jobs.KindUninstall {
 		return params
@@ -52,10 +61,8 @@ func installParams(j types.Job) map[string]any {
 	if j.Target != nil {
 		params["target"] = j.Target
 	}
-	// The install-option choices (the install-options capability) are the
-	// ones the job was queued with; a resumed job sends the same ones.
-	if j.Options != nil {
-		params["options"] = j.Options
+	if options != nil {
+		params["options"] = options
 	}
 	return params
 }
@@ -101,11 +108,7 @@ func (a *App) InstallGame(game types.Game) (types.Job, error) {
 	if err != nil {
 		return types.Job{}, err
 	}
-	options, err := a.savedOptions(game)
-	if err != nil {
-		return types.Job{}, err
-	}
-	return a.queueJobWith(jobs.KindInstall, game, target, options)
+	return a.queueJobWith(jobs.KindInstall, game, target, a.savedOptions(game))
 }
 
 // UpdateGame queues an update of an installed plugin game. A pinned game is
@@ -118,11 +121,7 @@ func (a *App) UpdateGame(game types.Game) (types.Job, error) {
 	if err != nil {
 		return types.Job{}, err
 	}
-	options, err := a.savedOptions(game)
-	if err != nil {
-		return types.Job{}, err
-	}
-	return a.queueJobWith(jobs.KindUpdate, game, target, options)
+	return a.queueJobWith(jobs.KindUpdate, game, target, a.savedOptions(game))
 }
 
 // UninstallGame queues removal of an installed plugin game.

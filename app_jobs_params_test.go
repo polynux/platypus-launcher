@@ -16,7 +16,7 @@ import (
 func TestStartParamsCarryTitle(t *testing.T) {
 	t.Run("install carries title and no branch", func(t *testing.T) {
 		j := types.Job{ID: "j1", Kind: jobs.KindInstall, Source: "echo", GameID: "g1", StoreGameID: "tiny", Title: "Tiny", InstallDir: "/g/tiny"}
-		params := installParams(j)
+		params := installParams(j, nil)
 		if params["title"] != "Tiny" {
 			t.Fatalf("game.install params missing title: %v", params)
 		}
@@ -33,7 +33,7 @@ func TestStartParamsCarryTitle(t *testing.T) {
 
 	t.Run("update carries title too", func(t *testing.T) {
 		j := types.Job{ID: "j2", Kind: jobs.KindUpdate, Source: "echo", GameID: "g1", StoreGameID: "tiny", Title: "Tiny", InstallDir: "/g/tiny"}
-		params := installParams(j)
+		params := installParams(j, nil)
 		if params["title"] != "Tiny" {
 			t.Fatalf("game.update params missing title: %v", params)
 		}
@@ -41,7 +41,7 @@ func TestStartParamsCarryTitle(t *testing.T) {
 
 	t.Run("uninstall carries no title and no installDir", func(t *testing.T) {
 		j := types.Job{ID: "j3", Kind: jobs.KindUninstall, Source: "echo", GameID: "g1", StoreGameID: "tiny", Title: "Tiny"}
-		params := installParams(j)
+		params := installParams(j, nil)
 		if _, ok := params["title"]; ok {
 			t.Fatalf("game.uninstall params must not carry a title: %v", params)
 		}
@@ -52,7 +52,7 @@ func TestStartParamsCarryTitle(t *testing.T) {
 
 	t.Run("empty title is omitted", func(t *testing.T) {
 		j := types.Job{ID: "j4", Kind: jobs.KindInstall, Source: "echo", GameID: "g1", StoreGameID: "tiny", InstallDir: "/g/tiny"}
-		params := installParams(j)
+		params := installParams(j, nil)
 		if _, ok := params["title"]; ok {
 			t.Fatalf("empty title must be omitted: %v", params)
 		}

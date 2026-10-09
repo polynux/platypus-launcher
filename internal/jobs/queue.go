@@ -331,7 +331,7 @@ func (q *Queue) AddWithOptions(kind, source, gameID, storeGameID, title, install
 	if kind == KindUninstall && options != nil {
 		return types.Job{}, errors.New("an uninstall has no install options")
 	}
-	options = maps.Clone(options)
+	options = types.NormalizeChoices(maps.Clone(options))
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for _, j := range q.jobs {

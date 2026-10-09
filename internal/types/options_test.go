@@ -42,7 +42,7 @@ func TestNormalizeIgnoresUnknownKindsAndBrokenGroups(t *testing.T) {
 }
 
 func TestResolveFillsDefaultsForEveryGroup(t *testing.T) {
-	got, err := ResolveOptions(testGroups(), nil, true)
+	got, err := ResolveOptions(testGroups(), nil, Check{Strict: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,18 +65,44 @@ func TestStrictRefusesUnownedDLCAndUnknownChoices(t *testing.T) {
 		"non-string item": {"packs": []any{42}},
 	}
 	for name, choices := range cases {
-		if _, err := ResolveOptions(groups, choices, true); err == nil {
+		if _, err := ResolveOptions(groups, choices, Check{Strict: true}); err == nil {
 			t.Errorf("%s: strict resolve accepted %v", name, choices)
 		}
 	}
-	_, err := ResolveOptions(groups, InstallOptions{"dlc": []any{"deluxe"}}, true)
+	_, err := ResolveOptions(groups, InstallOptions{"dlc": []any{"deluxe"}}, Check{Strict: true})
 	if !errors.Is(err, ErrNotOwned) {
 		t.Fatalf("unowned dlc error = %v, want ErrNotOwned", err)
 	}
 }
 
+// A fresh install never installs DLC the user doesn't own, even if some of it
+// is already on disk; an update may keep what is installed.
+func TestFreshInstallRefusesInstalledButUnownedDLC(t *testing.T) {
+	choices := InstallOptions{"dlc": []any{"old"}}
+	if _, err := ResolveOptions(testGroups(), choices, Check{Strict: true}); !errors.Is(err, ErrNotOwned) {
+		t.Fatalf("fresh install error = %v, want ErrNotOwned", err)
+	}
+	got, err := ResolveOptions(testGroups(), choices, Check{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list := got["dlc"].([]string); len(list) != 0 {
+		t.Fatalf("lenient fresh install kept %v, want the unowned DLC left out", list)
+	}
+}
+
+func TestNoGroupsMeansNoChoices(t *testing.T) {
+	got, err := ResolveOptions(nil, InstallOptions{"language": "fr"}, Check{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("choices for no groups = %#v, want nil so the job sends no options", got)
+	}
+}
+
 func TestUnownedButInstalledDLCStaysSelectable(t *testing.T) {
-	got, err := ResolveOptions(testGroups(), InstallOptions{"dlc": []any{"old", "pass"}}, true)
+	got, err := ResolveOptions(testGroups(), InstallOptions{"dlc": []any{"old", "pass"}}, Check{Strict: true, Installed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +114,7 @@ func TestUnownedButInstalledDLCStaysSelectable(t *testing.T) {
 func TestLenientDropsWhatNoLongerFits(t *testing.T) {
 	got, err := ResolveOptions(testGroups(), InstallOptions{
 		"language": "xx", "dlc": []any{"deluxe", "pass"}, "subs": "yes", "gone": true,
-	}, false)
+	}, Check{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +130,7 @@ func hasKey(m InstallOptions, k string) bool { _, ok := m[k]; return ok }
 
 func TestOptionsSizeCountsOnlyChosenValues(t *testing.T) {
 	groups := testGroups()
-	choices, err := ResolveOptions(groups, InstallOptions{"dlc": []any{"pass", "old"}, "packs": []any{"hd"}}, true)
+	choices, err := ResolveOptions(groups, InstallOptions{"dlc": []any{"pass", "old"}, "packs": []any{"hd"}}, Check{Strict: true, Installed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,5 +141,17 @@ func TestOptionsSizeCountsOnlyChosenValues(t *testing.T) {
 	trip := InstallOptions{"packs": []any{"docs", "hd"}}
 	if got := OptionsSize(groups, trip); got != 303 {
 		t.Fatalf("round-tripped size = %d, want 303", got)
+	}
+}
+
+func TestChangedOptionsNamesWhatTheStoreDropped(t *testing.T) {
+	before := InstallOptions{"language": "fr", "dlc": []any{"pass", "deluxe"}, "packs": []string{"hd"}, "gone": true}
+	after := InstallOptions{"language": "fr", "dlc": []string{"pass"}, "packs": []string{"hd"}}
+	if got := ChangedOptions(before, after); !slices.Equal(got, []string{"dlc", "gone"}) {
+		t.Fatalf("changed = %v, want dlc and gone", got)
+	}
+	same := InstallOptions{"dlc": []string{"pass", "old"}}
+	if got := ChangedOptions(same, InstallOptions{"dlc": []any{"old", "pass"}}); len(got) != 0 {
+		t.Fatalf("same choices reported as changed: %v", got)
 	}
 }

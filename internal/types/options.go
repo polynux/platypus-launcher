@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 )
 
@@ -53,7 +54,7 @@ type InstallOptions map[string]any
 // GameOptions answers GetGameOptions: the groups the store offers and the
 // choices Hydra would use now (the saved ones, or the defaults).
 type GameOptions struct {
-	Groups []OptionGroup `json:"groups"`
+	Groups []OptionGroup  `json:"groups"`
 	Chosen InstallOptions `json:"chosen"`
 }
 
@@ -134,17 +135,29 @@ func httpsOnly(s string) string {
 	return s
 }
 
+// Check says how ResolveOptions treats the choices it is given.
+type Check struct {
+	// Strict refuses a choice the store can't honour (a value that doesn't
+	// exist, a wrong type, DLC not owned). Lenient falls back to the default
+	// or leaves the choice out.
+	Strict bool
+	// Installed is true for an update of a game on disk. Then DLC the user no
+	// longer owns may stay, since it is already installed; a fresh install
+	// never installs DLC the user doesn't own.
+	Installed bool
+}
+
 // ResolveOptions turns the user's choices into the complete set of options an
 // install sends, checked against the groups the store offers now.
 //
 // Strict (a choice the user just made): a value that doesn't exist, a wrong
-// type, or an unowned DLC that isn't already installed is an error.
-// Lenient (choices saved earlier, re-used by a plain install or update): the
-// same problems quietly fall back to the default or are left out, so a DLC the
-// user no longer owns doesn't block a game update. In both cases a choice for
-// a group the store no longer offers is dropped. A group left out of choices
-// gets its default; the result has a key for every group.
-func ResolveOptions(groups []OptionGroup, choices InstallOptions, strict bool) (InstallOptions, error) {
+// type, or DLC the user doesn't own is an error (see Check.Installed for
+// updates). Lenient (choices saved earlier, re-used by a plain install or
+// update): the same problems quietly fall back to the default or are left
+// out, so a DLC the user no longer owns doesn't block a game update. In both
+// cases a choice for a group the store no longer offers is dropped. A group
+// left out of choices gets its default; the result has a key for every group.
+func ResolveOptions(groups []OptionGroup, choices InstallOptions, c Check) (InstallOptions, error) {
 	out := InstallOptions{}
 	for _, g := range groups {
 		raw, chosen := choices[g.ID]
@@ -154,7 +167,7 @@ func ResolveOptions(groups []OptionGroup, choices InstallOptions, strict bool) (
 			if chosen {
 				on, ok := raw.(bool)
 				if !ok {
-					if strict {
+					if c.Strict {
 						return nil, fmt.Errorf("%s is on or off", g.Label)
 					}
 					break
@@ -169,40 +182,63 @@ func ResolveOptions(groups []OptionGroup, choices InstallOptions, strict bool) (
 					out[g.ID] = id
 					break
 				}
-				if strict {
+				if c.Strict {
 					return nil, fmt.Errorf("%s has no choice %v", g.Label, raw)
 				}
 			}
 		case OptionMulti:
-			picked, err := pickValues(g, raw, chosen, strict)
+			picked, err := pickValues(g, raw, chosen, c)
 			if err != nil {
 				return nil, err
 			}
 			out[g.ID] = picked
 		}
 	}
-	return out, nil
+	return NormalizeChoices(out), nil
+}
+
+// NormalizeChoices is nil for no choices at all. An empty map and nil mean
+// different things once stored: a nil job sends no options, an empty one
+// sends `options: {}`, and the JSON round trip of the queue turns the empty
+// map into nil. So choices are kept as nil when there are none.
+func NormalizeChoices(o InstallOptions) InstallOptions {
+	if len(o) == 0 {
+		return nil
+	}
+	return o
 }
 
 // pickValues resolves a multi group. Values keep the store's order and appear
-// once. An unowned DLC value is allowed only when it is already installed.
-func pickValues(g OptionGroup, raw any, chosen, strict bool) ([]string, error) {
+// once. An unowned DLC value is allowed only for an update, and only when it
+// is already installed.
+func pickValues(g OptionGroup, raw any, chosen bool, c Check) ([]string, error) {
 	picked := []string{}
 	if !chosen {
 		return picked, nil
 	}
-	list, ok := raw.([]any)
-	if !ok && raw != nil {
-		if strict {
-			return nil, fmt.Errorf("%s takes a list of choices", g.Label)
+	// A list is []any from settings or the queue's JSON, []string when it
+	// was resolved in this process: both name the same values.
+	var list []any
+	switch v := raw.(type) {
+	case []any:
+		list = v
+	case []string:
+		for _, id := range v {
+			list = append(list, id)
 		}
-		return picked, nil
+	default:
+		if raw != nil {
+			if c.Strict {
+				return nil, fmt.Errorf("%s takes a list of choices", g.Label)
+			}
+			return picked, nil
+		}
 	}
 	want := map[string]bool{}
 	for _, item := range list {
 		id, ok := item.(string)
 		if !ok || id == "" {
-			if strict {
+			if c.Strict {
 				return nil, fmt.Errorf("%s has a choice that isn't a value", g.Label)
 			}
 			continue
@@ -213,15 +249,15 @@ func pickValues(g OptionGroup, raw any, chosen, strict bool) ([]string, error) {
 		if !want[v.ID] {
 			continue
 		}
-		if g.DLC && !v.Owned && !v.Installed {
-			if strict {
+		if g.DLC && !v.Owned && !(c.Installed && v.Installed) {
+			if c.Strict {
 				return nil, fmt.Errorf("%s is not owned: %w", v.Label, ErrNotOwned)
 			}
 			continue
 		}
 		picked = append(picked, v.ID)
 	}
-	if strict {
+	if c.Strict {
 		for id := range want {
 			if !hasValue(g, id) {
 				return nil, fmt.Errorf("%s has no choice %q", g.Label, id)
@@ -273,4 +309,41 @@ func isChosen(choice any, id string) bool {
 		}
 	}
 	return false
+}
+
+// ChangedOptions names the groups whose choice differs between before (what a
+// job was queued with) and after (what the store accepts now), sorted. A group
+// missing from after counts as changed; so does a value the store dropped.
+func ChangedOptions(before, after InstallOptions) []string {
+	var changed []string
+	for id, was := range before {
+		now, ok := after[id]
+		if !ok || !reflect.DeepEqual(canonicalChoice(was), canonicalChoice(now)) {
+			changed = append(changed, id)
+		}
+	}
+	slices.Sort(changed)
+	return changed
+}
+
+// canonicalChoice makes a choice comparable whatever it was decoded as: a list
+// of values is always a sorted []string, so []any from a JSON round trip and
+// []string from ResolveOptions compare equal.
+func canonicalChoice(c any) any {
+	switch v := c.(type) {
+	case []any:
+		list := []string{}
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				list = append(list, s)
+			}
+		}
+		slices.Sort(list)
+		return list
+	case []string:
+		list := append([]string{}, v...)
+		slices.Sort(list)
+		return list
+	}
+	return c
 }

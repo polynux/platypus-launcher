@@ -27,7 +27,11 @@ func (s *Store) SetOptions(gameID string, options types.InstallOptions) error {
 		s.data.InstallOptions = map[string]types.InstallOptions{}
 	}
 	prev, had := s.data.InstallOptions[gameID]
-	s.data.InstallOptions[gameID] = options
+	if options = types.NormalizeChoices(options); options == nil {
+		delete(s.data.InstallOptions, gameID)
+	} else {
+		s.data.InstallOptions[gameID] = options
+	}
 	if err := s.save(); err != nil {
 		if had {
 			s.data.InstallOptions[gameID] = prev
