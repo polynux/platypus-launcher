@@ -63,6 +63,9 @@ type file struct {
 	// SocialPlaying: whether friends see the game the user plays, per plugin.
 	// A plugin is on until the user switches it off (social.go).
 	SocialPlaying map[string]bool `json:"social_playing,omitempty"`
+	// ChatAlerts: whether the user hears about new messages from friends, per
+	// plugin. On until the user switches it off (chat.go).
+	ChatAlerts map[string]bool `json:"chat_alerts,omitempty"`
 	// PluginSettings are each plugin's plugin-wide settings values, and
 	// PluginGameSettings each game's per-game values (the `settings`
 	// capability, see plugin_settings.go). Values never hold secrets.
