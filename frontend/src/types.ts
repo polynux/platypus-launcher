@@ -168,6 +168,8 @@ export interface Game {
   copies?: GameCopy[] | null;
   /** The owner id of the copy the user picked; empty for the store's default (shared_by). */
   preferred_copy?: string;
+  /** The borrowed game's copies set against the baseline copy (two or more copies). */
+  copy_compare?: CopyComparison | null;
   /** What the user changed about the game's look (Hydra's customization): when
    *  `title` is theirs, `store_title` is the store's. The *_url fields are their
    *  images; `customized` names every part that is theirs. */
@@ -227,16 +229,53 @@ export interface GameCopy {
   owner_name: string;
   dlc?: GameDLC[] | null;
   note?: string;
+  /** What the store doesn't lend from this copy, as text. */
+  exclude?: string;
   /** Whether the copy can be borrowed now. */
   available: boolean;
   /** Whether someone is playing the copy now. */
   in_use?: boolean;
 }
 
-/** An add-on one copy has. */
+/** An add-on one copy has. Kind is 'dlc' (default), 'soundtrack' or 'other'. */
 export interface GameDLC {
   id: string;
   name: string;
+  kind?: 'dlc' | 'soundtrack' | 'other';
+}
+
+/** The copies of a borrowed game set against the baseline (core computes it).
+ *  `baseline` is the owner id of the preferred copy, or the one with the most add-ons. */
+export interface CopyComparison {
+  baseline: string;
+  diffs: CopyDiff[];
+}
+
+/** How one copy's add-ons differ from the baseline's. "here" is this copy, "baseline" the other. */
+export interface CopyDiff {
+  owner_id: string;
+  only_here: number;
+  only_baseline: number;
+  shared: number;
+  soundtracks_only_here: number;
+  soundtracks_only_baseline: number;
+  soundtracks_shared: number;
+}
+
+/** A term a store asks the user to accept before an install (protocol 1.11). */
+export interface GameTerm {
+  id: string;
+  title: string;
+  url?: string;
+  version: string;
+  /** Unix seconds when the user accepted this version; absent when they haven't. */
+  accepted_at?: number;
+}
+
+/** A term version the user accepts. */
+export interface TermRef {
+  id: string;
+  version: string;
 }
 
 /** A member of a store's family group (the `family` capability). */

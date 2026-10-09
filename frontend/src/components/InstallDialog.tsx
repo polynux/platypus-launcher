@@ -8,6 +8,7 @@ import { InstallLocationPicker } from './InstallLocationPicker';
 import { LauncherApi } from '../effect/runtime';
 import { formatBytes } from '../lib/games';
 import { isShort } from '../lib/installLocation';
+import { ensureTerms } from '../lib/termsRequest';
 import { useInstallSize } from '../lib/installSize';
 import { cx } from './ui';
 
@@ -35,6 +36,7 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
   const install = async () => {
     setBusy(true);
     try {
+      if (!(await ensureTerms(game))) return;
       await Effect.runPromise(LauncherApi.installGameTo(game, folder));
       onNotify(`Install of ${game.title} queued`, 'busy');
       onChanged();

@@ -12,6 +12,7 @@ import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { formatBytes } from '../lib/games';
+import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -92,6 +93,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   const submit = async () => {
     setBusy(true);
     try {
+      if (!(await ensureTerms(game))) return;
       if (installing) {
         await Effect.runPromise(folder ? LauncherApi.installGameWithOptionsTo(game, choices, folder) : LauncherApi.installGameWithOptions(game, choices));
       }

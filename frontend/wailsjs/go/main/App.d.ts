@@ -4,6 +4,8 @@ import {types} from '../models';
 import {chat} from '../models';
 import {social} from '../models';
 
+export function AcceptGameTerms(arg1:types.Game,arg2:Array<types.TermRef>):Promise<void>;
+
 export function AddCustomGame(arg1:string,arg2:string):Promise<types.Game>;
 
 export function AddGameFolder(arg1:string):Promise<Array<types.GameFolder>>;
@@ -69,6 +71,8 @@ export function GetGameOptions(arg1:types.Game):Promise<types.GameOptions>;
 export function GetGameSettings():Promise<Record<string, Record<string, any>>>;
 
 export function GetGameSettingsFields(arg1:types.Game):Promise<types.SettingsView>;
+
+export function GetGameTerms(arg1:types.Game):Promise<Array<types.GameTerm>>;
 
 export function GetGameVersions(arg1:types.Game):Promise<types.VersionInfo>;
 

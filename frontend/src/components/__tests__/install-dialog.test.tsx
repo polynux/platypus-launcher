@@ -5,6 +5,7 @@ import { Effect } from 'effect';
 import type { Game, InstallLocation, StorePlugin } from '../../types';
 
 const api = vi.hoisted(() => ({
+  getGameTerms: vi.fn(async () => []), // no terms unless a test says so (protocol 1.11)
   getInstallSize: vi.fn(),
   getGameOptions: vi.fn(),
   getInstallLocations: vi.fn(),
@@ -58,6 +59,19 @@ describe('InstallDialog ("Install to…")', () => {
     expect(radios[1].textContent).toMatch(/Game folder.*\/mnt\/ssd\/echo.*8\.0 GB free/);
     expect(radios[2].textContent).toMatch(/Recent.*\/data\/old/);
     expect(radios[0].getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('installs nothing while the store has terms the user hasn\'t accepted', async () => {
+    api.getGameTerms.mockResolvedValue([{ id: 'eula', title: 'Echo end user licence', version: '2026.1' }]);
+    const { onClose, onChanged } = open();
+    await screen.findByRole('radiogroup', { name: 'Install location' });
+    fireEvent.click(installBtn());
+    await waitFor(() => expect(api.getGameTerms).toHaveBeenCalled());
+    // No terms dialog is open here (the app mounts it), so nothing is accepted and nothing is queued.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.installGameTo).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onChanged).not.toHaveBeenCalled();
   });
 
   it('says so when the store cannot tell the size, and still installs', async () => {

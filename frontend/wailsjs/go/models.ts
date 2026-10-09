@@ -581,6 +581,63 @@ export namespace types {
 	    }
 	}
 	
+	export class CopyDiff {
+	    owner_id: string;
+	    only_here: number;
+	    only_baseline: number;
+	    shared: number;
+	    soundtracks_only_here: number;
+	    soundtracks_only_baseline: number;
+	    soundtracks_shared: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CopyDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.owner_id = source["owner_id"];
+	        this.only_here = source["only_here"];
+	        this.only_baseline = source["only_baseline"];
+	        this.shared = source["shared"];
+	        this.soundtracks_only_here = source["soundtracks_only_here"];
+	        this.soundtracks_only_baseline = source["soundtracks_only_baseline"];
+	        this.soundtracks_shared = source["soundtracks_shared"];
+	    }
+	}
+	export class CopyComparison {
+	    baseline: string;
+	    diffs: CopyDiff[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CopyComparison(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseline = source["baseline"];
+	        this.diffs = this.convertValues(source["diffs"], CopyDiff);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class Customization {
 	    title: string;
 	    sort_title: string;
@@ -620,6 +677,7 @@ export namespace types {
 	export class GameDLC {
 	    id: string;
 	    name: string;
+	    kind: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new GameDLC(source);
@@ -629,6 +687,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
+	        this.kind = source["kind"];
 	    }
 	}
 	export class GameCopy {
@@ -638,6 +697,7 @@ export namespace types {
 	    note?: string;
 	    available: boolean;
 	    in_use?: boolean;
+	    exclude?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new GameCopy(source);
@@ -651,6 +711,7 @@ export namespace types {
 	        this.note = source["note"];
 	        this.available = source["available"];
 	        this.in_use = source["in_use"];
+	        this.exclude = source["exclude"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -790,6 +851,7 @@ export namespace types {
 	    shared_by?: SharedBy;
 	    copies?: GameCopy[];
 	    preferred_copy?: string;
+	    copy_compare?: CopyComparison;
 	    store_title?: string;
 	    sort_title?: string;
 	    logo_url?: string;
@@ -833,6 +895,7 @@ export namespace types {
 	        this.shared_by = this.convertValues(source["shared_by"], SharedBy);
 	        this.copies = this.convertValues(source["copies"], GameCopy);
 	        this.preferred_copy = source["preferred_copy"];
+	        this.copy_compare = this.convertValues(source["copy_compare"], CopyComparison);
 	        this.store_title = source["store_title"];
 	        this.sort_title = source["sort_title"];
 	        this.logo_url = source["logo_url"];
@@ -1019,6 +1082,26 @@ export namespace types {
 		}
 	}
 	
+	export class GameTerm {
+	    id: string;
+	    title: string;
+	    url?: string;
+	    version: string;
+	    accepted_at?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new GameTerm(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.version = source["version"];
+	        this.accepted_at = source["accepted_at"];
+	    }
+	}
 	export class InstallFolderCheck {
 	    folder: string;
 	    free_bytes: number;
@@ -1604,6 +1687,20 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class TermRef {
+	    id: string;
+	    version: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TermRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.version = source["version"];
+	    }
 	}
 	export class Tweak {
 	    id: string;
