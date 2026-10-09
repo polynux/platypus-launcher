@@ -95,7 +95,9 @@ func (a *App) GetGameOptions(game types.Game) (types.GameOptions, error) {
 // InstallGameWithOptions queues an install with the choices the user made in
 // the install dialog. A choice the store doesn't offer, or DLC the user doesn't
 // own, refuses the install; the choices are remembered once it is queued.
-func (a *App) InstallGameWithOptions(game types.Game, options types.InstallOptions) (types.Job, error) {
+// The choices are a plain map: Wails binds named map types as nothing in the
+// generated TypeScript.
+func (a *App) InstallGameWithOptions(game types.Game, options map[string]any) (types.Job, error) {
 	if game.IsInstalled {
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
 	}
@@ -108,7 +110,7 @@ func (a *App) InstallGameWithOptions(game types.Game, options types.InstallOptio
 // UpdateGameWithOptions changes the add-ons or options of an installed game.
 // It is a game.update with the new options; the plugin installs what was added,
 // and removes what was switched off only where the store allows it.
-func (a *App) UpdateGameWithOptions(game types.Game, options types.InstallOptions) (types.Job, error) {
+func (a *App) UpdateGameWithOptions(game types.Game, options map[string]any) (types.Job, error) {
 	if !game.IsInstalled {
 		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
 	}
