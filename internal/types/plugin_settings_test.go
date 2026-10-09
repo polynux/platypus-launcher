@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -141,6 +142,44 @@ func TestCleanSettingValuesRefusesWrongValues(t *testing.T) {
 	} {
 		if _, err := s.CleanSettingValues(v); err == nil {
 			t.Errorf("%s: want an error", name)
+		}
+	}
+}
+
+func TestParseSettingsSchemaKeepsDefaultsInBounds(t *testing.T) {
+	long := strings.Repeat("x", maxSettingText+1)
+	s := mustParse(t, `{"groups":[{"id":"g","label":"G","fields":[
+	  {"id":"high","kind":"number","label":"High","default":50,"min":0,"max":10},
+	  {"id":"low","kind":"number","label":"Low","default":-3,"min":0,"max":10},
+	  {"id":"inverted","kind":"number","label":"Inverted","default":7,"min":10,"max":0},
+	  {"id":"big","kind":"text","label":"Big","default":"`+long+`"},
+	  {"id":"ok","kind":"text","label":"Ok","default":"fine"}
+	]}]}`)
+	if f, _ := s.Field("high"); f.Default != 10.0 {
+		t.Errorf("high default = %v, want clamped to the max 10", f.Default)
+	}
+	if f, _ := s.Field("low"); f.Default != 0.0 {
+		t.Errorf("low default = %v, want clamped to the min 0", f.Default)
+	}
+	if f, _ := s.Field("inverted"); f.Min != nil || f.Max != nil || f.Default != 7.0 {
+		t.Errorf("inverted = %+v, want min and max dropped (they contradict) and the default kept", f)
+	}
+	if f, _ := s.Field("big"); f.Default != nil {
+		t.Errorf("big text default is %d bytes, want it dropped at the %d-byte cap", len(f.Default.(string)), maxSettingText)
+	}
+	if f, _ := s.Field("ok"); f.Default != "fine" {
+		t.Errorf("ok default = %v, want kept", f.Default)
+	}
+}
+
+func TestDefaultsAreAlwaysAcceptedBySave(t *testing.T) {
+	s := mustParse(t, `{"groups":[{"id":"g","label":"G","fields":[
+	  {"id":"volume","kind":"number","label":"Volume","default":50,"min":0,"max":10},
+	  {"id":"big","kind":"text","label":"Big","default":"`+strings.Repeat("x", maxSettingText+1)+`"}
+	]}]}`)
+	for _, f := range s.Scoped(ScopePlugin).Groups[0].Fields {
+		if _, err := s.CleanSettingValues(map[string]any{f.ID: f.Default}); err != nil && f.Default != nil {
+			t.Errorf("default of %s refused by the save: %v", f.ID, err)
 		}
 	}
 }

@@ -150,15 +150,22 @@ func parseField(raw json.RawMessage) (SettingField, bool) {
 		}
 	case SettingText:
 		var s string
-		if json.Unmarshal(rf.Default, &s) == nil && present(rf.Default) {
+		// A default longer than a value may be is dropped: sent back with the
+		// rest of the scope, it would refuse the whole save.
+		if json.Unmarshal(rf.Default, &s) == nil && present(rf.Default) && len(s) <= maxSettingText {
 			f.Default = s
 		}
 	case SettingNumber:
+		// Bounds that contradict each other are dropped. A default outside the
+		// bounds is clamped into them, so the form never sends a refused value.
+		f.Min, f.Max = rf.Min, rf.Max
+		if f.Min != nil && f.Max != nil && *f.Min > *f.Max {
+			f.Min, f.Max = nil, nil
+		}
 		var n float64
 		if json.Unmarshal(rf.Default, &n) == nil && present(rf.Default) && finite(n) {
-			f.Default = n
+			f.Default = clampNumber(n, f.Min, f.Max)
 		}
-		f.Min, f.Max = rf.Min, rf.Max
 	case SettingSelect:
 		var list []SettingOption
 		if json.Unmarshal(rf.Options, &list) != nil {
@@ -202,6 +209,17 @@ func hasOption(list []SettingOption, id string) bool {
 func present(raw json.RawMessage) bool { return len(raw) > 0 && string(raw) != "null" }
 
 func finite(n float64) bool { return !math.IsNaN(n) && !math.IsInf(n, 0) }
+
+// clampNumber moves n into [min, max]; a nil bound doesn't limit.
+func clampNumber(n float64, lo, hi *float64) float64 {
+	if lo != nil && n < *lo {
+		return *lo
+	}
+	if hi != nil && n > *hi {
+		return *hi
+	}
+	return n
+}
 
 // Scoped returns the schema with only the fields of one scope. Groups left
 // without fields are dropped.
