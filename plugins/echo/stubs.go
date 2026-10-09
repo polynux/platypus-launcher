@@ -16,13 +16,6 @@ var stubs = map[string]struct {
 	"playtime.list":     {false, map[string]any{"games": []any{}}},
 	"redeem.submit":     {false, map[string]any{"message": "Echo has nothing to redeem."}},
 	"family.members":    {false, []any{}},
-	"social.start":      {false, map[string]any{}},
-	"social.stop":       {false, map[string]any{}},
-	"social.state":      {false, map[string]any{}},
-	"social.self":       {false, map[string]any{}},
-	"social.friends":    {false, map[string]any{"friends": []any{}}},
-	"social.setStatus":  {false, map[string]any{}},
-	"social.setPlaying": {false, map[string]any{}},
 }
 
 func capabilityStub(method string, p params) (res any, err error, ok bool) {
