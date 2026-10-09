@@ -55,6 +55,7 @@ type entry struct {
 	doneOnce sync.Once
 	token    string // HYDRA_SESSION value in the game's environment (direct launches)
 	hook     func(force bool)
+	onExit   func(ExitInfo)
 	stopping bool // the user asked to stop it
 	forceReq bool // ... and asked for SIGKILL before a pid was known
 }
@@ -291,12 +292,16 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		}
 		stoppedByUser := t.userStopped(e)
 		t.clearEntry(gameID, e)
+		failed := !stoppedByUser && err != nil && time.Since(started) < quickExit
+		if e.onExit != nil {
+			defer e.onExit(ExitInfo{Stopped: stoppedByUser, Failed: failed})
+		}
 		if stoppedByUser {
 			// A stop by the user is never a failed launch, however fast the exit.
 			t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
 			return
 		}
-		if err != nil && time.Since(started) < quickExit {
+		if failed {
 			msg := strings.TrimSpace(tail.String())
 			if msg == "" {
 				msg = err.Error()
