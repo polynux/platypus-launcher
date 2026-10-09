@@ -65,6 +65,12 @@ func chatEnv(t *testing.T) (*App, *chatSink) {
 		Logf:    func(string, ...any) {},
 	})
 	t.Cleanup(func() { a.chat.Forget("echo") })
+	// Chat notifications are kept only about friends on the store's list, so the
+	// list is loaded before the test runs, as the app does at launch.
+	a.syncSocial()
+	if _, err := a.plugins.Initialize(context.Background(), "echo"); err == nil && a.plugins.Has("echo", "social") {
+		waitSocial(t, "the friends list", func() bool { return len(a.social.View("echo").Friends) > 0 })
+	}
 	return a, sink
 }
 
@@ -370,6 +376,10 @@ func TestChatWithTwoStores(t *testing.T) {
 		a.chat.Forget("echo")
 		a.chat.Forget("echo-b")
 	})
+	a.syncSocial()
+	waitSocial(t, "both friends lists", func() bool {
+		return len(a.social.View("echo").Friends) > 0 && len(a.social.View("echo-b").Friends) > 0
+	})
 
 	// The same friend id exists in both stores, and each store has its own history.
 	for _, plugin := range []string{"echo", "echo-b"} {
@@ -412,4 +422,45 @@ func unreadOn(a *App, plugin string) int {
 		}
 	}
 	return n
+}
+
+// Chat notifications reach the manager only from a store at protocol 1.9 that
+// offers chat and social, and only about a friend on its own list. A store
+// settled on 1.8, a stranger, and a friend the store doesn't list change nothing.
+func TestChatNotificationsAreGated(t *testing.T) {
+	const stranger = "7656119800000099"
+	msg := func(friend string) json.RawMessage {
+		raw, _ := json.Marshal(map[string]any{"friendId": friend, "message": chat.Message{ID: "x1", From: friend, Text: "hi", SentAt: 1}})
+		return raw
+	}
+	t.Run("protocol 1.8", func(t *testing.T) {
+		t.Setenv("ECHO_PROTOCOLS", "1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8")
+		a, sink := chatEnv(t)
+		if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
+			t.Fatal(err)
+		}
+		waitSocial(t, "the friend list", func() bool { return a.chatFriend("echo", chatAna) })
+		if !a.chatNotify("echo", chat.NoteMessage, msg(chatAna)) {
+			t.Fatal("a chat notification was not claimed")
+		}
+		if n := len(sink.evs); n != 0 {
+			t.Fatalf("a 1.8 store's message reached the manager: %d events", n)
+		}
+	})
+	t.Run("stranger and unknown friend", func(t *testing.T) {
+		a, sink := chatEnv(t)
+		if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
+			t.Fatal(err)
+		}
+		waitSocial(t, "the friend list", func() bool { return a.chatFriend("echo", chatAna) })
+		a.chatNotify("unknown-store", chat.NoteMessage, msg(chatAna))
+		a.chatNotify("echo", chat.NoteMessage, msg(stranger))
+		if n := len(sink.evs); n != 0 {
+			t.Fatalf("notifications from a stranger or about a non-friend reached the manager: %d events", n)
+		}
+		a.chatNotify("echo", chat.NoteMessage, msg(chatAna))
+		if n := len(sink.evs); n == 0 {
+			t.Fatal("a friend's message from a 1.9 store was dropped")
+		}
+	})
 }

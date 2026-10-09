@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 
 	"hydra-launcher/internal/chat"
 	"hydra-launcher/internal/plugins"
+	"hydra-launcher/internal/social"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -130,11 +132,42 @@ func (a *App) SetChatAlerts(pluginID string, on bool) error {
 	return a.settings.SetChatAlerts(pluginID, on)
 }
 
-// chatNotify routes a chat notification from a plugin to the manager.
+// chatNotify routes a chat notification from a plugin to the manager. Only a
+// store that is running at protocol 1.9 and offers chat with social may send
+// them, and only about a friend on its own list. Anything else is dropped here.
 func (a *App) chatNotify(id, method string, params json.RawMessage) bool {
-	if a.chat == nil || !strings.HasPrefix(method, "chat.") {
+	if !strings.HasPrefix(method, "chat.") {
 		return false
+	}
+	if a.chat == nil || !a.chatSpoken(id) {
+		return true
+	}
+	var p struct {
+		FriendID string `json:"friendId"`
+	}
+	if json.Unmarshal(params, &p) != nil || !a.chatFriend(id, p.FriendID) {
+		return true
 	}
 	a.chat.Notify(id, method, params)
 	return true
+}
+
+// chatSpoken says whether a store is running, initialized, at protocol 1.9 or
+// later, and offers both chat and social: the same as chatBackend.Offers, but
+// without starting the plugin.
+func (a *App) chatSpoken(id string) bool {
+	if a.plugins == nil {
+		return false
+	}
+	rt := a.plugins.Runtime(id)
+	return rt.Initialized && rt.Speaks(plugins.Version{Major: 1, Minor: 9}) &&
+		slices.Contains(rt.Capabilities, "chat") && slices.Contains(rt.Capabilities, "social")
+}
+
+// chatFriend says whether a friend is on a store's list.
+func (a *App) chatFriend(id, friendID string) bool {
+	if a.social == nil || friendID == "" {
+		return false
+	}
+	return slices.ContainsFunc(a.social.View(id).Friends, func(f social.Friend) bool { return f.ID == friendID })
 }

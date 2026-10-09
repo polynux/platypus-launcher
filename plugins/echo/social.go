@@ -85,6 +85,9 @@ func loadSocial() {
 	if manifestID() == "echo-b" {
 		socialFixture = socialFixtureB
 		socialSelf = map[string]string{"name": "Echo B Player", "state": "online"}
+		for _, id := range chatBFriends {
+			chatFriends[id] = true
+		}
 	}
 }
 

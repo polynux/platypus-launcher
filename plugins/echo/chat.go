@@ -37,6 +37,10 @@ var chatFriends = map[string]bool{
 	"7656119800000001": true, "7656119800000002": true, "7656119800000007": true, chatBotID: true,
 }
 
+// chatBFriends are echo-b's own friends with chat: the store only sends and
+// answers for them, since its friends list is its own (socialFixtureB).
+var chatBFriends = []string{"8656119800000001", "8656119800000002", "8656119800000003"}
+
 // chatFixture is the history echo starts with.
 var chatFixture = map[string][]chatMsg{
 	"7656119800000001": {
@@ -291,6 +295,9 @@ func restartChatTicker() {
 // the store's unread count for that friend.
 func chatIncoming(i int) {
 	friends := []string{"7656119800000001", "7656119800000002", "7656119800000007"}
+	if manifestID() == "echo-b" {
+		friends = chatBFriends
+	}
 	friendID := friends[i%len(friends)]
 	chatMu.Lock()
 	if !chatReady {
