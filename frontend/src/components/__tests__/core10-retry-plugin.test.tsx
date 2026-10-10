@@ -25,6 +25,7 @@ vi.mock('../../effect/runtime', () => ({
   onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
+  onLibraryPartial: () => () => {},
 }));
 
 import { PluginsView } from '../PluginsView';

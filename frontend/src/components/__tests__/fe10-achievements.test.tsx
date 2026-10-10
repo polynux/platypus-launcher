@@ -21,6 +21,7 @@ vi.mock('../../effect/runtime', () => ({
   onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
+  onLibraryPartial: () => () => {},
 }));
 
 import { GamePage } from '../GamePage';

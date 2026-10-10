@@ -19,6 +19,7 @@ vi.mock('../../effect/runtime', () => ({
   onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
+  onLibraryPartial: () => () => {},
 }));
 
 import { ProgressAchievements } from '../ProgressAchievements';

@@ -44,6 +44,7 @@
 //	ECHO_COPY_UNAVAILABLE member ids whose copy of a shared game can't be picked or launched
 //	ECHO_COMPAT        JSON {"<id>": {steamAppId, platforms, drm, ...}} - game.details compat facts (compat.go, protocol 1.10)
 //	ECHO_TERMS_BUMP   set: the licence term of "licensed" has its next version (terms.go)
+//	ECHO_LIBRARY_DELAY_MS  milliseconds library.list waits before it answers (a slow store)
 //	ECHO_GAMES        number of extra games to list, with covers served locally (bulk.go), to try the UI at scale
 //
 // Cloud saves (cloud.go) have their own ECHO_CLOUD* knobs, listed there, and
@@ -739,6 +740,9 @@ func authStatus() map[string]any {
 }
 
 func library() (any, error) {
+	if ms, err := strconv.Atoi(os.Getenv("ECHO_LIBRARY_DELAY_MS")); err == nil && ms > 0 {
+		time.Sleep(time.Duration(ms) * time.Millisecond) // a slow store
+	}
 	stMu.Lock()
 	defer stMu.Unlock()
 	if !st.LoggedIn {

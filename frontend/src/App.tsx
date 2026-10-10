@@ -21,7 +21,7 @@ import { TermsHost } from './components/TermsHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onJobs, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
@@ -116,6 +116,24 @@ export function App() {
     return unsubscribe;
   }, [refreshSocial]);
 
+  // The startup scan shows the library of the sources that answered first (Steam
+  // reads local files; a store plugin may wait on its store) instead of a
+  // skeleton until the slowest one does. Later rescans keep what is shown.
+  const startupScan = useRef(false);
+  const savedSettings = useRef<Promise<Record<string, GameSettings>>>(Promise.resolve({}));
+  useEffect(
+    () =>
+      onLibraryPartial((lib) => {
+        if (!startupScan.current) return;
+        void savedSettings.current.then((saved) => {
+          if (!startupScan.current) return;
+          setGames((prev) => mergeRescannedGames(prev, lib.games, saved));
+          setLoaded(true);
+        });
+      }),
+    [],
+  );
+
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
   const loadData = useCallback(
@@ -130,12 +148,15 @@ export function App() {
           (value): Settled<A> => ({ ok: true, value }),
           (error): Settled<A> => ({ ok: false, error: error instanceof Error ? error : new Error(String(error)) }),
         );
+      startupScan.current = reason === 'startup';
+      // Unreadable saved settings shouldn't block the library.
+      const savedCall = settle(LauncherApi.getGameSettings());
+      savedSettings.current = savedCall.then((r) => (r.ok ? r.value : {}));
       return Promise.all([
         settle(LauncherApi.getLibrary()),
         settle(LauncherApi.getProtonVersions()),
         settle(LauncherApi.listPlugins()),
-        // Unreadable saved settings shouldn't block the library.
-        settle(LauncherApi.getGameSettings()),
+        savedCall,
         // A missing session snapshot (old backend) shouldn't block the library either.
         settle(LauncherApi.getSessions()),
       ])
@@ -210,6 +231,7 @@ export function App() {
           notify(msg, 'err');
         })
         .finally(() => {
+          startupScan.current = false;
           setLoaded(true);
           setScanning(false);
         });

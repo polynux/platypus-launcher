@@ -386,6 +386,12 @@ export function onJobs(cb: (jobs: Job[]) => void): () => void {
   return EventsOn('jobs', cb);
 }
 
+/** Subscribe to the partial results of a library scan: the games of the sources that have answered while others are still out. */
+export function onLibraryPartial(cb: (lib: Library) => void): () => void {
+  if (!window.go?.main?.App) return () => {};
+  return EventsOn('library-partial', cb);
+}
+
 /** Subscribe to playtime changes: a plugin's report changed a library value. */
 export function onPlaytime(cb: () => void): () => void {
   if (!window.go?.main?.App) return () => {};
