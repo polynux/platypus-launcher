@@ -33,11 +33,11 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
   return (
     <Modal label={`Compare copies of ${game.title}`} onClose={onClose} size="lg">
       <h2 className="text-[20px] font-extrabold tracking-tight">Compare copies</h2>
-      <p className="mt-1 text-[12.5px] text-white/50">
+      <p className="mt-1 text-[12.5px] text-white/55">
         {game.title} · compared with {baseline.owner_name}'s copy ({why})
       </p>
 
-      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11.5px] text-white/80">
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-hint text-white/80">
         <label className="flex items-center gap-2">
           <Switch aria-label="Differences only" checked={differencesOnly} onCheckedChange={setDifferencesOnly} />
           Differences only
@@ -49,9 +49,9 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
       </div>
 
       <div className="mt-4 max-h-[340px] overflow-auto rounded-2xl bg-white/[0.04]">
-        <table className="w-full border-collapse font-mono text-[11.5px]" aria-label="Add-ons by copy">
+        <table className="w-full border-collapse font-mono text-hint" aria-label="Add-ons by copy">
           <thead className="sticky top-0 bg-[#191410]">
-            <tr className="text-left text-white/50">
+            <tr className="text-left text-white/55">
               <th scope="col" className="px-3 py-2 font-normal">Add-on</th>
               {ordered.map((c) => (
                 <th key={c.owner_id} scope="col" className="px-3 py-2 align-top font-normal">
@@ -66,13 +66,13 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
               <tr key={row.id} className="border-t border-white/[0.06]">
                 <td className="px-3 py-2 text-white/85">
                   {row.name}
-                  {row.kind !== 'dlc' && <span className="ml-2 text-white/40">{row.kind}</span>}
+                  {row.kind !== 'dlc' && <span className="ml-2 text-white/55">{row.kind}</span>}
                 </td>
                 {ordered.map((c) => {
                   const has = row.owners.includes(c.owner_id);
                   return (
                     <td key={c.owner_id} className="px-3 py-2 text-center">
-                      <span aria-label={has ? `${c.owner_name} has it` : `${c.owner_name} doesn't have it`} className={has ? 'text-emerald-300' : 'text-white/30'}>
+                      <span aria-label={has ? `${c.owner_name} has it` : `${c.owner_name} doesn't have it`} className={has ? 'text-emerald-300' : 'text-white/55'}>
                         {has ? '✓' : '—'}
                       </span>
                     </td>
@@ -90,7 +90,7 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
       </div>
 
       {ordered.some((c) => c.exclude) && (
-        <ul className="mt-4 space-y-1 font-mono text-[11px] text-white/55">
+        <ul className="mt-4 space-y-1 font-mono text-hint text-white/55">
           {ordered.filter((c) => c.exclude).map((c) => <li key={c.owner_id}>{c.owner_name}: {c.exclude}</li>)}
         </ul>
       )}

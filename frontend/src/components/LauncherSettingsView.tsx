@@ -77,7 +77,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <div className="p-7">
       <header className="mb-2">
         <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/50">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
+        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/55">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
       </header>
 
       <section className={SECTION}>
@@ -87,7 +87,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         </div>
         <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/55">
           Store plugins install games here, each in its own subfolder, for example{' '}
-          <span className="font-mono text-[11.5px] text-white/75">{(saved?.games_folder ?? '~/Games') + '/epic'}</span>. Steam keeps using its own
+          <span className="font-mono text-hint text-white/75">{(saved?.games_folder ?? '~/Games') + '/epic'}</span>. Steam keeps using its own
           library folders.
         </p>
 
@@ -115,7 +115,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         <div className="mt-2.5 flex min-h-4 items-center justify-between gap-4">
           {error ? <ErrorNotice message={error} fallback="Platypus couldn't save that setting." /> : <span />}
           {saved && !isDefault && (
-            <Button variant="link" size="none" onClick={() => save('')} disabled={busy} className="flex-none text-[11.5px]">
+            <Button variant="link" size="none" onClick={() => save('')} disabled={busy} className="flex-none text-hint">
               reset to {saved.default_games_folder.replace(/^\/home\/[^/]+/, '~')}
             </Button>
           )}
@@ -197,7 +197,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
         </div>
         <Switch aria-label="Fetch game info online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
-      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[11px] leading-relaxed text-white/45">
+      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
         <p>Compatibility ratings: ProtonDB community reports (protondb.com).</p>
         <p>Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.</p>
         <p>Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet).</p>

@@ -22,8 +22,8 @@ export function Panel({ className, children, as: Tag = 'div' }: { className?: st
 export const cardClass =
   'group overflow-hidden rounded-2xl bg-white/[0.045] text-left ring-1 ring-white/[0.07] transition duration-300 hover:-translate-y-0.5 hover:ring-amber-300/40 focus-visible:ring-amber-300/60';
 
-export function MonoLabel({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cx('font-mono text-[11px] uppercase tracking-[0.16em] text-white/40', className)}>{children}</div>;
+export function MonoLabel({ children, className, as: Tag = 'div' }: { children: React.ReactNode; className?: string; as?: 'div' | 'h2' }) {
+  return <Tag className={cx('font-mono text-micro uppercase tracking-[0.16em] text-white/55', className)}>{children}</Tag>;
 }
 
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
@@ -37,7 +37,7 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
 
 export function LinkButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="rounded font-mono text-[11.5px] uppercase tracking-widest text-white/40 transition hover:text-white/80">
+    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-white/55 transition hover:text-white/80">
       {children}
     </button>
   );
@@ -169,7 +169,7 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
   if (!current) {
     return (
       <div className={cx('grid place-items-center bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-3 text-center', className)}>
-        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/45">{title}</span>
+        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/55">{title}</span>
       </div>
     );
   }

@@ -238,7 +238,7 @@ export function GamePage(p: GamePageProps) {
           style={{ backgroundImage: `url("${game.background_url}")`, maskImage: 'linear-gradient(180deg, #000 30%, transparent)', WebkitMaskImage: 'linear-gradient(180deg, #000 30%, transparent)' }}
         />
       )}
-      <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-white/50 hover:bg-transparent hover:text-white">
+      <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-white/55 hover:bg-transparent hover:text-white">
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
       </Button>
 
@@ -259,7 +259,7 @@ export function GamePage(p: GamePageProps) {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
             {(hours != null || last) && (
-              <div className="text-right font-mono text-[11.5px] leading-relaxed text-white/50">
+              <div className="text-right font-mono text-hint leading-relaxed text-white/55">
                 {hours != null && <div title={playtimeTooltip(game)}>{hours}h logged</div>}
                 {last && <div>last played {last}</div>}
               </div>
@@ -327,7 +327,7 @@ export function GamePage(p: GamePageProps) {
       )}
 
       {p.refreshing && (
-        <p className="mb-4 font-mono text-[11.5px] uppercase tracking-widest text-white/40">refreshing library…</p>
+        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-white/55">refreshing library…</p>
       )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -381,7 +381,7 @@ export function GamePage(p: GamePageProps) {
             ) : details?.summary ? (
               <p className="text-[13px] leading-relaxed text-white/70">{details.summary}</p>
             ) : (
-              <p className="text-[13px] text-white/45">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
+              <p className="text-[13px] text-white/55">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
             )}
             {about.length > 0 && <p className="mt-3 font-mono text-[12px] text-white/55">{about.join('  ·  ')}</p>}
           </Panel>
@@ -392,12 +392,12 @@ export function GamePage(p: GamePageProps) {
             <h2 className="mb-2 text-[15px] font-bold">Compatibility</h2>
             <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
             {fix?.winetricks && fix.winetricks.length > 0 && (
-              <p className="mt-2 font-mono text-[11.5px] text-sky-200/80">recipe: winetricks {fix.winetricks.join(' ')}</p>
+              <p className="mt-2 font-mono text-hint text-sky-200/80">recipe: winetricks {fix.winetricks.join(' ')}</p>
             )}
-            <div className="mt-4 space-y-2 font-mono text-[11.5px]">
+            <div className="mt-4 space-y-2 font-mono text-hint">
               {facts.map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                  <span className="text-white/45">{k}</span>
+                  <span className="text-white/55">{k}</span>
                   <span className="truncate text-right text-white/85">{v}</span>
                 </div>
               ))}
@@ -520,12 +520,12 @@ function GameHeading({ game }: { game: Game }) {
 function InstallSizeLine({ size }: { size: InstallSize }) {
   return (
     <p className="mb-1 font-mono text-[12px] text-white/75" data-testid="install-size-line">
-      {size.state === 'loading' && <span className="text-white/45">checking the install size…</span>}
+      {size.state === 'loading' && <span className="text-white/55">checking the install size…</span>}
       {size.state === 'unknown' && <span title="The store can't tell how big this is">Size unknown</span>}
       {size.state === 'known' && (
         <>
           Install size {formatBytes(size.total)}
-          {size.added > 0 && <span className="text-white/45"> · includes {formatBytes(size.added)} of add-ons</span>}
+          {size.added > 0 && <span className="text-white/55"> · includes {formatBytes(size.added)} of add-ons</span>}
         </>
       )}
     </p>
@@ -556,7 +556,7 @@ function InstallationPanel({
   return (
     <Panel className="bg-white/[0.05]">
       <h2 className="mb-2 text-[15px] font-bold">Installation</h2>
-      <div className="space-y-2 font-mono text-[11.5px]">
+      <div className="space-y-2 font-mono text-hint">
         {[
           ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
           // A game the store lists as installed may have no folder Platypus can name: say so.
@@ -566,7 +566,7 @@ function InstallationPanel({
           ['Size', formatBytes(game.size_bytes) || '—'],
         ].map(([k, v]) => (
           <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-            <span className="text-white/45">{k}</span>
+            <span className="text-white/55">{k}</span>
             <span className="truncate text-right text-white/85 select-text" title={v}>{v}</span>
           </div>
         ))}
@@ -596,7 +596,7 @@ function AchievementsSection({
     <section className="pb-8">
       <div className="mb-3.5 flex items-baseline justify-between">
         <h2 className="text-[16px] font-bold tracking-tight">Achievements</h2>
-        <span className="font-mono text-[12px] tabular-nums text-white/45">
+        <span className="font-mono text-[12px] tabular-nums text-white/55">
           {known ? `${ach.unlocked}/${ach.total} · ${pct}%` : `${ach.total} total`}
         </span>
       </div>
@@ -637,12 +637,12 @@ function AchievementCard({ a, known }: { a: Achievement; known: boolean }) {
       {a.icon ? (
         <img src={a.icon} alt="" loading="lazy" className={cx('h-11 w-11 flex-none rounded-lg', dim && 'opacity-40 grayscale')} />
       ) : (
-        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-white/[0.05]"><Trophy className="h-4 w-4 text-white/40" /></span>
+        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-white/[0.05]"><Trophy className="h-4 w-4 text-white/55" /></span>
       )}
       <div className={cx('min-w-0', dim && 'opacity-60')}>
         <div className="truncate text-[12px] font-bold">{a.name}</div>
-        {a.description && <div className="line-clamp-2 text-[11.5px] leading-snug text-white/50">{a.description}</div>}
-        {meta && <div className="mt-0.5 font-mono text-[11px] text-white/40">{meta}</div>}
+        {a.description && <div className="line-clamp-2 text-hint leading-snug text-white/55">{a.description}</div>}
+        {meta && <div className="mt-0.5 font-mono text-hint text-white/55">{meta}</div>}
       </div>
     </div>
   );

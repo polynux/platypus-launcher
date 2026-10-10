@@ -52,7 +52,7 @@ export function FamilyWarningHost({ games }: { games: Game[] }) {
       <span className="min-w-0 flex-1">
         <span className="block font-bold text-amber-200">{title}</span>
         <span className="block break-words text-white/75">{warning.message}</span>
-        {counting && <span className="tabular-nums text-white/50">{countdownLabel(left)}</span>}
+        {counting && <span className="tabular-nums text-white/55">{countdownLabel(left)}</span>}
       </span>
       <Button variant="ghost" size="sm" onClick={() => setShown(null)}>Dismiss</Button>
     </div>

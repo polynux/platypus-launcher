@@ -25,9 +25,9 @@ function MemberRow({ member }: { member: FamilyMember }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[12.5px] font-bold text-white/90">{member.name}</span>
-        {role && <span className="font-mono text-[10.5px] uppercase tracking-wider text-white/40">{role}</span>}
+        {role && <span className="font-mono text-micro uppercase tracking-wider text-white/55">{role}</span>}
       </span>
-      {member.state && <span className={cx('flex-none font-mono text-[11px]', member.state === 'online' ? 'text-emerald-300' : 'text-white/45')}>{member.state}</span>}
+      {member.state && <span className={cx('flex-none font-mono text-hint', member.state === 'online' ? 'text-emerald-300' : 'text-white/55')}>{member.state}</span>}
     </li>
   );
 }
@@ -63,14 +63,14 @@ function FamiliesList({ plugin }: { plugin: StorePlugin }) {
     <section aria-label="Families" className="space-y-2.5">
       <MonoLabel>families</MonoLabel>
       {error && <ErrorNotice message={error} fallback="Platypus couldn't read the family members." />}
-      {!error && members === null && <p className="font-mono text-[11.5px] text-white/45">loading…</p>}
-      {members && members.length === 0 && <p className="text-[12px] text-white/50">No family members on this account.</p>}
+      {!error && members === null && <p className="font-mono text-hint text-white/55">loading…</p>}
+      {members && members.length === 0 && <p className="text-[12px] text-white/55">No family members on this account.</p>}
       {members && members.length > 0 && (
         <ul aria-label="Family members" className="space-y-2">
           {members.map((m) => <MemberRow key={m.id} member={m} />)}
         </ul>
       )}
-      <p className="text-[11.5px] leading-relaxed text-white/40">Shown as the store reports them. Platypus doesn't enforce the family's rules.</p>
+      <p className="text-hint leading-relaxed text-white/55">Shown as the store reports them. Platypus doesn't enforce the family's rules.</p>
     </section>
   );
 }

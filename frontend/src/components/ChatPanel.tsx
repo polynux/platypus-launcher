@@ -72,7 +72,7 @@ export function ChatPanel(p: ChatPanelProps) {
           )}
           <div className="min-w-0">
             <h2 className="truncate text-[17px] font-extrabold tracking-tight">{p.friendName}</h2>
-            <div className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/45">{p.storeName}</div>
+            <div className="font-mono text-micro uppercase tracking-[0.16em] text-white/55">{p.storeName}</div>
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={p.onClose} className="flex-none">
@@ -101,16 +101,16 @@ export function ChatPanel(p: ChatPanelProps) {
             <LinkButton onClick={p.onLoadOlder}>Load older messages</LinkButton>
           </div>
         )}
-        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/50">Loading…</p>}
+        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/55">Loading…</p>}
         {p.view?.loaded && messages.length === 0 && (
-          <p className="text-[12.5px] text-white/50">No messages yet. Say hello.</p>
+          <p className="text-[12.5px] text-white/55">No messages yet. Say hello.</p>
         )}
         {messages.map((m) => (
           <MessageRow key={messageKey(m)} message={m} onResend={p.onResend} />
         ))}
       </div>
 
-      {p.view?.typing && <p className="text-[11.5px] italic text-white/45">{p.friendName} is typing…</p>}
+      {p.view?.typing && <p className="text-hint italic text-white/55">{p.friendName} is typing…</p>}
 
       <div className="flex items-end gap-2">
         <Textarea
@@ -168,7 +168,7 @@ function MessageRow({ message, onResend }: {
           ),
         )}
       </div>
-      <div className="flex items-center gap-2 font-mono text-[10px] text-white/40">
+      <div className="flex items-center gap-2 font-mono text-hint text-white/55">
         <span className={message.status === 'failed' ? 'text-red-300' : undefined}>{state}</span>
         {message.status === 'failed' && message.clientId && (
           <LinkButton onClick={() => onResend(message.clientId!)}>Send again</LinkButton>

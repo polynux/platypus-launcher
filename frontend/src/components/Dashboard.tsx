@@ -55,9 +55,9 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
             <Badge variant="bronze" className="bg-orange-400 text-[#130f0a]">
               {hero.fix_info?.source === 'protondb' ? 'needs attention' : 'fix available'}
             </Badge>
-            <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
+            <h2 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
               {hero.fix_info?.source === 'protondb' ? `${hero.title} may need tweaks` : `${hero.title} has a community fix`}
-            </h1>
+            </h2>
             <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/60">{attentionReason(hero)}</p>
             <div className="mt-3.5 flex gap-2.5">
               <Button variant="primary" onClick={() => onOpenGame(hero.id)}>Open game</Button>
@@ -77,7 +77,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
             ].map(([k, v, c]) => (
               <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
                 <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
-                <div className="font-mono text-[11px] uppercase tracking-widest text-white/50">{k}</div>
+                <div className="font-mono text-micro uppercase tracking-widest text-white/55">{k}</div>
               </div>
             ))}
           </div>
@@ -101,7 +101,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                 </div>
                 <div className="px-3 py-2.5">
                   <div className="truncate text-[12px] font-bold">{g.title}</div>
-                  <div className="font-mono text-[11px] uppercase tracking-wider text-white/40">
+                  <div className="font-mono text-micro uppercase tracking-wider text-white/55">
                     {hoursPlayed(g) != null ? `${hoursPlayed(g)}h · ` : ''}
                     {runnerShort(g.settings.runner_id, runners)}
                   </div>
@@ -115,7 +115,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <div>
             <h2 className="mb-2.5 text-[15px] font-bold">Waiting on you</h2>
             {waiting.length === 0 ? (
-              <p className="rounded-2xl bg-white/[0.03] p-4 text-[12px] text-white/50 ring-1 ring-white/[0.05]">
+              <p className="rounded-2xl bg-white/[0.03] p-4 text-[12px] text-white/55 ring-1 ring-white/[0.05]">
                 Nothing needs attention. Curated fixes and low ProtonDB ratings show up here.
               </p>
             ) : (
@@ -130,7 +130,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
                       {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/50">{attentionReason(g)}</p>
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/55">{attentionReason(g)}</p>
                   </button>
                 ))}
                 {waiting.length > 3 && (
@@ -162,7 +162,7 @@ function WelcomeBanner({ installed, owned, fixes }: { installed: number; owned: 
   return (
     <Panel as="section" className="mb-6 p-6">
       <h1 className="text-[25px] font-extrabold tracking-tight">{greeting()}</h1>
-      <p className="mt-1 font-mono text-[12px] tabular-nums text-white/50">
+      <p className="mt-1 font-mono text-[12px] tabular-nums text-white/55">
         {installed} installed{owned > installed ? ` · ${owned} owned` : ''} · {fixes} {fixes === 1 ? 'fix' : 'fixes'}
       </p>
     </Panel>
@@ -178,7 +178,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
             <Cover src={g.cover_url} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
-              <div className="font-mono text-[11px] uppercase tracking-wider text-white/40">{storeLabel(g.store)}</div>
+              <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store)}</div>
             </div>
           </button>
         </li>

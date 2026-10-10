@@ -55,6 +55,6 @@ export function CapabilitySurface({
 }: { plugin: StorePlugin | undefined; capability: Capability; game?: Game; reason?: string; children: React.ReactNode }) {
   const a = availability(plugin, capability, { game, reason });
   if (a.available) return <>{children}</>;
-  if (a.reason) return <p role="note" className="font-mono text-[11.5px] text-white/50">{a.reason}</p>;
+  if (a.reason) return <p role="note" className="font-mono text-hint text-white/55">{a.reason}</p>;
   return null;
 }

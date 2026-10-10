@@ -17,7 +17,7 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Runners</h1>
-          <p className="mt-0.5 text-[12.5px] text-white/50">Proton, GE-Proton and Wine builds detected on this system.</p>
+          <p className="mt-0.5 text-[12.5px] text-white/55">Proton, GE-Proton and Wine builds detected on this system.</p>
           <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/55">
             A runner is the build that runs a Windows game on Linux. Each game picks one in its settings; native Linux games need none.
           </p>
@@ -42,7 +42,7 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
                   {r.is_custom && <Badge variant="gold">custom</Badge>}
                   {r.is_system && <Badge variant="neutral">system</Badge>}
                 </div>
-                <div className="truncate font-mono text-[11px] text-white/45 select-text">{r.path}</div>
+                <div className="truncate font-mono text-hint text-white/55 select-text">{r.path}</div>
               </div>
               <Badge variant="ok" className="flex-none gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> found

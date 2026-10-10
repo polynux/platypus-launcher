@@ -5,7 +5,7 @@ import { MonoLabel, cx } from './ui';
 
 /** Why a capability isn't doing anything, in words. */
 function stateOf(c: PluginCapability, initialized: boolean): { text: string; tone: string } {
-  if (!c.known) return { text: 'unknown to this Platypus · ignored', tone: 'text-white/40' };
+  if (!c.known) return { text: 'unknown to this Platypus · ignored', tone: 'text-white/55' };
   if (!c.on) return { text: 'off right now', tone: 'text-orange-200' };
   if (!c.orchestrated) return { text: `${initialized ? 'on' : 'declared'} · not used by Platypus yet`, tone: 'text-white/55' };
   return { text: initialized ? 'on' : 'declared', tone: 'text-emerald-300' };
@@ -26,7 +26,7 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
           aria-expanded={open}
           aria-controls={listId}
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-center gap-1.5 text-left font-mono text-[11.5px] text-white/50 transition hover:text-white/75"
+          className="flex w-full items-center gap-1.5 text-left font-mono text-hint text-white/55 transition hover:text-white/75"
         >
           <ChevronDown className={cx('h-3 w-3 flex-none transition-transform', open ? '' : '-rotate-90')} aria-hidden />
           <span className="min-w-0 flex-1 truncate">
@@ -42,7 +42,7 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
         </MonoLabel>
       )}
       {p.offers.length > 0 && open && (
-        <ul id={listId} aria-label="Capabilities" className="space-y-1 font-mono text-[11.5px]">
+        <ul id={listId} aria-label="Capabilities" className="space-y-1 font-mono text-hint">
           {p.offers.map((c) => {
             const s = stateOf(c, p.initialized);
             const flags = Object.entries(c.features).sort(([a], [b]) => a.localeCompare(b));
@@ -51,7 +51,7 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
                 <span className="w-28 flex-none truncate text-white/85" title={c.name}>{c.name}</span>
                 <span className={cx('flex-none', s.tone)}>{s.text}</span>
                 {c.on && flags.length > 0 && (
-                  <span className="flex flex-wrap gap-x-2 text-white/45">
+                  <span className="flex flex-wrap gap-x-2 text-white/55">
                     {flags.map(([name, on]) => (
                       <span key={name} data-on={on} className={on ? 'text-white/70' : 'line-through decoration-white/30'}>{name}</span>
                     ))}
@@ -63,7 +63,7 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
         </ul>
       )}
       {p.warnings.map((w) => (
-        <p key={w} className="font-mono text-[11.5px] text-orange-200">{w}</p>
+        <p key={w} className="font-mono text-hint text-orange-200">{w}</p>
       ))}
     </div>
   );

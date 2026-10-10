@@ -131,20 +131,20 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
         <div key={g.id} className="space-y-2.5">
           <div>
             <MonoLabel>{g.label}</MonoLabel>
-            {g.description && <p className="mt-1 text-[12px] leading-relaxed text-white/50">{g.description}</p>}
+            {g.description && <p className="mt-1 text-[12px] leading-relaxed text-white/55">{g.description}</p>}
           </div>
           {g.fields.map((f) => (
             <div key={f.id} className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-[12.5px] text-white/85">{f.label}</div>
-                {f.description && <div className="text-[11.5px] leading-relaxed text-white/45">{f.description}</div>}
+                {f.description && <div className="text-hint leading-relaxed text-white/55">{f.description}</div>}
               </div>
               <FieldControl field={f} value={effectiveValue(f, values)} onChange={(v) => change(f.id, v)} />
             </div>
           ))}
         </div>
       ))}
-      {notice && <p role="status" className="font-mono text-[11.5px] text-amber-200">{notice}</p>}
+      {notice && <p role="status" className="font-mono text-hint text-amber-200">{notice}</p>}
       {error && <SettingError message={error} />}
     </div>
   );

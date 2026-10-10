@@ -44,9 +44,9 @@ function LegalList({ game }: { game: Game }) {
         {terms.map((t) => {
           const link = termURL(t);
           return (
-            <li key={`${t.id}@${t.version}`} className="flex items-center justify-between gap-3 font-mono text-[11.5px]">
+            <li key={`${t.id}@${t.version}`} className="flex items-center justify-between gap-3 font-mono text-hint">
               <span className="min-w-0 text-white/80">
-                {t.title} <span className="text-white/40">v{t.version}</span>
+                {t.title} <span className="text-white/55">v{t.version}</span>
               </span>
               <span className="flex shrink-0 items-center gap-3">
                 {t.accepted_at ? (

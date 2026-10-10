@@ -12,12 +12,12 @@ export function SelectTrigger({ className, children, ...props }: React.Component
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
-      className={cn(fieldClass, 'flex h-9 items-center justify-between gap-2 text-left data-[placeholder]:text-white/30 [&>span]:truncate', className)}
+      className={cn(fieldClass, 'flex h-9 items-center justify-between gap-2 text-left data-[placeholder]:text-white/55 [&>span]:truncate', className)}
       {...props}
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown className="size-4 flex-none text-white/40" aria-hidden />
+        <ChevronDown className="size-4 flex-none text-white/55" aria-hidden />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -44,7 +44,7 @@ export function SelectContent({ className, children, position = 'popper', ...pro
 }
 
 export function SelectLabel({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Label>) {
-  return <SelectPrimitive.Label data-slot="select-label" className={cn('px-2.5 pb-1 pt-2 font-mono text-[11px] uppercase tracking-[0.16em] text-white/40', className)} {...props} />;
+  return <SelectPrimitive.Label data-slot="select-label" className={cn('px-2.5 pb-1 pt-2 font-mono text-micro uppercase tracking-[0.16em] text-white/55', className)} {...props} />;
 }
 
 export function SelectItem({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) {

@@ -54,7 +54,7 @@ function SwitchRow({ label, hint, title, checked, onChange }: { label: string; h
   return (
     <label htmlFor={id} title={title} className="flex cursor-pointer items-center justify-between gap-3 py-2.5 transition hover:text-white">
       <span className="min-w-0">
-        <span className="block font-mono text-[11.5px] font-bold text-white/85">{label}</span>
+        <span className="block font-mono text-hint font-bold text-white/85">{label}</span>
         {hint && <span className="block truncate font-mono text-[12px] text-white/55">{hint}</span>}
       </span>
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
@@ -174,7 +174,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
-            <div className="font-mono text-[11.5px] text-white/45">{game.title}</div>
+            <div className="font-mono text-hint text-white/55">{game.title}</div>
           </div>
           <Button variant="neutral" size="icon" onClick={onClose} aria-label="Close" className="size-8">
             <X className="size-4" />
@@ -189,7 +189,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             To apply these settings, paste this into Steam → Properties → Launch options:
           </p>
           <div className="mt-2.5 flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-3 py-2 font-mono text-[11.5px] text-sky-100/90 select-text">{steamLaunchOptions(backend)}</code>
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-3 py-2 font-mono text-hint text-sky-100/90 select-text">{steamLaunchOptions(backend)}</code>
             <Button variant="neutral" size="sm" onClick={() => copy(steamLaunchOptions(backend))}>
               <Copy className="size-3.5" /> Copy
             </Button>
@@ -222,14 +222,14 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     </SelectGroup>
                   ))}
                 </SelectField>
-                <div className={cx('mt-1.5 truncate font-mono text-[11px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
+                <div className={cx('mt-1.5 truncate font-mono text-hint', runnerMissing ? 'text-orange-300' : 'text-white/55')}>
                   {runnerMissing
                     ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
                     : chosenRunner
                       ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
                       : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
                 </div>
-                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
+                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/55">No Proton or Wine runners detected.</p>}
               </div>
             )}
             <AdvancedFold set={runnerSet}>
@@ -262,12 +262,12 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 </div>
               )}
               <div>
-                <MonoLabel className="mb-2">winetricks <span className="normal-case tracking-normal text-white/35">· saved, not applied yet</span></MonoLabel>
+                <MonoLabel className="mb-2">winetricks <span className="normal-case tracking-normal text-white/55">· saved, not applied yet</span></MonoLabel>
                 <div className="flex flex-wrap gap-1.5">
                   {[...new Set([...WINETRICKS_VERBS, ...(game.fix_info?.winetricks ?? [])])].map((t) => {
                     const on = tricks.includes(t);
                     return (
-                      <button key={t} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== t) : [...tricks, t])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-[11.5px] transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
+                      <button key={t} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== t) : [...tricks, t])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-hint transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
                         {on ? '✓ ' : '+ '}{t}
                       </button>
                     );
@@ -340,7 +340,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                       {resChoice === 'custom' && (
                         <div className="mt-2 flex items-center gap-2">
                           <NumberField aria-label="gamescope width" min={0} step={10} hideSteppers value={draft.gamescope_w || undefined} onChange={(v) => set('gamescope_w', v ?? 0)} placeholder="width" className="min-w-0 flex-1" />
-                          <span className="text-white/40">×</span>
+                          <span className="text-white/55">×</span>
                           <NumberField aria-label="gamescope height" min={0} step={10} hideSteppers value={draft.gamescope_h || undefined} onChange={(v) => set('gamescope_h', v ?? 0)} placeholder="height" className="min-w-0 flex-1" />
                         </div>
                       )}
@@ -407,7 +407,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                             <X className="size-4" />
                           </Button>
                         </div>
-                        {err && <p role="status" className="mt-1 font-mono text-[11.5px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                        {err && <p role="status" className="mt-1 font-mono text-hint text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
                       </div>
                     );
                   })}
@@ -419,8 +419,8 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         </div>
 
         <div className="min-w-0 space-y-5">
-          <div className="rounded-xl bg-black/35 p-3.5 font-mono text-[11.5px] leading-relaxed ring-1 ring-white/[0.07]">
-            <div className="mb-1 flex items-center justify-between text-white/40">
+          <div className="rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-white/[0.07]">
+            <div className="mb-1 flex items-center justify-between text-white/55">
               <span>$ preview</span>
               {preview.cmd && (
                 <Button variant="ghost" size="none" onClick={() => copy([...envLines.map(([k, v]) => `${k}=${v}`), preview.cmd].join(' '))} className="rounded px-1 py-0.5" aria-label="Copy command">
@@ -438,7 +438,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             <Button variant="neutral" onClick={onClose} className="flex-1">Cancel</Button>
             <Button variant="primary" onClick={() => { onSave(current); setInitial({ draft: JSON.stringify(draft), env: envSig }); }} className="flex-1">Save config</Button>
           </div>
-          {dirty && <div role="status" className="font-mono text-[11.5px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
+          {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
             saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/platypus/prefixes/${game.id}`}
           </div>

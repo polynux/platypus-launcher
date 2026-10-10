@@ -46,7 +46,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
   return (
     <Modal label={`Terms for ${game.title}`} onClose={onCancel} size="md" dismissable={!busy}>
       <h2 className="text-[20px] font-extrabold tracking-tight">Terms for {game.title}</h2>
-      <p className="mt-1 text-[12.5px] text-white/50">
+      <p className="mt-1 text-[12.5px] text-white/55">
         Read these before {game.title} is installed. Platypus doesn't accept them for you.
       </p>
 
@@ -57,13 +57,13 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
             <li key={`${t.id}@${t.version}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3">
               <span className="min-w-0">
                 <span className="block text-[13px] text-white/90">{t.title}</span>
-                <span className="block font-mono text-[11px] text-white/45">version {t.version}</span>
+                <span className="block font-mono text-hint text-white/55">version {t.version}</span>
               </span>
               {link && (
                 <button
                   type="button"
                   onClick={() => BrowserOpenURL(link)}
-                  className={cx('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-[11.5px] text-sky-200 hover:bg-white/[0.06]')}
+                  className={cx('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-hint text-sky-200 hover:bg-white/[0.06]')}
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> Read
                 </button>

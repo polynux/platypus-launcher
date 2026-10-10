@@ -70,23 +70,23 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
           The game's folder moves into the folder you pick. If the disk changes, Platypus copies it, checks the copy and removes the
           old folder only then. Canceling leaves the game where it is.
         </p>
-        <div className="space-y-2 font-mono text-[11.5px]">
+        <div className="space-y-2 font-mono text-hint">
           <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-            <span className="text-white/45">From</span>
+            <span className="text-white/55">From</span>
             <span className="truncate text-right text-white/85" title={game.install_dir}>{game.install_dir}</span>
           </div>
           {check && (
             <>
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <span className="text-white/45">To</span>
+                <span className="text-white/55">To</span>
                 <span className="truncate text-right text-white/85" title={check.to}>{check.to}</span>
               </div>
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <span className="text-white/45">Needs</span>
+                <span className="text-white/55">Needs</span>
                 <span className="text-white/85">{formatBytes(check.need_bytes)}</span>
               </div>
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <span className="text-white/45">Free there</span>
+                <span className="text-white/55">Free there</span>
                 <span className="text-white/85">{formatBytes(check.free_bytes)}</span>
               </div>
             </>

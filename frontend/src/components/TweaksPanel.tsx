@@ -54,9 +54,9 @@ export function TweaksPanel({
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-[12.5px] font-semibold text-white/90">{t.title}</span>
-                      <span className="block text-[12px] leading-snug text-white/50">{t.reason}</span>
+                      <span className="block text-[12px] leading-snug text-white/55">{t.reason}</span>
                       {t.env && Object.keys(t.env).length > 0 && (
-                        <span className="mt-1 block truncate font-mono text-[11px] text-sky-200/60">
+                        <span className="mt-1 block truncate font-mono text-hint text-sky-200/60">
                           {Object.entries(t.env).map(([k, v]) => `${k}=${v}`).join(' ')}
                         </span>
                       )}
