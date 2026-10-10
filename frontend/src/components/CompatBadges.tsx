@@ -20,7 +20,7 @@ export function CompatChip({ game, className }: { game: Game; className?: string
   const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((t) => t === c.tier) ?? 'silver';
   return (
     <Badge variant={variant} title={`${prefix}: ${TIER_LABEL[c.tier] ?? c.tier}`} className={cx('max-w-full truncate', className)}>
-      {prefix} · {TIER_LABEL[c.tier] ?? c.tier}
+      <span className="truncate">{prefix} · {TIER_LABEL[c.tier] ?? c.tier}</span>
     </Badge>
   );
 }
