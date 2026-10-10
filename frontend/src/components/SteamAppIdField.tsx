@@ -8,6 +8,7 @@ import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel } from './ui';
 import { ErrorNotice } from './ErrorNotice';
+import { ExternalLink } from './ExternalLink';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -76,9 +77,9 @@ export function SteamAppIdField({ game }: { game: Game }) {
           ? `Currently ${effective} (${appIdSourceLabel(compat?.steam_app_id_source)}).`
           : 'No Steam AppID for this game, so there is no ProtonDB rating.'}{' '}
         Check it on{' '}
-        <a href={href} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">
+        <ExternalLink href={href} className="text-amber-200/80 hover:text-amber-200">
           {effective ? 'its Steam page' : 'Steam search'} ↗
-        </a>
+        </ExternalLink>
         .
       </p>
       {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't check that Steam app ID." />}

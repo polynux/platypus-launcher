@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ds/switch';
 import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { openExternal } from '../lib/external';
 import { formatBytes } from '../lib/games';
 import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
@@ -241,7 +241,7 @@ function OptionGroupBody({ group, choices, onChange }: {
             {!v.owned && group.dlc && <Badge variant="neutral">not owned</Badge>}
             {v.sizeBytes != null && v.sizeBytes > 0 && <span className="font-mono text-hint text-white/55">{formatBytes(v.sizeBytes)}</span>}
             {!v.owned && group.dlc && v.storeUrl && (
-              <Button variant="link" size="sm" onClick={() => BrowserOpenURL(v.storeUrl!)} className="gap-1">
+              <Button variant="link" size="sm" onClick={() => openExternal(v.storeUrl)} className="gap-1">
                 Store <ExternalLink className="h-3 w-3" />
               </Button>
             )}

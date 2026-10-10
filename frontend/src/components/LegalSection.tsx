@@ -4,7 +4,7 @@ import type { Game, GameTerm, StorePlugin } from '../types';
 import { CapabilitySurface } from '../lib/capabilities';
 import { LauncherApi } from '../effect/runtime';
 import { acceptedLabel, onTermsAccepted, termURL } from '../lib/terms';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { openExternal } from '../lib/external';
 import { MonoLabel } from './ui';
 import { ErrorNotice } from './ErrorNotice';
 
@@ -55,7 +55,7 @@ function LegalList({ game }: { game: Game }) {
                   <span className="text-amber-200/80">not accepted yet</span>
                 )}
                 {link && (
-                  <button type="button" className="text-sky-200 hover:underline" onClick={() => BrowserOpenURL(link)}>read</button>
+                  <button type="button" className="text-sky-200 hover:underline" onClick={() => openExternal(link)}>read</button>
                 )}
               </span>
             </li>

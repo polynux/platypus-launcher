@@ -5,7 +5,7 @@ import type { Game, GameTerm } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
 import { LauncherApi } from '../effect/runtime';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { openExternal } from '../lib/external';
 import { notifyTermsAccepted, termURL } from '../lib/terms';
 import { cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
@@ -62,7 +62,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
               {link && (
                 <button
                   type="button"
-                  onClick={() => BrowserOpenURL(link)}
+                  onClick={() => openExternal(link)}
                   className={cx('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-hint text-sky-200 hover:bg-white/[0.06]')}
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> Read

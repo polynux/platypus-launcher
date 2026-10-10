@@ -1,4 +1,5 @@
 import type { GameTerm } from '../types';
+import { webURL } from './external';
 
 /** The terms the user still has to accept: a version they haven't accepted
  *  counts, so a bumped version is asked again. */
@@ -14,12 +15,7 @@ export function acceptedLabel(term: Pick<GameTerm, 'accepted_at'>): string {
 
 /** The term's link, when it is a web address the browser may open ('' otherwise). */
 export function termURL(term: Pick<GameTerm, 'url'>): string {
-  try {
-    const u = new URL(term.url ?? '');
-    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : '';
-  } catch {
-    return '';
-  }
+  return webURL(term.url);
 }
 
 const acceptedListeners = new Set<() => void>();
