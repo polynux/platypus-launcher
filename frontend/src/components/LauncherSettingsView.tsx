@@ -2,19 +2,24 @@ import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { FolderOpen } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
-import type { LauncherSettings } from '../types';
+import type { LauncherSettings, StorePlugin } from '../types';
 import { NumberField } from '@/components/ds/number-field';
+import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel, Panel } from './ui';
+import { CloudSavesDefaults } from './CloudSavesSetting';
+import { GameFoldersSettings } from './GameFoldersSettings';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface LauncherSettingsViewProps {
   onNotify: (msg: string, kind?: 'ok' | 'err') => void;
+  /** The plugins list: the cloud-saves defaults come from the stores that offer them. */
+  plugins: StorePlugin[];
 }
 
-export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
+export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +74,7 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
     <div className="p-7">
       <header className="mb-6">
         <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-0.5 text-[12.5px] text-white/50">Hydra-wide settings, saved in ~/.local/share/hydra/settings.json.</p>
+        <p className="mt-0.5 text-[12.5px] text-white/50">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
       </header>
 
       <Panel as="section" className="max-w-2xl">
@@ -114,10 +119,12 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
         </div>
       </Panel>
 
+      <GameFoldersSettings onNotify={onNotify} />
+
       <Panel as="section" className="mt-4 max-w-2xl">
         <h2 className="text-[14px] font-bold">Canceled downloads</h2>
         <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
-          How long Hydra keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
+          How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
           time. 0 deletes it right away; a paused download is never touched.
         </p>
         <form
@@ -148,6 +155,50 @@ export function LauncherSettingsView({ onNotify }: LauncherSettingsViewProps) {
           {cleanupError ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{cleanupError}</p> : <span />}
         </div>
       </Panel>
+
+      <RatingsSetting onNotify={onNotify} />
+
+      <CloudSavesDefaults plugins={plugins} />
     </div>
+  );
+}
+
+/** "Fetch game info online" and the credits for the data Platypus shows. Off, Platypus
+ *  keeps what it fetched before and asks the network for nothing new. */
+export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.ratings_online ?? true))
+      .catch(() => setOn(true));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setRatingsOnline(next))
+      .then((s) => {
+        setOn(s.ratings_online ?? next);
+        onNotify(next ? 'Game info will be fetched online' : 'Game info stays offline');
+      })
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <Panel as="section" className="mt-4 max-w-2xl">
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">Ratings, protection and anti-cheat data</h2>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-white/55">
+            Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.
+          </p>
+        </div>
+        <Switch aria-label="Fetch game info online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+      </div>
+      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[11px] leading-relaxed text-white/45">
+        <p>Compatibility ratings: ProtonDB community reports (protondb.com).</p>
+        <p>Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.</p>
+        <p>Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet).</p>
+      </div>
+    </Panel>
   );
 }

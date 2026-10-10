@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 type fakeStore string
@@ -41,7 +41,7 @@ func TestSteamLaunch(t *testing.T) {
 		t.Fatalf("installed Steam app should launch through the client, got %+v, %v", l, err)
 	}
 
-	// An executable override means Hydra runs the game itself.
+	// An executable override means Platypus runs the game itself.
 	game.Executable = "/games/portal2/portal2.exe"
 	if l, _ := s.Launch(context.Background(), game, false); l != nil {
 		t.Fatalf("override should bypass the client, got %+v", l)

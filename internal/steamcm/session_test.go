@@ -100,7 +100,7 @@ func readLine(r interface{ Read([]byte) (int, error) }, buf []byte) (int, error)
 
 func withFakeCM(t *testing.T, hook string) {
 	t.Helper()
-	t.Setenv("HYDRA_STEAM_CM_SERVER", hook)
+	t.Setenv("PLATYPUS_STEAM_CM_SERVER", hook)
 }
 
 func TestExchangeHappyPath(t *testing.T) {

@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Plugin is a store backed by a store plugin process.
@@ -22,10 +23,28 @@ type Plugin struct {
 	// folders returns where the plugin's games may be launched from: its
 	// install folder plus folders the user allowed.
 	folders func() []string
+	// moved says where core moved a game's folder, when it did (see
+	// WithRelocations). Nil means core moved nothing.
+	moved func(gameID string) (types.Relocation, bool)
 }
 
 func NewPlugin(m *plugins.Manager, p plugins.Plugin, folders func() []string) *Plugin {
 	return &Plugin{m: m, p: p, folders: folders}
+}
+
+// WithRelocations tells the store where core moved its games' folders. A
+// plugin that doesn't know about the move still reports the old folder; the
+// library shows the new one and launches run from it.
+func (s *Plugin) WithRelocations(moved func(gameID string) (types.Relocation, bool)) *Plugin {
+	s.moved = moved
+	return s
+}
+
+func (s *Plugin) relocation(gameID string) (types.Relocation, bool) {
+	if s.moved == nil {
+		return types.Relocation{}, false
+	}
+	return s.moved(gameID)
 }
 
 func (s *Plugin) ID() string { return s.p.Manifest.ID }
@@ -94,8 +113,20 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Features:        s.gameFeatures(lg.Features),
 		Settings:        types.GameSettings{UseGameMode: true},
 	}
+	// A borrowed game is only marked while the game offers `family`: the
+	// plugin's own list (or the runtime set) decides, as for every capability.
+	if lg.SharedBy != nil && lg.SharedBy.ID != "" && slices.Contains(g.Features, "family") {
+		g.SharedBy = &types.SharedBy{ID: lg.SharedBy.ID, Name: lg.SharedBy.Name}
+		// Copies only mean something for a borrowed game: an own game has none.
+		g.Copies, g.PreferredCopy = normalizeCopies(lg.Copies, lg.PreferredCopy)
+		g.CopyCompare = compareCopies(g.Copies, g.PreferredCopy)
+	}
 	if lg.Installed && lg.InstallPath != "" {
 		g.InstallDir = filepath.Clean(lg.InstallPath)
+		if rel, ok := s.relocation(g.ID); ok && g.InstallDir == rel.From {
+			g.InstallDir = rel.To
+			folders = append(slices.Clip(folders), rel.To)
+		}
 		real := g.InstallDir
 		if r, err := filepath.EvalSymlinks(real); err == nil {
 			real = r
@@ -126,6 +157,17 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		Publishers:  d.Publishers,
 		ReleaseDate: d.ReleaseDate,
 	}
+	// The compat fields are protocol 1.10: an older plugin's answer has none.
+	if s.m.Runtime(s.ID()).Speaks(plugins.CompatVersion) {
+		out.SteamAppID = d.SteamAppID
+		out.Platforms = d.Platforms
+		if d.DRM != nil {
+			out.DRM = &types.DRM{
+				DRMFree: d.DRM.DRMFree, OnlineRequired: d.DRM.OnlineRequired,
+				Launcher: d.DRM.Launcher, DenuvoLikely: d.DRM.DenuvoLikely, Notes: d.DRM.Notes,
+			}
+		}
+	}
 	for _, u := range d.Screenshots {
 		if u = webURL(u); u != "" {
 			out.Screenshots = append(out.Screenshots, u)
@@ -149,18 +191,88 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 	return out, nil
 }
 
+// familyRoles are the member roles the Families section names; any other
+// role the plugin sends is shown as none.
+var familyRoles = []string{"adult", "child"}
+
+// FamilyMembers asks the plugin for the family group (protocol 1.8). Members
+// without an id are dropped; roles and avatars are normalized like the rest
+// of the plugin's data. Platypus shows them and enforces nothing.
+func (s *Plugin) FamilyMembers(ctx context.Context) ([]types.FamilyMember, error) {
+	var wire []struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Role      string `json:"role"`
+		AvatarURL string `json:"avatarUrl"`
+		State     string `json:"state"`
+	}
+	if err := s.m.Call(ctx, s.ID(), "family.members", map[string]any{}, &wire); err != nil {
+		return nil, err
+	}
+	out := []types.FamilyMember{}
+	seen := map[string]bool{}
+	for _, w := range wire {
+		if w.ID == "" || seen[w.ID] {
+			continue
+		}
+		seen[w.ID] = true
+		m := types.FamilyMember{ID: w.ID, Name: w.Name, AvatarURL: webURL(w.AvatarURL), State: w.State}
+		if m.Name == "" {
+			m.Name = w.ID
+		}
+		if slices.Contains(familyRoles, w.Role) {
+			m.Role = w.Role
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*Launch, error) {
 	var spec plugins.LaunchSpec
 	params := map[string]any{"id": game.StoreAppID, "preview": preview}
 	if err := s.m.Call(ctx, s.ID(), "game.launchSpec", params, &spec); err != nil {
 		return nil, err
 	}
-	return ValidateSpec(spec, s.p.Manifest, s.folders())
+	folders := s.folders()
+	if rel, ok := s.relocation(game.ID); ok {
+		// The plugin may still name the folder core moved the game from.
+		spec = rebaseSpec(spec, rel.From, rel.To)
+		folders = append(slices.Clip(folders), rel.To)
+	}
+	return ValidateSpec(spec, s.p.Manifest, folders)
+}
+
+// rebaseSpec points the paths of a launch spec that are inside from at to.
+// Arguments are left alone: they are the game's own.
+func rebaseSpec(spec plugins.LaunchSpec, from, to string) plugins.LaunchSpec {
+	spec.Exe = rebasePath(spec.Exe, from, to)
+	spec.Cwd = rebasePath(spec.Cwd, from, to)
+	if spec.Command != nil {
+		command := slices.Clone(spec.Command)
+		for i, c := range command {
+			command[i] = rebasePath(c, from, to)
+		}
+		spec.Command = command
+	}
+	return spec
+}
+
+// rebasePath returns p with the from folder replaced by to, when p is inside
+// from; any other path comes back as it is.
+func rebasePath(p, from, to string) string {
+	if p == from {
+		return to
+	}
+	if rest, ok := strings.CutPrefix(p, from+string(filepath.Separator)); ok {
+		return filepath.Join(to, rest)
+	}
+	return p
 }
 
 var unsafeIDChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
-// GameID is Hydra's id for a plugin game. It's used in file names (wine
+// GameID is Platypus's id for a plugin game. It's used in file names (wine
 // prefix, launch log), so the plugin's id is reduced to safe characters, with
 // a hash suffix when that changed it so ids stay unique.
 func GameID(source, id string) string {

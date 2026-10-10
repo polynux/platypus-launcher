@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"strings"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
-// IsAuto reports whether a runner ID means "let Hydra pick".
+// IsAuto reports whether a runner ID means "let Platypus pick".
 func IsAuto(id string) bool {
 	return id == "" || strings.EqualFold(id, "auto")
 }

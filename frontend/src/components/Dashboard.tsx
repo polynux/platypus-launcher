@@ -6,8 +6,9 @@ import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { attentionReason, byRecent, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
+import { sortKey } from '../lib/customize';
 
-const byTitle = (a: Game, b: Game) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
+const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
 interface DashboardProps {
   games: Game[];
@@ -38,7 +39,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
       <div className="p-7">
         <WelcomeBanner installed={0} owned={ownedCount ?? 0} fixes={0} />
         <EmptyState label="no titles found">
-          Hydra didn't find any installed games. Install something in Steam, or add a game from the Library.
+          Platypus didn't find any installed games. Install something in Steam, or add a game from the Library.
         </EmptyState>
       </div>
     );

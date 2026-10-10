@@ -1,0 +1,538 @@
+#!/usr/bin/env python3
+"""Platypus store plugin for Amazon Prime Gaming, wrapping nile.
+
+Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+over stdin/stdout, one object per line. The store-specific work is done by the
+`nile` CLI (imLinguin/nile); this plugin drives it and never stores
+credentials.
+
+Login is Amazon's device registration: the plugin generates a device serial,
+client id and PKCE verifier, shows nile's sign-in URL, and the user pastes the
+address Amazon redirects to. `nile register --code … --client-id … --code-verifier …
+--serial …` finishes it. nile keeps everything encrypted in
+$NILE_CONFIG_PATH, which the plugin points into $PLATYPUS_PLUGIN_DATA so Platypus's
+sandbox rules hold. Nothing reaches Platypus.
+
+Amazon titles are Windows games; launch specs say needsWine and Platypus picks
+the runner.
+"""
+
+import json
+import os
+import re
+import secrets
+import hashlib
+import base64
+import uuid
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+
+API = 1
+CODE_AUTH_REQUIRED = -32001
+
+PROGRESS_RE = re.compile(r"(\d+)/(\d+)\s*\((\d+(?:\.\d+)?)%\)")
+SPEED_RE = re.compile(r"(\d+(?:\.\d+)?)\s*MiB/s")
+DOWNLOADED_RE = re.compile(r"\[\s*(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)\s*MiB")
+
+out_lock = threading.Lock()
+jobs_lock = threading.Lock()
+jobs = {}  # jobId -> {"proc": Popen, "canceled": bool}
+
+MIB = 1024 * 1024
+
+
+class RPCError(Exception):
+    def __init__(self, message, code=-32000):
+        super().__init__(message)
+        self.code = code
+
+
+def send(msg):
+    msg["jsonrpc"] = "2.0"
+    line = json.dumps(msg, separators=(",", ":"))
+    with out_lock:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+
+def notify(method, params):
+    send({"method": method, "params": params})
+
+
+def log(level, message):
+    notify("log", {"level": level, "message": message})
+
+
+def nile(*args, timeout=300):
+    """Runs nile with the plugin's config path and returns (code, out, err)."""
+    try:
+        p = subprocess.run(["nile", *args], stdin=subprocess.DEVNULL, capture_output=True,
+                           text=True, timeout=timeout)
+    except FileNotFoundError:
+        raise RPCError("nile is not installed (see github.com/imLinguin/nile)")
+    except subprocess.TimeoutExpired:
+        raise RPCError(f"nile {args[0]} timed out")
+    return p.returncode, p.stdout, p.stderr
+
+
+def tail(text, n=3):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return " · ".join(lines[-n:]) if lines else "no output"
+
+
+# nile reads $NILE_CONFIG_PATH at import time, so it must be set for every
+# invocation. Subprocess inherits this process's env.
+# Idempotent and done under a lock; main() calls it once before any handler
+# thread starts, so the per-call invocations never write os.environ.
+_env_lock = threading.Lock()
+
+
+def setup_env():
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+    path = os.path.join(data, "nile-config")
+    with _env_lock:
+        if os.environ.get("NILE_CONFIG_PATH") != path:
+            os.makedirs(data, exist_ok=True)
+            os.environ["NILE_CONFIG_PATH"] = path
+    return path
+
+
+# --- auth ---------------------------------------------------------------
+
+def auth_status(_params=None):
+    setup_env()
+    code, out, _ = nile("auth", "--status", timeout=120)
+    if code != 0:
+        return {"loggedIn": False}
+    try:
+        st = json.loads(out)
+    except ValueError:
+        return {"loggedIn": False}
+    if not st.get("LoggedIn"):
+        return {"loggedIn": False}
+    return {"loggedIn": True, "user": st.get("Username") or ""}
+
+
+# Set by auth.begin, read by auth.complete. The plugin serves one user.
+# Guarded by pending_lock: RPC handlers run one thread per request, and two
+# overlapping auth.begin calls (StrictMode double-submit, two windows, retry
+# while the first dialog is open) must not overwrite each other's triple.
+# A second begin while one is pending reuses it (same URL, same verifier),
+# so either dialog completes against the triple it showed.
+pending_login = {}
+pending_lock = threading.Lock()
+PENDING_TTL = 600  # seconds a triple stays valid
+
+
+def _auth_instructions():
+    return ("Log in to Amazon in your browser. You land on a normal amazon.com "
+            "page: copy its full address (it contains "
+            "openid.oa2.authorization_code=…) and paste it here.")
+
+
+def _auth_fields():
+    return [{"id": "code", "label": "address you were redirected to",
+             "placeholder": "https://www.amazon.com/…openid.oa2.authorization_code=…", "secret": True}]
+
+
+def auth_begin(_params):
+    # The device registration triple: nile's register needs exactly these,
+    # and only this plugin process knows them for this login.
+    import time as _time
+    with pending_lock:
+        cur = dict(pending_login)
+        if cur.get("client_id") and cur.get("url") and _time.time() - cur.get("at", 0) < PENDING_TTL:
+            return {"url": cur["url"], "instructions": _auth_instructions(), "fields": _auth_fields()}
+        serial = uuid.uuid4().hex.upper()
+        client_id = f"{serial}#A2UMVHOX7UP4V7"
+        client_id_hex = client_id.encode("ascii").hex()
+        verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        url = "https://amazon.com/ap/signin?" + urllib.parse.urlencode({
+            "openid.ns": "http://specs.openid.net/auth/2.0",
+            "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
+            "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
+            "openid.mode": "checkid_setup",
+            "openid.oa2.scope": "device_auth_access",
+            "openid.ns.oa2": "http://www.amazon.com/ap/ext/oauth/2",
+            "openid.oa2.response_type": "code",
+            "openid.oa2.code_challenge_method": "S256",
+            "openid.oa2.client_id": f"device:{client_id_hex}",
+            "language": "en_US",
+            "marketPlaceId": "ATVPDKIKX0DER",
+            "openid.return_to": "https://www.amazon.com",
+            "openid.pape.max_auth_age": 0,
+            "openid.assoc_handle": "amzn_sonic_games_launcher",
+            "pageId": "amzn_sonic_games_launcher",
+            "openid.oa2.code_challenge": challenge,
+        })
+        # Remember until auth.complete; the protocol has no session, so the values
+        # travel with the params instead.
+        pending_login.clear()
+        pending_login.update({"client_id": client_id_hex, "code_verifier": verifier,
+                              "serial": serial, "url": url, "at": _time.time()})
+    return {
+        "url": url,
+        "instructions": _auth_instructions(),
+        "fields": _auth_fields(),
+    }
+
+
+def auth_complete(params):
+    import time as _time
+    with pending_lock:
+        snap = dict(pending_login)
+    if not snap.get("client_id"):
+        raise RPCError("start the login again; it expired")
+    if _time.time() - snap.get("at", 0) >= PENDING_TTL:
+        with pending_lock:
+            pending_login.clear()
+        raise RPCError("start the login again; it expired")
+    text = ((params or {}).get("fields") or {}).get("code", "")
+    m = re.search(r"openid\.oa2\.authorization_code=([^&\s]+)", text or "")
+    code = (m.group(1) if m else "").strip()
+    if not code or len(code) < 8:
+        raise RPCError("the pasted address doesn't contain an authorization code; "
+                       "copy the whole address Amazon redirected you to")
+    setup_env()
+    # NOTE (PLUG-3): the one-time code, client id, PKCE verifier and serial
+    # travel on argv, visible in ps(1) while register runs. nile offers no
+    # stdin/env alternative, so this is upstream-limited; the values are
+    # single-use and never logged (only nile's tail is kept). Contrast the
+    # Steam plugin, which feeds secrets over stdin.
+    rc, _out, err = nile("register", "--code", code,
+                         "--client-id", snap["client_id"],
+                         "--code-verifier", snap["code_verifier"],
+                         "--serial", snap["serial"], timeout=300)
+    if rc != 0:
+        raise RPCError(f"Amazon rejected the login: {tail(err)}")
+    with pending_lock:
+        # Clear only our own triple; a newer begin must survive.
+        if pending_login.get("serial") == snap.get("serial"):
+            pending_login.clear()
+    return auth_status()
+
+
+def auth_logout(_params):
+    setup_env()
+    nile("auth", "--logout", timeout=120)
+    return {"loggedIn": False}
+
+
+# --- library ------------------------------------------------------------
+
+def library_list(_params):
+    setup_env()
+    code, out, err = nile("library", "list", "--json", timeout=600)
+    if code != 0:
+        if "not logged in" in err.lower():
+            raise RPCError("log in to Amazon first", CODE_AUTH_REQUIRED)
+        raise RPCError(f"nile library list failed: {tail(err)}")
+    try:
+        games = json.loads(out)
+    except ValueError:
+        raise RPCError(f"nile library list printed no JSON: {tail(err)}")
+    try:
+        installed = {g["id"]: g for g in json.loads(nile("library", "list", "--json", "--installed", timeout=120)[1] or "[]")}
+    except (ValueError, RPCError):
+        installed = {}
+    try:
+        updates = set(json.loads(nile("list-updates", "--json", timeout=300)[1] or "[]"))
+    except (ValueError, RPCError):
+        updates = set()
+    out = []
+    for g in games:
+        app = str(g.get("product", {}).get("id") or "")
+        if not app:
+            continue
+        product = g.get("product") or {}
+        entry = {
+            "id": app,
+            "title": product.get("title") or app,
+            "installed": app in installed,
+            "installable": True,
+        }
+        if app in installed:
+            ig = installed[app]
+            entry["installPath"] = ig.get("path", "")
+            entry["version"] = ig.get("version", "")
+            entry["updateAvailable"] = app in updates
+        out.append(entry)
+    return {"games": out}
+
+
+def install_size(params):
+    setup_env()
+    code, out, err = nile("install", params["id"], "--info", "--json", "--base-path", "/", timeout=600)
+    if code != 0:
+        if "not logged in" in err.lower():
+            raise RPCError("log in to Amazon first", CODE_AUTH_REQUIRED)
+        raise RPCError(f"nile install info failed: {tail(err)}")
+    try:
+        data = json.loads(out)
+    except ValueError:
+        raise RPCError(f"nile install info printed no JSON: {tail(err)}")
+    download = int(float(data.get("download_size", 0)) * MIB)
+    disk = int(float(data.get("uncompressed_size", 0)) * MIB)
+    return {"downloadBytes": download, "diskBytes": disk}
+
+
+# --- jobs ---------------------------------------------------------------
+
+def start_job(params, kind):
+    app, job_id = params["id"], params["jobId"]
+    setup_env()
+    if kind == "uninstall":
+        ev = threading.Event()
+        with jobs_lock:
+            if job_id in jobs:
+                return {}
+            jobs[job_id] = {"proc": None, "canceled": False, "id": app, "event": ev}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
+        return {}
+    base = params.get("installDir") or ""
+    if not os.path.isabs(base):
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
+    cmd = [kind if kind in ("install", "update") else "install", app]
+    if kind == "update":
+        cmd = ["update", app]
+    cmd += ["--base-path", base]
+    # Platypus resends a job with the same jobId after a crash: run it once.
+    with jobs_lock:
+        if job_id in jobs:
+            return {}
+        jobs[job_id] = {"proc": None, "canceled": False, "id": app, "path": base}
+    try:
+        proc = subprocess.Popen(["nile", *cmd], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1)
+    except FileNotFoundError:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        raise RPCError("nile is not installed (see github.com/imLinguin/nile)")
+    with jobs_lock:
+        job = jobs.setdefault(job_id, {"canceled": False, "id": app})
+        job["proc"] = proc
+        canceled = job["canceled"]
+    threading.Thread(target=follow_job, args=(job_id, proc), daemon=True).start()
+    if canceled:  # job.cancel arrived while the process was starting
+        stop_proc(proc, grace=5)
+    return {}
+
+
+def follow_job(job_id, proc):
+    state = {"jobId": job_id, "phase": "downloading", "percent": 0}
+    for line in proc.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        m = PROGRESS_RE.search(line) or DOWNLOADED_RE.search(line)
+        if m:
+            groups = m.groups()
+            if len(groups) >= 3 and "%" in line:  # done/total/percent
+                state["total"] = int(float(groups[1]) * MIB)
+                state["bytes"] = int(float(groups[0]) * MIB)
+                state["percent"] = float(groups[2])
+            elif len(groups) >= 2:  # downloaded/total MiB
+                state["bytes"] = int(float(groups[0]) * MIB)
+                state["total"] = int(float(groups[1]) * MIB)
+                if state.get("total"):
+                    state["percent"] = state["bytes"] * 100 / state["total"]
+            sp = SPEED_RE.search(line)
+            if sp:
+                state["speed"] = float(sp.group(1)) * MIB
+            notify("job.progress", dict(state))
+    rc = proc.wait()
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        return
+    if rc != 0:
+        notify("job.failed", {"jobId": job_id, "error": f"nile exited with {rc}"})
+        return
+    notify("job.done", {"jobId": job_id})
+
+
+def follow_uninstall(job_id, app, ev=None):
+    setup_env()
+    with jobs_lock:
+        if jobs.get(job_id, {}).get("canceled"):
+            jobs.pop(job_id, None)
+            return
+    # nile uninstall is a blocking child; run it as Popen so job.cancel
+    # can SIGINT it instead of deleting anyway.
+    try:
+        proc = subprocess.Popen(["nile", "uninstall", app], stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, bufsize=1)
+    except FileNotFoundError:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        notify("job.failed", {"jobId": job_id, "error": "nile is not installed (see github.com/imLinguin/nile)"})
+        return
+    with jobs_lock:
+        if job_id in jobs:
+            jobs[job_id]["proc"] = proc
+    if ev is not None:
+        while proc.poll() is None and not ev.is_set():
+            ev.wait(0.1)
+    else:
+        proc.wait()
+    with jobs_lock:
+        canceled = jobs.get(job_id, {}).get("canceled", False)
+        if canceled:
+            jobs.pop(job_id, None)
+    if canceled:
+        stop_proc(proc, grace=5)
+        return
+    rc = proc.wait()
+    with jobs_lock:
+        jobs.pop(job_id, None)
+    if rc != 0:
+        notify("job.failed", {"jobId": job_id, "error": f"nile uninstall exited with {rc}"})
+        return
+    notify("job.done", {"jobId": job_id})
+
+
+def stop_proc(proc, grace=15):
+    if proc is None:
+        return
+    try:
+        proc.send_signal(signal.SIGINT)
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
+def job_cancel(params):
+    with jobs_lock:
+        job = jobs.get(params.get("jobId"))
+        if job:
+            job["canceled"] = True
+            proc, ev = job.get("proc"), job.get("event")
+        else:
+            proc, ev = None, None
+    if ev is not None:
+        ev.set()
+    if proc:
+        threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
+    return {}
+
+
+# --- launch -------------------------------------------------------------
+
+def launch_spec(params):
+    app = params["id"]
+    setup_env()
+    code, out, _err = nile("library", "list", "--json", "--installed", timeout=120)
+    if code != 0:
+        raise RPCError("log in to Amazon first", CODE_AUTH_REQUIRED)
+    try:
+        installed = json.loads(out or "[]")
+    except ValueError:
+        raise RPCError("nile printed no JSON for installed games")
+    ig = next((g for g in installed if str(g.get("id")) == app), None)
+    if not ig:
+        raise RPCError(f"{app} is not installed")
+    path = ig.get("path") or ""
+    exe = find_exe(path)
+    if not exe:
+        raise RPCError(f"couldn't find a game executable in {path}")
+    info = ig.get("info") or {}
+    return {
+        "exe": exe,
+        "args": [],
+        "cwd": os.path.dirname(exe),
+        "env": {},
+        "needsWine": True,
+    }
+
+
+def find_exe(path):
+    """Amazon games ship a Windows exe; the biggest one in the root wins."""
+    best, size = "", 0
+    try:
+        for entry in os.scandir(path):
+            if entry.is_file() and entry.name.lower().endswith(".exe"):
+                try:
+                    s = entry.stat().st_size
+                except OSError:
+                    continue
+                if s > size and not entry.name.lower().startswith(
+                        ("unins", "setup", "redist", "dxsetup", "vcredist", "dotnet")):
+                    best, size = entry.path, s
+    except OSError:
+        pass
+    return best
+
+
+# --- dispatch -----------------------------------------------------------
+
+def initialize(params):
+    return {"name": "Amazon Games (nile)", "version": "0.1.0", "api": API,
+            "capabilities": ["library", "install", "launch", "auth"], "missing": []}
+
+
+METHODS = {
+    "initialize": initialize,
+    "auth.status": auth_status,
+    "auth.begin": auth_begin,
+    "auth.complete": auth_complete,
+    "auth.logout": auth_logout,
+    "library.list": library_list,
+    "game.installSize": install_size,
+    "game.install": lambda p: start_job(p, "install"),
+    "game.update": lambda p: start_job(p, "update"),
+    "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "job.cancel": job_cancel,
+    "game.launchSpec": launch_spec,
+}
+
+
+def handle(msg):
+    fn = METHODS.get(msg.get("method"))
+    resp = {"id": msg["id"]}
+    if fn is None:
+        resp["error"] = {"code": -32601, "message": f"method not found: {msg.get('method')}"}
+    else:
+        try:
+            result = fn(msg.get("params") or {})
+            resp["result"] = result if result is not None else {}
+        except RPCError as e:
+            resp["error"] = {"code": e.code, "message": str(e)}
+        except (KeyError, TypeError) as e:
+            resp["error"] = {"code": -32602, "message": f"invalid params: {e}"}
+        except Exception as e:  # report, never crash the plugin
+            resp["error"] = {"code": -32000, "message": f"{type(e).__name__}: {e}"}
+    send(resp)
+
+
+def main():
+    setup_env()
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError as e:
+            send({"error": {"code": -32700, "message": str(e)}})
+            continue
+        if "id" not in msg:
+            continue  # notifications need no answer
+        # Library listing and logins can take seconds; keep reading so
+        # job.cancel stays responsive.
+        threading.Thread(target=handle, args=(msg,), daemon=True).start()
+    with jobs_lock:
+        procs = [j.get("proc") for j in jobs.values()]
+    for p in procs:
+        stop_proc(p, grace=5)
+
+
+if __name__ == "__main__":
+    main()

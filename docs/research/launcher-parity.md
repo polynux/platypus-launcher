@@ -1,4 +1,4 @@
-# Research: launcher parity — what Hydra's core must offer plugins to replace Steam, Epic, GOG and Ubisoft
+# Research: launcher parity — what Platypus's core must offer plugins to replace Steam, Epic, GOG and Ubisoft
 
 Status: research only, written 2026-10-09 on `research/launcher-parity`. No account was used, nothing was
 downloaded. The plan built on this is [docs/plans/launcher-parity.md](../plans/launcher-parity.md).
@@ -22,11 +22,11 @@ the user's own account is entitled to.
 2. **Version selection is genuinely possible on GOG, partly on Steam, barely on Epic, unknown on Ubisoft.** GOG
    publishes a public builds list per product and OS (verified live, no login) and Heroic already ships "pin a
    build" on top of `gogdl --build` [src]. Steam lists *branches* (and their manifest ids) in app info, but no
-   store lists *past* manifests; older ones need ids from outside (SteamDB, the user) or from Hydra's own install
+   store lists *past* manifests; older ones need ids from outside (SteamDB, the user) or from Platypus's own install
    history [src/inferred]. Epic serves only the live manifest; legendary can install from a manifest you supply
    but has no history, and Heroic marks version pinning "not implemented" for Epic [src].
 3. **Ubisoft is a different kind of plugin.** There is no maintained open-source downloader or CLI. The realistic
-   Linux design is the Playnite/Galaxy-integration one: let the Ubisoft Connect client (in a Wine prefix Hydra
+   Linux design is the Playnite/Galaxy-integration one: let the Ubisoft Connect client (in a Wine prefix Platypus
    manages) do the downloading, and have the plugin import the library, start games through `uplay://` URLs and
    track the process tree. Library import can come either from the client's local product cache (no login, but
    needs the client run once) or from Ubisoft's web API (needs a web login and Ubisoft Connect's own application
@@ -38,7 +38,7 @@ the user's own account is entitled to.
 5. **Licences matter for reuse.** Playnite and PlayniteExtensions are MIT (their Ubisoft/Epic/GOG/Steam library
    code can be ported with attribution). legendary, gogdl, nile and Heroic are GPL-3.0: keep calling them as
    separate executables (as today), do not copy their code. UplayKit and `galaxy-integration-uplay` are MIT. The
-   Hydra repo has no LICENSE file yet, which should be settled before any port.
+   Platypus repo has no LICENSE file yet, which should be settled before any port.
 
 ---
 
@@ -46,16 +46,16 @@ the user's own account is entitled to.
 
 Class: **CORE** = store-agnostic capability, core defines the contract and UI, plugins fill it. **PLUGIN** =
 store-specific, lives and dies with its plugin (core may offer a generic container, e.g. a "link" or a form).
-**OUT** = out of scope, reason given. "Today" is what Hydra has now. Cells for GOG mean GOG Galaxy 2.0 [known];
+**OUT** = out of scope, reason given. "Today" is what Platypus has now. Cells for GOG mean GOG Galaxy 2.0 [known];
 for Epic the Epic Games Launcher (EGL).
 
-| Feature | Steam | Epic (EGL) | GOG Galaxy | Ubisoft Connect | Class | Hydra today / note |
+| Feature | Steam | Epic (EGL) | GOG Galaxy | Ubisoft Connect | Class | Platypus today / note |
 |---|---|---|---|---|---|---|
 | Library list with art | yes | yes | yes | yes | CORE | `library` |
-| Collections, favourites, hidden | yes (cloud-synced) | categories (limited) | tags, filters | no | CORE, local to Hydra | Hydra-side tags beat copying each store's; importing Steam collections is a plugin extra |
+| Collections, favourites, hidden | yes (cloud-synced) | categories (limited) | tags, filters | no | CORE, local to Platypus | Platypus-side tags beat copying each store's; importing Steam collections is a plugin extra |
 | Install, update, uninstall | yes | yes | yes | yes (client) | CORE | `install`, `game.update`, `game.uninstall` |
 | Verify / repair | "verify integrity" | verify, repair [src: `legendary verify`, `install --repair`] | repair [known]; `gogdl download` re-checks files [inferred] | "verify files" | CORE | new `game.verify` job; no method today |
-| Move install | yes (folder move) | `legendary move` [src] | no | no | CORE | Hydra can move the folder and ask the plugin to rebase its records: `game.relocate` |
+| Move install | yes (folder move) | `legendary move` [src] | no | no | CORE | Platypus can move the folder and ask the plugin to rebase its records: `game.relocate` |
 | Install options (language, optional packs, platform) | language, beta | install tags / selective download [src: `--install-tag`, `--reset-sdl`], platform | language, extras | language | CORE (generic option list) | none: `game.install` has only `installDir` |
 | DLC | owned DLC auto-installed per depot | `--with-dlcs`, `--skip-dlcs` [src] | `gogdl download --dlcs` [src] | add-ons in the product cache [src] | CORE | no DLC concept; needs `dlc` listing + selection |
 | Redistributables / prerequisites | `_CommonRedist` via client | prereq in manifest | `gogdl redist` [src] | installed by client | PLUGIN | internal to `game.install`; under Wine the runner may need them |
@@ -65,16 +65,16 @@ for Epic the Epic Games Launcher (EGL).
 | Friends, presence | CM session | friends service | Galaxy friends | Ubisoft friends API [src: `api-ubiservices.ubi.com/v2/profiles/me/friends` in the Galaxy plugin] | CORE (summary list + status) | designed: `social.*` |
 | Chat, voice, groups | yes | yes | yes | yes | PLUGIN, deferred | large per-store protocols; not core |
 | Family sharing | Steam Families (6 members, per-copy limit) [src: Steam support FAQ via search] | none [inferred] | none [known] | none [inferred] | PLUGIN (Steam), with a small core hook | entries need an `owner`/`sharedBy` field and a "borrowed" launch rule |
-| Parental controls | Steam Families (adult/child, playtime limits) | account-level controls | none | none | PLUGIN, deferred | only detect and show "restricted"; Hydra cannot enforce a child account's limits |
-| In-game overlay | injected by the client | EOS overlay, managed by `legendary eos-overlay` [src] | Galaxy overlay | Ubisoft overlay | OUT, except EOS overlay install | the Steam/Galaxy/Ubisoft overlays are injected by their clients; Hydra has its own MangoHud/gamescope overlay. EOS overlay is an Epic-supplied component the user's account is entitled to; optional plugin feature |
+| Parental controls | Steam Families (adult/child, playtime limits) | account-level controls | none | none | PLUGIN, deferred | only detect and show "restricted"; Platypus cannot enforce a child account's limits |
+| In-game overlay | injected by the client | EOS overlay, managed by `legendary eos-overlay` [src] | Galaxy overlay | Ubisoft overlay | OUT, except EOS overlay install | the Steam/Galaxy/Ubisoft overlays are injected by their clients; Platypus has its own MangoHud/gamescope overlay. EOS overlay is an Epic-supplied component the user's account is entitled to; optional plugin feature |
 | Store page, purchases | yes | yes | yes | yes | PLUGIN (deep link only) | `storeUrl` in game details; no in-app checkout (payment, tax, regional law) |
 | Wishlist, store browse | yes | yes | yes | yes | OUT | link out |
 | Redeem a key or code | `Store.RegisterKey` / web | redeem code | redeem code (web) | redeem code (web) | CORE (one text field) | `redeem` method returning a message |
-| Playtime | `playtime_forever`, client reports | in launcher | local + cloud | Club "time played" [src: Galaxy plugin imports it] | CORE | Hydra measures locally (`session.Tracker`); store-side playtime import is new |
-| Launch options, env, args | per-game string | per-game | per-game | no | CORE (already Hydra's) | Hydra has per-game settings; importing a store's launch options is a plugin extra |
+| Playtime | `playtime_forever`, client reports | in launcher | local + cloud | Club "time played" [src: Galaxy plugin imports it] | CORE | Platypus measures locally (`session.Tracker`); store-side playtime import is new |
+| Launch options, env, args | per-game string | per-game | per-game | no | CORE (already Platypus's) | Platypus has per-game settings; importing a store's launch options is a plugin extra |
 | Controller config (Steam Input) | Steam Input, workshop layouts | no | no | no | OUT | needs the client's input layer; "Launch through Steam" keeps it working |
 | Mods / Workshop | Steam Workshop (needs `ISteamUGC`, i.e. the client) | no | no | no | PLUGIN, deferred; direct launch OUT | games find subscribed items through the Steamworks API; without an emulator that only works when the real client launches the game |
-| Notifications | yes | yes | yes | yes | CORE | Hydra toasts exist; plugin-pushed events (friend online, achievement) are new |
+| Notifications | yes | yes | yes | yes | CORE | Platypus toasts exist; plugin-pushed events (friend online, achievement) are new |
 | Offline mode | client offline mode | `launch --offline` [src] | GOG games are DRM-free; client not required | client offline mode | CORE | cache library, skip cloud/social, per-plugin "offline launch" flag |
 | Auto-update, bandwidth limit, schedule | yes | yes | yes | yes | CORE | queue exists; limits and schedule absent |
 | Account and profile | name, avatar | name | name, avatar | name, avatar | CORE | `auth.status.user` |
@@ -103,12 +103,12 @@ Plugin model, per the [SDK docs](https://api.playnite.link/docs/tutorials/extens
 - **Controllers** instead of RPC verbs: a library plugin returns `InstallController`, `PlayController` and
   `UninstallController` objects for a game (`GetInstallActions`, `GetPlayActions`, `GetUninstallActions`); the
   controller raises `InvokeOnInstalled(GameInstallationData)`, `InvokeOnStarted`, `InvokeOnStopped(session
-  length)`, `InvokeOnUninstalled`. This is the same shape as Hydra's jobs plus session tracking.
+  length)`, `InvokeOnUninstalled`. This is the same shape as Platypus's jobs plus session tracking.
 - Plugins are in-process .NET: no isolation, no capability gating beyond which virtual members are overridden.
 
-What it teaches Hydra:
+What it teaches Platypus:
 
-1. **Metadata is a separate plugin axis.** Hydra already treats ProtonDB as built in and `game.details` as optional
+1. **Metadata is a separate plugin axis.** Platypus already treats ProtonDB as built in and `game.details` as optional
    per store; a `metadata` capability (SteamGridDB, IGDB) in its own plugin would keep store plugins small.
 2. **The "client does the work" pattern is first-class.** The Ubisoft controllers don't download anything: install
    is `uplay://install/<id>` and uninstall `uplay://uninstall/<id>`, then a watcher polls the installed list until
@@ -129,7 +129,7 @@ about running the client in Wine.
 
 [HeroicGamesLauncher](https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher) splits each store into a
 "store manager" (`src/backend/storeManagers/{legendary,gog,nile,sideload,zoom}`: games, library, user, setup)
-[src]. That is the same decomposition as Hydra's plugin methods, which is some evidence the protocol's shape is
+[src]. That is the same decomposition as Platypus's plugin methods, which is some evidence the protocol's shape is
 right. Relevant findings:
 
 - **GOG version pinning exists.** `gog/games.ts` passes `--build <id>` and `--branch <name>` to `gogdl`, stores a
@@ -156,12 +156,12 @@ CLI facts that matter here (all [src], from `--help`/source):
 | [nile](https://github.com/imLinguin/nile) | GPL-3.0 | Amazon Games; already wrapped |
 
 GPL consequence: spawning these as external programs and parsing their output is how the bundled plugins already
-work and is fine. Copying their code into Hydra would impose GPL on Hydra; so don't. Hydra's own licence is
+work and is fine. Copying their code into Platypus would impose GPL on Platypus; so don't. Platypus's own licence is
 undecided (no LICENSE file in the repo), which should be settled first.
 
 ### 2.3 Ubisoft tooling
 
-| Project | Licence | What it is | Use for Hydra |
+| Project | Licence | What it is | Use for Platypus |
 |---|---|---|---|
 | [PlayniteExtensions UplayLibrary](https://github.com/JosefNemec/PlayniteExtensions/tree/master/source/Libraries/UplayLibrary) | MIT | local-cache library import, `uplay://` install/launch/uninstall | **Port the data model and rules**; Windows-registry and file paths need Wine equivalents |
 | [melcom-creations/galaxy-integration-uplay](https://github.com/melcom-creations/galaxy-integration-uplay) | MIT, active (pushed 2026-09) | GOG Galaxy plugin: web login, entitlements, friends, club titles, playtime, stats | **Best reference for the web API**: endpoints, headers and the `Ubi_v1 t=`/`rm_v1 t=` ticket refresh flow |
@@ -171,7 +171,7 @@ undecided (no LICENSE file in the repo), which should be settled first.
 
 I found **no maintained open-source tool that downloads Ubisoft games outside Ubisoft Connect** [LIVE/negative
 result; searches on GitHub and the web]. UplayKit's demux client shows ownership and patch queries exist, but
-whether it can fetch game content was not established here. So a Hydra Ubisoft plugin should not promise native
+whether it can fetch game content was not established here. So a Platypus Ubisoft plugin should not promise native
 downloads (see §4).
 
 ### 2.4 Reuse summary
@@ -179,10 +179,10 @@ downloads (see §4).
 | Need | Reuse (with attribution) | Build |
 |---|---|---|
 | Ubisoft product cache schema, DLC filter | Playnite `UplayLibrary` (MIT) | Go reader, Wine `system.reg` parse |
-| Ubisoft web API calls | `galaxy-integration-uplay` (MIT) | Hydra-side login dialog, token storage in the plugin |
+| Ubisoft web API calls | `galaxy-integration-uplay` (MIT) | Platypus-side login dialog, token storage in the plugin |
 | Library plugin concepts, controller events | Playnite SDK (design only) | none (already jobs + session tracking) |
 | GOG version list and pin semantics | Heroic design (GPL: reimplement from the public API) | `versions.*` over `gogdl info` and the content-system builds API |
-| Steam branch and manifest listing | SteamKit/DepotDownloader behaviour; Hydra's `steamcm` already has `ManifestRequestCode(branch, passwordHash)` and `CheckBetaPassword` | listing, password UX, rollback bookkeeping |
+| Steam branch and manifest listing | SteamKit/DepotDownloader behaviour; Platypus's `steamcm` already has `ManifestRequestCode(branch, passwordHash)` and `CheckBetaPassword` | listing, password UX, rollback bookkeeping |
 | Epic old builds | none | nothing is possible without outside manifests |
 
 ---
@@ -198,20 +198,20 @@ Goal: a store-agnostic "install a different build" capability. What each store t
   Verified on a public app via the PICS mirror `api.steamcmd.net/v1/info/620`: branches `public`, `beta`,
   `previous_release`, `demo_viewer`, each with its own `buildid` and depot `gid` [src].
 - **Password branches**: `ClientCheckAppBetaPassword` (EMsg 5450) returns the decryption key for the branch;
-  Hydra's `steamcm.CheckBetaPassword` exists [src: `internal/steamcm/content.go`]. DepotDownloader exposes this as
+  Platypus's `steamcm.CheckBetaPassword` exists [src: `internal/steamcm/content.go`]. DepotDownloader exposes this as
   `-branch` and `-branchpassword` [src: its README via search].
 - **Old manifests**: the Steam client never lists past manifests for a depot; only each branch's *current* one.
   DepotDownloader can download an arbitrary `-manifest <id>` given `-depot` [src: README via search], and the
   manifest request code (`ContentServerDirectory.GetManifestRequestCode`, required since 2022, valid minutes,
-  requires owning the depot) is what authorises it [src: SteamDB FAQ via search; Hydra's `ManifestRequestCode`].
+  requires owning the depot) is what authorises it [src: SteamDB FAQ via search; Platypus's `ManifestRequestCode`].
   Where do old ids come from? SteamDB's depot history (no API, scraping forbidden [src: SteamDB FAQ]), the user, or
-  **Hydra's own record of what it installed before**. That last source is the only one Hydra can offer reliably.
+  **Platypus's own record of what it installed before**. That last source is the only one Platypus can offer reliably.
 - **Does the CDN still serve old chunks?** Usually yes for recent builds, not guaranteed [inferred]; Valve can
   retire content. A rollback must fail cleanly on a missing manifest or chunk. [LIVE] with a real older manifest.
 - **Decryption key**: the depot key is per depot, not per manifest, so a fresh key request works for any manifest
   [src: TEK Steam Client README via search: "depot decryption keys are never updated"].
 - **Playing an old build**: the game's Steam Cloud saves and online features may break against an old build;
-  Hydra must warn, not block.
+  Platypus must warn, not block.
 
 ### 3.2 GOG
 
@@ -232,9 +232,9 @@ Goal: a store-agnostic "install a different build" capability. What each store t
   change what is installed: `--manifest <uri|path>` (use a given manifest), `--old-manifest`/`--delta-manifest`
   (for patch testing), `--base-url`, `--platform` [src: `legendary --help`].
 - No command lists past versions, and Epic exposes no history API [src: absence in legendary's help; Heroic: "not
-  implemented"]. A rollback only works when Hydra *kept* a manifest file from an earlier install (legendary stores
+  implemented"]. A rollback only works when Platypus *kept* a manifest file from an earlier install (legendary stores
   manifests on disk; `legendary cleanup --keep-manifests` retains them [src]) and the CDN still serves its chunks.
-  Hydra can therefore offer **"go back to what I installed before"** for Epic if the plugin archives the manifest
+  Platypus can therefore offer **"go back to what I installed before"** for Epic if the plugin archives the manifest
   at install time, and nothing else. [LIVE] to check chunk retention.
 
 ### 3.4 Ubisoft
@@ -251,7 +251,7 @@ normal install job with a `target`. Differences between stores are expressed as 
 - `kind`: `channel` (a moving pointer: Steam branch, GOG branch) or `build` (an immutable build: GOG build id, a
   Steam manifest set). Core shows channels as a dropdown and builds as a history list.
 - `requires`: `none`, `password` (branch password, never stored by core), `manifest-id` (user types or pastes it),
-  `archived` (only builds Hydra/the plugin saw).
+  `archived` (only builds Platypus/the plugin saw).
 - `pinned`: the install should not auto-update. Core keeps "pinned build X" in game settings and tells the plugin
   on `game.update`.
 - Honest capability: a plugin lists `versions` only if it can do at least one of channel or build selection; the
@@ -265,16 +265,16 @@ and Epic. The ledger lives in core because it is store-agnostic, but plugins dec
 
 ## 4. Ubisoft on Linux
 
-What a Hydra Ubisoft plugin can realistically do:
+What a Platypus Ubisoft plugin can realistically do:
 
 | Capability | Feasible? | How | Risk |
 |---|---|---|---|
 | Library import | yes | (a) read the client's local product cache in the Wine prefix [src: Playnite]; requires the client to have been run and logged in once; (b) web API with a web login [src: Galaxy plugin] | U1, U2 |
 | Installed games | yes | Wine `system.reg` key `HKLM\SOFTWARE\(WOW6432Node\)ubisoft\Launcher\Installs` [src: Playnite uses it on Windows; the Wine path is **[LIVE]**] | low |
-| Launch | yes | start `UbisoftConnect.exe` / `uplay://launch/<id>` in the plugin's prefix, then follow the game's process tree (Hydra's `store-client` delegate with a Wine-aware `find`) | needs a launch-spec extension (§plan) |
+| Launch | yes | start `UbisoftConnect.exe` / `uplay://launch/<id>` in the plugin's prefix, then follow the game's process tree (Platypus's `store-client` delegate with a Wine-aware `find`) | needs a launch-spec extension (§plan) |
 | Install, update, uninstall | via the client | `uplay://install/<id>`, then watch the install list [src: Playnite]; progress shown by the client's own window, so `job.progress` is coarse | U3 |
 | Native download | **no** | no maintained open-source tool; would need the demux protocol and an ownership token [src: UplayKit exists, content download unverified] | U4, ToS |
-| Cloud saves | via the client | Ubisoft Connect syncs on launch/exit when launched through it; Hydra does nothing | none |
+| Cloud saves | via the client | Ubisoft Connect syncs on launch/exit when launched through it; Platypus does nothing | none |
 | Friends, achievements, playtime | web API | `api-ubiservices.ubi.com` friends and club endpoints [src: Galaxy plugin] | U1 |
 | Verify, versions | no | client-only | n/a |
 
@@ -287,11 +287,11 @@ What a Hydra Ubisoft plugin can realistically do:
    `Ubi-AppId`; refresh the ticket before its `refreshTime`; renew via the `rm_v1 t=<rememberMeTicket>` header.
 3. Entitlements from `…/ubiconnect/entitlement/api/entitlements`, details by `spaceIds`.
 
-For Hydra (Wails, no embedded web view guarantee, Linux): the plugin protocol's `auth.begin` already supports
+For Platypus (Wails, no embedded web view guarantee, Linux): the plugin protocol's `auth.begin` already supports
 "open this URL in the browser, then paste fields". Ubisoft's flow ends on a page whose data lives in
 `localStorage`, which a browser tab can't hand over. Options: (1) the user pastes the ticket from the browser's dev
 tools (poor), (2) a small helper using a system web engine or a local redirect, (3) rely on the client's own
-login in the Wine prefix and read its caches (no Hydra login at all). Option 3 is the cheapest and the safest.
+login in the Wine prefix and read its caches (no Platypus login at all). Option 3 is the cheapest and the safest.
 
 **Risks**
 
@@ -303,7 +303,7 @@ login in the Wine prefix and read its caches (no Hydra login at all). Option 3 i
 - **U3: UI fragility.** Install via `uplay://` needs the client window and a working login webview under
   Wine/Proton; Heroic and Lutris threads show login failures. [LIVE] on this machine's Proton.
 - **U4: terms of service** for any direct download.
-- **U5: Wine prefix isolation.** Heroic notes all games share one prefix; Hydra's per-game prefixes would need a
+- **U5: Wine prefix isolation.** Heroic notes all games share one prefix; Platypus's per-game prefixes would need a
   dedicated shared "Ubisoft Connect prefix" per plugin.
 
 **Recommendation**: Ubisoft plugin, phase A (library from local cache, launch/install/uninstall through the
@@ -318,7 +318,7 @@ No native downloads.
 
 - The manifest lists capability names: `library`, `install`, `launch`, `auth`, `cloud-saves`, `discard`.
 - `knownCapabilities` is a hard-coded map; an unknown name makes the manifest **invalid**. A plugin written for a
-  newer Hydra therefore cannot even be listed by an older one.
+  newer Platypus therefore cannot even be listed by an older one.
 - `initialize` returns `capabilities` too; the conformance suite requires it to equal the manifest's. The manifest
   is what the UI uses (`plugin.capabilities.includes('install')` in `GamePage.tsx`, `PluginsView.tsx`).
 - Gating is per capability, not per method: `Installable: lg.Installable && s.has("install")`. A missing optional
@@ -340,7 +340,7 @@ No native downloads.
    `cloud-saves`, `versions@1`. Core knows a registry (`capability -> { methods, minProtocol, surfaces }`) as
    data, not scattered `if` statements.
 2. **Unknown capabilities are tolerated.** An unrecognised name is ignored with a warning on the Plugins view
-   ("this plugin offers X, which this Hydra doesn't use"); only a malformed name is invalid. Plugins can mark a
+   ("this plugin offers X, which this Platypus doesn't use"); only a malformed name is invalid. Plugins can mark a
    capability `required` to refuse an older core.
 3. **`initialize` is the truth, the manifest is the promise.** The manifest declares the maximum (shown to the
    user before approval, hashed); `initialize` returns the subset actually available right now with feature flags
@@ -366,18 +366,18 @@ No native downloads.
 | ID | Risk | Mitigation |
 |---|---|---|
 | R1 | Capability sprawl: ten new names tempt plugins to declare things half-done | Conformance suite per capability; `initialize` reports reality |
-| R2 | Steam rollback relies on old manifests existing on the CDN and on ids Hydra can't list | Ledger-based "previous install" rollback; manual manifest id; clear failure |
+| R2 | Steam rollback relies on old manifests existing on the CDN and on ids Platypus can't list | Ledger-based "previous install" rollback; manual manifest id; clear failure |
 | R3 | Epic rollback only via archived manifests | Plugin archives at install; otherwise hide `versions` |
 | R4 | Ubisoft private formats and login webview under Wine | Local-cache-first, client does the work, [LIVE] on this machine |
 | R5 | Ubisoft web API needs the client's app id (U1) | Product decision; ship without |
-| R6 | GPL code must not be copied | External processes only; settle Hydra's licence |
-| R7 | Family and parental rules are server-side and change | Plugin reads the state and shows it; Hydra enforces nothing it can't verify |
+| R6 | GPL code must not be copied | External processes only; settle Platypus's licence |
+| R7 | Family and parental rules are server-side and change | Plugin reads the state and shows it; Platypus enforces nothing it can't verify |
 | R8 | Launching a store client inside Wine needs a launch-spec extension the current `store-client` mode lacks (`command[0]` must be in `requires`, runs natively) | Plan §"Core changes" |
 | R9 | Workshop/Steam Input need the real client; a direct launch can't provide them without an emulator | Keep "Launch through Steam"; mark capabilities `OUT` |
 
 ## 7. Sources
 
-- Hydra: `docs/plugins/protocol.md`, `docs/plans/launcher-plugins.md`, `docs/plans/steam-cloud-social.md`,
+- Platypus: `docs/plugins/protocol.md`, `docs/plans/launcher-plugins.md`, `docs/plans/steam-cloud-social.md`,
   `internal/plugins/manifest.go`, `internal/steamcm/content.go`, `plugins/*/plugin.json`.
 - Playnite SDK: <https://api.playnite.link/docs/tutorials/extensions/libraryPlugins.html>,
   <https://api.playnite.link/docs/tutorials/extensions/gameActions.html>,

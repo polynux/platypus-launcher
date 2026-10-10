@@ -1,4 +1,4 @@
-// Package plugins discovers store plugins in ~/.local/share/hydra/plugins,
+// Package plugins discovers store plugins in ~/.local/share/platypus/plugins,
 // decides which ones may run (manifest, pinned hash, user approval) and runs
 // them as JSON-RPC subprocesses. See docs/plans/launcher-plugins.md.
 package plugins
@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/dataplug"
-	"hydra-launcher/internal/settings"
+	"platypus/internal/dataplug"
+	"platypus/internal/settings"
 )
 
 // Status says whether a discovered plugin may run.
@@ -32,10 +32,10 @@ const (
 	StatusDisabled   Status = "disabled"   // approved, then turned off
 	StatusMissing    Status = "missing-requirements"
 	// StatusNeedsNewer: approved, but the manifest `needs` a capability this
-	// Hydra doesn't know. It is listed, never started.
-	StatusNeedsNewer Status = "needs-newer-hydra"
+	// Platypus doesn't know. It is listed, never started.
+	StatusNeedsNewer Status = "needs-newer-platypus"
 	// StatusTooOld: the plugin only speaks protocol versions older than any
-	// this Hydra still supports. Listed, never started.
+	// this Platypus still supports. Listed, never started.
 	StatusTooOld Status = "too-old"
 )
 
@@ -48,7 +48,7 @@ type Plugin struct {
 	Problem  string        `json:"problem,omitempty"`
 	Missing  []Requirement `json:"missing,omitempty"`
 	// Warnings are things the user should know that don't stop the plugin:
-	// capabilities this Hydra ignores because it doesn't know them.
+	// capabilities this Platypus ignores because it doesn't know them.
 	Warnings []string `json:"warnings,omitempty"`
 	// Data is a data plugin's content, loaded at discovery. Store plugins
 	// have none.
@@ -62,14 +62,18 @@ type NotifyFunc func(pluginID, method string, params json.RawMessage)
 type Options struct {
 	Dir      string          // plugins folder, one subfolder per plugin
 	LogDir   string          // stderr and `log` notifications: LogDir/plugin-<id>.log
-	DataDir  string          // private data: DataDir/<id>, passed as HYDRA_PLUGIN_DATA
+	DataDir  string          // private data: DataDir/<id>, passed as PLATYPUS_PLUGIN_DATA
 	Settings *settings.Store // approvals and per-plugin folders
 	OnNotify NotifyFunc
 	// OnExit is called when a plugin exits without being asked to (crash),
 	// so work in flight can be restarted.
 	OnExit func(pluginID string, err error)
-	// Protocols are the protocol versions Hydra offers plugins; nil means
-	// SupportedProtocols. Tests narrow it to play an older Hydra.
+	// OnReady is called when a plugin has initialized (its protocol and
+	// capabilities are settled) and is about to take requests. It runs on
+	// its own goroutine, so it may call the plugin.
+	OnReady func(pluginID string)
+	// Protocols are the protocol versions Platypus offers plugins; nil means
+	// SupportedProtocols. Tests narrow it to play an older Platypus.
 	Protocols []Version
 	// Timings overrides the crash/restart timings for tests. Zero fields
 	// keep the defaults.
@@ -83,6 +87,7 @@ type Manager struct {
 	trust     *settings.Store
 	onNotify  NotifyFunc
 	onExit    func(string, error)
+	onReady   func(string)
 	lookPath  func(string) (string, error)
 	t         timings
 	protocols []Version
@@ -102,6 +107,7 @@ func NewManager(o Options) *Manager {
 		trust:     o.Settings,
 		onNotify:  o.OnNotify,
 		onExit:    o.OnExit,
+		onReady:   o.OnReady,
 		lookPath:  exec.LookPath,
 		t:         defaultTimings,
 		protocols: slices.Clone(o.Protocols),
@@ -210,9 +216,9 @@ func (m *Manager) inspect(dir string) *Plugin {
 	unmet := man.UnmetNeeds()
 	for _, c := range man.UnknownCapabilities() {
 		if slices.Contains(unmet, c) {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("needs %q, which this Hydra doesn't know: a newer Hydra is required", c))
+			p.Warnings = append(p.Warnings, fmt.Sprintf("needs %q, which this Platypus doesn't know: a newer Platypus is required", c))
 		} else {
-			p.Warnings = append(p.Warnings, fmt.Sprintf("offers %q, which this Hydra doesn't know; it is ignored", c))
+			p.Warnings = append(p.Warnings, fmt.Sprintf("offers %q, which this Platypus doesn't know; it is ignored", c))
 		}
 	}
 
@@ -225,7 +231,7 @@ func (m *Manager) inspect(dir string) *Plugin {
 	case !trust.Enabled:
 		p.Status = StatusDisabled
 	case len(unmet) > 0:
-		p.Status, p.Problem = StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (unknown capability %s)", quoteList(unmet))
+		p.Status, p.Problem = StatusNeedsNewer, fmt.Sprintf("needs a newer Platypus (unknown capability %s)", quoteList(unmet))
 	case len(p.Missing) > 0:
 		p.Status, p.Problem = StatusMissing, fmt.Sprintf("%d required tool(s) not found", len(p.Missing))
 	default:
@@ -265,8 +271,8 @@ func (m *Manager) Approve(id string) error {
 	case StatusInvalid:
 		return fmt.Errorf("plugin %s is invalid: %s", id, p.Problem)
 	case StatusNeedsNewer, StatusTooOld:
-		if p.Hash == "" { // incompatible with this Hydra: there is nothing it could run
-			return fmt.Errorf("plugin %s can't run on this Hydra: %s", id, p.Problem)
+		if p.Hash == "" { // incompatible with this Platypus: there is nothing it could run
+			return fmt.Errorf("plugin %s can't run on this Platypus: %s", id, p.Problem)
 		}
 	}
 	state, _ := m.trust.PluginState(id) // keeps folder choices across re-approval
@@ -451,6 +457,10 @@ func (m *Manager) process(id string) (*process, error) {
 	if m.onExit != nil {
 		onExit = func(err error) { m.onExit(id, err) }
 	}
+	var onReady func()
+	if m.onReady != nil {
+		onReady = func() { go m.onReady(id) }
+	}
 	pinned := p.Hash
 	offered, transportName := p.Manifest.Offered()
 	transport, ok := LookupTransport(transportName)
@@ -464,6 +474,7 @@ func (m *Manager) process(id string) (*process, error) {
 		offered:   offered,
 		transport: transport,
 		onExit:    onExit,
+		onReady:   onReady,
 		id:        id,
 		dir:       p.Dir,
 		exec:      execPath,
@@ -543,7 +554,7 @@ func (m *Manager) SetInstallFolder(id, path string) error {
 }
 
 // AllowFolder lets the plugin's games launch from an extra folder, for games
-// its CLI installed before Hydra managed it.
+// its CLI installed before Platypus managed it.
 func (m *Manager) AllowFolder(id, path string) error {
 	if !filepath.IsAbs(path) {
 		return fmt.Errorf("folder must be an absolute path, got %q", path)

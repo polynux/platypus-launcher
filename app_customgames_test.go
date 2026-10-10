@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/settings"
+	"platypus/internal/settings"
 )
 
 // CORE-9: sideloaded games must keep settings keys the backend struct

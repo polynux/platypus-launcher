@@ -16,7 +16,7 @@ function Side({ active }) {
     <aside className="flex h-screen w-52 flex-none flex-col border-r border-[#26282c] bg-[#141518]">
       <div className="flex items-center gap-2 px-4 py-4">
         <span className="h-6 w-6 rounded bg-[#2dd4bf]" />
-        <span className="text-[14px] font-bold tracking-tight text-[#e9eaec]">hydra</span>
+        <span className="text-[14px] font-bold tracking-tight text-[#e9eaec]">platypus</span>
         <span className="ml-auto rounded bg-[#26282c] px-1.5 py-0.5 font-mono text-[9px] text-[#8b8f94]">⌘K</span>
       </div>
       <div className="px-4 pb-4">
@@ -175,7 +175,7 @@ export function ProGame() {
               <div>
                 <h3 className="mb-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#6f747a]">Preview — updates live</h3>
                 <div className="rounded-md border border-[#26282c] bg-[#141518] p-4 font-mono text-[11.5px] leading-relaxed">
-                  <div className="text-[#6f747a]">$ hydra exec</div>
+                  <div className="text-[#6f747a]">$ platypus exec</div>
                   <div className="mt-1 text-[#2dd4bf]">gamemoderun mangohud \</div>
                   <div className="pl-4 text-[#2dd4bf]">GE-Proton10-4 run helldivers2.exe \</div>
                   <div className="pl-4 text-[#a3a7ac]">--use-vulkan --skip-intro</div>

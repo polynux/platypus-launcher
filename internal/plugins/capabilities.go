@@ -14,10 +14,10 @@ type Capability struct {
 	// Since is the protocol revision that introduced the capability. All
 	// revisions are additive to api 1.
 	Since string `json:"since"`
-	// Methods are the requests Hydra sends once the plugin offers the
+	// Methods are the requests Platypus sends once the plugin offers the
 	// capability; the plugin must implement them.
 	Methods []string `json:"methods"`
-	// OptionalMethods may be missing: the plugin answers -32601, Hydra
+	// OptionalMethods may be missing: the plugin answers -32601, Platypus
 	// notes it for the rest of that plugin run and stops asking.
 	OptionalMethods []string `json:"optionalMethods,omitempty"`
 	// Surfaces are the places in the UI that appear only when the plugin
@@ -30,8 +30,17 @@ type Capability struct {
 }
 
 const (
-	rev10 = "1.0" // capabilities of the first plugin releases
-	rev11 = "1.1" // parity roadmap (docs/plans/launcher-parity.md §2)
+	rev10  = "1.0"  // capabilities of the first plugin releases
+	rev11  = "1.1"  // parity roadmap (docs/plans/launcher-parity.md §2)
+	rev12  = "1.2"  // cloud saves (docs/plans/steam-cloud-social.md)
+	rev13  = "1.3"  // versions (docs/plans/launcher-parity.md §2.2)
+	rev14  = "1.4"  // verify and move (docs/plans/launcher-parity.md §2.3)
+	rev15  = "1.5"  // install options and DLC (docs/plans/launcher-parity.md §2.1)
+	rev16  = "1.6"  // social: friends and own status (docs/plans/steam-cloud-social.md, "social.*")
+	rev17  = "1.7"  // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
+	rev18  = "1.8"  // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
+	rev19  = "1.9"  // chat with friends (docs/plugins/protocol.md, "Chat")
+	rev111 = "1.11" // terms to accept before an install (docs/plugins/protocol.md, "Terms")
 )
 
 var registry = []Capability{
@@ -48,31 +57,89 @@ var registry = []Capability{
 		Surfaces: []string{"login", "logout"}},
 	{Name: "discard", Since: rev10, Orchestrated: true,
 		Methods: []string{"job.discard"}, Surfaces: []string{"downloads-discard"}},
-	{Name: "cloud-saves", Since: rev10,
+	{Name: "cloud-saves", Since: rev12, Orchestrated: true,
 		Methods:  []string{"cloud.status", "cloud.pull", "cloud.push", "cloud.resolve"},
 		Surfaces: []string{"cloud-row", "cloud-conflict"}},
 
-	{Name: "install-options", Since: rev11,
-		Methods: []string{"game.options"}, Surfaces: []string{"install-dialog"}},
-	{Name: "versions", Since: rev11,
+	{Name: "install-options", Since: rev15, Orchestrated: true,
+		Methods:  []string{"game.options"},
+		Surfaces: []string{"install-dialog", "add-ons"}},
+	{Name: "versions", Since: rev13, Orchestrated: true,
 		Methods: []string{"versions.list"}, OptionalMethods: []string{"versions.unlock"},
 		Surfaces: []string{"version-picker", "version-pin"}},
-	{Name: "verify", Since: rev11,
+	{Name: "verify", Since: rev14, Orchestrated: true,
 		Methods: []string{"game.verify"}, Surfaces: []string{"verify-button"}},
-	{Name: "move", Since: rev11,
+	{Name: "move", Since: rev14, Orchestrated: true,
 		Methods: []string{"game.move"}, Surfaces: []string{"move-dialog"}},
-	{Name: "social", Since: rev11,
-		Methods:         []string{"social.start", "social.stop", "social.state", "social.self", "social.friends"},
+	{Name: "social", Since: rev16, Orchestrated: true,
+		Methods:         []string{"social.start", "social.stop", "social.state"},
 		OptionalMethods: []string{"social.setStatus", "social.setPlaying"},
 		Surfaces:        []string{"friends-summary", "friends-modal"}},
-	{Name: "achievements", Since: rev11,
+	{Name: "achievements", Since: rev17, Orchestrated: true,
 		Methods: []string{"achievements.list"}, Surfaces: []string{"achievement-list"}},
-	{Name: "playtime", Since: rev11,
+	{Name: "playtime", Since: rev17, Orchestrated: true,
 		Methods: []string{"playtime.list"}, Surfaces: []string{"playtime"}},
-	{Name: "redeem", Since: rev11,
+	{Name: "redeem", Since: rev17, Orchestrated: true,
 		Methods: []string{"redeem.submit"}, Surfaces: []string{"redeem-entry"}},
-	{Name: "family", Since: rev11,
-		Methods: []string{"family.members"}, Surfaces: []string{"shared-badge", "shared-filter", "families-section"}},
+	{Name: "family", Since: rev18, Orchestrated: true,
+		Methods:         []string{"family.members"},
+		OptionalMethods: []string{"family.setPreferredCopy"},
+		Surfaces:        []string{"shared-badge", "shared-filter", "families-section", "copy-picker"}},
+	{Name: "settings", Since: rev18, Orchestrated: true,
+		Methods: []string{"settings.schema", "settings.apply"}, Surfaces: []string{"plugin-settings", "game-settings"}},
+	{Name: "chat", Since: rev19, Orchestrated: true,
+		Methods:  []string{"chat.history", "chat.send", "chat.markRead"},
+		Surfaces: []string{"chat-panel", "chat-unread"}},
+	{Name: "terms", Since: rev111, Orchestrated: true,
+		OptionalMethods: []string{"game.acceptTerms"},
+		Surfaces:        []string{"terms-dialog", "legal"}},
+}
+
+// capabilityFreeOptional are optional methods that belong to no capability:
+// Platypus sends them to any plugin that speaks the revision that defines them,
+// and remembers a -32601 answer like any optional method. game.relocated
+// (protocol 1.4) tells a plugin that core moved its game folder.
+var capabilityFreeOptional = []string{"game.relocated"}
+
+// OptionalWithoutCapability reports whether method is an optional method that
+// no capability owns (see capabilityFreeOptional).
+func OptionalWithoutCapability(method string) bool {
+	return slices.Contains(capabilityFreeOptional, method)
+}
+
+// sharedMethods are requests that more than one capability uses besides the
+// one that owns them: job.cancel stops an install, and also a cloud sync.
+var sharedMethods = map[string][]string{"job.cancel": {"cloud-saves"}}
+
+// MethodOffered reports whether a plugin offering caps serves method, which
+// belongs to capability (see CapabilityForMethod).
+func MethodOffered(method, capability string, caps []string) bool {
+	if slices.Contains(caps, capability) {
+		return true
+	}
+	for _, c := range sharedMethods[method] {
+		if slices.Contains(caps, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// WithinProtocol splits caps into the capabilities a plugin that settled on
+// protocol v can offer and the ones introduced by a later revision, which
+// stay off for it. Names this Platypus doesn't know pass (they do nothing).
+func WithinProtocol(caps []string, v Version) (kept, later []string) {
+	kept = []string{}
+	for _, name := range caps {
+		if c, ok := LookupCapability(name); ok {
+			if since, err := ParseVersion(c.Since); err == nil && v.Less(since) {
+				later = append(later, name)
+				continue
+			}
+		}
+		kept = append(kept, name)
+	}
+	return kept, later
 }
 
 type methodOwner struct {
@@ -104,7 +171,7 @@ func (c Capability) clone() Capability {
 	return c
 }
 
-// Registry returns every capability this Hydra knows, in registration order.
+// Registry returns every capability this Platypus knows, in registration order.
 func Registry() []Capability {
 	out := make([]Capability, len(registry))
 	for i, c := range registry {

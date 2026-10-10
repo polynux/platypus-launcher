@@ -1,4 +1,4 @@
-// TestMain builds hydra-steam-dl once for the whole package, with the
+// TestMain builds platypus-steam-dl once for the whole package, with the
 // real environment. Tests below override HOME with temp dirs (cell-id
 // tests point it at a fake Steam client config); building per-test under
 // those would redirect Go's module cache into read-only temp folders and
@@ -13,23 +13,23 @@ import (
 	"testing"
 )
 
-// prebuiltDL is the built hydra-steam-dl binary all tests share.
+// prebuiltDL is the built platypus-steam-dl binary all tests share.
 var prebuiltDL string
 
 func TestMain(m *testing.M) {
 	home, modCache, buildCache := realGoEnv()
-	dir, err := os.MkdirTemp("", "hydra-steam-dl-test")
+	dir, err := os.MkdirTemp("", "platypus-steam-dl-test")
 	if err != nil {
 		panic(err)
 	}
-	out := filepath.Join(dir, "hydra-steam-dl")
+	out := filepath.Join(dir, "platypus-steam-dl")
 	cmd := exec.Command("go", "build", "-o", out,
-		"hydra-launcher/plugins/steam-standalone/cmd/hydra-steam-dl")
+		"platypus/plugins/steam-standalone/cmd/platypus-steam-dl")
 	cmd.Env = append(os.Environ(),
 		"HOME="+home, "GOMODCACHE="+modCache, "GOCACHE="+buildCache)
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		os.RemoveAll(dir)
-		panic("build hydra-steam-dl: " + string(combined))
+		panic("build platypus-steam-dl: " + string(combined))
 	}
 	prebuiltDL = out
 	code := m.Run()

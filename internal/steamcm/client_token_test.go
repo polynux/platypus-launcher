@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/steamcm"
-	"hydra-launcher/internal/steamcm/steamcmtest"
+	"platypus/internal/steamcm"
+	"platypus/internal/steamcm/steamcmtest"
 )
 
 func TestClientTokenRejectedStopsReconnecting(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 
 func TestPersistsAcrossOpen(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	path := filepath.Join(t.TempDir(), "hydra", "settings.json")
+	path := filepath.Join(t.TempDir(), "platypus", "settings.json")
 
 	s, err := Open(path)
 	if err != nil {

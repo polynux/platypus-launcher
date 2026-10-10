@@ -1,4 +1,4 @@
-# UI Critique — Hydra Launcher frontend (2026-10-08)
+# UI Critique — Platypus Launcher frontend (2026-10-08)
 
 > **Handoff document.** Written for an AI agent (or human) that will implement the fixes.
 > It is self-contained: context, per-surface findings with exact file/line anchors, suggested
@@ -125,7 +125,7 @@ accept and move on — flagging for hierarchy awareness.
 
 **Strengths (keep — this is the product's best moment):** `ApproveModal` (lines ~490–560)
 shows `runs` path, `sha-256`, capabilities, network hosts, read/write paths, missing tools,
-plus the honest "Hydra doesn't enforce them yet" disclosure — exactly PRODUCT.md's
+plus the honest "Platypus doesn't enforce them yet" disclosure — exactly PRODUCT.md's
 positioning. QR login redraws when the code expires (`QrArt` + polling effect). Missing-
 requirements boxes give real install hints. Data-plugin "no code, always on" framing.
 

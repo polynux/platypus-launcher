@@ -1,4 +1,4 @@
-"""Steam CM session for hydra-steam: exchange the stored refresh token for an
+"""Steam CM session for platypus-steam: exchange the stored refresh token for an
 access token, over an authenticated CM session.
 
 Why: since 2025-04-30, SteamClient refresh tokens fail with AccessDenied when
@@ -26,7 +26,7 @@ Renewal is deliberately NOT requested (renewal_type None): renewing would
 invalidate the refresh token DepotDownloader keeps in its login key, and the
 plugin doesn't persist tokens anywhere else.
 
-Test hook: when HYDRA_STEAM_CM_SERVER is set ("host:port"), the module uses
+Test hook: when PLATYPUS_STEAM_CM_SERVER is set ("host:port"), the module uses
 ws:// to that server instead of fetching Valve's CM list and using wss:// —
 the fake CM in testdata/fake_cm.py implements the same protocol so tests
 drive this code with no network.
@@ -60,10 +60,10 @@ PROTO_MASK = 0x80000000
 PROTOCOL_VERSION = 65580
 CLIENT_PACKAGE_VERSION = 1771
 CLIENT_OS_LINUX = (-203) & 0xFFFFFFFF   # EOSType.LinuxUnknown as uint32
-machine_name = "Hydra"
+machine_name = "Platypus"
 
 # The obfuscated private ip doubles as the login id: a fixed value keeps a
-# logon from kicking an existing session — same as hydra-steam's -loginid.
+# logon from kicking an existing session — same as platypus-steam's -loginid.
 LOGIN_ID = 2718281
 
 # EResult names worth putting in front of users (steam/steammessages...,
@@ -76,7 +76,7 @@ ERESULT_NAMES = {
 }
 
 # EResults that mean "Steam says this login/token is no good": the caller
-# (hydra-steam) maps these to its auth-required error, everything else is a
+# (platypus-steam) maps these to its auth-required error, everything else is a
 # plain failure with the real message.
 ERESULTS_TOKEN_REJECTED = frozenset((5, 26, 27))
 
@@ -328,7 +328,7 @@ def cm_list():
     """WebSocket CM endpoints from ISteamDirectory/GetCMListForConnect, best
     load first (the API already sorts most-used-last by wtd_load)."""
     import urllib.request
-    hook = os.environ.get("HYDRA_STEAM_CM_SERVER")
+    hook = os.environ.get("PLATYPUS_STEAM_CM_SERVER")
     if hook:
         return [hook], False  # fake CM: plain ws://, no TLS
     url = ("https://api.steampowered.com/ISteamDirectory/GetCMListForConnect/v1/"
@@ -493,7 +493,7 @@ def exchange(refresh_token, timeout=30):
     """The refresh token -> access token, via an authenticated CM session.
     Returns the access token string (a JWT whose payload carries exp).
     Raises CMError; `auth` is set only when Steam says the token itself is
-    bad — hydra-steam maps that to its auth-required error."""
+    bad — platypus-steam maps that to its auth-required error."""
     try:
         steamid = int(jwt_payload(refresh_token)["sub"])
     except (KeyError, ValueError) as e:

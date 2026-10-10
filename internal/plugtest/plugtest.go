@@ -1,5 +1,5 @@
 // Package plugtest drives any store plugin through every protocol method it
-// declares, the way Hydra drives it (see docs/plugins/protocol.md). The
+// declares, the way Platypus drives it (see docs/plugins/protocol.md). The
 // conformance suite lives here, not in one plugin's tests, so each plugin
 // package only wires up its own plugin-specific bits: where its fake CLI is
 // and how to log in and pick a game from its library.
@@ -13,17 +13,18 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Suite describes one plugin under test. CopyDir is the plugin's source folder
@@ -51,7 +52,7 @@ type Suite struct {
 	PickGame func(t *testing.T, games []types.Game) types.Game
 
 	// Escape, when set, returns a library game the plugin reports as
-	// installed outside its folder; Hydra must refuse to launch it.
+	// installed outside its folder; Platypus must refuse to launch it.
 	Escape func(t *testing.T, games []types.Game) *types.Game
 	// NoSpeed excludes the check that job.progress carries a speed (a
 	// plugin whose tool reports none).
@@ -76,8 +77,9 @@ type Session struct {
 	Games  string // the Games folder
 	Folder string // this plugin's install folder
 
-	evMu   sync.Mutex
-	events []event
+	evMu     sync.Mutex
+	events   []event
+	progress []json.RawMessage // cloud.progress notifications
 }
 
 // event is one job notification the plugin sent, as the host saw it.
@@ -119,6 +121,9 @@ func (b backend) Start(ctx context.Context, j types.Job) error {
 		p["installDir"] = j.InstallDir
 		if j.Title != "" {
 			p["title"] = j.Title
+		}
+		if j.Target != nil {
+			p["target"] = j.Target
 		}
 	}
 	return b.m.Call(ctx, j.Source, "game."+j.Kind, p, nil)
@@ -222,6 +227,10 @@ func (s Suite) Start(t *testing.T) *Session {
 		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"),
 		DataDir: filepath.Join(root, "data"), Settings: st,
 		OnNotify: func(id, method string, params json.RawMessage) {
+			if method == "cloud.progress" {
+				sess.recordCloudProgress(params)
+				return
+			}
 			qMu.Lock()
 			qq := q
 			qMu.Unlock()
@@ -366,7 +375,7 @@ func (s Suite) Conformance(t *testing.T) {
 		}
 	}
 	game := s.PickGame(t, games)
-	// Strict wire check: only keys docs/plugins/protocol.md defines. Hydra
+	// Strict wire check: only keys docs/plugins/protocol.md defines. Platypus
 	// ignores the rest today, but authors copy whatever the bundled plugins
 	// send, so extras spread.
 	var rawLib struct {
@@ -377,6 +386,13 @@ func (s Suite) Conformance(t *testing.T) {
 	}
 	for _, g := range rawLib.Games {
 		checkKeys(t, "library.list game", g, LibraryKeys)
+		if has("family") {
+			var gid struct {
+				ID string `json:"id"`
+			}
+			_ = json.Unmarshal(g, &gid)
+			sess.checkCopies(t, gid.ID, g)
+		}
 	}
 
 	d, err := sess.Store.Details(ctx, game)
@@ -387,6 +403,16 @@ func (s Suite) Conformance(t *testing.T) {
 	var rawDetails json.RawMessage
 	if err := sess.call("game.details", map[string]any{"id": game.StoreAppID}, &rawDetails); err == nil {
 		checkKeys(t, "game.details", rawDetails, DetailsKeys)
+		// The compat fields (protocol 1.10): drm is an object of its own.
+		var details map[string]json.RawMessage
+		if json.Unmarshal(rawDetails, &details) == nil {
+			if drm, ok := details["drm"]; ok {
+				checkKeys(t, "game.details drm", drm, DRMKeys)
+			}
+		}
+		if has("terms") {
+			sess.checkTerms(t, game.StoreAppID, rawDetails)
+		}
 	}
 	if !s.NoUnknownDetails {
 		// An unknown id is an error (or the method is absent), never data or
@@ -412,6 +438,28 @@ func (s Suite) Conformance(t *testing.T) {
 		t.Fatalf("install job didn't report full progress: %+v", done)
 	}
 	sess.checkProgress(done.ID, s.NoSpeed)
+	if has("cloud-saves") {
+		sess.checkCloud(t, game)
+	}
+	if has("versions") {
+		sess.checkVersions(t, game, done.ID, !s.NoUnknownDetails)
+	}
+	if has("install-options") {
+		sess.checkOptions(t, game, !s.NoUnknownDetails)
+	}
+	if has("social") {
+		sess.checkSocial(t)
+	}
+	if has("chat") && has("social") {
+		sess.checkChat(t)
+	}
+	sess.checkStats(t, game, has, !s.NoUnknownDetails)
+	if has("family") {
+		sess.checkFamily(t)
+	}
+	if has("settings") {
+		sess.checkSettings(t)
+	}
 
 	lib, err := sess.Store.Library(ctx)
 	if err != nil {
@@ -420,6 +468,13 @@ func (s Suite) Conformance(t *testing.T) {
 	installed := findGame(lib, game.ID)
 	if installed == nil || !installed.IsInstalled || installed.OutsideFolder {
 		t.Fatalf("game not installed inside the folder: %+v", installed)
+	}
+
+	if has("verify") {
+		sess.checkVerify(t, *installed)
+	}
+	if has("move") {
+		sess.checkMoveParams(t, *installed)
 	}
 
 	if has("launch") {
@@ -540,7 +595,7 @@ func (s Suite) Conformance(t *testing.T) {
 		t.Fatalf("canceled install left the game installed: %+v", g)
 	}
 
-	// The same jobId sent twice (Hydra resends after a crash) runs once.
+	// The same jobId sent twice (Platypus resends after a crash) runs once.
 	if !s.NoDuplicateJobID {
 		dup := map[string]any{"id": game.StoreAppID, "installDir": sess.Folder, "jobId": "dup-job-1"}
 		if err := sess.call("game.install", dup, nil); err != nil {
@@ -578,14 +633,96 @@ func (s Suite) Handshake(t *testing.T) *Session {
 	return sess
 }
 
+// checkVersions holds a plugin offering `versions` to the shapes in
+// docs/plugins/protocol.md ("Versions"): versions.list needs an id and answers
+// only documented keys, with the documented vocabulary; versions.unlock needs
+// its params (or is absent); job.done's `installed`, when sent, names a build.
+func (s *Session) checkVersions(t *testing.T, game types.Game, doneJob string, unknownIDErrors bool) {
+	t.Helper()
+	s.wantCode("versions.list", map[string]any{}, jsonrpc.CodeInvalidParams)
+	var raw json.RawMessage
+	params := map[string]any{"id": game.StoreAppID, "ledger": []any{}}
+	if err := s.call("versions.list", params, &raw); err != nil {
+		t.Fatalf("versions.list: %v", err)
+	}
+	checkKeys(t, "versions.list", raw, VersionListKeys)
+	var list struct {
+		Channels []json.RawMessage `json:"channels"`
+		Builds   []json.RawMessage `json:"builds"`
+		Manual   json.RawMessage   `json:"manual"`
+		Links    []json.RawMessage `json:"links"`
+	}
+	if err := json.Unmarshal(raw, &list); err != nil {
+		t.Fatalf("versions.list result: %v", err)
+	}
+	oneOf := func(what string, v string, ok ...string) {
+		if v != "" && !slices.Contains(ok, v) {
+			t.Errorf("%s is %q, want one of %v", what, v, ok)
+		}
+	}
+	for _, c := range list.Channels {
+		checkKeys(t, "versions.list channel", c, VersionChannelKeys)
+		var ch struct{ ID, Requires string }
+		_ = json.Unmarshal(c, &ch)
+		if ch.ID == "" {
+			t.Errorf("versions.list channel without an id: %s", c)
+		}
+		oneOf("channel requires", ch.Requires, "none", "password")
+	}
+	for _, b := range list.Builds {
+		checkKeys(t, "versions.list build", b, VersionBuildKeys)
+		var bd struct{ ID, Source string }
+		_ = json.Unmarshal(b, &bd)
+		if bd.ID == "" {
+			t.Errorf("versions.list build without an id: %s", b)
+		}
+		oneOf("build source", bd.Source, "store", "archive", "manual")
+	}
+	if len(list.Manual) > 0 && string(list.Manual) != "null" {
+		checkKeys(t, "versions.list manual", list.Manual, VersionManualKeys)
+	}
+	for _, l := range list.Links {
+		checkKeys(t, "versions.list link", l, VersionLinkKeys)
+		var link struct{ URL string }
+		_ = json.Unmarshal(l, &link)
+		if !strings.HasPrefix(link.URL, "https://") && !strings.HasPrefix(link.URL, "http://") {
+			t.Errorf("versions.list link %q is not http(s)", link.URL)
+		}
+	}
+	if unknownIDErrors {
+		var junk json.RawMessage
+		err := s.call("versions.list", map[string]any{"id": "no-such-game-0xdead"}, &junk)
+		var re *jsonrpc.Error
+		if err == nil || !errors.As(err, &re) {
+			t.Errorf("versions.list on an unknown id answered %s (err %v), want an RPC error", junk, err)
+		}
+	}
+	// versions.unlock is optional; if present it checks its params before it
+	// looks at any password.
+	var unlock json.RawMessage
+	if err := s.call("versions.unlock", map[string]any{}, &unlock); err != nil {
+		var re *jsonrpc.Error
+		if !errors.As(err, &re) || (re.Code != jsonrpc.CodeInvalidParams && re.Code != jsonrpc.CodeMethodNotFound) {
+			t.Errorf("versions.unlock without params: %v, want -32602 (or -32601 when the store has no passwords)", err)
+		}
+	} else {
+		t.Errorf("versions.unlock without params succeeded: %s", unlock)
+	}
+	for _, e := range s.Events(doneJob) {
+		if e.Method == "job.done" && e.Update.Installed != nil && e.Update.Installed.Build == "" {
+			t.Errorf("job.done `installed` has no build: %+v", e.Update.Installed)
+		}
+	}
+}
+
 // probeSkip are the capabilities whose methods the rest of the suite already
 // drives with real params (probing them with {} could start work).
 var probeSkip = []string{"library", "install", "launch", "auth", "discard"}
 
 // checkHandshake holds the plugin to docs/plugins/protocol.md's rules for
-// initialize: it answers a protocol version Hydra offered and the manifest
+// initialize: it answers a protocol version Platypus offered and the manifest
 // declares, its capabilities are a subset of the manifest's, its features
-// belong to capabilities it offers, and Hydra's gate matches what it said.
+// belong to capabilities it offers, and Platypus's gate matches what it said.
 func (s *Session) checkHandshake(t *testing.T) {
 	t.Helper()
 	p, _ := s.m.Plugin(s.id)
@@ -609,14 +746,14 @@ func (s *Session) checkHandshake(t *testing.T) {
 			t.Fatalf("initialize protocol: %v", err)
 		}
 		if !slices.Contains(plugins.SupportedProtocols, v) || !offered.Contains(v) {
-			t.Fatalf("initialize answered protocol %s; Hydra offered %v and the manifest declares %s", v, offer, offered)
+			t.Fatalf("initialize answered protocol %s; Platypus offered %v and the manifest declares %s", v, offer, offered)
 		}
 		if best, _ := plugins.Negotiate(offered, plugins.SupportedProtocols); best != v {
 			t.Fatalf("initialize answered protocol %s, but the highest both sides speak is %s", v, best)
 		}
 	}
 	if rt := s.m.Runtime(s.id); !rt.Initialized || rt.Protocol == "" {
-		t.Fatalf("Hydra has no negotiated protocol after initialize: %+v", rt)
+		t.Fatalf("Platypus has no negotiated protocol after initialize: %+v", rt)
 	}
 
 	// Subset rule: initialize may switch capabilities off, never on.
@@ -668,11 +805,20 @@ func (s *Session) checkHandshake(t *testing.T) {
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl"}
+		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
-		"releaseDate", "heroUrl", "achievements"}
+		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms"}
+	// The drm block of game.details (protocol 1.10, "Compat").
+	DRMKeys    = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "find", "startTimeout"}
+
+	// The versions capability (docs/plugins/protocol.md, "Versions").
+	VersionListKeys    = []string{"channels", "builds", "manual", "links", "updateAvailable", "pinned"}
+	VersionChannelKeys = []string{"id", "name", "description", "updatedAt", "buildId", "requires", "unlocked", "current"}
+	VersionBuildKeys   = []string{"id", "name", "publishedAt", "channel", "source", "available", "current"}
+	VersionManualKeys  = []string{"label", "hint"}
+	VersionLinkKeys    = []string{"label", "url"}
 )
 
 func checkKeys(t *testing.T, what string, raw json.RawMessage, allowed []string) {

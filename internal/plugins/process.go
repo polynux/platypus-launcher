@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // ErrExited is returned for calls the plugin never answered because it exited.
@@ -58,8 +58,8 @@ type InitResult struct {
 	// plugin that leaves it out offers everything it declared.
 	Capabilities []string `json:"capabilities"`
 	// Protocol is the version the plugin picked ("1.1"): the highest both
-	// sides speak. Absent in answers from before negotiation; Hydra then
-	// takes the highest version the manifest and Hydra share.
+	// sides speak. Absent in answers from before negotiation; Platypus then
+	// takes the highest version the manifest and Platypus share.
 	Protocol string `json:"protocol,omitempty"`
 	// Features are depth flags per capability, e.g.
 	// {"versions": {"channels": true, "password": false}}.
@@ -75,6 +75,13 @@ type Runtime struct {
 	Protocol     string
 	Capabilities []string
 	Features     map[string]map[string]bool
+}
+
+// Speaks reports whether the negotiated protocol is v or later. Before the
+// first initialize there is none, so nothing is spoken.
+func (r Runtime) Speaks(v Version) bool {
+	got, err := ParseVersion(r.Protocol)
+	return err == nil && !got.Less(v)
 }
 
 // resolveInit applies the subset rule: the runtime capabilities are what
@@ -118,12 +125,13 @@ type process struct {
 	hash      string       // pinned at approval
 	verify    func() error // re-checks the pinned hash before every start
 	logPath   string
-	dataDir   string     // HYDRA_PLUGIN_DATA
+	dataDir   string     // PLATYPUS_PLUGIN_DATA
 	declared  []string   // the manifest's capabilities
-	protocols []Version  // what Hydra speaks
+	protocols []Version  // what Platypus speaks
 	offered   VersionSet // what the manifest says the plugin speaks
 	transport Transport
 	onExit    func(error) // unexpected exits only
+	onReady   func()      // after a successful initialize, once per run
 	notify    jsonrpc.NotifyFunc
 	t         timings
 
@@ -184,7 +192,7 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 	return err
 }
 
-// gate keeps Hydra from sending a request the plugin has said it doesn't
+// gate keeps Platypus from sending a request the plugin has said it doesn't
 // serve: one belonging to a capability that is off at runtime, or an optional
 // method it already answered -32601 to in this run. Both answer as the plugin
 // would (method not found), so callers handle one case. Methods outside the
@@ -192,11 +200,20 @@ func (p *process) call(ctx context.Context, method string, params, result any) e
 func (p *process) gate(method string) (optional bool, err error) {
 	capability, optional, ok := CapabilityForMethod(method)
 	if !ok {
-		return false, nil
+		if !OptionalWithoutCapability(method) {
+			return false, nil
+		}
+		optional = true
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.absent[method] {
+			return optional, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found: " + method}
+		}
+		return optional, nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.runtime != nil && !slices.Contains(p.runtime.Capabilities, capability) {
+	if p.runtime != nil && !MethodOffered(method, capability, p.runtime.Capabilities) {
 		return optional, &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound,
 			Message: fmt.Sprintf("plugin %s doesn't offer %s right now (%s)", p.id, capability, method)}
 	}
@@ -314,7 +331,7 @@ func (p *process) start() (Conn, error) {
 	}
 	cmd := exec.Command(p.exec)
 	cmd.Dir = p.dir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("HYDRA_PLUGIN_API=%d", APIVersion), "HYDRA_PLUGIN_DATA="+p.dataDir, "PYTHONDONTWRITEBYTECODE=1")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("PLATYPUS_PLUGIN_API=%d", APIVersion), "PLATYPUS_PLUGIN_DATA="+p.dataDir, "PYTHONDONTWRITEBYTECODE=1")
 	cmd.Stdin = inR
 	cmd.Stdout = outW
 	var logFile *os.File
@@ -325,7 +342,7 @@ func (p *process) start() (Conn, error) {
 		}
 	}
 	// Own process group, so the plugin's helpers (legendary, …) die with it,
-	// and SIGKILL if Hydra dies without a clean shutdown.
+	// and SIGKILL if Platypus dies without a clean shutdown.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	err = cmd.Start()
 	inR.Close()
@@ -436,13 +453,28 @@ func (p *process) initialize(conn Conn) {
 	if len(dropped) > 0 {
 		appendPluginLog(p.logPath, fmt.Sprintf("[warn] initialize listed capabilities the manifest doesn't declare; ignored: %s\n", strings.Join(dropped, ", ")))
 	}
+	// A capability introduced after the revision the plugin settled on is off
+	// for it: it never agreed to speak those methods.
+	if v, err := ParseVersion(res.Protocol); err == nil {
+		var later []string
+		res.Capabilities, later = WithinProtocol(res.Capabilities, v)
+		if len(later) > 0 {
+			appendPluginLog(p.logPath, fmt.Sprintf("[info] capabilities newer than the negotiated protocol %s stay off: %s\n", v, strings.Join(later, ", ")))
+			for _, c := range later {
+				delete(res.Features, c)
+			}
+		}
+	}
 	p.info = &res
 	p.runtime = &Runtime{Initialized: true, Protocol: res.Protocol, Capabilities: res.Capabilities, Features: res.Features}
 	close(p.ready)
+	if p.onReady != nil {
+		p.onReady()
+	}
 }
 
 // settleProtocol checks the version the plugin picked and writes the settled
-// one back into res.Protocol. The pick must be one Hydra offered and the
+// one back into res.Protocol. The pick must be one Platypus offered and the
 // manifest declared; an answer without one comes from a plugin that predates
 // negotiation and gets the highest version both sides list.
 func (p *process) settleProtocol(res *InitResult, supported []Version) error {
@@ -456,7 +488,7 @@ func (p *process) settleProtocol(res *InitResult, supported []Version) error {
 			return fmt.Errorf("no protocol version in common (manifest %s)", offered)
 		}
 		if res.API != 0 && res.API != v.Major {
-			return fmt.Errorf("plugin answers api %d, Hydra settled on protocol %s", res.API, v)
+			return fmt.Errorf("plugin answers api %d, Platypus settled on protocol %s", res.API, v)
 		}
 		res.Protocol = v.String()
 		return nil
@@ -466,7 +498,7 @@ func (p *process) settleProtocol(res *InitResult, supported []Version) error {
 		return fmt.Errorf("plugin answered protocol: %w", err)
 	}
 	if !slices.Contains(supported, v) || !offered.Contains(v) {
-		return fmt.Errorf("plugin answered protocol %s, which Hydra didn't offer or its manifest doesn't declare", v)
+		return fmt.Errorf("plugin answered protocol %s, which Platypus didn't offer or its manifest doesn't declare", v)
 	}
 	return nil
 }

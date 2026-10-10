@@ -94,3 +94,71 @@ export function mergeRescannedGames(
     return fix && !withSettings.fix_info ? { ...withSettings, fix_info: fix } : withSettings;
   });
 }
+
+/** Take only the playtime fields from a fresh library read (protocol 1.7), so a
+ *  playtime report updates the library without a rescan. Returns `prev` itself
+ *  when nothing changed. */
+export function mergePlaytime(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same =
+      g.playtime_minutes === f.playtime_minutes &&
+      g.playtime_local_minutes === f.playtime_local_minutes &&
+      g.playtime_store_minutes === f.playtime_store_minutes;
+    if (same) return g;
+    changed = true;
+    return {
+      ...g,
+      playtime_minutes: f.playtime_minutes,
+      playtime_local_minutes: f.playtime_local_minutes,
+      playtime_store_minutes: f.playtime_store_minutes,
+    };
+  });
+  return changed ? next : prev;
+}
+
+/** Take only the family fields (who shares a borrowed game, its copies and the
+ *  preferred copy) from a fresh library read, so a copy pick shows without a
+ *  rescan. Returns `prev` itself when nothing changed. */
+export function mergeCopies(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same =
+      g.preferred_copy === f.preferred_copy &&
+      JSON.stringify(g.copies ?? null) === JSON.stringify(f.copies ?? null) &&
+      JSON.stringify(g.shared_by ?? null) === JSON.stringify(f.shared_by ?? null);
+    if (same) return g;
+    changed = true;
+    return { ...g, copies: f.copies, preferred_copy: f.preferred_copy, shared_by: f.shared_by };
+  });
+  return changed ? next : prev;
+}
+
+const CUSTOM_FIELDS = [
+  'title', 'store_title', 'sort_title', 'cover_url', 'banner_url', 'hero_url', 'logo_url', 'icon_url', 'background_url',
+] as const;
+
+/** Take only what the user's customization sets (their title and art) from a
+ *  fresh library read, so editing it shows without a rescan. Returns `prev`
+ *  itself when nothing changed. */
+export function mergeCustomization(prev: Game[], fresh: Game[]): Game[] {
+  const byId = new Map(fresh.map((x) => [x.id, x]));
+  let changed = false;
+  const next = prev.map((g) => {
+    const f = byId.get(g.id);
+    if (!f) return g;
+    const same = CUSTOM_FIELDS.every((k) => g[k] === f[k]) && JSON.stringify(g.customized ?? null) === JSON.stringify(f.customized ?? null);
+    if (same) return g;
+    changed = true;
+    const merged: Game = { ...g, customized: f.customized };
+    for (const k of CUSTOM_FIELDS) (merged as unknown as Record<string, unknown>)[k] = f[k];
+    return merged;
+  });
+  return changed ? next : prev;
+}

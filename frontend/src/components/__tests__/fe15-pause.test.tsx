@@ -96,6 +96,7 @@ describe('FE-15 pause/resume/discard buttons and states', () => {
 // Effect.runPromise, like every other view here.
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getGameFolders: () => Effect.succeed([]),
     getLauncherSettings: () =>
       Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),
     setGamesFolder: () => Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),
@@ -109,7 +110,7 @@ import { LauncherSettingsView } from '../LauncherSettingsView';
 
 describe('FE-15 cleanup-days setting', () => {
   it('saves a changed threshold and shows it coming back from the backend', async () => {
-    const { findByLabelText, findAllByRole, findByDisplayValue } = render(<LauncherSettingsView onNotify={noop} />);
+    const { findByLabelText, findAllByRole, findByDisplayValue } = render(<LauncherSettingsView onNotify={noop} plugins={[]} />);
     // The input starts at the saved threshold once settings arrive.
     const input = await findByLabelText("Days to keep canceled downloads' data");
     await waitFor(() => expect((input as HTMLInputElement).value).toBe('7'));
@@ -121,7 +122,7 @@ describe('FE-15 cleanup-days setting', () => {
   });
 
   it('offers 0 (delete right away) and clamps anything above 365', async () => {
-    const { findByLabelText, findAllByRole, findByDisplayValue } = render(<LauncherSettingsView onNotify={noop} />);
+    const { findByLabelText, findAllByRole, findByDisplayValue } = render(<LauncherSettingsView onNotify={noop} plugins={[]} />);
     const input = await findByLabelText("Days to keep canceled downloads' data");
     await waitFor(() => expect((input as HTMLInputElement).value).toBe('7'));
     fireEvent.change(input, { target: { value: '0' } });

@@ -19,9 +19,9 @@ export function UtilityDashboard() {
         {/* wide sidebar */}
         <aside className="flex h-screen w-60 flex-none flex-col border-r border-white/[0.06] bg-[#15181c] p-4">
           <div className="flex items-center gap-3 px-2 py-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-lime-300 text-[17px] font-black text-[#101316]">H</span>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-lime-300 text-[17px] font-black text-[#101316]">P</span>
             <div>
-              <div className="text-[15px] font-extrabold tracking-tight">hydra</div>
+              <div className="text-[15px] font-extrabold tracking-tight">platypus</div>
               <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/30">game hub</div>
             </div>
           </div>

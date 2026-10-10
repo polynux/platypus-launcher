@@ -107,7 +107,7 @@ func TestNegotiateTakesTheHighestCommonVersion(t *testing.T) {
 			t.Errorf("Negotiate(%s) = %v, %v; want %s, %v", c.offered, got, ok, c.want, c.ok)
 		}
 	}
-	// Hydra's own list order doesn't matter.
+	// Platypus's own list order doesn't matter.
 	var s VersionSet
 	_ = json.Unmarshal([]byte(`["1.0","1.1"]`), &s)
 	if got, _ := Negotiate(s, []Version{{1, 1}, {1, 0}}); got != (Version{1, 1}) {

@@ -18,7 +18,7 @@ export function OpsTonight() {
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
         {/* slim nav */}
         <nav className="flex w-16 flex-col items-center gap-8 border-r border-white/[0.06] py-6">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-400 to-fuchsia-500 text-[15px] font-black">H</div>
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-400 to-fuchsia-500 text-[15px] font-black">P</div>
           {['Library', 'Tonight', 'Fixes', 'Runners'].map((t, i) => (
             <button key={t} className={`h-9 w-9 rounded-xl text-[13px] font-black transition ${i === 1 ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/70'}`}>
               {['L', 'T', 'F', 'R'][i]}

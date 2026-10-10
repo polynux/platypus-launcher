@@ -32,7 +32,7 @@
 //     code. EAuthSessionGuardType: EmailCode = 2, DeviceCode (TOTP) = 3,
 //     DeviceConfirmation (mobile approve) = 4.
 //
-// Device-friendly name is "Hydra Launcher" and platform type is
+// Device-friendly name is "Platypus" and platform type is
 // SteamClient (1), so the minted refresh token works with the CM logon
 // the library and downloader already use. ESessionPersistence_Persistent
 // is 1; website_id "Client" matches what the real client sends (the
@@ -53,12 +53,12 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // Device identity for auth sessions.
 const (
-	AuthDeviceName = "Hydra Launcher"
+	AuthDeviceName = "Platypus"
 	// EAuthTokenPlatformType_SteamClient.
 	AuthPlatformSteamClient = 1
 	// ESessionPersistence_Persistent.

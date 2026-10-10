@@ -1,18 +1,18 @@
 #!/bin/sh
-# Installs a plugin from this folder into ~/.local/share/hydra/plugins/<name>.
-# Hydra then lists it as unapproved until you approve it in the Plugins view.
+# Installs a plugin from this folder into ~/.local/share/platypus/plugins/<name>.
+# Platypus then lists it as unapproved until you approve it in the Plugins view.
 #
 #   plugins/install.sh echo             # fake store, for trying the plugin UI
 #   plugins/install.sh epic-legendary   # needs legendary: pipx install legendary-gl
 #
 # Go plugins are built; other plugins are copied as they are. Files are
 # replaced by rename, so a running plugin keeps its old binary until restart
-# (and Hydra asks you to approve the new one).
+# (and Platypus asks you to approve the new one).
 set -eu
 name=${1:?usage: plugins/install.sh <plugin>}
 here=$(cd "$(dirname "$0")" && pwd)
 src=$here/$name
-dest=${HYDRA_PLUGINS:-$HOME/.local/share/hydra/plugins}/$name
+dest=${PLATYPUS_PLUGINS:-$HOME/.local/share/platypus/plugins}/$name
 [ -f "$src/plugin.json" ] || { echo "no plugin named $name in $here" >&2; exit 1; }
 
 # .new leftovers from an interrupted install are never valid; drop them.
@@ -78,7 +78,7 @@ else
   chmod 755 "$tmp"
 fi
 mv -f "$tmp" "$dest/$exec_rel"
-# Go helpers shipped next to a non-Go exec (e.g. cmd/hydra-steam-dl in a
+# Go helpers shipped next to a non-Go exec (e.g. cmd/platypus-steam-dl in a
 # Python plugin) are built into the plugin's bin/ alongside it.
 if [ -d "$src/cmd" ]; then
   if ! command -v go >/dev/null 2>&1; then

@@ -1,12 +1,12 @@
 # Data plugins (fixes and tweaks)
 
-A data plugin is a folder in `~/.local/share/hydra/plugins/<id>/` whose
+A data plugin is a folder in `~/.local/share/platypus/plugins/<id>/` whose
 `plugin.json` says `"kind": "data"` and has no executable. It is JSON only: fix
-recipes and tweak packs. It can't run anything, so Hydra applies it without
+recipes and tweak packs. It can't run anything, so Platypus applies it without
 asking the user to approve anything — the Plugins view lists it under
 "data plugins · no code, always on".
 
-Hydra's own curated fixes and hardware tweaks are the same format, embedded in
+Platypus's own curated fixes and hardware tweaks are the same format, embedded in
 the launcher (`internal/dataplug/builtin`) and read through the same loader.
 
 ## Manifest
@@ -53,7 +53,7 @@ rejected and the plugin shows as invalid, with the reason, in the Plugins view.
 
 A fix matches a game by exact `title` or by `appId` (a Steam app id or a
 plugin game's store id); one of the two is required. The first match in load
-order wins — Hydra's built-in recipes come first, so a plugin can't override
+order wins — Platypus's built-in recipes come first, so a plugin can't override
 one, but it can add titles the built-ins don't know. `tier` is one of
 `platinum gold silver bronze borked`; `source` says where the recipe came from
 and is shown as a badge on the game page.

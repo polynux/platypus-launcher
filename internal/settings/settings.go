@@ -1,5 +1,5 @@
 // Package settings persists launcher settings, per-game settings and plugin
-// trust in ~/.local/share/hydra/settings.json.
+// trust in ~/.local/share/platypus/settings.json.
 package settings
 
 import (
@@ -11,6 +11,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"platypus/internal/datadir"
+	"platypus/internal/types"
 )
 
 const fileVersion = 1
@@ -24,7 +27,7 @@ type PluginState struct {
 	// InstallDir overrides <Games folder>/<install_dir> (absolute path).
 	InstallDir string `json:"install_dir,omitempty"`
 	// Folders are other folders the user allowed this plugin's games to be
-	// launched from (games its CLI installed before Hydra).
+	// launched from (games its CLI installed before Platypus).
 	Folders []string `json:"folders,omitempty"`
 }
 
@@ -35,16 +38,57 @@ type file struct {
 	// doesn't model (sync mode, winetricks, …) survive a restart.
 	Games   map[string]map[string]any `json:"games,omitempty"`
 	Plugins map[string]PluginState    `json:"plugins,omitempty"`
+	// Relocations are the game folders core moved, by game id (see
+	// types.Relocation): the plugin's own records still name the old folder.
+	Relocations map[string]types.Relocation `json:"relocations,omitempty"`
 	// Games the user added by hand (sideloaded executables), with their
 	// per-game settings in Games like every other game's.
 	CustomGames []CustomGame `json:"custom_games,omitempty"`
 	// CancelCleanupDays is how long a canceled download's partial data is
-	// kept before Hydra deletes it. A pointer: 0 (delete at once) is a
+	// kept before Platypus deletes it. A pointer: 0 (delete at once) is a
 	// choice, unset means DefaultCancelCleanupDays.
 	CancelCleanupDays *int `json:"cancel_cleanup_days,omitempty"`
+	// Cloud saves: each plugin's default mode and each game's own choice
+	// (see cloud.go).
+	CloudPlugins map[string]string `json:"cloud_plugins,omitempty"`
+	CloudGames   map[string]string `json:"cloud_games,omitempty"`
+	// Pins hold a game at a version (the `versions` capability), keyed by
+	// Platypus's game id. See pins.go.
+	Pins map[string]types.VersionPin `json:"pins,omitempty"`
+	// InstallOptions are each game's last install-option choices (the
+	// `install-options` capability), keyed by Platypus's game id. See options.go.
+	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`
+	// Terms are the term versions the user accepted, per game id: a record
+	// per (term id, version), kept as history (terms.go).
+	Terms map[string][]types.TermAcceptance `json:"terms,omitempty"`
+	// Social: whether each plugin's friends list is on, by plugin id. A plugin
+	// that offers social is on until the user switches it off (social.go).
+	SocialPlugins map[string]bool `json:"social_plugins,omitempty"`
+	// SocialPlaying: whether friends see the game the user plays, per plugin.
+	// A plugin is on until the user switches it off (social.go).
+	SocialPlaying map[string]bool `json:"social_playing,omitempty"`
+	// ChatAlerts: whether the user hears about new messages from friends, per
+	// plugin. On until the user switches it off (chat.go).
+	ChatAlerts map[string]bool `json:"chat_alerts,omitempty"`
+	// PluginSettings are each plugin's plugin-wide settings values, and
+	// PluginGameSettings each game's per-game values (the `settings`
+	// capability, see plugin_settings.go). Values never hold secrets.
+	// GameFolders are extra library folders to install into, besides the Games
+	// folder; RecentInstall the folders games were last installed into by hand,
+	// newest first (see installfolders.go).
+	GameFolders        []string                    `json:"game_folders,omitempty"`
+	RecentInstall      []string                    `json:"recent_install_folders,omitempty"`
+	PluginSettings     map[string]map[string]any   `json:"plugin_settings,omitempty"`
+	PluginGameSettings map[string]PluginGameValues `json:"plugin_game_settings,omitempty"`
+	// FetchRatings is the "Fetch ratings online" switch. A pointer: unset
+	// means on (see compat.go).
+	FetchRatings *bool `json:"fetch_ratings,omitempty"`
+	// CompatAppIDs are the Steam AppIDs the user set for ratings, by Platypus's
+	// game id (see compat.go).
+	CompatAppIDs map[string]string `json:"compat_app_ids,omitempty"`
 }
 
-// CustomGame is a game the user added by hand: an executable on disk. Hydra
+// CustomGame is a game the user added by hand: an executable on disk. Platypus
 // runs it through the same runner pipeline as any other game.
 type CustomGame struct {
 	ID         string `json:"id"`
@@ -60,13 +104,13 @@ type Store struct {
 	data file
 }
 
-// DataDir is Hydra's data folder, ~/.local/share/hydra.
+// DataDir is Platypus's data folder, ~/.local/share/platypus.
 func DataDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".local/share/hydra"), nil
+	return datadir.Path(home), nil
 }
 
 // Open loads the settings file at path. A missing file gives defaults. A file

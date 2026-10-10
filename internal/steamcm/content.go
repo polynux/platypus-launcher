@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	"hydra-launcher/internal/depot"
-	"hydra-launcher/internal/steam"
+	"platypus/internal/depot"
+	"platypus/internal/steam"
 )
 
 // Exchange trades the refresh token for an access token over an

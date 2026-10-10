@@ -7,6 +7,9 @@ const LONG = `Library scan failed: plugin epic-legendary needs login: run \`lege
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    socialViews: () => Effect.succeed([] as never),
+    chatUnread: () => Effect.succeed([] as never),
+    chatAlerts: () => Effect.succeed({} as never),
     getLibrary: () => Effect.fail(new Error(LONG) as never),
     getProtonVersions: () => Effect.succeed([] as never),
     listPlugins: () => Effect.succeed([] as never),
@@ -17,7 +20,12 @@ vi.mock('../../effect/runtime', () => ({
     listJobs: () => Effect.succeed([] as never),
   },
   onJobs: () => () => {},
+  onFamily: () => () => {},
   onSession: () => () => {},
+  onPlaytime: () => () => {},
+  onCloud: () => () => {},
+  onSocial: () => () => {},
+  onChat: () => () => {},
 }));
 
 import { App } from '../../App';

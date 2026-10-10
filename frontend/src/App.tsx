@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';
+import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
-import { SettingsModal } from './components/SettingsModal';
 import { AddGameModal } from './components/AddGameModal';
 import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
@@ -12,14 +12,23 @@ import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView } from './components/DownloadsView';
+import { CloudSavesHost } from './components/CloudSavesHost';
+import { FriendsModal } from './components/FriendsModal';
+import { RedeemDialog } from './components/RedeemDialog';
+import { ChatPanel } from './components/ChatPanel';
+import { FamilyWarningHost } from './components/FamilyWarningHost';
+import { TermsHost } from './components/TermsHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onSession } from './effect/runtime';
+import { LauncherApi, onJobs, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { reconcileViews, upsertView } from './lib/social';
+import { ensureTerms } from './lib/termsRequest';
+import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { needsAttention, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
+import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind }
@@ -37,6 +46,9 @@ export function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
   const [plugins, setPlugins] = useState<StorePlugin[]>([]);
+  const [social, setSocial] = useState<SocialView[]>([]);
+  const [friendsOpen, setFriendsOpen] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -51,10 +63,9 @@ export function App() {
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
   const [ownership, setOwnership] = useState<Ownership>('installed');
 
-  const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
-  // Games Hydra launched that are starting or running, keyed by game id.
+  // Games Platypus launched that are starting or running, keyed by game id.
   const [sessions, setSessions] = useState<Record<string, SessionEvent>>({});
   const [tweaks, setTweaks] = useState<Tweak[]>([]);
   const [dismissedHero, setDismissedHero] = useState<ReadonlySet<string>>(() => new Set());
@@ -77,6 +88,23 @@ export function App() {
 
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
+
+  // Friends lists: the snapshot of every store that offers one, then each push.
+  // A snapshot is merged with what the pushes already brought in, and it drops
+  // the stores that are no longer ready (refreshSocial runs on a plugin change).
+  const refreshSocial = useCallback(
+    () => Effect.runPromise(LauncherApi.socialViews()).then((vs) => setSocial((list) => reconcileViews(list, vs)), () => {}),
+    [],
+  );
+  const onPluginsChanged = useCallback((list: StorePlugin[]) => {
+    setPlugins(list);
+    void refreshSocial();
+  }, [refreshSocial]);
+  useEffect(() => {
+    const unsubscribe = onSocial((v) => setSocial((list) => upsertView(list, v)));
+    void refreshSocial();
+    return unsubscribe;
+  }, [refreshSocial]);
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
@@ -132,6 +160,7 @@ export function App() {
           }
           if (pR.ok) {
             setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
+            void refreshSocial();
           } else {
             failures.push(`Plugins: ${errMsg((pR as { ok: false; error: Error }).error)}`);
           }
@@ -175,7 +204,7 @@ export function App() {
           setScanning(false);
         });
     },
-    [log, notify]
+    [log, notify, refreshSocial]
   );
 
   // StrictMode mounts effects twice in dev; scan only once on startup.
@@ -190,9 +219,13 @@ export function App() {
     loadData('startup');
   }, [loadData]);
 
-  // Enrich with fix/tier data (curated first, then ProtonDB) in the background.
-  // Each game is fetched at most once per session.
+  // Enrich with fix/tier data (curated first, then the ProtonDB tier) in the background.
+  // A game is asked at most once per session, except when it had no answer
+  // yet: the first ProtonDB fetch can outlast the wait, and it fills the cache
+  // meanwhile, so those are asked again (three tries at most).
   const fixFetched = useRef(new Set<string>());
+  const fixTries = useRef(new Map<string, number>());
+  const [fixRetry, setFixRetry] = useState(0);
   useEffect(() => {
     const todo = games.filter((g) => g.is_installed && !g.fix_info && g.store !== 'custom' && !fixFetched.current.has(g.id));
     if (todo.length === 0) return;
@@ -204,12 +237,22 @@ export function App() {
     );
     Effect.runPromise(program).then((results) => {
       const found = new Map(results.filter(([, f]) => f).map(([id, f]) => [id, f!]));
+      let again = false;
+      for (const [id] of results.filter(([, f]) => !f)) {
+        const tries = (fixTries.current.get(id) ?? 0) + 1;
+        fixTries.current.set(id, tries);
+        if (tries < 3) {
+          fixFetched.current.delete(id);
+          again = true;
+        }
+      }
+      if (again) setTimeout(() => setFixRetry((n) => n + 1), 20000);
       if (found.size === 0) return;
       setGames((prev) => prev.map((g) => (found.has(g.id) && !g.fix_info ? { ...g, fix_info: found.get(g.id) } : g)));
       const curated = [...found.values()].filter((f) => f.source !== 'protondb').length;
       log({ type: 'fix', detail: `Compatibility data for ${found.size} titles`, meta: curated ? `${curated} curated fixes` : 'protondb' });
     });
-  }, [games, log]);
+  }, [games, log, fixRetry]);
 
   const launch = (game: Game) => {
     if (launchingId || sessions[game.id]) return;
@@ -289,7 +332,6 @@ export function App() {
   const saveSettings = (id: string, settings: GameSettings, what = 'Launcher settings changed') => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
-    setSettingsFor(null);
     if (!g) return;
     Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
@@ -334,10 +376,28 @@ export function App() {
     return onJobs((l) => apply(l));
   }, [log, notify]);
 
+  // A silent library read: no rescan notice and no details-cache eviction.
+  // Only the fields `merge` names are taken from the fresh read. A failed read
+  // keeps what is shown; the next rescan reconciles it.
+  const refreshLibraryQuietly = useCallback(
+    (merge: (prev: Game[], fresh: Game[]) => Game[]) => {
+      Effect.runPromise(LauncherApi.getLibrary()).then(
+        (lib) => setGames((prev) => merge(prev, lib.games)),
+        () => {},
+      );
+    },
+    [],
+  );
+
+  // A plugin's playtime report changed a library value (protocol 1.7).
+  useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
+
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
-    Effect.runPromise(op(game))
-      .then(() => notify(`${kind === 'install' ? 'Install' : kind === 'update' ? 'Update' : 'Uninstall'} of ${game.title} queued`, 'busy'))
+    const queue = kind === 'uninstall' ? Promise.resolve(true) : ensureTerms(game);
+    queue
+      .then((ok) => ok && Effect.runPromise(op(game))
+        .then(() => notify(`${kind === 'install' ? 'Install' : kind === 'update' ? 'Update' : 'Uninstall'} of ${game.title} queued`, 'busy')))
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
@@ -380,11 +440,19 @@ export function App() {
   const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
+  const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  // Conversations with friends (chat capability): unread badges, the open chat, alerts.
+  const chat = useChat(social, notify, socialLabels);
+  // Redeem is one entry for every ready store that offers it (none: no entry).
+  const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
+  const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
+
   const openGame = (id: string) =>
     setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
+  // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
+  const closeFriends = () => { chat.close(); setFriendsOpen(false); };
 
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
-  const settingsGame = settingsFor ? games.find((g) => g.id === settingsFor) : undefined;
 
   const renderView = () => {
     if (!loaded) {
@@ -455,13 +523,18 @@ export function App() {
             refreshing={scanning}
             tweaks={tweaks}
             onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
-            onOpenSettings={() => setSettingsFor(currentGame.id)}
+            onSaveSettings={(st) => saveSettings(currentGame.id, st)}
+            onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
             plugin={plugins.find((x) => x.id === currentGame.source)}
             job={jobFor(currentGame.id)}
+            jobs={jobs}
             onJob={(kind) => runJob(kind, currentGame)}
             onJobAction={jobAction}
             onAllowFolder={(folder) => allowFolder(currentGame, folder)}
             onNavigate={setView}
+            onNotify={notify}
+            onVersionsChanged={() => loadData('rescan')}
+            onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
           />
         ) : (
           <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>
@@ -477,7 +550,7 @@ export function App() {
           <PluginsView
             plugins={plugins}
             warnings={warnings}
-            onPlugins={setPlugins}
+            onPlugins={onPluginsChanged}
             onLibraryChanged={() => loadData('rescan')}
             onNotify={notify}
           />
@@ -502,7 +575,7 @@ export function App() {
           />
         );
       case 'settings':
-        return <LauncherSettingsView onNotify={notify} />;
+        return <LauncherSettingsView onNotify={notify} plugins={plugins} />;
     }
   };
 
@@ -524,23 +597,62 @@ export function App() {
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
         onStop={(id) => stop(id, false)}
+        friends={social}
+        friendLabels={socialLabels}
+        onOpenFriends={() => setFriendsOpen(true)}
+        canRedeem={redeemStores.length > 0}
+        onRedeem={() => setRedeemOpen(true)}
+        friendsUnread={chat.unread}
       />
 
       <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
         {renderView()}
       </main>
 
-      {settingsGame && (
-        <SettingsModal
-          game={settingsGame}
-          runners={runners}
-          onClose={() => setSettingsFor(null)}
-          onSave={(s) => saveSettings(settingsGame.id, s)}
-          onCopied={() => notify('Copied to clipboard')}
+      {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
+
+      <CloudSavesHost games={games} onNotify={notify} onLog={log} />
+      <FamilyWarningHost games={games} />
+      <TermsHost />
+
+      {redeemOpen && redeemStores.length > 0 && <RedeemDialog stores={redeemStores} onClose={() => setRedeemOpen(false)} />}
+
+      {friendsOpen && (
+        <FriendsModal
+          views={social}
+          labels={socialLabels}
+          plugins={plugins}
+          inLibrary={(id) => libraryIds.has(id)}
+          onClose={closeFriends}
+          onSetEnabled={(plugin, enabled) =>
+            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onSetStatus={(plugin, state: SocialStatus) =>
+            Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(errMsg(err), 'err'))}
+          onSetPlaying={(plugin, show) =>
+            Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onReconnect={(plugin) =>
+            Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+          onOpenGame={(id) => { closeFriends(); openGame(id); }}
+          unreadOf={chat.unreadOf}
+          onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
+          chatAlerts={chat.alerts}
+          onSetChatAlerts={chat.setAlerts}
+          chat={chat.target && (
+            <ChatPanel
+              view={chat.conversation}
+              friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
+              storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
+              error={chat.error}
+              onLoadOlder={chat.loadOlder}
+              onSend={chat.send}
+              onResend={chat.resend}
+              onBack={chat.close}
+              onClose={closeFriends}
+            />
+          )}
+          onBackFromChat={chat.close}
         />
       )}
-
-      {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
 
       {notice && (
         <div

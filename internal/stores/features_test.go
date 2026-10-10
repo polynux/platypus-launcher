@@ -13,7 +13,7 @@ func TestGameFeaturesAbsentMeansEveryRuntimeCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"library", "install", "launch", "auth"}
+	want := []string{"library", "install", "launch", "auth", "cloud-saves", "versions", "verify", "move", "install-options", "social", "achievements", "playtime", "redeem", "family", "settings", "chat", "terms"}
 	for _, g := range lib {
 		if !slices.Equal(g.Features, want) {
 			t.Fatalf("%s features = %v, want every runtime capability %v", g.StoreAppID, g.Features, want)
@@ -23,7 +23,7 @@ func TestGameFeaturesAbsentMeansEveryRuntimeCapability(t *testing.T) {
 
 func TestGameFeaturesNarrowAndAreClampedToTheRuntimeSet(t *testing.T) {
 	t.Setenv("ECHO_OFF", "launch")
-	// tiny: a subset, with a capability that is off and one Hydra never heard of.
+	// tiny: a subset, with a capability that is off and one Platypus never heard of.
 	// slow: explicitly none. The other games say nothing.
 	t.Setenv("ECHO_GAME_FEATURES", `{"tiny":["install","launch","hologram","install"],"slow":[]}`)
 	e := newEchoEnv(t)
@@ -39,7 +39,7 @@ func TestGameFeaturesNarrowAndAreClampedToTheRuntimeSet(t *testing.T) {
 	if slow.Features == nil || len(slow.Features) != 0 {
 		t.Fatalf("an explicit empty list must stay empty (not nil, which means all): %#v", slow.Features)
 	}
-	if got := e.game(t, "flaky"); len(got.Features) != 4 { // library, install, auth, discard
+	if got := e.game(t, "flaky"); len(got.Features) != 17 { // library, install, auth, discard, cloud-saves, versions, verify, move, install-options, social, achievements, playtime, redeem, family, settings, chat, terms
 		t.Fatalf("flaky features = %v", got.Features)
 	}
 	_ = lib

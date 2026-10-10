@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
 func (b backend) Discard(ctx context.Context, j types.Job) error {
@@ -115,7 +115,7 @@ func TestEpicDiscardRemovesPartialFolderAndResumeFile(t *testing.T) {
 	if !exists(filepath.Join(e.folder, "Other", "keep.txt")) || !exists(e.folder) {
 		t.Fatal("discard deleted something that wasn't the job's")
 	}
-	// The other, preinstalled game outside Hydra's folder is untouched.
+	// The other, preinstalled game outside Platypus's folder is untouched.
 	if !e.library(t)["Pre"].IsInstalled {
 		t.Fatal("an installed game was affected")
 	}

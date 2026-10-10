@@ -1,4 +1,4 @@
-// Tests the Epic plugin through Hydra's real plugin path (manager, JSON-RPC,
+// Tests the Epic plugin through Platypus's real plugin path (manager, JSON-RPC,
 // job queue, launch-spec validation) against testdata/legendary, a fake CLI
 // that prints the real legendary's output formats. They don't reach Epic.
 package epic_test
@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 const id = "epic-legendary"
@@ -73,14 +73,14 @@ func setup(t *testing.T) *env {
 	root := t.TempDir()
 	plug := filepath.Join(root, "plugins", id)
 	copyFile(t, "plugin.json", filepath.Join(plug, "plugin.json"), 0o644)
-	copyFile(t, "bin/hydra-epic", filepath.Join(plug, "bin/hydra-epic"), 0o755)
+	copyFile(t, "bin/platypus-epic", filepath.Join(plug, "bin/platypus-epic"), 0o755)
 	bin := filepath.Join(root, "fakebin")
 	copyFile(t, "testdata/legendary", filepath.Join(bin, "legendary"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	e := &env{state: filepath.Join(root, "legendary-state.json"), games: filepath.Join(root, "Games")}
 	t.Setenv("FAKE_LEGENDARY_STATE", e.state)
-	// A game legendary installed before Hydra, outside Hydra's folder.
+	// A game legendary installed before Platypus, outside Platypus's folder.
 	pre := filepath.Join(root, "Heroic", "Pre")
 	os.MkdirAll(filepath.Join(pre, "Binaries"), 0o755)
 	os.WriteFile(filepath.Join(pre, "Binaries", "Game.exe"), []byte("MZ"), 0o644)

@@ -8,8 +8,8 @@ lists where it differs from this plan.
 
 ## Goal
 
-1. Anyone can add support for a store or launcher without touching Hydra's core.
-2. Hydra can install, update and uninstall games the user owns **without the store's
+1. Anyone can add support for a store or launcher without touching Platypus's core.
+2. Platypus can install, update and uninstall games the user owns **without the store's
    official launcher**, where the store allows it through its own APIs and the user's
    own login.
 
@@ -39,13 +39,13 @@ open-source CLIs, which proves the approach and gives us ready-made backends:
 
 ## Design: out-of-process plugins over JSON-RPC
 
-A plugin is a directory with a manifest and an executable. Hydra starts it and talks
+A plugin is a directory with a manifest and an executable. Platypus starts it and talks
 JSON-RPC 2.0 over stdin/stdout (one JSON object per line), the same model as LSP.
 
 ```
-~/.local/share/hydra/plugins/epic-legendary/
+~/.local/share/platypus/plugins/epic-legendary/
   plugin.json
-  bin/hydra-epic          # any language
+  bin/platypus-epic          # any language
 ```
 
 ```json
@@ -55,7 +55,7 @@ JSON-RPC 2.0 over stdin/stdout (one JSON object per line), the same model as LSP
   "version": "0.1.0",
   "api": 1,
   "store": "epic",
-  "exec": "bin/hydra-epic",
+  "exec": "bin/platypus-epic",
   "capabilities": ["library", "install", "launch", "auth", "cloud-saves"],
   "requires": [{ "bin": "legendary", "hint": "uv tool install legendary-gl" }],
   "install_dir": "epic",
@@ -67,20 +67,20 @@ JSON-RPC 2.0 over stdin/stdout (one JSON object per line), the same model as LSP
 }
 ```
 
-`install_dir` is optional: relative to Hydra's base games folder, or absolute if the
+`install_dir` is optional: relative to Platypus's base games folder, or absolute if the
 user overrides it per plugin (see Install folders).
 
 Why this over the alternatives:
 
 - **Go `plugin` package**: Linux-only, must be built with the exact same Go toolchain
-  and dependency versions as Hydra. Every Hydra release breaks every plugin. Rejected.
+  and dependency versions as Platypus. Every Platypus release breaks every plugin. Rejected.
 - **Embedded JS/Lua (goja, gopher-lua)**: sandboxable, but plugins mostly wrap
   existing CLIs and need processes, files and network anyway, so the sandbox buys
   little and the API surface we'd have to expose is large.
 - **WASM (wazero)**: best isolation, any language, but no process spawning, so it
   can't wrap legendary/gogdl. Revisit for pure-HTTP plugins later.
 - **Subprocess + JSON-RPC**: any language, crash-isolated (a broken plugin can't take
-  Hydra down), trivially wraps existing CLIs, testable from a shell. Cost: we define
+  Platypus down), trivially wraps existing CLIs, testable from a shell. Cost: we define
   and version a protocol. Chosen.
 
 Steam stays built in, but is refactored behind the same Go interface so the core has
@@ -90,7 +90,7 @@ one code path for all stores.
 
 As first planned; the reference is now [docs/plugins/protocol.md](../plugins/protocol.md).
 
-Hydra → plugin requests:
+Platypus → plugin requests:
 
 | Method               | Returns                                                     |
 |----------------------|-------------------------------------------------------------|
@@ -105,10 +105,10 @@ Hydra → plugin requests:
 | `game.launchSpec`    | `{ exe, args, cwd, env, needsWine, runnerHint }`, or `{ delegate: "store-client" }` |
 | `job.cancel`         | cancels an install or update                                |
 
-Plugin → Hydra notifications: `job.progress` (bytes, total, speed, phase),
+Plugin → Platypus notifications: `job.progress` (bytes, total, speed, phase),
 `job.done`, `job.failed`, `log`.
 
-Hydra owns the runner pipeline. A plugin returns a launch *spec* and never executes
+Platypus owns the runner pipeline. A plugin returns a launch *spec* and never executes
 the game itself, so every store gets the same Proton/Wine handling, wrappers, tweaks
 and session tracking (`internal/session`).
 
@@ -121,11 +121,11 @@ and session tracking (`internal/session`).
   lifecycle (start on demand, restart with backoff, kill on shutdown), the JSON-RPC
   client, and `requires` checks.
 - Jobs: a queue with persisted state so a crash or restart can resume an install
-  (`~/.local/share/hydra/jobs.json`), plus a disk-space check before starting.
+  (`~/.local/share/platypus/jobs.json`), plus a disk-space check before starting.
 - Persistence: library cache and per-game settings move from session-only memory to
-  `~/.local/share/hydra/` (needed anyway: settings are lost on restart today).
-- Credentials: never stored by Hydra. Each plugin keeps tokens where its CLI already
-  does (legendary: `~/.config/legendary`). Hydra only sees `auth.status`.
+  `~/.local/share/platypus/` (needed anyway: settings are lost on restart today).
+- Credentials: never stored by Platypus. Each plugin keeps tokens where its CLI already
+  does (legendary: `~/.config/legendary`). Platypus only sees `auth.status`.
 
 ### UI changes
 
@@ -142,7 +142,7 @@ Two kinds of plugin, because most useful extensions don't need code at all:
 
 **Data plugins** (no executable): fix recipes, tweak packs, runner download sources,
 art sources. A JSON file validated against a schema. They can't run anything, so they
-are safe to share freely and need no trust prompt. Hydra applies them through the
+are safe to share freely and need no trust prompt. Platypus applies them through the
 same paths as its built-in fixes and tweaks.
 
 **Store plugins** (executable, the protocol above): library, auth, install, launch
@@ -155,13 +155,13 @@ A store plugin is arbitrary code running as the user. We can't make that fully s
 and pretending otherwise is worse than saying so. What we can enforce, in order of
 cost:
 
-1. **Protocol boundary** (v1, cheap). Plugins never execute anything through Hydra:
-   they return a launch *spec*, and Hydra checks it. The executable and working dir
+1. **Protocol boundary** (v1, cheap). Plugins never execute anything through Platypus:
+   they return a launch *spec*, and Platypus checks it. The executable and working dir
    must be inside that plugin's install folder, env keys are filtered against a
    denylist (`LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, …), and the spec is shown in the
    launch command preview. Plugins can't see other plugins' data or settings.
 2. **Explicit install, no surprises** (v1). Only from a local folder or a git URL the
-   user pastes. Before enabling, Hydra shows the manifest: what it runs, declared
+   user pastes. Before enabling, Platypus shows the manifest: what it runs, declared
    network hosts and paths, required tools. The hash of the whole plugin folder is
    pinned; if anything in it changes, the plugin is disabled until the user re-approves. No auto-update.
 3. **Sandbox with bubblewrap** (v2, Linux-native, what Flatpak uses). Run the plugin
@@ -174,20 +174,20 @@ cost:
    *games* plugins download. Games run with the same trust as anything the user
    installs, same as Heroic or Lutris.
 
-Plugins also can't inject UI. Hydra renders everything from protocol data (library
-entries, auth forms, progress), so a plugin can't spoof Hydra's own dialogs.
+Plugins also can't inject UI. Platypus renders everything from protocol data (library
+entries, auth forms, progress), so a plugin can't spoof Platypus's own dialogs.
 
 ## Install folders
 
-- Hydra setting **Games folder**, default `~/Games`, configurable in the launcher
+- Platypus setting **Games folder**, default `~/Games`, configurable in the launcher
   settings.
 - Each store plugin installs into `<Games folder>/<install_dir>` (`install_dir` from
   the manifest, defaulting to the plugin id), e.g. `~/Games/epic/`.
 - The user can override the folder per plugin in the Plugins view, including an
-  absolute path on another disk. Hydra passes the resolved folder to the plugin in
+  absolute path on another disk. Platypus passes the resolved folder to the plugin in
   `game.install`; plugins never pick paths themselves. That keeps the launch-spec
-  check from point 1 simple: everything must live under the folder Hydra handed out.
-- Before a job starts, Hydra checks free space against the size the plugin reports.
+  check from point 1 simple: everything must live under the folder Platypus handed out.
+- Before a job starts, Platypus checks free space against the size the plugin reports.
 
 ## Steam without the Steam client: a separate plugin
 
@@ -202,13 +202,13 @@ into `<Games folder>/steam/`. Updates are a diff against the installed manifest.
 **Launch** comes in three cases, detected per game:
 
 1. **No Steamworks dependency** (no `steam_api*.dll` / `libsteam_api.so`): launch
-   directly with Hydra's runner pipeline. Fully launcher-free.
+   directly with Platypus's runner pipeline. Fully launcher-free.
 2. **Uses Steamworks, works without a client**: many games only call
    `SteamAPI_Init` for achievements or overlay and continue if it fails. We launch
    directly and set `SteamAppId`/`SteamGameId` so the game doesn't relaunch itself
    through Steam.
 3. **Requires the client** (`SteamAPI_Init` failure is fatal, or Steam's DRM wrapper):
-   Hydra starts the Steam client hidden (`steam -silent`) and launches the game
+   Platypus starts the Steam client hidden (`steam -silent`) and launches the game
    *outside* Steam's library, with the same env. The game talks to the running client
    for licence and achievements, so the user never sees Steam, but it's running.
 
@@ -326,13 +326,13 @@ plugin path (old milestones 3 and 4) came before data plugins.
   - **Download speed.** DepotDownloader's default 8 connections reached
     ~1.4 MiB/s here (the content server throttled each connection); 24 reached
     ~5 MiB/s. The plugin passes `-max-downloads 24`
-    (`HYDRA_STEAM_MAX_DOWNLOADS` overrides) and `-cellid` from
-    `HYDRA_STEAM_CELLID` or the Steam client's `CellIDServerOverride`; the cell
+    (`PLATYPUS_STEAM_MAX_DOWNLOADS` overrides) and `-cellid` from
+    `PLATYPUS_STEAM_CELLID` or the Steam client's `CellIDServerOverride`; the cell
     id made no measurable difference.
 
 - **Plugin authoring (milestone 5).** `plugins/new.sh <id> [store]` writes a
   minimal but complete plugin: a manifest, a Python stub that answers the
-  whole protocol (one fake game, install into the folder Hydra passes,
+  whole protocol (one fake game, install into the folder Platypus passes,
   launch, uninstall) and a README marking what to replace. The conformance
   suite (`internal/plugtest`) runs every bundled plugin through the methods
   its manifest declares — initialize, auth, library, details, install via the
@@ -346,7 +346,7 @@ plugin path (old milestones 3 and 4) came before data plugins.
   `~/Games/gog`, Proton launch, session tracked, uninstall. Findings:
   - legendary reuses an existing install's directory even when `--base-path`
     says otherwise (core.py "reuse existing installation's directory"), so a
-    game once installed outside Hydra's folder stays there. The launch check
+    game once installed outside Platypus's folder stays there. The launch check
     catches this; the fake legendary now models the behavior.
   - Proton assumes Steam created the compat-data dir and crashes on a missing
     `<prefix>/pfx.lock`; `runner.BuildCommand` now creates the prefix first
@@ -378,7 +378,7 @@ plugin path (old milestones 3 and 4) came before data plugins.
   `epic-legendary` wraps legendary; no core changes were needed, and the
   protocol additions of the gaps commit (`game.details`, `native`) are enough:
   GOG Linux installers report `native` and launch their start script without
-  Proton. The plugin keeps its own installed.json in `HYDRA_PLUGIN_DATA`
+  Proton. The plugin keeps its own installed.json in `PLATYPUS_PLUGIN_DATA`
   because gogdl has no "list installed" command. Tested against a fake gogdl
   only (testdata/gogdl), like epic-legendary.
 - **Data plugins (milestone 3).** A manifest with `"kind": "data"` and no `exec`
@@ -395,7 +395,7 @@ plugin path (old milestones 3 and 4) came before data plugins.
   - `game.details` gives plugin games real game-page metadata (summary,
     screenshots, genres, developers, publishers, release date, a better hero
     image, and store-level achievements when the plugin has them). Plugins
-    without metadata just don't implement it; Hydra then shows the library
+    without metadata just don't implement it; Platypus then shows the library
     entry only, as before.
   - `library.list` takes a `native` flag: a plugin game with a Linux build
     launches without the Proton pipeline, and its game page and settings show
@@ -410,7 +410,7 @@ plugin path (old milestones 3 and 4) came before data plugins.
   `delegate: "store-client"` must return `command` (a tool from `requires`) and
   `find.cmdline`, the strings that identify the game's process. Without that,
   sessions can't be tracked. Steam itself uses the same mechanism internally.
-- **Hydra allocates job ids** and passes them to `game.install`/`update`/`uninstall`,
+- **Platypus allocates job ids** and passes them to `game.install`/`update`/`uninstall`,
   so a job keeps its id across plugin restarts and resumes. Added
   `game.installSize` for the free-space check, and `auth.logout`.
 - **Auth prompts are uniform**: `auth.begin` returns an optional URL and always a list
@@ -418,10 +418,10 @@ plugin path (old milestones 3 and 4) came before data plugins.
 - **Launch previews**: `game.launchSpec` takes `preview`, so the settings dialog's live
   command preview doesn't fetch tokens; specs can list `redact` prefixes so tokens
   stay out of previews and launch logs.
-- **Games installed before Hydra**: legendary may already have games outside Hydra's
+- **Games installed before Platypus**: legendary may already have games outside Platypus's
   folder. The launch check refuses them until the user allows that game's folder
   (system folders and the home folder itself can't be allowed).
-- **Plugins get `HYDRA_PLUGIN_DATA`**, a private folder for their own state.
+- **Plugins get `PLATYPUS_PLUGIN_DATA`**, a private folder for their own state.
 - **Crash handling**: the plugin restarts lazily (next call, with backoff), but a
   crash during a job requeues the job at once, which restarts the plugin.
 - **The placeholder plugin catalog is gone.** The Plugins view shows discovered
@@ -438,5 +438,5 @@ plugin path (old milestones 3 and 4) came before data plugins.
    and a bubblewrap sandbox in v2 (see above).
 3. **Steam without the client**: a separate `steam-standalone` plugin with
    DepotDownloader and three launch modes, last in line because it's the most involved.
-4. **Install folders**: a base Games folder in Hydra's settings, a per-plugin subfolder
+4. **Install folders**: a base Games folder in Platypus's settings, a per-plugin subfolder
    by default, and a per-plugin override.

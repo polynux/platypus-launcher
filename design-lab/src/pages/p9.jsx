@@ -23,7 +23,7 @@ export function EditorialDashboard() {
         <div className="mx-auto flex max-w-[1360px] items-baseline justify-between">
           <div className="flex items-baseline gap-3">
             <span className="font-mono text-[26px] font-black leading-none">🜋</span>
-            <span className="text-[30px] font-extrabold leading-none tracking-[-0.02em]">hydra.</span>
+            <span className="text-[30px] font-extrabold leading-none tracking-[-0.02em]">platypus.</span>
           </div>
           <nav className="flex gap-8 text-[14px] font-semibold">
             <span className="border-b-2 pb-0.5" style={{ borderColor: CORAL, color: CORAL }}>Shelf</span>
@@ -157,7 +157,7 @@ export function EditorialGame() {
               {[
                 ['Compatibility runner', game.runner, 'select'],
                 ['DX translation', game.dx, 'select'],
-                ['Wine prefix', '~/.hydra/prefixes/bg3', 'text'],
+                ['Wine prefix', '~/.platypus/prefixes/bg3', 'text'],
                 ['Launch arguments', '--continue-launcher -skiplauncher', 'text'],
                 ['Gamescope', 'off', 'toggle'],
                 ['MangoHud', 'on', 'toggle'],

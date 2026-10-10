@@ -3,7 +3,7 @@ package runner
 import (
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func TestPickAuto(t *testing.T) {

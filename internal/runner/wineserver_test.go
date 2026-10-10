@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func touchExec(t *testing.T, path string) {

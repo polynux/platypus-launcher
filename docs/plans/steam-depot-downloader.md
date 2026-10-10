@@ -40,7 +40,7 @@ a scheduler that spreads chunks over many hosts, which is the core of this plan.
 
 Study these to learn the protocol, then write our own code. Don't translate
 files line by line: SteamKit2 is LGPL-2.1 and DepotDownloader is GPL-2.0, and
-Hydra has no licence chosen yet.
+Platypus has no licence chosen yet.
 
 | What | Where |
 |---|---|
@@ -110,17 +110,17 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   - `internal/depot`: the manifest parser, chunk decoder, CDN client,
     scheduler, file writer, verify and update logic. No CM code, so it can be
     tested on its own with a fake CDN.
-- **Binary** `hydra-steam-dl`, built from `plugins/steam-standalone/cmd/hydra-steam-dl`
+- **Binary** `platypus-steam-dl`, built from `plugins/steam-standalone/cmd/platypus-steam-dl`
   into the plugin's `bin/`. `install.sh` has to learn to build Go helpers next
   to a non-Go exec; whole-folder hash pinning already covers the result.
 - **Interface to the Python plugin:** subcommands that print JSON lines on
   stdout (`size`, `install`, `update`, `verify`). Progress lines carry bytes
   done, bytes total, current speed, connection count and host count; the last
   line is a result or an error with a code. The refresh token goes in through
-  stdin or a 0600 file in `HYDRA_PLUGIN_DATA`, **never argv** (other users can
+  stdin or a 0600 file in `PLATYPUS_PLUGIN_DATA`, **never argv** (other users can
   read `/proc/<pid>/cmdline`), and is never logged.
 - **Python plugin changes:** `install_size`, installs, updates and uninstalls
-  call `hydra-steam-dl` instead of `depotdownloader`. Login stays on
+  call `platypus-steam-dl` instead of `depotdownloader`. Login stays on
   DepotDownloader until phase 6.
 
 ## Scheduler design (where the speed comes from)
@@ -147,9 +147,9 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 ## Disk layout, resume and updates
 
 - Write into the final install folder. Keep job state in
-  `HYDRA_PLUGIN_DATA/jobs/<job>.json` (manifest ids and completed chunk ids,
+  `PLATYPUS_PLUGIN_DATA/jobs/<job>.json` (manifest ids and completed chunk ids,
   flushed every few seconds), and the installed manifest per depot in
-  `HYDRA_PLUGIN_DATA/manifests/<app>/<depot>_<gid>.manifest`.
+  `PLATYPUS_PLUGIN_DATA/manifests/<app>/<depot>_<gid>.manifest`.
 - **Resume:** reload the job state, re-check partially written chunks by
   checksum, and fetch only what's missing.
 - **Update:** compare the old and new manifests. Reuse unchanged chunks by
@@ -174,7 +174,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
    resume and verify. Test against an `httptest` fake CDN with several hosts,
    including a slow host, a failing host and bad chunks. Add a benchmark that
    shows multi-host beats single-host on throttled fake hosts.
-4. **`hydra-steam-dl` binary and plugin wiring.** Subcommands, JSON progress,
+4. **`platypus-steam-dl` binary and plugin wiring.** Subcommands, JSON progress,
    `install.sh` support, and the Python plugin switched over. The existing
    steam-standalone tests and the conformance suite must pass with the fake
    CDN. Keep DepotDownloader only for login.
@@ -215,7 +215,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
 - [x] Phase 1: offline core (decoder, manifest, fixtures)
 - [x] Phase 2: CM in Go (logon, depot keys, PICS, server list, request codes, CDN tokens)
 - [x] Phase 3: downloader and scheduler (multi-host, resume, verify, updates) with fake CDN and benchmark
-- [x] Phase 4: `hydra-steam-dl` binary, install.sh, Python plugin switched over
+- [x] Phase 4: `platypus-steam-dl` binary, install.sh, Python plugin switched over
 - [x] Phase 5: live validation (small game, SUPERHOT speed, update, resume, uninstall)
 - [ ] Phase 6 (optional): login in Go, DepotDownloader and dotnet removed (live: QR + install OK; password pending)
 
@@ -257,7 +257,7 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   timed-out gorilla read breaks later reads so Dial never drains.
   Benchmark (64 chunks, 5 ms/host throttle): single-host 169 ms/op vs
   multi-host (4 hosts) 45 ms/op, ~3.8x. No new deps.
-- **Phase 4 notes:** `plugins/steam-standalone/cmd/hydra-steam-dl` (size,
+- **Phase 4 notes:** `plugins/steam-standalone/cmd/platypus-steam-dl` (size,
   install, update, verify) prints JSON progress/result lines; the refresh
   token arrives on stdin (or a 0600 file), never argv/logged. Depot
   selection (linux, windows fallback) parses PICS text KV; manifests come
@@ -320,10 +320,10 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
     plugin-data/steam-standalone kept.
   - Unrelated pre-existing issue reported: after uninstall the game page
     still shows installed until refresh — the plugin already reports
-    `installed:false`; the staleness is Hydra frontend caching, identical
+    `installed:false`; the staleness is Platypus frontend caching, identical
     with the old backend.
 - **Review fixes (before phase 5, one commit each).** (1) The steam tests
-  built hydra-steam-dl per-test; with HOME pointed at a temp dir Go put
+  built platypus-steam-dl per-test; with HOME pointed at a temp dir Go put
   its module cache in read-only folders and TempDir cleanup failed. The
   binary is now built once per package in TestMain with the real
   HOME/GOMODCACHE/GOCACHE and only copied per test. (2) The flag
@@ -349,11 +349,11 @@ Look up EMsg numbers in `enums_clientserver.proto`, not from memory.
   password via `GetPasswordRSAPublicKey` + `BeginAuthSessionViaCredentials`
   (RSA PKCS#1 v1.5, base64) + `UpdateAuthSessionWithSteamGuardCode`
   (email=2, TOTP/device=3) or mobile-confirmation poll. Device
-  "Hydra Launcher", platform SteamClient (1), persistence Persistent (1),
+  "Platypus", platform SteamClient (1), persistence Persistent (1),
   website_id "Client", so the refresh token works with the existing CM
   logon. Wrong password/code, expired sessions and EResult 84 surface
   with no retry loop (84 stops immediately). Unauthenticated CM via
-  `DialUnauth` (hello only). `hydra-steam-dl auth` speaks JSON lines
+  `DialUnauth` (hello only). `platypus-steam-dl auth` speaks JSON lines
   (qr/code-needed/waiting/result/error, code replies on stdin) and stores
   `refresh.token` (0600) + `token.json`/`session.json` in the same shapes
   the plugin reads; the pre-Go `account.config` is migrated on first read

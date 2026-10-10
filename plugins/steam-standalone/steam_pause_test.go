@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/types"
 )
 
 // Discard is the optional half of the jobs.Backend the real app wires; the
@@ -301,7 +301,7 @@ func TestSteamDiscardRefusesPathTricks(t *testing.T) {
 	}
 }
 
-// A discard for a job this plugin never heard of is not an error: Hydra
+// A discard for a job this plugin never heard of is not an error: Platypus
 // forgets jobs whose data is already gone.
 func TestSteamDiscardUnknownJobIsFine(t *testing.T) {
 	e := setup(t)

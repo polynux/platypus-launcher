@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // ClientState mirrors social.connection's states (plan, social.*).

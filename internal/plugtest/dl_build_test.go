@@ -1,4 +1,4 @@
-// TestMain builds hydra-steam-dl once for the whole conformance package,
+// TestMain builds platypus-steam-dl once for the whole conformance package,
 // with the real environment. The steam suite reaches this binary through
 // PATH, and per-test builds under an overridden HOME would redirect Go's
 // module cache into read-only temp folders, so it is built here, before
@@ -12,24 +12,24 @@ import (
 	"testing"
 )
 
-// prebuiltDLDir holds a hydra-steam-dl binary all tests share via PATH.
+// prebuiltDLDir holds a platypus-steam-dl binary all tests share via PATH.
 var prebuiltDLDir string
 
 func TestMain(m *testing.M) {
 	home := os.Getenv("HOME")
 	modCache := goEnvValue("GOMODCACHE")
 	buildCache := goEnvValue("GOCACHE")
-	dir, err := os.MkdirTemp("", "hydra-steam-dl-conformance")
+	dir, err := os.MkdirTemp("", "platypus-steam-dl-conformance")
 	if err != nil {
 		panic(err)
 	}
-	cmd := exec.Command("go", "build", "-o", filepath.Join(dir, "hydra-steam-dl"),
-		"hydra-launcher/plugins/steam-standalone/cmd/hydra-steam-dl")
+	cmd := exec.Command("go", "build", "-o", filepath.Join(dir, "platypus-steam-dl"),
+		"platypus/plugins/steam-standalone/cmd/platypus-steam-dl")
 	cmd.Env = append(os.Environ(),
 		"HOME="+home, "GOMODCACHE="+modCache, "GOCACHE="+buildCache)
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		os.RemoveAll(dir)
-		panic("build hydra-steam-dl: " + string(combined))
+		panic("build platypus-steam-dl: " + string(combined))
 	}
 	prebuiltDLDir = dir
 	code := m.Run()

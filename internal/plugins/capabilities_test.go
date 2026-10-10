@@ -23,18 +23,8 @@ func TestRegistryHoldsTheExistingCapabilities(t *testing.T) {
 	}
 }
 
-func TestRegistryHoldsThePlannedCapabilitiesWithoutOrchestrators(t *testing.T) {
-	for _, name := range []string{"install-options", "versions", "verify", "move", "social",
-		"achievements", "playtime", "redeem", "family"} {
-		c, ok := LookupCapability(name)
-		if !ok {
-			t.Fatalf("planned capability %q is not registered", name)
-		}
-		if c.Orchestrated {
-			t.Errorf("%s has no orchestrator yet but is marked orchestrated", name)
-		}
-	}
-	for _, name := range []string{"library", "install", "launch", "auth", "discard"} {
+func TestRegistryMarksTheCoreCapabilitiesOrchestrated(t *testing.T) {
+	for _, name := range []string{"library", "install", "launch", "auth", "discard", "versions", "verify", "move", "install-options", "social", "achievements", "playtime", "redeem", "family", "settings"} {
 		if c, _ := LookupCapability(name); !c.Orchestrated {
 			t.Errorf("%s is used by core today but is not marked orchestrated", name)
 		}
@@ -107,5 +97,33 @@ func TestValidCapabilityName(t *testing.T) {
 		if ValidCapabilityName(bad) {
 			t.Errorf("%q should be malformed", bad)
 		}
+	}
+}
+
+func TestWithinProtocolDropsCapabilitiesOfALaterRevision(t *testing.T) {
+	kept, later := WithinProtocol([]string{"library", "versions", "cloud-saves", "hologram"}, Version{1, 1})
+	if !slices.Equal(kept, []string{"library", "hologram"}) || !slices.Equal(later, []string{"versions", "cloud-saves"}) {
+		t.Fatalf("1.1: kept %v, later %v", kept, later)
+	}
+	if kept, later = WithinProtocol([]string{"library", "versions", "cloud-saves"}, Version{1, 2}); !slices.Equal(later, []string{"versions"}) || len(kept) != 2 {
+		t.Fatalf("1.2: kept %v, later %v", kept, later)
+	}
+	if kept, later = WithinProtocol([]string{"library", "versions", "cloud-saves"}, Version{1, 3}); len(later) != 0 || len(kept) != 3 {
+		t.Fatalf("1.3: kept %v, later %v", kept, later)
+	}
+	if kept, _ = WithinProtocol(nil, Version{1, 0}); kept == nil {
+		t.Fatal("kept must not be nil: it is serialised")
+	}
+}
+
+func TestJobCancelIsServedToACloudOnlyPlugin(t *testing.T) {
+	if !MethodOffered("job.cancel", "install", []string{"cloud-saves"}) {
+		t.Fatal("a plugin with cloud-saves and no install must still be sent job.cancel")
+	}
+	if MethodOffered("job.cancel", "install", []string{"library"}) {
+		t.Fatal("job.cancel reached a plugin with neither install nor cloud-saves")
+	}
+	if MethodOffered("game.install", "install", []string{"cloud-saves"}) {
+		t.Fatal("only job.cancel is shared")
 	}
 }

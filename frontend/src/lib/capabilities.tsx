@@ -1,11 +1,12 @@
 import React from 'react';
 import type { Game, StorePlugin } from '../types';
 
-/** The capability names Hydra knows (internal/plugins/capabilities.go). A UI
+/** The capability names Platypus knows (internal/plugins/capabilities.go). A UI
  *  surface names the one it depends on; the compiler catches a typo. */
 export type Capability =
   | 'library' | 'install' | 'launch' | 'auth' | 'discard' | 'cloud-saves'
-  | 'install-options' | 'versions' | 'verify' | 'move' | 'social' | 'achievements' | 'playtime' | 'redeem' | 'family';
+  | 'install-options' | 'versions' | 'verify' | 'move' | 'social' | 'achievements' | 'playtime' | 'redeem' | 'family' | 'settings'
+  | 'chat' | 'terms';
 
 /** Why a surface is unavailable:
  *  - no-plugin: the game doesn't come from a store plugin
@@ -21,7 +22,7 @@ export type Availability =
 export interface AvailabilityOptions {
   game?: Game;
   /** What the plugin wrote about this state (e.g. a cloud status message).
-   *  Hydra never makes one up; it is kept only where the capability exists. */
+   *  Platypus never makes one up; it is kept only where the capability exists. */
   reason?: string;
 }
 

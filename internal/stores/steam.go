@@ -3,9 +3,9 @@ package stores
 import (
 	"context"
 
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/steam"
-	"hydra-launcher/internal/types"
+	"platypus/internal/session"
+	"platypus/internal/steam"
+	"platypus/internal/types"
 )
 
 // Steam is the built-in Steam store: local library manifests, the Store API
@@ -32,7 +32,7 @@ func (s *Steam) Details(_ context.Context, game types.Game) (*types.GameDetails,
 }
 
 // Launch hands the game to the Steam client unless the user set an
-// executable override, in which case Hydra runs that executable itself.
+// executable override, in which case Platypus runs that executable itself.
 func (s *Steam) Launch(_ context.Context, game types.Game, _ bool) (*Launch, error) {
 	if !steam.IsClientLaunch(game) {
 		return nil, nil

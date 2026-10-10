@@ -9,8 +9,8 @@ import (
 	"slices"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Plugin calls made from the Plugins view: a login can wait on the store.
@@ -107,7 +107,9 @@ func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
 		return nil, err
 	}
 	a.syncDataPlugins(found)
+	a.forgetSettingsOfRemoved(found)
 	a.failStoppedJobs()
+	a.syncSocial()
 	return a.ListStorePlugins(), nil
 }
 
@@ -136,6 +138,7 @@ func (a *App) ApprovePlugin(id string) error {
 		return err
 	}
 	a.failStoppedJobs()
+	a.syncSocial()
 	return nil
 }
 
@@ -145,6 +148,7 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 		return err
 	}
 	a.failStoppedJobs()
+	a.syncSocial()
 	return nil
 }
 
@@ -200,7 +204,7 @@ func (a *App) PluginAuthBegin(id string) (types.AuthPrompt, error) {
 	if pr.URL != "" {
 		u, err := url.Parse(pr.URL)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return types.AuthPrompt{}, fmt.Errorf("plugin returned a login URL Hydra won't open: %q", pr.URL)
+			return types.AuthPrompt{}, fmt.Errorf("plugin returned a login URL Platypus won't open: %q", pr.URL)
 		}
 	}
 	var fields []types.AuthField
@@ -223,6 +227,9 @@ func (a *App) PluginAuthBegin(id string) (types.AuthPrompt, error) {
 func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.AuthStatus, error) {
 	var st types.AuthStatus
 	err := a.authCall(id, "auth.complete", map[string]any{"fields": fields}, &st)
+	if err == nil && st.LoggedIn {
+		a.socialLoggedIn(id)
+	}
 	return st, err
 }
 
@@ -247,7 +254,7 @@ func (a *App) ChoosePluginInstallFolder(id string) (string, error) {
 }
 
 // AllowGameFolder lets a plugin's games launch from a folder outside its
-// install folder (games its CLI installed before Hydra).
+// install folder (games its CLI installed before Platypus).
 func (a *App) AllowGameFolder(pluginID, path string) error {
 	return a.plugins.AllowFolder(pluginID, path)
 }

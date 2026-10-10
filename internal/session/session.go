@@ -20,7 +20,8 @@ import (
 	"syscall"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/datadir"
+	"platypus/internal/types"
 )
 
 const (
@@ -53,8 +54,9 @@ type entry struct {
 
 	done     chan struct{} // closed when the launch is no longer tracked
 	doneOnce sync.Once
-	token    string // HYDRA_SESSION value in the game's environment (direct launches)
+	token    string // PLATYPUS_SESSION value in the game's environment (direct launches)
 	hook     func(force bool)
+	onExit   func(ExitInfo)
 	stopping bool // the user asked to stop it
 	forceReq bool // ... and asked for SIGKILL before a pid was known
 }
@@ -63,7 +65,7 @@ func NewTracker(emit Emit) *Tracker {
 	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}}
 }
 
-// Running reports whether a game launched by Hydra is still tracked.
+// Running reports whether a game launched by Platypus is still tracked.
 func (t *Tracker) Running(gameID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -207,7 +209,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 }
 
 // StartDirect runs cmd and follows it until exit. Output goes to a per-game
-// log file under ~/.local/share/hydra/logs so failed launches can be diagnosed.
+// log file under ~/.local/share/platypus/logs so failed launches can be diagnosed.
 // shown is the command line written to the log, with secrets redacted.
 // redact holds the launch spec's secret prefixes; the game's own stdout is
 // filtered with the same prefixes so echoed secrets reach neither the log
@@ -291,12 +293,16 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		}
 		stoppedByUser := t.userStopped(e)
 		t.clearEntry(gameID, e)
+		failed := !stoppedByUser && err != nil && time.Since(started) < quickExit
+		if e.onExit != nil {
+			defer e.onExit(ExitInfo{Stopped: stoppedByUser, Failed: failed})
+		}
 		if stoppedByUser {
 			// A stop by the user is never a failed launch, however fast the exit.
 			t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
 			return
 		}
-		if err != nil && time.Since(started) < quickExit {
+		if failed {
 			msg := strings.TrimSpace(tail.String())
 			if msg == "" {
 				msg = err.Error()
@@ -460,7 +466,7 @@ func openLog(gameID string) (*os.File, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	dir := filepath.Join(home, ".local/share/hydra/logs")
+	dir := filepath.Join(datadir.Path(home), "logs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, "", err
 	}

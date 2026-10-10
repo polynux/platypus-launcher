@@ -35,7 +35,7 @@ re-read on every auth poll so tests can approve mid-login):
                     abrupt close (no close frame), like a dead socket; the
                     drop fires once, the next logon stays up
   Auth knobs (phase 6 logins, no Valve network):
-    auth_account        account name Poll reports (default "HydraUser" for
+    auth_account        account name Poll reports (default "PlatypusUser" for
                         QR, else the Begin account)
     auth_steamid        steamid for auth tokens (default 76561198)
     auth_password       password Begin accepts (default "correct-horse")
@@ -443,7 +443,7 @@ def serve_logged_in(conn, hdr, body, st):
             return
 
 
-# --- content RPCs for hydra-steam-dl -------------------------------------
+# --- content RPCs for platypus-steam-dl -------------------------------------
 # Driven by the state file so the Go tests control depot keys, PICS, the
 # server list, request codes and CDN tokens without touching Valve:
 #   depot_key    hex of the 32-byte depot key the fake CDN encrypted with
@@ -598,7 +598,7 @@ def serve_auth(conn, target, hdr, body, steamid):
         cid = _auth_next_id[0]
         req_id = os.urandom(16)
         challenge = st.get("auth_challenge_url", "https://steamcommunity.com/qr/TESTCHALLENGE")
-        _auth_sessions[cid] = {"request_id": req_id, "account": st.get("auth_account", "HydraUser"),
+        _auth_sessions[cid] = {"request_id": req_id, "account": st.get("auth_account", "PlatypusUser"),
                                "steamid": st.get("auth_steamid", 76561198), "mode": "qr",
                                "challenge": challenge, "refreshed": False, "polls": 0}
         allow = pb_int(1, 4) + pb_str(2, "Confirm via the Steam mobile app")
@@ -620,7 +620,7 @@ def serve_auth(conn, target, hdr, body, steamid):
             conn.send_frame(2, pack(EMSG_SERVICE_METHOD_RESPONSE, content_hdr(steamid, 0, jobid, 5), b""))
             return True
         if not account:
-            account = st.get("auth_account", "HydraUser")
+            account = st.get("auth_account", "PlatypusUser")
         guard = st.get("auth_guard", "none")
         exp_code = st.get("auth_expected_code", "123456" if guard == "totp" else "ABC12")
         _auth_next_id[0] += 1

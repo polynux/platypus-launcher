@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/plugtest"
-	"hydra-launcher/internal/types"
-	"hydra-launcher/plugins/steam-standalone/fakesteam"
+	"platypus/internal/plugins"
+	"platypus/internal/plugtest"
+	"platypus/internal/types"
+	"platypus/plugins/steam-standalone/fakesteam"
 )
 
 // echo builds from source and answers everything itself, no external CLI.
@@ -27,9 +27,9 @@ func TestConformanceEcho(t *testing.T) {
 	plugtest.Suite{
 		ID:      "echo",
 		CopyDir: "../../plugins/echo",
-		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
-			"hydra-launcher/plugins/echo"},
-		BuildOut: "plugins/echo/bin/hydra-echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/platypus-echo",
+			"platypus/plugins/echo"},
+		BuildOut: "plugins/echo/bin/platypus-echo",
 		// Echo's uninstall is instant, so there is nothing for job.cancel to stop.
 		NoUninstallCancel: true,
 		Login: func(t *testing.T, s *plugtest.Session) {
@@ -50,9 +50,9 @@ func echoAllCapabilities(env map[string]string) plugtest.Suite {
 	return plugtest.Suite{
 		ID:      "echo",
 		CopyDir: "../../plugins/echo",
-		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
-			"hydra-launcher/plugins/echo"},
-		BuildOut: "plugins/echo/bin/hydra-echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/platypus-echo",
+			"platypus/plugins/echo"},
+		BuildOut: "plugins/echo/bin/platypus-echo",
 		Env:      env,
 		EditManifest: func(m map[string]any) {
 			var names []string
@@ -97,7 +97,7 @@ func TestHandshakeEchoSwitchedOffCapabilities(t *testing.T) {
 		"ECHO_FEATURES": `{"install-options":{"dlc":true,"languages":false}}`,
 	}).Handshake(t)
 	calls := echoCalls(t, sess)
-	for _, m := range []string{"versions.list", "game.verify", "social.friends"} {
+	for _, m := range []string{"versions.list", "game.verify", "social.start"} {
 		if calls[m] != 0 {
 			t.Errorf("%s reached the plugin although its capability is off", m)
 		}
@@ -107,12 +107,32 @@ func TestHandshakeEchoSwitchedOffCapabilities(t *testing.T) {
 	}
 }
 
+// A plugin that speaks only 1.5 is never sent social.*: the capability is
+// introduced by 1.6, so it stays off at runtime although the manifest lists it.
+func TestSocialStaysOffForAProtocol15Plugin(t *testing.T) {
+	s := echoAllCapabilities(map[string]string{"ECHO_PROTOCOLS": "1.0,1.1,1.2,1.3,1.4,1.5"})
+	s.EditManifest = func(m map[string]any) {
+		m["protocol"] = map[string]any{"versions": []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}}
+	}
+	sess := s.Handshake(t)
+	if sess.Has("social") {
+		t.Fatal("social is on for a plugin that settled on 1.5")
+	}
+	var raw map[string]any
+	if err := sess.Call("social.start", map[string]any{}, &raw); err == nil {
+		t.Fatal("social.start reached a 1.5 plugin")
+	}
+	if n := echoCalls(t, sess)["social.start"]; n != 0 {
+		t.Fatalf("the plugin received social.start %d time(s)", n)
+	}
+}
+
 // A plugin from before negotiation: no protocol in the answer.
 func TestHandshakeEchoWithoutNegotiation(t *testing.T) {
 	echoAllCapabilities(map[string]string{"ECHO_NO_PROTOCOL": "1"}).Handshake(t)
 }
 
-// A plugin that speaks only 1.0 and says so negotiates 1.0 with a Hydra that
+// A plugin that speaks only 1.0 and says so negotiates 1.0 with a Platypus that
 // speaks 1.1 too.
 func TestHandshakeEchoOlderPlugin(t *testing.T) {
 	s := echoAllCapabilities(map[string]string{"ECHO_PROTOCOLS": "1.0"})
@@ -170,7 +190,7 @@ func TestConformanceGog(t *testing.T) {
 		ID:      "gog-gogdl",
 		CopyDir: "../../plugins/gog-gogdl",
 		FakeCLI: map[string]string{"gogdl": "../../plugins/gog-gogdl/testdata/gogdl"},
-		Env:     map[string]string{"FAKE_GOGDL_STATE": state, "HYDRA_GOG_API_FILE": api},
+		Env:     map[string]string{"FAKE_GOGDL_STATE": state, "PLATYPUS_GOG_API_FILE": api},
 		// The API file answers every id; unknown-id details is unit-tested in
 		// plugins/gog-gogdl.
 		NoUnknownDetails: true,
@@ -240,7 +260,7 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 	return cmd, ""
 }
 
-// steam-standalone logs in and downloads through hydra-steam-dl (built
+// steam-standalone logs in and downloads through platypus-steam-dl (built
 // from source) against a fake CM and a fake CDN (see fakesteam); the
 // plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
@@ -263,7 +283,7 @@ func TestConformanceSteamStandalone(t *testing.T) {
 	// exported here too — Suite.Env applies only at plugin start.
 	t.Setenv("FAKE_CM_STATE", cmState)
 	_, endpoint := startFakeCM(t, "../../plugins/steam-standalone/testdata/fake_cm.py")
-	// hydra-steam-dl comes from a PATH copy (the copied plugin tree has no
+	// platypus-steam-dl comes from a PATH copy (the copied plugin tree has no
 	// built binary); it was built once in TestMain, before any test could
 	// override HOME. The fake CDN serves the fixture depot and the fake CM
 	// points the downloader at it.
@@ -278,12 +298,12 @@ func TestConformanceSteamStandalone(t *testing.T) {
 		// Steam's store answers success:false for delisted apps and unknown ids
 		// alike, so an unknown id gets an empty page, not an error.
 		NoUnknownDetails: true,
-		Env: map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api,
-			"HYDRA_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
+		Env: map[string]string{"FAKE_DD_STATE": state, "PLATYPUS_STEAM_API_FILE": api,
+			"PLATYPUS_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			err := s.Call("auth.complete", map[string]any{
-				"fields": map[string]string{"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st)
+				"fields": map[string]string{"username": "PlatypusUser", "password": "correct-horse", "guard": "ABC12"}}, &st)
 			if err != nil || !st.LoggedIn {
 				t.Fatalf("login: %+v, %v", st, err)
 			}
@@ -310,4 +330,55 @@ func (s *syncBuf) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
+}
+
+// Every state echo's cloud can be put in answers the shapes the protocol defines.
+func TestConformanceEchoCloudStates(t *testing.T) {
+	for _, state := range []string{"synced", "pending", "conflict", "conflict2", "unsupported", "offline", "error"} {
+		t.Run(state, func(t *testing.T) {
+			s := echoCloudSuite(map[string]string{"ECHO_CLOUD": state})
+			s.CloudConformance(t)
+		})
+	}
+	t.Run("client running", func(t *testing.T) {
+		echoCloudSuite(map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "1"}).CloudConformance(t)
+	})
+}
+
+func echoCloudSuite(env map[string]string) plugtest.Suite {
+	return plugtest.Suite{
+		ID:      "echo",
+		CopyDir: "../../plugins/echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/platypus-echo",
+			"platypus/plugins/echo"},
+		BuildOut: "plugins/echo/bin/platypus-echo",
+		Env:      env,
+		Login: func(t *testing.T, s *plugtest.Session) {
+			var st types.AuthStatus
+			if err := s.Call("auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, &st); err != nil || !st.LoggedIn {
+				t.Fatalf("login: %+v, %v", st, err)
+			}
+		},
+		PickGame: func(t *testing.T, games []types.Game) types.Game { return pick(t, games, "tiny") },
+	}
+}
+
+// A plugin that speaks only 1.1 is never sent cloud.*: the capability stays
+// off at runtime although the manifest lists it.
+func TestCloudSavesStayOffForAProtocol11Plugin(t *testing.T) {
+	s := echoCloudSuite(map[string]string{"ECHO_PROTOCOLS": "1.0,1.1"})
+	s.EditManifest = func(m map[string]any) {
+		m["protocol"] = map[string]any{"versions": []string{"1.0", "1.1"}}
+	}
+	sess := s.Handshake(t)
+	if sess.Has("cloud-saves") {
+		t.Fatal("cloud-saves is on for a plugin that settled on 1.1")
+	}
+	var raw map[string]any
+	if err := sess.Call("cloud.status", map[string]any{"id": "tiny", "ctx": types.CloudContext{OS: "linux", InstallDir: "/x"}}, &raw); err == nil {
+		t.Fatal("cloud.status reached a 1.1 plugin")
+	}
+	if n := echoCalls(t, sess)["cloud.status"]; n != 0 {
+		t.Fatalf("the plugin received cloud.status %d time(s)", n)
+	}
 }

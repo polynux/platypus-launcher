@@ -33,7 +33,7 @@ func approvedEnv(t *testing.T, adjust func(*Options), edit func(m map[string]any
 	return e, p
 }
 
-func hydraSpeaks(vs ...Version) func(*Options) {
+func platypusSpeaks(vs ...Version) func(*Options) {
 	return func(o *Options) { o.Protocols = vs }
 }
 
@@ -57,9 +57,9 @@ func TestLegacyAPIManifestStillWorks(t *testing.T) {
 	}
 }
 
-func TestPluginOffering1To5NegotiatesWhatHydraSpeaks(t *testing.T) {
+func TestPluginOffering1To5NegotiatesWhatPlatypusSpeaks(t *testing.T) {
 	t.Setenv("ECHO_FUTURE", "1") // its answer carries things only newer protocols define
-	e, p := approvedEnv(t, hydraSpeaks(Version{1, 0}), useProtocol(map[string]any{"min": "1.0", "max": "1.5"}, "jsonrpc-stdio"))
+	e, p := approvedEnv(t, platypusSpeaks(Version{1, 0}), useProtocol(map[string]any{"min": "1.0", "max": "1.5"}, "jsonrpc-stdio"))
 	if p.Status != StatusReady {
 		t.Fatalf("%+v", p)
 	}
@@ -68,7 +68,7 @@ func TestPluginOffering1To5NegotiatesWhatHydraSpeaks(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.Protocol != "1.0" || e.m.Runtime("echo").Protocol != "1.0" {
-		t.Fatalf("negotiated %q, want 1.0 against a Hydra that speaks only 1.0", info.Protocol)
+		t.Fatalf("negotiated %q, want 1.0 against a Platypus that speaks only 1.0", info.Protocol)
 	}
 	// The unknown field and notification were ignored, and the plugin works.
 	if err := e.m.Call(ctx(t), "echo", "echo", map[string]any{"x": 1}, nil); err != nil {
@@ -77,22 +77,22 @@ func TestPluginOffering1To5NegotiatesWhatHydraSpeaks(t *testing.T) {
 }
 
 func TestNegotiationPicksTheHighestCommon(t *testing.T) {
-	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.1", "1.4"}, ""))
+	e, _ := approvedEnv(t, nil, useProtocol([]string{"1.0", "1.1", "1.4", "1.5"}, ""))
 	if _, err := e.m.Initialize(ctx(t), "echo"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.m.Runtime("echo").Protocol; got != "1.1" {
-		t.Fatalf("negotiated %q, want 1.1 (Hydra speaks 1.0 and 1.1)", got)
+	if got := e.m.Runtime("echo").Protocol; got != "1.5" {
+		t.Fatalf("negotiated %q, want 1.5 (the highest Platypus speaks that the plugin offers)", got)
 	}
 }
 
-func TestPluginNeedingOnlyANewerProtocolNeedsANewerHydra(t *testing.T) {
+func TestPluginNeedingOnlyANewerProtocolNeedsANewerPlatypus(t *testing.T) {
 	e, p := approvedEnv(t, nil, useProtocol([]string{"2.0"}, ""))
-	if p.Status != StatusNeedsNewer || !strings.Contains(p.Problem, "newer Hydra") || !strings.Contains(p.Problem, "2.0") {
+	if p.Status != StatusNeedsNewer || !strings.Contains(p.Problem, "newer Platypus") || !strings.Contains(p.Problem, "2.0") {
 		t.Fatalf("status %q problem %q", p.Status, p.Problem)
 	}
 	if _, err := e.m.Initialize(ctx(t), "echo"); err == nil {
-		t.Fatal("started a plugin whose protocol Hydra doesn't speak")
+		t.Fatal("started a plugin whose protocol Platypus doesn't speak")
 	}
 	if e.m.Running("echo") != 0 {
 		t.Fatal("process running")
@@ -103,14 +103,14 @@ func TestPluginNeedingOnlyANewerProtocolNeedsANewerHydra(t *testing.T) {
 }
 
 func TestPluginWithTooNewMinorOfTheSameMajor(t *testing.T) {
-	_, p := approvedEnv(t, nil, useProtocol(map[string]any{"min": "1.2"}, ""))
+	_, p := approvedEnv(t, nil, useProtocol(map[string]any{"min": "1.12"}, ""))
 	if p.Status != StatusNeedsNewer {
 		t.Fatalf("%+v", p)
 	}
 }
 
-func TestPluginTooOldForThisHydra(t *testing.T) {
-	_, p := approvedEnv(t, hydraSpeaks(Version{2, 0}, Version{2, 1}), useProtocol([]string{"1.0"}, ""))
+func TestPluginTooOldForThisPlatypus(t *testing.T) {
+	_, p := approvedEnv(t, platypusSpeaks(Version{2, 0}, Version{2, 1}), useProtocol([]string{"1.0"}, ""))
 	if p.Status != StatusTooOld || !strings.Contains(p.Problem, "too old") {
 		t.Fatalf("status %q problem %q", p.Status, p.Problem)
 	}
@@ -136,7 +136,7 @@ func TestMalformedTransportIsInvalid(t *testing.T) {
 func TestNewerManifestVersionIsListedNotParsed(t *testing.T) {
 	_, p := approvedEnv(t, nil, func(m map[string]any) {
 		m["manifestVersion"] = 2
-		// A newer schema may change any field's shape; Hydra must not call
+		// A newer schema may change any field's shape; Platypus must not call
 		// that "invalid".
 		m["capabilities"] = map[string]any{"library": map[string]any{"since": "2.0"}}
 		m["permissions"] = []string{"a list now"}
@@ -182,7 +182,7 @@ func TestProtocolDeclarationErrorsAreInvalid(t *testing.T) {
 	}
 }
 
-func TestLegacyAPIOfANewerMajorNeedsANewerHydra(t *testing.T) {
+func TestLegacyAPIOfANewerMajorNeedsANewerPlatypus(t *testing.T) {
 	_, p := approvedEnv(t, nil, func(m map[string]any) { delete(m, "protocol"); m["api"] = 2 })
 	if p.Status != StatusNeedsNewer {
 		t.Fatalf("api 2: %+v", p)
@@ -191,10 +191,10 @@ func TestLegacyAPIOfANewerMajorNeedsANewerHydra(t *testing.T) {
 
 func TestPluginAnsweringAProtocolItWasNotOfferedFails(t *testing.T) {
 	t.Setenv("ECHO_PROTOCOL", "1.1")
-	e, _ := approvedEnv(t, hydraSpeaks(Version{1, 0}), useProtocol([]string{"1.0", "1.1"}, ""))
+	e, _ := approvedEnv(t, platypusSpeaks(Version{1, 0}), useProtocol([]string{"1.0", "1.1"}, ""))
 	_, err := e.m.Initialize(ctx(t), "echo")
 	if err == nil || !strings.Contains(err.Error(), "protocol") {
-		t.Fatalf("initialize with a protocol Hydra didn't offer: %v", err)
+		t.Fatalf("initialize with a protocol Platypus didn't offer: %v", err)
 	}
 	t.Setenv("ECHO_PROTOCOL", "1.5") // the manifest doesn't offer it either
 	e2, _ := approvedEnv(t, nil, useProtocol([]string{"1.0"}, ""))
@@ -203,7 +203,7 @@ func TestPluginAnsweringAProtocolItWasNotOfferedFails(t *testing.T) {
 	}
 }
 
-func TestInitializeTellsThePluginWhatHydraSpeaks(t *testing.T) {
+func TestInitializeTellsThePluginWhatPlatypusSpeaks(t *testing.T) {
 	// echo refuses to initialize when it has no version in common, so a
 	// successful start proves the list reached it.
 	t.Setenv("ECHO_PROTOCOLS", "1.1")

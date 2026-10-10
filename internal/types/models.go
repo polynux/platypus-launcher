@@ -73,14 +73,21 @@ type Game struct {
 	SettingsExtra map[string]any `json:"settings_extra,omitempty"`
 	FixInfo       *GameFixInfo   `json:"fix_info,omitempty"`
 	LastPlayed    int64          `json:"last_played_at,omitempty"` // unix seconds
-	PlaytimeMin   int            `json:"playtime_minutes,omitempty"`
-	SizeBytes     int64          `json:"size_bytes,omitempty"` // installed size, if known
-	Version       string         `json:"version,omitempty"`
+	// PlaytimeMin is the playtime shown and sorted by: max(local, store) for
+	// a plugin game with a playtime report (playtime capability, protocol 1.7),
+	// else the local value. The two parts ride along for the tooltip.
+	PlaytimeMin int `json:"playtime_minutes,omitempty"`
+	// PlaytimeLocalMin is nil when Platypus has no local record (plugin games);
+	// PlaytimeStoreMin is nil without a store report, and 0 is a real report.
+	PlaytimeLocalMin *int   `json:"playtime_local_minutes,omitempty"`
+	PlaytimeStoreMin *int   `json:"playtime_store_minutes,omitempty"`
+	SizeBytes        int64  `json:"size_bytes,omitempty"` // installed size, if known
+	Version          string `json:"version,omitempty"`
 	// Plugin games only.
 	UpdateAvailable bool   `json:"update_available,omitempty"`
-	Installable     bool   `json:"installable,omitempty"`    // Hydra can install it through the plugin
+	Installable     bool   `json:"installable,omitempty"`    // Platypus can install it through the plugin
 	Note            string `json:"note,omitempty"`           // e.g. "Needs the EA app"
-	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Hydra lets the plugin launch from
+	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Platypus lets the plugin launch from
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
@@ -90,6 +97,48 @@ type Game struct {
 	// games, so an empty list ("nothing") differs from null (Steam, sideloaded:
 	// not capability-driven).
 	Features []string `json:"features"`
+	// Pinned is the version the user holds the game at (the `versions`
+	// capability): its update prompt is off and updates install this.
+	Pinned *VersionPin `json:"pinned,omitempty"`
+	// SharedBy is the family member who lends the game (the `family`
+	// capability). Nil for the user's own games.
+	SharedBy *SharedBy `json:"shared_by,omitempty"`
+	// Copies are the family copies of a borrowed game, when they differ
+	// (protocol 1.8). PreferredCopy is the owner id the user chose, "" for
+	// the store's default (SharedBy).
+	Copies        []GameCopy `json:"copies,omitempty"`
+	PreferredCopy string     `json:"preferred_copy,omitempty"`
+	// CopyCompare sets the borrowed game's copies against the baseline copy
+	// (nil with fewer than two copies). Computed by core, see stores/copydiff.go.
+	CopyCompare *CopyComparison `json:"copy_compare,omitempty"`
+	// What the user changed about the game's look (Platypus's own customization,
+	// never the plugin's): StoreTitle is the title the store gave when Title is
+	// the user's, SortTitle orders the library, the *URL fields are the user's
+	// images and Customized names every part that is theirs (title, sort_title
+	// and the kinds of art). Plugins only ever see StoreTitle.
+	StoreTitle    string   `json:"store_title,omitempty"`
+	SortTitle     string   `json:"sort_title,omitempty"`
+	LogoURL       string   `json:"logo_url,omitempty"`
+	IconURL       string   `json:"icon_url,omitempty"`
+	BackgroundURL string   `json:"background_url,omitempty"`
+	Customized    []string `json:"customized,omitempty"`
+}
+
+// OriginalTitle is the title the store gave the game: what a plugin is sent
+// and what the user's own title replaces.
+func (g Game) OriginalTitle() string {
+	if g.StoreTitle != "" {
+		return g.StoreTitle
+	}
+	return g.Title
+}
+
+// Customization is the user's look for one game, as the editor shows it: the
+// title and sort title they set, and the address of each image they set.
+type Customization struct {
+	Title     string            `json:"title"`
+	SortTitle string            `json:"sort_title"`
+	Art       map[string]string `json:"art"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -131,10 +180,10 @@ type StorePlugin struct {
 	// Offers lists every declared capability with its state and depth flags,
 	// for the Plugins view.
 	Offers []PluginCapability `json:"offers"`
-	// Needs are the capabilities Hydra must know for the plugin to run.
+	// Needs are the capabilities Platypus must know for the plugin to run.
 	Needs []string `json:"needs"`
 	// Warnings are things that don't stop the plugin, e.g. capabilities this
-	// Hydra ignores because it doesn't know them.
+	// Platypus ignores because it doesn't know them.
 	Warnings []string `json:"warnings"`
 	// Initialized is true once the plugin has answered initialize in this
 	// session; Protocol is the negotiated version ("1.1").
@@ -164,7 +213,7 @@ type PluginCapability struct {
 	Name string `json:"name"`
 	// On: the plugin offers it right now (see StorePlugin.Capabilities).
 	On bool `json:"on"`
-	// Known: this Hydra has it in its registry; unknown names are ignored.
+	// Known: this Platypus has it in its registry; unknown names are ignored.
 	Known bool `json:"known"`
 	// Orchestrated: core has code that uses it. Known but not orchestrated
 	// capabilities are recognised and not used yet.
@@ -205,13 +254,15 @@ type AuthField struct {
 	Placeholder string `json:"placeholder,omitempty"`
 }
 
-// LauncherSettings are Hydra-wide settings, persisted in settings.json.
+// LauncherSettings are Platypus-wide settings, persisted in settings.json.
 type LauncherSettings struct {
 	GamesFolder        string `json:"games_folder"` // store plugins install into <GamesFolder>/<plugin>
 	DefaultGamesFolder string `json:"default_games_folder"`
 	// CancelCleanupDays is how long a canceled download's partial data is
-	// kept before Hydra deletes it; 0 deletes it right away.
+	// kept before Platypus deletes it; 0 deletes it right away.
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
+	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
+	RatingsOnline bool `json:"ratings_online"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when
@@ -242,9 +293,23 @@ type GameDetails struct {
 	ReleaseDate  string        `json:"release_date"`
 	HeroURL      string        `json:"hero_url,omitempty"` // wide art, when the store has better than the library entry's
 	Achievements *Achievements `json:"achievements"`
+	// Compat facts from the plugin (protocol 1.10): the Steam AppID hint, the
+	// store's platforms and DRM. Nil when the plugin says nothing.
+	SteamAppID string   `json:"steam_app_id,omitempty"`
+	Platforms  []string `json:"platforms,omitempty"`
+	DRM        *DRM     `json:"drm,omitempty"`
 }
 
-// Tweak is a launch setting Hydra suggests for every game, based on the
+// DRM is the store's protection facts for a game (see plugins.DRM).
+type DRM struct {
+	DRMFree        *bool  `json:"drm_free,omitempty"`
+	OnlineRequired *bool  `json:"online_required,omitempty"`
+	Launcher       string `json:"launcher,omitempty"`
+	DenuvoLikely   *bool  `json:"denuvo_likely,omitempty"`
+	Notes          string `json:"notes,omitempty"`
+}
+
+// Tweak is a launch setting Platypus suggests for every game, based on the
 // detected hardware and session, independent of the ProtonDB tier.
 type Tweak struct {
 	ID       string            `json:"id"`
@@ -269,7 +334,7 @@ type Job struct {
 	ID          string  `json:"id"`
 	Kind        string  `json:"kind"` // "install" | "update" | "uninstall"
 	Source      string  `json:"source"`
-	GameID      string  `json:"game_id"`       // Hydra's game id
+	GameID      string  `json:"game_id"`       // Platypus's game id
 	StoreGameID string  `json:"store_game_id"` // the plugin's game id
 	Title       string  `json:"title"`
 	State       string  `json:"state"` // "queued" | "running" | "paused" | "done" | "failed" | "canceled"
@@ -292,4 +357,75 @@ type Job struct {
 	// Leftover says what may remain on disk after a cleanup the plugin
 	// couldn't perform, or why the last cleanup attempt failed.
 	Leftover string `json:"leftover,omitempty"`
+	// Target is the version the install or update asked for (the `versions`
+	// capability). It names a channel or build and never carries a password.
+	Target *VersionTarget `json:"target,omitempty"`
+	// Repair says a verify job restores the damaged files it finds (the
+	// second run, after the user agreed to it).
+	Repair bool `json:"repair,omitempty"`
+	// Destination is where a move takes the game (InstallDir is where it is).
+	Destination string `json:"destination,omitempty"`
+	// Verify is what a verify job found, once it is done.
+	Verify *VerifyReport `json:"verify,omitempty"`
+	// Options are the install-option choices the install or update sends
+	// (the `install-options` capability), kept with the job like Target.
+	Options InstallOptions `json:"options,omitempty"`
+}
+
+// VerifyReport is what a game's files check found. Checked counts the files
+// looked at; Damaged and Missing are the ones that were wrong or absent (in a
+// repair run, what is still wrong afterwards); Repaired is what a repair run
+// restored.
+type VerifyReport struct {
+	Checked  int `json:"checked"`
+	Damaged  int `json:"damaged"`
+	Missing  int `json:"missing"`
+	Repaired int `json:"repaired"`
+}
+
+// MoveCheck is what a move would do, before it is queued: where the game ends
+// up, what it needs and what the destination has free. PluginMoves says the
+// plugin does the move itself (game.move) rather than Platypus.
+type MoveCheck struct {
+	To          string `json:"to"`
+	NeedBytes   int64  `json:"need_bytes"`
+	FreeBytes   int64  `json:"free_bytes"`
+	PluginMoves bool   `json:"plugin_moves"`
+}
+
+// Relocation says core moved a game's folder: the folder the plugin reports
+// (From) and where the game is now (To). It is kept until the plugin reports
+// the new folder itself (game.relocated) or the game is moved again.
+type Relocation struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// InstallLocation is a place the install dialog offers: Folder is the install
+// folder the plugin is sent (games land in a folder of their own inside it).
+// Kind is "default" (the store's install folder), "library" (inside one of the
+// user's game folders; Root names it) or "recent" (a folder picked by hand
+// before). FreeBytes is -1 when the disk can't be read.
+type InstallLocation struct {
+	Folder    string `json:"folder"`
+	Kind      string `json:"kind"`
+	Root      string `json:"root,omitempty"`
+	FreeBytes int64  `json:"free_bytes"`
+	Exists    bool   `json:"exists"`
+}
+
+// InstallFolderCheck is what Platypus found out about a folder the user picked
+// to install into, before anything is queued.
+type InstallFolderCheck struct {
+	Folder    string `json:"folder"`
+	FreeBytes int64  `json:"free_bytes"`
+	Exists    bool   `json:"exists"`
+}
+
+// GameFolder is one of the user's library folders (Settings → Game folders).
+type GameFolder struct {
+	Path      string `json:"path"`
+	IsDefault bool   `json:"is_default"`
+	Exists    bool   `json:"exists"`
+	FreeBytes int64  `json:"free_bytes"` // -1 when the disk can't be read
 }

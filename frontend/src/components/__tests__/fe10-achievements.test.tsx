@@ -18,6 +18,9 @@ vi.mock('../../effect/runtime', () => ({
   },
   onJobs: () => () => {},
   onSession: () => () => {},
+  onFamily: () => () => {},
+  onSocial: () => () => {},
+  onPlaytime: () => () => {},
 }));
 
 import { GamePage } from '../GamePage';
@@ -65,7 +68,7 @@ const baseProps = {
   launching: false,
   tweaks: [],
   onChangeSettings: () => {},
-  onOpenSettings: () => {},
+  onSaveSettings: () => {},
   onJob: () => {},
   onJobAction: () => {},
   onAllowFolder: () => {},

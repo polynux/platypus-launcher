@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // DefaultTransport is what a manifest that names none (every legacy "api": 1
@@ -23,7 +23,7 @@ type Conn interface {
 	Close()
 }
 
-// Transport is how Hydra talks to a plugin process. The manifest selects it
+// Transport is how Platypus talks to a plugin process. The manifest selects it
 // by name (protocol.transport); a new wire format is a new implementation
 // registered here, not a change to the process lifecycle, the capability
 // gate or anything above them. Today there is one: JSON-RPC over the plugin's

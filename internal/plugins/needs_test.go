@@ -46,22 +46,22 @@ func TestUnmetNeedsKeepThePluginFromStarting(t *testing.T) {
 		m["needs"] = []string{"hologram"}
 	})
 	p := e.discover(t)["echo"]
-	// Still listable and approvable by this Hydra, with the reason shown.
+	// Still listable and approvable by this Platypus, with the reason shown.
 	if p.Status != StatusUnapproved {
 		t.Fatalf("unapproved plugin with unmet needs: %+v", p)
 	}
-	if len(p.Warnings) == 0 || !strings.Contains(strings.Join(p.Warnings, "\n"), "newer Hydra") {
-		t.Fatalf("warnings should say it needs a newer Hydra: %q", p.Warnings)
+	if len(p.Warnings) == 0 || !strings.Contains(strings.Join(p.Warnings, "\n"), "newer Platypus") {
+		t.Fatalf("warnings should say it needs a newer Platypus: %q", p.Warnings)
 	}
 	if err := e.m.Approve("echo"); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
 	p = e.discover(t)["echo"]
-	if p.Status != StatusNeedsNewer || !strings.Contains(p.Problem, "newer Hydra") || !strings.Contains(p.Problem, "hologram") {
+	if p.Status != StatusNeedsNewer || !strings.Contains(p.Problem, "newer Platypus") || !strings.Contains(p.Problem, "hologram") {
 		t.Fatalf("approved plugin with unmet needs: status %q problem %q", p.Status, p.Problem)
 	}
 	if _, err := e.m.Initialize(ctx(t), "echo"); err == nil {
-		t.Fatal("a plugin that needs a newer Hydra was started")
+		t.Fatal("a plugin that needs a newer Platypus was started")
 	}
 	if e.m.Running("echo") != 0 {
 		t.Fatal("the plugin process is running")

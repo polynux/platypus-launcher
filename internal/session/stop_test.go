@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 type recorder struct{ ch chan types.SessionEvent }

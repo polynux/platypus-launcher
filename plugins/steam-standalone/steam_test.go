@@ -1,6 +1,6 @@
-// Tests the Steam-standalone plugin through Hydra's real plugin path
+// Tests the Steam-standalone plugin through Platypus's real plugin path
 // (manager, JSON-RPC, job queue, launch-spec validation). Logins go
-// through hydra-steam-dl (built from source) against the fake CM
+// through platypus-steam-dl (built from source) against the fake CM
 // (testdata/fake_cm.py); downloads go through the same binary against the
 // fake CM and a fake CDN (see fakesteam). It doesn't reach Steam or
 // Valve's network.
@@ -21,12 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
-	"hydra-launcher/plugins/steam-standalone/fakesteam"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
+	"platypus/plugins/steam-standalone/fakesteam"
 )
 
 const id = "steam-standalone"
@@ -75,7 +75,7 @@ type env struct {
 	q           *jobs.Queue
 	store       *stores.Plugin
 	folder      string // the plugin's install folder: Games/steam
-	gamesFolder string // Hydra's Games folder
+	gamesFolder string // Platypus's Games folder
 	cmState     string
 	fix         *fakesteam.Fixture
 	cdn         *fakesteam.CDN
@@ -121,7 +121,7 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	for _, f := range binSrc {
-		if !f.IsDir() && (strings.HasSuffix(f.Name(), ".py") || f.Name() == "hydra-steam") {
+		if !f.IsDir() && (strings.HasSuffix(f.Name(), ".py") || f.Name() == "platypus-steam") {
 			copyFile(t, filepath.Join("bin", f.Name()), filepath.Join(binDir, f.Name()), 0o755)
 		}
 	}
@@ -147,7 +147,7 @@ func setup(t *testing.T) *env {
 	    "4322": {"success": true, "data": {"type": "tool", "name": "Tool Thing"}}
 	  }
 	}`), 0o644)
-	t.Setenv("HYDRA_STEAM_API_FILE", api)
+	t.Setenv("PLATYPUS_STEAM_API_FILE", api)
 
 	// The CM exchange answers from testdata/fake_cm.py: a real WebSocket CM
 	// speaking the plugin's protocol on localhost (no Valve network).
@@ -175,14 +175,14 @@ func setup(t *testing.T) *env {
 	if endpoint == "" {
 		t.Skip("fake CM didn't print a port")
 	}
-	t.Setenv("HYDRA_STEAM_CM_SERVER", endpoint)
+	t.Setenv("PLATYPUS_STEAM_CM_SERVER", endpoint)
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
 	e := &env{t: t, root: root, folder: filepath.Join(root, "Games", "steam"), gamesFolder: filepath.Join(root, "Games"), cmState: cmState}
-	// hydra-steam-dl is built once in TestMain (real environment) and only
+	// platypus-steam-dl is built once in TestMain (real environment) and only
 	// copied here, the way install.sh ships it into the plugin's bin/.
 	// Logins and downloads both go through it, against the fake CM.
-	copyFile(t, prebuiltDL, filepath.Join(binDir, "hydra-steam-dl"), 0o755)
+	copyFile(t, prebuiltDL, filepath.Join(binDir, "platypus-steam-dl"), 0o755)
 	// The fake CDN serves the fixture depot; the fake CM points the
 	// downloader at it (see fakesteam).
 	e.refreshCDN()
@@ -227,10 +227,10 @@ func (e *env) login() {
 	e.t.Helper()
 	var st types.AuthStatus
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st); err != nil || !st.LoggedIn {
+		"username": "PlatypusUser", "password": "correct-horse", "guard": "ABC12"}}, &st); err != nil || !st.LoggedIn {
 		e.t.Fatalf("login: %+v, %v", st, err)
 	}
-	if !strings.Contains(st.User, "HydraUser") && !strings.Contains(st.User, "TestPersona") {
+	if !strings.Contains(st.User, "PlatypusUser") && !strings.Contains(st.User, "TestPersona") {
 		e.t.Fatalf("user: %+v", st)
 	}
 }
@@ -325,13 +325,13 @@ func TestSteamPasswordTwoStepEmail(t *testing.T) {
 	var st types.AuthStatus
 	// Attempt 1 carries no code: the dialog must be told which kind.
 	err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse"}}, &st)
+		"username": "PlatypusUser", "password": "correct-horse"}}, &st)
 	if err == nil || !strings.Contains(err.Error(), "emailed") {
 		t.Fatalf("want email-code prompt, got %+v, %v", st, err)
 	}
 	// Attempt 2 feeds the attempt-1 code into the SAME session.
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st); err != nil || !st.LoggedIn {
+		"username": "PlatypusUser", "password": "correct-horse", "guard": "ABC12"}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("second attempt: %+v, %v", st, err)
 	}
 	if n := strings.Count(e.cmLog(), "Authentication.BeginAuthSessionViaCredentials#1"); n != 1 {
@@ -351,12 +351,12 @@ func TestSteamPasswordTwoStepTOTP(t *testing.T) {
 	e.setCMState("auth_guard", "totp")
 	var st types.AuthStatus
 	err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse"}}, &st)
+		"username": "PlatypusUser", "password": "correct-horse"}}, &st)
 	if err == nil || !strings.Contains(err.Error(), "authenticator") {
 		t.Fatalf("want authenticator prompt, got %+v, %v", st, err)
 	}
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse", "guard": "123456"}}, &st); err != nil || !st.LoggedIn {
+		"username": "PlatypusUser", "password": "correct-horse", "guard": "123456"}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("second attempt: %+v, %v", st, err)
 	}
 	if n := strings.Count(e.cmLog(), "Authentication.BeginAuthSessionViaCredentials#1"); n != 1 {
@@ -375,7 +375,7 @@ func TestSteamPasswordMobileConfirm(t *testing.T) {
 	e.setCMState("auth_mobile_approved", true)
 	var st types.AuthStatus
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse"}}, &st); err != nil || !st.LoggedIn {
+		"username": "PlatypusUser", "password": "correct-horse"}}, &st); err != nil || !st.LoggedIn {
 		t.Fatalf("confirm login: %+v, %v", st, err)
 	}
 	if n := strings.Count(e.cmLog(), "Authentication.BeginAuthSessionViaCredentials#1"); n != 1 {
@@ -386,7 +386,7 @@ func TestSteamPasswordMobileConfirm(t *testing.T) {
 	}
 }
 
-// The login uses hydra-steam-dl auth against the fake CM: the CM log must
+// The login uses platypus-steam-dl auth against the fake CM: the CM log must
 // show the Authentication RPCs, and no depotdownloader call file may exist.
 func (e *env) authLog() string {
 	e.t.Helper()
@@ -413,7 +413,7 @@ func TestSteamAuth(t *testing.T) {
 	}
 	// Wrong password is rejected, and nothing is persisted.
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "wrong"}}, &st); err == nil {
+		"username": "PlatypusUser", "password": "wrong"}}, &st); err == nil {
 		t.Fatal("wrong password accepted")
 	} else if !strings.Contains(err.Error(), "wrong account name or password") {
 		t.Fatalf("wrong-password message: %v", err)
@@ -423,7 +423,7 @@ func TestSteamAuth(t *testing.T) {
 	}
 	// Bad guard code is rejected too.
 	if err := e.call("auth.complete", map[string]any{"fields": map[string]string{
-		"username": "HydraUser", "password": "correct-horse", "guard": "WRONG"}}, &st); err == nil {
+		"username": "PlatypusUser", "password": "correct-horse", "guard": "WRONG"}}, &st); err == nil {
 		t.Fatal("bad guard code accepted")
 	} else if !strings.Contains(err.Error(), "wrong Steam Guard code") {
 		t.Fatalf("bad-code message: %v", err)
@@ -446,7 +446,7 @@ func TestSteamAuth(t *testing.T) {
 	// the user's real home, with the account alongside it.
 	fi, err := os.Stat(filepath.Join(e.pluginData(), "refresh.token"))
 	if err != nil {
-		t.Fatalf("refresh token not kept inside HYDRA_PLUGIN_DATA: %v", err)
+		t.Fatalf("refresh token not kept inside PLATYPUS_PLUGIN_DATA: %v", err)
 	}
 	if fi.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("refresh.token too open: %v", fi.Mode())
@@ -456,7 +456,7 @@ func TestSteamAuth(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(filepath.Join(e.pluginData(), "token.json"))
 	json.Unmarshal(raw, &tok)
-	if tok.Account != "HydraUser" {
+	if tok.Account != "PlatypusUser" {
 		t.Fatalf("token account: %q", tok.Account)
 	}
 	if got := os.Getenv("HOME"); got != "" {
@@ -643,7 +643,7 @@ func TestSteamStoreDetailsCached(t *testing.T) {
 		t.Fatalf("no store cache: %v", err)
 	}
 	// Now the Store knows nothing; the owned list still answers.
-	api := os.Getenv("HYDRA_STEAM_API_FILE")
+	api := os.Getenv("PLATYPUS_STEAM_API_FILE")
 	raw, err := os.ReadFile(api)
 	if err != nil {
 		t.Fatal(err)
@@ -664,8 +664,8 @@ func TestSteamStoreDetailsCached(t *testing.T) {
 	}
 }
 
-// Downloads use the Steam client's download region (or HYDRA_STEAM_CELLID)
-// as the server-list cell id hydra-steam-dl requests.
+// Downloads use the Steam client's download region (or PLATYPUS_STEAM_CELLID)
+// as the server-list cell id platypus-steam-dl requests.
 func TestSteamDownloadCellID(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -686,7 +686,7 @@ func TestSteamDownloadCellID(t *testing.T) {
 
 func TestSteamDownloadCellIDEnv(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // no Steam client config
-	t.Setenv("HYDRA_STEAM_CELLID", "96")
+	t.Setenv("PLATYPUS_STEAM_CELLID", "96")
 	e := setup(t)
 	e.login()
 	game := e.find(e.library(), "4321")
@@ -843,7 +843,7 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// The QR login path: auth.begin starts hydra-steam-dl auth in the
+// The QR login path: auth.begin starts platypus-steam-dl auth in the
 // background and returns the challenge as block-art; approving it (the
 // test flips the fake CM's auth_qr_approved knob, like the Steam mobile
 // app would) makes an empty auth.complete log in.
@@ -936,7 +936,7 @@ func TestSteamQRConcurrentBegin(t *testing.T) {
 	}
 }
 
-// countAuthHelpers counts this test's live vs zombie hydra-steam-dl auth
+// countAuthHelpers counts this test's live vs zombie platypus-steam-dl auth
 // processes: direct children of the harness's plugin process only, so
 // helpers from parallel packages, other tests, or the user's dev launcher
 // never leak into the count. (An earlier version scraped `ps` output for
@@ -963,12 +963,12 @@ func (e *env) countAuthHelpers() (alive, zombie int) {
 		if state == "Z" {
 			// Zombies have no cmdline; comm (15 chars) still names
 			// the binary. Only auth helpers spawn in this test.
-			if comm == "hydra-steam-dl" {
+			if comm == "platypus-steam-dl" {
 				zombie++
 			}
 			continue
 		}
-		if procExe(cmdline) != "hydra-steam-dl" || !slices.Contains(cmdline, "auth") {
+		if procExe(cmdline) != "platypus-steam-dl" || !slices.Contains(cmdline, "auth") {
 			continue
 		}
 		alive++

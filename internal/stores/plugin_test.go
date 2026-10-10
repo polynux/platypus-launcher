@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 // echoEnv is the whole plugin path wired the way app.go wires it, around the
@@ -55,7 +55,7 @@ func newEchoEnv(t *testing.T) *echoEnv {
 	if err := os.MkdirAll(filepath.Join(pluginDir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("go", "build", "-o", filepath.Join(pluginDir, "bin/hydra-echo"), "hydra-launcher/plugins/echo").CombinedOutput()
+	out, err := exec.Command("go", "build", "-o", filepath.Join(pluginDir, "bin/platypus-echo"), "platypus/plugins/echo").CombinedOutput()
 	if err != nil {
 		t.Fatalf("build echo: %s", out)
 	}
@@ -169,7 +169,7 @@ func TestEchoLibraryNeedsLogin(t *testing.T) {
 	}
 	e.login(t)
 	lib, err := e.store.Library(e.ctx(t))
-	if err != nil || len(lib) != 6 {
+	if err != nil || len(lib) != 10 {
 		t.Fatalf("library: %d games, %v", len(lib), err)
 	}
 	tiny := e.game(t, "tiny")
@@ -196,6 +196,11 @@ func TestEchoDetails(t *testing.T) {
 	d, err = e.store.Details(e.ctx(t), e.game(t, "slow"))
 	if err != nil || d.Summary != "" || d.Achievements != nil {
 		t.Fatalf("empty details: %+v, %v", d, err)
+	}
+	// Asking for a game with no metadata must not stop the plugin's details
+	// for the others: that answer is empty, not "method not found".
+	if d, err = e.store.Details(e.ctx(t), e.game(t, "tiny")); err != nil || d.Summary == "" {
+		t.Fatalf("details after a game without metadata: %+v, %v", d, err)
 	}
 	if esc := e.game(t, "escape"); !esc.IsInstalled || !esc.OutsideFolder || esc.Installable {
 		t.Fatalf("escape: %+v", esc)

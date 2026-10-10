@@ -3,7 +3,7 @@ import { GAMES, RUNNERS, FIXES, ACTIVITY, PIPELINE, achievementsFor, SCREENS, HO
 import { ActivityFeed } from './p6.jsx';
 
 /* ============================================================
-   /7 — GOG Galaxy-inspired warm gradient dashboard for Hydra:
+   /7 — GOG Galaxy-inspired warm gradient dashboard for Platypus:
    colored radial wash, slim icon+list sidebar, summary plates,
    recently-played rails with avatar chips, dense table.
    Game page: two-pane with media top, settings form inline.
@@ -24,8 +24,8 @@ export function GalaxyDashboard() {
         {/* sidebar */}
         <aside className="flex h-screen w-56 flex-none flex-col border-r border-white/[0.07] bg-black/25 backdrop-blur-sm">
           <div className="flex items-center gap-2.5 px-5 py-5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-rose-500 text-[14px] font-black text-black">H</span>
-            <span className="text-[15px] font-bold tracking-tight">Hydra</span>
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-rose-500 text-[14px] font-black text-black">P</span>
+            <span className="text-[15px] font-bold tracking-tight">Platypus</span>
           </div>
           <div className="px-5 pb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">Games</div>
           <nav className="text-[13.5px]">
@@ -43,7 +43,7 @@ export function GalaxyDashboard() {
               {i === 1 && <span className="rounded-full bg-amber-400 px-1.5 font-mono text-[9px] font-bold text-black">9</span>}
             </button>
           ))}
-          <div className="mt-auto p-4 text-[10px] text-white/25">Hydra v0.2 · wayland</div>
+          <div className="mt-auto p-4 text-[10px] text-white/25">Platypus v0.2 · wayland</div>
         </aside>
 
         {/* main */}
@@ -160,7 +160,7 @@ export function GalaxyGame() {
     >
       <div className="flex">
         <aside className="flex h-screen w-56 flex-none flex-col border-r border-white/[0.07] bg-black/25">
-          <div className="px-5 py-5 text-[15px] font-bold">Hydra</div>
+          <div className="px-5 py-5 text-[15px] font-bold">Platypus</div>
           {[['Dashboard', '/7'], ['Game page', null], ['Achievements', null], ['Activity', null]].map(([label, href]) => (
             <a key={label} href={href} className="px-5 py-2 text-[13.5px] text-white/55 hover:text-white">{label}</a>
           ))}
@@ -196,7 +196,7 @@ export function GalaxyGame() {
                     </div>
                     <div>
                       <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-widest text-white/40">Wine prefix</label>
-                      <input defaultValue="~/.hydra/prefixes/hades-2" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2.5 font-mono text-[12px] text-white focus:outline-none focus:border-amber-300/60" />
+                      <input defaultValue="~/.platypus/prefixes/hades-2" className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2.5 font-mono text-[12px] text-white focus:outline-none focus:border-amber-300/60" />
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-4 gap-2">

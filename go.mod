@@ -1,4 +1,4 @@
-module hydra-launcher
+module platypus
 
 go 1.25.0
 

@@ -11,8 +11,8 @@ export function PosterEditorial() {
       <header className="border-b border-[#1a1814]">
         <div className="mx-auto flex max-w-[1180px] items-center justify-between px-10 py-5">
           <div className="flex items-baseline gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#1a1814] text-[15px] font-black text-[#f4f1ea]">H</span>
-            <span className="text-[19px] font-extrabold tracking-tight">The Hydra Register</span>
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-[#1a1814] text-[15px] font-black text-[#f4f1ea]">P</span>
+            <span className="text-[19px] font-extrabold tracking-tight">The Platypus Register</span>
           </div>
           <nav className="flex gap-7 text-[13px] font-semibold">
             <button className="border-b-2 border-[#c14a2e] pb-0.5 text-[#c14a2e]">Collection</button>
@@ -35,7 +35,7 @@ export function PosterEditorial() {
               The whole collection,<br />kept in working order.
             </h1>
             <p className="mt-6 max-w-[54ch] text-[16.5px] leading-[1.65] text-[#3d382e]">
-              Hydra keeps every store you buy from in one shelf, and — this is the part the
+              Platypus keeps every store you buy from in one shelf, and — this is the part the
               others skip — records what each game needs to actually run on Linux. Below,
               the state of the shelf this morning: what verified clean, what wants a tweak,
               and what the community has learned since Friday.
@@ -104,7 +104,7 @@ export function PosterEditorial() {
 
         {/* footer strip */}
         <footer className="flex items-center justify-between border-t border-[#1a1814] py-5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#8a8272]">
-          <span>Hydra Register · set in Bricolage Grotesque</span>
+          <span>Platypus Register · set in Bricolage Grotesque</span>
           <span>printed locally · no cloud required</span>
         </footer>
       </main>

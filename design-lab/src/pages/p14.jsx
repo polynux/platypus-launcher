@@ -30,8 +30,8 @@ export function It14Dashboard() {
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg,#120e08 3%, rgba(18,14,8,.3) 45%, rgba(18,14,8,.65))' }} />
         <div className="absolute inset-x-0 top-0 flex items-center justify-between px-10 py-5">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-rose-500 text-[13px] font-black text-[#120e08]">H</span>
-            <span className="text-[15px] font-extrabold tracking-tight">Hydra</span>
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-rose-500 text-[13px] font-black text-[#120e08]">P</span>
+            <span className="text-[15px] font-extrabold tracking-tight">Platypus</span>
           </div>
           <div className="flex items-center gap-2.5">
             <span className="rounded-full bg-black/40 px-4 py-2 text-[12px] font-bold text-white/70 backdrop-blur">search…</span>
@@ -216,7 +216,7 @@ export function It14Game() {
         <aside className="space-y-4">
           <div className="rounded-2xl bg-white/[0.045] p-5 ring-1 ring-white/[0.07]">
             <h3 className="mb-3 text-[13px] font-bold">Configuration summary</h3>
-            {[['Runner', game.runner], ['DXVK', dxvk], ['Sync', sync], ['Upscaler', ups], ['HUD', hud], ['Prefix', `~/.hydra/pfx/${game.id}`]].map(([k, v]) => (
+            {[['Runner', game.runner], ['DXVK', dxvk], ['Sync', sync], ['Upscaler', ups], ['HUD', hud], ['Prefix', `~/.platypus/pfx/${game.id}`]].map(([k, v]) => (
               <div key={k} className="flex justify-between border-b border-white/[0.05] py-2 font-mono text-[11px] last:border-0">
                 <span className="text-white/35">{k}</span><span className="truncate pl-2 text-white/85">{v}</span>
               </div>

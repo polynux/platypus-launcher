@@ -1,6 +1,6 @@
 package steam_test
 
-// Unit-level checks of hydra-steam helpers, run by loading the script as a
+// Unit-level checks of platypus-steam helpers, run by loading the script as a
 // module (no Steam, no downloader).
 
 import (
@@ -14,7 +14,7 @@ import (
 const pyLoad = `
 import importlib.machinery, importlib.util, sys
 sys.path.insert(0, "bin")
-loader = importlib.machinery.SourceFileLoader("hs", "bin/hydra-steam")
+loader = importlib.machinery.SourceFileLoader("hs", "bin/platypus-steam")
 spec = importlib.util.spec_from_loader("hs", loader)
 hs = importlib.util.module_from_spec(spec)
 loader.exec_module(hs)
@@ -29,7 +29,7 @@ func pyRun(t *testing.T, script string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// STEAM-4: the beta branch and its password reach hydra-steam-dl's stdin
+// STEAM-4: the beta branch and its password reach platypus-steam-dl's stdin
 // request (never argv), for the size query and for install/update.
 func TestSteamBranchPasswordInRequest(t *testing.T) {
 	got := pyRun(t, `

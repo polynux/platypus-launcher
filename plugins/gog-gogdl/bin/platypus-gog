@@ -1,0 +1,863 @@
+#!/usr/bin/env python3
+"""Platypus store plugin for GOG, wrapping gogdl.
+
+Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+over stdin/stdout, one object per line. Everything store-specific is done by
+the `gogdl` CLI (Heroic's downloader, Heroic-Games-Launcher/heroic-gogdl),
+which keeps the user's tokens in its own auth file; this plugin only passes it
+paths and a one-time authorization code, and never stores credentials.
+
+GOG games are DRM-free: gogdl downloads offline installers and unpacks them,
+and the games run without any GOG client. Platypus runs them through its own
+runner pipeline.
+
+gogdl notes that shape this plugin:
+  - `--auth-config-path` picks where tokens live; the plugin points it into
+    $PLATYPUS_PLUGIN_DATA so Platypus's sandbox rules hold.
+  - `auth --code <code>` exchanges a code from the OAuth login page.
+  - `auth` (no arguments) prints the stored credentials as JSON, which is how
+    login state is checked without network.
+  - Library listing needs GOG's web API, which gogdl doesn't expose directly;
+    the plugin calls GOG's gamesdb endpoint with gogdl's credentials itself.
+  - `info` prints the download and disk size; `download` installs; progress
+    lines come on stdout/stderr and are parsed into job.progress.
+"""
+
+import glob
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+
+API = 1
+CODE_AUTH_REQUIRED = -32001
+# GOG's login page for Platypus's client id (gogdl's own OAuth client). The page
+# redirects to embed.gog.com/on_login_success?... with the code in the query.
+LOGIN_URL = ("https://auth.gog.com/auth?client_id=46899977096215655&response_type=code"
+             "&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient")
+
+out_lock = threading.Lock()
+jobs_lock = threading.Lock()
+# Serializes read-modify-write of installed.json / titles.json: finishing jobs
+# and library listings run on different threads.
+state_lock = threading.RLock()
+jobs = {}  # jobId -> {"proc": Popen, "canceled": bool}
+
+MIB = 1024 * 1024
+# gogdl download progress: "Progress: 42.13% (123.45/292.88 MiB) @ 5.61 MiB/s"
+PROGRESS_RE = re.compile(r"Progress:\s*([\d.]+)%\s*\(([\d.]+)/([\d.]+)\s*MiB\)(?:\s*@\s*([\d.]+)\s*MiB/s)?")
+
+
+class RPCError(Exception):
+    def __init__(self, message, code=-32000):
+        super().__init__(message)
+        self.code = code
+
+
+def send(msg):
+    msg["jsonrpc"] = "2.0"
+    line = json.dumps(msg, separators=(",", ":"))
+    with out_lock:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+
+def notify(method, params):
+    send({"method": method, "params": params})
+
+
+def log(level, message):
+    notify("log", {"level": level, "message": message})
+
+
+def auth_file():
+    """Where gogdl keeps its tokens: the plugin's private data folder."""
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+    os.makedirs(data, exist_ok=True)
+    return os.path.join(data, "gogdl-auth.json")
+
+
+def gogdl(*args, timeout=300):
+    """Runs gogdl and returns (exit code, stdout, stderr)."""
+    try:
+        p = subprocess.run(["gogdl", "--auth-config-path", auth_file(), *args],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        raise RPCError("gogdl is not installed; get the binary from "
+                       "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
+    except subprocess.TimeoutExpired:
+        raise RPCError(f"gogdl {args[0]} timed out")
+    return p.returncode, p.stdout, p.stderr
+
+
+def tail(text, n=3):
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return " · ".join(lines[-n:]) if lines else "no output"
+
+
+def credentials():
+    """The stored credentials, or None. `gogdl auth` prints them without
+    touching the network when they are present."""
+    code, out, _ = gogdl("auth", timeout=60)
+    if code != 0:
+        return None
+    try:
+        creds = json.loads(out)
+    except ValueError:
+        return None
+    if not isinstance(creds, dict) or "access_token" not in creds:
+        return None
+    return creds
+
+
+def api_get(url, token):
+    # Test hook: tests point this at a file with the response, so nothing
+    # reaches the network. Not set in normal runs.
+    hook = os.environ.get("PLATYPUS_GOG_API_FILE")
+    if hook:
+        with open(hook) as f:
+            return json.load(f)
+    headers = {"User-Agent": "gogdl (Platypus)"}
+    if token:  # anonymous endpoints can reject an empty Bearer
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode())
+
+
+# --- auth ---------------------------------------------------------------
+
+def auth_status(_params=None):
+    creds = credentials()
+    if not creds:
+        return {"loggedIn": False}
+    user = ""
+    try:
+        me = api_get("https://embed.gog.com/userData.json", creds["access_token"])
+        user = me.get("username") or ""
+    except Exception:
+        pass  # expired token or network trouble: still logged in, name unknown
+    return {"loggedIn": True, "user": user} if user else {"loggedIn": True}
+
+
+def auth_begin(_params):
+    return {
+        "url": LOGIN_URL,
+        "instructions": "Log in to GOG in your browser. You land on a page that "
+                        "doesn't load (on_login_success): copy its full address and paste "
+                        "it here, or just the code=... value from it.",
+        "fields": [{"id": "code", "label": "code or page address", "placeholder": "embed.gog.com/on_login_success?…code=…", "secret": True}],
+    }
+
+
+def extract_code(text):
+    text = (text or "").strip()
+    if text.startswith("{"):  # the whole JSON query string pasted by mistake
+        try:
+            text = json.loads(text).get("code", "")
+        except ValueError:
+            pass
+    m = re.search(r"[?&]code=([^&\s]+)", text)
+    if m:
+        return m.group(1)
+    return text.strip('"')
+
+
+def auth_complete(params):
+    code = extract_code(((params or {}).get("fields") or {}).get("code"))
+    if not re.fullmatch(r"[A-Za-z0-9._-]{5,512}", code or ""):
+        raise RPCError("that doesn't look like the address of the login page; "
+                       "copy the whole address including the code= part")
+    # NOTE (PLUG-3): the one-time code travels on argv, visible in ps(1)
+    # while auth runs. gogdl offers no stdin/env alternative for --code
+    # (see `gogdl auth --help`), so this is upstream-limited; the code is
+    # short-lived, single-use, and never logged (only the CLI's tail is kept).
+    rc, out, err = gogdl("auth", "--code", code, timeout=120)
+    if rc != 0 or not credentials():
+        raise RPCError(f"login failed: {tail(err)}")
+    return auth_status()
+
+
+def auth_logout(_params):
+    try:
+        os.remove(auth_file())
+    except FileNotFoundError:
+        pass
+    return {"loggedIn": False}
+
+
+# --- library ------------------------------------------------------------
+
+def game_details_meta(app_id, token):
+    """The store's product data: art and description for the game page."""
+    try:
+        return api_get(f"https://www.gog.com/games/ajax/filtered?search={app_id}", token)
+    except Exception:
+        return {}
+
+
+def library_list(_params):
+    creds = credentials()
+    if not creds:
+        raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
+    token = creds["access_token"]
+    try:
+        # userData.json no longer lists owned games (it dropped ownedGames);
+        # the account endpoint does, with title and art included.
+        page, games = 1, []
+        while True:
+            data = api_get(f"https://www.gog.com/account/getFilteredProducts"
+                           f"?mediaType=1&page={page}", token)
+            games += data.get("products") or []
+            if page >= (data.get("totalPages") or 1):
+                break
+            page += 1
+    except Exception as e:
+        raise RPCError(f"GOG API is unreachable: {e}")
+    installed = installed_games()
+    remember_titles({str(g.get("id")): g["title"] for g in games if g.get("id") and g.get("title")})
+    out = []
+    for g in games:
+        app = str(g.get("id") or "")
+        if not app or g.get("isGame") is False:
+            continue
+        title = g.get("title") or app
+        img = (g.get("image") or "").strip()
+        if img.startswith("//"):
+            img = "https:" + img
+        entry = {
+            "id": app,
+            "title": title,
+            "installed": app in installed,
+            "installable": True,
+            "coverUrl": f"{img}_product_card_v2_mobile_slider_639_2.jpg" if img else "",
+            "heroUrl": f"{img}_scaled_1366x768.jpg" if img else "",
+            "bannerUrl": f"{img}.jpg" if img else "",
+        }
+        # Movie extras sit in the same account list.
+        if g.get("isMovie") or g.get("category") == "movie" or g.get("url", "").startswith("/movie/"):
+            entry["installable"] = False
+            entry["note"] = "This is a movie or extra, not a game."
+        if app in installed:
+            add_installed(entry, installed[app])
+        out.append(entry)
+    for app, ig in installed.items():  # installed but missing from the owned list
+        if not any(e["id"] == app for e in out):
+            entry = {"id": app, "title": ig.get("title") or known_titles().get(app) or app,
+                     "installable": False}
+            add_installed(entry, ig)
+            out.append(entry)
+    return {"games": out}
+
+
+def known_titles():
+    """Titles the account listing returned, so an install whose account entry
+    later vanishes keeps its name instead of the numeric id."""
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+    try:
+        with open(os.path.join(data, "titles.json")) as f:
+            t = json.load(f)
+        return t if isinstance(t, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def remember_titles(new):
+    with state_lock:
+        known = known_titles()
+        if all(known.get(k) == v for k, v in new.items()):
+            return
+        known.update(new)
+        data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+        try:
+            write_json_atomic(os.path.join(data, "titles.json"), known)
+        except OSError:
+            pass
+
+
+def write_json_atomic(path, obj):
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".new"
+    with open(tmp, "w") as f:
+        json.dump(obj, f)
+    os.replace(tmp, path)
+
+
+def installed_games():
+    """gogdl doesn't list installs, so the plugin scans its own state file."""
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+    try:
+        with open(os.path.join(data, "installed.json")) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_installed(state):
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
+    write_json_atomic(os.path.join(data, "installed.json"), state)
+
+
+def add_installed(entry, ig):
+    entry["installed"] = True
+    entry["installPath"] = ig.get("path", "")
+    entry["version"] = ig.get("version", "")
+    entry["native"] = ig.get("platform", "windows") == "linux"
+
+
+def install_size(params):
+    app, platform = params["id"], platform_of(params["id"])
+    code, out, err = gogdl("info", app, "--platform", platform, timeout=600)
+    if code != 0:
+        # Logged out = gogdl says so, or no stored credentials. A bare "auth"
+        # substring also matches unrelated words ("authoritative").
+        if "not logged in" in err.lower() or credentials() is None:
+            raise RPCError("log in to GOG first", CODE_AUTH_REQUIRED)
+        raise RPCError(f"gogdl info failed: {tail(err)}")
+    try:
+        data = json.loads(out)
+    except ValueError:
+        raise RPCError(f"gogdl info printed no JSON: {tail(err)}")
+    # Real gogdl (v1.3+) nests the sizes per language under "size"; the *
+    # entry can be all zeros while the actual language carries the numbers,
+    # so take the biggest entry. Older builds printed the fields at top level.
+    sizes = data.get("size") or {"*": data}
+    entries = list(sizes.values()) or [data]
+    best = max(entries, key=lambda e: int((e or {}).get("disk_size") or 0))
+    return {"downloadBytes": int(best.get("download_size") or 0),
+            "diskBytes": int(best.get("disk_size") or 0)}
+
+
+def platform_of(app):
+    """The platform to install: what the user installed before, else what the
+    product offers (a game with no Linux installer must install Windows).
+    gogdl crashes on a platform with no installer, so never guess linux."""
+    ig = installed_games().get(app)
+    if ig:
+        return ig.get("platform", "windows")
+    try:
+        data = api_get(f"https://api.gog.com/products/{app}?expand=downloads", "")
+        installers = (data.get("downloads") or {}).get("installers") or []
+        for i in installers:
+            if i.get("os") == "linux":
+                return "linux"
+    except Exception:
+        pass
+    return "windows"
+
+
+# --- jobs ---------------------------------------------------------------
+
+def start_job(params, kind):
+    app, job_id = params["id"], params["jobId"]
+    if kind == "uninstall":
+        ig = installed_games().get(app)
+        if not ig:
+            raise RPCError(f"{app} is not installed")
+        ev = threading.Event()
+        if not claim_job(job_id, {"proc": None, "canceled": False, "id": app, "event": ev}):
+            return {}
+        threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
+        return {}
+    path = params.get("installDir") or ""
+    if not os.path.isabs(path):
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
+    if kind == "update" and app in installed_games():
+        cmd = ["update", app, "--path", path]
+    else:
+        cmd = ["download", app, "--path", path]
+    cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
+    # Platypus resends a job with the same jobId after a crash: run it once. A job
+    # just paused or canceled is still stopping: wait, then resume from what
+    # gogdl left in the game folder.
+    if not claim_job(job_id, {"proc": None, "canceled": False, "id": app, "path": path}):
+        return {}
+    job_started(job_id, app, kind, path)
+    try:
+        proc = subprocess.Popen(["gogdl", "--auth-config-path", auth_file(), *cmd],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=1)
+    except FileNotFoundError:
+        with jobs_lock:
+            jobs.pop(job_id, None)
+        raise RPCError("gogdl is not installed; get the binary from "
+                       "github.com/Heroic-Games-Launcher/heroic-gogdl/releases")
+    with jobs_lock:
+        job = jobs.setdefault(job_id, {"canceled": False, "id": app})
+        job["proc"] = proc
+        canceled = job["canceled"]
+        job["title"] = params.get("title") or ""
+    threading.Thread(target=follow_job, args=(job_id, kind, proc), daemon=True).start()
+    if canceled:  # job.cancel arrived while the process was starting
+        stop_proc(proc, grace=5)
+    return {}
+
+
+def follow_job(job_id, kind, proc):
+    state = {"jobId": job_id, "phase": "downloading", "percent": 0}
+    for line in proc.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        m = PROGRESS_RE.search(line)
+        if m:
+            state["percent"] = float(m.group(1))
+            state["bytes"] = int(float(m.group(2)) * MIB)
+            state["total"] = int(float(m.group(3)) * MIB)
+            if m.group(4):
+                state["speed"] = float(m.group(4)) * MIB
+            notify("job.progress", dict(state))
+    rc = proc.wait()
+    with jobs_lock:
+        job = jobs.pop(job_id, {})
+    if job.get("canceled"):
+        job_stopped(job_id)
+        return
+    if rc != 0:
+        job_stopped(job_id)
+        notify("job.failed", {"jobId": job_id, "error": f"gogdl exited with {rc}"})
+        return
+    record_install(job, kind)
+    job_finished(job_id)
+    notify("job.done", {"jobId": job_id})
+
+
+def record_install(job, kind):
+    """Remember the install so launches and updates can find it. gogdl imports
+    don't exist here, so the plugin keeps its own index of what it installed."""
+    app, path = job.get("id"), job.get("path")
+    if not app or not path:
+        return
+    game_dir = find_game_dir(app, path)
+    exe = find_executable(game_dir)
+    platform = platform_of(app)
+    with state_lock:
+        state = installed_games()
+        state[app] = {
+            "path": game_dir,
+            "platform": platform,
+            "version": "",
+            "executable": exe,
+            "title": job.get("title") or known_titles().get(app, ""),
+        }
+        save_installed(state)
+
+
+def find_game_dir(app, path):
+    """gogdl unpacks into <path>/<folder_name> (the store's folder name, not
+    the numeric id). Find the dir holding the game's goggame-<id>.info marker;
+    fall back to the id-named dir, then the path itself."""
+    direct = os.path.join(path, app)
+    if os.path.isdir(direct):
+        return direct
+    try:
+        for name in sorted(os.listdir(path)):
+            sub = os.path.join(path, name)
+            if os.path.isfile(os.path.join(sub, f"goggame-{app}.info")):
+                return sub
+    except OSError:
+        pass
+    return path
+
+
+def find_executable(game_dir):
+    """The start script or binary gogdl unpacked: start.sh, then the game's
+    own .exe (Windows installs ship many helper exes; goggame-*.info names
+    the real one), then any *.sh."""
+    for name in ("start.sh",):
+        p = os.path.join(game_dir, name)
+        if os.path.isfile(p):
+            return p
+    # The goggame info file carries the primary executable (playTasks).
+    candidates = []
+    for info in glob.glob(os.path.join(game_dir, "goggame-*.info")):
+        try:
+            with open(info, encoding="utf-8-sig") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        for task in (data.get("playTasks") or []):
+            rel = task.get("path") or ""
+            if not rel:
+                continue
+            p = os.path.join(game_dir, rel.replace("\\", os.sep))
+            if os.path.isfile(p):
+                candidates.append((not task.get("isPrimary"), p))
+    if candidates:
+        # Prefer the primary task; any playTask beats guessing a script.
+        return min(candidates, key=lambda c: c[0])[1]
+    try:
+        for root, _dirs, files in os.walk(game_dir):
+            for f in files:
+                if f.endswith(".sh") and os.access(os.path.join(root, f), os.X_OK):
+                    return os.path.join(root, f)
+    except OSError:
+        pass
+    return ""
+
+
+def follow_uninstall(job_id, app, ev=None):
+    if ev is not None:
+        ev.wait(0.5)
+    else:
+        time.sleep(0.2)
+    with jobs_lock:
+        if jobs.get(job_id, {}).get("canceled"):
+            jobs.pop(job_id, None)
+            return
+    with state_lock:
+        state = installed_games()
+        ig = state.pop(app, None)
+        with jobs_lock:
+            if jobs.get(job_id, {}).get("canceled"):
+                jobs.pop(job_id, None)
+                return
+            jobs.pop(job_id, None)
+        if ig and ig.get("path") and os.path.isdir(ig["path"]):
+            import shutil
+            shutil.rmtree(ig["path"], ignore_errors=True)
+        save_installed(state)
+    notify("job.done", {"jobId": job_id})
+
+
+def claim_job(job_id, entry, timeout=90):
+    """Registers entry as the run of job_id and returns True. False when the
+    job is already running (a repeated start). A job that job.cancel just
+    stopped is still shutting down gogdl: wait for it to go, so a resume with
+    the same jobId doesn't lose to the old run and report nothing."""
+    deadline = time.monotonic() + timeout
+    while True:
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job is None:
+                jobs[job_id] = entry
+                return True
+            if not job.get("canceled"):
+                return False
+        if time.monotonic() > deadline:
+            raise RPCError("the previous run of this download is still stopping; try again in a moment")
+        time.sleep(0.05)
+
+
+def stop_proc(proc, grace=15):
+    if proc is None:
+        return
+    try:
+        proc.send_signal(signal.SIGINT)
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+
+
+def job_cancel(params):
+    with jobs_lock:
+        job = jobs.get(params.get("jobId"))
+        if job:
+            job["canceled"] = True
+            proc, ev = job.get("proc"), job.get("event")
+        else:
+            proc, ev = None, None
+    if ev is not None:
+        ev.set()
+    if proc:
+        threading.Thread(target=stop_proc, args=(proc,), daemon=True).start()
+    return {}
+
+
+# --- discarding a canceled job's data ---------------------------------------
+# gogdl unpacks into <installDir>/<the store's folder name> and keeps its resume
+# files (.gogdl-resume, the download cache) inside that folder, so deleting the
+# folder deletes everything. The plugin can't know the folder's name before
+# gogdl has made it, so it remembers which folders appeared in the install folder
+# while an install job ran ($PLATYPUS_PLUGIN_DATA/jobs-meta.json) and job.discard
+# deletes exactly those, never one that is installed.
+
+meta_lock = threading.RLock()
+JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def meta_file():
+    return os.path.join(os.environ.get("PLATYPUS_PLUGIN_DATA") or ".", "jobs-meta.json")
+
+
+def load_meta():
+    try:
+        with open(meta_file()) as f:
+            meta = json.load(f)
+        return meta if isinstance(meta, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def list_dir(path):
+    try:
+        return sorted(os.listdir(path))
+    except OSError:
+        return []
+
+
+def installed_dirs():
+    return [os.path.realpath(g["path"]) for g in installed_games().values() if g.get("path")]
+
+
+def claim_new_dirs(meta, m):
+    """Attributes to the job the folders that showed up since it began and that
+    nothing else accounts for: not there before, not another job's, not installed."""
+    taken = set(m["pre"]) | set(m["dirs"])
+    for o in meta.values():
+        if o is not m and o.get("installDir") == m["installDir"]:
+            taken |= set(o.get("dirs", []))
+    installed = installed_dirs()
+    for name in list_dir(m["installDir"]):
+        path = os.path.realpath(os.path.join(m["installDir"], name))
+        if name in taken or path in installed:
+            continue
+        m["dirs"].append(name)
+
+
+def job_started(job_id, app, kind, install_dir):
+    if kind != "install":
+        return
+    with meta_lock:
+        meta = load_meta()
+        m = meta.get(job_id)
+        if m is None:
+            meta[job_id] = {"app": app, "installDir": install_dir, "pre": list_dir(install_dir), "dirs": []}
+        else:
+            claim_new_dirs(meta, m)  # a run that was cut short, now resuming
+        try:
+            write_json_atomic(meta_file(), meta)
+        except OSError as e:
+            log("warn", f"couldn't record job {job_id}: {e}")
+
+
+def job_stopped(job_id):
+    """The run ended without finishing: note what it left."""
+    with meta_lock:
+        meta = load_meta()
+        m = meta.get(job_id)
+        if m is None:
+            return
+        claim_new_dirs(meta, m)
+        try:
+            write_json_atomic(meta_file(), meta)
+        except OSError:
+            pass
+
+
+def job_finished(job_id):
+    with meta_lock:
+        meta = load_meta()
+        if meta.pop(job_id, None) is not None:
+            try:
+                write_json_atomic(meta_file(), meta)
+            except OSError:
+                pass
+
+
+def job_discard(params):
+    """Deletes the partial install of a job that was canceled: the folders it
+    created in the install folder. Updates and anything installed are left."""
+    job_id = params.get("jobId")
+    if not isinstance(job_id, str) or not JOB_ID_RE.fullmatch(job_id):
+        raise RPCError("invalid jobId", -32602)
+    job_cancel({"jobId": job_id})
+    deadline = time.monotonic() + 90
+    while True:  # the job may still be shutting down
+        with jobs_lock:
+            running = job_id in jobs
+        if not running:
+            break
+        if time.monotonic() > deadline:
+            raise RPCError("the download is still stopping; try again in a moment")
+        time.sleep(0.05)
+    with meta_lock:
+        meta = load_meta()
+        m = meta.pop(job_id, None)
+        if m is not None:
+            if params.get("kind", "install") == "install" and m.get("installDir") == params.get("installDir"):
+                claim_new_dirs({**meta, job_id: m}, m)
+                remove_job_dirs(m)
+            try:
+                write_json_atomic(meta_file(), meta)
+            except OSError:
+                pass
+    return {}
+
+
+def remove_job_dirs(m):
+    base = os.path.realpath(m["installDir"])
+    installed = installed_dirs()
+    for name in m.get("dirs", []):
+        if not isinstance(name, str) or name in ("", ".", "..") or "/" in name:
+            continue
+        path = os.path.join(base, name)
+        real = os.path.realpath(path)
+        if os.path.islink(path) or not os.path.isdir(path) or os.path.dirname(real) != base:
+            continue
+        if any(i == real or i.startswith(real + os.sep) or real.startswith(i + os.sep) for i in installed):
+            log("warn", f"not deleting {path}: it holds an installed game")
+            continue
+        shutil.rmtree(path, ignore_errors=True)
+
+
+# --- launch -------------------------------------------------------------
+
+def launch_spec(params):
+    app = params["id"]
+    ig = installed_games().get(app)
+    if not ig:
+        raise RPCError(f"{app} is not installed")
+    path, exe = ig.get("path") or "", ig.get("executable") or ""
+    if not exe or not os.path.isfile(exe):
+        exe = find_executable(path)
+    if not exe:
+        raise RPCError(f"couldn't find a start script for {app} in {path or 'the install folder'}")
+    native = ig.get("platform") == "linux"
+    # Windows installers run their exe directly through Proton; Linux installers
+    # run the start script. GOG scripts take care of their own working dir.
+    return {
+        "exe": exe,
+        "args": [],
+        "cwd": os.path.dirname(exe),
+        "env": {},
+        "needsWine": not native,
+    }
+
+
+# --- dispatch -----------------------------------------------------------
+
+def initialize(params):
+    return {"name": "GOG (gogdl)", "version": "0.1.0", "api": API,
+            "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
+
+
+def game_details(params):
+    """Art and description from the product API, no login needed. The old
+    store-search endpoint (games/ajax/filtered) stopped returning products
+    for id searches."""
+    app = params["id"]
+    try:
+        data = api_get(f"https://api.gog.com/products/{app}?expand=description,screenshots", "")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:  # the other plugins error on an unknown id too
+            raise RPCError(f"{app} is not a GOG product")
+        return {}
+    except Exception:
+        return {}
+    if isinstance(data, dict) and data.get("_test"):
+        data = data["_test"]  # test hook: file carries the whole response
+    try:
+        out = {}
+        desc = data.get("description") or {}
+        if isinstance(desc, str):
+            text = desc
+        else:
+            text = desc.get("lead") or desc.get("full") or ""
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            out["summary"] = text[:2000]
+        genres = data.get("genres") or []
+        names = [g.get("name") if isinstance(g, dict) else str(g) for g in genres]
+        names = [g for g in names if g]
+        if names:
+            out["genres"] = names[:4]
+        date = data.get("release_date") or ""
+        if isinstance(date, dict):
+            date = date.get("date") or ""
+        if date:
+            out["releaseDate"] = str(date)[:10]
+        shots = []
+        for s in (data.get("screenshots") or [])[:6]:
+            if not isinstance(s, dict):
+                continue
+            # formatted_images carries ready URLs; the template with {formatter}
+            # is the fallback. .ggvgl is a large screenshot format.
+            u = ""
+            for f in s.get("formatted_images") or []:
+                if f.get("formatter_name") == "ggvgl":
+                    u = f.get("image_url") or ""
+                    break
+            u = u or (s.get("formatter_template_url") or "").replace("{formatter}", ".ggvgl.jpg")
+            if not u:
+                continue
+            if u.startswith("//"):
+                u = "https:" + u
+            shots.append(u)
+        if shots:
+            out["screenshots"] = shots
+        return out
+    except Exception:
+        return {}
+
+
+METHODS = {
+    "initialize": initialize,
+    "auth.status": auth_status,
+    "auth.begin": auth_begin,
+    "auth.complete": auth_complete,
+    "auth.logout": auth_logout,
+    "library.list": library_list,
+    "game.details": game_details,
+    "game.installSize": install_size,
+    "game.install": lambda p: start_job(p, "install"),
+    "game.update": lambda p: start_job(p, "update"),
+    "game.uninstall": lambda p: start_job(p, "uninstall"),
+    "job.cancel": job_cancel,
+    "job.discard": job_discard,
+    "game.launchSpec": launch_spec,
+}
+
+
+def handle(msg):
+    fn = METHODS.get(msg.get("method"))
+    resp = {"id": msg["id"]}
+    if fn is None:
+        resp["error"] = {"code": -32601, "message": f"method not found: {msg.get('method')}"}
+    else:
+        try:
+            result = fn(msg.get("params") or {})
+            resp["result"] = result if result is not None else {}
+        except RPCError as e:
+            resp["error"] = {"code": e.code, "message": str(e)}
+        except (KeyError, TypeError) as e:
+            resp["error"] = {"code": -32602, "message": f"invalid params: {e}"}
+        except Exception as e:  # report, never crash the plugin
+            resp["error"] = {"code": -32000, "message": f"{type(e).__name__}: {e}"}
+    send(resp)
+
+
+def main():
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError as e:
+            send({"error": {"code": -32700, "message": str(e)}})
+            continue
+        if "id" not in msg:
+            continue  # notifications need no answer
+        # Library listing and logins can take seconds; keep reading so
+        # job.cancel stays responsive.
+        threading.Thread(target=handle, args=(msg,), daemon=True).start()
+    # stdin closed: Platypus is shutting down. Interrupted installs resume later.
+    with jobs_lock:
+        procs = [j.get("proc") for j in jobs.values()]
+    for p in procs:
+        stop_proc(p, grace=5)
+
+
+if __name__ == "__main__":
+    main()

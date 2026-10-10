@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // WineserverStopCommand builds the command that terminates the wineserver of

@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // IsClientLaunch reports whether the game must be started by the Steam client

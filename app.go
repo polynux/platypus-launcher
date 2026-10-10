@@ -14,15 +14,20 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/dataplug"
-	"hydra-launcher/internal/fixes"
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/runner"
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/chat"
+	"platypus/internal/cloudsync"
+	"platypus/internal/compat"
+	"platypus/internal/dataplug"
+	"platypus/internal/jobs"
+	"platypus/internal/ledger"
+	"platypus/internal/migrate"
+	"platypus/internal/plugins"
+	"platypus/internal/runner"
+	"platypus/internal/session"
+	"platypus/internal/settings"
+	"platypus/internal/social"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -36,25 +41,50 @@ const (
 
 // App struct
 type App struct {
-	ctx          context.Context
-	stop         context.CancelFunc
-	plugins      *plugins.Manager
-	settings     *settings.Store
-	jobs         *jobs.Queue
-	fixesService *fixes.Service
-	stores       *stores.Registry
-	sessions     *session.Tracker
+	ctx      context.Context
+	stop     context.CancelFunc
+	plugins  *plugins.Manager
+	settings *settings.Store
+	jobs     *jobs.Queue
+	// compat is the ProtonDB, anti-cheat and install-marker metadata (app_compat.go).
+	compat      *compat.Service
+	compatHints compatHintCache
+	stores      *stores.Registry
+	sessions    *session.Tracker
+	cloud       *cloudsync.Orchestrator
+	social      *social.Manager // friends lists of plugins with the social capability
+	chat        *chat.Manager   // conversations with friends (the chat capability, protocol 1.9)
+	socialMu    sync.Mutex
+	socialGames map[string]socialGame // launched store games by Platypus game id, for "playing"
+	// familyEmit delivers family.warning notifications to the UI (the
+	// "family" event). Nil until the window exists; tests replace it.
+	familyEmit func(types.FamilyWarning)
+	// settingsLocks orders the settings saves and starts of each plugin.
+	settingsLocks settingsLocks
+	moves         coreMoves
+	custom        customStore // the user's titles and art (app_customize.go)
+	ledger        *ledger.Ledger
+	// sessionRunning says whether a game has a session open. Nil asks the
+	// session tracker; tests replace it.
+	sessionRunning func(gameID string) bool
 	// data holds the built-in fixes and tweaks plus every valid data plugin's.
 	data *dataplug.Registry
 
 	tweaksMu     sync.Mutex
 	tweaksCached bool
 	tweaks       []types.Tweak
+	// stats caches the store playtime and the achievement progress (protocol 1.7).
+	stats statsCache
+	// sizes caches what the store says an install needs (app_installsize.go).
+	sizes sizeCache
+
+	gameMu    sync.Mutex
+	gameLocks map[string]*sync.Mutex // by game id; see lockGame
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	a := &App{fixesService: fixes.NewService(), data: dataplug.NewRegistry()}
+	a := &App{data: dataplug.NewRegistry()}
 	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
 	return a
 }
@@ -62,10 +92,25 @@ func NewApp() *App {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.stats.changed = func() { wruntime.EventsEmit(ctx, "playtime") }
+	a.stats.info = func(format string, args ...any) { wruntime.LogInfof(ctx, format, args...) }
+	a.stats.warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, format, args...) }
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
 		wruntime.EventsEmit(ctx, "session", e)
+		a.socialSession(e)
+		if e.State == "stopped" || e.State == "failed" {
+			a.schedulePlaytimeRefresh(e.GameID)
+		}
 	})
 
+	// Before anything opens a data file: the previous data folder moves to
+	// its new name, and the paths stored in it follow (internal/migrate).
+	if home, err := os.UserHomeDir(); err == nil {
+		migrate.Run(home, migrate.Options{
+			Info: func(format string, args ...any) { wruntime.LogInfof(ctx, format, args...) },
+			Warn: func(format string, args ...any) { wruntime.LogWarningf(ctx, format, args...) },
+		})
+	}
 	dataDir, err := settings.DataDir()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "settings: %v", err)
@@ -76,6 +121,18 @@ func (a *App) startup(ctx context.Context) {
 		wruntime.LogErrorf(ctx, "settings: %v", err)
 	}
 
+	a.compat, err = newCompatService(dataDir, a.settings)
+	if err != nil {
+		wruntime.LogErrorf(ctx, "compat: %v", err)
+	}
+	if a.compat != nil {
+		a.compat.Warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, "compat: "+format, args...) }
+	}
+
+	if err := a.openCustomization(dataDir); err != nil {
+		wruntime.LogErrorf(ctx, "customization: %v", err)
+	}
+
 	a.jobs, err = jobs.Open(filepath.Join(dataDir, "jobs.json"), jobBackend{a}, func(list []types.Job) {
 		wruntime.EventsEmit(ctx, "jobs", list)
 	})
@@ -83,6 +140,13 @@ func (a *App) startup(ctx context.Context) {
 		wruntime.LogErrorf(ctx, "jobs: %v", err)
 	}
 	a.jobs.SetCleanupAfter(cleanupAfter(a.settings.CancelCleanupDays()))
+
+	a.ledger, err = ledger.Open(filepath.Join(dataDir, "install-history.json"))
+	if err != nil {
+		wruntime.LogErrorf(ctx, "install history: %v", err)
+	}
+	a.jobs.SetOnInstalled(a.recordInstall)
+	a.jobs.SetOnFinished(a.jobFinished)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -95,11 +159,19 @@ func (a *App) startup(ctx context.Context) {
 		OnExit: func(id string, err error) {
 			wruntime.LogWarningf(ctx, "plugin %s exited: %v", id, err)
 			a.jobs.PluginExited(id, err)
+			if a.social != nil {
+				a.social.Exited(id)
+			}
 		},
+		OnReady: a.pluginReady,
 	})
+	a.familyEmit = func(w types.FamilyWarning) { wruntime.EventsEmit(ctx, "family", w) }
 	found, err := a.plugins.Discover()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "plugins: %v", err)
+	}
+	if err == nil {
+		a.forgetSettingsOfRemoved(found)
 	}
 	for _, p := range found {
 		msg := fmt.Sprintf("plugin %s: %s", p.Manifest.ID, p.Status)
@@ -111,21 +183,33 @@ func (a *App) startup(ctx context.Context) {
 	// Data plugins feed the fixes/tweaks registry; rebuilt here and on
 	// every rescan so installs and removals apply without a restart.
 	a.syncDataPlugins(found)
+	a.startCloud(ctx, dataDir)
+	a.startSocial(ctx)
+	a.startChat(ctx)
+	a.syncSocial()
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
 	go a.jobs.Run(runCtx)
 }
 
-// shutdown stops games Hydra started directly and every store plugin.
+// shutdown stops games Platypus started directly and every store plugin.
 // Steam-launched games belong to the Steam client and keep running. Running
 // installs stay "running" in jobs.json and resume on the next start.
 func (a *App) shutdown(ctx context.Context) {
 	if a.stop != nil {
 		a.stop()
 	}
+	// Syncs get a few seconds to finish; a push cut short stays owed and runs
+	// at the next start.
+	if a.cloud != nil {
+		a.cloud.Shutdown(cloudShutdownGrace)
+	}
 	if a.sessions != nil {
 		a.sessions.StopAll()
+	}
+	if a.social != nil {
+		a.social.StopAll()
 	}
 	if a.plugins != nil {
 		a.plugins.Shutdown()
@@ -134,6 +218,21 @@ func (a *App) shutdown(ctx context.Context) {
 
 // pluginNotify routes plugin notifications: job updates to the queue.
 func (a *App) pluginNotify(id, method string, params json.RawMessage) {
+	if method == "cloud.progress" && a.cloud != nil {
+		a.cloud.Progress(id, params)
+		return
+	}
+	if a.social != nil && strings.HasPrefix(method, "social.") {
+		a.social.Notify(id, method, params)
+		return
+	}
+	if a.chatNotify(id, method, params) {
+		return
+	}
+	if method == "family.warning" {
+		a.familyWarning(id, params)
+		return
+	}
 	if !strings.HasPrefix(method, "job.") {
 		return
 	}
@@ -154,12 +253,25 @@ func (a *App) pluginStores() []stores.Store {
 		if p.Status != plugins.StatusReady || !a.plugins.Has(p.Manifest.ID, "library") {
 			continue
 		}
-		id := p.Manifest.ID
-		out = append(out, stores.NewPlugin(a.plugins, p, func() []string {
-			return a.plugins.Folders(id, a.settings.GamesFolder())
-		}))
+		out = append(out, a.pluginStore(p))
 	}
 	return out
+}
+
+// pluginStore is the library of one store plugin, with core's moves applied.
+func (a *App) pluginStore(p plugins.Plugin) *stores.Plugin {
+	id := p.Manifest.ID
+	return stores.NewPlugin(a.plugins, p, func() []string {
+		return a.plugins.Folders(id, a.settings.GamesFolder())
+	}).WithRelocations(a.settings.Relocation)
+}
+
+// isRunning says whether the game has a session open.
+func (a *App) isRunning(gameID string) bool {
+	if a.sessionRunning != nil {
+		return a.sessionRunning(gameID)
+	}
+	return a.sessions.Running(gameID)
 }
 
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
@@ -271,9 +383,29 @@ func (a *App) GetLibrary() (types.Library, error) {
 			continue
 		}
 		lib.Games = append(lib.Games, results[i]...)
+		a.startPlaytimeOnce(s.ID())
 	}
+	a.forgetRemovedGameSettings(all, results, errs)
 	lib.Games = append(lib.Games, a.customGames()...)
+	a.stats.applyPlaytime(lib.Games)
+	a.applyPins(&lib)
+	a.applyCustomization(lib.Games)
+	a.applyFixes(lib.Games)
 	return lib, nil
+}
+
+// applyFixes puts each game's curated fix or ProtonDB tier on it (the library
+// cards and filters read it). Ratings come from the cache: a game with none yet
+// gets one on a later scan, when its fetch has finished.
+func (a *App) applyFixes(games []types.Game) {
+	for i := range games {
+		games[i].FixInfo = a.gameFix(games[i], func(appID string) (compat.Rating, bool) {
+			if a.compat == nil {
+				return compat.Rating{}, false
+			}
+			return a.compat.ProtonDBCached(appID)
+		})
+	}
 }
 
 // sourceWarning describes a source that failed to list. The plugin's message
@@ -285,18 +417,6 @@ func sourceWarning(source string, err error) types.SourceWarning {
 		NeedsAuth:   plugins.IsAuthRequired(err),
 		Unavailable: plugins.IsUnavailable(err),
 	}
-}
-
-// GetGameFix returns the curated fix from data plugins, or a live ProtonDB
-// summary for a game without one.
-func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
-	if fix := a.data.Fix(title, storeAppID); fix != nil {
-		return fix
-	}
-	if fix, err := a.fixesService.FetchProtonDBFix(storeAppID); err == nil {
-		return fix
-	}
-	return nil
 }
 
 // GetGameDetails returns summary, screenshots and achievements for the game
@@ -482,10 +602,28 @@ func (a *App) PreviewLaunchCommand(game types.Game) (string, error) {
 }
 
 // LaunchGame starts the game. Progress (running, stopped, failed) arrives on
-// the "session" event; the returned string is only a status line.
+// the "session" event; the returned string is only a status line. For a game
+// with cloud saves it first syncs them: when the user has to decide (a
+// conflict, an unreachable store, the store's client running) nothing is
+// launched, the "cloud" event carries the prompt, and the answer is another
+// launch (LaunchGameAnyway, LaunchGameViaClient) or a resolve and a retry.
 func (a *App) LaunchGame(game types.Game) (string, error) {
-	if a.sessions.Running(game.ID) {
+	return a.launchGame(game, false)
+}
+
+// launchGame starts a game. anyway is the user's "launch anyway" for this one
+// launch: it skips the cloud step and nothing after it.
+func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
+	if _, ok := a.plugins.Plugin(game.Source); ok {
+		a.stats.noteSource(game.ID, game.Source)
+	}
+	unlock := a.lockGame(game.ID)
+	defer unlock()
+	if a.isRunning(game.ID) {
 		return "", fmt.Errorf("%s is already running", game.Title)
+	}
+	if err := a.heldByJob(game); err != nil {
+		return "", err
 	}
 	p, err := a.prepareLaunch(game, false)
 	if err != nil {
@@ -501,6 +639,7 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 		return "", fmt.Errorf("game %q has no launch target", game.Title)
 	}
 
+	a.noteSocialGame(game)
 	cmd := exec.Command(filtered[0], filtered[1:]...)
 	cmd.Env = os.Environ()
 	for k, v := range p.env {
@@ -509,26 +648,39 @@ func (a *App) LaunchGame(game types.Game) (string, error) {
 	cmd.Dir = p.dir
 
 	if cl := p.client; cl != nil {
-		// With the client running, the command forwards the request and
-		// exits; if not, it becomes the client and keeps running. Either way,
-		// follow the game itself (Steam: its reaper process), not this PID.
-		if err := cmd.Start(); err != nil {
-			return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
-		}
-		go func() { _ = cmd.Wait() }()
-		if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
-			return "", fmt.Errorf("%s is already running", game.Title)
-		}
-		return "Asked " + cl.Client + " to start " + game.Title, nil
+		return a.startClient(game, cmd, cl)
 	}
-	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, session.WithStopHook(p.stopHook()))
+	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
+	push, msg, blocked := a.cloudBeforeLaunch(game, p, anyway)
+	if blocked {
+		return msg, nil
+	}
+	opts = append(opts, push.options()...)
+	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, opts...)
 	if err != nil {
 		if errors.Is(err, session.ErrAlreadyRunning) {
+			// Never abandon here: the record Launching wrote may belong to the game that runs.
 			return "", fmt.Errorf("%s is already running", game.Title)
 		}
+		push.abandon()
 		return "", err
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
+}
+
+// startClient runs the command that asks the store's client to start the game
+// and follows the game itself. With the client running, the command forwards
+// the request and exits; if not, it becomes the client and keeps running.
+// Either way, follow the game itself (Steam: its reaper process), not this PID.
+func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunch) (string, error) {
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
+	}
+	go func() { _ = cmd.Wait() }()
+	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
+		return "", fmt.Errorf("%s is already running", game.Title)
+	}
+	return "Asked " + cl.Client + " to start " + game.Title, nil
 }
 
 // StopGame asks a running game to quit: SIGTERM to its processes (and the
@@ -557,10 +709,11 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		GamesFolder:        a.settings.GamesFolder(),
 		DefaultGamesFolder: settings.DefaultGamesFolder(),
 		CancelCleanupDays:  a.settings.CancelCleanupDays(),
+		RatingsOnline:      a.settings.RatingsOnline(),
 	}
 }
 
-// GetLauncherSettings returns Hydra-wide settings.
+// GetLauncherSettings returns Platypus-wide settings.
 func (a *App) GetLauncherSettings() types.LauncherSettings {
 	return a.launcherSettings()
 }

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 type fakeBackend struct {
@@ -238,7 +238,7 @@ func TestResumeAfterRestart(t *testing.T) {
 	q.save()
 	q.mu.Unlock()
 
-	// A new Hydra process loads the file: the job is queued again and starts.
+	// A new Platypus process loads the file: the job is queued again and starts.
 	b2 := &fakeBackend{}
 	q2, err := Open(path, b2, nil)
 	if err != nil {

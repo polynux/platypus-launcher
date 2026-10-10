@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // Session is one logon session to one CM.
@@ -43,10 +43,10 @@ type License struct {
 // Licenses returns the licence list the CM sent after logon.
 func (s *Session) Licenses() []License { return s.licenses }
 
-// cmCandidates lists WebSocket CM endpoints: the HYDRA_STEAM_CM_SERVER
+// cmCandidates lists WebSocket CM endpoints: the PLATYPUS_STEAM_CM_SERVER
 // test hook ("host:port", plain ws) or Valve's directory (best load first).
 func cmCandidates(ctx context.Context) ([]string, bool, error) {
-	if hook := os.Getenv("HYDRA_STEAM_CM_SERVER"); hook != "" {
+	if hook := os.Getenv("PLATYPUS_STEAM_CM_SERVER"); hook != "" {
 		return []string{hook}, false, nil
 	}
 	req, _ := http.NewRequestWithContext(ctx, "GET",
@@ -135,9 +135,9 @@ func dialWebsocket(ctx context.Context, rawURL string) (*websocket.Conn, error) 
 }
 
 // machineIDForDial picks the machine id for a one-shot dial: stable
-// under HYDRA_PLUGIN_DATA when the plugin data dir is known, otherwise
+// under PLATYPUS_PLUGIN_DATA when the plugin data dir is known, otherwise
 // a random one (the old behaviour).
-func machineIDForDial() []byte { return StableMachineID(os.Getenv("HYDRA_PLUGIN_DATA")) }
+func machineIDForDial() []byte { return StableMachineID(os.Getenv("PLATYPUS_PLUGIN_DATA")) }
 
 func randInt() (uint64, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(1<<30))

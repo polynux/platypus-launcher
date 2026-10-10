@@ -6,10 +6,10 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/dataplug"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/dataplug"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 // CORE-5: installing then removing a data plugin followed by rescan must

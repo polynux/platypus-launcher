@@ -1,4 +1,4 @@
-# DESIGN.md — Hydra Launcher (finalist design: /21)
+# DESIGN.md — Platypus (finalist design: /21)
 
 > **Purpose:** self-contained implementation contract for an agent rebuilding the Wails
 > frontend (`frontend/src/**`) to this design. Readable without the design-lab conversation.
@@ -168,7 +168,7 @@ source of truth for controls. Import via `@/components/ds/<name>`. Never use nat
 
 ## 4. Sidebar spec (w-56; fixed, never scrolls)
 
-1. **Brand:** 36px amber→rose gradient rounded-xl tile "H"; "Hydra" 15px extrabold;
+1. **Brand:** 36px amber→rose gradient rounded-xl tile "P"; "Platypus" 15px extrabold;
    `GAME HUB` mono 11px `text-white/30`.
 2. **Search:** styled input with lucide `Search` icon absolute-left; `rounded-xl bg-white/[0.06] px-3.5 py-2.5 text-[12px] placeholder-white/30`. Live-filters library.
 3. **Nav** (12.5px semibold, `px-3 py-2 rounded-xl mb-0.5`): Dashboard, Library (count badge),
@@ -186,7 +186,7 @@ source of truth for controls. Import via `@/components/ds/<name>`. Never use nat
      only — until friends/presence are real backend features, this panel is a **stub:
      render "Friends — coming soon" honest empty state** OR omit; do not fabricate.
      (The mockup shows fake friends; the app must not.)
-   - Footer: `hydra v0.2 · scan 09:41` mono 11px `text-white/55`.
+   - Footer: `platypus v0.2 · scan 09:41` mono 11px `text-white/55`.
 
 ---
 

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // discardBackend is a fakeBackend that can also delete a canceled job's data.
@@ -203,7 +203,7 @@ func TestPausedJobPersistsAcrossReopen(t *testing.T) {
 	go func() { defer close(done); q2.Run(ctx) }()
 	time.Sleep(50 * time.Millisecond)
 	if b2.starts() != 0 {
-		t.Fatal("a paused job must not restart with Hydra")
+		t.Fatal("a paused job must not restart with Platypus")
 	}
 	if err := q2.Resume(j.ID); err != nil {
 		t.Fatal(err)

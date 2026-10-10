@@ -56,7 +56,7 @@ function Shell({ view, game, children }) {
     <div className="relative mx-auto flex min-h-screen max-w-[1600px] bg-[#0a0b0d] text-white" style={{ fontFamily: 'Sora, sans-serif' }}>
       {/* glass dock */}
       <nav className="sticky top-0 flex h-screen w-16 flex-none flex-col items-center gap-2 py-5">
-        <div className="mb-4 grid h-10 w-10 place-items-center rounded-2xl bg-white/10 text-[15px] font-black text-[#7dd3fc]">H</div>
+        <div className="mb-4 grid h-10 w-10 place-items-center rounded-2xl bg-white/10 text-[15px] font-black text-[#7dd3fc]">P</div>
         {[['home', D.grid], ['library', D.play], ['achievements', D.trophy], ['activity', D.pulse]].map(([k, d], i) => (
           <DockIcon key={k} label={k} active={(view === 'home' && i === 0) || (view === 'game' && i === 1)}>
             <Icon d={d} />
@@ -264,7 +264,7 @@ export function CinematicGame() {
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 font-mono text-[12px]">
             <h3 className="mb-3 font-sans text-[13px] font-bold">Details</h3>
             {[
-              ['Runner', game.runner], ['DX layer', game.dx], ['Prefix', '~/.hydra/pfx/kcd2'],
+              ['Runner', game.runner], ['DX layer', game.dx], ['Prefix', '~/.platypus/pfx/kcd2'],
               ['Last played', game.last], ['Installed', '28 Feb'], ['Size', game.size],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between border-b border-white/[0.05] py-2 last:border-0">

@@ -1,0 +1,27 @@
+{{Infobox game
+|cover        = Example Horror Game cover.jpg
+|steam appid  = 900101
+|steam appid side = 900102, 900103, 900104
+|gogcom id    = 
+}}
+
+==Availability==
+{{Availability|
+{{Availability/row| ExampleStore | example-horror | Steam | {{store link|ExampleStore|example-horror-deluxe|Deluxe Edition}} also available. | | Windows }}
+{{Availability/row| MacApp | id900101 | MacApp |  | | OS X }}
+{{Availability/row| Steam | 900101 | Steam | {{store link|Steam-sub|900102|Deluxe Edition}} also available.  | | Windows }}
+}}
+{{ii}} {{Removed DRM|Denuvo}} was removed from the Windows version on April 10, 2023.<ref>{{Refurl|url=https://example.com/patchnotes/1|title=Example Horror Game update for 10 April 2023|date=2023-04-10}}</ref>
+{{ii}} Requires an internet connection at all times: {{DRM|Steam|offline=false}}.
+
+==Monetization==
+{{Infobox game/row/taxonomy/monetization | One-time game purchase }}
+
+===Middleware===
+{{Middleware
+|physics          = Example Physics
+|audio            = Example Audio
+|multiplayer      = 
+|anticheat        = Example Guard, Sentinel Shield
+|anticheat notes  = 
+}}

@@ -25,8 +25,8 @@ export function Sidebar({ active = 'Dashboard', libraryUrl = '/library' }) {
   return (
     <aside className="sticky top-0 flex h-screen w-56 flex-none flex-col border-r border-white/[0.06] bg-black/25 p-4">
       <div className="mb-5 flex items-center gap-2.5 px-1.5">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">H</span>
-        <div><div className="text-[15px] font-extrabold tracking-tight">Hydra</div><div className="font-mono text-[8.5px] uppercase tracking-[0.16em] text-white/30">game hub</div></div>
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">P</span>
+        <div><div className="text-[15px] font-extrabold tracking-tight">Platypus</div><div className="font-mono text-[8.5px] uppercase tracking-[0.16em] text-white/30">game hub</div></div>
       </div>
       <div className="mb-4 rounded-xl bg-white/[0.06] px-3.5 py-2.5 text-[12px] text-white/35">🔍 Search…</div>
       {[['Dashboard', 0], ['Library', 24], ['Downloads', 1], ['Achievements', 0], ['Activity', 0]].map(([l, c]) => (
@@ -66,7 +66,7 @@ export function Sidebar({ active = 'Dashboard', libraryUrl = '/library' }) {
             </div>
           ))}
         </div>
-        <div className="px-1.5 font-mono text-[8.5px] text-white/20">hydra v0.2 · scan 09:41</div>
+        <div className="px-1.5 font-mono text-[8.5px] text-white/20">platypus v0.2 · scan 09:41</div>
       </div>
     </aside>
   );

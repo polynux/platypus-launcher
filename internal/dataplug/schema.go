@@ -1,5 +1,5 @@
 // Package dataplug loads data plugins: fix recipes and tweak packs with no
-// executable. They contain no code, so Hydra applies them without asking the
+// executable. They contain no code, so Platypus applies them without asking the
 // user to approve anything, through the same paths as its built-in fixes and
 // tweaks. See docs/plugins/data-plugins.md.
 package dataplug

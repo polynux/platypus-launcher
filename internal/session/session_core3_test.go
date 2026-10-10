@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // CORE-3: concurrent launches for one game must not double-start. Exactly
