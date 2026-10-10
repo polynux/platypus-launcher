@@ -3,10 +3,6 @@
 // The core: the App without a window. The UI shell (Electron, see electron/)
 // spawns this binary and talks to it over stdio: JSON-RPC 2.0, one object per
 // line (internal/corerpc). Build it with `go build -tags core -o platypus-core .`.
-//
-// Why a build tag and not cmd/platypus-core: the App is package main, and Go
-// cannot import a main package. Moving it into its own package is part of the
-// migration (docs/electron.md).
 package main
 
 import (
@@ -21,6 +17,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"platypus/internal/app"
 	"platypus/internal/corerpc"
 )
 
@@ -36,20 +33,20 @@ func main() {
 	}
 	proto := os.NewFile(uintptr(protoFd), "protocol")
 
-	app := NewApp()
-	srv := corerpc.New(app)
-	app.host = coreHost{srv: srv}
+	a := app.NewApp()
+	srv := corerpc.New(a)
+	app.SetHost(a, coreHost{srv: srv})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	art, err := serveArt(app)
+	art, err := serveArt(a)
 	if err != nil {
 		fatal(err)
 	}
 	srv.Info = map[string]any{"artURL": art.url, "artToken": art.token}
 	srv.OnInitialize = func() error {
-		app.startup(ctx)
+		app.Startup(a, ctx)
 		return nil
 	}
 
@@ -64,7 +61,7 @@ func main() {
 	if err := srv.Serve(os.Stdin, proto); err != nil {
 		fmt.Fprintln(os.Stderr, "core: reading the shell:", err)
 	}
-	app.shutdown(ctx)
+	app.Shutdown(a, ctx)
 }
 
 func fatal(err error) {
@@ -78,6 +75,8 @@ func fatal(err error) {
 type coreHost struct {
 	srv *corerpc.Server
 }
+
+var _ app.Host = coreHost{}
 
 func (h coreHost) Emit(event string, data ...any) {
 	var payload any
@@ -95,13 +94,13 @@ func logf(level, format string, args ...any) {
 	fmt.Fprintf(os.Stderr, level+" "+format+"\n", args...)
 }
 
-func (h coreHost) OpenFile(d FileDialog) (string, error) {
+func (h coreHost) OpenFile(d app.FileDialog) (string, error) {
 	var path string
 	err := h.srv.Call(context.Background(), "dialog.openFile", d, &path)
 	return path, err
 }
 
-func (h coreHost) OpenDirectory(d DirectoryDialog) (string, error) {
+func (h coreHost) OpenDirectory(d app.DirectoryDialog) (string, error) {
 	var path string
 	err := h.srv.Call(context.Background(), "dialog.openDirectory", d, &path)
 	return path, err
@@ -113,7 +112,7 @@ type artServer struct{ url, token string }
 // on 127.0.0.1, for the shell's art protocol to fetch from. Every request must
 // carry this run's random token, so another local process can't read the art
 // (or probe the file paths) through the port.
-func serveArt(app *App) (artServer, error) {
+func serveArt(a *app.App) (artServer, error) {
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		return artServer{}, err
@@ -123,7 +122,7 @@ func serveArt(app *App) (artServer, error) {
 	if err != nil {
 		return artServer{}, err
 	}
-	handler := steamArt(app.customArt(http.NotFoundHandler()))
+	handler := app.SteamArt(app.CustomArt(a, http.NotFoundHandler()))
 	go http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Platypus-Token")), []byte(token)) != 1 {
 			http.Error(w, "forbidden", http.StatusForbidden)

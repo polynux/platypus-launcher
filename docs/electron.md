@@ -45,9 +45,9 @@ cannot import it; moving it to its own package comes with the migration.
 
 ## Pieces
 
-- `host.go`: the `Host` interface (events, log, dialogs). `host_wails.go`
-  (`!core`) is the Wails one; `core_main.go` (`core`) sends events as
-  notifications and dialogs as requests to Electron.
+- `internal/app/host.go`: the `Host` interface (events, log, dialogs).
+  `host_wails.go` (`!core`) is the Wails one; `core_main.go` (`core`) sends
+  events as notifications and dialogs as requests to Electron.
 - `internal/corerpc`: reflection dispatch of `*App`'s exported methods;
   `initialize {protocol}` handshake (core protocol 1.0: same major, shell minor
   ≤ core minor); the App starts while `initialize` answers.
