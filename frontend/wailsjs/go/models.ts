@@ -485,6 +485,7 @@ export namespace types {
 	export class CloudStatus {
 	    state: string;
 	    message?: string;
+	    detail?: string;
 	    counts: CloudCounts;
 	    conflicts?: CloudConflict[];
 	    checkedAt?: number;
@@ -500,6 +501,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.state = source["state"];
 	        this.message = source["message"];
+	        this.detail = source["detail"];
 	        this.counts = this.convertValues(source["counts"], CloudCounts);
 	        this.conflicts = this.convertValues(source["conflicts"], CloudConflict);
 	        this.checkedAt = source["checkedAt"];

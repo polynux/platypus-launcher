@@ -559,7 +559,8 @@ function InstallationPanel({
       <div className="space-y-2 font-mono text-[11.5px]">
         {[
           ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
-          ['Folder', game.install_dir || '—'],
+          // A game the store lists as installed may have no folder Platypus can name: say so.
+          ['Folder', game.install_dir || (game.is_installed ? 'not known to Platypus' : '—')],
           ['Version', game.version || '—'],
           ...(game.pinned ? [['Pinned to', pinLabel(game.pinned)]] : []),
           ['Size', formatBytes(game.size_bytes) || '—'],

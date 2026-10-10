@@ -183,7 +183,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
       )}
 
       {error && (
-        <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't reach the cloud saves just now." onRetry={() => void check()} />
+        <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't reach the cloud saves just now." />
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">

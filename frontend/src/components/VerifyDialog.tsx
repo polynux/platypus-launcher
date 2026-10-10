@@ -47,7 +47,7 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
   let body: React.ReactNode;
   let actions: React.ReactNode;
   if (error) {
-    body = <ErrorNotice message={error} fallback="Platypus couldn't start the check." onRetry={() => start(false)} />;
+    body = <ErrorNotice message={error} fallback="Platypus couldn't start the check." />;
   } else if (!job) {
     body = <p className="text-white/60">Starting the check…</p>;
   } else if (running) {
