@@ -69,10 +69,9 @@ in place.
 ## Process
 
 - Environment: `PLATYPUS_PLUGIN_API=1` (the major protocol version), and `PLATYPUS_PLUGIN_DATA`, a private folder
-  for the plugin's own state. Before the project was renamed from Hydra to Platypus these were
-  `HYDRA_PLUGIN_API` and `HYDRA_PLUGIN_DATA`; the protocol was unreleased, so they were renamed outright
-  (every `HYDRA_*` variable became `PLATYPUS_*`) and there are no aliases. A plugin built for the old names
-  must be updated and reinstalled.
+  for the plugin's own state. Every environment variable of the protocol is prefixed `PLATYPUS_`; the
+  protocol is unreleased, so there are no aliases for earlier names, and a plugin built against them must be
+  updated and reinstalled.
 - Exit when stdin closes. Platypus kills the plugin's process group a couple of
   seconds later, and also when Platypus itself dies.
 - Answer requests concurrently if they can take a while: Platypus may send
