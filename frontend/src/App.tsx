@@ -410,16 +410,32 @@ export function App() {
 
   // A silent library read: no rescan notice and no details-cache eviction.
   // Only the fields `merge` names are taken from the fresh read. A failed read
-  // keeps what is shown; the next rescan reconciles it.
-  const refreshLibraryQuietly = useCallback(
-    (merge: (prev: Game[], fresh: Game[]) => Game[]) => {
+  // keeps what is shown; the next rescan reconciles it. Every read lists every
+  // store (a plugin may spawn its CLI for it), so asks that come while one is
+  // out share the next single read instead of each starting their own.
+  const quietRead = useRef<{ running: boolean; waiting: Set<(prev: Game[], fresh: Game[]) => Game[]> }>({ running: false, waiting: new Set() });
+  const refreshLibraryQuietly = useCallback((merge: (prev: Game[], fresh: Game[]) => Game[]) => {
+    const q = quietRead.current;
+    q.waiting.add(merge);
+    if (q.running) return;
+    const read = () => {
+      const merges = [...q.waiting];
+      q.waiting.clear();
+      q.running = true;
+      const done = () => {
+        q.running = false;
+        if (q.waiting.size > 0) read();
+      };
       Effect.runPromise(LauncherApi.getLibrary()).then(
-        (lib) => setGames((prev) => merge(prev, lib.games)),
-        () => {},
+        (lib) => {
+          setGames((prev) => merges.reduce((acc, m) => m(acc, lib.games), prev));
+          done();
+        },
+        done,
       );
-    },
-    [],
-  );
+    };
+    read();
+  }, []);
 
   // A plugin's playtime report changed a library value (protocol 1.7).
   useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
