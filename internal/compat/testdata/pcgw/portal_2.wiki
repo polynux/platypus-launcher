@@ -1,0 +1,27 @@
+{{Infobox game
+|cover        = Portal 2 cover.jpg
+{{Infobox game/row/taxonomy/modes             | Singleplayer, Multiplayer}}
+|steam appid  = 620
+|steam appid side = 659, 660, 323180, 104600
+|gogcom id    = 
+}}
+
+==Availability==
+{{Availability|
+{{Availability/row| Retail | | Steam | |  | Windows, OS X }}
+{{Availability/row| Steam | 620 | Steam | [https://store.steampowered.com/bundle/234/Portal_Bundle Portal Bundle] also available. Requires the Steam client to be running.<ref>{{Refcheck|user=Jwillikers|date=2025-09-25}}</ref> | | Windows, OS X, Linux }}
+}}
+{{ii}} All versions require {{DRM|Steam}}. Uses [[Digital_rights_management_(DRM)#Steamworks_DRM|Steamworks API]].
+
+==Monetization==
+{{Infobox game/row/taxonomy/monetization | One-time game purchase }}
+
+===Middleware===
+{{Middleware
+|physics          = Havok
+|audio            = FMOD
+|multiplayer      = Steamworks
+|multiplayer notes= Co-op mode starring ATLAS and P-Body.
+|anticheat        = 
+|anticheat notes  = 
+}}

@@ -607,6 +607,15 @@ export interface CompatBadge {
   checked_at: number;
 }
 
+/** The PCGamingWiki page a protection fact was read from (internal/types/compat.go). */
+export interface WikiCredit {
+  title: string;
+  url: string;
+  /** Unix seconds: when Hydra read the page. */
+  fetched_at: number;
+  licence_url: string;
+}
+
 /** A game's compatibility and protection facts (GetGameCompat). */
 export interface Compat {
   steam_app_id?: string;
@@ -617,6 +626,8 @@ export interface Compat {
   drm: CompatBadge[] | null;
   drm_notes?: string;
   anticheat: CompatBadge[] | null;
+  /** Set when a fact came from PCGamingWiki: the credit line shows its page and licence. */
+  wiki?: WikiCredit | null;
 }
 
 export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak' | 'cloud';

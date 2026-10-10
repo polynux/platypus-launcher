@@ -4,6 +4,9 @@ import type { Compat, CompatBadge, Game, ProtonRating } from '../types';
 
 /** Compatibility facts for the library and the game page (internal/compat). */
 
+/** The credit PCGamingWiki asks for under every fact read from it (CC BY-NC-SA 3.0). */
+export const PCGW_ATTRIBUTION = 'Source: PCGamingWiki contributors, CC BY-NC-SA 3.0';
+
 export const TIER_LABEL: Record<string, string> = {
   platinum: 'Platinum',
   gold: 'Gold',
@@ -81,9 +84,14 @@ export function gameCompat(game: Game): Promise<Compat> {
   return p;
 }
 
+/** Fired on window when a game's facts are replaced, so every view showing
+ *  them (the game page and the settings modal, say) takes the new answer. */
+export const COMPAT_CHANGED = 'hydra:compat-changed';
+
 /** Replaces a game's cached facts, after the user changed its Steam AppID. */
 export function setGameCompat(id: string, c: Compat): void {
   cache.set(id, { at: Date.now(), p: Promise.resolve(c) });
+  window.dispatchEvent(new CustomEvent<{ id: string; compat: Compat }>(COMPAT_CHANGED, { detail: { id, compat: c } }));
 }
 
 /** Test helper: forget every cached answer. */

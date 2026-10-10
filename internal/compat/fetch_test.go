@@ -193,3 +193,61 @@ func TestProtonDBRejectsNonNumericAppIDWithoutAsking(t *testing.T) {
 		t.Fatal("asked the server for a bad AppID")
 	}
 }
+
+func TestFetcherLocationReturnsTheRedirectWithoutFollowingIt(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if r.URL.Path == "/api/appid.php" {
+			http.Redirect(w, r, "/wiki/Portal_2", http.StatusFound)
+			return
+		}
+		_, _ = w.Write([]byte(`<html>the page</html>`))
+	}))
+	defer srv.Close()
+	f, _ := testFetcher(NewNoRedirectClient())
+	loc, err := f.Location(context.Background(), srv.URL+"/api/appid.php?appid=620")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loc != "/wiki/Portal_2" {
+		t.Fatalf("location %q", loc)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("%d requests, want 1: the redirect target must not be fetched", hits.Load())
+	}
+}
+
+func TestFetcherLocationNotFoundAndRateLimit(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/missing" {
+			http.NotFound(w, r)
+			return
+		}
+		if calls.Add(1) == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		http.Redirect(w, r, "/wiki/Portal_2", http.StatusFound)
+	}))
+	defer srv.Close()
+	f, waits := testFetcher(NewNoRedirectClient())
+	f.Backoff = 60 * time.Second
+	f.Retries = 1
+	if _, err := f.Location(context.Background(), srv.URL+"/missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("404 err %v, want ErrNotFound", err)
+	}
+	if _, err := f.Location(context.Background(), srv.URL+"/ok"); err != nil {
+		t.Fatalf("after a 429: %v", err)
+	}
+	var backed60 bool
+	for _, d := range *waits {
+		if d == 60*time.Second {
+			backed60 = true
+		}
+	}
+	if !backed60 {
+		t.Fatalf("waits %v, want a 60s backoff after the 429", *waits)
+	}
+}

@@ -24,6 +24,7 @@ type cacheFile struct {
 	Version  int                    `json:"version"`
 	ProtonDB map[string]ProtonEntry `json:"protondb,omitempty"`
 	Local    map[string]LocalEntry  `json:"local,omitempty"`
+	Wiki     map[string]WikiEntry   `json:"pcgw,omitempty"`
 }
 
 // ProtonEntry is one ProtonDB answer for a Steam AppID. Found false means
@@ -35,6 +36,14 @@ type ProtonEntry struct {
 	Confidence string    `json:"confidence,omitempty"`
 	Total      int       `json:"total,omitempty"`
 	Score      float64   `json:"score,omitempty"`
+}
+
+// WikiEntry is one PCGamingWiki answer for a Steam AppID. Found false means
+// the wiki has no page for the game.
+type WikiEntry struct {
+	Found     bool       `json:"found"`
+	FetchedAt time.Time  `json:"fetched_at"`
+	Record    WikiRecord `json:"record,omitempty"`
 }
 
 // LocalEntry is the result of scanning one installed game's folder.
@@ -81,6 +90,25 @@ func (c *Cache) SetProtonDB(appID string, e ProtonEntry) error {
 		c.data.ProtonDB = map[string]ProtonEntry{}
 	}
 	c.data.ProtonDB[appID] = e
+	return c.saveLocked()
+}
+
+// Wiki returns the saved PCGamingWiki answer for an AppID.
+func (c *Cache) Wiki(appID string) (WikiEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.data.Wiki[appID]
+	return e, ok
+}
+
+// SetWiki saves a PCGamingWiki answer and writes the file.
+func (c *Cache) SetWiki(appID string, e WikiEntry) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.data.Wiki == nil {
+		c.data.Wiki = map[string]WikiEntry{}
+	}
+	c.data.Wiki[appID] = e
 	return c.saveLocked()
 }
 

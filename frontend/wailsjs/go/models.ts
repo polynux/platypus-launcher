@@ -581,6 +581,24 @@ export namespace types {
 	    }
 	}
 	
+	export class WikiCredit {
+	    title: string;
+	    url: string;
+	    fetched_at: number;
+	    licence_url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WikiCredit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.fetched_at = source["fetched_at"];
+	        this.licence_url = source["licence_url"];
+	    }
+	}
 	export class CompatBadge {
 	    kind: string;
 	    label: string;
@@ -636,6 +654,7 @@ export namespace types {
 	    drm: CompatBadge[];
 	    drm_notes?: string;
 	    anticheat: CompatBadge[];
+	    wiki?: WikiCredit;
 	
 	    static createFrom(source: any = {}) {
 	        return new Compat(source);
@@ -651,6 +670,7 @@ export namespace types {
 	        this.drm = this.convertValues(source["drm"], CompatBadge);
 	        this.drm_notes = source["drm_notes"];
 	        this.anticheat = this.convertValues(source["anticheat"], CompatBadge);
+	        this.wiki = this.convertValues(source["wiki"], WikiCredit);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1965,6 +1985,7 @@ export namespace types {
 		    return a;
 		}
 	}
+	
 	
 	
 	

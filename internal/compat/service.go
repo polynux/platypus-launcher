@@ -23,6 +23,9 @@ const (
 	failBackoff = 10 * time.Minute
 	// firstWait bounds the wait for an answer when nothing is cached yet.
 	firstWait = 6 * time.Second
+	// wikiFirstWait bounds the wait for a PCGamingWiki answer: a lookup is two
+	// requests, one a second.
+	wikiFirstWait = 12 * time.Second
 	// refreshWait bounds a background refresh.
 	refreshWait = 30 * time.Second
 )
@@ -33,6 +36,8 @@ type Service struct {
 	Cache     *Cache
 	Ratings   RatingSource
 	AntiCheat *AntiCheatStore
+	// Wiki is the PCGamingWiki source (see pcgw_service.go).
+	Wiki WikiSource
 	// Online says whether network fetches are allowed (the setting). Read on
 	// every call, so switching it off takes effect at once.
 	Online func() bool

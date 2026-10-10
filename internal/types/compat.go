@@ -23,6 +23,18 @@ type Compat struct {
 	// AntiCheat are anti-cheat systems: from AreWeAntiCheatYet for the game's
 	// Steam AppID or Epic id, and from the installed files.
 	AntiCheat []CompatBadge `json:"anticheat"`
+	// Wiki credits PCGamingWiki for the facts above that came from it: nil when
+	// none did. The UI shows the licence line and the page with it.
+	Wiki *WikiCredit `json:"wiki,omitempty"`
+}
+
+// WikiCredit is the PCGamingWiki page a fact was read from, with when it was
+// fetched (unix seconds) and the licence the content is under.
+type WikiCredit struct {
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	FetchedAt  int64  `json:"fetched_at"`
+	LicenceURL string `json:"licence_url"`
 }
 
 // ProtonRating is a ProtonDB summary. FetchedAt is when ProtonDB answered, so
