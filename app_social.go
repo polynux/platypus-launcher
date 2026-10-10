@@ -8,8 +8,6 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/social"
 	"platypus/internal/types"
-
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // socialStatusTimeout bounds a status change sent to a store.
@@ -38,8 +36,8 @@ func (a *App) startSocial(ctx context.Context) {
 		Backend:     socialBackend{a},
 		Enabled:     a.settings.SocialEnabled,
 		ShowPlaying: a.settings.SocialPlaying,
-		Emit:        func(v social.View) { wruntime.EventsEmit(ctx, "social", v) },
-		Logf:        func(f string, args ...any) { wruntime.LogInfof(ctx, "social: "+f, args...) },
+		Emit:        func(v social.View) { a.host.Emit("social", v) },
+		Logf:        func(f string, args ...any) { a.host.Infof("social: "+f, args...) },
 	})
 }
 
