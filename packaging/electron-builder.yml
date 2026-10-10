@@ -1,0 +1,31 @@
+# Platypus distributable (issue #29). One root command builds it:
+# `bun run package`. It bundles the app's own pinned Electron (apps/desktop's
+# exact dependency, never the system one), the built UI, and a trimmed
+# platypus-core binary for linux-x64. Store plugins are NOT bundled: they
+# install per user with plugins/install.sh and approval pins them (see
+# docs/electron.md).
+appId: io.github.polynux.platypus
+productName: Platypus
+directories:
+  app: apps/desktop
+  output: packaging/dist
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: packaging/stage/platypus-core
+    to: platypus-core
+  - from: apps/ui/dist
+    to: frontend
+  - from: packaging/icons/appicon.png
+    to: icon.png
+asar: true
+linux:
+  target:
+    - AppImage
+    - tar.gz
+  category: Game
+  executableName: platypus
+  syncDesktopName: true
+  icon: packaging/icons/platypus.png
+  description: Game launcher for Linux

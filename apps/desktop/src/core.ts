@@ -26,6 +26,20 @@ interface Message {
 
 type RequestHandler = (params: unknown) => Promise<unknown>;
 
+/**
+ * Closes every inherited file descriptor but stdin/stdout/stderr, then execs
+ * the core (`$0` is its path, `$@` its arguments). Runs inside `sh -c`, so no
+ * script file of its own can leak. Deliberately no redirections inside the
+ * loop: redirecting stderr (`2>/dev/null`) makes the shell stash stderr in a
+ * spare fd, and the loop then closes that very fd — stderr stays pointed at
+ * /dev/null for the core. Single-threaded there is no race to guard against,
+ * so every listed fd still exists when closed; the existence check only keeps
+ * dash honest. The loop is POSIX (dash-safe) and /proc is a given on Linux.
+ */
+export const CLOSE_FDS =
+  'for fd in /proc/self/fd/*; do n=${fd##*/}; ' +
+  'case $n in 0|1|2) ;; *) if [ -e /proc/self/fd/"$n" ]; then eval "exec $n>&-"; fi;; esac; done; ';
+
 /** The Go core as a child process, spoken to in JSON-RPC 2.0, one object per line (internal/corerpc). */
 export class Core {
   private child: ChildProcessByStdio<Writable, Readable, Readable>;
@@ -33,6 +47,7 @@ export class Core {
   private pending = new Map<number, Pending>();
   private exited: Promise<number | null>;
   private closing = false;
+  private started = false;
 
   /** Methods the core serves, from initialize. */
   methods = new Set<string>();
@@ -46,7 +61,17 @@ export class Core {
   onCrash: (code: number | null) => void = () => {};
 
   constructor(binary: string, args: string[] = []) {
-    this.child = spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    // The core must not inherit anything the shell holds: Chromium opens
+    // files and sockets without close-on-exec (verified: the core once held
+    // the GPU cache, Local Storage, even the remote debugger's socket), and
+    // libuv does not close them at spawn. So the core is started through a
+    // shell one-liner that closes every fd but 0/1/2 and only then execs it;
+    // the loop is POSIX (dash-safe) and /proc is a given on Linux. The core's
+    // own children (plugins, games) get only 0/1/2 in turn: Go's os/exec
+    // closes the rest, and nothing in internal/ passes ExtraFiles.
+    this.child = spawn('sh', ['-c', `${CLOSE_FDS}exec "$0" "$@"`, binary, ...args], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
     this.child.stderr.on('data', (b: Buffer) => process.stderr.write(b));
     this.child.stdin.on('error', () => {}); // a dying core is reported through exit
     createInterface({ input: this.child.stdout }).on('line', (line) => this.read(line));
@@ -56,7 +81,9 @@ export class Core {
         resolve(null);
       });
       this.child.once('exit', (code) => {
-        this.failAll(new Error('the core stopped'));
+        // Through the sh wrapper a missing binary surfaces as exit 127, not
+        // a spawn error: say what failed to start.
+        this.failAll(this.started ? new Error('the core stopped') : new Error(`the core exited during startup (exit ${code}): ${binary}`));
         if (!this.closing) this.onCrash(code);
         resolve(code);
       });
@@ -68,6 +95,7 @@ export class Core {
     const hello = (await this.call('initialize', [{ protocol: PROTOCOL }])) as { protocol: string; methods: string[]; info?: Partial<CoreInfo> };
     this.methods = new Set(hello.methods);
     this.info = { artURL: hello.info?.artURL ?? '', artToken: hello.info?.artToken ?? '' };
+    this.started = true;
   }
 
   call(method: string, params: unknown[]): Promise<unknown> {

@@ -1,21 +1,37 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Core } from './core.ts';
+import { resolvePaths } from './paths.ts';
 import { APP_ORIGIN, csp, isAppURL, isArtPath, safePath, staticFile, webURL } from './security.ts';
+import { isReloadOrInspect } from './shortcuts.ts';
+import { clampState, DEFAULT_STATE, loadState, saveState } from './window-state.ts';
 
-// Where things are. run.mjs sets these; the defaults are the repo layout.
+// Where things are: next to the app in production, the repo build outputs in
+// development. run.mjs and the tests override with the environment.
 const repo = path.resolve(import.meta.dirname, '..', '..', '..');
-const coreBinary = process.env.PLATYPUS_CORE ?? path.join(repo, 'apps', 'desktop', '.build', 'platypus-core');
-const distDir = path.resolve(process.env.PLATYPUS_FRONTEND_DIST ?? path.join(repo, 'apps', 'ui', 'dist'));
+const runtime = resolvePaths({
+  packaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  exeDir: path.dirname(app.getPath('exe')),
+  env: process.env,
+  repoRoot: repo,
+});
+const coreBinary = runtime.coreBinary;
+const distDir = runtime.frontendDist;
 // Set when the page comes from a Vite dev server (hot reload, looser CSP).
-const devURL = process.env.PLATYPUS_DEV_URL ? new URL(process.env.PLATYPUS_DEV_URL) : undefined;
+const devURL = !app.isPackaged && process.env.PLATYPUS_DEV_URL ? new URL(process.env.PLATYPUS_DEV_URL) : undefined;
 const devPort = devURL ? Number(devURL.port) : undefined;
 
 // Wayland where there is one, X11 otherwise.
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
-// For driving the window from a test script (Playwright connectOverCDP); loopback only.
-if (process.env.PLATYPUS_REMOTE_DEBUGGING_PORT) app.commandLine.appendSwitch('remote-debugging-port', process.env.PLATYPUS_REMOTE_DEBUGGING_PORT);
+// For driving the window from a test script (Playwright over CDP).
+// Development only, loopback only: a packaged app never opens a debugger,
+// so there is nothing a child process could inherit or a neighbor could join.
+if (!app.isPackaged && process.env.PLATYPUS_REMOTE_DEBUGGING_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.PLATYPUS_REMOTE_DEBUGGING_PORT);
+  app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+}
 
 // The page is app://platypus/... : a secure, standard origin of our own, so
 // nothing depends on file:// rules and the art URLs (/steam-art/...) the Go
@@ -116,10 +132,14 @@ function decodeURIComponentSafe(s: string): string {
 }
 
 function createWindow(): void {
+  const statePath = path.join(app.getPath('userData'), 'window-state.json');
+  const saved = loadState(statePath);
+  const state = clampState(saved ?? DEFAULT_STATE, screen.getAllDisplays().map((d) => d.workArea));
+  const { maximized, ...bounds } = state;
   const win = new BrowserWindow({
-    width: 1024,
-    height: 768,
+    ...bounds,
     title: 'Platypus',
+    icon: runtime.iconFile,
     backgroundColor: '#1b2636',
     autoHideMenuBar: true,
     webPreferences: {
@@ -144,12 +164,27 @@ function createWindow(): void {
     if (external) void shell.openExternal(external);
   });
   win.webContents.on('will-attach-webview', (e) => e.preventDefault());
-  if (process.env.PLATYPUS_DEVTOOLS) {
-    win.webContents.on('before-input-event', (_e, input) => {
-      if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) win.webContents.toggleDevTools();
-    });
-  }
+  // Reload and DevTools keys: development keeps them (hot reload, F12 with
+  // PLATYPUS_DEVTOOLS=1); production answers neither, so a stray Ctrl+R can
+  // never drop the session and no shortcut opens DevTools.
+  win.webContents.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return;
+    if (!app.isPackaged && process.env.PLATYPUS_DEVTOOLS) {
+      if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) win.webContents.toggleDevTools();
+      return;
+    }
+    if (app.isPackaged && isReloadOrInspect(input)) e.preventDefault();
+  });
+  // Remember the window for the next run (clamped to the displays then).
+  // Saved on close for a window the user closes, and again in before-quit:
+  // app.exit() never delivers close, so a SIGTERM quit would lose it.
+  win.on('close', () => saveWindowState(statePath, win));
+  if (maximized) win.maximize();
   void win.loadURL(`${APP_ORIGIN}/`);
+}
+
+function saveWindowState(statePath: string, win: BrowserWindow): void {
+  saveState(statePath, { ...win.getBounds(), maximized: win.isMaximized() });
 }
 
 app.on('second-instance', () => {
@@ -164,9 +199,21 @@ app.on('before-quit', (e) => {
   if (quitting || !core) return;
   quitting = true;
   e.preventDefault();
+  for (const w of BrowserWindow.getAllWindows()) {
+    saveWindowState(path.join(app.getPath('userData'), 'window-state.json'), w);
+  }
   // The core stops games it started, the plugins and a last cloud sync; give it time.
   void core.close().finally(() => app.exit(0));
 });
+
+// A bare SIGTERM/SIGINT would kill Electron at once and strand the core's
+// children (games, plugin helpers). Quitting instead runs before-quit, which
+// shuts the core down cleanly first.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    if (!quitting) app.quit();
+  });
+}
 
 app.on('window-all-closed', () => app.quit());
 
