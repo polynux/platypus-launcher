@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { buttonVariantClass } from './ds/button';
 import { Badge } from './ds/badge';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
+import { TIER_MEANING } from '../lib/compat';
 
 /*
  * App-level primitives and legacy helpers. src/components/ds/ (shadcn/Radix, restyled to
@@ -82,7 +83,7 @@ export function TierBadge({ tier, suffix }: { tier?: string | null; suffix?: str
   if (!tier) return null;
   const variant = (TIERS as readonly string[]).includes(tier) ? (tier as (typeof TIERS)[number]) : 'silver';
   return (
-    <Badge variant={variant}>
+    <Badge variant={variant} title={TIER_MEANING[tier]}>
       {tier}
       {suffix ? ` ${suffix}` : ''}
     </Badge>

@@ -19,6 +19,10 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
           <p className="mt-0.5 max-w-xl text-[12.5px] text-white/50">
             Curated recipes (Lutris, community) and ProtonDB ratings for your library. {withData.length} of {games.length} titles have data.
           </p>
+          <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/55">
+            A fix is a recipe of winetricks packages and DLL overrides for one game. ProtonDB tiers run from Platinum (works out of the box)
+            through Gold, Silver and Bronze to Borked (doesn't run).
+          </p>
         </div>
         <SegRow<Filter>
           label="Filter"

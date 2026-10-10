@@ -55,7 +55,7 @@ function SwitchRow({ label, hint, title, checked, onChange }: { label: string; h
     <label htmlFor={id} title={title} className={cx('flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 transition', checked ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
       <span className="min-w-0">
         <span className="block font-mono text-[11.5px] font-bold text-white/85">{label}</span>
-        {hint && <span className="block truncate font-mono text-[11px] text-white/40">{hint}</span>}
+        {hint && <span className="block truncate font-mono text-[12px] text-white/55">{hint}</span>}
       </span>
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
     </label>
@@ -173,6 +173,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           {!native && (
           <div>
             <MonoLabel className="mb-2">runner</MonoLabel>
+            <p className="mb-2 text-[12px] leading-relaxed text-white/55">The Proton or Wine build that runs this Windows game.</p>
             <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
               <SelectItem value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</SelectItem>
               {runnerMissing && <SelectItem value={selectedRunner}>{selectedRunner} (missing)</SelectItem>}
@@ -196,28 +197,41 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
           {!native && (
           <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-            <div><MonoLabel className="mb-1.5">dx layer</MonoLabel><SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} /></div>
-            <div><MonoLabel className="mb-1.5">sync</MonoLabel><SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} /></div>
+            <div>
+              <MonoLabel className="mb-1.5">dx layer</MonoLabel>
+              <SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} />
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.</p>
+            </div>
+            <div>
+              <MonoLabel className="mb-1.5">sync</MonoLabel>
+              <SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.</p>
+            </div>
             <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
             <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
-            <div><MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel><SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} /></div>
+            <div>
+              <MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel>
+              <SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} />
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0.</p>
+            </div>
           </div>
           )}
 
           <div>
             <MonoLabel className="mb-2">pipeline</MonoLabel>
+            <p className="mb-2 text-[12px] leading-relaxed text-white/55">Each switch wraps the launch command in one more program.</p>
             <div className="grid gap-1.5 sm:grid-cols-2">
               {([
-                ['use_gamemode', 'gamemode', 'Wrap with gamemoderun'],
-                ['use_gamescope', 'gamescope', 'Run inside a gamescope session'],
+                ['use_gamemode', 'gamemode', 'Wrap the launch in gamemoderun'],
+                ['use_gamescope', 'gamescope', 'Run the game inside a gamescope session'],
                 ...(!native
                   ? ([
-                      ['eac_runtime', 'eac runtime', 'Bind the Proton EasyAntiCheat runtime'],
-                      ['battleye_runtime', 'battleye runtime', 'Bind the Proton BattlEye runtime'],
+                      ['eac_runtime', 'eac runtime', 'For games that use EasyAntiCheat'],
+                      ['battleye_runtime', 'battleye runtime', 'For games that use BattlEye'],
                     ] as const)
                   : []),
               ] as const).map(([k, label, title]) => (
-                <SwitchRow key={k} label={label} title={title} checked={!!draft[k]} onChange={(v) => set(k, v)} />
+                <SwitchRow key={k} label={label} hint={title} checked={!!draft[k]} onChange={(v) => set(k, v)} />
               ))}
             </div>
             {draft.use_gamescope && (
@@ -320,6 +334,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           {!native && (
           <div>
             <MonoLabel className="mb-2">proton flags</MonoLabel>
+            <p className="mb-2 text-[12px] leading-relaxed text-white/55">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
             <div className="space-y-1.5">
               {PROTON_FLAGS.map((f) => {
                 const on = flags.includes(f.key);

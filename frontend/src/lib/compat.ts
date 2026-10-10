@@ -15,6 +15,15 @@ export const TIER_LABEL: Record<string, string> = {
   borked: 'Borked',
 };
 
+/** What a ProtonDB tier means for the player, in ProtonDB's own terms. */
+export const TIER_MEANING: Record<string, string> = {
+  platinum: 'Works perfectly out of the box',
+  gold: 'Works after small tweaks',
+  silver: 'Works, with notable issues',
+  bronze: 'Runs, with crashes or major issues',
+  borked: "Doesn't run or isn't playable",
+};
+
 /** What a library card shows: a native Linux build, a ProtonDB tier, or nothing. */
 export type CardCompat = { kind: 'native' } | { kind: 'tier'; tier: string; source: string } | null;
 

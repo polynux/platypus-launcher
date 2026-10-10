@@ -18,6 +18,9 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Runners</h1>
           <p className="mt-0.5 text-[12.5px] text-white/50">Proton, GE-Proton and Wine builds detected on this system.</p>
+          <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/55">
+            A runner is the build that runs a Windows game on Linux. Each game picks one in its settings; native Linux games need none.
+          </p>
         </div>
         <Button variant="neutral" onClick={onRefresh} disabled={scanning}>
           {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
