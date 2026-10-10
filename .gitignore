@@ -39,3 +39,8 @@ plugins/echo/bin/
 
 # Root build output
 /platypus
+
+# Electron shell
+electron/node_modules/
+electron/.build/
+electron/dist/
