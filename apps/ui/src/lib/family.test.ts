@@ -46,7 +46,7 @@ describe('family copies', () => {
     expect(copyStatus(copy('a', { available: false }))).toBe('unavailable');
     expect(copyStatus(copy('a', { in_use: true }))).toBe('in use');
     expect(copyStatus(copy('a'))).toBe('');
-    expect(dlcLabel({ dlc: [{ id: 'x', name: 'Soundtrack' }, { id: 'y', name: 'Track pack' }] })).toBe('Soundtrack, Track pack');
+    expect(dlcLabel({ dlc: [{ id: 'x', name: 'Soundtrack', kind: 'dlc' }, { id: 'y', name: 'Track pack', kind: 'dlc' }] })).toBe('Soundtrack, Track pack');
     expect(dlcLabel({ dlc: [] })).toBe('no add-ons');
   });
 });
@@ -70,8 +70,8 @@ describe('copy comparison', () => {
 
   it('keeps the add-on rows the table shows: differences only drops the shared ones, soundtracks wait for the toggle', () => {
     const copies: GameCopy[] = [
-      { owner_id: 'ana', owner_name: 'Ana', available: true, dlc: [{ id: 'x', name: 'X' }, { id: 'ost', name: 'OST', kind: 'soundtrack' }] },
-      { owner_id: 'ben', owner_name: 'Ben', available: true, dlc: [{ id: 'x', name: 'X' }, { id: 'y', name: 'Y', kind: 'other' }] },
+      { owner_id: 'ana', owner_name: 'Ana', available: true, dlc: [{ id: 'x', name: 'X', kind: 'dlc' }, { id: 'ost', name: 'OST', kind: 'soundtrack' }] },
+      { owner_id: 'ben', owner_name: 'Ben', available: true, dlc: [{ id: 'x', name: 'X', kind: 'dlc' }, { id: 'y', name: 'Y', kind: 'other' }] },
     ];
     expect(compareRows(copies, { differencesOnly: true, soundtracks: false }).map((r) => r.id)).toEqual(['y']);
     expect(compareRows(copies, { differencesOnly: false, soundtracks: false }).map((r) => r.id)).toEqual(['x', 'y']);

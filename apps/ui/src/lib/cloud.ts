@@ -4,6 +4,12 @@ import { plainError } from './plainError';
 
 export const CLOUD_MODES: CloudMode[] = ['off', 'ask', 'auto'];
 
+/** The wire carries modes as plain strings; anything Platypus doesn't know
+ *  means "ask" (the default), never a crash. */
+export function asCloudMode(s: string): CloudMode {
+  return s === 'off' || s === 'auto' ? s : 'ask';
+}
+
 export const MODE_HELP: Record<CloudMode, string> = {
   off: "Platypus doesn't sync this game's saves.",
   ask: 'Syncs on its own when nothing clashes; asks when saves changed on both sides or the store is unreachable.',

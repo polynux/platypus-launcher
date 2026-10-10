@@ -6,7 +6,7 @@ import { Badge } from './ds/badge';
 import { Button } from './ds/button';
 import { CapabilitySurface } from '../lib/capabilities';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
-import { MODE_HELP, STATE_CHIP, agoLabel, describeCounts } from '../lib/cloud';
+import { MODE_HELP, STATE_CHIP, agoLabel, asCloudMode, describeCounts } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { ErrorNotice, RawDetails } from './ErrorNotice';
 import { MonoLabel, Panel, SegRow, cx } from './ui';
@@ -209,7 +209,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
           <MonoLabel className="mb-1.5">sync for this game</MonoLabel>
           <SegRow<CloudMode | 'default'>
             label="Sync mode for this game"
-            value={info.game_mode || 'default'}
+            value={info.game_mode ? asCloudMode(info.game_mode) : 'default'}
             onChange={setMode}
             options={[
               { value: 'default', label: `Default · ${info.plugin_mode}`, title: 'Follow the store plugin\'s setting' },

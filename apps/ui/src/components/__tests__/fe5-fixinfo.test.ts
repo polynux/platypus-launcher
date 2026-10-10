@@ -11,6 +11,8 @@ function game(over: Partial<Game> = {}): Game {
     title: 'G',
     cover_url: '',
     banner_url: '',
+    hero_url: '',
+    features: [],
     install_dir: '/g',
     executable: '',
     is_installed: true,
@@ -21,7 +23,7 @@ function game(over: Partial<Game> = {}): Game {
 
 describe('FE-5 fix_info survives rescan', () => {
   it('preserves fix_info when the backend list carries none', () => {
-    const fix = { source: 'curated', tier: 'gold', description: 'fix it' };
+    const fix = { source: 'curated', tier: 'gold', description: 'fix it', winetricks: [], dll_overrides: {}, launch_args: '' };
     const prev = [game({ id: 'g1', fix_info: fix })];
     const next = [game({ id: 'g1', fix_info: undefined })];
     const merged = mergeRescannedGames(prev, next, {});
@@ -29,8 +31,8 @@ describe('FE-5 fix_info survives rescan', () => {
   });
 
   it('prefers fresh backend fix_info when present', () => {
-    const oldFix = { source: 'curated', tier: 'gold', description: 'old' };
-    const newFix = { source: 'protondb', tier: 'silver', description: 'new' };
+    const oldFix = { source: 'curated', tier: 'gold', description: 'old', winetricks: [], dll_overrides: {}, launch_args: '' };
+    const newFix = { source: 'protondb', tier: 'silver', description: 'new', winetricks: [], dll_overrides: {}, launch_args: '' };
     const merged = mergeRescannedGames(
       [game({ id: 'g1', fix_info: oldFix })],
       [game({ id: 'g1', fix_info: newFix })],

@@ -26,8 +26,8 @@ const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_on
 
 describe('card compatibility', () => {
   it('shows a native build over a tier, and a tier when there is no native build', () => {
-    expect(cardCompat(mk('a', { native: true, fix_info: { source: 'protondb', tier: 'gold', description: '' } }))).toEqual({ kind: 'native' });
-    expect(cardCompat(mk('b', { fix_info: { source: 'protondb', tier: 'gold', description: '' } }))).toEqual({ kind: 'tier', tier: 'gold', source: 'protondb' });
+    expect(cardCompat(mk('a', { native: true, fix_info: { source: 'protondb', tier: 'gold', description: '', winetricks: [], dll_overrides: {}, launch_args: '' } }))).toEqual({ kind: 'native' });
+    expect(cardCompat(mk('b', { fix_info: { source: 'protondb', tier: 'gold', description: '', winetricks: [], dll_overrides: {}, launch_args: '' } }))).toEqual({ kind: 'tier', tier: 'gold', source: 'protondb' });
   });
 
   it('shows nothing for a game with no answer', () => {
@@ -36,7 +36,7 @@ describe('card compatibility', () => {
 
   it('filters by native, a tier, or none', () => {
     expect(tierFilterValue(mk('a', { native: true }))).toBe('native');
-    expect(tierFilterValue(mk('b', { fix_info: { source: 'protondb', tier: 'platinum', description: '' } }))).toBe('platinum');
+    expect(tierFilterValue(mk('b', { fix_info: { source: 'protondb', tier: 'platinum', description: '', winetricks: [], dll_overrides: {}, launch_args: '' } }))).toBe('platinum');
     expect(tierFilterValue(mk('c'))).toBe('none');
   });
 });

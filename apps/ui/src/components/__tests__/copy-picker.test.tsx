@@ -20,8 +20,8 @@ import { CopyPicker } from '../CopyPicker';
 const plugin = (o: Partial<StorePlugin> = {}): StorePlugin =>
   ({ id: 'echo', name: 'Echo', status: 'ready', capabilities: ['family'], declared: ['family'], ...o }) as StorePlugin;
 
-const ana: GameCopy = { owner_id: 'ana', owner_name: 'Ana', dlc: [{ id: 'soundtrack', name: 'Soundtrack' }], note: "Ana's copy has the soundtrack", available: true };
-const ben: GameCopy = { owner_id: 'ben', owner_name: 'Ben', dlc: [{ id: 'soundtrack', name: 'Soundtrack' }, { id: 'track-pack', name: 'Track pack' }], available: true, in_use: true };
+const ana: GameCopy = { owner_id: 'ana', owner_name: 'Ana', dlc: [{ id: 'soundtrack', name: 'Soundtrack', kind: 'dlc' }], note: "Ana's copy has the soundtrack", available: true };
+const ben: GameCopy = { owner_id: 'ben', owner_name: 'Ben', dlc: [{ id: 'soundtrack', name: 'Soundtrack', kind: 'dlc' }, { id: 'track-pack', name: 'Track pack', kind: 'dlc' }], available: true, in_use: true };
 const carl: GameCopy = { owner_id: 'carl', owner_name: 'Carl', dlc: [], available: false };
 
 const borrowed = (o: Partial<Game> = {}): Game =>

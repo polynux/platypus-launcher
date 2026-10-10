@@ -11,6 +11,8 @@ function game(over: Partial<Game> = {}): Game {
     title: 'G',
     cover_url: '',
     banner_url: '',
+    hero_url: '',
+    features: [],
     install_dir: '/g',
     executable: '',
     is_installed: true,

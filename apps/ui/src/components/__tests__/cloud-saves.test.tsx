@@ -36,7 +36,7 @@ const counts = (o: Partial<CloudStatus['counts']> = {}) => ({ same: 3, download:
 const NOW = Math.floor(Date.now() / 1000);
 
 const status = (o: Partial<CloudStatus> = {}): CloudStatus => ({ state: 'synced', counts: counts(), checkedAt: NOW - 120, ...o });
-const info = (o: Partial<CloudInfo> = {}): CloudInfo => ({ mode: 'ask', plugin_mode: 'ask', game_mode: '', status: status(), ...o });
+const info = (o: Partial<CloudInfo> = {}): CloudInfo => ({ mode: 'ask', plugin_mode: 'ask', game_mode: '', status: status(), running: false, ...o });
 
 const conflictStatus = (): CloudStatus => status({
   state: 'conflict', message: '2 files changed on both sides', counts: counts({ same: 1, conflict: 2 }),
@@ -49,7 +49,7 @@ const conflictStatus = (): CloudStatus => status({
 
 function game(o: Partial<Game> = {}): Game {
   return {
-    id: 'p.echo.tiny', source: 'echo', store: 'echo', store_app_id: 'tiny', title: 'Echo Tiny', cover_url: '', banner_url: '',
+    id: 'p.echo.tiny', source: 'echo', store: 'echo', store_app_id: 'tiny', title: 'Echo Tiny', cover_url: '', banner_url: '', hero_url: '',
     install_dir: '/g/tiny', executable: '', is_installed: true, settings: {} as Game['settings'], features: null, ...o,
   };
 }

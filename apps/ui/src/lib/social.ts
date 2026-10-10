@@ -21,7 +21,7 @@ export const FRIEND_STATE_LABEL: Record<FriendState, string> = {
 };
 
 /** Dot colour for a status or friend state: green online, amber away-ish, grey offline. */
-export function stateDot(state: FriendState | SocialStatus): string {
+export function stateDot(state: string): string {
   switch (state) {
     case 'online':
     case 'looking':

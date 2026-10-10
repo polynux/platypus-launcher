@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import type { CloudMode, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
-import { MODE_HELP } from '../lib/cloud';
+import { MODE_HELP, asCloudMode } from '../lib/cloud';
 import { MonoLabel, Panel, SegRow } from './ui';
 import { ErrorNotice } from './ErrorNotice';
 
@@ -35,7 +35,7 @@ function Row({ plugin }: { plugin: StorePlugin }) {
   useEffect(() => {
     let live = true;
     Effect.runPromise(LauncherApi.getCloudSettings())
-      .then((s) => live && setMode(s.plugins[plugin.id] ?? 'ask'))
+      .then((s) => live && setMode(asCloudMode(s.plugins[plugin.id] ?? 'ask')))
       .catch((e) => live && setError(e instanceof Error ? e.message : String(e)));
     return () => { live = false; };
   }, [plugin.id]);

@@ -18,7 +18,8 @@ export const SOURCE_LABEL: Record<VersionBuildSource, string> = {
   manual: 'typed by you',
 };
 
-export const sourceLabel = (s: VersionBuildSource): string => SOURCE_LABEL[s] ?? SOURCE_LABEL.store;
+export const sourceLabel = (s: string | undefined): string =>
+  s === 'archive' ? SOURCE_LABEL.archive : s === 'manual' ? SOURCE_LABEL.manual : SOURCE_LABEL.store;
 
 /** The target the backend queues. Typed text rides in manual.input, as typed. */
 export function targetOf(choice: VersionChoice): VersionTarget {

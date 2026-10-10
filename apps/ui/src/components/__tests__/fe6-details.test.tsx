@@ -40,6 +40,8 @@ function game(): Game {
     title: 'Details Game',
     cover_url: '',
     banner_url: '',
+    hero_url: '',
+    features: [],
     install_dir: '/g',
     executable: '',
     is_installed: true,

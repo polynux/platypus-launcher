@@ -11,6 +11,8 @@ function game(over: Partial<Game> = {}): Game {
     title: 'Echo Shared Racer',
     cover_url: '',
     banner_url: '',
+    hero_url: '',
+    features: [],
     install_dir: '',
     executable: '',
     is_installed: true,

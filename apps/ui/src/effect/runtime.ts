@@ -44,6 +44,7 @@ import type {
   VersionPin,
   VersionTarget,
 } from '../types';
+import type { types as gen } from '../gen/models';
 import { toBackendGame } from '../lib/settings';
 import { App, backendAvailable, onEvent } from './bridge';
 
@@ -67,8 +68,10 @@ function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error
   });
 }
 
-// Games cross to Go with their structured settings folded into env_vars.
-const backend = (g: Game) => toBackendGame(g) as never;
+// Games cross to Go with their structured settings folded into env_vars. The
+// UI holds features as null when the backend listed none; Go reads that as an
+// empty list, so the handoff is a direct assertion, not a conversion.
+const backend = (g: Game) => toBackendGame(g) as gen.Game;
 
 /** A compat answer with its lists present, whatever Go sent (nil slices arrive as null). */
 function normalizeCompat(c: Compat): Compat {
@@ -85,7 +88,7 @@ export const LauncherApi = {
   // Every source merged; plugin failures arrive as warnings, not errors.
   getLibrary: () =>
     call<Library>('GetLibrary', async () => {
-      const lib = (await App.GetLibrary()) as unknown as Library;
+      const lib = await App.GetLibrary();
       if (!lib || !Array.isArray(lib.games)) throw new Error('GetLibrary returned unexpected payload');
       return { games: lib.games, warnings: lib.warnings ?? [] };
     }),
@@ -106,18 +109,18 @@ export const LauncherApi = {
   // applies to the game). Resolves null when neither has data worth showing.
   getGameFix: (game: Game) =>
     call<GameFixInfo | null>('GetGameFix', async () => {
-      const fix = (await App.GetGameFix(backend(game))) as unknown as GameFixInfo | null;
+      const fix = await App.GetGameFix(backend(game));
       return fix && (fix.tier || fix.description) ? fix : null;
     }),
 
   // Compatibility and protection facts: ProtonDB rating, native build, DRM and
   // anti-cheat (internal/compat). Lists are normalized to [] at the edge.
   getGameCompat: (game: Game) =>
-    call<Compat>('GetGameCompat', async () => normalizeCompat((await App.GetGameCompat(backend(game))) as unknown as Compat)),
+    call<Compat>('GetGameCompat', async () => normalizeCompat(await App.GetGameCompat(backend(game)))),
 
   // Saves the Steam AppID the user chose for a game's ratings ("" clears it).
   setGameSteamAppID: (game: Game, appId: string) =>
-    call<Compat>('SetGameSteamAppID', async () => normalizeCompat((await App.SetGameSteamAppID(backend(game), appId)) as unknown as Compat)),
+    call<Compat>('SetGameSteamAppID', async () => normalizeCompat(await App.SetGameSteamAppID(backend(game), appId))),
 
   // The "Fetch ratings online" switch.
   setRatingsOnline: (on: boolean) => call<LauncherSettings>('SetRatingsOnline', () => App.SetRatingsOnline(on)),
@@ -127,7 +130,7 @@ export const LauncherApi = {
   // so consumers never crash on list.map (FE-10).
   getGameDetails: (game: Game) =>
     call<GameDetails>('GetGameDetails', async () => {
-      const d = (await App.GetGameDetails(backend(game))) as unknown as GameDetails;
+      const d = await App.GetGameDetails(backend(game));
       return {
         ...d,
         screenshots: d.screenshots ?? [],
@@ -155,7 +158,7 @@ export const LauncherApi = {
   getSessions: () => call<SessionEvent[]>('ListSessions', async () => (await App.ListSessions()) ?? []),
 
   saveGameSettings: (id: string, settings: GameSettings) =>
-    call<void>('SaveGameSettings', () => App.SaveGameSettings(id, settings as unknown as Record<string, unknown>)),
+    call<void>('SaveGameSettings', () => App.SaveGameSettings(id, { ...settings })),
 
   // Store plugins.
   listPlugins: () => call<StorePlugin[]>('ListStorePlugins', async () => (await App.ListStorePlugins()) ?? []),
@@ -185,8 +188,8 @@ export const LauncherApi = {
   launchGameAnyway: (game: Game, prompt: CloudPrompt) => call<string>('LaunchGameAnyway', () => App.LaunchGameAnyway(backend(game), prompt)),
   launchGameViaClient: (game: Game) => call<string>('LaunchGameViaClient', () => App.LaunchGameViaClient(backend(game))),
   getCloudSettings: () => call<CloudSettings>('GetCloudSettings', async () => {
-    const s = (await App.GetCloudSettings()) as unknown as Partial<CloudSettings>;
-    return { plugins: s?.plugins ?? {}, games: s?.games ?? {} };
+    const s = await App.GetCloudSettings();
+    return { plugins: s.plugins ?? {}, games: s.games ?? {} };
   }),
   // '' restores the default (plugin: ask; game: follow its plugin).
   setCloudPluginMode: (pluginId: string, mode: CloudMode | '') => call<void>('SetCloudPluginMode', () => App.SetCloudPluginMode(pluginId, mode)),
@@ -195,7 +198,7 @@ export const LauncherApi = {
   // builds; Platypus adds the install history and its pin.
   getGameVersions: (game: Game) =>
     call<VersionInfo>('GetGameVersions', async () => {
-      const v = (await App.GetGameVersions(backend(game))) as unknown as VersionInfo;
+      const v = await App.GetGameVersions(backend(game));
       return {
         ...v,
         channels: v.channels ?? [],
@@ -210,24 +213,24 @@ export const LauncherApi = {
   unlockVersionChannel: (game: Game, channel: string, password: string) =>
     call<boolean>('UnlockVersionChannel', () => App.UnlockVersionChannel(backend(game), channel, password)),
   pinGameVersion: (game: Game, pin: VersionPin) =>
-    call<void>('PinGameVersion', () => App.PinGameVersion(backend(game), pin as never)),
+    call<void>('PinGameVersion', () => App.PinGameVersion(backend(game), pin)),
   unpinGameVersion: (gameId: string) => call<void>('UnpinGameVersion', () => App.UnpinGameVersion(gameId)),
   installGameVersion: (game: Game, target: VersionTarget) =>
-    call<Job>('InstallGameVersion', () => App.InstallGameVersion(backend(game), target as never)),
+    call<Job>('InstallGameVersion', () => App.InstallGameVersion(backend(game), target)),
   updateGameVersion: (game: Game, target: VersionTarget) =>
-    call<Job>('UpdateGameVersion', () => App.UpdateGameVersion(backend(game), target as never)),
+    call<Job>('UpdateGameVersion', () => App.UpdateGameVersion(backend(game), target)),
 
   // Achievements and redeem (protocol 1.7). Null when the plugin doesn't offer
   // the user's progress for this game; the game page then shows the catalogue.
   getGameAchievements: (game: Game) =>
     call<AchievementProgress | null>('GetGameAchievements', async () => {
-      const a = (await App.GetGameAchievements(backend(game))) as unknown as AchievementProgress | null;
+      const a = await App.GetGameAchievements(backend(game));
       return a ? { ...a, list: a.list ?? [] } : null;
     }),
   // The code goes to the store's plugin only; one submission at a time (Go refuses a second).
   redeemCode: (source: string, code: string) =>
     call<RedeemResult>('RedeemCode', async () => {
-      const r = (await App.RedeemCode(source, code)) as unknown as RedeemResult;
+      const r = await App.RedeemCode(source, code);
       return { message: r.message ?? '', titles: r.titles ?? [] };
     }),
 
@@ -243,7 +246,7 @@ export const LauncherApi = {
   // groups; Platypus adds the choices it would use now (saved, or the defaults).
   getGameOptions: (game: Game) =>
     call<GameOptions>('GetGameOptions', async () => {
-      const o = (await App.GetGameOptions(backend(game))) as unknown as GameOptions;
+      const o = (await App.GetGameOptions(backend(game))) as GameOptions;
       return {
         groups: (o.groups ?? []).map((g) => ({ ...g, values: g.values ?? [] })),
         chosen: o.chosen ?? {},

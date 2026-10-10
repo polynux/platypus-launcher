@@ -89,7 +89,7 @@ export function compareRows(copies: GameCopy[], opts: { differencesOnly: boolean
   const rows = new Map<string, CompareRow>();
   for (const copy of copies) {
     for (const d of copy.dlc ?? []) {
-      const kind = d.kind ?? 'dlc';
+      const kind = d.kind === 'soundtrack' || d.kind === 'other' ? d.kind : 'dlc';
       const row = rows.get(d.id) ?? { id: d.id, name: d.name, kind, owners: [] };
       row.owners.push(copy.owner_id);
       rows.set(d.id, row);
