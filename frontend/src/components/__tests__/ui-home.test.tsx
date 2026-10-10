@@ -55,8 +55,10 @@ describe('Library', () => {
   it('L1: chips only for stores that have games', () => {
     expect(sourceChips([mk('a'), mk('b', { store: 'custom' })])).toEqual(['all', 'steam']);
     expect(sourceChips([mk('a'), mk('g', { store: 'gog' }), mk('x', { store: 'itch' as Game['store'] })])).toEqual(['all', 'steam', 'gog', 'itch']);
-    const { queryByRole } = lib([mk('a')]);
-    expect(queryByRole('radio', { name: 'gog' })).toBeNull();
+    // One store has nothing to choose between: no store chips at all, two or more show them.
+    expect(lib([mk('a')]).queryByRole('radio', { name: 'steam' })).toBeNull();
+    const { queryByRole } = lib([mk('a'), mk('g', { store: 'gog' })]);
+    expect(queryByRole('radio', { name: 'gog' })).toBeTruthy();
     expect(queryByRole('radio', { name: 'steam' })).toBeTruthy();
   });
   it('L2: sorts by title and hours with aria-sort', () => {
