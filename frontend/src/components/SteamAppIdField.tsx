@@ -43,7 +43,7 @@ export function SteamAppIdField({ game }: { game: Game }) {
     : `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title)}`;
 
   return (
-    <div className="rounded-2xl bg-white/[0.035] p-4 ring-1 ring-white/[0.06]">
+    <div className="border-b border-white/[0.07] pb-5">
       <MonoLabel className="mb-2">steam appid for ratings</MonoLabel>
       <form
         className="flex items-center gap-2"

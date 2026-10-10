@@ -52,7 +52,7 @@ function SelectField({ label, value, onChange, children, className }: { label: s
 function SwitchRow({ label, hint, title, checked, onChange }: { label: string; hint?: string; title?: string; checked: boolean; onChange: (v: boolean) => void }) {
   const id = React.useId();
   return (
-    <label htmlFor={id} title={title} className={cx('flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 transition', checked ? 'bg-amber-300/[0.08] ring-1 ring-amber-300/35' : 'bg-white/[0.04] hover:bg-white/[0.06]')}>
+    <label htmlFor={id} title={title} className="flex cursor-pointer items-center justify-between gap-3 py-2.5 transition hover:text-white">
       <span className="min-w-0">
         <span className="block font-mono text-[11.5px] font-bold text-white/85">{label}</span>
         {hint && <span className="block truncate font-mono text-[12px] text-white/55">{hint}</span>}
@@ -220,7 +220,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           <div>
             <MonoLabel className="mb-2">pipeline</MonoLabel>
             <p className="mb-2 text-[12px] leading-relaxed text-white/55">Each switch wraps the launch command in one more program.</p>
-            <div className="grid gap-1.5 sm:grid-cols-2">
+            <div className="divide-y divide-white/[0.07]">
               {([
                 ['use_gamemode', 'gamemode', 'Wrap the launch in gamemoderun'],
                 ['use_gamescope', 'gamescope', 'Run the game inside a gamescope session'],
@@ -235,7 +235,8 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               ))}
             </div>
             {draft.use_gamescope && (
-              <div className="mt-2.5 space-y-3 rounded-xl bg-white/[0.03] p-3.5 ring-1 ring-white/[0.07]">
+              // The gamescope options hang off the pipeline switch: a hairline and indent, not a card inside the panel.
+              <div className="mt-2.5 space-y-4 border-l border-white/[0.08] pl-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <MonoLabel className="mb-1.5">resolution</MonoLabel>
@@ -284,7 +285,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     )}
                   </div>
                 </div>
-                <div className="grid gap-1.5 sm:grid-cols-2">
+                <div className="divide-y divide-white/[0.07]">
                   {GS_TOGGLES.map((t) => (
                     <SwitchRow key={t.key} label={t.label} hint={t.flag} title={t.title} checked={gs.toggles[t.key]} onChange={(v) => setGs({ toggles: { ...gs.toggles, [t.key]: v } })} />
                   ))}
@@ -335,7 +336,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           <div>
             <MonoLabel className="mb-2">proton flags</MonoLabel>
             <p className="mb-2 text-[12px] leading-relaxed text-white/55">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
-            <div className="space-y-1.5">
+            <div className="divide-y divide-white/[0.07]">
               {PROTON_FLAGS.map((f) => {
                 const on = flags.includes(f.key);
                 return (
