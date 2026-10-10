@@ -32,8 +32,8 @@ type WikiFacts struct {
 
 // RemovedDRM is a DRM that was taken out of a version, on a day (YYYY-MM-DD).
 type RemovedDRM struct {
-	Name string
-	Date string
+	Name string `json:"name"`
+	Date string `json:"date"`
 }
 
 // tmpl is one template call found in wikitext.
