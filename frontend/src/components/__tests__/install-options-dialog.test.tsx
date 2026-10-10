@@ -31,6 +31,7 @@ vi.mock('../../effect/runtime', () => ({
   onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
+  onLibraryPartial: () => () => {},
 }));
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: openUrl }));
 

@@ -1029,7 +1029,7 @@ def library_list(_params):
                 entry["native"] = True
             entry["note"] = mode_note(ig.get("mode") or "none")
         if store:
-            entry["coverUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_600x900_2x.jpg"
+            entry["coverUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_600x900.jpg"
             entry["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
             entry["bannerUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/header.jpg"
         # Tools, movies, music etc. aren't depot installs Platypus can run.

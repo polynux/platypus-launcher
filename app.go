@@ -59,6 +59,9 @@ type App struct {
 	// familyEmit delivers family.warning notifications to the UI (the
 	// "family" event). Nil until the window exists; tests replace it.
 	familyEmit func(types.FamilyWarning)
+	// libraryEmit delivers a library scan's partial results to the UI (the
+	// "library-partial" event). Nil until the window exists.
+	libraryEmit func(types.Library)
 	// settingsLocks orders the settings saves and starts of each plugin.
 	settingsLocks settingsLocks
 	moves         coreMoves
@@ -166,6 +169,7 @@ func (a *App) startup(ctx context.Context) {
 		OnReady: a.pluginReady,
 	})
 	a.familyEmit = func(w types.FamilyWarning) { wruntime.EventsEmit(ctx, "family", w) }
+	a.libraryEmit = func(l types.Library) { wruntime.EventsEmit(ctx, "library-partial", l) }
 	found, err := a.plugins.Discover()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "plugins: %v", err)
@@ -357,24 +361,49 @@ func (a *App) RemoveCustomGame(id string) error {
 // GetLibrary lists every source and returns the merged library. Steam failing
 // fails the scan, as before; a plugin failing (logged out, crashed) only adds
 // a warning, so one broken plugin can't hide the rest of the library.
+//
+// Sources answer at their own pace (Steam reads local files, a store plugin
+// may wait on its store): each time one finishes while others are still out,
+// the library of those finished is sent as a "library-partial" event, so the
+// window can show it before the slowest plugin answers.
 func (a *App) GetLibrary() (types.Library, error) {
 	all := a.stores.All()
 	results := make([][]types.Game, len(all))
 	errs := make([]error, len(all))
-	var wg sync.WaitGroup
+	finished := make(chan int, len(all))
 	for i, s := range all {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
 			defer cancel()
 			results[i], errs[i] = s.Library(ctx)
+			finished <- i
 		}()
 	}
-	wg.Wait()
+	done := make([]bool, len(all))
+	for left := len(all); left > 0; left-- {
+		done[<-finished] = true // the channel hands over the writes of results[i] and errs[i]
+		if left > 1 && a.libraryEmit != nil {
+			if lib, err := a.assembleLibrary(all, results, errs, done); err == nil && len(lib.Games) > 0 {
+				a.libraryEmit(lib)
+			}
+		}
+	}
+	lib, err := a.assembleLibrary(all, results, errs, done)
+	if err != nil {
+		return types.Library{}, err
+	}
+	a.forgetRemovedGameSettings(all, results, errs)
+	return lib, nil
+}
 
+// assembleLibrary merges what the finished sources returned with the sideloaded
+// games and puts the per-game facts on them.
+func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs []error, done []bool) (types.Library, error) {
 	lib := types.Library{Games: []types.Game{}, Warnings: []types.SourceWarning{}}
 	for i, s := range all {
+		if !done[i] {
+			continue
+		}
 		if errs[i] != nil {
 			if s.ID() == types.SourceSteam {
 				return types.Library{}, fmt.Errorf("%s library scan failed: %w", s.ID(), errs[i])
@@ -385,7 +414,6 @@ func (a *App) GetLibrary() (types.Library, error) {
 		lib.Games = append(lib.Games, results[i]...)
 		a.startPlaytimeOnce(s.ID())
 	}
-	a.forgetRemovedGameSettings(all, results, errs)
 	lib.Games = append(lib.Games, a.customGames()...)
 	a.stats.applyPlaytime(lib.Games)
 	a.applyPins(&lib)

@@ -21,7 +21,7 @@ import { TermsHost } from './components/TermsHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onJobs, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
@@ -116,6 +116,24 @@ export function App() {
     return unsubscribe;
   }, [refreshSocial]);
 
+  // The startup scan shows the library of the sources that answered first (Steam
+  // reads local files; a store plugin may wait on its store) instead of a
+  // skeleton until the slowest one does. Later rescans keep what is shown.
+  const startupScan = useRef(false);
+  const savedSettings = useRef<Promise<Record<string, GameSettings>>>(Promise.resolve({}));
+  useEffect(
+    () =>
+      onLibraryPartial((lib) => {
+        if (!startupScan.current) return;
+        void savedSettings.current.then((saved) => {
+          if (!startupScan.current) return;
+          setGames((prev) => mergeRescannedGames(prev, lib.games, saved));
+          setLoaded(true);
+        });
+      }),
+    [],
+  );
+
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
   const loadData = useCallback(
@@ -130,12 +148,15 @@ export function App() {
           (value): Settled<A> => ({ ok: true, value }),
           (error): Settled<A> => ({ ok: false, error: error instanceof Error ? error : new Error(String(error)) }),
         );
+      startupScan.current = reason === 'startup';
+      // Unreadable saved settings shouldn't block the library.
+      const savedCall = settle(LauncherApi.getGameSettings());
+      savedSettings.current = savedCall.then((r) => (r.ok ? r.value : {}));
       return Promise.all([
         settle(LauncherApi.getLibrary()),
         settle(LauncherApi.getProtonVersions()),
         settle(LauncherApi.listPlugins()),
-        // Unreadable saved settings shouldn't block the library.
-        settle(LauncherApi.getGameSettings()),
+        savedCall,
         // A missing session snapshot (old backend) shouldn't block the library either.
         settle(LauncherApi.getSessions()),
       ])
@@ -210,6 +231,7 @@ export function App() {
           notify(msg, 'err');
         })
         .finally(() => {
+          startupScan.current = false;
           setLoaded(true);
           setScanning(false);
         });
@@ -388,16 +410,32 @@ export function App() {
 
   // A silent library read: no rescan notice and no details-cache eviction.
   // Only the fields `merge` names are taken from the fresh read. A failed read
-  // keeps what is shown; the next rescan reconciles it.
-  const refreshLibraryQuietly = useCallback(
-    (merge: (prev: Game[], fresh: Game[]) => Game[]) => {
+  // keeps what is shown; the next rescan reconciles it. Every read lists every
+  // store (a plugin may spawn its CLI for it), so asks that come while one is
+  // out share the next single read instead of each starting their own.
+  const quietRead = useRef<{ running: boolean; waiting: Set<(prev: Game[], fresh: Game[]) => Game[]> }>({ running: false, waiting: new Set() });
+  const refreshLibraryQuietly = useCallback((merge: (prev: Game[], fresh: Game[]) => Game[]) => {
+    const q = quietRead.current;
+    q.waiting.add(merge);
+    if (q.running) return;
+    const read = () => {
+      const merges = [...q.waiting];
+      q.waiting.clear();
+      q.running = true;
+      const done = () => {
+        q.running = false;
+        if (q.waiting.size > 0) read();
+      };
       Effect.runPromise(LauncherApi.getLibrary()).then(
-        (lib) => setGames((prev) => merge(prev, lib.games)),
-        () => {},
+        (lib) => {
+          setGames((prev) => merges.reduce((acc, m) => m(acc, lib.games), prev));
+          done();
+        },
+        done,
       );
-    },
-    [],
-  );
+    };
+    read();
+  }, []);
 
   // A plugin's playtime report changed a library value (protocol 1.7).
   useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
@@ -457,8 +495,11 @@ export function App() {
   const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
   const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
 
-  const openGame = (id: string) =>
-    setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
+  // Stable, so the library's memoized cards are not re-rendered by every App update.
+  const openGame = useCallback(
+    (id: string) => setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' })),
+    [],
+  );
   // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
 
@@ -614,7 +655,7 @@ export function App() {
         friendsUnread={chat.unread}
       />
 
-      <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
+      <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
         {renderView()}
       </main>
 

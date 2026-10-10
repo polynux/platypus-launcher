@@ -9,13 +9,16 @@ const state = vi.hoisted(() => ({
   library: 0,
   runners: 0,
   onPlaytime: null as null | (() => void),
+  // When set, a library read waits for it.
+  gate: null as null | Promise<void>,
 }));
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
     getLibrary: () => {
       state.library += 1;
-      return Effect.succeed({
+      const wait = state.gate;
+      const answer = {
         games: [
           {
             id: 'g1', source: 'steam', store: 'steam', store_app_id: '10', title: 'Test Game', cover_url: '', banner_url: '',
@@ -24,7 +27,8 @@ vi.mock('../../effect/runtime', () => ({
           },
         ],
         warnings: [],
-      } as never);
+      };
+      return (wait ? Effect.promise(() => wait.then(() => answer)) : Effect.succeed(answer)) as never;
     },
     getProtonVersions: () => {
       state.runners += 1;
@@ -50,6 +54,7 @@ vi.mock('../../effect/runtime', () => ({
     return () => {};
   },
   onCloud: () => () => {},
+  onLibraryPartial: () => () => {},
 }));
 
 import { App } from '../../App';
@@ -67,5 +72,24 @@ describe('playtime event merges the library silently', () => {
     await waitFor(() => expect(state.library).toBe(2), { timeout: 3000 });
     expect(state.runners).toBe(runnersBefore);
     expect(queryByText('Library rescanned')).toBeNull();
+  });
+
+  it('shares one read between the reports that arrive while it is out', async () => {
+    render(<App />);
+    await waitFor(() => expect(state.library).toBeGreaterThanOrEqual(1), { timeout: 3000 });
+    await waitFor(() => expect(state.onPlaytime).not.toBeNull());
+    await new Promise((r) => setTimeout(r, 50));
+    const before = state.library;
+    let open!: () => void;
+    state.gate = new Promise<void>((r) => (open = r));
+    act(() => state.onPlaytime?.());
+    act(() => state.onPlaytime?.());
+    act(() => state.onPlaytime?.());
+    expect(state.library).toBe(before + 1); // the first read is out, the others wait for it
+    state.gate = null;
+    open();
+    await waitFor(() => expect(state.library).toBe(before + 2), { timeout: 3000 }); // one more read for all of them
+    await new Promise((r) => setTimeout(r, 100));
+    expect(state.library).toBe(before + 2);
   });
 });

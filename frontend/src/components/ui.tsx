@@ -173,7 +173,7 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
       </div>
     );
   }
-  return <img ref={img} src={current} alt="" loading="lazy" onError={fail} className={cx('object-cover', className)} />;
+  return <img ref={img} src={current} alt="" loading="lazy" decoding="async" onError={fail} className={cx('object-cover', className)} />;
 }
 
 export function relTime(ts: number, now = Date.now()): string {

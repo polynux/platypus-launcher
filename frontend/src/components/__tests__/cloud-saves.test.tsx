@@ -18,6 +18,7 @@ vi.mock('../../effect/runtime', () => ({
   onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
+  onLibraryPartial: () => () => {},
 }));
 
 import { CloudSavesPanel } from '../CloudSavesPanel';
