@@ -1,8 +1,7 @@
-//go:build core
-
 // The core: the App without a window. The UI shell (Electron, see electron/)
 // spawns this binary and talks to it over stdio: JSON-RPC 2.0, one object per
-// line (internal/corerpc). Build it with `go build -tags core -o platypus-core .`.
+// line (internal/corerpc). Build it with
+// `go build -o platypus-core ./cmd/platypus-core` (no GTK/WebKit linked).
 package main
 
 import (

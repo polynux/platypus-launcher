@@ -7,7 +7,7 @@ import (
 )
 
 // Host is the shell the App runs in: the Wails window, or the Electron shell
-// that talks to the core process (core_main.go). The App only ever reaches the
+// that talks to the core process (cmd/platypus-core). The App only ever reaches the
 // UI through it, so the same methods serve both.
 type Host interface {
 	// Emit sends an event to the UI. data is JSON-encoded.

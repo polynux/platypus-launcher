@@ -39,15 +39,13 @@ Environment: `PLATYPUS_ELECTRON` (binary), `PLATYPUS_ELECTRON_ARGS` (extra
 flags, e.g. `--ozone-platform=x11`), `PLATYPUS_DEVTOOLS=1` (F12),
 `PLATYPUS_REMOTE_DEBUGGING_PORT` (for Playwright over CDP, loopback).
 
-The core alone: `go build -tags core -o platypus-core .` (no GTK/WebKit linked).
-Why a build tag and not `cmd/platypus-core`: the App is `package main` and Go
-cannot import it; moving it to its own package comes with the migration.
+The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GTK/WebKit linked).
 
 ## Pieces
 
 - `internal/app/host.go`: the `Host` interface (events, log, dialogs).
-  `host_wails.go` (`!core`) is the Wails one; `core_main.go` (`core`) sends
-  events as notifications and dialogs as requests to Electron.
+  `host_wails.go` is the Wails one; the Electron core (`cmd/platypus-core`)
+  sends events as notifications and dialogs as requests to Electron.
 - `internal/corerpc`: reflection dispatch of `*App`'s exported methods;
   `initialize {protocol}` handshake (core protocol 1.0: same major, shell minor
   ≤ core minor); the App starts while `initialize` answers.
