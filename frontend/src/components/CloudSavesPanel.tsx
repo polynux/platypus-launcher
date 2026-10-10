@@ -187,7 +187,8 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
         </div>
       )}
 
-      {error && (
+      {/* The same reason as the note above is not repeated as an error. */}
+      {error && error !== info?.skipped && (
         <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't reach the cloud saves just now." />
       )}
 
