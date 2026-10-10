@@ -257,7 +257,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
       {plugins.some((p) => p.kind === 'data') && (
         <>
-          <MonoLabel className="mb-3 mt-8">data plugins · no code, always on</MonoLabel>
+          <MonoLabel className="mb-3 mt-8 normal-case tracking-normal">data plugins · no code, always on</MonoLabel>
           <div className="grid gap-4 xl:grid-cols-2">
             {plugins
               .filter((p) => p.kind === 'data')
@@ -534,7 +534,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
           <div className="mt-4 space-y-4">
             {prompt.url && (
               <div>
-                <MonoLabel className="mb-1.5">1 · log in on the store's page</MonoLabel>
+                <MonoLabel className="mb-1.5 normal-case tracking-normal">1 · log in on the store's page</MonoLabel>
                 <Button variant="neutral" className="w-full" onClick={() => BrowserOpenURL(prompt.url!)}>
                   <ExternalLink className="h-3.5 w-3.5" /> Open login page
                 </Button>
@@ -543,7 +543,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             )}
             {prompt.qr && (
               <div>
-                <MonoLabel className="mb-1.5">1 · scan with the {plugin.name.replace(/ \(.*\)$/, '')} mobile app</MonoLabel>
+                <MonoLabel className="mb-1.5 normal-case tracking-normal">1 · scan with the {plugin.name.replace(/ \(.*\)$/, '')} mobile app</MonoLabel>
                 <div className="flex justify-center rounded-xl bg-white p-3">
                   <QrArt art={prompt.qr} />
                 </div>
@@ -551,7 +551,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             )}
             {prompt.instructions && <p className="text-[12px] leading-relaxed text-white/65">{prompt.instructions}</p>}
             <div className="space-y-3">
-              {prompt.url && <MonoLabel>2 · paste what the page shows</MonoLabel>}
+              {prompt.url && <MonoLabel className="normal-case tracking-normal">2 · paste what the page shows</MonoLabel>}
               {prompt.fields.map((f, i) => (
                 <label key={f.id} className="block">
                   <span className="mb-1 block text-[12px] font-semibold text-white/75">{f.label}</span>

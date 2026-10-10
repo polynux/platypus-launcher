@@ -39,7 +39,7 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
   return (
     <section className="max-w-2xl border-t border-white/[0.07] py-6">
       <h2 className="text-[14px] font-bold">Game folders</h2>
-      <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
+      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/55">
         Where a game can be installed. Each game's “Install to…” step offers these folders next to the Games folder; a store's games go in
         their own subfolder.
       </p>

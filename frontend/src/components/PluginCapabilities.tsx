@@ -26,7 +26,7 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
           aria-expanded={open}
           aria-controls={listId}
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-center gap-1.5 text-left font-mono text-[11px] uppercase tracking-[0.16em] text-white/40 transition hover:text-white/70"
+          className="flex w-full items-center gap-1.5 text-left font-mono text-[11.5px] text-white/50 transition hover:text-white/75"
         >
           <ChevronDown className={cx('h-3 w-3 flex-none transition-transform', open ? '' : '-rotate-90')} aria-hidden />
           <span className="min-w-0 flex-1 truncate">
@@ -37,7 +37,7 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
         </button>
       )}
       {p.offers.length === 0 && (
-        <MonoLabel>
+        <MonoLabel className="normal-case tracking-normal">
           capabilities{p.protocol ? ` · protocol ${p.protocol}` : ''}
         </MonoLabel>
       )}
