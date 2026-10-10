@@ -47,7 +47,9 @@ export function ScrollBar({ className, orientation = 'vertical', ...props }: Rea
       <ScrollAreaPrimitive.ScrollAreaThumb
         className={cn(
           'relative rounded-full bg-white/10 opacity-70 transition-[width,height,opacity,background-color] duration-200 ease-out group-hover/sb:bg-white/25 group-hover/sb:opacity-100 group-active/sb:bg-amber-300/50',
-          orientation === 'vertical' ? 'w-1 group-hover/sb:w-2' : 'h-1 group-hover/sb:h-2',
+          // Radix sets the thumb's cross size inline from a CSS variable it only defines for the
+          // scrolled axis, which leaves the other one at 0px; the ! keeps the thin size.
+          orientation === 'vertical' ? '!w-1 group-hover/sb:!w-2' : '!h-1 group-hover/sb:!h-2',
         )}
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
