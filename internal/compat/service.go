@@ -71,13 +71,8 @@ func (s *Service) ProtonDB(ctx context.Context, appID string) (Rating, bool) {
 		return Rating{}, false
 	}
 	key := "protondb:" + appID
-	e, have := s.Cache.ProtonDB(appID)
-	if have {
-		stale := s.now().Sub(e.FetchedAt) >= protonTTL(e)
-		if stale && s.online() && !s.cooling(key) {
-			s.start(key, func(ctx context.Context) error { return s.refreshProton(ctx, appID) })
-		}
-		return e.rating(stale || !s.online()), true
+	if r, ok := s.cachedProton(appID); ok {
+		return r, true
 	}
 	if !s.online() || s.cooling(key) {
 		return Rating{}, false
@@ -91,8 +86,43 @@ func (s *Service) ProtonDB(ctx context.Context, appID string) (Rating, bool) {
 	case <-time.After(s.firstWait()):
 	case <-ctx.Done():
 	}
-	e, have = s.Cache.ProtonDB(appID)
-	return e.rating(false), have
+	if r, ok := s.cachedProton(appID); ok {
+		return r, true
+	}
+	return Rating{}, false
+}
+
+// ProtonDBCached is ProtonDB without the wait: the cached rating when there is
+// one (a stale one is refreshed in the background), otherwise nothing, with a
+// background fetch started for the next look. The library lists every game
+// with it, so it never blocks.
+func (s *Service) ProtonDBCached(appID string) (Rating, bool) {
+	if !validAppID(appID) {
+		return Rating{}, false
+	}
+	if r, ok := s.cachedProton(appID); ok {
+		return r, true
+	}
+	key := "protondb:" + appID
+	if s.online() && !s.cooling(key) {
+		s.start(key, func(ctx context.Context) error { return s.refreshProton(ctx, appID) })
+	}
+	return Rating{}, false
+}
+
+// cachedProton is the saved rating of an AppID. A stale one is served at once
+// and refreshed in the background when the network is on.
+func (s *Service) cachedProton(appID string) (Rating, bool) {
+	key := "protondb:" + appID
+	e, have := s.Cache.ProtonDB(appID)
+	if !have {
+		return Rating{}, false
+	}
+	stale := s.now().Sub(e.FetchedAt) >= protonTTL(e)
+	if stale && s.online() && !s.cooling(key) {
+		s.start(key, func(ctx context.Context) error { return s.refreshProton(ctx, appID) })
+	}
+	return e.rating(stale || !s.online()), true
 }
 
 // refreshProton asks ProtonDB and saves the answer. "No reports" is an

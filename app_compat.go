@@ -112,6 +112,14 @@ func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source
 // Plugin games get their ProtonDB tier only through a Steam AppID hint or one
 // the user set; nothing is matched by title.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
+	return a.gameFix(game, func(appID string) (compat.Rating, bool) {
+		return a.compat.ProtonDB(a.baseCtx(), appID)
+	})
+}
+
+// gameFix is GetGameFix with the ProtonDB lookup chosen by the caller: the
+// library asks without waiting for ProtonDB.
+func (a *App) gameFix(game types.Game, protonDB func(appID string) (compat.Rating, bool)) *types.GameFixInfo {
 	storeAppID := ""
 	if game.Source == types.SourceSteam {
 		storeAppID = game.StoreAppID
@@ -126,7 +134,7 @@ func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
 	if appID == "" {
 		return nil
 	}
-	r, ok := a.compat.ProtonDB(a.baseCtx(), appID)
+	r, ok := protonDB(appID)
 	if !ok {
 		return nil
 	}

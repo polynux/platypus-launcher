@@ -244,3 +244,42 @@ func TestSlowFirstFetchKeepsRunningAndIsNotCoolingDown(t *testing.T) {
 	}
 	t.Fatal("the slow fetch never filled the cache")
 }
+
+// The library asks without waiting: an unknown AppID answers at once with no
+// rating and starts a fetch, and the next look finds the answer in the cache.
+func TestProtonDBCachedNeverWaitsAndFillsTheCacheForTheNextLook(t *testing.T) {
+	online := true
+	s, rt, _, _ := newTestService(t, &online)
+	s.FirstWait = time.Minute // a waiting lookup would hang the test
+	if _, ok := s.ProtonDBCached("620"); ok {
+		t.Fatal("an unknown app answered before any fetch")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if r, ok := s.ProtonDBCached("620"); ok {
+			if r.Summary.Tier != "platinum" || r.Stale {
+				t.Fatalf("cached rating = %+v, want platinum and fresh", r)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the background fetch never filled the cache")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if n := rt.calls.Load(); n != 1 {
+		t.Fatalf("ProtonDB asked %d times, want 1", n)
+	}
+}
+
+// With the network off the library gets the saved answer, and nothing is asked.
+func TestProtonDBCachedOfflineServesWhatIsSaved(t *testing.T) {
+	online := false
+	s, rt, _, _ := newTestService(t, &online)
+	if _, ok := s.ProtonDBCached("620"); ok {
+		t.Fatal("offline with nothing saved gave an answer")
+	}
+	if rt.calls.Load() != 0 {
+		t.Fatal("offline, ProtonDB was asked")
+	}
+}

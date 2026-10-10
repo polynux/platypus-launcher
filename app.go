@@ -381,7 +381,22 @@ func (a *App) GetLibrary() (types.Library, error) {
 	a.stats.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
 	a.applyCustomization(lib.Games)
+	a.applyFixes(lib.Games)
 	return lib, nil
+}
+
+// applyFixes puts each game's curated fix or ProtonDB tier on it (the library
+// cards and filters read it). Ratings come from the cache: a game with none yet
+// gets one on a later scan, when its fetch has finished.
+func (a *App) applyFixes(games []types.Game) {
+	for i := range games {
+		games[i].FixInfo = a.gameFix(games[i], func(appID string) (compat.Rating, bool) {
+			if a.compat == nil {
+				return compat.Rating{}, false
+			}
+			return a.compat.ProtonDBCached(appID)
+		})
+	}
 }
 
 // sourceWarning describes a source that failed to list. The plugin's message
