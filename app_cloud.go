@@ -94,16 +94,23 @@ func cloudContextOf(game types.Game, r types.ProtonVersion) types.CloudContext {
 
 // cloudContextFor is the context for a game that isn't being launched (Check
 // now, resolving): the launch spec's preview says which runner it would use.
-func (a *App) cloudContextFor(game types.Game) types.CloudContext {
+// The folder is the library's (currentFolder); without one there is no context
+// to send, so the plugin is never asked.
+func (a *App) cloudContextFor(game types.Game) (types.CloudContext, error) {
+	folder, err := a.currentFolder(game)
+	if err != nil {
+		return types.CloudContext{}, err
+	}
+	game.InstallDir = folder
 	if p, err := a.prepareLaunch(game, true); err == nil && p.client == nil {
-		return cloudContextOf(game, p.runner)
+		return cloudContextOf(game, p.runner), nil
 	}
 	// The launch can't be prepared: use the runner it would pick.
 	var r types.ProtonVersion
 	if !game.Native {
 		r, _ = selectRunner(game)
 	}
-	return cloudContextOf(game, r)
+	return cloudContextOf(game, r), nil
 }
 
 // lockGame serializes the launch and cloud steps of one game, so that a second
@@ -155,6 +162,12 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 	if !ok {
 		return nil, "", false
 	}
+	folder, err := a.currentFolder(game)
+	if err != nil {
+		// No folder to read saves from: the game starts without a cloud step.
+		return nil, "", false
+	}
+	game.InstallDir = folder
 	cc := cloudContextOf(game, p.runner)
 	d := a.cloud.BeforeLaunch(a.ctx, g, cc, anyway)
 	if !d.Proceed {
@@ -196,7 +209,11 @@ func (a *App) CheckCloudSaves(game types.Game) (types.CloudInfo, error) {
 	if !ok {
 		return a.cloudInfo(game), errors.New("this game has no cloud saves Platypus can sync")
 	}
-	if _, err := a.cloud.Check(a.ctx, g, a.cloudContextFor(game)); err != nil {
+	cc, err := a.cloudContextFor(game)
+	if err != nil {
+		return a.cloud.Info(g), err
+	}
+	if _, err := a.cloud.Check(a.ctx, g, cc); err != nil {
 		return a.cloud.Info(g), err
 	}
 	return a.cloud.Info(g), nil
@@ -216,7 +233,11 @@ func (a *App) ResolveCloudSaves(game types.Game, choices map[string]string) (typ
 		// The game writes its saves while it runs: settle them after it exits.
 		return a.cloudInfo(game), fmt.Errorf("%s is running; choose its saves after it exits", game.Title)
 	}
-	if _, err := a.cloud.Resolve(a.ctx, g, a.cloudContextFor(game), choices); err != nil {
+	cc, err := a.cloudContextFor(game)
+	if err != nil {
+		return a.cloud.Info(g), err
+	}
+	if _, err := a.cloud.Resolve(a.ctx, g, cc, choices); err != nil {
 		return a.cloud.Info(g), err
 	}
 	return a.cloud.Info(g), nil
