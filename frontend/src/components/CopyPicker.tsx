@@ -75,10 +75,8 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
           </div>
         )}
         {compare && (
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <span className="font-mono text-[11px] text-white/50">
-              {copies.length} copies · compared with {baselineName}'s
-            </span>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <span className="font-mono text-[11px] text-white/50">vs {baselineName}'s copy</span>
             <Button variant="neutral" size="sm" onClick={() => setComparing(true)}>Compare copies</Button>
           </div>
         )}
