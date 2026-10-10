@@ -25,6 +25,20 @@ describe('external links', () => {
     expect(webURL(undefined)).toBe('');
   });
 
+  it('under Electron openExternal goes through the bridge, not Wails', () => {
+    const bridge = { invoke: vi.fn(), on: vi.fn(), openExternal: vi.fn() };
+    window.platypus = bridge;
+    try {
+      expect(openExternal('https://www.pcgamingwiki.com/wiki/Foo')).toBe(true);
+      expect(bridge.openExternal).toHaveBeenCalledWith('https://www.pcgamingwiki.com/wiki/Foo');
+      expect(BrowserOpenURL).not.toHaveBeenCalled();
+      expect(openExternal('file:///etc/passwd')).toBe(false);
+      expect(bridge.openExternal).toHaveBeenCalledTimes(1);
+    } finally {
+      delete window.platypus;
+    }
+  });
+
   it('openExternal hands a web link to the browser and nothing else', () => {
     expect(openExternal('https://www.pcgamingwiki.com/wiki/Foo')).toBe(true);
     expect(BrowserOpenURL).toHaveBeenCalledWith('https://www.pcgamingwiki.com/wiki/Foo');
