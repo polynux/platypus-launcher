@@ -74,7 +74,7 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
           <p className="text-[15px] font-bold text-amber-200">
             {wrong} {wrong === 1 ? 'file' : 'files'} damaged — Repair?
           </p>
-          <p className="mt-1 font-mono text-[11.5px] text-white/55">
+          <p className="mt-1 font-mono text-hint text-white/55">
             {report.damaged} damaged, {report.missing} missing, of {report.checked} files checked. A repair restores them from the store.
           </p>
         </>

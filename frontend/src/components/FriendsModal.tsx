@@ -69,7 +69,7 @@ export function FriendsModal(p: FriendsModalProps) {
           <h2 className="text-[17px] font-extrabold tracking-tight">Friends</h2>
           <label className="relative block w-64">
             <span className="sr-only">Search friends</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/55" />
             <Input
               type="search"
               value={query}
@@ -101,14 +101,14 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
   return (
     <section aria-label={`${label} friends`} className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 first:border-t-0 first:pt-0">
       <header className="flex items-center justify-between gap-3">
-        <h3 className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/50">{label}</h3>
+        <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-white/55">{label}</h3>
         <Button variant="ghost" size="sm" onClick={() => onSetEnabled(view.plugin, !view.enabled)}>
           {view.enabled ? 'Turn off' : 'Turn on'}
         </Button>
       </header>
 
       {!view.enabled ? (
-        <p className="text-[12.5px] text-white/50">Friends are off for {label}. Turn them on to see who is online.</p>
+        <p className="text-[12.5px] text-white/55">Friends are off for {label}. Turn them on to see who is online.</p>
       ) : (
         <>
           {line && (
@@ -163,7 +163,7 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
           )}
 
           {total === 0 && (
-            <p className="text-[12.5px] text-white/50">
+            <p className="text-[12.5px] text-white/55">
               {view.friends.length === 0 ? `No friends on ${label} yet.` : `No friends match “${query.trim()}”.`}
             </p>
           )}
@@ -192,7 +192,7 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
   if (friends.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
-      <h4 className="px-1 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/40">
+      <h4 className="px-1 font-mono text-micro uppercase tracking-[0.16em] text-white/55">
         {title} · {friends.length}
       </h4>
       <ul className="flex flex-col">
@@ -204,7 +204,7 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
               onOpenChat={onOpenChat && (() => onOpenChat(plugin, f))}
             />
             {unreadOf && unreadOf(plugin, f.id) > 0 && (
-              <span aria-label={`${unreadOf(plugin, f.id)} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-mono text-[10px] font-bold text-[#130f0a]">
+              <span aria-label={`${unreadOf(plugin, f.id)} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-mono text-hint font-bold text-[#130f0a]">
                 {unreadOf(plugin, f.id)}
               </span>
             )}
@@ -229,7 +229,7 @@ function FriendRowMain({ friend: f, onOpenChat }: { friend: SocialFriend; onOpen
       <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold text-white/85">{f.name}</div>
-        <div className="truncate text-[11.5px] text-white/45">
+        <div className="truncate text-hint text-white/55">
           {f.game ? `Playing ${f.game.title}` : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? `Last seen ${agoLabel(f.lastSeen)}` : 'Offline') : FRIEND_STATE_LABEL[f.state]}
         </div>
       </div>
@@ -247,7 +247,7 @@ function Avatar({ name, url, dot }: { name: string; url?: string; dot: string })
   return (
     // The dot sits outside the clipped picture: inside it, overflow-hidden would cut it.
     <span className="relative h-8 w-8 flex-none">
-      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[10px] font-bold text-white/70">
+      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-hint font-bold text-white/70">
         {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
       </span>
       <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1a140f]', dot)} />

@@ -58,7 +58,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
       </p>
 
       {conflicts.length > 1 && (
-        <div className="mt-3 flex items-center gap-3 font-mono text-[11.5px] text-white/45">
+        <div className="mt-3 flex items-center gap-3 font-mono text-hint text-white/55">
           all files:
           <Button variant="link" onClick={() => setAll('local')}>keep this device</Button>
           <Button variant="link" onClick={() => setAll('remote')}>keep cloud</Button>
@@ -90,7 +90,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
         ))}
       </ul>
 
-      {status.backupDir && <p className="mt-3 font-mono text-[11px] text-white/40 select-text">backups: {status.backupDir}</p>}
+      {status.backupDir && <p className="mt-3 font-mono text-hint text-white/55 select-text">backups: {status.backupDir}</p>}
       {error && <ErrorNotice className="mt-3" message={error} fallback="Platypus couldn't settle these saves. Nothing was changed on either side." />}
 
       <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
@@ -122,8 +122,8 @@ function Side({ title, file, newer, from }: { title: string; file: CloudConflict
         {newer && <Badge variant="accent">newer</Badge>}
       </div>
       <div className="mt-1.5 font-mono text-[12px] text-white/85">{fileSize(file.size)}</div>
-      <div className="font-mono text-[11.5px] text-white/50">{whenLabel(file.mtime)}</div>
-      {from && <div className="font-mono text-[11px] text-white/40">from {from}</div>}
+      <div className="font-mono text-hint text-white/55">{whenLabel(file.mtime)}</div>
+      {from && <div className="font-mono text-hint text-white/55">from {from}</div>}
     </div>
   );
 }

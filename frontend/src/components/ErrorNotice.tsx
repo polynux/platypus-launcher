@@ -41,7 +41,7 @@ export function RawDetails({ text }: { text: string }) {
   return (
     <details className="font-mono text-[12px] text-white/55">
       <summary className="cursor-pointer select-none hover:text-white/80">Details</summary>
-      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2 text-[11.5px] text-white/65">{text}</pre>
+      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-2 text-hint text-white/65">{text}</pre>
     </details>
   );
 }

@@ -59,7 +59,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="text-[20px] font-extrabold tracking-tight">Game settings</h2>
-            <div className="truncate font-mono text-[11.5px] text-white/45">{game.title}</div>
+            <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
           </div>
           <Button variant="neutral" size="icon" onClick={p.onClose} aria-label="Close" className="size-8 flex-none">
             <X className="size-4" />

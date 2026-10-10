@@ -15,12 +15,12 @@ interface DownloadsViewProps {
 const VERB: Record<Job['kind'], string> = { install: 'Install', update: 'Update', uninstall: 'Uninstall', verify: 'Verify', move: 'Move' };
 
 const STATE_STYLE: Record<Job['state'], string> = {
-  queued: 'text-white/50',
+  queued: 'text-white/55',
   running: 'text-amber-200',
   paused: 'text-sky-300',
   done: 'text-emerald-300',
   failed: 'text-red-300',
-  canceled: 'text-white/40',
+  canceled: 'text-white/55',
 };
 
 function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsViewProps, 'onAction' | 'onOpenGame'>) {
@@ -44,12 +44,12 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
           <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-amber-200">
             {VERB[job.kind]} · {job.title}
           </button>
-          <div className={cx('truncate font-mono text-[11.5px]', STATE_STYLE[job.state])} title={detail}>
+          <div className={cx('truncate font-mono text-hint', STATE_STYLE[job.state])} title={detail}>
             {job.state}{detail ? ` · ${detail}` : ''}
             {job.attempts > 1 && active ? ` · attempt ${job.attempts}` : ''}
           </div>
           {job.state === 'canceled' && job.leftover && (
-            <div className="mt-0.5 truncate font-mono text-[11px] text-orange-300/80" title={job.leftover}>
+            <div className="mt-0.5 truncate font-mono text-hint text-orange-300/80" title={job.leftover}>
               {job.leftover}
             </div>
           )}
@@ -115,7 +115,7 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Downloads</h1>
-          <p className="mt-0.5 text-[12.5px] text-white/50">
+          <p className="mt-0.5 text-[12.5px] text-white/55">
             Installs, updates and uninstalls run one at a time. A paused download keeps its data and resumes from there; an interrupted install resumes when Platypus starts again.
           </p>
         </div>

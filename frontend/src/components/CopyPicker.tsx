@@ -38,7 +38,7 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
     <CapabilitySurface plugin={plugin} capability="family" game={game}>
       <Panel className="bg-white/[0.05]">
         <h2 className="mb-2 text-[15px] font-bold">Copy</h2>
-        <p className="font-mono text-[11.5px] text-white/85 select-text">Copy: from {from}</p>
+        <p className="font-mono text-hint text-white/85 select-text">Copy: from {from}</p>
         {copies.length > 1 && (
           <div role="radiogroup" aria-label="Family copies" className="mt-3 space-y-2">
             {copies.map((copy) => {
@@ -53,23 +53,23 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
                   disabled={!copy.available || pending !== null}
                   onClick={() => pick(copy)}
                   className={cx(
-                    'block w-full rounded-xl border px-3 py-2 text-left font-mono text-[11.5px]',
+                    'block w-full rounded-xl border px-3 py-2 text-left font-mono text-hint',
                     chosen ? 'border-sky-300/50 bg-sky-400/10 text-white' : 'border-white/[0.08] text-white/75 hover:bg-white/[0.06]',
                     !copy.available && 'cursor-not-allowed opacity-40 hover:bg-transparent',
                   )}
                 >
                   <span className="flex justify-between gap-3">
                     <span>{copy.owner_name}</span>
-                    {status && <span className={copy.available ? 'text-amber-200/80' : 'text-white/50'}>{status}</span>}
+                    {status && <span className={copy.available ? 'text-amber-200/80' : 'text-white/55'}>{status}</span>}
                   </span>
-                  <span className="mt-1 block text-white/50">{dlcLabel(copy)}</span>
+                  <span className="mt-1 block text-white/55">{dlcLabel(copy)}</span>
                   {compare && copy.owner_id !== compare.baseline && diffFor(compare, copy.owner_id) && (
                     <span className="mt-1 block text-white/65">
                       {copyDiffSummary(copy.owner_name, baselineName, diffFor(compare, copy.owner_id)!)}
                     </span>
                   )}
-                  {copy.note && <span className="mt-1 block text-white/45">{copy.note}</span>}
-                  {copy.exclude && <span className="mt-1 block text-white/45">{copy.exclude}</span>}
+                  {copy.note && <span className="mt-1 block text-white/55">{copy.note}</span>}
+                  {copy.exclude && <span className="mt-1 block text-white/55">{copy.exclude}</span>}
                 </button>
               );
             })}
@@ -77,7 +77,7 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
         )}
         {compare && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <span className="font-mono text-[11px] text-white/50">vs {baselineName}'s copy</span>
+            <span className="font-mono text-hint text-white/55">vs {baselineName}'s copy</span>
             <Button variant="neutral" size="sm" onClick={() => setComparing(true)}>Compare copies</Button>
           </div>
         )}

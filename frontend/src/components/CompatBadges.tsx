@@ -61,13 +61,13 @@ export function CompatFacts({ compat }: { compat: Compat }) {
               {anticheat.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
-          {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/50">{compat.drm_notes}</p>}
+          {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/55">{compat.drm_notes}</p>}
         </div>
       ) : (
-        <p className="font-mono text-[11.5px] text-white/40">No DRM or anti-cheat reported for this game.</p>
+        <p className="font-mono text-hint text-white/55">No DRM or anti-cheat reported for this game.</p>
       )}
       {pdb && compat.steam_app_id && (
-        <p className="font-mono text-[11.5px] text-white/50">
+        <p className="font-mono text-hint text-white/55">
           {ratingLine(pdb)}
           {pdb.fetched_at > 0 && ` · as of ${asOfDate(pdb.fetched_at)}`}
           {pdb.stale && ' · refreshing'}
@@ -79,7 +79,7 @@ export function CompatFacts({ compat }: { compat: Compat }) {
       )}
       {compat.wiki && <WikiCreditLine credit={compat.wiki} />}
       {compat.steam_app_id && (
-        <p className="font-mono text-[11px] text-white/35">
+        <p className="font-mono text-hint text-white/55">
           Steam AppID {compat.steam_app_id} ({appIdSourceLabel(compat.steam_app_id_source)})
         </p>
       )}
@@ -91,7 +91,7 @@ export function CompatFacts({ compat }: { compat: Compat }) {
  *  and the licence as links, and the day Platypus read the page. */
 export function WikiCreditLine({ credit }: { credit: WikiCredit }) {
   return (
-    <p className="font-mono text-[11px] leading-relaxed text-white/45" aria-label="PCGamingWiki credit">
+    <p className="font-mono text-hint leading-relaxed text-white/55" aria-label="PCGamingWiki credit">
       {PCGW_ATTRIBUTION}
       {' · '}
       <a href={credit.url} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">

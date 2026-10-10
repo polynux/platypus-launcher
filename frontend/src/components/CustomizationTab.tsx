@@ -117,9 +117,9 @@ export function CustomizationTab({ game, onChanged }: {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[12.5px] font-semibold text-white/90">
                     {info.label}
-                    {mine && <span className="rounded bg-amber-300/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-200">yours</span>}
+                    {mine && <span className="rounded bg-amber-300/15 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-amber-200">yours</span>}
                   </div>
-                  <div className="truncate text-[11.5px] text-white/45">{info.hint}</div>
+                  <div className="truncate text-hint text-white/55">{info.hint}</div>
                 </div>
                 <div className="flex flex-none gap-1.5">
                   <Button variant="neutral" size="sm" disabled={!custom || busy != null} onClick={() => void choose(info)} aria-label={`Choose ${info.label.toLowerCase()} image`}>

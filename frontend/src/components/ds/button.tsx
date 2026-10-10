@@ -8,7 +8,7 @@ export const buttonVariantClass = {
   primary: 'rounded-xl bg-amber-300 font-extrabold text-[#130f0a] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60',
   neutral: 'rounded-xl bg-white/[0.06] font-bold text-white/80 transition hover:bg-white/[0.1]',
   ghost: 'rounded-xl font-bold text-white/60 hover:bg-white/[0.06] hover:text-white/90',
-  link: 'rounded font-mono uppercase tracking-widest text-white/40 hover:text-white/80',
+  link: 'rounded font-mono uppercase tracking-widest text-white/55 hover:text-white/80',
   danger: 'rounded-xl bg-red-500/15 font-bold text-red-300 hover:bg-red-500/25',
 } as const;
 
@@ -26,7 +26,7 @@ export const buttonVariants = cva(
         none: '',
       },
     },
-    compoundVariants: [{ variant: 'link', size: ['sm', 'md', 'lg'], class: 'h-auto px-0 text-[11.5px]' }],
+    compoundVariants: [{ variant: 'link', size: ['sm', 'md', 'lg'], class: 'h-auto px-0 text-hint' }],
     defaultVariants: { variant: 'neutral', size: 'md' },
   },
 );

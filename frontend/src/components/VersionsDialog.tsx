@@ -142,29 +142,29 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       {!embedded && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? 'Version' : 'Choose a version'}</h2>
-          <p className="mt-1 text-[12.5px] text-white/50">
+          <p className="mt-1 text-[12.5px] text-white/55">
             {game.title} · {plugin.name}
           </p>
         </>
       )}
 
-      {!info && !error && <p className="mt-6 font-mono text-[11.5px] uppercase tracking-widest text-white/40">loading versions…</p>}
+      {!info && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">loading versions…</p>}
       {error && (
         <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback="Platypus couldn't list this game's versions." />
       )}
 
       {info && (
         <>
-          <dl className="mt-4 space-y-2 font-mono text-[11.5px]">
+          <dl className="mt-4 space-y-2 font-mono text-hint">
             {installed && (
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <dt className="text-white/45">Installed</dt>
+                <dt className="text-white/55">Installed</dt>
                 <dd className="truncate text-right text-white/85" title={game.version}>{game.version || '—'}</dd>
               </div>
             )}
             {last && (
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <dt className="text-white/45">Last install</dt>
+                <dt className="text-white/55">Last install</dt>
                 <dd className="truncate text-right text-white/85">
                   {[last.versionName || last.build, last.channel, shortDate(last.date)].filter(Boolean).join(' · ')}
                 </dd>
@@ -232,10 +232,10 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                   onChange={(e) => type(e.target.value)}
                   rows={2}
                   aria-label={info.manual.label}
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[12px] text-white placeholder-white/30 outline-none ring-amber-300/50 transition focus:ring-1"
+                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[12px] text-white placeholder-white/55 outline-none ring-amber-300/50 transition focus:ring-1"
                 />
               </label>
-              {info.manual.hint && <p className="mt-1 text-[12px] text-white/50">{info.manual.hint}</p>}
+              {info.manual.hint && <p className="mt-1 text-[12px] text-white/55">{info.manual.hint}</p>}
             </section>
           )}
 
@@ -266,7 +266,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
             </div>
           ) : (
             <div className="mt-6">
-              <label className={cx('flex items-start gap-2.5 text-[12.5px] leading-snug', pin == null ? 'text-white/35' : 'text-white/70')}>
+              <label className={cx('flex items-start gap-2.5 text-[12.5px] leading-snug', pin == null ? 'text-white/55' : 'text-white/70')}>
                 <input
                   type="checkbox"
                   checked={pinIt && pin != null}
@@ -276,7 +276,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                 />
                 <span>
                   Keep this version (pin)
-                  <span className="block text-[12px] text-white/45">
+                  <span className="block text-[12px] text-white/55">
                     {pin != null
                       ? 'Updates install it, and the update prompt stays off.'
                       : choice == null
@@ -356,9 +356,9 @@ function ChannelRow({
             </Badge>
           )}
         </span>
-        {channel.description && <span className="block text-[12px] leading-snug text-white/50">{channel.description}</span>}
+        {channel.description && <span className="block text-[12px] leading-snug text-white/55">{channel.description}</span>}
         {(channel.updatedAt || channel.buildId) && (
-          <span className="mt-0.5 block font-mono text-[11px] text-white/40">
+          <span className="mt-0.5 block font-mono text-hint text-white/55">
             {[channel.buildId && `build ${channel.buildId}`, channel.updatedAt && `updated ${channel.updatedAt}`].filter(Boolean).join(' · ')}
           </span>
         )}
@@ -426,7 +426,7 @@ function BuildRow({ build, selected, onSelect }: { build: VersionBuild; selected
         <Badge variant={build.source === 'store' ? 'neutral' : build.source === 'archive' ? 'info' : 'accent'}>{sourceLabel(build.source)}</Badge>
         {build.channel && <Badge variant="neutral">{build.channel}</Badge>}
       </span>
-      <span className="mt-0.5 block font-mono text-[11px] text-white/40">
+      <span className="mt-0.5 block font-mono text-hint text-white/55">
         {[build.name && build.name !== build.id ? build.id : '', build.publishedAt, !build.available && 'can’t be fetched right now'].filter(Boolean).join(' · ')}
       </span>
     </RowShell>

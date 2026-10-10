@@ -31,7 +31,7 @@ export function FriendsSummary({ views, labels, onOpen, unread = 0 }: FriendsSum
           <span key={v.plugin} className="flex min-w-0 items-center gap-2">
             {/* The dot sits outside the clipped picture: inside it, overflow-hidden would cut it. */}
             <span className="relative h-6 w-6 flex-none">
-              <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-[9px] font-bold text-white/70">
+              <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-hint font-bold text-white/70">
                 {self?.avatarUrl ? <img src={self.avatarUrl} alt="" className="h-full w-full object-cover" /> : initials(self?.name ?? name)}
               </span>
               <span className={cx('absolute bottom-0 right-0 h-2 w-2 rounded-full ring-2 ring-[#15110d]', stateDot(self?.state ?? 'offline'))} />
@@ -41,7 +41,7 @@ export function FriendsSummary({ views, labels, onOpen, unread = 0 }: FriendsSum
               <span title={self?.name ?? name} className="min-w-0 truncate text-[12px] font-semibold text-white/85">{self?.name ?? name}</span>
               <span
                 title={!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
-                className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wider text-white/55"
+                className="min-w-0 truncate font-mono text-micro uppercase tracking-wider text-white/55"
               >
                 {!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
               </span>
@@ -49,7 +49,7 @@ export function FriendsSummary({ views, labels, onOpen, unread = 0 }: FriendsSum
           </span>
         );
       })}
-      <span className="flex items-center justify-between gap-2 font-mono text-[11px] tabular-nums text-white/55">
+      <span className="flex items-center justify-between gap-2 font-mono text-hint tabular-nums text-white/55">
         <span>{!summary.text ? (views.some((v) => v.enabled) ? 'no friends online' : 'friends off') : summary.text}</span>
         {unread > 0 && (
           <span aria-label={`${unread} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-bold text-[#130f0a]">

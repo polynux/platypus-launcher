@@ -114,13 +114,13 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       {!embedded && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? 'Install options' : 'Add-ons & options'}</h2>
-          <p className="mt-1 text-[12.5px] text-white/50">
+          <p className="mt-1 text-[12.5px] text-white/55">
             {game.title} · {plugin.name}
           </p>
         </>
       )}
 
-      {!groups && !error && <p className="mt-6 font-mono text-[11.5px] uppercase tracking-widest text-white/40">loading options…</p>}
+      {!groups && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">loading options…</p>}
       {error && (
         <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback="Platypus couldn't read this game's install options." />
       )}
@@ -139,18 +139,18 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       ))}
 
       {groups && groups.length > 0 && (
-        <div className="mt-6 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-[11.5px]">
+        <div className="mt-6 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-hint">
           <div className="flex justify-between gap-4">
-            <span className="text-white/45">Add-ons & packs</span>
+            <span className="text-white/55">Add-ons & packs</span>
             <span className="text-white/85" data-testid="added-size">{added > 0 ? `+${formatBytes(added)}` : '—'}</span>
           </div>
           <div className="mt-1.5 flex justify-between gap-4">
-            <span className="text-white/45">Total size</span>
+            <span className="text-white/55">Total size</span>
             <span className="text-white/85" data-testid="total-size">{total != null ? formatBytes(total) : 'unknown'}</span>
           </div>
           {room != null && room >= 0 && (
             <div className="mt-1.5 flex justify-between gap-4">
-              <span className="text-white/45">Free space</span>
+              <span className="text-white/55">Free space</span>
               <span className={cx(short ? 'text-red-300' : 'text-white/85')} data-testid="free-space">{formatBytes(room)}</span>
             </div>
           )}
@@ -227,7 +227,7 @@ function OptionGroupBody({ group, choices, onChange }: {
         const allowed = canPick(group, v);
         const checked = picked.includes(v.id);
         return (
-          <li key={v.id} className={cx('flex items-center gap-2.5 text-[12.5px]', allowed ? 'text-white/75' : 'text-white/35')}>
+          <li key={v.id} className={cx('flex items-center gap-2.5 text-[12.5px]', allowed ? 'text-white/75' : 'text-white/55')}>
             <input
               type="checkbox"
               aria-label={v.label ?? v.id}
@@ -239,7 +239,7 @@ function OptionGroupBody({ group, choices, onChange }: {
             <span className="min-w-0 flex-1 truncate">{v.label ?? v.id}</span>
             {v.installed && <Badge variant="ok">installed</Badge>}
             {!v.owned && group.dlc && <Badge variant="neutral">not owned</Badge>}
-            {v.sizeBytes != null && v.sizeBytes > 0 && <span className="font-mono text-[11px] text-white/45">{formatBytes(v.sizeBytes)}</span>}
+            {v.sizeBytes != null && v.sizeBytes > 0 && <span className="font-mono text-hint text-white/55">{formatBytes(v.sizeBytes)}</span>}
             {!v.owned && group.dlc && v.storeUrl && (
               <Button variant="link" size="sm" onClick={() => BrowserOpenURL(v.storeUrl!)} className="gap-1">
                 Store <ExternalLink className="h-3 w-3" />

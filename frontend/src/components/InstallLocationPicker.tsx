@@ -77,7 +77,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
   return (
     <section>
       <MonoLabel className="mb-1.5">install to</MonoLabel>
-      {!rows && !error && <p className="font-mono text-[11.5px] uppercase tracking-widest text-white/40">looking for folders…</p>}
+      {!rows && !error && <p className="font-mono text-micro uppercase tracking-widest text-white/55">looking for folders…</p>}
       {rows && (
         <div role="radiogroup" aria-label="Install location" className="space-y-1.5">
           {rows.map((r) => {
@@ -97,10 +97,10 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block font-mono text-[11px] uppercase tracking-wider text-white/45">{kindLabel(r.kind)}</span>
+                  <span className="block font-mono text-micro uppercase tracking-wider text-white/55">{kindLabel(r.kind)}</span>
                   <span className="block truncate font-mono text-[12px] text-white/85" title={r.folder}>{r.folder}</span>
                 </span>
-                <span className={cx('flex-none font-mono text-[11.5px]', short ? 'text-red-300' : 'text-white/50')}>
+                <span className={cx('flex-none font-mono text-hint', short ? 'text-red-300' : 'text-white/55')}>
                   {freeLabel(r.free_bytes)}
                 </span>
               </button>

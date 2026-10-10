@@ -24,6 +24,10 @@
   --color-text-body: #a8a29e;
   --color-text-faint: #78716c;
 
+  /* Type floor (DESIGN.md §1.4): mono uppercase labels, and body/hints/notes. */
+  --text-micro: 0.71875rem; /* 11.5px */
+  --text-hint: 0.75rem; /* 12px */
+
   /* shadcn semantic tokens, mapped onto Platypus's palette so ds/ components inherit the look. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);

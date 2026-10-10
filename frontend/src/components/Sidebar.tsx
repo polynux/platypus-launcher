@@ -119,13 +119,13 @@ export function Sidebar(p: SidebarProps) {
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">P</span>
         <div>
           <div className="text-[15px] font-extrabold tracking-tight">Platypus</div>
-          <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/40">game hub</div>
+          <div className="font-mono text-micro uppercase tracking-[0.16em] text-white/55">game hub</div>
         </div>
       </div>
 
       <label className="relative mb-4 block flex-none">
         <span className="sr-only">Search library</span>
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/55" />
         <Input
           type="search"
           value={p.search}
@@ -151,8 +151,8 @@ export function Sidebar(p: SidebarProps) {
             aria-expanded={toolsOpen}
             aria-controls="sidebar-tools"
             className={cx(
-              'mt-2 flex w-full items-center justify-between rounded-xl px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
-              toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-white/40 hover:text-white/70'
+              'mt-2 flex w-full items-center justify-between rounded-xl px-3 py-1.5 font-mono text-micro uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
+              toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-white/55 hover:text-white/70'
             )}
           >
             <span>Tools</span>
@@ -167,7 +167,7 @@ export function Sidebar(p: SidebarProps) {
           </div>
         </nav>
 
-        <div className="px-2 pb-1.5 pt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-white/40">sources</div>
+        <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">sources</div>
         {[
           ...SOURCES,
           // Stores that only plugins provide, then sideloaded games.
@@ -187,7 +187,7 @@ export function Sidebar(p: SidebarProps) {
                 <span className={cx('h-1.5 w-1.5 rounded-full', count ? 'bg-amber-300/60' : 'bg-white/15')} />
                 {s.label}
               </span>
-              <span className="font-mono text-[11px] tabular-nums text-white/40">
+              <span className="font-mono text-hint tabular-nums text-white/55">
                 {p.loading ? <span aria-label="counting games" className="inline-block h-2.5 w-5 animate-pulse rounded bg-white/15 motion-reduce:animate-none" /> : count || '—'}
               </span>
             </button>
@@ -226,10 +226,10 @@ export function Sidebar(p: SidebarProps) {
             >
               <span className={cx('h-2 w-2 flex-none rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-amber-300')} />
               <span className="min-w-0 flex-1">
-                <span className={cx('block font-mono text-[11px] uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
+                <span className={cx('block font-mono text-micro uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
                   {label}
                 </span>
-                <span className="block truncate text-[11.5px] font-semibold text-white/85">{e.title}</span>
+                <span className="block truncate text-hint font-semibold text-white/85">{e.title}</span>
               </span>
               {e.state !== 'stopping' && (
                 <Tooltip>
@@ -239,7 +239,7 @@ export function Sidebar(p: SidebarProps) {
                       size="icon"
                       onClick={() => p.onStop(e.game_id)}
                       aria-label={`Stop ${e.title}`}
-                      className="size-7 flex-none text-white/45 hover:text-red-200"
+                      className="size-7 flex-none text-white/55 hover:text-red-200"
                     >
                       <Square className="h-3 w-3 fill-current" />
                     </Button>

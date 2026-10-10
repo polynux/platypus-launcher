@@ -193,7 +193,7 @@ export function LibraryView(p: LibraryProps) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-[23px] font-extrabold tracking-tight">Library</h1>
-            <p className="mt-0.5 text-[12.5px] tabular-nums text-white/50">
+            <p className="mt-0.5 text-[12.5px] tabular-nums text-white/55">
               {filtered.length} shown · {installedCount} installed{owned > installedCount ? ` · ${owned} owned` : ''}
               {p.lastScan ? ` · scanned ${clock(p.lastScan)}` : ''}
             </p>
@@ -227,7 +227,7 @@ export function LibraryView(p: LibraryProps) {
                     size="icon"
                     aria-label="Clear search"
                     onClick={() => p.onSearch('')}
-                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-white/45"
+                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-white/55"
                   >
                     <X className="h-3.5 w-3.5" />
                   </Button>
@@ -315,7 +315,7 @@ export function LibraryView(p: LibraryProps) {
                         <span className="truncate text-[16px] font-extrabold tracking-tight">{g.title}</span>
                         {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
                       </div>
-                      <div className="mt-1 flex items-center gap-2 font-mono text-[11px] text-white/50">
+                      <div className="mt-1 flex items-center gap-2 font-mono text-hint text-white/55">
                         {hoursPlayed(g) != null && <><span>{hoursPlayed(g)}h</span><span>·</span></>}
                         <span>{lastPlayedLabel(g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
                       </div>
@@ -349,7 +349,7 @@ export function LibraryView(p: LibraryProps) {
                       )}
                       {job ? (
                         <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
-                          <div className="font-mono text-[11px] uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
+                          <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
                           <div className="mt-1 h-1 rounded-full bg-white/15">
                             <div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(job.percent, 2)}%` }} />
                           </div>
@@ -363,8 +363,8 @@ export function LibraryView(p: LibraryProps) {
                       )}
                     </div>
                     <div className="px-2.5 py-2">
-                      <div className="truncate text-[11.5px] font-bold">{g.title}</div>
-                      <div className="truncate font-mono text-[11px] uppercase tracking-wider text-white/40">
+                      <div className="truncate text-hint font-bold">{g.title}</div>
+                      <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
                         {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.update_available && 'update'].filter(Boolean).join(' · ')}
                       </div>
                       {cardCompat(g) && <CompatChip game={g} className="mt-1.5" />}
@@ -388,7 +388,7 @@ export function LibraryView(p: LibraryProps) {
       ) : (
         <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
           <div role="table" aria-label="Library" className="min-w-[760px]">
-            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-white/40', TABLE_COLS)}>
+            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-white/55', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">status</span></span>
               <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
               <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>
@@ -408,11 +408,11 @@ export function LibraryView(p: LibraryProps) {
                       {g.shared_by && <Badge variant="neutral" className="flex-none">Shared by {g.shared_by.name}</Badge>}
                     </button>
                   </span>
-                  <span role="cell" className={cx('font-mono text-[11.5px]', TIER_TEXT[tier ?? ''] ?? 'text-white/40')}>{tier ?? '—'}</span>
-                  <span role="cell" className="truncate font-mono text-[11.5px] text-white/45">{runnerShort(g.settings.runner_id, p.runners)}</span>
-                  <span role="cell" className="text-right font-mono text-[11.5px] tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
-                  <span role="cell" className="text-right font-mono text-[11.5px] text-white/45">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
-                  <span role="cell" className="text-right font-mono text-[11.5px] text-white/45">{lastPlayedLabel(g) ?? '—'}</span>
+                  <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-white/55')}>{tier ?? '—'}</span>
+                  <span role="cell" className="truncate font-mono text-hint text-white/55">{runnerShort(g.settings.runner_id, p.runners)}</span>
+                  <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
+                  <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
+                  <span role="cell" className="text-right font-mono text-hint text-white/55">{lastPlayedLabel(g) ?? '—'}</span>
                 </div>
               );
             })}

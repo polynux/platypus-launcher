@@ -102,7 +102,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Plugins</h1>
-          <p className="mt-0.5 max-w-xl text-[12.5px] text-white/50">
+          <p className="mt-0.5 max-w-xl text-[12.5px] text-white/55">
             Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.
           </p>
         </div>
@@ -116,7 +116,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
         </div>
       </header>
 
-      <MonoLabel className="mb-3">store plugins</MonoLabel>
+      <MonoLabel as="h2" className="mb-3">store plugins</MonoLabel>
       {plugins.filter((p) => p.kind === 'store').length === 0 ? (
         <EmptyState label="no store plugins">
           Put a plugin folder in ~/.local/share/platypus/plugins and rescan. From Platypus's source: plugins/install.sh epic-legendary.
@@ -133,7 +133,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
-                      <p className="font-mono text-[11px] text-white/45">
+                      <p className="font-mono text-hint text-white/55">
                         v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
                       </p>
                     </div>
@@ -141,7 +141,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   </div>
                   {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                   {p.problem && p.status !== 'missing-requirements' && (
-                    <p className={cx('mt-2 font-mono text-[11.5px]', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
+                    <p className={cx('mt-2 font-mono text-hint', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
                   )}
                 </div>
 
@@ -166,9 +166,9 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3.5 py-2.5">
                     <span className="min-w-0 truncate text-[12px] text-white/70">
                       {!a ? (
-                        <span className="flex items-center gap-2 text-white/45"><Loader2 className="h-3 w-3 animate-spin" /> checking login…</span>
+                        <span className="flex items-center gap-2 text-white/55"><Loader2 className="h-3 w-3 animate-spin" /> checking login…</span>
                       ) : 'error' in a ? (
-                        <span className="font-mono text-[11.5px] text-red-300">{a.error}</span>
+                        <span className="font-mono text-hint text-red-300">{a.error}</span>
                       ) : a.loggedIn ? (
                         <>Logged in{a.user ? <> as <span className="font-bold text-white/90">{a.user}</span></> : ''}</>
                       ) : (
@@ -188,9 +188,9 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 )}
 
                 {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
-                  <div className="space-y-1 font-mono text-[11.5px]">
+                  <div className="space-y-1 font-mono text-hint">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-white/45">installs into</span>
+                      <span className="text-white/55">installs into</span>
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
                         <Button variant="link" className="flex-none" onClick={() => chooseFolder(p)}>change</Button>
@@ -203,7 +203,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     </div>
                     {p.extra_folders.map((f) => (
                       <div key={f} className="flex justify-between gap-3">
-                        <span className="text-white/45">also allowed</span>
+                        <span className="text-white/55">also allowed</span>
                         <span className="truncate text-white/60 select-text" title={f}>{f}</span>
                       </div>
                     ))}
@@ -257,7 +257,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
       {plugins.some((p) => p.kind === 'data') && (
         <>
-          <MonoLabel className="mb-3 mt-8 normal-case tracking-normal">data plugins · no code, always on</MonoLabel>
+          <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">data plugins · no code, always on</MonoLabel>
           <div className="grid gap-4 xl:grid-cols-2">
             {plugins
               .filter((p) => p.kind === 'data')
@@ -268,14 +268,14 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
-                        <p className="font-mono text-[11px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+                        <p className="font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
                       </div>
                       <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
                         {p.status === 'ready' ? 'data' : st.label}
                       </Badge>
                     </div>
                     {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
-                    {p.problem && <p className="font-mono text-[11.5px] text-red-300">{p.problem}</p>}
+                    {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
                       <p className="mt-auto text-[12px] text-white/55">
                         JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.
@@ -288,13 +288,13 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
         </>
       )}
 
-      <MonoLabel className="mb-3 mt-8">built in</MonoLabel>
+      <MonoLabel as="h2" className="mb-3 mt-8">built in</MonoLabel>
       <div className="grid gap-2 xl:grid-cols-2">
         {BUILT_IN.map((b) => (
           <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
             <div className="min-w-0">
               <div className="text-[13px] font-bold">{b.name}</div>
-              <div className="text-[12px] text-white/50">{b.what}</div>
+              <div className="text-[12px] text-white/55">{b.what}</div>
             </div>
             <Badge variant="neutral" className="flex-none">built in</Badge>
           </div>
@@ -332,8 +332,8 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 function ManifestRow({ label, items, empty }: { label: string; items: string[]; empty: string }) {
   return (
     <div className="flex gap-4 border-t border-white/[0.05] pt-2">
-      <span className="w-24 flex-none text-white/45">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-white/85 select-text">{items.length ? items.join(', ') : <span className="text-white/40">{empty}</span>}</span>
+      <span className="w-24 flex-none text-white/55">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-white/85 select-text">{items.length ? items.join(', ') : <span className="text-white/55">{empty}</span>}</span>
     </div>
   );
 }
@@ -344,14 +344,14 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
     <Modal label={`Approve ${p.name}`} onClose={onClose} size="md">
       <div>
         <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? `Re-approve ${p.name}` : `Approve ${p.name}`}</h2>
-        <p className="mt-1 font-mono text-[11.5px] text-white/45">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
+        <p className="mt-1 font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
         {p.status === 'changed' && (
           <p className="mt-3 rounded-xl bg-orange-400/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
             Its program changed since you approved it. If you didn't update it yourself, don't approve it.
           </p>
         )}
 
-        <div className="mt-4 space-y-2 font-mono text-[11.5px]">
+        <div className="mt-4 space-y-2 font-mono text-hint">
           <ManifestRow label="runs" items={[`${p.dir}/${p.exec}`]} empty="" />
           <ManifestRow label="sha-256" items={[p.hash]} empty="" />
           <ManifestRow label="can" items={p.declared} empty="nothing declared" />
@@ -368,7 +368,7 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
           <ManifestRow label="installs into" items={[p.install_folder]} empty="" />
         </div>
 
-        <div className="mt-4 flex gap-3 rounded-xl bg-white/[0.04] px-3.5 py-3 text-[11.5px] leading-relaxed text-white/60">
+        <div className="mt-4 flex gap-3 rounded-xl bg-white/[0.04] px-3.5 py-3 text-hint leading-relaxed text-white/60">
           <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300/80" />
           <p>
             A store plugin runs with your user's permissions. The hosts and paths above are what it declares; Platypus doesn't enforce them yet. Platypus does check
@@ -528,7 +528,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
         <p className="mt-1 text-[12px] text-white/55">Your login stays with {plugin.name}'s own tool; Platypus doesn't store it.</p>
         {!prompt && !error && (
-          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/45"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
+          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/55"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
         )}
         {prompt && (
           <div className="mt-4 space-y-4">

@@ -68,7 +68,7 @@ export function CloudSavesHost({
       <Modal label="Cloud saves need a decision" onClose={close}>
         <h2 className="text-[19px] font-extrabold tracking-tight">{title}</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-white/50">Open the game's page to decide.</p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-white/55">Open the game's page to decide.</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>Close</Button>
         </div>
@@ -114,7 +114,7 @@ export function CloudSavesHost({
     <Modal label="Cloud saves not synced" onClose={close}>
       <h2 className="text-[19px] font-extrabold tracking-tight">Cloud saves aren't synced</h2>
       <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-white/50">
+      <p className="mt-2 text-[12.5px] leading-relaxed text-white/55">
         You can launch {game.title} anyway. Its saves on this device may be older or newer than the cloud's.
       </p>
       <div className="mt-5 flex justify-end gap-2">

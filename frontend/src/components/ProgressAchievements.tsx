@@ -33,7 +33,7 @@ export function ProgressAchievements({ progress }: { progress: AchievementProgre
     <section className="pb-8" aria-label="Your achievements">
       <div className="mb-3.5 flex items-baseline justify-between">
         <h2 className="text-[16px] font-bold tracking-tight">Achievements</h2>
-        <span className="font-mono text-[12px] tabular-nums text-white/45">
+        <span className="font-mono text-[12px] tabular-nums text-white/55">
           {progress.unlocked}/{progress.total} · {pct}%
         </span>
       </div>
@@ -66,12 +66,12 @@ function ProgressCard({ a }: { a: ProgressAchievement }) {
       {a.icon ? (
         <img src={a.icon} alt="" loading="lazy" className={cx('h-11 w-11 flex-none rounded-lg', !a.unlocked && 'opacity-40 grayscale')} />
       ) : (
-        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-white/[0.05]"><Trophy className="h-4 w-4 text-white/40" /></span>
+        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-white/[0.05]"><Trophy className="h-4 w-4 text-white/55" /></span>
       )}
       <div className={cx('min-w-0', !a.unlocked && 'opacity-60')}>
         <div className="truncate text-[12px] font-bold">{a.name}</div>
-        {a.description && <div className="line-clamp-2 text-[11.5px] leading-snug text-white/50">{a.description}</div>}
-        <div className="mt-0.5 font-mono text-[11px] text-white/40">{a.unlocked ? (meta || 'unlocked') : meta || (a.hidden ? 'hidden' : 'locked')}</div>
+        {a.description && <div className="line-clamp-2 text-hint leading-snug text-white/55">{a.description}</div>}
+        <div className="mt-0.5 font-mono text-hint text-white/55">{a.unlocked ? (meta || 'unlocked') : meta || (a.hidden ? 'hidden' : 'locked')}</div>
       </div>
     </div>
   );

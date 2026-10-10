@@ -140,9 +140,9 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
         </>
       )}
       {st && describeCounts(st.counts) && (
-        <p className="mt-1.5 font-mono text-[11.5px] text-white/55" data-testid="cloud-counts">{describeCounts(st.counts)}</p>
+        <p className="mt-1.5 font-mono text-hint text-white/55" data-testid="cloud-counts">{describeCounts(st.counts)}</p>
       )}
-      {when && <p className="mt-1 font-mono text-[11px] text-white/40">checked {when}</p>}
+      {when && <p className="mt-1 font-mono text-hint text-white/55">checked {when}</p>}
       {info?.skipped && (
         <p role="note" className="mt-2 text-[12px] leading-relaxed text-white/65" data-testid="cloud-skipped">
           Launches don't sync these saves: {info.skipped}
@@ -166,7 +166,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
 
       {busy && (
         <div className="mt-3" role="status">
-          <div className="flex items-center justify-between gap-3 font-mono text-[11.5px] uppercase tracking-wider text-amber-200">
+          <div className="flex items-center justify-between gap-3 font-mono text-micro uppercase tracking-wider text-amber-200">
             <span className="flex items-center gap-2">
               <Loader2 className="h-3 w-3 animate-spin" />
               {progress?.phase ?? (info?.busy ? info.busy : 'checking')}
@@ -201,7 +201,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
         )}
       </div>
       {running && st?.state === 'conflict' && (
-        <p className="mt-2 text-[11.5px] text-white/45">{game.title} is running. Choose its saves after it exits.</p>
+        <p className="mt-2 text-hint text-white/55">{game.title} is running. Choose its saves after it exits.</p>
       )}
 
       {info && (
@@ -218,7 +218,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
               { value: 'auto', label: 'Auto' },
             ]}
           />
-          <p className="mt-2 text-[11.5px] leading-snug text-white/45">{MODE_HELP[info.mode]}</p>
+          <p className="mt-2 text-hint leading-snug text-white/55">{MODE_HELP[info.mode]}</p>
         </div>
       )}
 

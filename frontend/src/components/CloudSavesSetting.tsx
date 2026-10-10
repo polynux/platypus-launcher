@@ -61,7 +61,7 @@ function Row({ plugin }: { plugin: StorePlugin }) {
           options={[{ value: 'off', label: 'Off' }, { value: 'ask', label: 'Ask' }, { value: 'auto', label: 'Auto' }]}
         />
       </div>
-      <p className="text-[11.5px] leading-snug text-white/45">{MODE_HELP[mode]}</p>
+      <p className="text-hint leading-snug text-white/55">{MODE_HELP[mode]}</p>
       {error && <ErrorNotice message={error} fallback="Platypus couldn't save the cloud setting." />}
     </div>
   );
