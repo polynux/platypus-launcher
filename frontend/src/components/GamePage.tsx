@@ -168,6 +168,19 @@ export function GamePage(p: GamePageProps) {
     const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [shot, details]);
+  // The thumbnail strip scrolls sideways: a mouse wheel's vertical turns scroll it too. Native, not
+  // React's onWheel, because React's listener is passive and can't stop the page from scrolling.
+  useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [details]);
 
   const s = normalizeSettings(game.settings);
   const autoRunner = runners.find((r) => r.is_default);
@@ -349,7 +362,7 @@ export function GamePage(p: GamePageProps) {
               </TooltipTrigger>
               <TooltipContent side="bottom">Open slideshow</TooltipContent>
               </Tooltip>
-              <ScrollArea orientation="horizontal" viewportRef={strip} data-testid="shot-strip">
+              <ScrollArea orientation="horizontal" type="always" viewportRef={strip} data-testid="shot-strip">
                 {/* Padding keeps the active ring and rounded corners inside the viewport; pb leaves room for the overlay bar. */}
                 <div data-testid="shot-strip-inner" className="flex w-max gap-2.5 px-1.5 pb-3.5 pt-1.5">
                   {shots.map((src, i) => (
@@ -360,7 +373,7 @@ export function GamePage(p: GamePageProps) {
                       onDoubleClick={() => setLightbox(true)}
                       aria-label={`Show screenshot ${i + 1}`}
                       aria-pressed={i === shot}
-                      className={cx('aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
+                      className={cx('aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
                     >
                       <img src={src} alt="" loading="lazy" className="h-full w-full object-contain" />
                     </button>

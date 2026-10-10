@@ -99,8 +99,6 @@ vi.mock('../../effect/runtime', () => ({
     getGameFolders: () => Effect.succeed([]),
     getLauncherSettings: () =>
       Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),
-    setGamesFolder: () => Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),
-    chooseGamesFolder: () => Effect.succeed('' as never),
     setCancelCleanupDays: (days: number) =>
       Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: days } as never),
   },
@@ -116,8 +114,7 @@ describe('FE-15 cleanup-days setting', () => {
     await waitFor(() => expect((input as HTMLInputElement).value).toBe('7'));
     fireEvent.change(input, { target: { value: '3' } });
     fireEvent.blur(input);
-    // Two Save buttons: the games-folder form's and the cleanup form's.
-    fireEvent.click((await findAllByRole('button', { name: 'Save' }))[1]);
+    fireEvent.click((await findAllByRole('button', { name: 'Save' }))[0]);
     expect(await findByDisplayValue('3')).toBeTruthy();
   });
 
@@ -127,7 +124,7 @@ describe('FE-15 cleanup-days setting', () => {
     await waitFor(() => expect((input as HTMLInputElement).value).toBe('7'));
     fireEvent.change(input, { target: { value: '0' } });
     fireEvent.blur(input);
-    fireEvent.click((await findAllByRole('button', { name: 'Save' }))[1]);
+    fireEvent.click((await findAllByRole('button', { name: 'Save' }))[0]);
     expect(await findByDisplayValue('0')).toBeTruthy();
     // The field clamps anything past the max (on blur) before it can reach the backend.
     fireEvent.change(input, { target: { value: '9999' } });

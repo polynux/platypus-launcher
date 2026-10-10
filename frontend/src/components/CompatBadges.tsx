@@ -2,6 +2,7 @@ import { Badge } from '@/components/ds/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ds/tooltip';
 import type { Compat, CompatBadge, Game, WikiCredit } from '../types';
 import { appIdSourceLabel, asOfDate, badgeTitle, cardCompat, PCGW_ATTRIBUTION, ratingLine, TIER_LABEL } from '../lib/compat';
+import { ExternalLink } from './ExternalLink';
 import { cx } from './ui';
 
 /** The badge on a library card: Native for a Linux build, else the game's tier.
@@ -72,9 +73,9 @@ export function CompatFacts({ compat }: { compat: Compat }) {
           {pdb.fetched_at > 0 && ` · as of ${asOfDate(pdb.fetched_at)}`}
           {pdb.stale && ' · refreshing'}
           {' · '}
-          <a href={pdb.url} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">
+          <ExternalLink href={pdb.url} className="text-amber-200/80 hover:text-amber-200">
             protondb ↗
-          </a>
+          </ExternalLink>
         </p>
       )}
       {compat.wiki && <WikiCreditLine credit={compat.wiki} />}
@@ -94,13 +95,13 @@ export function WikiCreditLine({ credit }: { credit: WikiCredit }) {
     <p className="font-mono text-hint leading-relaxed text-white/55" aria-label="PCGamingWiki credit">
       {PCGW_ATTRIBUTION}
       {' · '}
-      <a href={credit.url} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">
+      <ExternalLink href={credit.url} className="text-amber-200/80 hover:text-amber-200">
         {credit.title} on PCGamingWiki ↗
-      </a>
+      </ExternalLink>
       {' · '}
-      <a href={credit.licence_url} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">
+      <ExternalLink href={credit.licence_url} className="text-amber-200/80 hover:text-amber-200">
         licence ↗
-      </a>
+      </ExternalLink>
       {credit.fetched_at > 0 && ` · read ${asOfDate(credit.fetched_at)}`}
     </p>
   );

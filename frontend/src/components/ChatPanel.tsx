@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { cx, LinkButton } from './ui';
 import { Button } from './ds/button';
 import { Textarea } from './ds/textarea';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { ExternalLink } from './ExternalLink';
 import { canSendChat, clockLabel, messageKey, splitLinks } from '../lib/chat';
 import type { ChatMessage, ChatView } from '../types';
 
@@ -152,17 +152,9 @@ function MessageRow({ message, onResend }: {
       >
         {splitLinks(message.text).map((part, i) =>
           part.href ? (
-            <a
-              key={i}
-              href={part.href}
-              className="underline decoration-white/35 underline-offset-2 hover:text-white"
-              onClick={(e) => {
-                e.preventDefault();
-                BrowserOpenURL(part.href!);
-              }}
-            >
+            <ExternalLink key={i} href={part.href} className="underline decoration-white/35 underline-offset-2 hover:text-white">
               {part.text}
-            </a>
+            </ExternalLink>
           ) : (
             <React.Fragment key={i}>{part.text}</React.Fragment>
           ),

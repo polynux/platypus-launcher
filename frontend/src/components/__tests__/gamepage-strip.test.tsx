@@ -42,4 +42,21 @@ describe('screenshot strip', () => {
     fireEvent.click(screen.getByLabelText('Show screenshot 3'));
     expect(calls).toContain(screen.getByLabelText('Show screenshot 3'));
   });
+
+  it('is always scrollable with its bar showing, and a wheel turn scrolls it sideways', async () => {
+    render(<GamePage game={game} {...props} />);
+    const strip = await screen.findByTestId('shot-strip');
+    const viewport = strip.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]')!;
+    Object.defineProperty(viewport, 'scrollWidth', { configurable: true, value: 1000 });
+    Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 300 });
+    viewport.scrollLeft = 0;
+    const wheel = new WheelEvent('wheel', { deltaY: 120, cancelable: true, bubbles: true });
+    viewport.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(viewport.scrollLeft).toBe(120);
+    // A sideways wheel is left to the browser.
+    const sideways = new WheelEvent('wheel', { deltaX: 40, cancelable: true, bubbles: true });
+    viewport.dispatchEvent(sideways);
+    expect(sideways.defaultPrevented).toBe(false);
+  });
 });

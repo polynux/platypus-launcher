@@ -221,12 +221,14 @@ func TestInstallLocationsListDefaultLibrariesAndRecents(t *testing.T) {
 			t.Errorf("%s: free = %d", l.Folder, l.FreeBytes)
 		}
 	}
-	want := []string{"default " + def, "library " + filepath.Join(ssd, "echo"), "recent " + picked}
+	// The old default is a library now, after the default and before the added folder.
+	libs := e.a.settings.GameFolders()
+	want := []string{"default " + def, "library " + filepath.Join(libs[0], "echo"), "library " + filepath.Join(ssd, "echo"), "recent " + picked}
 	if !slices.Equal(got, want) {
 		t.Fatalf("locations =\n%v\nwant\n%v", got, want)
 	}
-	if locs[1].Root != ssd {
-		t.Errorf("library root = %q", locs[1].Root)
+	if locs[2].Root != ssd {
+		t.Errorf("library root = %q", locs[2].Root)
 	}
 	if _, err := e.a.GetInstallLocations(types.Game{Source: "steam", Title: "x"}); err == nil {
 		t.Error("a game that is not from a plugin got install locations")

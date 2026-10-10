@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { openExternal } from '../lib/external';
 import { Modal } from './Modal';
 import { EmptyState, MonoLabel, Panel, cx } from './ui';
 import { Button } from './ds/button';
@@ -535,7 +535,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             {prompt.url && (
               <div>
                 <MonoLabel className="mb-1.5 normal-case tracking-normal">1 · log in on the store's page</MonoLabel>
-                <Button variant="neutral" className="w-full" onClick={() => BrowserOpenURL(prompt.url!)}>
+                <Button variant="neutral" className="w-full" onClick={() => openExternal(prompt.url)}>
                   <ExternalLink className="h-3.5 w-3.5" /> Open login page
                 </Button>
                 <p className="mt-1.5 break-all font-mono text-[12px] text-white/55 select-text">{prompt.url}</p>

@@ -9,7 +9,7 @@ import { Input } from '@/components/ds/input';
 import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { ensureTerms } from '../lib/termsRequest';
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
+import { openExternal } from '../lib/external';
 import {
   VERSION_WARNING, buildTitle, channelLocked, choiceIsEmpty, isCurrent, lastInstall, pinLabel, pinOf, samePin, shortDate, sourceLabel, targetOf,
   type VersionChoice,
@@ -242,7 +242,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           {info.links.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
               {info.links.map((l) => (
-                <Button key={l.url} variant="link" size="sm" onClick={() => BrowserOpenURL(l.url)} className="gap-1">
+                <Button key={l.url} variant="link" size="sm" onClick={() => openExternal(l.url)} className="gap-1">
                   {l.label} <ExternalLink className="h-3 w-3" />
                 </Button>
               ))}

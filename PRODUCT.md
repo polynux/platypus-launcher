@@ -36,7 +36,7 @@ Linux desktop (WebKitGTK webview inside Wails), dark rooms, desktop sessions (Wa
 - Native Linux binary detection (including binaries with no extension or exec bit; the Unity player is preferred as the native entry point); installed games show their launch mode (native vs. runner)
 - Fixes browser: curated fixes + ProtonDB tier data (curated data real; ProtonDB fetch exists)
 - Custom game addition is currently local-state only (no backend persistence binding yet)
-- Per-game settings and the Games folder persist in ~/.local/share/platypus/settings.json (sideloaded games and their settings are still session-only)
+- Per-game settings and the game folders (the default one first) persist in ~/.local/share/platypus/settings.json (sideloaded games and their settings are still session-only)
 - Plugins (docs/plugins/): two kinds, both installed under ~/.local/share/platypus/plugins/<id>/
   - Store plugins (protocol.md): out-of-process executables over JSON-RPC. The user approves each one, and approval pins the whole plugin folder. Enable/disable and log in from the Plugins view; their games merge into the library (installed/owned); install, update, uninstall through a resumable download queue; launches validated and run through Platypus's runner pipeline
   - Data plugins (data-plugins.md): JSON-only fix recipes and tweak packs, no code, so always on with no approval. Platypus's own curated fixes and hardware tweaks use the same format (internal/dataplug/builtin)

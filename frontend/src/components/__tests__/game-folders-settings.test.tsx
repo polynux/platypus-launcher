@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   getGameFolders: vi.fn(),
   addGameFolder: vi.fn(),
   removeGameFolder: vi.fn(),
+  makeDefaultGameFolder: vi.fn(),
   chooseGameFolder: vi.fn(),
 }));
 vi.mock('../../effect/runtime', () => ({
@@ -62,6 +63,18 @@ describe('GameFoldersSettings', () => {
     await screen.findByRole('list');
     fireEvent.click(screen.getByRole('button', { name: /add folder/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/system folder/);
+  });
+
+  it('makes a library folder the default, and the old default stays in the list', async () => {
+    const onNotify = vi.fn();
+    const swapped = [{ ...extra, is_default: true }, { ...def, is_default: false }];
+    api.makeDefaultGameFolder.mockReturnValue(Effect.succeed(swapped));
+    render(<GameFoldersSettings onNotify={onNotify} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Make /mnt/big/Games the default folder' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Make /home/me/Games the default folder' })).toBeInTheDocument());
+    expect(api.makeDefaultGameFolder).toHaveBeenCalledWith('/mnt/big/Games');
+    expect(screen.queryByRole('button', { name: 'Remove /mnt/big/Games' })).toBeNull();
+    expect(onNotify).toHaveBeenCalledWith('Default game folder changed');
   });
 
   it('removes a folder', async () => {

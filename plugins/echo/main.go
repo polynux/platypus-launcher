@@ -587,6 +587,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		if g.details {
 			out = map[string]any{
 				"summary":     "A tiny fake game from the Echo test store, shown on its game page.",
+				"screenshots": echoScreenshots(p.ID),
 				"genres":      []string{"Test"},
 				"developers":  []string{"Echo Software"},
 				"publishers":  []string{"Echo Software"},
@@ -934,4 +935,14 @@ func launchSpec(p params) (any, error) {
 		"env":    map[string]string{"ECHO_GAME": "1"},
 		"redact": []string{"-AUTH_PASSWORD="},
 	}, nil
+}
+
+// echoScreenshots are the screenshots a game page shows for an echo game: six
+// http(s) images, so the thumbnail strip is wider than the page at 1024 px.
+func echoScreenshots(id string) []string {
+	out := make([]string, 0, 6)
+	for i := 1; i <= 6; i++ {
+		out = append(out, fmt.Sprintf("https://picsum.photos/seed/echo-%s-%d/1280/720", id, i))
+	}
+	return out
 }

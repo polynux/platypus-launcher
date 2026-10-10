@@ -199,8 +199,8 @@ func (a *App) InstallGameWithOptionsTo(game types.Game, options map[string]any, 
 	return a.queueWithOptionsIn(jobs.KindInstall, game, options, folder)
 }
 
-// gameFolderList is the Settings list: the Games folder (the default one)
-// first, then the others.
+// gameFolderList is the Settings list: the default folder first, then the
+// library folders.
 func (a *App) gameFolderList() []types.GameFolder {
 	paths := append([]string{a.settings.GamesFolder()}, a.settings.GameFolders()...)
 	out := make([]types.GameFolder, 0, len(paths))
@@ -213,6 +213,20 @@ func (a *App) gameFolderList() []types.GameFolder {
 
 // GetGameFolders lists the user's game folders, the default one first.
 func (a *App) GetGameFolders() []types.GameFolder { return a.gameFolderList() }
+
+// MakeDefaultGameFolder makes a game folder the default one, where installs go.
+// A folder not in the list yet is added, and it is checked like an install
+// folder. The old default stays in the list.
+func (a *App) MakeDefaultGameFolder(path string) ([]types.GameFolder, error) {
+	clean, err := a.checkInstallFolder(path)
+	if err != nil {
+		return a.gameFolderList(), err
+	}
+	if _, err := a.settings.SetGamesFolder(clean); err != nil {
+		return a.gameFolderList(), err
+	}
+	return a.gameFolderList(), nil
+}
 
 // AddGameFolder adds a library folder to install into. It is checked like an
 // install folder; it need not exist yet.
@@ -227,8 +241,9 @@ func (a *App) AddGameFolder(path string) ([]types.GameFolder, error) {
 	return a.gameFolderList(), nil
 }
 
-// RemoveGameFolder takes a library folder off the list. The Games folder is the
-// default one and stays. Games already in the removed folder keep working.
+// RemoveGameFolder takes a library folder off the list. The default folder
+// stays until another one is made the default. Games already in the removed
+// folder keep working.
 func (a *App) RemoveGameFolder(path string) ([]types.GameFolder, error) {
 	if _, err := a.settings.RemoveGameFolder(path); err != nil {
 		return a.gameFolderList(), err
