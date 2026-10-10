@@ -46,6 +46,11 @@ export class Core {
   onCrash: (code: number | null) => void = () => {};
 
   constructor(binary: string, args: string[] = []) {
+    // Explicit stdio pipes and nothing else: libuv closes every other file
+    // descriptor in the child, so nothing the shell holds — the remote
+    // debugger's socket, crashpad, GPU channel — reaches the core, and the
+    // core's own children (plugins, games) get only 0/1/2 in turn: Go's
+    // os/exec closes the rest (no ExtraFiles anywhere in internal/).
     this.child = spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stderr.on('data', (b: Buffer) => process.stderr.write(b));
     this.child.stdin.on('error', () => {}); // a dying core is reported through exit
