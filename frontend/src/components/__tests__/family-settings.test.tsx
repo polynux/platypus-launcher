@@ -262,6 +262,7 @@ describe('library family filter and badge', () => {
   it('marks borrowed games and filters to the ones shared with the user', () => {
     library([mk('own'), mk('lent', { shared_by: { id: 'ana', name: 'Ana' } })]);
     expect(screen.getByText('Shared by Ana')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'shared with me' }));
     expect(screen.queryByText('own')).toBeNull();
     expect(screen.getAllByText('lent').length).toBeGreaterThan(0);
@@ -274,6 +275,7 @@ describe('library family filter and badge', () => {
 
   it('does not keep the shared filter once no game is borrowed', () => {
     const r = library([mk('own'), mk('lent', { shared_by: { id: 'ana', name: 'Ana' } })]);
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
     fireEvent.click(screen.getByRole('radio', { name: 'shared with me' }));
     expect(screen.queryByText('own')).toBeNull();
     r.rerender(libraryView([mk('own')]));

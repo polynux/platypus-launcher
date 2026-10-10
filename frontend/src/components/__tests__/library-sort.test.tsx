@@ -29,6 +29,7 @@ describe('Library sort', () => {
   });
   it('table tier header sorts and the toolbar control stays in sync', () => {
     const { getAllByRole, getByRole, getByLabelText } = lib(games, 'table');
+    fireEvent.click(getByRole('button', { name: /^Filters/ }));
     fireEvent.click(getByRole('button', { name: 'tier' }));
     expect(getByLabelText('Sort by').textContent).toMatch(/tier/i);
     const order = () => getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[1].textContent);
@@ -38,6 +39,7 @@ describe('Library sort', () => {
   it('card mode sorts via the toolbar and drops the last-played strip', () => {
     const played = [mk('b', { last_played_at: 5, playtime_minutes: 1 }), mk('a', { last_played_at: 9, playtime_minutes: 99 }), mk('c', { playtime_minutes: 50 })];
     const { container, getByLabelText, getByRole, queryByText } = lib(played, 'cards');
+    fireEvent.click(getByRole('button', { name: /^Filters/ }));
     expect(queryByText('Last played')).toBeTruthy();
     fireEvent.pointerDown(getByLabelText('Sort by'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
     fireEvent.click(getByRole('option', { name: 'hours played' }));
