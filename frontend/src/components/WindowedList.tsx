@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { columnWidth, gridColumns, useElementWidth, useRowWindow } from '../lib/windowing';
 
-/** Rendered before the list has measured itself (and always in jsdom, which has no layout). */
-const FALLBACK_ROWS = 60;
+/** Rendered before the list has measured itself (and always in jsdom, which has no layout): about a screenful. */
+const FALLBACK_ITEMS = 30;
 
 interface WindowedGridProps<T> {
   items: T[];
@@ -27,8 +27,8 @@ export function WindowedGrid<T>({ items, itemKey, renderItem, minColumn, gap, ro
   const cols = ready ? gridColumns(width, minColumn, gap) : 1;
   const rowH = ready ? rowHeight(columnWidth(width, cols, gap)) : 0;
   const rows = ready ? Math.ceil(items.length / cols) : items.length;
-  const { start, end, padTop, padBottom } = useRowWindow(ref, { rows, pitch: rowH + gap, ready, fallback: FALLBACK_ROWS });
-  const shown = ready ? items.slice(start * cols, end * cols) : items.slice(0, FALLBACK_ROWS);
+  const { start, end, padTop, padBottom } = useRowWindow(ref, { rows, pitch: rowH + gap, ready, fallback: FALLBACK_ITEMS });
+  const shown = ready ? items.slice(start * cols, end * cols) : items.slice(0, FALLBACK_ITEMS);
 
   return (
     <div ref={ref} style={{ paddingTop: padTop, paddingBottom: padBottom }}>
@@ -54,7 +54,7 @@ export function WindowedRows<T>({ items, itemKey, renderRow, rowHeight }: Window
   const ref = useRef<HTMLDivElement>(null);
   const width = useElementWidth(ref);
   const ready = width > 0;
-  const { start, end, padTop, padBottom } = useRowWindow(ref, { rows: items.length, pitch: rowHeight, ready, fallback: FALLBACK_ROWS });
+  const { start, end, padTop, padBottom } = useRowWindow(ref, { rows: items.length, pitch: rowHeight, ready, fallback: FALLBACK_ITEMS });
   const from = ready ? start : 0;
   return (
     <div ref={ref} style={{ paddingTop: padTop, paddingBottom: padBottom }}>
