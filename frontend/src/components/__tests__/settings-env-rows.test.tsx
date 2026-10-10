@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { render, fireEvent, screen, within } from '@testing-library/react';
 import { Effect } from 'effect';
 import type { Game } from '../../types';
 
@@ -16,6 +16,8 @@ describe('env var rows', () => {
   it('adds two rows, deletes one, and saves only the remaining one', () => {
     const onSave = vi.fn();
     render(<SettingsModal game={game} runners={[]} onClose={() => {}} onSave={onSave} onCopied={() => {}} />);
+    // The env vars sit in the launch group's folded Advanced section.
+    fireEvent.click(within(screen.getByRole('region', { name: 'launch' })).getByRole('button', { name: /Advanced/ }));
     const add = screen.getByRole('button', { name: '+ Add variable' });
     fireEvent.click(add);
     fireEvent.click(add);

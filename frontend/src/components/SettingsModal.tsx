@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { Copy, X } from 'lucide-react';
+import { ChevronDown, Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ds/select';
@@ -68,6 +68,38 @@ function runnerKind(r: ProtonVersion): string {
   return 'steam';
 }
 
+/** A named group of the General form: a mono label over its controls. */
+function SettingGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section aria-label={label} className="space-y-3.5">
+      <MonoLabel>{label}</MonoLabel>
+      {children}
+    </section>
+  );
+}
+
+/** The rarely needed settings of a group, folded. Closed, it says how many are set, so nothing hidden goes unseen. */
+function AdvancedFold({ set, children }: { set: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = React.useId();
+  return (
+    <div className="border-t border-white/[0.07] pt-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 font-mono text-[12px] text-white/60 transition hover:text-white/85"
+      >
+        <ChevronDown className={cx('size-3.5 transition-transform', open ? '' : '-rotate-90')} aria-hidden />
+        Advanced
+        {set > 0 && <span className="tabular-nums text-amber-200/90">· {set} set</span>}
+      </button>
+      <div id={id} hidden={!open} className="mt-4 space-y-5">{children}</div>
+    </div>
+  );
+}
+
 /** The launcher's own settings for one game (runner, wrappers, env…): the form
  *  of the "General" tab, and of the standalone settings dialog. */
 export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded }: GeneralProps) {
@@ -128,6 +160,12 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
     set('gamescope_args', composeGamescopeArgs(next));
   };
 
+  // How many folded settings are off their defaults: the Advanced folds report them while closed.
+  const syncSet = !['default', 'fsync'].includes(draft.sync_mode ?? 'fsync') ? 1 : 0;
+  const runnerSet = (native ? 0 : syncSet + flags.length) + tricks.length;
+  const gsSet = GS_TOGGLES.filter((t) => gs.toggles[t.key]).length + (gs.filter ? 1 : 0) + (gsExtra.trim() ? 1 : 0);
+  const launchSet = envRows.length + (draft.use_gamescope ? gsSet : 0);
+
   const copy = (text: string) => navigator.clipboard.writeText(text).then(onCopied).catch(() => {});
 
   return (
@@ -160,214 +198,227 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
       )}
 
       <div className="grid gap-6 @3xl:grid-cols-[1.5fr_1fr]">
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-7">
           <SteamAppIdField game={game} />
-          {native && (
-            <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
-              <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
-                This game ships a native Linux build from the store. It runs directly, without Proton —
-                runner, DX layer and Proton flags don't apply.
-              </p>
-            </div>
-          )}
-          {!native && (
-          <div>
-            <MonoLabel className="mb-2">runner</MonoLabel>
-            <p className="mb-2 text-[12px] leading-relaxed text-white/55">The Proton or Wine build that runs this Windows game.</p>
-            <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
-              <SelectItem value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</SelectItem>
-              {runnerMissing && <SelectItem value={selectedRunner}>{selectedRunner} (missing)</SelectItem>}
-              {runnerGroups.map(([kind, list]) => (
-                <SelectGroup key={kind}>
-                  <SelectLabel>{kind}</SelectLabel>
-                  {list.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</SelectItem>)}
-                </SelectGroup>
-              ))}
-            </SelectField>
-            <div className={cx('mt-1.5 truncate font-mono text-[11px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
-              {runnerMissing
-                ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
-                : chosenRunner
-                  ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
-                  : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
-            </div>
-            {runners.length === 0 && <p className="mt-1 text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
-          </div>
-          )}
 
-          {!native && (
-          <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-            <div>
-              <MonoLabel className="mb-1.5">dx layer</MonoLabel>
-              <SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} />
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.</p>
-            </div>
-            <div>
-              <MonoLabel className="mb-1.5">sync</MonoLabel>
-              <SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.</p>
-            </div>
-            <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
-            <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
-            <div>
-              <MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel>
-              <SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} />
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0.</p>
-            </div>
-          </div>
-          )}
-
-          <div>
-            <MonoLabel className="mb-2">pipeline</MonoLabel>
-            <p className="mb-2 text-[12px] leading-relaxed text-white/55">Each switch wraps the launch command in one more program.</p>
-            <div className="divide-y divide-white/[0.07]">
-              {([
-                ['use_gamemode', 'gamemode', 'Wrap the launch in gamemoderun'],
-                ['use_gamescope', 'gamescope', 'Run the game inside a gamescope session'],
-                ...(!native
-                  ? ([
-                      ['eac_runtime', 'eac runtime', 'For games that use EasyAntiCheat'],
-                      ['battleye_runtime', 'battleye runtime', 'For games that use BattlEye'],
-                    ] as const)
-                  : []),
-              ] as const).map(([k, label, title]) => (
-                <SwitchRow key={k} label={label} hint={title} checked={!!draft[k]} onChange={(v) => set(k, v)} />
-              ))}
-            </div>
-            {draft.use_gamescope && (
-              // The gamescope options hang off the pipeline switch: a hairline and indent, not a card inside the panel.
-              <div className="mt-2.5 space-y-4 border-l border-white/[0.08] pl-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <MonoLabel className="mb-1.5">resolution</MonoLabel>
-                    <SelectField
-                      label="Gamescope resolution"
-                      value={resChoice || 'default'}
-                      onChange={(v) => {
-                        if (v === 'custom') return setResCustom(true);
-                        setResCustom(false);
-                        const [w, h] = v !== 'default' ? v.split('x').map(Number) : [0, 0];
-                        setDraft((d) => ({ ...d, gamescope_w: w, gamescope_h: h }));
-                      }}
-                    >
-                      <SelectItem value="default">Game default</SelectItem>
-                      {display && <SelectItem value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</SelectItem>}
-                      {GS_RESOLUTIONS.filter((r) => !(display && r.w === display.w && r.h === display.h)).map((r) => (
-                        <SelectItem key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</SelectItem>
-                      ))}
-                      <SelectItem value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</SelectItem>
-                    </SelectField>
-                    {resChoice === 'custom' && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <NumberField aria-label="gamescope width" min={0} step={10} hideSteppers value={draft.gamescope_w || undefined} onChange={(v) => set('gamescope_w', v ?? 0)} placeholder="width" className="min-w-0 flex-1" />
-                        <span className="text-white/40">×</span>
-                        <NumberField aria-label="gamescope height" min={0} step={10} hideSteppers value={draft.gamescope_h || undefined} onChange={(v) => set('gamescope_h', v ?? 0)} placeholder="height" className="min-w-0 flex-1" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <MonoLabel className="mb-1.5">frame rate</MonoLabel>
-                    <SelectField
-                      label="Gamescope frame rate"
-                      value={rateSel || 'default'}
-                      onChange={(v) => {
-                        if (v === 'custom') return setRateCustom(true);
-                        setRateCustom(false);
-                        set('gamescope_r', v !== 'default' ? Number(v) : 0);
-                      }}
-                    >
-                      <SelectItem value="default">Game default</SelectItem>
-                      {GS_RATES.map((r) => <SelectItem key={r} value={String(r)}>{r} Hz</SelectItem>)}
-                      <SelectItem value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</SelectItem>
-                    </SelectField>
-                    {rateSel === 'custom' && (
-                      <NumberField aria-label="gamescope refresh" min={0} hideSteppers value={draft.gamescope_r || undefined} onChange={(v) => set('gamescope_r', v ?? 0)} placeholder="Hz" className="mt-2" />
-                    )}
-                  </div>
-                </div>
-                <div className="divide-y divide-white/[0.07]">
-                  {GS_TOGGLES.map((t) => (
-                    <SwitchRow key={t.key} label={t.label} hint={t.flag} title={t.title} checked={gs.toggles[t.key]} onChange={(v) => setGs({ toggles: { ...gs.toggles, [t.key]: v } })} />
+          <SettingGroup label="runner">
+            {native ? (
+              <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
+                <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
+                  This game ships a native Linux build from the store. It runs directly, without Proton —
+                  runner, DX layer and Proton flags don't apply.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="mb-2 text-[12px] leading-relaxed text-white/55">The Proton or Wine build that runs this Windows game.</p>
+                <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
+                  <SelectItem value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</SelectItem>
+                  {runnerMissing && <SelectItem value={selectedRunner}>{selectedRunner} (missing)</SelectItem>}
+                  {runnerGroups.map(([kind, list]) => (
+                    <SelectGroup key={kind}>
+                      <SelectLabel>{kind}</SelectLabel>
+                      {list.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</SelectItem>)}
+                    </SelectGroup>
                   ))}
+                </SelectField>
+                <div className={cx('mt-1.5 truncate font-mono text-[11px]', runnerMissing ? 'text-orange-300' : 'text-white/45')}>
+                  {runnerMissing
+                    ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
+                    : chosenRunner
+                      ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
+                      : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
                 </div>
-                <div>
-                  <MonoLabel className="mb-1.5">upscale filter</MonoLabel>
-                  <SegRow label="Gamescope upscale filter" options={GS_FILTERS} value={gs.filter} onChange={(v) => setGs({ filter: v })} />
-                </div>
-                <label className="block">
-                  <MonoLabel className="mb-1.5">extra gamescope args</MonoLabel>
-                  <Input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" />
-                </label>
+                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/50">No Proton or Wine runners detected.</p>}
               </div>
             )}
-          </div>
-
-          <label className="block">
-            <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
-            <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" />
-          </label>
-
-          <div>
-            <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
-            <div className="space-y-1.5">
-              {envRows.map((r, i) => {
-                const err = envKeyError(envRows, i);
-                const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
-                return (
-                  <div key={r.id}>
-                    <div className="flex items-center gap-1.5">
-                      <Input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx('w-[40%] flex-none', err && 'ring-1 ring-orange-300/70')} />
-                      <Input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className="min-w-0 flex-1" />
-                      <Button variant="ghost" size="icon" aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none">
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                    {err && <p role="status" className="mt-1 font-mono text-[11.5px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+            <AdvancedFold set={runnerSet}>
+              {!native && (
+                <div>
+                  <MonoLabel className="mb-1.5">sync</MonoLabel>
+                  <SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.</p>
+                </div>
+              )}
+              {!native && (
+                <div>
+                  <MonoLabel className="mb-2">proton flags</MonoLabel>
+                  <p className="mb-2 text-[12px] leading-relaxed text-white/55">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
+                  <div className="divide-y divide-white/[0.07]">
+                    {PROTON_FLAGS.map((f) => {
+                      const on = flags.includes(f.key);
+                      return (
+                        <SwitchRow
+                          key={f.key}
+                          label={f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}
+                          hint={f.key}
+                          title={`${f.key}=1 — ${f.desc}`}
+                          checked={on}
+                          onChange={(v) => set('proton_flags', v ? [...flags, f.key] : flags.filter((x) => x !== f.key))}
+                        />
+                      );
+                    })}
                   </div>
-                );
-              })}
+                </div>
+              )}
+              <div>
+                <MonoLabel className="mb-2">winetricks <span className="normal-case tracking-normal text-white/35">· saved, not applied yet</span></MonoLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...new Set([...WINETRICKS_VERBS, ...(game.fix_info?.winetricks ?? [])])].map((t) => {
+                    const on = tricks.includes(t);
+                    return (
+                      <button key={t} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== t) : [...tricks, t])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-[11.5px] transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
+                        {on ? '✓ ' : '+ '}{t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </AdvancedFold>
+          </SettingGroup>
+
+          {!native && (
+            <SettingGroup label="graphics">
+              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                <div>
+                  <MonoLabel className="mb-1.5">dx layer</MonoLabel>
+                  <SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.</p>
+                </div>
+                <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
+                <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
+                <div>
+                  <MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel>
+                  <SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0.</p>
+                </div>
+              </div>
+            </SettingGroup>
+          )}
+
+          <SettingGroup label="launch">
+            <div>
+              <MonoLabel className="mb-2">pipeline</MonoLabel>
+              <p className="mb-2 text-[12px] leading-relaxed text-white/55">Each switch wraps the launch command in one more program.</p>
+              <div className="divide-y divide-white/[0.07]">
+                {([
+                  ['use_gamemode', 'gamemode', 'Wrap the launch in gamemoderun'],
+                  ['use_gamescope', 'gamescope', 'Run the game inside a gamescope session'],
+                  ...(!native
+                    ? ([
+                        ['eac_runtime', 'eac runtime', 'For games that use EasyAntiCheat'],
+                        ['battleye_runtime', 'battleye runtime', 'For games that use BattlEye'],
+                      ] as const)
+                    : []),
+                ] as const).map(([k, label, title]) => (
+                  <SwitchRow key={k} label={label} hint={title} checked={!!draft[k]} onChange={(v) => set(k, v)} />
+                ))}
+              </div>
+              {draft.use_gamescope && (
+                // The gamescope options hang off the pipeline switch: a hairline and indent, not a card inside the panel.
+                <div className="mt-2.5 space-y-4 border-l border-white/[0.08] pl-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <MonoLabel className="mb-1.5">resolution</MonoLabel>
+                      <SelectField
+                        label="Gamescope resolution"
+                        value={resChoice || 'default'}
+                        onChange={(v) => {
+                          if (v === 'custom') return setResCustom(true);
+                          setResCustom(false);
+                          const [w, h] = v !== 'default' ? v.split('x').map(Number) : [0, 0];
+                          setDraft((d) => ({ ...d, gamescope_w: w, gamescope_h: h }));
+                        }}
+                      >
+                        <SelectItem value="default">Game default</SelectItem>
+                        {display && <SelectItem value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</SelectItem>}
+                        {GS_RESOLUTIONS.filter((r) => !(display && r.w === display.w && r.h === display.h)).map((r) => (
+                          <SelectItem key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</SelectItem>
+                        ))}
+                        <SelectItem value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</SelectItem>
+                      </SelectField>
+                      {resChoice === 'custom' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <NumberField aria-label="gamescope width" min={0} step={10} hideSteppers value={draft.gamescope_w || undefined} onChange={(v) => set('gamescope_w', v ?? 0)} placeholder="width" className="min-w-0 flex-1" />
+                          <span className="text-white/40">×</span>
+                          <NumberField aria-label="gamescope height" min={0} step={10} hideSteppers value={draft.gamescope_h || undefined} onChange={(v) => set('gamescope_h', v ?? 0)} placeholder="height" className="min-w-0 flex-1" />
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <MonoLabel className="mb-1.5">frame rate</MonoLabel>
+                      <SelectField
+                        label="Gamescope frame rate"
+                        value={rateSel || 'default'}
+                        onChange={(v) => {
+                          if (v === 'custom') return setRateCustom(true);
+                          setRateCustom(false);
+                          set('gamescope_r', v !== 'default' ? Number(v) : 0);
+                        }}
+                      >
+                        <SelectItem value="default">Game default</SelectItem>
+                        {GS_RATES.map((r) => <SelectItem key={r} value={String(r)}>{r} Hz</SelectItem>)}
+                        <SelectItem value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</SelectItem>
+                      </SelectField>
+                      {rateSel === 'custom' && (
+                        <NumberField aria-label="gamescope refresh" min={0} hideSteppers value={draft.gamescope_r || undefined} onChange={(v) => set('gamescope_r', v ?? 0)} placeholder="Hz" className="mt-2" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className="mt-2">+ Add variable</Button>
-          </div>
+
+            <label className="block">
+              <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
+              <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" />
+            </label>
+
+            <AdvancedFold set={launchSet}>
+              {draft.use_gamescope && (
+                <div className="space-y-4 border-l border-white/[0.08] pl-4">
+                  <div className="divide-y divide-white/[0.07]">
+                    {GS_TOGGLES.map((t) => (
+                      <SwitchRow key={t.key} label={t.label} hint={t.flag} title={t.title} checked={gs.toggles[t.key]} onChange={(v) => setGs({ toggles: { ...gs.toggles, [t.key]: v } })} />
+                    ))}
+                  </div>
+                  <div>
+                    <MonoLabel className="mb-1.5">upscale filter</MonoLabel>
+                    <SegRow label="Gamescope upscale filter" options={GS_FILTERS} value={gs.filter} onChange={(v) => setGs({ filter: v })} />
+                  </div>
+                  <label className="block">
+                    <MonoLabel className="mb-1.5">extra gamescope args</MonoLabel>
+                    <Input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" />
+                  </label>
+                </div>
+              )}
+              <div>
+                <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
+                <div className="space-y-1.5">
+                  {envRows.map((r, i) => {
+                    const err = envKeyError(envRows, i);
+                    const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
+                    return (
+                      <div key={r.id}>
+                        <div className="flex items-center gap-1.5">
+                          <Input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx('w-[40%] flex-none', err && 'ring-1 ring-orange-300/70')} />
+                          <Input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className="min-w-0 flex-1" />
+                          <Button variant="ghost" size="icon" aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none">
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                        {err && <p role="status" className="mt-1 font-mono text-[11.5px] text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className="mt-2">+ Add variable</Button>
+              </div>
+            </AdvancedFold>
+          </SettingGroup>
         </div>
 
         <div className="min-w-0 space-y-5">
-          {!native && (
-          <div>
-            <MonoLabel className="mb-2">proton flags</MonoLabel>
-            <p className="mb-2 text-[12px] leading-relaxed text-white/55">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
-            <div className="divide-y divide-white/[0.07]">
-              {PROTON_FLAGS.map((f) => {
-                const on = flags.includes(f.key);
-                return (
-                  <SwitchRow
-                    key={f.key}
-                    label={f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}
-                    hint={f.key}
-                    title={`${f.key}=1 — ${f.desc}`}
-                    checked={on}
-                    onChange={(v) => set('proton_flags', v ? [...flags, f.key] : flags.filter((x) => x !== f.key))}
-                  />
-                );
-              })}
-            </div>
-          </div>
-          )}
-
-          <div>
-            <MonoLabel className="mb-2">winetricks <span className="normal-case tracking-normal text-white/35">· saved, not applied yet</span></MonoLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {[...new Set([...WINETRICKS_VERBS, ...(game.fix_info?.winetricks ?? [])])].map((t) => {
-                const on = tricks.includes(t);
-                return (
-                  <button key={t} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== t) : [...tricks, t])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-[11.5px] transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
-                    {on ? '✓ ' : '+ '}{t}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           <div className="rounded-xl bg-black/35 p-3.5 font-mono text-[11.5px] leading-relaxed ring-1 ring-white/[0.07]">
             <div className="mb-1 flex items-center justify-between text-white/40">
               <span>$ preview</span>
