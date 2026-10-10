@@ -36,11 +36,12 @@ export function FriendsSummary({ views, labels, onOpen, unread = 0 }: FriendsSum
               </span>
               <span className={cx('absolute bottom-0 right-0 h-2 w-2 rounded-full ring-2 ring-[#15110d]', stateDot(self?.state ?? 'offline'))} />
             </span>
-            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-              <span className="min-w-0 truncate text-[12px] font-semibold text-white/85">{self?.name ?? name}</span>
+            {/* The name gets the full width; the store and status sit on their own line below it. */}
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span title={self?.name ?? name} className="min-w-0 truncate text-[12px] font-semibold text-white/85">{self?.name ?? name}</span>
               <span
                 title={!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
-                className="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-white/40"
+                className="min-w-0 truncate font-mono text-[11px] uppercase tracking-wider text-white/55"
               >
                 {!v.enabled ? 'friends off' : self ? `${name} · ${STATUS_LABEL[self.state] ?? self.state}` : name}
               </span>
