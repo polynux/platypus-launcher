@@ -4,6 +4,7 @@ import { FolderOpen } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings, StorePlugin } from '../types';
 import { NumberField } from '@/components/ds/number-field';
+import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel, Panel } from './ui';
@@ -155,7 +156,48 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         </div>
       </Panel>
 
+      <RatingsSetting onNotify={onNotify} />
+
       <CloudSavesDefaults plugins={plugins} />
     </div>
+  );
+}
+
+/** "Fetch ratings online" and the credits for the data Hydra shows. Off, Hydra
+ *  keeps what it fetched before and asks the network for nothing new. */
+export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.ratings_online ?? true))
+      .catch(() => setOn(true));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setRatingsOnline(next))
+      .then((s) => {
+        setOn(s.ratings_online ?? next);
+        onNotify(next ? 'Ratings will be fetched online' : 'Ratings stay offline');
+      })
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <Panel as="section" className="mt-4 max-w-2xl">
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">Ratings and anti-cheat data</h2>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-white/55">
+            Fetch ProtonDB ratings and the anti-cheat list online. Off, Hydra shows what it saved before and asks nothing new.
+          </p>
+        </div>
+        <Switch aria-label="Fetch ratings online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+      </div>
+      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[11px] leading-relaxed text-white/45">
+        <p>Compatibility ratings: ProtonDB community reports (protondb.com).</p>
+        <p>Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet).</p>
+      </div>
+    </Panel>
   );
 }

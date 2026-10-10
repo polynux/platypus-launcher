@@ -9,6 +9,7 @@ import { Switch } from '@/components/ds/switch';
 import { Input } from '@/components/ds/input';
 import { NumberField } from '@/components/ds/number-field';
 import { MonoLabel, SegRow, cx } from './ui';
+import { SteamAppIdField } from './SteamAppIdField';
 import { LauncherApi } from '../effect/runtime';
 import {
   DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
@@ -160,6 +161,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
       <div className="grid gap-6 @3xl:grid-cols-[1.5fr_1fr]">
         <div className="min-w-0 space-y-6">
+          <SteamAppIdField game={game} />
           {native && (
             <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
               <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
