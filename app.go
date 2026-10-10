@@ -116,6 +116,9 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		wruntime.LogErrorf(ctx, "compat: %v", err)
 	}
+	if a.compat != nil {
+		a.compat.Warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, "compat: "+format, args...) }
+	}
 
 	if err := a.openCustomization(dataDir); err != nil {
 		wruntime.LogErrorf(ctx, "customization: %v", err)

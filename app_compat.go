@@ -137,7 +137,7 @@ func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
 	return &types.GameFixInfo{
 		Source:      "protondb",
 		Tier:        tier,
-		Description: fmt.Sprintf("ProtonDB Tier: %s (Confidence: %s, %d reports, as of %s)", tier, r.Summary.Confidence, r.Summary.Total, r.FetchedAt.Format("2006-01-02")),
+		Description: fmt.Sprintf("ProtonDB Tier: %s (Confidence: %s, %d reports, as of %s)", tier, r.Summary.Confidence, r.Summary.Total, r.FetchedAt.UTC().Format("2006-01-02")),
 	}
 }
 

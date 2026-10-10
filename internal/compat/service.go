@@ -40,10 +40,15 @@ type Service struct {
 	// Scan looks for markers in an install folder (ScanInstall unless a test
 	// replaces it).
 	Scan func(root string) ([]LocalHit, bool)
+	// Warn reports a source that failed to answer. Optional.
+	Warn func(format string, args ...any)
+	// FirstWait bounds how long a look at a source waits for its first
+	// answer; zero means firstWait.
+	FirstWait time.Duration
 
 	mu         sync.Mutex
-	refreshing map[string]bool      // a background refresh is running
-	failed     map[string]time.Time // last failed fetch, per source key
+	refreshing map[string]chan struct{} // a refresh is running; closed when it ends
+	failed     map[string]time.Time     // last failed fetch, per source key
 }
 
 // Rating is a ProtonDB answer as the service holds it.
@@ -65,26 +70,26 @@ func (s *Service) ProtonDB(ctx context.Context, appID string) (Rating, bool) {
 	if !validAppID(appID) {
 		return Rating{}, false
 	}
+	key := "protondb:" + appID
 	e, have := s.Cache.ProtonDB(appID)
 	if have {
 		stale := s.now().Sub(e.FetchedAt) >= protonTTL(e)
-		if stale && s.online() && s.begin("protondb:"+appID) {
-			go func() {
-				defer s.end("protondb:" + appID)
-				ctx, cancel := context.WithTimeout(context.Background(), refreshWait)
-				defer cancel()
-				_ = s.refreshProton(ctx, appID)
-			}()
+		if stale && s.online() && !s.cooling(key) {
+			s.start(key, func(ctx context.Context) error { return s.refreshProton(ctx, appID) })
 		}
 		return e.rating(stale || !s.online()), true
 	}
-	if !s.online() || s.cooling("protondb:"+appID) {
+	if !s.online() || s.cooling(key) {
 		return Rating{}, false
 	}
-	ctx, cancel := context.WithTimeout(ctx, firstWait)
-	defer cancel()
-	if err := s.refreshProton(ctx, appID); err != nil {
-		return Rating{}, false
+	// Nothing cached: the fetch runs in the background (it may queue behind
+	// others), and the caller waits for it only up to firstWait. A fetch that
+	// is still running fills the cache for the next look.
+	done := s.start(key, func(ctx context.Context) error { return s.refreshProton(ctx, appID) })
+	select {
+	case <-done:
+	case <-time.After(s.firstWait()):
+	case <-ctx.Done():
 	}
 	e, have = s.Cache.ProtonDB(appID)
 	return e.rating(false), have
@@ -99,7 +104,11 @@ func (s *Service) refreshProton(ctx context.Context, appID string) error {
 	case errors.Is(err, ErrNotFound):
 		return s.Cache.SetProtonDB(appID, ProtonEntry{FetchedAt: now})
 	case err != nil:
-		s.setFailed("protondb:" + appID)
+		// A wait that ran out is our own deadline, not the source failing.
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			s.setFailed("protondb:" + appID)
+			s.warn("ProtonDB for %s: %v", appID, err)
+		}
 		return err
 	}
 	return s.Cache.SetProtonDB(appID, ProtonEntry{
@@ -134,31 +143,27 @@ func (s *Service) AntiCheatCatalogue(ctx context.Context) *AntiCheatData {
 	if !s.AntiCheat.Stale(d) || !s.online() || s.cooling("awacy") {
 		return d
 	}
+	done := s.start("awacy", func(ctx context.Context) error { return s.refreshAntiCheat(ctx) })
 	if d != nil {
-		if s.begin("awacy") {
-			go func() {
-				defer s.end("awacy")
-				ctx, cancel := context.WithTimeout(context.Background(), refreshWait)
-				defer cancel()
-				s.refreshAntiCheat(ctx)
-			}()
-		}
 		return d
 	}
-	ctx, cancel := context.WithTimeout(ctx, firstWait)
-	defer cancel()
-	if !s.refreshAntiCheat(ctx) {
-		return nil
+	select {
+	case <-done:
+	case <-time.After(s.firstWait()):
+	case <-ctx.Done():
 	}
 	return s.AntiCheat.Load()
 }
 
-func (s *Service) refreshAntiCheat(ctx context.Context) bool {
+func (s *Service) refreshAntiCheat(ctx context.Context) error {
 	if _, err := s.AntiCheat.Refresh(ctx); err != nil {
-		s.setFailed("awacy")
-		return false
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			s.setFailed("awacy")
+			s.warn("AreWeAntiCheatYet: %v", err)
+		}
+		return err
 	}
-	return true
+	return nil
 }
 
 func (s *Service) now() time.Time {
@@ -168,26 +173,44 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
+func (s *Service) firstWait() time.Duration {
+	if s.FirstWait > 0 {
+		return s.FirstWait
+	}
+	return firstWait
+}
+
+func (s *Service) warn(format string, args ...any) {
+	if s.Warn != nil {
+		s.Warn(format, args...)
+	}
+}
+
 func (s *Service) online() bool { return s.Online == nil || s.Online() }
 
-// begin claims a background refresh; false when one is already running.
-func (s *Service) begin(key string) bool {
+// start runs a refresh of key in the background, unless one is already
+// running. The returned channel is closed when the refresh ends.
+func (s *Service) start(key string, run func(ctx context.Context) error) <-chan struct{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.refreshing == nil {
-		s.refreshing = map[string]bool{}
+		s.refreshing = map[string]chan struct{}{}
 	}
-	if s.refreshing[key] {
-		return false
+	if ch, ok := s.refreshing[key]; ok {
+		return ch
 	}
-	s.refreshing[key] = true
-	return true
-}
-
-func (s *Service) end(key string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.refreshing, key)
+	ch := make(chan struct{})
+	s.refreshing[key] = ch
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), refreshWait)
+		defer cancel()
+		_ = run(ctx)
+		s.mu.Lock()
+		delete(s.refreshing, key)
+		s.mu.Unlock()
+		close(ch)
+	}()
+	return ch
 }
 
 func (s *Service) setFailed(key string) {

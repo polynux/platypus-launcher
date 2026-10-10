@@ -15,11 +15,19 @@ type fakeRatings struct {
 	mu    sync.Mutex
 	sums  map[string]Summary
 	err   error
+	gate  chan struct{} // when set, Summary waits for it to close
 	calls atomic.Int32
 }
 
 func (f *fakeRatings) Summary(ctx context.Context, appID string) (Summary, error) {
 	f.calls.Add(1)
+	if f.gate != nil {
+		select {
+		case <-f.gate:
+		case <-ctx.Done():
+			return Summary{}, ctx.Err()
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
@@ -208,4 +216,31 @@ func TestLocalScanIsCachedPerInstall(t *testing.T) {
 	if scans != 2 {
 		t.Fatal("not rescanned after the TTL")
 	}
+}
+
+func TestSlowFirstFetchKeepsRunningAndIsNotCoolingDown(t *testing.T) {
+	on := true
+	s, rt, _, _ := newTestService(t, &on)
+	s.FirstWait = 20 * time.Millisecond
+	rt.gate = make(chan struct{})
+	// The caller gives up before the source answers: no answer yet, no failure.
+	if _, ok := s.ProtonDB(context.Background(), "620"); ok {
+		t.Fatal("an answer before the source responded")
+	}
+	if s.cooling("protondb:620") {
+		t.Fatal("a wait that ran out put the source in cooldown")
+	}
+	// The fetch is still running; when it lands, the cache has it.
+	close(rt.gate)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if r, ok := s.ProtonDB(context.Background(), "620"); ok && r.Summary.Tier == "platinum" {
+			if rt.calls.Load() != 1 {
+				t.Fatalf("%d asks, want the one in-flight fetch", rt.calls.Load())
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the slow fetch never filled the cache")
 }
