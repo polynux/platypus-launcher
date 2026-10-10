@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"platypus/internal/datadir"
 	"platypus/internal/types"
 )
 
@@ -109,7 +110,7 @@ func DataDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".local/share/platypus"), nil
+	return datadir.Path(home), nil
 }
 
 // Open loads the settings file at path. A missing file gives defaults. A file

@@ -20,6 +20,7 @@ import (
 	"platypus/internal/dataplug"
 	"platypus/internal/jobs"
 	"platypus/internal/ledger"
+	"platypus/internal/migrate"
 	"platypus/internal/plugins"
 	"platypus/internal/runner"
 	"platypus/internal/session"
@@ -102,6 +103,14 @@ func (a *App) startup(ctx context.Context) {
 		}
 	})
 
+	// Before anything opens a data file: the previous data folder moves to
+	// its new name, and the paths stored in it follow (internal/migrate).
+	if home, err := os.UserHomeDir(); err == nil {
+		migrate.Run(home, migrate.Options{
+			Info: func(format string, args ...any) { wruntime.LogInfof(ctx, format, args...) },
+			Warn: func(format string, args ...any) { wruntime.LogWarningf(ctx, format, args...) },
+		})
+	}
 	dataDir, err := settings.DataDir()
 	if err != nil {
 		wruntime.LogErrorf(ctx, "settings: %v", err)

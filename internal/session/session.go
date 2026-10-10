@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"platypus/internal/datadir"
 	"platypus/internal/types"
 )
 
@@ -465,7 +466,7 @@ func openLog(gameID string) (*os.File, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	dir := filepath.Join(home, ".local/share/platypus/logs")
+	dir := filepath.Join(datadir.Path(home), "logs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, "", err
 	}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"platypus/internal/datadir"
 	"platypus/internal/types"
 )
 
@@ -31,7 +32,7 @@ func PrefixPath(game types.Game, home string) string {
 	if game.Settings.WinePrefix != "" {
 		return game.Settings.WinePrefix
 	}
-	return filepath.Join(home, ".local/share/platypus/prefixes", game.ID)
+	return filepath.Join(datadir.Path(home), "prefixes", game.ID)
 }
 
 // BuildCommand constructs, for games Platypus starts itself (see
