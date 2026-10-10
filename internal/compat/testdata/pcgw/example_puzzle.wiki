@@ -1,0 +1,28 @@
+{{Infobox game
+|cover        = Example Puzzle Game cover.jpg
+{{Infobox game/row/taxonomy/modes             | Singleplayer, Multiplayer}}
+|steam appid  = 900001
+|steam appid side = 900002, 900003, 900004, 900005
+|gogcom id    = 
+}}
+
+==Availability==
+{{Availability|
+{{Availability/row| Retail | | Steam | |  | Windows, OS X }}
+{{Availability/row| Steam | 900001 | Steam | [https://store.example.com/bundle/1/Example_Bundle Example Bundle] also available. Requires the Steam client to be running.<ref>{{Refcheck|user=ExampleUser|date=2025-01-01}}</ref> | | Windows, OS X, Linux }}
+{{Availability/row| Example Store | example-puzzle | {{DRM|Denuvo Anti-Tamper}} | | | Windows }}
+}}
+{{ii}} All versions require {{DRM|Steam}}. Uses [[Digital_rights_management_(DRM)#Steamworks_DRM|Steamworks API]].
+
+==Monetization==
+{{Infobox game/row/taxonomy/monetization | One-time game purchase }}
+
+===Middleware===
+{{Middleware
+|physics          = Example Physics
+|audio            = Example Audio
+|multiplayer      = Steamworks
+|multiplayer notes= Co-op mode with two example characters.
+|anticheat        = 
+|anticheat notes  = 
+}}

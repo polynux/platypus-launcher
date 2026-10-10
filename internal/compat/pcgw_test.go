@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,7 +50,7 @@ func fakeWiki(t *testing.T, pages map[string]string, titles map[string]string) (
 	return srv, &hits, &agents
 }
 
-func portal2Wikitext(t *testing.T) string { return readFixture(t, "portal_2.wiki") }
+func examplePuzzleWikitext(t *testing.T) string { return readFixture(t, "example_puzzle.wiki") }
 
 func testPCGW(srv *httptest.Server) *PCGW {
 	f, _ := testFetcher(NewNoRedirectClient())
@@ -61,14 +62,14 @@ func testPCGW(srv *httptest.Server) *PCGW {
 
 func TestPCGWLookupResolvesTheTitleAndReadsThePage(t *testing.T) {
 	srv, hits, agents := fakeWiki(t,
-		map[string]string{"620": "Portal 2"},
-		map[string]string{"Portal 2": portal2Wikitext(t)})
+		map[string]string{"900001": "Example Puzzle Game"},
+		map[string]string{"Example Puzzle Game": examplePuzzleWikitext(t)})
 	p := testPCGW(srv)
-	rec, err := p.Lookup(context.Background(), "620")
+	rec, err := p.Lookup(context.Background(), "900001")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Title != "Portal 2" || len(rec.DRM) != 1 || rec.DRM[0] != "Steam" {
+	if rec.Title != "Example Puzzle Game" || !reflect.DeepEqual(rec.DRM, []string{"Steam", "Denuvo Anti-Tamper"}) {
 		t.Fatalf("record %+v", rec)
 	}
 	if hits.Load() != 2 {
@@ -86,18 +87,18 @@ func TestPCGWLookupResolvesTheTitleAndReadsThePage(t *testing.T) {
 
 func TestPCGWLookupMissingAndWrongPageAreNotFound(t *testing.T) {
 	srv, _, _ := fakeWiki(t,
-		map[string]string{"620": "Portal 2"},
-		map[string]string{"Portal 2": portal2Wikitext(t)})
+		map[string]string{"900001": "Example Puzzle Game"},
+		map[string]string{"Example Puzzle Game": examplePuzzleWikitext(t)})
 	p := testPCGW(srv)
 	ctx := context.Background()
 	if _, err := p.Lookup(ctx, "999999"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("no page: %v, want ErrNotFound", err)
 	}
-	// The page for 620 says nothing about 1196590: a wrong page is not an answer.
-	if _, err := p.Lookup(ctx, "1196590"); !errors.Is(err, ErrNotFound) {
+	// The page for 900001 says nothing about 900101: a wrong page is not an answer.
+	if _, err := p.Lookup(ctx, "900101"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("other game's page: %v, want ErrNotFound", err)
 	}
-	if _, err := p.Lookup(ctx, "Portal 2"); err == nil || errors.Is(err, ErrNotFound) {
+	if _, err := p.Lookup(ctx, "Example Puzzle Game"); err == nil || errors.Is(err, ErrNotFound) {
 		t.Fatalf("a title is not a Steam AppID: %v", err)
 	}
 }
@@ -131,7 +132,7 @@ func TestPCGWBacksOffAMinuteOnRateLimit(t *testing.T) {
 	f.Retries = 1
 	f.Jitter = 0
 	p.Fetch = f
-	if _, err := p.Lookup(context.Background(), "620"); !errors.Is(err, ErrNotFound) {
+	if _, err := p.Lookup(context.Background(), "900001"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err %v, want ErrNotFound after the retry", err)
 	}
 	if len(*waits) == 0 || (*waits)[0] != time.Minute {

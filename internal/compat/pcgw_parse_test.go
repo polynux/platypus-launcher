@@ -15,15 +15,15 @@ func readFixture(t *testing.T, name string) string {
 	return string(b)
 }
 
-func TestParsePortal2Fixture(t *testing.T) {
-	f := ParseWikitext(readFixture(t, "portal_2.wiki"))
-	if f.SteamAppID != "620" {
+func TestParseExamplePuzzleFixture(t *testing.T) {
+	f := ParseWikitext(readFixture(t, "example_puzzle.wiki"))
+	if f.SteamAppID != "900001" {
 		t.Fatalf("steam appid %q", f.SteamAppID)
 	}
-	if !reflect.DeepEqual(f.SteamSide, []string{"659", "660", "323180", "104600"}) {
+	if !reflect.DeepEqual(f.SteamSide, []string{"900002", "900003", "900004", "900005"}) {
 		t.Fatalf("side %v", f.SteamSide)
 	}
-	if !reflect.DeepEqual(f.DRM, []string{"Steam"}) {
+	if !reflect.DeepEqual(f.DRM, []string{"Steam", "Denuvo Anti-Tamper"}) {
 		t.Fatalf("drm %v", f.DRM)
 	}
 	if len(f.Removed) != 0 || f.Online != "" || len(f.AntiCheat) != 0 {
@@ -31,9 +31,9 @@ func TestParsePortal2Fixture(t *testing.T) {
 	}
 }
 
-func TestParseResidentEvilVillageRemovedDenuvo(t *testing.T) {
-	f := ParseWikitext(readFixture(t, "resident_evil_village.wiki"))
-	if f.SteamAppID != "1196590" {
+func TestParseExampleHorrorRemovedDRM(t *testing.T) {
+	f := ParseWikitext(readFixture(t, "example_horror.wiki"))
+	if f.SteamAppID != "900101" {
 		t.Fatalf("steam appid %q", f.SteamAppID)
 	}
 	if !reflect.DeepEqual(f.DRM, []string{"Steam"}) {
@@ -42,6 +42,12 @@ func TestParseResidentEvilVillageRemovedDenuvo(t *testing.T) {
 	want := []RemovedDRM{{Name: "Denuvo", Date: "2023-04-10"}}
 	if !reflect.DeepEqual(f.Removed, want) {
 		t.Fatalf("removed %+v, want %+v", f.Removed, want)
+	}
+	if f.Online != "always" {
+		t.Fatalf("online %q, want always from the offline=false note", f.Online)
+	}
+	if !reflect.DeepEqual(f.AntiCheat, []string{"Example Guard", "Sentinel Shield"}) {
+		t.Fatalf("anticheat %v", f.AntiCheat)
 	}
 }
 
