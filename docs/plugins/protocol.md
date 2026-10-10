@@ -1,4 +1,4 @@
-# Store plugin protocol (1.10, draft)
+# Store plugin protocol (1.11, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -101,7 +101,7 @@ other errors can contain.
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
-| `game.details` | `{ id }` | `GameDetails` |
+| `game.details` | `{ id }` | `GameDetails` (with `terms` from 1.11) |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
 | `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
 | `game.update` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
@@ -408,7 +408,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -435,9 +435,11 @@ that doesn't know it.
   `copies` and `preferredCopy` on library entries and the `family.warning` notification (see [Family](#family-18) and
   [Plugin settings](#plugin-settings-18)). 1.9: the `chat` capability (`chat.history`, `chat.send`, `chat.markRead`) and
   the `chat.*` notifications (see [Chat](#chat-19)). 1.10: the compat fields of `game.details` (`steamAppId`,
-  `platforms`, `drm`; see [Compat](#compat-110)). A capability whose `since` is newer than the negotiated protocol is
-  off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 or 1.10 method.
+  `platforms`, `drm`; see [Compat](#compat-110)). 1.11: the `terms` capability (`terms` on `game.details`, the optional
+  `game.acceptTerms`, see [Terms](#terms-111)), and the DLC `kind` and copy `exclude` of `copies` (see [Family](#family-18)).
+  A capability whose `since` is newer than the negotiated protocol is off for that plugin (Hydra drops it from the
+  runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
+  1.10 or 1.11 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -469,6 +471,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `family` | 1.8 | `family.members` | `family.setPreferredCopy` | yes |
 | `settings` | 1.8 | `settings.schema`, `settings.apply` | | yes |
 | `chat` | 1.9 | `chat.history`, `chat.send`, `chat.markRead` | | yes |
+| `terms` | 1.11 | | `game.acceptTerms` | yes |
 
 "Not yet" means Hydra recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -816,8 +819,10 @@ default. Hydra uses it only while the game's `features` include `family`.
 
 When several members lend the same game and their copies differ (DLC, a note, in use), the
 entry also carries `copies` and `preferredCopy`. Each copy is
-`{ "ownerId": "ben", "ownerName": "Ben", "dlc": [{ "id": "soundtrack", "name": "Soundtrack" }],
-"note": "…", "available": true, "inUse": false }`. `ownerId` is required, `available` says whether the
+`{ "ownerId": "ben", "ownerName": "Ben", "dlc": [{ "id": "soundtrack", "name": "Soundtrack", "kind": "soundtrack" }],
+"note": "…", "exclude": "…", "available": true, "inUse": false }`. A DLC's `kind` is `dlc` (the default), `soundtrack` or
+`other`, and Hydra counts soundtracks apart in the comparison; an unknown kind is read as `dlc`. `exclude` is text the
+store gives for what the copy doesn't lend (1.11), shown as it is. `ownerId` is required, `available` says whether the
 copy can be borrowed now (an unavailable one is shown greyed out), `inUse` says whether someone is
 playing it. `preferredCopy` is the `ownerId` the user picked, or absent/`null` for the store's
 default. Copies are read only from a borrowed game: a game the user owns has no `sharedBy`, and
@@ -841,6 +846,11 @@ doesn't stop the game; the store does. Hydra takes the notification only from a 
 whose `initialize` has said it offers `family` (before that, the manifest is only a guess).
 The toast is shown only for a game in the user's library, and a warning without
 `secondsLeft` leaves by itself after 15 seconds.
+
+When a game has two or more copies, Hydra also compares them (computed by core, nothing for the plugin to send): each
+copy is set against the preferred copy, or the copy with the most add-ons when none is preferred (ties go to the lower
+`ownerId`). The counts say how many add-ons the copy has that the baseline lacks, how many the baseline has that the copy
+lacks, how many both have, and the same three for soundtracks.
 
 Owner exclusions, per-copy limits and parental limits are the store's rules. Hydra shows
 the state the store reports and enforces none of them.
@@ -975,6 +985,39 @@ Mapping hints for plugins, from their own store fields:
   `game.details` is read as before, and its compat fields are ignored.
 - **Anti-cheat** is not sent by plugins. Hydra gets it from the AreWeAntiCheatYet catalogue (MIT, credited in the
   About view) and from the markers it finds in an installed game's folder.
+## Terms (1.11)
+
+The `terms` capability (protocol 1.11) lists the agreements a store asks the user to accept before a game is installed:
+an end user licence, a privacy notice, a sales note. Hydra shows them with a link to each, and the user accepts them or
+doesn't. Hydra never accepts for the user.
+
+```
+game.details { id } -> { ..., terms: [{ id, title, url?, version }] }
+game.acceptTerms { id, terms: [{ id, version }] } -> {}      optional: the store keeps acceptance too
+```
+
+- **Listing.** `terms` is read from `game.details`. Each term has an `id` and a `version`, and an optional `url`
+  (`https` or `http`, shown as a link that opens in the browser). Hydra keeps the first of two terms with the same
+  `id`, drops a term without an `id` or a `version`, and falls back to the id for a missing title. A game with no
+  `terms`, or a store that doesn't answer `game.details` (`-32601`), has none. A `version` changes when the text does:
+  a new version is a new term to accept, and an old acceptance doesn't count for it.
+- **Installs and updates.** Before a fresh install, and before an update, the install dialog lists the terms the user
+  hasn't accepted (in their current version) and asks for "I accept" or Cancel. Hydra checks the same before it queues
+  the job: an install or update with a term still unaccepted is refused, and nothing is sent to the store. A verify,
+  a move or an uninstall asks for nothing. A job that was queued after its acceptance is not asked again when it starts,
+  even if a term has changed since.
+- **Acceptance.** Hydra records each accepted `(term id, version)` with the date, per game, in its own settings
+  (`settings.json`). The Game settings show the accepted terms. Hydra accepts only the terms the store lists now, at the
+  version it lists now: a dialog that is out of date can't accept a version that has changed, and is asked again.
+- **Server-side acceptance.** A store that keeps acceptance itself implements `game.acceptTerms`, optional. Hydra calls
+  it with the terms the user accepted, before it records them. `-32601` means the store doesn't keep one: Hydra keeps
+  the record alone. Any other error stops the acceptance, which is not recorded. A store is never asked to accept a
+  term the user didn't see.
+- **Gating.** Hydra sends no `game.details` for terms, and no `game.acceptTerms`, when `terms` is off for the plugin,
+  when the protocol is older than 1.11, or when the game's `features` leave `terms` out. A game whose terms can't be
+  read (the store is down) can't be installed, and the install says so; retry later.
+- **Install size.** `game.installSize` doesn't carry terms: Hydra reads them from `game.details` only, so the size
+  stays a cheap call.
 
 ## Out of scope
 

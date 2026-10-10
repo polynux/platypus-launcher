@@ -8,6 +8,7 @@ import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
+import { ensureTerms } from '../lib/termsRequest';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import {
   VERSION_WARNING, buildTitle, channelLocked, choiceIsEmpty, isCurrent, lastInstall, pinLabel, pinOf, samePin, shortDate, sourceLabel, targetOf,
@@ -66,6 +67,8 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
     const before = info.pinned;
     const pinMoves = wantPin && pin ? !samePin(before, pin) : before != null;
     try {
+      // The terms come first: a pin that moves for a job the user won't accept is never set.
+      if (!current && !(await ensureTerms(game))) return;
       // The pin goes first: one that can't be set or cleared queues nothing,
       // so a job never runs at a version the pin didn't take.
       if (pinMoves) {
@@ -119,6 +122,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
   const updateToPin = async () => {
     setBusy(true);
     try {
+      if (!(await ensureTerms(game))) return;
       await Effect.runPromise(LauncherApi.updateGame(game));
       onNotify(`Update of ${game.title} queued`, 'busy');
       onChanged();

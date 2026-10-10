@@ -14,8 +14,8 @@ import (
 // rules core relies on. Unknown kinds in a schema are allowed; core drops them.
 var (
 	FamilyMemberKeys  = []string{"id", "name", "role", "avatarUrl", "state"}
-	FamilyCopyKeys    = []string{"ownerId", "ownerName", "dlc", "note", "available", "inUse"}
-	FamilyCopyDLCKeys = []string{"id", "name"}
+	FamilyCopyKeys    = []string{"ownerId", "ownerName", "dlc", "note", "available", "inUse", "exclude"}
+	FamilyCopyDLCKeys = []string{"id", "name", "kind"}
 	SettingsKeys      = []string{"groups"}
 	SettingGroupKeys  = []string{"id", "label", "description", "fields"}
 	SettingFieldKeys  = []string{"id", "kind", "label", "description", "scope", "default", "options", "placeholder", "min", "max"}

@@ -11,6 +11,7 @@ import { InstallOptionsDialog } from './InstallOptionsDialog';
 import { CustomizationTab } from './CustomizationTab';
 import { MaintenanceTab } from './MaintenanceTab';
 import { TweaksPanel } from './TweaksPanel';
+import { LegalSection } from './LegalSection';
 import { cx } from './ui';
 import { TAB_LABELS, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
 
@@ -112,6 +113,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                 onCopied={p.onCopied}
                 onDirty={setDirty}
               />
+              <LegalSection game={game} plugin={plugin} />
             </section>
             {shown !== 'general' && (
               <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>

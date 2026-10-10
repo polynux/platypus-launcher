@@ -119,6 +119,7 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		g.SharedBy = &types.SharedBy{ID: lg.SharedBy.ID, Name: lg.SharedBy.Name}
 		// Copies only mean something for a borrowed game: an own game has none.
 		g.Copies, g.PreferredCopy = normalizeCopies(lg.Copies, lg.PreferredCopy)
+		g.CopyCompare = compareCopies(g.Copies, g.PreferredCopy)
 	}
 	if lg.Installed && lg.InstallPath != "" {
 		g.InstallDir = filepath.Clean(lg.InstallPath)

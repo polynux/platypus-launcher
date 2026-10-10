@@ -410,6 +410,9 @@ func (s Suite) Conformance(t *testing.T) {
 				checkKeys(t, "game.details drm", drm, DRMKeys)
 			}
 		}
+		if has("terms") {
+			sess.checkTerms(t, game.StoreAppID, rawDetails)
+		}
 	}
 	if !s.NoUnknownDetails {
 		// An unknown id is an error (or the method is absent), never data or
@@ -804,7 +807,7 @@ var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
 		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
-		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm"}
+		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms"}
 	// The drm block of game.details (protocol 1.10, "Compat").
 	DRMKeys    = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",

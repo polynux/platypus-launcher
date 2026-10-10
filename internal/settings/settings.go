@@ -57,6 +57,9 @@ type file struct {
 	// InstallOptions are each game's last install-option choices (the
 	// `install-options` capability), keyed by Hydra's game id. See options.go.
 	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`
+	// Terms are the term versions the user accepted, per game id: a record
+	// per (term id, version), kept as history (terms.go).
+	Terms map[string][]types.TermAcceptance `json:"terms,omitempty"`
 	// Social: whether each plugin's friends list is on, by plugin id. A plugin
 	// that offers social is on until the user switches it off (social.go).
 	SocialPlugins map[string]bool `json:"social_plugins,omitempty"`

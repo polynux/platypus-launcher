@@ -169,7 +169,7 @@ func TestEchoLibraryNeedsLogin(t *testing.T) {
 	}
 	e.login(t)
 	lib, err := e.store.Library(e.ctx(t))
-	if err != nil || len(lib) != 9 {
+	if err != nil || len(lib) != 10 {
 		t.Fatalf("library: %d games, %v", len(lib), err)
 	}
 	tiny := e.game(t, "tiny")

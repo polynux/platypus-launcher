@@ -17,11 +17,13 @@ import { FriendsModal } from './components/FriendsModal';
 import { RedeemDialog } from './components/RedeemDialog';
 import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
+import { TermsHost } from './components/TermsHost';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
 import { LauncherApi, onJobs, onPlaytime, onSession, onSocial } from './effect/runtime';
 import { reconcileViews, upsertView } from './lib/social';
+import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
@@ -392,8 +394,10 @@ export function App() {
 
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
-    Effect.runPromise(op(game))
-      .then(() => notify(`${kind === 'install' ? 'Install' : kind === 'update' ? 'Update' : 'Uninstall'} of ${game.title} queued`, 'busy'))
+    const queue = kind === 'uninstall' ? Promise.resolve(true) : ensureTerms(game);
+    queue
+      .then((ok) => ok && Effect.runPromise(op(game))
+        .then(() => notify(`${kind === 'install' ? 'Install' : kind === 'update' ? 'Update' : 'Uninstall'} of ${game.title} queued`, 'busy')))
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
@@ -609,6 +613,7 @@ export function App() {
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
       <FamilyWarningHost games={games} />
+      <TermsHost />
 
       {redeemOpen && redeemStores.length > 0 && <RedeemDialog stores={redeemStores} onClose={() => setRedeemOpen(false)} />}
 

@@ -83,12 +83,16 @@ type LibraryCopy struct {
 	Note      string       `json:"note,omitempty"`
 	Available bool         `json:"available"`
 	InUse     bool         `json:"inUse,omitempty"`
+	// Exclude says why part of the copy isn't lent (1.11), shown as text.
+	Exclude string `json:"exclude,omitempty"`
 }
 
-// LibraryDLC is an add-on one copy has (LibraryCopy.dlc).
+// LibraryDLC is an add-on one copy has (LibraryCopy.dlc). Kind is "dlc"
+// (the default), "soundtrack" or "other" (1.11).
 type LibraryDLC struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Kind string `json:"kind,omitempty"`
 }
 
 type LibraryList struct {
@@ -139,6 +143,9 @@ type GameDetails struct {
 	SteamAppID string   `json:"steamAppId,omitempty"` // the game's Steam AppID, for ratings
 	Platforms  []string `json:"platforms,omitempty"`  // "linux", "windows", "macos"
 	DRM        *DRM     `json:"drm,omitempty"`
+	// Terms are the agreements the user accepts before an install (1.11, the
+	// `terms` capability: docs/plugins/protocol.md, "Terms").
+	Terms []Term `json:"terms,omitempty"`
 }
 
 // CompatVersion is the first protocol revision whose game.details carries the
@@ -158,6 +165,15 @@ type DRM struct {
 	Launcher       string `json:"launcher,omitempty"`
 	DenuvoLikely   *bool  `json:"denuvoLikely,omitempty"`
 	Notes          string `json:"notes,omitempty"`
+}
+
+// Term is one agreement a store asks the user to accept (GameDetails.terms).
+// Version changes when the text does: the user accepts each version again.
+type Term struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	URL     string `json:"url,omitempty"`
+	Version string `json:"version"`
 }
 
 // Achievements in game.details are store-level: what the store shows about

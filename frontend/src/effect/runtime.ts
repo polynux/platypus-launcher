@@ -27,6 +27,7 @@ import type {
   Compat,
   GameSettings,
   GameOptions,
+  GameTerm,
   InstallChoices,
   Job,
   LauncherSettings,
@@ -37,6 +38,7 @@ import type {
   SocialStatus,
   SocialView,
   StorePlugin,
+  TermRef,
   Tweak,
   VersionInfo,
   VersionPin,
@@ -269,6 +271,11 @@ export const LauncherApi = {
         chosen: o.chosen ?? {},
       };
     }),
+  // Terms (protocol 1.11): the agreements to accept before an install or an update.
+  getGameTerms: (game: Game) =>
+    call<GameTerm[]>('GetGameTerms', async () => (await App.GetGameTerms(backend(game))) ?? []),
+  acceptGameTerms: (game: Game, terms: TermRef[]) =>
+    call<void>('AcceptGameTerms', () => App.AcceptGameTerms(backend(game), terms)),
   installGameWithOptions: (game: Game, choices: InstallChoices) =>
     call<Job>('InstallGameWithOptions', () => App.InstallGameWithOptions(backend(game), choices)),
   updateGameWithOptions: (game: Game, choices: InstallChoices) =>

@@ -5,6 +5,7 @@ import { Effect } from 'effect';
 import type { Game, GameOptions, OptionGroup, StorePlugin } from '../../types';
 
 const api = vi.hoisted(() => ({
+  getGameTerms: vi.fn(async () => []), // no terms unless a test says so (protocol 1.11)
   getGameOptions: vi.fn(),
   getInstallFreeSpace: vi.fn(),
   getInstallSize: vi.fn(),

@@ -5,6 +5,7 @@ import { Effect } from 'effect';
 import type { Game, StorePlugin, VersionInfo } from '../../types';
 
 const api = vi.hoisted(() => ({
+  getGameTerms: vi.fn(async () => []), // no terms unless a test says so (protocol 1.11)
   getGameVersions: vi.fn(),
   unlockVersionChannel: vi.fn(),
   pinGameVersion: vi.fn(),
