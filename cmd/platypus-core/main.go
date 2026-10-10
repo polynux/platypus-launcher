@@ -24,10 +24,15 @@ import (
 func main() {
 	// Stdout carries the protocol and nothing else: keep our own handle on it
 	// and point fd 1 at stderr, so a stray print can't corrupt the stream.
+	// Close-on-exec on the duplicate: plugins and games the core spawns must
+	// not inherit the protocol fd (Go's os/exec only closes close-on-exec
+	// fds, and a child holding our stdout open would stall EOF and could
+	// inject stream lines).
 	protoFd, err := syscall.Dup(1)
 	if err != nil {
 		fatal(err)
 	}
+	syscall.CloseOnExec(protoFd)
 	if err := syscall.Dup3(2, 1, 0); err != nil {
 		fatal(err)
 	}
