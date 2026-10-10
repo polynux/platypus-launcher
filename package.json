@@ -20,5 +20,8 @@
     "test": "bun run test:ui && bun run test:desktop",
     "gen-ts": "go run ./cmd/gen-ts",
     "package": "node apps/desktop/scripts/package.mjs"
-  }
+  },
+  "trustedDependencies": [
+    "electron"
+  ]
 }

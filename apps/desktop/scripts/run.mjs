@@ -25,6 +25,7 @@ function electronBinary() {
     const bin = path.join(here, 'node_modules/electron/dist', rel);
     if (existsSync(bin)) return bin;
   } catch {}
+  console.error('» Electron is not downloaded (run `bun install` at the repo root; package.json trusts electron so its install script runs). Falling back to the system electron, which may be too old.');
   return 'electron';
 }
 
@@ -57,7 +58,12 @@ run('go', ['build', '-o', path.join(here, '.build/platypus-core'), './cmd/platyp
 console.log('» building the shell');
 run('node', ['scripts/build.mjs'], here);
 
-const env = { ...process.env, PLATYPUS_CORE: path.join(here, '.build/platypus-core') };
+const env = {
+  ...process.env,
+  PLATYPUS_CORE: path.join(here, '.build/platypus-core'),
+  // Explicit, so the page never depends on how Electron judges "packaged".
+  PLATYPUS_FRONTEND_DIST: path.join(frontend, 'dist'),
+};
 // Set when this runs from inside another Electron app (an IDE terminal): it would make Electron run our main script as plain Node.
 delete env.ELECTRON_RUN_AS_NODE;
 const children = [];
