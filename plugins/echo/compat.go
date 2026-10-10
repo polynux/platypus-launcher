@@ -11,8 +11,8 @@ import (
 // has all of them by default and covers every DRM field. Any other game gets
 // them from the ECHO_COMPAT environment variable (JSON {"<id>": {...}}, read
 // at start) or from `config` {compat: {"<id>": {...}}}, which replaces that
-// game's facts (an empty object clears them). A game with facts answers
-// game.details even without the details flag.
+// game's facts (an empty object clears them). A game without facts answers an
+// empty game.details.
 var compatDefaults = map[string]map[string]any{
 	"tiny": {
 		"steamAppId": "620",

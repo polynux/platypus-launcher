@@ -197,6 +197,11 @@ func TestEchoDetails(t *testing.T) {
 	if err != nil || d.Summary != "" || d.Achievements != nil {
 		t.Fatalf("empty details: %+v, %v", d, err)
 	}
+	// Asking for a game with no metadata must not stop the plugin's details
+	// for the others: that answer is empty, not "method not found".
+	if d, err = e.store.Details(e.ctx(t), e.game(t, "tiny")); err != nil || d.Summary == "" {
+		t.Fatalf("details after a game without metadata: %+v, %v", d, err)
+	}
 	if esc := e.game(t, "escape"); !esc.IsInstalled || !esc.OutsideFolder || esc.Installable {
 		t.Fatalf("escape: %+v", esc)
 	}

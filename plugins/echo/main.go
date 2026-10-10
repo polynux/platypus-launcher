@@ -568,10 +568,10 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown game %q", p.ID)
 		}
+		// A game without metadata answers an empty object, not -32601: -32601
+		// means the method isn't implemented, and Hydra would stop asking for
+		// every game for the rest of the run.
 		facts := compatFor(p.ID)
-		if !g.details && facts == nil {
-			return nil, &rpcError{Code: -32601, Message: "method not found: game.details"}
-		}
 		out := map[string]any{}
 		if g.details {
 			out = map[string]any{
