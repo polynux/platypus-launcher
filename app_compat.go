@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -173,16 +174,22 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 		c.DRM = compat.StoreDRM(hints.DRM, a.pluginName(game), now)
 		c.DRMNotes = hints.DRM.Notes
 	}
-	// PCGamingWiki is asked by Steam AppID only; its anti-cheat names win over
-	// AreWeAntiCheatYet's when it names any (see Compat.Wiki).
-	wikiAnticheat := false
+	// AreWeAntiCheatYet goes first: it is the only source with the Linux status.
+	if cat := a.compat.AntiCheatCatalogue(a.baseCtx()); cat != nil {
+		if e, ok := cat.BySteam(c.SteamAppID); ok {
+			c.AntiCheat = append(c.AntiCheat, compat.AntiCheatBadges(e, cat.FetchedAt)...)
+		} else if e, ok := cat.ByEpic(game.StoreAppID); ok && game.Store == types.StoreEpic {
+			c.AntiCheat = append(c.AntiCheat, compat.AntiCheatBadges(e, cat.FetchedAt)...)
+		}
+	}
+	// PCGamingWiki is asked by Steam AppID only; it adds the anti-cheat names
+	// AreWeAntiCheatYet doesn't list (see Compat.Wiki).
 	if c.SteamAppID != "" {
 		if w, ok := a.compat.WikiPage(a.baseCtx(), c.SteamAppID); ok && w.Found {
 			drm := compat.WikiDRMBadges(w.Record, w.FetchedAt, hints != nil && hints.DRM != nil)
-			ac := compat.WikiAntiCheatBadges(w.Record, w.FetchedAt)
+			ac := newAntiCheat(c.AntiCheat, compat.WikiAntiCheatBadges(w.Record, w.FetchedAt))
 			c.DRM = append(c.DRM, drm...)
 			c.AntiCheat = append(c.AntiCheat, ac...)
-			wikiAnticheat = len(ac) > 0
 			if len(drm)+len(ac) > 0 {
 				c.Wiki = &types.WikiCredit{
 					Title:      w.Record.Title,
@@ -191,13 +198,6 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 					LicenceURL: compat.PCGWLicenceURL,
 				}
 			}
-		}
-	}
-	if cat := a.compat.AntiCheatCatalogue(a.baseCtx()); cat != nil && !wikiAnticheat {
-		if e, ok := cat.BySteam(c.SteamAppID); ok {
-			c.AntiCheat = append(c.AntiCheat, compat.AntiCheatBadges(e, cat.FetchedAt)...)
-		} else if e, ok := cat.ByEpic(game.StoreAppID); ok && game.Store == types.StoreEpic {
-			c.AntiCheat = append(c.AntiCheat, compat.AntiCheatBadges(e, cat.FetchedAt)...)
 		}
 	}
 	if game.IsInstalled && game.InstallDir != "" {
@@ -245,4 +245,20 @@ func protonRating(r compat.Rating, appID string) *types.ProtonRating {
 		FewReports: r.Found && tier == "",
 		URL:        compat.ProtonDBPage(appID),
 	}
+}
+
+// newAntiCheat keeps the badges of add whose name isn't already in have
+// (compared case-insensitively), so one system shows once.
+func newAntiCheat(have, add []types.CompatBadge) []types.CompatBadge {
+	seen := map[string]bool{}
+	for _, b := range have {
+		seen[strings.ToLower(b.Label)] = true
+	}
+	out := []types.CompatBadge{}
+	for _, b := range add {
+		if !seen[strings.ToLower(b.Label)] {
+			out = append(out, b)
+		}
+	}
+	return out
 }
