@@ -947,11 +947,17 @@ func launchSpec(p params) (any, error) {
 }
 
 // echoScreenshots are the screenshots a game page shows for an echo game: six
-// http(s) images, so the thumbnail strip is wider than the page at 1024 px.
+// images from echo's own local server (no network), so the thumbnail strip is
+// wider than the page at 1024 px.
 func echoScreenshots(id string) []string {
+	bulkOnce.Do(startCoverServer)
+	if bulkBase == "" {
+		return nil
+	}
+	seed := len(id)
 	out := make([]string, 0, 6)
 	for i := 1; i <= 6; i++ {
-		out = append(out, fmt.Sprintf("https://picsum.photos/seed/echo-%s-%d/1280/720", id, i))
+		out = append(out, fmt.Sprintf("%s/shot/%d.jpg", bulkBase, seed*7+i))
 	}
 	return out
 }

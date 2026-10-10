@@ -31,7 +31,7 @@ var (
 	bulkOnce sync.Once
 	bulkBase string
 	bulkMu   sync.Mutex
-	bulkJPEG = map[int][]byte{}
+	bulkJPEG = map[[3]int][]byte{}
 )
 
 // bulkCount is how many extra games ECHO_GAMES asks for.
@@ -94,17 +94,30 @@ func startCoverServer() {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		_, _ = w.Write(coverJPEG(v))
 	})
+	mux.HandleFunc("/shot/", func(w http.ResponseWriter, r *http.Request) {
+		v, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/shot/"), ".jpg"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_, _ = w.Write(gradientJPEG(v, 1280, 720))
+	})
 	go func() { _ = http.Serve(ln, mux) }()
 }
 
 // coverJPEG is a 600x900 gradient with some structure, so it does not compress to nothing.
-func coverJPEG(v int) []byte {
+func coverJPEG(v int) []byte { return gradientJPEG(v, 600, 900) }
+
+// gradientJPEG is a w x h gradient for variant v (covers and screenshots).
+func gradientJPEG(v, w, h int) []byte {
+	key := [3]int{v, w, h}
 	bulkMu.Lock()
 	defer bulkMu.Unlock()
-	if b, ok := bulkJPEG[v]; ok {
+	if b, ok := bulkJPEG[key]; ok {
 		return b
 	}
-	const w, h = 600, 900
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
@@ -119,7 +132,7 @@ func coverJPEG(v int) []byte {
 	}
 	var out sliceWriter
 	_ = jpeg.Encode(&out, img, &jpeg.Options{Quality: 82})
-	bulkJPEG[v] = out.b
+	bulkJPEG[key] = out.b
 	return out.b
 }
 
