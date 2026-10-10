@@ -116,7 +116,7 @@ func moveParams(j types.Job) map[string]any {
 }
 
 // currentFolder is the folder the game is installed in, as its store's library
-// reports it (core's moves applied). The folder the frontend holds is never
+// reports it (core's moves applied). The folder the UI holds is never
 // trusted: moves, checks and repairs act on this one.
 func (a *App) currentFolder(game types.Game) (string, error) {
 	p, ok := a.plugins.Plugin(game.Source)

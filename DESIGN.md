@@ -1,8 +1,8 @@
 # DESIGN.md — Platypus (finalist design: /21)
 
-> **Purpose:** self-contained implementation contract for an agent rebuilding the Wails
-> frontend (`frontend/src/**`) to this design. Readable without the design-lab conversation.
-> The living mockup lives in `design-lab/` (`npm run dev`; port 5175; key routes: `/21`,
+> **Purpose:** self-contained implementation contract for an agent rebuilding the app UI
+> (`apps/ui/src/**`) to this design. Readable without the design-lab conversation.
+> The living mockup lives in `tools/design-lab/` (`npm run dev`; port 5175; key routes: `/21`,
 > `/21-game`, `/library`; alternates `/17`–`/20`). Reference screenshots:
 > `/tmp/opencode/shots/it21-wide.png`, `it21-game-v3.png`, `library-page.png`.
 
@@ -17,7 +17,7 @@ Read `PRODUCT.md` for product truth. Design summary:
 - **Design mode:** Operate. Brand: **"the warm control room"** — GOG Galaxy's information
   architecture and warm radial wash, + /10's tactile rounded cards, at /13's density discipline.
 - **References:** GOG Galaxy (dashboard structure), Cirno downloader (cinematic dark),
-  iterations /7, /10, /16–/21 in `design-lab/`.
+  iterations /7, /10, /16–/21 in `tools/design-lab/`.
 
 ### 1.1 World rules
 
@@ -40,7 +40,7 @@ Read `PRODUCT.md` for product truth. Design summary:
    readouts `tabular-nums`. **Fonts bundled locally** (no network fetch in the app).
 5. **Event-type color system** (Activity, fixes): session=emerald, unlock=amber, fix=sky,
    update=neutral, download=violet, add=neutral, tweak=orange. Source of truth:
-   `ActivityFeed` in `design-lab/src/pages/p6.jsx`.
+   `ActivityFeed` in `tools/design-lab/src/pages/p6.jsx`.
 
 ---
 
@@ -78,7 +78,7 @@ The launcher-wide Settings view is reached from the sidebar footer, not the main
 ## 3. Tokens (style.css)
 
 Fonts: ship woff2 (Hanken Grotesk 400/600/700/800; JetBrains Mono 400/700) to
-`frontend/src/assets/fonts/`, `@font-face` in `style.css`. No Google Fonts in the app.
+`apps/ui/src/assets/fonts/`, `@font-face` in `style.css`. No Google Fonts in the app.
 
 ```css
 @theme {
@@ -116,7 +116,7 @@ body { background-color: #130f0a; color: var(--color-text); }
 
 Apply `.app-wash` on the root div (not `body`). Game pages use `.app-wash-game`.
 
-### 3.1 Primitives (build once in `frontend/src/components/ui.tsx`)
+### 3.1 Primitives (build once in `apps/ui/src/components/ui.tsx`)
 
 - **Panel:** `rounded-3xl bg-white/[0.045] ring-1 ring-white/[0.07] p-5` (hero panels `p-6`)
 - **Card:** `rounded-2xl bg-white/[0.045] ring-1 ring-white/[0.07]` hover: `ring-amber-300/40` + `-translate-y-0.5` + `transition duration-300`
@@ -146,7 +146,7 @@ Apply `.app-wash` on the root div (not `body`). Game pages use `.app-wash-game`.
 
 ---
 
-### 3.3 Components (`frontend/src/components/ds/`)
+### 3.3 Components (`apps/ui/src/components/ds/`)
 
 `ds/` is shadcn/ui (Radix primitives, copied into the repo) restyled to this contract; it is the
 source of truth for controls. Import via `@/components/ds/<name>`. Never use native `<select>`,
@@ -204,7 +204,8 @@ source of truth for controls. Import via `@/components/ds/<name>`. Never use nat
 
 ## 5. Data model contract (target schema)
 
-Extend `internal/types/models.go` + `frontend/src/types.ts`; regenerate Wails bindings.
+Extend `internal/types/models.go` + `apps/ui/src/types.ts`; regenerate the bridge types
+(`go run ./cmd/gen-ts`).
 
 ```ts
 interface Game {
@@ -250,7 +251,7 @@ interface ActivityEvent { ts: string; type: ActivityType; game?: string;
                           detail: string; meta?: string }
 ```
 
-### 5.1 New/changed Go bindings (app.go, then `wails generate module`)
+### 5.1 New/changed Go methods (internal/app, then `go run ./cmd/gen-ts`)
 
 - `GetRecentActivity(limit int) []ActivityEvent` — honest data only (from scans/launches);
   may return `[]`.
@@ -267,7 +268,7 @@ override settings for "launch once with X".
 
 ## 6. View specs
 
-### 6.1 Dashboard (`p-7`, fluid; source: `design-lab/src/pages/p21.jsx`)
+### 6.1 Dashboard (`p-7`, fluid; source: `tools/design-lab/src/pages/p21.jsx`)
 
 1. **Action hero** — when a fix/download needs attention (else fallback welcome banner):
    `relative mb-6 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]`; image
@@ -296,7 +297,7 @@ override settings for "launch once with X".
    detail 13px (type label mono uppercase 10px colored per §3.2 + text `text-white/85`) ·
    meta mono 11.5px `text-white/35`.
 
-### 6.2 Library (`p-7`; source: `design-lab/src/pages/library.jsx`)
+### 6.2 Library (`p-7`; source: `tools/design-lab/src/pages/library.jsx`)
 
 Header: "Library" 23px + subtitle `{n} of {total} titles · all sources verified {time}`;
 controls right: filter input (`w-48 font-mono text-[11.5px] rounded-xl bg-white/[0.06]`),
@@ -387,8 +388,8 @@ Friends panel = honest stub until real friends feature exists.
 button "applies this session" (honest).
 
 **Phase D — data plumbing:** extend Go models + bindings per §5; persistence JSON;
-activity feed from real events (launches, scans, fix applications). Wails tags:
-`go build -tags "desktop,production,webkit2_41"`; regenerate wailsjs bindings; tsc clean.
+activity feed from real events (launches, scans, fix applications). Build tags:
+`go build ./...`; regenerate the bridge types (`go run ./cmd/gen-ts`); tsc clean.
 
 **Phase E — polish & verify:** hover/focus states (amber focus rings), empty states,
 reduced-motion, keyboard (Esc/close, tab order), run design detector, rebuild, launch,
@@ -399,15 +400,15 @@ screenshot at 1440+1920 widths, compare with `/tmp/opencode/shots/it21-wide.png`
 
 | Mockup file | Extract into |
 |---|---|
-| `design-lab/src/pages/shared16.jsx` | `ui.tsx` (primitives), `Sidebar.tsx`, `GamePage.tsx`, `SettingsModal.tsx` |
-| `design-lab/src/pages/p21.jsx` | `Dashboard.tsx` |
-| `design-lab/src/pages/library.jsx` | `LibraryView.tsx` |
-| `design-lab/src/pages/p13.jsx` | table-row anatomy for library table mode |
-| `design-lab/src/pages/p6.jsx` | `ActivityFeed.tsx` + event colors |
-| `design-lab/src/pages/p20.jsx` | AchievementsTab/RunsTab/FixesTab (future tabs) |
+| `tools/design-lab/src/pages/shared16.jsx` | `ui.tsx` (primitives), `Sidebar.tsx`, `GamePage.tsx`, `SettingsModal.tsx` |
+| `tools/design-lab/src/pages/p21.jsx` | `Dashboard.tsx` |
+| `tools/design-lab/src/pages/library.jsx` | `LibraryView.tsx` |
+| `tools/design-lab/src/pages/p13.jsx` | table-row anatomy for library table mode |
+| `tools/design-lab/src/pages/p6.jsx` | `ActivityFeed.tsx` + event colors |
+| `tools/design-lab/src/pages/p20.jsx` | AchievementsTab/RunsTab/FixesTab (future tabs) |
 
 All mockup JSX is plain React + Tailwind 4 syntax; conversion = TypeScript types from
-`frontend/src/types.ts` (§5), replace mock data with bindings, keep class strings.
+`apps/ui/src/types.ts` (§5), replace mock data with bindings, keep class strings.
 
 ### 7.2 Verification checklist (acceptance)
 

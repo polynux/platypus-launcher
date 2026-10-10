@@ -10,14 +10,20 @@ Platypus keeps its data in `~/.local/share/platypus`.
 
 ## Development
 
-The app is built with [Wails](https://wails.io) (Go backend, React + TypeScript frontend).
+The app is a Go core (`cmd/platypus-core`) with a React + TypeScript UI (`apps/ui`) inside a desktop shell
+(`apps/desktop`, Electron + Chromium). The UI talks to the core over stdio JSON-RPC through `window.platypus`;
+the typed bridge is generated with `go run ./cmd/gen-ts` into `apps/ui/src/gen` (see
+[docs/electron.md](docs/electron.md)).
 
 ```sh
-cd frontend && bun install && bun run build && cd ..   # the Go tests embed frontend/dist
-wails dev -tags webkit2_41                             # live development
-go test ./...                                          # backend and plugins
-cd frontend && bunx tsc --noEmit && bunx vitest run    # frontend
-wails build -tags webkit2_41                           # a redistributable build
+bun install                           # once: the apps/ui and apps/desktop workspaces
+bun run dev                           # desktop app with the UI from Vite (hot reload)
+bun run start                         # desktop app with the built UI (builds it if missing)
+go test ./...                         # backend and plugins
+bun run test:ui                       # UI tests (vitest in apps/ui)
+bun run test:desktop                  # shell tests (node --test in apps/desktop)
+bun run typecheck                     # tsc in both apps
+bun run gen-ts                        # regenerate apps/ui/src/gen after changing the core surface
 ```
 
 Store plugins live in `plugins/`; `plugins/install.sh <name>` installs one into

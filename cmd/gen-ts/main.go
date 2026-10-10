@@ -1,6 +1,6 @@
-// Command gen-ts regenerates the frontend's typed core bridge from the Go
-// core: struct interfaces into frontend/src/gen/models.ts and the typed
-// method list into frontend/src/gen/api.ts.
+// Command gen-ts regenerates the UI's typed core bridge from the Go
+// core: struct interfaces into apps/ui/src/gen/models.ts and the typed
+// method list into apps/ui/src/gen/api.ts.
 //
 // Run it from the repository root: `go run ./cmd/gen-ts` (an optional first
 // argument overrides the root). The generated files are checked in;
@@ -26,7 +26,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "gen-ts:", err)
 		os.Exit(1)
 	}
-	dir := filepath.Join(root, "frontend", "src", "gen")
+	dir := filepath.Join(root, "apps", "ui", "src", "gen")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fmt.Fprintln(os.Stderr, "gen-ts:", err)
 		os.Exit(1)
@@ -37,5 +37,5 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	fmt.Println("wrote frontend/src/gen/models.ts and frontend/src/gen/api.ts")
+	fmt.Println("wrote apps/ui/src/gen/models.ts and apps/ui/src/gen/api.ts")
 }

@@ -141,7 +141,7 @@ const (
 	CloudPromptClient   = "client-running" // the store's client is running and can start the game
 )
 
-// CloudEvent is emitted on the "cloud" Wails event.
+// CloudEvent is emitted on the "cloud" core event.
 type CloudEvent struct {
 	GameID  string       `json:"game_id"`
 	Kind    string       `json:"kind"`

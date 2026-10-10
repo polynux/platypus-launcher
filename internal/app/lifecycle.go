@@ -2,8 +2,7 @@ package app
 
 import "context"
 
-// Entry points for the shells that run the App (the Wails window in the repo
-// root, the Electron core in cmd/platypus-core).
+// Entry points for the shell that runs the App (the core in cmd/platypus-core).
 //
 // They are package-level functions, not methods: the core serves the App's
 // exported methods to the UI over RPC (internal/corerpc), and the lifecycle

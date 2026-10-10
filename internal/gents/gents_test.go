@@ -22,7 +22,7 @@ func repoRoot(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..")
 }
 
-// TestGeneratedUpToDate fails when frontend/src/gen/ is stale: regenerate with
+// TestGeneratedUpToDate fails when apps/ui/src/gen/ is stale: regenerate with
 // `go run ./cmd/gen-ts` from the repository root and commit the result.
 func TestGeneratedUpToDate(t *testing.T) {
 	root := repoRoot(t)
@@ -31,7 +31,7 @@ func TestGeneratedUpToDate(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 	for name, want := range map[string]string{"models.ts": models, "api.ts": api} {
-		got, err := os.ReadFile(filepath.Join(root, "frontend", "src", "gen", name))
+		got, err := os.ReadFile(filepath.Join(root, "apps", "ui", "src", "gen", name))
 		if err != nil {
 			t.Fatalf("%s: %v (run `go run ./cmd/gen-ts` from the repository root)", name, err)
 		}

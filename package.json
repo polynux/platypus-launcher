@@ -1,0 +1,23 @@
+{
+  "name": "platypus",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Platypus game launcher: React UI (apps/ui) and desktop shell (apps/desktop) around the Go core",
+  "workspaces": [
+    "apps/ui",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "node apps/desktop/scripts/run.mjs dev",
+    "start": "node apps/desktop/scripts/run.mjs start",
+    "build:ui": "bun --filter platypus-ui build",
+    "build:desktop": "bun --filter platypus-desktop build",
+    "typecheck": "bun --filter platypus-ui typecheck && bun --filter platypus-desktop typecheck",
+    "test:ui": "bun --filter platypus-ui test",
+    "test:desktop": "bun --filter platypus-desktop test",
+    "test": "bun run test:ui && bun run test:desktop",
+    "gen-ts": "go run ./cmd/gen-ts"
+  }
+}

@@ -54,7 +54,7 @@ type statsCache struct {
 	achievements map[string]achievementsEntry // by Platypus game id
 	redeemMu     sync.Mutex                   // one submission at a time
 	// changed tells the UI that a playtime report changed a library value.
-	// info and warn are the Wails log calls; tests leave all three nil.
+	// info and warn are the host log calls; tests leave all three nil.
 	changed func()
 	info    func(format string, args ...any)
 	warn    func(format string, args ...any)

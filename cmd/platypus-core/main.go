@@ -1,4 +1,5 @@
-// The core: the App without a window. The UI shell (Electron, see electron/)
+// The core: the App without a window. The UI shell (the desktop app, see
+// apps/desktop/)
 // spawns this binary and talks to it over stdio: JSON-RPC 2.0, one object per
 // line (internal/corerpc). Build it with
 // `go build -o platypus-core ./cmd/platypus-core` (no GTK/WebKit linked).

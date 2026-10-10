@@ -6,9 +6,9 @@ import (
 	"os"
 )
 
-// Host is the shell the App runs in: the Wails window, or the Electron shell
-// that talks to the core process (cmd/platypus-core). The App only ever reaches the
-// UI through it, so the same methods serve both.
+// Host is the shell the App runs in: the desktop shell that talks to the
+// core process (cmd/platypus-core). The App only ever reaches the UI
+// through it.
 type Host interface {
 	// Emit sends an event to the UI. data is JSON-encoded.
 	Emit(event string, data ...any)
