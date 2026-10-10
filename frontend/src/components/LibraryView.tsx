@@ -105,10 +105,10 @@ function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort
 }
 
 /** A row of chips with its name in front, so each group reads as its own control (two "all" chips are not one). */
-function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterGroup({ label, labelClass, children }: { label: string; labelClass?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <MonoLabel className="flex-none">{label}</MonoLabel>
+      <MonoLabel className={cx('flex-none', labelClass)}>{label}</MonoLabel>
       {children}
     </div>
   );
@@ -236,9 +236,12 @@ export function LibraryView(p: LibraryProps) {
               </Tooltip>
             )}
           </div>
-          <FilterGroup label="store">
-            <SegRow label="Store" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
-          </FilterGroup>
+          {/* One store (or none) has nothing to choose between: the chips show only with two or more. */}
+          {sources.length > 2 && (
+            <FilterGroup label="store">
+              <SegRow label="Store" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
+            </FilterGroup>
+          )}
           <Button
             variant="neutral"
             aria-expanded={filtersOpen}
@@ -251,21 +254,22 @@ export function LibraryView(p: LibraryProps) {
         </div>
 
         {filtersOpen && (
-          <div id="library-filters" className="flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
+          // One row per group, labels in a shared column: the panel never wraps a group onto a second line.
+          <div id="library-filters" className="flex flex-col items-start gap-2.5 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
             {owned > installedCount && (
-              <FilterGroup label="show">
+              <FilterGroup label="show" labelClass="w-14">
                 <SegRow label="Show" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
               </FilterGroup>
             )}
             {hasBorrowed && (
-              <FilterGroup label="family">
+              <FilterGroup label="family" labelClass="w-14">
                 <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
               </FilterGroup>
             )}
-            <FilterGroup label="tier">
+            <FilterGroup label="tier" labelClass="w-14">
               <TierFilterControl value={tier} onChange={setTier} />
             </FilterGroup>
-            <FilterGroup label="sort">
+            <FilterGroup label="sort" labelClass="w-14">
               <SortControl sort={sort} onChange={setSort} />
             </FilterGroup>
           </div>
