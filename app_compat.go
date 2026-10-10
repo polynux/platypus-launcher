@@ -23,6 +23,10 @@ import (
 // library card doesn't ask the plugin on every render.
 const compatHintTTL = time.Hour
 
+// compatHintRetry is how long a failed game.details ask is remembered, so a
+// slow or failing plugin isn't asked again on every look.
+const compatHintRetry = 5 * time.Minute
+
 // compatHintCache keeps the plugin facts per game id.
 type compatHintCache struct {
 	mu sync.Mutex
@@ -32,6 +36,7 @@ type compatHintCache struct {
 type compatHint struct {
 	at      time.Time
 	details *types.GameDetails
+	failed  bool // the ask failed; kept only for compatHintRetry
 }
 
 // newCompatService opens the compat cache in dataDir.
@@ -68,11 +73,8 @@ func (a *App) pluginHints(game types.Game) *types.GameDetails {
 	if game.Source == types.SourceSteam || game.Source == types.SourceCustom {
 		return nil
 	}
-	a.compatHints.mu.Lock()
-	h, ok := a.compatHints.m[game.ID]
-	a.compatHints.mu.Unlock()
-	if ok && time.Since(h.at) < compatHintTTL {
-		return h.details
+	if d, ok := a.cachedPluginHints(game); ok {
+		return d
 	}
 	s, ok := a.stores.Get(sourceOf(game))
 	if !ok {
@@ -82,15 +84,38 @@ func (a *App) pluginHints(game types.Game) *types.GameDetails {
 	defer cancel()
 	d, err := s.Details(ctx, game)
 	if err != nil {
-		return nil // not cached: the next look asks again
+		d = nil // remembered for compatHintRetry, then asked again
 	}
 	a.compatHints.mu.Lock()
 	if a.compatHints.m == nil {
 		a.compatHints.m = map[string]compatHint{}
 	}
-	a.compatHints.m[game.ID] = compatHint{at: time.Now(), details: d}
+	a.compatHints.m[game.ID] = compatHint{at: time.Now(), details: d, failed: err != nil}
 	a.compatHints.mu.Unlock()
 	return d
+}
+
+// cachedPluginHints is pluginHints without asking the plugin: the library scan
+// uses it, so listing a big library never waits on per-game plugin calls. ok is
+// false when nothing fresh is cached.
+func (a *App) cachedPluginHints(game types.Game) (*types.GameDetails, bool) {
+	if game.Source == types.SourceSteam || game.Source == types.SourceCustom {
+		return nil, true
+	}
+	a.compatHints.mu.Lock()
+	defer a.compatHints.mu.Unlock()
+	h, ok := a.compatHints.m[game.ID]
+	if !ok {
+		return nil, false
+	}
+	ttl := compatHintTTL
+	if h.failed {
+		ttl = compatHintRetry
+	}
+	if time.Since(h.at) >= ttl {
+		return nil, false
+	}
+	return h.details, true
 }
 
 // ratingAppID is the Steam AppID ratings use for a game, and where it came
@@ -114,14 +139,14 @@ func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source
 // Plugin games get their ProtonDB tier only through a Steam AppID hint or one
 // the user set; nothing is matched by title.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
-	return a.gameFix(game, func(appID string) (compat.Rating, bool) {
+	return a.gameFix(game, a.pluginHints(game), func(appID string) (compat.Rating, bool) {
 		return a.compat.ProtonDB(a.baseCtx(), appID)
 	})
 }
 
 // gameFix is GetGameFix with the ProtonDB lookup chosen by the caller: the
 // library asks without waiting for ProtonDB.
-func (a *App) gameFix(game types.Game, protonDB func(appID string) (compat.Rating, bool)) *types.GameFixInfo {
+func (a *App) gameFix(game types.Game, hints *types.GameDetails, protonDB func(appID string) (compat.Rating, bool)) *types.GameFixInfo {
 	storeAppID := ""
 	if game.Source == types.SourceSteam {
 		storeAppID = game.StoreAppID
@@ -132,7 +157,7 @@ func (a *App) gameFix(game types.Game, protonDB func(appID string) (compat.Ratin
 	if a.compat == nil {
 		return nil
 	}
-	appID, _ := a.ratingAppID(game, a.pluginHints(game))
+	appID, _ := a.ratingAppID(game, hints)
 	if appID == "" {
 		return nil
 	}

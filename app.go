@@ -399,7 +399,8 @@ func (a *App) GetLibrary() (types.Library, error) {
 // gets one on a later scan, when its fetch has finished.
 func (a *App) applyFixes(games []types.Game) {
 	for i := range games {
-		games[i].FixInfo = a.gameFix(games[i], func(appID string) (compat.Rating, bool) {
+		hints, _ := a.cachedPluginHints(games[i]) // never a plugin call per game here
+		games[i].FixInfo = a.gameFix(games[i], hints, func(appID string) (compat.Rating, bool) {
 			if a.compat == nil {
 				return compat.Rating{}, false
 			}
