@@ -31,7 +31,6 @@ vi.mock('../../effect/runtime', () => ({
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
 }));
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: openUrl }));
 
 import { VersionsDialog } from '../VersionsDialog';
 
@@ -69,6 +68,7 @@ function open(g: Game = game(), v: VersionInfo = info()) {
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
   openUrl.mockReset();
+  window.platypus!.openExternal = openUrl;
   api.installGameVersion.mockResolvedValue({ id: 'j' });
   api.updateGameVersion.mockResolvedValue({ id: 'j' });
   api.pinGameVersion.mockResolvedValue(undefined);

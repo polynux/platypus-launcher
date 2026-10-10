@@ -91,7 +91,7 @@ describe('FE-15 pause/resume/discard buttons and states', () => {
   });
 });
 
-// LauncherSettingsView talks to Wails through its own module; stub the calls
+// LauncherSettingsView talks to the core through effect/runtime; stub the calls
 // it makes. The mocked calls return Effects: the view runs them through
 // Effect.runPromise, like every other view here.
 vi.mock('../../effect/runtime', () => ({

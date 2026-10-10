@@ -14,7 +14,6 @@ vi.mock('../../effect/runtime', () => ({
     }),
   }),
 }));
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
 
 import { LegalSection } from '../LegalSection';
 import { notifyTermsAccepted } from '../../lib/terms';

@@ -31,9 +31,6 @@ vi.mock('../../effect/runtime', () => ({
   onLibraryPartial: () => () => {},
 }));
 
-vi.mock('../../../wailsjs/runtime/runtime', () => ({
-  BrowserOpenURL: vi.fn(),
-}));
 
 import { PluginsView } from '../PluginsView';
 import type { StorePlugin } from '../../types';

@@ -706,7 +706,7 @@ export interface CloudSettings {
 
 export type CloudPrompt = 'conflict' | 'offline' | 'client-running';
 
-/** The "cloud" Wails event. */
+/** The "cloud" core event. */
 export interface CloudEvent {
   game_id: string;
   kind: 'progress' | 'status' | 'prompt' | 'pushed' | 'skipped' | 'failed' | 'canceled';

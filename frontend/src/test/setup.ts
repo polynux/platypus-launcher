@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+import { afterEach, beforeEach } from 'vitest';
 
 // jsdom lacks scrollTo; App scrolls main on view change.
 if (!Element.prototype.scrollTo) {
@@ -25,3 +26,20 @@ if (!('ResizeObserver' in globalThis)) {
     disconnect() {}
   };
 }
+
+// Every test runs as if inside the desktop shell: the UI only talks to the Go
+// core through window.platypus (see effect/bridge.ts). Tests that assert on
+// bridge calls override openExternal (or the whole stub) themselves.
+beforeEach(() => {
+  window.platypus = {
+    invoke: async () => {
+      throw new Error('unexpected core call in test');
+    },
+    on: () => () => {},
+    openExternal: () => {},
+  };
+});
+
+afterEach(() => {
+  delete window.platypus;
+});

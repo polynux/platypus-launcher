@@ -25,7 +25,6 @@ vi.mock('../../effect/runtime', () => ({
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
 }));
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
 
 import { RedeemDialog } from '../RedeemDialog';
 import { PluginsView } from '../PluginsView';

@@ -14,7 +14,6 @@ vi.mock('../../effect/runtime', () => ({
     }),
   }),
 }));
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: (u: string) => api.browserOpen(u) }));
 
 import { TermsDialog } from '../TermsDialog';
 import { onTermsAccepted } from '../../lib/terms';
@@ -27,6 +26,7 @@ const terms: GameTerm[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.platypus!.openExternal = api.browserOpen;
   api.acceptGameTerms.mockResolvedValue(undefined);
 });
 

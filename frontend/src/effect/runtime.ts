@@ -47,24 +47,20 @@ import type {
 import { toBackendGame } from '../lib/settings';
 import { App, backendAvailable, onEvent } from './bridge';
 
-// The generated wailsjs model classes (with convertValues) don't match our
-// structural src/types interfaces; at runtime Wails returns plain JSON objects
-// that structurally satisfy src/types. Cast through unknown once at the edge.
-
-// The backend is the Electron bridge or the Wails bindings (bridge.ts). If the
-// frontend is served outside both (plain browser dev), every call below fails
-// with an explicit error instead of silently substituting fake data.
-function wailsUnavailable(op: string): Error {
+// The backend is the desktop shell's bridge (bridge.ts). If the frontend is
+// served outside it (plain browser dev), every call below fails with an
+// explicit error instead of silently substituting fake data.
+function backendUnavailable(op: string): Error {
   return new Error(
-    `Platypus backend not available (${op}). The UI must run inside the app — use \`wails dev -tags webkit2_41\` or the Electron shell (docs/electron.md), not a plain vite server.`
+    `Platypus backend not available (${op}). The UI must run inside the app — see docs/electron.md, not a plain vite server.`
   );
 }
 
-/** One bound Go call as an Effect. Go errors reject the Wails promise. */
+/** One bound Go call as an Effect. Go errors reject the bridge promise. */
 function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error> {
   return Effect.tryPromise({
     try: async () => {
-      if (!backendAvailable()) throw wailsUnavailable(op);
+      if (!backendAvailable()) throw backendUnavailable(op);
       return (await fn()) as T;
     },
     catch: (err) => (err instanceof Error ? err : new Error(String(err))),

@@ -320,7 +320,7 @@ type Tweak struct {
 	Wrappers []string          `json:"wrappers,omitempty"` // "gamemode", "mangohud"
 }
 
-// SessionEvent is emitted on the "session" Wails event when a launched game
+// SessionEvent is emitted on the "session" core event when a launched game
 // changes state.
 type SessionEvent struct {
 	GameID  string `json:"game_id"`

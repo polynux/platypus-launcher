@@ -32,9 +32,6 @@ vi.mock('../../effect/runtime', () => ({
   onLibraryPartial: () => () => {},
 }));
 
-vi.mock('../../../wailsjs/runtime/runtime', () => ({
-  BrowserOpenURL: vi.fn(),
-}));
 
 import { PluginsView, qrPollDelay, QR_ERROR_AFTER, QR_MAX_ATTEMPTS } from '../PluginsView';
 import type { StorePlugin } from '../../types';

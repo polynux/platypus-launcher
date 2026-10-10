@@ -29,7 +29,6 @@ vi.mock('../../effect/runtime', () => ({
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
 }));
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn() }));
 
 import { GamePage } from '../GamePage';
 import { VerifyDialog } from '../VerifyDialog';

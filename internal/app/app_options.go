@@ -150,8 +150,8 @@ func (a *App) GetGameOptions(game types.Game) (types.GameOptions, error) {
 // InstallGameWithOptions queues an install with the choices the user made in
 // the install dialog. A choice the store doesn't offer, or DLC the user doesn't
 // own, refuses the install; the choices are remembered once it is queued.
-// The choices are a plain map: Wails binds named map types as nothing in the
-// generated TypeScript.
+// The choices are a plain map: a named map type would generate as nothing
+// useful in the TypeScript bridge.
 func (a *App) InstallGameWithOptions(game types.Game, options map[string]any) (types.Job, error) {
 	if game.IsInstalled {
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)

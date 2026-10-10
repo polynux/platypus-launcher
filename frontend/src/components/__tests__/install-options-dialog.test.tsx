@@ -33,7 +33,6 @@ vi.mock('../../effect/runtime', () => ({
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
 }));
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: openUrl }));
 
 import { InstallOptionsDialog } from '../InstallOptionsDialog';
 import { formatBytes } from '../../lib/games';
@@ -84,6 +83,7 @@ const ready = () => screen.findByLabelText('Season Pass');
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
   openUrl.mockReset();
+  window.platypus!.openExternal = openUrl;
   api.installGameWithOptions.mockResolvedValue({ id: 'j' });
   api.updateGameWithOptions.mockResolvedValue({ id: 'j' });
   api.installGameWithOptionsTo.mockResolvedValue({ id: 'j' });

@@ -6,7 +6,6 @@ import type { ChatMessage, ChatView } from '../../types';
 
 const open = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: open }));
 
 const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({ id: 'm1', from: 'ana', text: 'hello', sentAt: new Date(2026, 9, 9, 7, 5).getTime(), ...over });
 
@@ -84,6 +83,7 @@ describe('ChatPanel', () => {
   });
 
   it('opens http and https links in the browser and shows anything else as text', () => {
+    window.platypus!.openExternal = open;
     panel({ view: view({ messages: [msg({ text: 'go to https://example.com now' }), msg({ id: 'm2', text: 'not javascript:alert(1)' })] }) });
     const link = screen.getByRole('link', { name: 'https://example.com' });
     fireEvent.click(link);
