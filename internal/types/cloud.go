@@ -112,6 +112,9 @@ type CloudInfo struct {
 	Busy string `json:"busy,omitempty"`
 	// Running says the game is running now: its saves are not synced until it exits.
 	Running bool `json:"running"`
+	// Skipped says why a launch doesn't sync the saves: Platypus doesn't know the
+	// game's folder, so there is nothing to read them from. Empty when it syncs.
+	Skipped string `json:"skipped,omitempty"`
 }
 
 // CloudSettings are the saved modes: the plugins' defaults and the games' own choices.

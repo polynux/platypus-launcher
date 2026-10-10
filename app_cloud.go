@@ -156,7 +156,8 @@ func (c *cloudLaunch) abandon() {
 // cloudBeforeLaunch syncs a game's cloud saves before Platypus starts it. anyway
 // is the user's "launch anyway" for this launch only. blocked means the launch
 // waits for the user (msg says on what); otherwise sync, when not nil, registers
-// the post-exit push.
+// the post-exit push. When the launch goes on without a sync, msg says why, if
+// the game has cloud saves at all (a note, not a question).
 func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync *cloudLaunch, msg string, blocked bool) {
 	g, ok := a.cloudGame(game)
 	if !ok {
@@ -164,8 +165,8 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 	}
 	folder, err := a.currentFolder(game)
 	if err != nil {
-		// No folder to read saves from: the game starts without a cloud step.
-		return nil, "", false
+		// No folder to read saves from: the game starts without a cloud step, and says so.
+		return nil, cloudSkipNote(err), false
 	}
 	game.InstallDir = folder
 	cc := cloudContextOf(game, p.runner)
@@ -183,6 +184,11 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 	return &cloudLaunch{a: a, g: g, job: job}, "", false
 }
 
+// cloudSkipNote is why a launch goes without a cloud sync, in words for the user.
+func cloudSkipNote(err error) string {
+	return "cloud saves not synced: " + err.Error()
+}
+
 // cloudInfo is the game page's view of the game's cloud saves.
 func (a *App) cloudInfo(game types.Game) types.CloudInfo {
 	running := a.isRunning(game.ID)
@@ -192,6 +198,10 @@ func (a *App) cloudInfo(game types.Game) types.CloudInfo {
 	}
 	info := a.cloud.Info(g)
 	info.Running = running
+	// An installed game whose folder is unknown launches without a sync: say so here too.
+	if _, err := a.currentFolder(game); err != nil && game.IsInstalled {
+		info.Skipped = err.Error()
+	}
 	return info
 }
 

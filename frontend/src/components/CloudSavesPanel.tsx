@@ -143,6 +143,11 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
         <p className="mt-1.5 font-mono text-[11.5px] text-white/55" data-testid="cloud-counts">{describeCounts(st.counts)}</p>
       )}
       {when && <p className="mt-1 font-mono text-[11px] text-white/40">checked {when}</p>}
+      {info?.skipped && (
+        <p role="note" className="mt-2 text-[12px] leading-relaxed text-white/65" data-testid="cloud-skipped">
+          Launches don't sync these saves: {info.skipped}
+        </p>
+      )}
 
       {client && (
         <div role="note" className="mt-3 rounded-xl bg-amber-300/[0.07] px-3.5 py-2.5 text-[12px] leading-relaxed text-white/75 ring-1 ring-amber-300/25">

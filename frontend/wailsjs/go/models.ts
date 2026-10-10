@@ -535,6 +535,7 @@ export namespace types {
 	    status?: CloudStatus;
 	    busy?: string;
 	    running: boolean;
+	    skipped?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CloudInfo(source);
@@ -548,6 +549,7 @@ export namespace types {
 	        this.status = this.convertValues(source["status"], CloudStatus);
 	        this.busy = source["busy"];
 	        this.running = source["running"];
+	        this.skipped = source["skipped"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
