@@ -37,10 +37,45 @@ setup. To look first without touching anything, use a scratch home:
 there with `PLATYPUS_PLUGINS=/tmp/platypus-try/.local/share/platypus/plugins sh plugins/install.sh echo`.
 
 Environment: `PLATYPUS_ELECTRON` (binary), `PLATYPUS_ELECTRON_ARGS` (extra
-flags, e.g. `--ozone-platform=x11`), `PLATYPUS_DEVTOOLS=1` (F12),
-`PLATYPUS_REMOTE_DEBUGGING_PORT` (for Playwright over CDP, loopback).
+flags, e.g. `--ozone-platform=x11`), `PLATYPUS_DEVTOOLS=1` (F12, dev only),
+`PLATYPUS_REMOTE_DEBUGGING_PORT` (for Playwright over CDP, dev only,
+loopback). A packaged app ignores both debug variables: no remote debugging
+in production.
 
 The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GUI toolkit linked).
+
+## Packaging
+
+```sh
+bun run package
+```
+
+Builds the UI, the shell and the core (`-trimpath`, `CGO_ENABLED=0`,
+linux-x64), then packs `packaging/dist/Platypus-0.0.0.AppImage` (plus a
+tar.gz) with electron-builder (`packaging/electron-builder.yml`). The
+AppImage bundles the app's own pinned Electron (apps/desktop's exact
+`electron` dependency, passed as `-c.electronVersion`), the built UI
+(`resources/frontend`) and the core binary (`resources/platypus-core`); the
+shell finds them next to itself when packaged (`apps/desktop/src/paths.ts`),
+so no repo checkout is needed to run it.
+
+Store plugins are NOT bundled: they install per user with
+`plugins/install.sh <name>` (default dir `~/.local/share/platypus/plugins`,
+override with `PLATYPUS_PLUGINS`), and approval pins the installed folder.
+Bundling them would ship code the user never approved and rot with the
+release; the curated data plugins could one day be baked in instead
+(follow-up).
+
+Trying the AppImage without touching your data:
+
+```sh
+HOME=/tmp/platypus-try ./packaging/dist/Platypus-0.0.0.AppImage --no-sandbox
+# then, in another shell:
+PLATYPUS_PLUGINS=/tmp/platypus-try/.local/share/platypus/plugins sh plugins/install.sh echo
+```
+
+(`--no-sandbox` only where the kernel forbids user namespaces, e.g. some
+containers; a normal desktop does not need it.)
 
 ## Pieces
 
@@ -58,7 +93,11 @@ The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GUI toolkit 
   navigation and `window.open` blocked (http/https go to `shell.openExternal`),
   IPC accepted only from `app://platypus`, only for methods the core listed,
   strict CSP (scripts from the app only; images may come from https and
-  loopback). The dev CSP adds `unsafe-inline` and Vite's websocket.
+  loopback). The dev CSP adds `unsafe-inline` and Vite's websocket. The core
+  is spawned with explicit stdio pipes and nothing else (libuv closes every
+  other fd in the child, so Chromium's sockets never reach it; plugins and
+  games get only 0/1/2 in turn — Go's os/exec closes the rest, and nothing in
+  internal/ passes ExtraFiles). Remote debugging exists only in development.
 
 ## What the shell does not do yet
 
@@ -66,8 +105,14 @@ The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GUI toolkit 
   from the root), which reflects over the App's exported methods and the
   structs they exchange (`internal/gents`) into `apps/ui/src/gen/` (checked
   in; a Go test fails when it is stale).
-- Packaging (electron-builder / AppImage), auto-update, a menu, the window
-  icon, remembering window size/position.
+- Desktop polish: the window remembers size/position/maximized
+  (`window-state.json` in userData, clamped to the displays now attached), the
+  window and the AppImage/`.desktop` use `packaging/icons`, a second launch
+  focuses the running window (single instance), and quitting (or SIGTERM/
+  SIGINT) shuts the core down first so its games and plugin helpers die with
+  it. There is deliberately no app menu and no tray icon (follow-up if asked
+  for); reload and DevTools keys are disabled in production.
+- Packaging (electron-builder / AppImage), auto-update.
 - Event delivery when no window is open (events are dropped).
 - `GPU`: history — `PLATYPUS_GPU` and the DMA-BUF switch concerned only
   WebKitGTK, the previous shell. Chromium logs

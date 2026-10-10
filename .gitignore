@@ -42,3 +42,7 @@ plugins/echo/bin/
 # Root build output
 /platypus
 /platypus-core
+
+# Packaged distributable (bun run package)
+packaging/dist/
+packaging/stage/

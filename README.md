@@ -19,6 +19,7 @@ the typed bridge is generated with `go run ./cmd/gen-ts` into `apps/ui/src/gen` 
 bun install                           # once: the apps/ui and apps/desktop workspaces
 bun run dev                           # desktop app with the UI from Vite (hot reload)
 bun run start                         # desktop app with the built UI (builds it if missing)
+bun run package                       # Linux AppImage (+ tar.gz) in packaging/dist
 go test ./...                         # backend and plugins
 bun run test:ui                       # UI tests (vitest in apps/ui)
 bun run test:desktop                  # shell tests (node --test in apps/desktop)

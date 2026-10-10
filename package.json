@@ -18,6 +18,7 @@
     "test:ui": "bun --filter platypus-ui test",
     "test:desktop": "bun --filter platypus-desktop test",
     "test": "bun run test:ui && bun run test:desktop",
-    "gen-ts": "go run ./cmd/gen-ts"
+    "gen-ts": "go run ./cmd/gen-ts",
+    "package": "node apps/desktop/scripts/package.mjs"
   }
 }
