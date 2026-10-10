@@ -29,12 +29,16 @@ type RequestHandler = (params: unknown) => Promise<unknown>;
 /**
  * Closes every inherited file descriptor but stdin/stdout/stderr, then execs
  * the core (`$0` is its path, `$@` its arguments). Runs inside `sh -c`, so no
- * script file of its own can leak; the /proc glob is expanded before the
- * loop, so closing the directory fd mid-loop is safe.
+ * script file of its own can leak. Two passes: the /proc glob (fast, and the
+ * only way past the fd limit) and an unconditional sweep of 3..fd-limit
+ * (catches anything the glob missed — a second instance of this shell must
+ * never depend on directory listing quirks). The loop is POSIX (dash-safe)
+ * and /proc is a given on Linux.
  */
 export const CLOSE_FDS =
   'for fd in /proc/self/fd/*; do n=${fd##*/}; ' +
-  'case $n in 0|1|2) ;; *) eval "exec $n>&-" 2>/dev/null || true;; esac; done; ';
+  'case $n in 0|1|2) ;; *) eval "exec $n>&-" 2>/dev/null || true;; esac; done; ' +
+  'n=3; lim=$(ulimit -n); while [ "$n" -lt "$lim" ]; do eval "exec $n>&- 2>/dev/null"; n=$((n + 1)); done; ';
 
 /** The Go core as a child process, spoken to in JSON-RPC 2.0, one object per line (internal/corerpc). */
 export class Core {

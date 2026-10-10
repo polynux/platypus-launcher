@@ -1,20 +1,25 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readdirSync, readlinkSync } from 'node:fs';
-import net from 'node:net';
+import { readdirSync, readlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { CLOSE_FDS } from './core.ts';
 
 // The core must not inherit the shell's sockets and files (Chromium does not
 // set close-on-exec, and libuv does not close them at spawn). The exact
-// wrapper Core starts its child through, run here against a socket this very
-// process holds open: the child may own only 0/1/2.
+// wrapper Core starts its child through, run here with fifty non-close-on-exec
+// fds held open (a shell opens files without CLOEXEC, like Chromium does):
+// the grandchild may own only 0/1/2.
 test('the spawn wrapper leaves the child only stdin, stdout and stderr', async () => {
-  const server = net.createServer();
-  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const child = spawn('sh', ['-c', `${CLOSE_FDS}exec "$0" "$@"`, '/bin/sleep', '30'], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const filler = path.join(tmpdir(), 'platypus-spawn-test-filler');
+  writeFileSync(filler, 'x');
+  const open =
+    `i=10; while [ "$i" -lt 60 ]; do eval "exec $i>${filler}"; i=$((i + 1)); done; ` +
+    `${CLOSE_FDS}exec /bin/sleep 30`;
+  const child = spawn('sh', ['-c', open], { stdio: ['pipe', 'pipe', 'pipe'] });
   try {
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 500));
     const fds = readdirSync(`/proc/${child.pid}/fd`).map((fd) => {
       try {
         return `${fd}->${readlinkSync(`/proc/${child.pid}/fd/${fd}`)}`;
@@ -29,6 +34,5 @@ test('the spawn wrapper leaves the child only stdin, stdout and stderr', async (
     );
   } finally {
     child.kill('SIGKILL');
-    server.close();
   }
 });
