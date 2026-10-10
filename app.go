@@ -28,8 +28,6 @@ import (
 	"platypus/internal/social"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // How long a store plugin gets for library.list (legendary refreshes its
@@ -41,6 +39,8 @@ const (
 
 // App struct
 type App struct {
+	// host is how the App reaches the shell it runs in: events, log, dialogs (host.go).
+	host     Host
 	ctx      context.Context
 	stop     context.CancelFunc
 	plugins  *plugins.Manager
@@ -87,7 +87,7 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	a := &App{data: dataplug.NewRegistry()}
+	a := &App{data: dataplug.NewRegistry(), host: stderrHost{}}
 	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
 	return a
 }
@@ -95,11 +95,11 @@ func NewApp() *App {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	a.stats.changed = func() { wruntime.EventsEmit(ctx, "playtime") }
-	a.stats.info = func(format string, args ...any) { wruntime.LogInfof(ctx, format, args...) }
-	a.stats.warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, format, args...) }
+	a.stats.changed = func() { a.host.Emit("playtime") }
+	a.stats.info = func(format string, args ...any) { a.host.Infof(format, args...) }
+	a.stats.warn = func(format string, args ...any) { a.host.Warnf(format, args...) }
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
-		wruntime.EventsEmit(ctx, "session", e)
+		a.host.Emit("session", e)
 		a.socialSession(e)
 		if e.State == "stopped" || e.State == "failed" {
 			a.schedulePlaytimeRefresh(e.GameID)
@@ -110,43 +110,43 @@ func (a *App) startup(ctx context.Context) {
 	// its new name, and the paths stored in it follow (internal/migrate).
 	if home, err := os.UserHomeDir(); err == nil {
 		migrate.Run(home, migrate.Options{
-			Info: func(format string, args ...any) { wruntime.LogInfof(ctx, format, args...) },
-			Warn: func(format string, args ...any) { wruntime.LogWarningf(ctx, format, args...) },
+			Info: func(format string, args ...any) { a.host.Infof(format, args...) },
+			Warn: func(format string, args ...any) { a.host.Warnf(format, args...) },
 		})
 	}
 	dataDir, err := settings.DataDir()
 	if err != nil {
-		wruntime.LogErrorf(ctx, "settings: %v", err)
+		a.host.Errorf("settings: %v", err)
 	}
 	a.settings, err = settings.Open(filepath.Join(dataDir, "settings.json"))
 	if err != nil {
 		// Open still returns usable defaults.
-		wruntime.LogErrorf(ctx, "settings: %v", err)
+		a.host.Errorf("settings: %v", err)
 	}
 
 	a.compat, err = newCompatService(dataDir, a.settings)
 	if err != nil {
-		wruntime.LogErrorf(ctx, "compat: %v", err)
+		a.host.Errorf("compat: %v", err)
 	}
 	if a.compat != nil {
-		a.compat.Warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, "compat: "+format, args...) }
+		a.compat.Warn = func(format string, args ...any) { a.host.Warnf("compat: "+format, args...) }
 	}
 
 	if err := a.openCustomization(dataDir); err != nil {
-		wruntime.LogErrorf(ctx, "customization: %v", err)
+		a.host.Errorf("customization: %v", err)
 	}
 
 	a.jobs, err = jobs.Open(filepath.Join(dataDir, "jobs.json"), jobBackend{a}, func(list []types.Job) {
-		wruntime.EventsEmit(ctx, "jobs", list)
+		a.host.Emit("jobs", list)
 	})
 	if err != nil {
-		wruntime.LogErrorf(ctx, "jobs: %v", err)
+		a.host.Errorf("jobs: %v", err)
 	}
 	a.jobs.SetCleanupAfter(cleanupAfter(a.settings.CancelCleanupDays()))
 
 	a.ledger, err = ledger.Open(filepath.Join(dataDir, "install-history.json"))
 	if err != nil {
-		wruntime.LogErrorf(ctx, "install history: %v", err)
+		a.host.Errorf("install history: %v", err)
 	}
 	a.jobs.SetOnInstalled(a.recordInstall)
 	a.jobs.SetOnFinished(a.jobFinished)
@@ -160,7 +160,7 @@ func (a *App) startup(ctx context.Context) {
 		Settings: a.settings,
 		OnNotify: a.pluginNotify,
 		OnExit: func(id string, err error) {
-			wruntime.LogWarningf(ctx, "plugin %s exited: %v", id, err)
+			a.host.Warnf("plugin %s exited: %v", id, err)
 			a.jobs.PluginExited(id, err)
 			if a.social != nil {
 				a.social.Exited(id)
@@ -168,11 +168,11 @@ func (a *App) startup(ctx context.Context) {
 		},
 		OnReady: a.pluginReady,
 	})
-	a.familyEmit = func(w types.FamilyWarning) { wruntime.EventsEmit(ctx, "family", w) }
-	a.libraryEmit = func(l types.Library) { wruntime.EventsEmit(ctx, "library-partial", l) }
+	a.familyEmit = func(w types.FamilyWarning) { a.host.Emit("family", w) }
+	a.libraryEmit = func(l types.Library) { a.host.Emit("library-partial", l) }
 	found, err := a.plugins.Discover()
 	if err != nil {
-		wruntime.LogErrorf(ctx, "plugins: %v", err)
+		a.host.Errorf("plugins: %v", err)
 	}
 	if err == nil {
 		a.forgetSettingsOfRemoved(found)
@@ -182,7 +182,7 @@ func (a *App) startup(ctx context.Context) {
 		if p.Problem != "" {
 			msg += " (" + p.Problem + ")"
 		}
-		wruntime.LogInfo(ctx, msg)
+		a.host.Infof("%s", msg)
 	}
 	// Data plugins feed the fixes/tweaks registry; rebuilt here and on
 	// every rescan so installs and removals apply without a restart.
@@ -754,11 +754,7 @@ func (a *App) chooseFolder(title, start string) (string, error) {
 	if _, err := os.Stat(start); err != nil {
 		start, _ = os.UserHomeDir()
 	}
-	return wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
-		Title:                title,
-		DefaultDirectory:     start,
-		CanCreateDirectories: true,
-	})
+	return a.host.OpenDirectory(DirectoryDialog{Title: title, Default: start, CanCreate: true})
 }
 
 // GetGameSettings returns every saved per-game settings object by game ID.

@@ -8,8 +8,6 @@ import (
 
 	"platypus/internal/customize"
 	"platypus/internal/types"
-
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Customization: the user's own title and art for a game (docs/plans: game
@@ -154,10 +152,10 @@ func (a *App) ResetCustomization(gameID string) (types.Customization, error) {
 
 // PickImage opens a file picker for an image. Returns "" when the user cancels.
 func (a *App) PickImage(title string) (string, error) {
-	return wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+	return a.host.OpenFile(FileDialog{
 		Title: title,
-		Filters: []wruntime.FileFilter{
-			{DisplayName: "Images (*.png, *.jpg, *.jpeg, *.gif, *.webp)", Pattern: "*.png;*.jpg;*.jpeg;*.gif;*.webp"},
+		Filters: []FileFilter{
+			{Name: "Images", Extensions: []string{"png", "jpg", "jpeg", "gif", "webp"}},
 		},
 	})
 }

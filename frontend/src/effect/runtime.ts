@@ -45,30 +45,18 @@ import type {
   VersionTarget,
 } from '../types';
 import { toBackendGame } from '../lib/settings';
-import * as App from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
-
-// Wails injects window.go bindings into the webview at runtime.
-declare global {
-  interface Window {
-    go?: {
-      main?: {
-        App?: Record<string, (...args: unknown[]) => Promise<unknown>>;
-      };
-    };
-  }
-}
+import { App, backendAvailable, onEvent } from './bridge';
 
 // The generated wailsjs model classes (with convertValues) don't match our
 // structural src/types interfaces; at runtime Wails returns plain JSON objects
 // that structurally satisfy src/types. Cast through unknown once at the edge.
 
-// Generated Wails bindings resolve window.go at call time. If the frontend is
-// served outside the compiled app (plain browser dev), every call below fails
+// The backend is the Electron bridge or the Wails bindings (bridge.ts). If the
+// frontend is served outside both (plain browser dev), every call below fails
 // with an explicit error instead of silently substituting fake data.
 function wailsUnavailable(op: string): Error {
   return new Error(
-    `Platypus backend not available (${op}). The UI must run inside the Wails app — use \`wails dev -tags webkit2_41\`, not a plain vite server.`
+    `Platypus backend not available (${op}). The UI must run inside the app — use \`wails dev -tags webkit2_41\` or the Electron shell (docs/electron.md), not a plain vite server.`
   );
 }
 
@@ -76,7 +64,7 @@ function wailsUnavailable(op: string): Error {
 function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error> {
   return Effect.tryPromise({
     try: async () => {
-      if (!window.go?.main?.App) throw wailsUnavailable(op);
+      if (!backendAvailable()) throw wailsUnavailable(op);
       return (await fn()) as T;
     },
     catch: (err) => (err instanceof Error ? err : new Error(String(err))),
@@ -371,48 +359,40 @@ export const LauncherApi = {
 
 /** Subscribe to launched-game state changes. Returns the unsubscribe function. */
 export function onSession(cb: (e: SessionEvent) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('session', cb);
+  return onEvent('session', cb);
 }
 
 /** Subscribe to the install queue; every event carries the whole list. */
 export function onJobs(cb: (jobs: Job[]) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('jobs', cb);
+  return onEvent('jobs', cb);
 }
 
 /** Subscribe to the partial results of a library scan: the games of the sources that have answered while others are still out. */
 export function onLibraryPartial(cb: (lib: Library) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('library-partial', cb);
+  return onEvent('library-partial', cb);
 }
 
 /** Subscribe to playtime changes: a plugin's report changed a library value. */
 export function onPlaytime(cb: () => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('playtime', cb);
+  return onEvent('playtime', cb);
 }
 
 /** Subscribe to family warnings: a borrowed game is about to be taken back. */
 export function onFamily(cb: (w: FamilyWarning) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('family', cb);
+  return onEvent('family', cb);
 }
 
 /** Subscribe to cloud sync events: progress, new statuses, prompts, results. */
 export function onCloud(cb: (e: CloudEvent) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('cloud', cb);
+  return onEvent('cloud', cb);
 }
 
 /** Subscribe to a store's friends list: every change carries that store's whole view. */
 export function onSocial(cb: (v: SocialView) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('social', cb);
+  return onEvent('social', cb);
 }
 
 /** Subscribe to chat changes: a conversation's messages, unread count or typing. Returns the unsubscribe function. */
 export function onChat(cb: (e: ChatEvent) => void): () => void {
-  if (!window.go?.main?.App) return () => {};
-  return EventsOn('chat', cb);
+  return onEvent('chat', cb);
 }

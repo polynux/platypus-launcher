@@ -10,8 +10,6 @@ import (
 	"platypus/internal/chat"
 	"platypus/internal/plugins"
 	"platypus/internal/social"
-
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // chatBackend reaches plugins for the chat orchestrator.
@@ -37,8 +35,8 @@ func (a *App) startChat(ctx context.Context) {
 	a.chat = chat.NewManager(chat.Options{
 		Backend: chatBackend{a},
 		Alert:   a.settings.ChatAlerts,
-		Emit:    func(e chat.Event) { wruntime.EventsEmit(ctx, "chat", e) },
-		Logf:    func(f string, args ...any) { wruntime.LogInfof(ctx, "chat: "+f, args...) },
+		Emit:    func(e chat.Event) { a.host.Emit("chat", e) },
+		Logf:    func(f string, args ...any) { a.host.Infof("chat: "+f, args...) },
 	})
 }
 

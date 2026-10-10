@@ -17,10 +17,6 @@ import (
 	"platypus/internal/types"
 )
 
-// Wails only logs through its own contexts, so the tests drop the warnings. It
-// is set once: plugins of an earlier test may still be reading it.
-func init() { logWarning = func(context.Context, string, ...any) {} }
-
 // Family and plugin settings (protocol 1.8) around the echo test plugin. The
 // echo manifest offers both; the protocol list decides whether they are on.
 

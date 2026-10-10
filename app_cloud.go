@@ -17,8 +17,6 @@ import (
 	"platypus/internal/session"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-
-	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // cloudShutdownGrace is how long Platypus waits for running cloud syncs when it
@@ -49,8 +47,8 @@ func (a *App) startCloud(ctx context.Context, dataDir string) {
 		Backend:   cloudBackend{a},
 		Settings:  a.settings,
 		StatePath: filepath.Join(dataDir, "cloud.json"),
-		Emit:      func(e types.CloudEvent) { wruntime.EventsEmit(ctx, "cloud", e) },
-		Logf:      func(f string, args ...any) { wruntime.LogInfof(ctx, "cloud: "+f, args...) },
+		Emit:      func(e types.CloudEvent) { a.host.Emit("cloud", e) },
+		Logf:      func(f string, args ...any) { a.host.Infof("cloud: "+f, args...) },
 	})
 	a.cloud.Resume()
 }
