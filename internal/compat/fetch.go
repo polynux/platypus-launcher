@@ -71,6 +71,15 @@ func NewFetcher(userAgent string) *Fetcher {
 	}
 }
 
+// NewNoRedirectClient is an HTTP client that hands a redirect back to the
+// caller instead of following it (Fetcher.Location).
+func NewNoRedirectClient() *http.Client {
+	return &http.Client{
+		Timeout:       15 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
 func (f *Fetcher) init() {
 	f.once.Do(func() {
 		if f.Concurrency < 1 {
@@ -95,60 +104,96 @@ func (f *Fetcher) init() {
 // Get fetches url and returns the body. ErrNotFound is a 404; any other
 // unusable answer is a *StatusError, and a transport error is returned as is.
 func (f *Fetcher) Get(ctx context.Context, url string) ([]byte, error) {
+	a, err := f.send(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	switch a.status {
+	case http.StatusOK:
+		return a.body, nil
+	case http.StatusNotFound:
+		return nil, ErrNotFound
+	}
+	return nil, &StatusError{Status: a.status}
+}
+
+// Location asks for url without following a redirect and returns where it
+// points. A client used for this must not follow redirects itself (see
+// NewNoRedirectClient). ErrNotFound is a 404; a non-redirect answer is a
+// *StatusError.
+func (f *Fetcher) Location(ctx context.Context, url string) (string, error) {
+	a, err := f.send(ctx, url)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case a.status >= 300 && a.status < 400 && a.location != "":
+		return a.location, nil
+	case a.status == http.StatusNotFound:
+		return "", ErrNotFound
+	}
+	return "", &StatusError{Status: a.status}
+}
+
+// send makes the request and retries a 429 or 5xx with exponential backoff,
+// honouring Retry-After. It returns the last answer, whatever its status.
+func (f *Fetcher) send(ctx context.Context, url string) (answer, error) {
 	f.init()
 	wait := f.Backoff
 	for attempt := 0; ; attempt++ {
-		status, body, retryAfter, err := f.do(ctx, url)
+		a, err := f.do(ctx, url)
 		if err != nil {
-			return nil, err
+			return answer{}, err
 		}
-		switch {
-		case status == http.StatusOK:
-			return body, nil
-		case status == http.StatusNotFound:
-			return nil, ErrNotFound
-		case status == http.StatusTooManyRequests || status >= 500:
-			if attempt >= f.Retries {
-				return nil, &StatusError{Status: status}
-			}
-			d := wait
-			if retryAfter > d {
-				d = retryAfter
-			}
-			if err := f.Sleep(ctx, d+f.jitter()); err != nil {
-				return nil, err
-			}
-			wait *= 2
-		default:
-			return nil, &StatusError{Status: status}
+		if a.status != http.StatusTooManyRequests && a.status < 500 {
+			return a, nil
 		}
+		if attempt >= f.Retries {
+			return a, nil
+		}
+		d := wait
+		if a.retryAfter > d {
+			d = a.retryAfter
+		}
+		if err := f.Sleep(ctx, d+f.jitter()); err != nil {
+			return answer{}, err
+		}
+		wait *= 2
 	}
 }
 
+// answer is one HTTP response, reduced to what Hydra reads.
+type answer struct {
+	status     int
+	body       []byte
+	retryAfter time.Duration
+	location   string
+}
+
 // do makes one request: it takes a slot, waits its turn, and records a 429.
-func (f *Fetcher) do(ctx context.Context, url string) (int, []byte, time.Duration, error) {
+func (f *Fetcher) do(ctx context.Context, url string) (answer, error) {
 	select {
 	case f.slots <- struct{}{}:
 	case <-ctx.Done():
-		return 0, nil, 0, ctx.Err()
+		return answer{}, ctx.Err()
 	}
 	defer func() { <-f.slots }()
 
 	if err := f.pace(ctx); err != nil {
-		return 0, nil, 0, err
+		return answer{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return 0, nil, 0, err
+		return answer{}, err
 	}
 	req.Header.Set("User-Agent", f.UserAgent)
 	req.Header.Set("Accept", "application/json")
 	resp, err := f.Client.Do(req)
 	if err != nil {
-		return 0, nil, 0, err
+		return answer{}, err
 	}
 	defer resp.Body.Close()
-	retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+	a := answer{status: resp.StatusCode, retryAfter: parseRetryAfter(resp.Header.Get("Retry-After")), location: resp.Header.Get("Location")}
 
 	f.mu.Lock()
 	if resp.StatusCode == http.StatusTooManyRequests {
@@ -163,16 +208,17 @@ func (f *Fetcher) do(ctx context.Context, url string) (int, []byte, time.Duratio
 
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxBody))
-		return resp.StatusCode, nil, retryAfter, nil
+		return a, nil
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
-		return 0, nil, 0, err
+		return answer{}, err
 	}
 	if len(body) > maxBody {
-		return 0, nil, 0, errors.New("response is too large")
+		return answer{}, errors.New("response is too large")
 	}
-	return http.StatusOK, body, 0, nil
+	a.body = body
+	return a, nil
 }
 
 // pace reserves the next start time and waits for it. A pause from repeated
