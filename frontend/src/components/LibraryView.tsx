@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Download, LogIn, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { byRecent, formatBytes, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
+import { WindowedGrid, WindowedRows } from './WindowedList';
 
 export type LibraryMode = 'cards' | 'table';
 /** installed: what can be played now; owned: everything store plugins report too. */
@@ -150,6 +151,70 @@ function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string
   );
 }
 
+/** Every card is as tall as its cover plus this footer, so the grid can leave the rows
+ *  out of view unrendered. Room for the title, the details line and a compat chip. */
+const CARD_FOOTER = 82;
+const CARD_GAP = 12;
+const CARD_MIN_WIDTH = 140;
+const cardRowHeight = (width: number) => width * 1.5 + CARD_FOOTER;
+const TABLE_ROW_HEIGHT = 44;
+
+const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; job?: Job; onOpen: (id: string) => void }) {
+  return (
+    <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'flex h-full flex-col')}>
+      <div className="relative flex-none">
+        <Cover src={g.cover_url} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
+        {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
+        {g.shared_by && (
+          <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">Shared by {g.shared_by.name}</Badge>
+        )}
+        {job ? (
+          <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
+            <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
+            <div className="mt-1 h-1 rounded-full bg-white/15">
+              <div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(job.percent, 2)}%` }} />
+            </div>
+          </div>
+        ) : (
+          !g.is_installed && (
+            <Badge variant="neutral" className="absolute bottom-2 left-2 gap-1 bg-black/65 text-white/70">
+              {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? 'not installed' : 'owned'}
+            </Badge>
+          )
+        )}
+      </div>
+      <div className="h-[82px] flex-none overflow-hidden px-2.5 py-2">
+        <div className="truncate text-hint font-bold">{g.title}</div>
+        <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
+          {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.update_available && 'update'].filter(Boolean).join(' · ')}
+        </div>
+        {cardCompat(g) && <CompatChip game={g} className="mt-1.5" />}
+      </div>
+    </button>
+  );
+});
+
+const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { game: Game; index: number; runners: ProtonVersion[]; onOpen: (id: string) => void }) {
+  const tier = g.native ? 'native' : g.fix_info?.tier;
+  return (
+    <div role="row" aria-rowindex={index + 2} className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-amber-300/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}>
+      <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />
+      <span role="cell" className="min-w-0">
+        <button onClick={() => onOpen(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
+          <Cover src={g.cover_url} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
+          <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
+          {g.shared_by && <Badge variant="neutral" className="flex-none">Shared by {g.shared_by.name}</Badge>}
+        </button>
+      </span>
+      <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-white/55')}>{tier ?? '—'}</span>
+      <span role="cell" className="truncate font-mono text-hint text-white/55">{runnerShort(g.settings.runner_id, runners)}</span>
+      <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint text-white/55">{lastPlayedLabel(g) ?? '—'}</span>
+    </div>
+  );
+});
+
 export function LibraryView(p: LibraryProps) {
   const [sort, setSort] = useState<Sort | null>(null);
   const [tier, setTier] = useState<TierFilter>('all');
@@ -162,30 +227,35 @@ export function LibraryView(p: LibraryProps) {
   // The less-used filters sit behind the Filters toggle; the toggle counts the ones that are in effect.
   const [filtersOpen, setFiltersOpen] = useState(false);
   const extraFilters = [p.ownership === 'owned', lendingFilter !== 'all', tier !== 'all', sort !== null].filter(Boolean).length;
-  const q = p.search.trim().toLowerCase();
+  // Typing in the search box paints the box first and filters the library after.
+  const q = useDeferredValue(p.search).trim().toLowerCase();
   const owned = p.games.length;
-  const installedCount = p.games.filter((g) => g.is_installed).length;
-  const sources = sourceChips(p.games);
+  const installedCount = useMemo(() => p.games.filter((g) => g.is_installed).length, [p.games]);
+  const sources = useMemo(() => sourceChips(p.games), [p.games]);
   // A store can drop to zero games (logout, uninstall) while selected: its chip is gone, so show all.
   const source = sources.includes(p.source) ? p.source : 'all';
-  const filtered = p.games.filter(
-    (g) =>
-      (p.ownership === 'owned' || g.is_installed) &&
-      (source === 'all' || g.store === source) &&
-      (lendingFilter === 'all' || g.shared_by != null) &&
-      (tier === 'all' || tierFilterValue(g) === tier) &&
-      g.title.toLowerCase().includes(q)
+  const filtered = useMemo(
+    () =>
+      p.games.filter(
+        (g) =>
+          (p.ownership === 'owned' || g.is_installed) &&
+          (source === 'all' || g.store === source) &&
+          (lendingFilter === 'all' || g.shared_by != null) &&
+          (tier === 'all' || tierFilterValue(g) === tier) &&
+          g.title.toLowerCase().includes(q)
+      ),
+    [p.games, p.ownership, source, lendingFilter, tier, q]
   );
-  const jobOf = (g: Game) => p.jobs.find((j) => j.game_id === g.id);
+  const jobs = useMemo(() => new Map(p.jobs.map((j) => [j.game_id, j])), [p.jobs]);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
   // The Last played strip belongs to the default order; an explicit sort shows one ordered grid.
-  const played = sort ? [] : filtered.filter((g) => g.last_played_at).sort(byRecent).slice(0, 3);
-  const tableRows = sortGames(filtered, sort);
+  const played = useMemo(() => (sort ? [] : filtered.filter((g) => g.last_played_at).sort(byRecent).slice(0, 3)), [filtered, sort]);
+  const tableRows = useMemo(() => sortGames(filtered, sort), [filtered, sort]);
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultDir(key) }));
-  const rest = (sort ? tableRows : filtered).filter((g) => !played.includes(g));
-  const maxHours = Math.max(1, ...p.games.map((g) => hoursPlayed(g) ?? 0));
-  const recentlyAdded = p.games.filter((g) => g.store === 'custom').slice(0, 6);
+  const rest = useMemo(() => (sort ? tableRows : filtered).filter((g) => !played.includes(g)), [sort, tableRows, filtered, played]);
+  const maxHours = useMemo(() => Math.max(1, ...p.games.map((g) => hoursPlayed(g) ?? 0)), [p.games]);
+  const recentlyAdded = useMemo(() => p.games.filter((g) => g.store === 'custom').slice(0, 6), [p.games]);
 
   return (
     <div className="p-7">
@@ -336,43 +406,15 @@ export function LibraryView(p: LibraryProps) {
 
           <section className="mb-8">
             <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">All titles</h2>
-            <div className="cover-grid-sm">
-              {rest.map((g) => {
-                const job = jobOf(g);
-                return (
-                  <button key={g.id} onClick={() => p.onOpenGame(g.id)} className={cardClass}>
-                    <div className="relative">
-                      <Cover src={g.cover_url} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
-                      {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
-                      {g.shared_by && (
-                        <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">Shared by {g.shared_by.name}</Badge>
-                      )}
-                      {job ? (
-                        <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
-                          <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
-                          <div className="mt-1 h-1 rounded-full bg-white/15">
-                            <div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(job.percent, 2)}%` }} />
-                          </div>
-                        </div>
-                      ) : (
-                        !g.is_installed && (
-                          <Badge variant="neutral" className="absolute bottom-2 left-2 gap-1 bg-black/65 text-white/70">
-                            {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? 'not installed' : 'owned'}
-                          </Badge>
-                        )
-                      )}
-                    </div>
-                    <div className="px-2.5 py-2">
-                      <div className="truncate text-hint font-bold">{g.title}</div>
-                      <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
-                        {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.update_available && 'update'].filter(Boolean).join(' · ')}
-                      </div>
-                      {cardCompat(g) && <CompatChip game={g} className="mt-1.5" />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <WindowedGrid
+              items={rest}
+              itemKey={(g) => g.id}
+              minColumn={CARD_MIN_WIDTH}
+              gap={CARD_GAP}
+              rowHeight={cardRowHeight}
+              className="cover-grid-sm"
+              renderItem={(g) => <GameCard game={g} job={jobs.get(g.id)} onOpen={p.onOpenGame} />}
+            />
           </section>
 
           <section className={cx('mb-4 grid gap-5', recentlyAdded.length > 0 && 'xl:grid-cols-[1.5fr_1fr]')}>
@@ -387,8 +429,8 @@ export function LibraryView(p: LibraryProps) {
         </>
       ) : (
         <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
-          <div role="table" aria-label="Library" className="min-w-[760px]">
-            <div role="row" className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-white/55', TABLE_COLS)}>
+          <div role="table" aria-label="Library" aria-rowcount={tableRows.length + 1} className="min-w-[760px]">
+            <div role="row" aria-rowindex={1} className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-white/55', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">status</span></span>
               <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
               <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>
@@ -396,26 +438,12 @@ export function LibraryView(p: LibraryProps) {
               <SortHead k="size" label="size" sort={sort} onSort={toggleSort} right />
               <SortHead k="last" label="last played" sort={sort} onSort={toggleSort} right />
             </div>
-            {tableRows.map((g, i) => {
-              const tier = g.native ? 'native' : g.fix_info?.tier;
-              return (
-                <div key={g.id} role="row" className={cx('grid items-center gap-3 px-4 py-2 transition hover:bg-amber-300/[0.05]', TABLE_COLS, i % 2 && 'bg-white/[0.015]')}>
-                  <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />
-                  <span role="cell" className="min-w-0">
-                    <button onClick={() => p.onOpenGame(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
-                      <Cover src={g.cover_url} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
-                      <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
-                      {g.shared_by && <Badge variant="neutral" className="flex-none">Shared by {g.shared_by.name}</Badge>}
-                    </button>
-                  </span>
-                  <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-white/55')}>{tier ?? '—'}</span>
-                  <span role="cell" className="truncate font-mono text-hint text-white/55">{runnerShort(g.settings.runner_id, p.runners)}</span>
-                  <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
-                  <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
-                  <span role="cell" className="text-right font-mono text-hint text-white/55">{lastPlayedLabel(g) ?? '—'}</span>
-                </div>
-              );
-            })}
+            <WindowedRows
+              items={tableRows}
+              itemKey={(g) => g.id}
+              rowHeight={TABLE_ROW_HEIGHT}
+              renderRow={(g, i) => <TableRow game={g} index={i} runners={p.runners} onOpen={p.onOpenGame} />}
+            />
           </div>
         </section>
       )}

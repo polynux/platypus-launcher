@@ -457,8 +457,11 @@ export function App() {
   const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
   const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
 
-  const openGame = (id: string) =>
-    setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' }));
+  // Stable, so the library's memoized cards are not re-rendered by every App update.
+  const openGame = useCallback(
+    (id: string) => setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' })),
+    [],
+  );
   // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
 
@@ -614,7 +617,7 @@ export function App() {
         friendsUnread={chat.unread}
       />
 
-      <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
+      <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
         {renderView()}
       </main>
 
