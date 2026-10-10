@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"hydra-launcher/internal/jobs"
+	"hydra-launcher/internal/settings"
 	"hydra-launcher/internal/stores"
 	"hydra-launcher/internal/types"
 )
@@ -195,5 +198,58 @@ func TestAcceptingAnUnlistedTermIsRefused(t *testing.T) {
 	}
 	if n := len(e.a.settings.AcceptedTerms(game.ID)); n != 0 {
 		t.Fatalf("recorded %d acceptances for a term that isn't listed", n)
+	}
+}
+
+// Acceptance is kept per game and term version, in settings.json. A plugin
+// reinstall and a fresh approval (new files, new hash) and a Hydra restart
+// don't touch it: only a new version asks again.
+func TestAcceptanceSurvivesAReinstallAndARestart(t *testing.T) {
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	terms, err := e.a.GetGameTerms(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.AcceptGameTerms(game, termRefs(terms)); err != nil {
+		t.Fatal(err)
+	}
+
+	pluginDir := filepath.Join(e.root, "plugins", "echo")
+	if err := os.RemoveAll(pluginDir); err != nil {
+		t.Fatal(err)
+	}
+	installEchoApp(t, filepath.Join(e.root, "plugins"))
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(fmt.Sprintf(versionsManifest, termsProtocols, termsCaps)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.a.plugins.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.plugins.Approve("echo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.a.plugins.Initialize(context.Background(), "echo"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := e.a.GetGameTerms(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending := types.Pending(after); len(pending) != 0 {
+		t.Fatalf("after a reinstall pending = %+v, want none: the acceptance was kept", pending)
+	}
+
+	restarted, err := settings.Open(filepath.Join(e.root, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.a.settings = restarted
+	again, err := e.a.GetGameTerms(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending := types.Pending(again); len(pending) != 0 {
+		t.Fatalf("after a restart pending = %+v, want none", pending)
 	}
 }

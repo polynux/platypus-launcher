@@ -6,7 +6,7 @@ import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
 import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
-import { termURL } from '../lib/terms';
+import { notifyTermsAccepted, termURL } from '../lib/terms';
 import { cx } from './ui';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -33,6 +33,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
     setError(null);
     try {
       await Effect.runPromise(LauncherApi.acceptGameTerms(game, terms.map((t) => ({ id: t.id, version: t.version }))));
+      notifyTermsAccepted();
       onAccepted();
     } catch (e) {
       setError(errMsg(e));

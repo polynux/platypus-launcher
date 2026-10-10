@@ -17,6 +17,7 @@ vi.mock('../../effect/runtime', () => ({
 vi.mock('../../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: (u: string) => api.browserOpen(u) }));
 
 import { TermsDialog } from '../TermsDialog';
+import { onTermsAccepted } from '../../lib/terms';
 
 const game = { id: 'p.echo.licensed', source: 'echo', title: 'Echo Licensed' } as Game;
 const terms: GameTerm[] = [
@@ -45,9 +46,13 @@ describe('TermsDialog', () => {
 
   it('accepts exactly the versions it shows, then reports it', async () => {
     const onAccepted = vi.fn();
+    const onTermsChanged = vi.fn();
+    const unsubscribe = onTermsAccepted(onTermsChanged);
     render(<TermsDialog game={game} terms={terms} onAccepted={onAccepted} onCancel={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'I accept' }));
     await waitFor(() => expect(onAccepted).toHaveBeenCalled());
+    expect(onTermsChanged).toHaveBeenCalledTimes(1);
+    unsubscribe();
     expect(api.acceptGameTerms).toHaveBeenCalledWith(game, [{ id: 'eula', version: '2026.2' }, { id: 'privacy', version: '3' }]);
   });
 

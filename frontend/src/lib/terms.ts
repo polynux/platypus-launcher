@@ -21,3 +21,17 @@ export function termURL(term: Pick<GameTerm, 'url'>): string {
     return '';
   }
 }
+
+const acceptedListeners = new Set<() => void>();
+
+/** Calls fn after the user accepts a game's terms, so a view that shows the
+ *  acceptance (the Legal section) reads it again. Returns the unsubscribe. */
+export function onTermsAccepted(fn: () => void): () => void {
+  acceptedListeners.add(fn);
+  return () => { acceptedListeners.delete(fn); };
+}
+
+/** Tells the views that show acceptance that it changed. */
+export function notifyTermsAccepted(): void {
+  acceptedListeners.forEach((fn) => fn());
+}

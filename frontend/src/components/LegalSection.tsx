@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import type { Game, GameTerm, StorePlugin } from '../types';
 import { CapabilitySurface } from '../lib/capabilities';
 import { LauncherApi } from '../effect/runtime';
-import { acceptedLabel, termURL } from '../lib/terms';
+import { acceptedLabel, onTermsAccepted, termURL } from '../lib/terms';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { MonoLabel } from './ui';
 
@@ -21,6 +21,10 @@ export function LegalSection({ game, plugin }: { game: Game; plugin: StorePlugin
 function LegalList({ game }: { game: Game }) {
   const [terms, setTerms] = useState<GameTerm[] | null>(null);
   const [error, setError] = useState('');
+  // Bumped when the user accepts terms elsewhere (the install dialog), so the
+  // list is read again while this view stays open.
+  const [accepted, setAccepted] = useState(0);
+  useEffect(() => onTermsAccepted(() => setAccepted((n) => n + 1)), []);
   useEffect(() => {
     let live = true;
     Effect.runPromise(LauncherApi.getGameTerms(game)).then(
@@ -28,7 +32,7 @@ function LegalList({ game }: { game: Game }) {
       (e: Error) => { if (live) setError(e.message || 'Could not read the terms.'); },
     );
     return () => { live = false; };
-  }, [game]);
+  }, [game, accepted]);
 
   if (error) return <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p>;
   if (!terms || terms.length === 0) return null;
