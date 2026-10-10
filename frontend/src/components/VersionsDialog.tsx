@@ -14,6 +14,7 @@ import {
   VERSION_WARNING, buildTitle, channelLocked, choiceIsEmpty, isCurrent, lastInstall, pinLabel, pinOf, samePin, shortDate, sourceLabel, targetOf,
   type VersionChoice,
 } from '../lib/versions';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -149,9 +150,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
 
       {!info && !error && <p className="mt-6 font-mono text-[11.5px] uppercase tracking-widest text-white/40">loading versions…</p>}
       {error && (
-        <p role="alert" className="mt-5 rounded-xl bg-red-500/10 px-4 py-3 text-[12.5px] text-red-200">
-          Couldn't list versions: {error}
-        </p>
+        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback="Platypus couldn't list this game's versions." />
       )}
 
       {info && (
@@ -410,7 +409,7 @@ function UnlockForm({
           aria-label={`Password for ${channel.name}`}
           aria-invalid={problem ? true : undefined}
         />
-        {problem && <p role="alert" className="mt-1 text-[12px] text-red-300">{problem}</p>}
+        {problem && <ErrorNotice className="mt-1 text-[12px]" message={problem} fallback="Platypus couldn't check that password." />}
       </div>
       <Button type="submit" size="md" disabled={!password || busy}>Unlock</Button>
     </form>

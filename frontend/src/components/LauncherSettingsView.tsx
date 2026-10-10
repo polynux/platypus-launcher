@@ -10,6 +10,7 @@ import { Input } from '@/components/ds/input';
 import { MonoLabel, Panel } from './ui';
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -110,7 +111,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         </form>
 
         <div className="mt-2.5 flex min-h-4 items-center justify-between gap-4">
-          {error ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p> : <span />}
+          {error ? <ErrorNotice message={error} fallback="Platypus couldn't save that setting." /> : <span />}
           {saved && !isDefault && (
             <Button variant="link" size="none" onClick={() => save('')} disabled={busy} className="flex-none text-[11.5px]">
               reset to {saved.default_games_folder.replace(/^\/home\/[^/]+/, '~')}
@@ -152,7 +153,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
           <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>Save</Button>
         </form>
         <div className="mt-2.5 flex min-h-4 items-center gap-4">
-          {cleanupError ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{cleanupError}</p> : <span />}
+          {cleanupError ? <ErrorNotice message={cleanupError} fallback="Platypus couldn't clean up those folders." /> : <span />}
         </div>
       </Panel>
 

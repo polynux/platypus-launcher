@@ -133,8 +133,13 @@ func (a *App) currentFolder(game types.Game) (string, error) {
 		if g.ID != game.ID {
 			continue
 		}
-		if !g.IsInstalled || g.InstallDir == "" {
+		if !g.IsInstalled {
 			return "", fmt.Errorf("%s is not installed", game.Title)
+		}
+		if g.InstallDir == "" {
+			// The store says it is installed but names no folder (a store client,
+			// a borrowed copy kept elsewhere): say what is known, not "not installed".
+			return "", fmt.Errorf("%s is installed, but Platypus doesn't know which folder holds its files", game.Title)
 		}
 		return g.InstallDir, nil
 	}

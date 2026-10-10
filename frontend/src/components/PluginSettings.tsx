@@ -8,12 +8,13 @@ import { MonoLabel, Panel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
 import { effectiveValue } from '../lib/pluginSettings';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** A saved setting that the plugin answers with its own words. */
 export function SettingError({ message }: { message: string }) {
-  return <p role="alert" className="font-mono text-[11.5px] text-red-300">{message}</p>;
+  return <ErrorNotice message={message} fallback="The plugin couldn't save that setting." />;
 }
 
 /** One field of the form. Text and number commit when the user leaves the box

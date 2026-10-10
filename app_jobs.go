@@ -226,6 +226,11 @@ func (a *App) UninstallGame(game types.Game) (types.Job, error) {
 	if a.isRunning(game.ID) {
 		return types.Job{}, fmt.Errorf("%s is running", game.Title)
 	}
+	folder, err := a.currentFolder(game)
+	if err != nil {
+		return types.Job{}, err
+	}
+	game.InstallDir = folder // the library's folder, as Verify and Move use
 	return a.queueJob(jobs.KindUninstall, game, nil)
 }
 

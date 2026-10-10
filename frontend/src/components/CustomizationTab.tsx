@@ -7,6 +7,7 @@ import { Input } from '@/components/ds/input';
 import { Cover, MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { ART_KINDS, currentArt, hasCustomization, type ArtKindInfo } from '../lib/customize';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -136,7 +137,7 @@ export function CustomizationTab({ game, onChanged }: {
         </ul>
       </section>
 
-      {error && <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p>}
+      {error && <ErrorNotice message={error} fallback="Platypus couldn't save the customization." />}
 
       {hasCustomization(custom) && (
         <Button variant="neutral" size="sm" disabled={busy != null} onClick={() => void resetAll()}>

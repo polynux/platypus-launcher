@@ -77,7 +77,7 @@ func sameInt(got *int, want int) bool {
 
 func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
 	a, _ := statsApp(t, statsManifest)
-	g := echoGame(t)
+	g := types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny", InstallDir: t.TempDir(), IsInstalled: true, Native: true}
 
 	got, err := a.GetGameAchievements(g)
 	if err != nil || got == nil {
@@ -118,7 +118,7 @@ func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
 func TestAchievementsAreAbsentWhenTheGameOrPluginDoesNotOfferThem(t *testing.T) {
 	// Protocol 1.5 is the last this plugin agrees to: achievements (1.7) stay off.
 	a, _ := statsApp(t, strings.Replace(statsManifest, `,"1.6","1.7"`, "", 1))
-	if got, err := a.GetGameAchievements(echoGame(t)); got != nil || err != nil {
+	if got, err := a.GetGameAchievements(types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny", InstallDir: t.TempDir(), IsInstalled: true, Native: true}); got != nil || err != nil {
 		t.Fatalf("over 1.5: %v, %v; want nil and no error (the page uses the catalogue)", got, err)
 	}
 	if n := echoCalls(t, a)["achievements.list"]; n != 0 {
@@ -126,7 +126,7 @@ func TestAchievementsAreAbsentWhenTheGameOrPluginDoesNotOfferThem(t *testing.T) 
 	}
 
 	b, _ := statsApp(t, statsManifest)
-	g := echoGame(t)
+	g := types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny", InstallDir: t.TempDir(), IsInstalled: true, Native: true}
 	g.Features = []string{"library", "launch"}
 	if got, _ := b.GetGameAchievements(g); got != nil {
 		t.Fatalf("a game whose features leave out achievements got progress: %+v", got)

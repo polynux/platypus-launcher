@@ -41,23 +41,7 @@ func (e *versionsEnv) installedTiny(t *testing.T) types.Game {
 // records applied.
 func (e *versionsEnv) libraryTiny(t *testing.T) types.Game {
 	t.Helper()
-	if err := e.m.Call(context.Background(), "echo", "auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, nil); err != nil {
-		t.Fatal(err)
-	}
-	p, _ := e.m.Plugin("echo")
-	s := stores.NewPlugin(e.m, p, func() []string { return e.m.Folders("echo", e.a.settings.GamesFolder()) }).
-		WithRelocations(e.a.settings.Relocation)
-	lib, err := s.Library(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, g := range lib {
-		if g.StoreAppID == "tiny" {
-			return g
-		}
-	}
-	t.Fatal("echo has no tiny game")
-	return types.Game{}
+	return e.libraryGame(t, "tiny")
 }
 
 // mustDir creates a folder for a test, failing the test when it can't.

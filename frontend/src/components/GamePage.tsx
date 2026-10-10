@@ -28,6 +28,7 @@ import { pinLabel } from '../lib/versions';
 import { isCustomized } from '../lib/customize';
 import { useInstallSize, type InstallSize } from '../lib/installSize';
 import type { GameSettingsTab } from '../lib/gameSettingsTabs';
+import { ErrorNotice } from './ErrorNotice';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -321,7 +322,7 @@ export function GamePage(p: GamePageProps) {
               </p>
             </>
           )}
-          {!game.is_installed && job?.state === 'failed' && <p className="mt-1 font-mono text-[11.5px] text-red-300">last attempt failed: {job.error}</p>}
+          {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback="The last attempt didn't finish." />}
         </div>
       )}
 
@@ -558,7 +559,8 @@ function InstallationPanel({
       <div className="space-y-2 font-mono text-[11.5px]">
         {[
           ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
-          ['Folder', game.install_dir || '—'],
+          // A game the store lists as installed may have no folder Platypus can name: say so.
+          ['Folder', game.install_dir || (game.is_installed ? 'not known to Platypus' : '—')],
           ['Version', game.version || '—'],
           ...(game.pinned ? [['Pinned to', pinLabel(game.pinned)]] : []),
           ['Size', formatBytes(game.size_bytes) || '—'],
@@ -571,10 +573,7 @@ function InstallationPanel({
       </div>
       {active && <div className="mt-4"><JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} /></div>}
       {job?.state === 'failed' && !active && (
-        <p className="mt-2 font-mono text-[11.5px] text-red-300">
-          {job.kind} failed: {job.error}{' '}
-          <Button variant="ghost" size="none" onClick={() => onJobAction('retry', job.id)} className="inline-flex rounded-none px-0 font-mono text-[11.5px] font-normal text-red-300 underline underline-offset-2 hover:bg-transparent hover:text-red-200">retry</Button>
-        </p>
+        <ErrorNotice className="mt-2" message={job.error ?? ''} fallback={`The ${job.kind} didn't finish.`} onRetry={() => onJobAction('retry', job.id)} />
       )}
     </Panel>
   );

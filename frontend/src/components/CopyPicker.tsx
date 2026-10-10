@@ -7,6 +7,7 @@ import { copyDiffSummary, copyStatus, diffFor, dlcLabel, pickableCopies, playedC
 import { Button } from '@/components/ds/button';
 import { CopyCompareDialog } from './CopyCompareDialog';
 import { Panel, cx } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 /** Which family copy a borrowed game is played from, and the choice between
  *  the lenders' copies (family, protocol 1.8). Platypus shows the copies and
@@ -80,7 +81,7 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
             <Button variant="neutral" size="sm" onClick={() => setComparing(true)}>Compare copies</Button>
           </div>
         )}
-        {error && <p role="alert" className="mt-2 font-mono text-[11.5px] text-red-300">{error}</p>}
+        {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't switch copies." />}
       </Panel>
       {comparing && compare && (
         <CopyCompareDialog game={game} copies={copies} compare={compare} onClose={() => setComparing(false)} />

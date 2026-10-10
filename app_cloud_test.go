@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,6 +64,15 @@ func cloudApp(t *testing.T, protocols []plugins.Version, env map[string]string) 
 	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "plugin.json"), []byte(echoCloudManifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Echo Tiny is installed and echo is logged in: the library names its folder,
+	// and cloud saves are read from there.
+	installed := filepath.Join(root, "Games", "tiny")
+	mustDir(t, installed)
+	state := fmt.Sprintf(`{"loggedIn":true,"installed":{"tiny":%q}}`, installed)
+	mustDir(t, filepath.Join(root, "data", "echo"))
+	if err := os.WriteFile(filepath.Join(root, "data", "echo", "state.json"), []byte(state), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	a := &App{settings: trust, ctx: context.Background()}
 	a.plugins = plugins.NewManager(plugins.Options{
 		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: trust,
@@ -86,9 +96,21 @@ func cloudApp(t *testing.T, protocols []plugins.Version, env map[string]string) 
 	return a, ev
 }
 
-func echoGame(t *testing.T) types.Game {
-	return types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny",
-		InstallDir: t.TempDir(), IsInstalled: true, Native: true}
+// echoGame is Echo Tiny as the library lists it (cloudApp installs it).
+func echoGame(t *testing.T, a *App) types.Game {
+	t.Helper()
+	var res plugins.LibraryList
+	if err := a.plugins.Call(context.Background(), "echo", "library.list", nil, &res); err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range res.Games {
+		if g.ID == "tiny" {
+			return types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny",
+				InstallDir: g.InstallPath, IsInstalled: g.Installed, Native: true}
+		}
+	}
+	t.Fatal("echo has no tiny game")
+	return types.Game{}
 }
 
 func echoCalls(t *testing.T, a *App) map[string]int {
@@ -102,7 +124,7 @@ func echoCalls(t *testing.T, a *App) map[string]int {
 
 func TestCloudGameNeedsThePluginTheCapabilityAndTheGameFeature(t *testing.T) {
 	a, _ := cloudApp(t, nil, nil)
-	g := echoGame(t)
+	g := echoGame(t, a)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +136,7 @@ func TestCloudGameNeedsThePluginTheCapabilityAndTheGameFeature(t *testing.T) {
 		t.Fatal("the game's features leave out cloud-saves")
 	}
 	for _, src := range []string{"", "steam", "custom", "no-such-plugin"} {
-		other := echoGame(t)
+		other := echoGame(t, a)
 		other.Source = src
 		if _, ok := a.cloudGame(other); ok {
 			t.Fatalf("source %q has no cloud saves", src)
@@ -127,7 +149,7 @@ func TestCloudGameNeedsThePluginTheCapabilityAndTheGameFeature(t *testing.T) {
 
 func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
 	a, _ := cloudApp(t, []plugins.Version{{Major: 1, Minor: 0}, {Major: 1, Minor: 1}}, nil) // an older Platypus: speaks up to 1.1
-	g := echoGame(t)
+	g := echoGame(t, a)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +173,7 @@ func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
 
 func TestPreLaunchPullsThenTheExitPushes(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending"})
-	g := echoGame(t)
+	g := echoGame(t, a)
 	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 	if blocked || push == nil {
 		t.Fatalf("blocked %v (%s), push %v", blocked, msg, push)
@@ -187,7 +209,7 @@ func TestPreLaunchPullsThenTheExitPushes(t *testing.T) {
 
 func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "conflict2"})
-	g := echoGame(t)
+	g := echoGame(t, a)
 	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 	if !blocked || push != nil || msg == "" {
 		t.Fatalf("a conflict must block the launch: blocked %v, %q", blocked, msg)
@@ -224,7 +246,7 @@ func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 
 func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "offline"})
-	g := echoGame(t)
+	g := echoGame(t, a)
 	if _, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); !blocked || msg == "" {
 		t.Fatalf("blocked %v %q", blocked, msg)
 	}
@@ -239,7 +261,7 @@ func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
 
 func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "1"})
-	g := echoGame(t)
+	g := echoGame(t, a)
 	_, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
 	e := ev.find(types.CloudEvPrompt)
 	if !blocked || e == nil || e.Prompt != types.CloudPromptClient || e.Client != "Echo client" {
@@ -266,7 +288,7 @@ func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
 
 func TestCancelStopsAPullInEcho(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_DELAY_MS": "300"})
-	g := echoGame(t)
+	g := echoGame(t, a)
 	done := make(chan bool, 1)
 	go func() {
 		_, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
@@ -299,7 +321,7 @@ func TestCancelStopsAPullInEcho(t *testing.T) {
 
 func TestProgressReachesTheEventsWhileEchoWorks(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_DELAY_MS": "130"})
-	g := echoGame(t)
+	g := echoGame(t, a)
 	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); blocked {
 		t.Fatal("blocked")
 	}
@@ -311,7 +333,7 @@ func TestProgressReachesTheEventsWhileEchoWorks(t *testing.T) {
 
 func TestCloudModesPerPluginAndPerGame(t *testing.T) {
 	a, _ := cloudApp(t, nil, nil)
-	g := echoGame(t)
+	g := echoGame(t, a)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +369,7 @@ func TestCloudModesPerPluginAndPerGame(t *testing.T) {
 
 func TestResolveRefusesWhileTheGameRuns(t *testing.T) {
 	a, _ := cloudApp(t, nil, nil)
-	g := echoGame(t)
+	g := echoGame(t, a)
 	if _, err := a.sessions.StartDirect(g.ID, exec.Command("sleep", "30"), "sleep 30", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -366,12 +388,17 @@ func TestResolveRefusesWhileTheGameRuns(t *testing.T) {
 func TestTheCloudContextFallbackFollowsTheLaunchRule(t *testing.T) {
 	a, _ := cloudApp(t, nil, nil)
 	// A runner this machine doesn't have: no launch can use Wine, whatever is installed.
-	g := types.Game{ID: "p.ghost.x", Source: "ghost", StoreAppID: "x", Title: "Ghost", InstallDir: t.TempDir(),
-		Settings: types.GameSettings{RunnerID: "no-such-runner"}}
+	g := echoGame(t, a)
+	g.Native = false
+	g.Settings = types.GameSettings{RunnerID: "no-such-runner"}
 	if _, err := a.prepareLaunch(g, true); err == nil {
 		t.Fatal("the test needs a launch that can't be prepared")
 	}
-	if cc := a.cloudContextFor(g); cc.OS != "linux" {
+	cc, err := a.cloudContextFor(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cc.OS != "linux" {
 		t.Fatalf("the fallback picked %q with no runner to launch with", cc.OS)
 	}
 	if cc := cloudContextOf(g, types.ProtonVersion{Path: "/opt/proton/proton"}); cc.OS != "windows" {
@@ -381,7 +408,8 @@ func TestTheCloudContextFallbackFollowsTheLaunchRule(t *testing.T) {
 
 func TestGameLaunchesTakeTurns(t *testing.T) {
 	a := &App{}
-	g := echoGame(t)
+	g := types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny",
+		InstallDir: t.TempDir(), IsInstalled: true, Native: true}
 	unlock := a.lockGame(g.ID)
 	acquired := make(chan struct{})
 	go func() {

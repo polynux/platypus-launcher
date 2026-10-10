@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -316,6 +317,25 @@ func TestAPluginErrorIsTreatedLikeAnUnreachableStore(t *testing.T) {
 	d := r.o.BeforeLaunch(context.Background(), game, cctx, false)
 	if d.Proceed || d.Prompt != types.CloudPromptOffline || d.Message == "" {
 		t.Fatalf("%+v", d)
+	}
+}
+
+// A plugin error reaches the user as a plain sentence; the raw reason is kept
+// for the Details disclosure, never in the message itself.
+func TestAPluginErrorKeepsTheRawReasonOutOfTheMessage(t *testing.T) {
+	r := newRig(t, fakeSettings{})
+	r.be.handlers["cloud.status"] = func(context.Context, map[string]any) (any, error) {
+		return nil, errors.New("invalid params: ctx needs os (linux or windows)")
+	}
+	st, err := r.o.Check(context.Background(), game, cctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != types.CloudStateError || strings.Contains(st.Message, "invalid params") {
+		t.Fatalf("the message shows the raw reason: %+v", st)
+	}
+	if !strings.Contains(st.Detail, "invalid params") {
+		t.Fatalf("the raw reason is lost: %q", st.Detail)
 	}
 }
 

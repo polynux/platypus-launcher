@@ -41,8 +41,11 @@ type CloudContext struct {
 
 // CloudStatus is the plugin's answer to every cloud.* request.
 type CloudStatus struct {
-	State     string          `json:"state"`
-	Message   string          `json:"message,omitempty"` // shown to the user as is
+	State   string `json:"state"`
+	Message string `json:"message,omitempty"` // shown to the user as is
+	// Detail is the raw reason behind a Message the user only sees a sentence of
+	// (a developer string from the plugin or the transport), behind Details.
+	Detail    string          `json:"detail,omitempty"`
 	Counts    CloudCounts     `json:"counts"`
 	Conflicts []CloudConflict `json:"conflicts,omitempty"`
 	CheckedAt int64           `json:"checkedAt,omitempty"` // unix seconds

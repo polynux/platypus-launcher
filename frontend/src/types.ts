@@ -673,6 +673,8 @@ export interface CloudStatus {
   state: CloudState;
   /** Written by the plugin for people; for `unsupported` it is the reason. */
   message?: string;
+  /** The raw reason behind `message`, shown only under Details. */
+  detail?: string;
   counts: { same: number; download: number; upload: number; conflict: number; unmapped: number };
   conflicts?: CloudConflict[] | null;
   checkedAt?: number; // unix seconds

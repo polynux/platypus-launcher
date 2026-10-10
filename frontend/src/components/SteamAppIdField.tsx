@@ -7,6 +7,7 @@ import { useCompat } from '../lib/useCompat';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -80,7 +81,7 @@ export function SteamAppIdField({ game }: { game: Game }) {
         </a>
         .
       </p>
-      {error && <p role="alert" className="mt-2 font-mono text-[11.5px] text-red-300">{error}</p>}
+      {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't check that Steam app ID." />}
     </div>
   );
 }

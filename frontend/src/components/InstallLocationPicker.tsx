@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
-import { FolderOpen, TriangleAlert } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import type { Game, InstallLocation } from '../types';
 import { Button } from '@/components/ds/button';
 import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { freeLabel, isShort, kindLabel } from '../lib/installLocation';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -110,7 +111,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
       <Button variant="neutral" size="sm" onClick={() => void choose()} disabled={disabled || busy || !rows} className="mt-2">
         <FolderOpen className="h-3.5 w-3.5" /> Choose folder…
       </Button>
-      {error && <p role="alert" className="mt-2 flex items-start gap-1.5 text-[12.5px] text-red-300"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />{error}</p>}
+      {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't open the folder picker." />}
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import type { CloudEvent, CloudInfo, CloudMode, CloudState, CloudStatus } from '../types';
 import { formatBytes } from './games';
+import { plainError } from './plainError';
 
 export const CLOUD_MODES: CloudMode[] = ['off', 'ask', 'auto'];
 
@@ -74,7 +75,7 @@ export function cloudNotice(e: CloudEvent, title: string): CloudNotice | null {
     case 'status':
       return e.message ? { toast: { msg: `${e.message} · ${title}`, kind: 'ok' }, activity: { detail: `${e.message} · ${title}`, meta: 'cloud' } } : null;
     case 'failed':
-      return { toast: { msg: e.message ?? `${title}'s cloud sync failed`, kind: 'err' }, activity: { detail: `Cloud sync failed · ${title}`, meta: e.message?.slice(0, 80) } };
+      return { toast: { msg: e.message ?? `${title}'s cloud sync failed`, kind: 'err' }, activity: { detail: `Cloud sync failed · ${title}`, meta: plainError(e.message, 'Open the game page for details') } };
     case 'skipped':
       return { toast: { msg: e.message ?? `${title} was not synced`, kind: 'busy' }, activity: { detail: `Cloud sync skipped · ${title}`, meta: e.message?.slice(0, 80) } };
     case 'canceled':

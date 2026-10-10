@@ -6,6 +6,7 @@ import { Button } from '@/components/ds/button';
 import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { formatBytes } from '../lib/games';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -91,7 +92,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
             </>
           )}
         </div>
-        {error && <p role="alert" className="mt-3 text-[13px] text-red-300">{error}</p>}
+        {error && <ErrorNotice className="mt-3 text-[13px]" message={error} fallback="Platypus couldn't move the game." />}
         <div className="mt-6 flex gap-2">
           <Button onClick={pick} disabled={busy} className="flex-1 text-white/80">
             {parent ? 'Choose another folder…' : 'Choose folder…'}

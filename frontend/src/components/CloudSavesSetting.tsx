@@ -5,6 +5,7 @@ import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
 import { MODE_HELP } from '../lib/cloud';
 import { MonoLabel, Panel, SegRow } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 /** The cloud-saves default of every ready store that offers cloud saves, one
  *  row each, in Settings. Games can override their store's default on their
@@ -61,7 +62,7 @@ function Row({ plugin }: { plugin: StorePlugin }) {
         />
       </div>
       <p className="text-[11.5px] leading-snug text-white/45">{MODE_HELP[mode]}</p>
-      {error && <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p>}
+      {error && <ErrorNotice message={error} fallback="Platypus couldn't save the cloud setting." />}
     </div>
   );
 }

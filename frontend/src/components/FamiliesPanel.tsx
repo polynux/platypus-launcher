@@ -5,6 +5,7 @@ import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
 import { memberInitial, roleLabel } from '../lib/family';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -61,7 +62,7 @@ function FamiliesList({ plugin }: { plugin: StorePlugin }) {
   return (
     <section aria-label="Families" className="space-y-2.5">
       <MonoLabel>families</MonoLabel>
-      {error && <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p>}
+      {error && <ErrorNotice message={error} fallback="Platypus couldn't read the family members." />}
       {!error && members === null && <p className="font-mono text-[11.5px] text-white/45">loading…</p>}
       {members && members.length === 0 && <p className="text-[12px] text-white/50">No family members on this account.</p>}
       {members && members.length > 0 && (
