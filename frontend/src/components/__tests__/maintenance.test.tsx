@@ -94,15 +94,31 @@ describe('Verify and move in the game settings', () => {
     expect(api.verifyGame).toHaveBeenCalledOnce();
   });
 
-  it('asks twice before uninstalling and closes the settings', () => {
+  it('asks before uninstalling, names the game, folder and space, and closes the settings', () => {
+    const onJob = vi.fn();
+    render(<GamePage game={game({ size_bytes: 1_200_000_000 })} plugin={plugin(['install', 'verify'])} {...base} onJob={onJob} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }));
+    expect(onJob).not.toHaveBeenCalled();
+    expect(screen.getByText(/Delete Echo Tiny — 1\.2 GB in \/games\/echo\/tiny\?/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete game files' }));
+    expect(onJob).toHaveBeenCalledWith('uninstall');
+    expect(screen.queryByRole('dialog', { name: 'Settings for Echo Tiny' })).toBeNull();
+  });
+
+  it('keeps the confirmation through a blur, and Cancel or Escape backs out of it', () => {
     const onJob = vi.fn();
     render(<GamePage game={game()} plugin={plugin(['install', 'verify'])} {...base} onJob={onJob} />);
     openTab('Maintenance');
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }));
+    fireEvent.blur(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Delete game files' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Uninstall' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Uninstall' })).toBeTruthy();
     expect(onJob).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Delete game files?' }));
-    expect(onJob).toHaveBeenCalledWith('uninstall');
-    expect(screen.queryByRole('dialog', { name: 'Settings for Echo Tiny' })).toBeNull();
   });
 
   it('shows the running job instead of the actions', () => {

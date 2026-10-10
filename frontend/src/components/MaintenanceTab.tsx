@@ -6,7 +6,8 @@ import { CapabilitySurface, offers } from '../lib/capabilities';
 import { JobProgress } from './JobProgress';
 import { MoveDialog } from './MoveDialog';
 import { VerifyDialog } from './VerifyDialog';
-import { MonoLabel, cx } from './ui';
+import { MonoLabel } from './ui';
+import { formatBytes } from '../lib/games';
 import { ErrorNotice } from './ErrorNotice';
 
 /** The folder a game folder sits in ("" when there is none). */
@@ -32,6 +33,18 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   useEffect(() => { setConfirm(false); setVerifyOpen(false); setMoveOpen(false); }, [game.id]);
+  // While the uninstall waits for an answer, Escape only backs out of it. The window's capture
+  // phase runs before the dialog's own Escape handler, so the settings stay open.
+  useEffect(() => {
+    if (!confirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setConfirm(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [confirm]);
   const active = job && (job.state === 'queued' || job.state === 'running');
 
   if (active) {
@@ -54,19 +67,20 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
         <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> Move…</Button>
       </Row>
 
-      {offers(plugin, 'install', { game }) && (
-        <Row title="Uninstall" text="Removes the game's files from this computer. Your saves in the cloud stay where they are.">
-          <Button
-            variant={confirm ? 'danger' : 'neutral'}
-            onClick={() => (confirm ? (setConfirm(false), onJob('uninstall'), onClose()) : setConfirm(true))}
-            onBlur={() => setConfirm(false)}
-            onKeyDown={(e) => { if (e.key === 'Escape') setConfirm(false); }}
-            className={cx(confirm && 'bg-red-500/80 text-white hover:bg-red-500')}
-          >
-            <Trash2 className="h-3.5 w-3.5" /> {confirm ? 'Delete game files?' : 'Uninstall'}
-          </Button>
+      {offers(plugin, 'install', { game }) && (confirm ? (
+        <Row title="Uninstall" text={`Delete ${game.title}${formatBytes(game.size_bytes) ? ` — ${formatBytes(game.size_bytes)}` : ''} ${game.install_dir ? ` in ${game.install_dir}` : ''}? Your cloud saves stay in the cloud.`}>
+          <div className="flex gap-2">
+            <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>Cancel</Button>
+            <Button variant="danger" onClick={() => { setConfirm(false); onJob('uninstall'); onClose(); }}>
+              <Trash2 className="h-3.5 w-3.5" /> Delete game files
+            </Button>
+          </div>
         </Row>
-      )}
+      ) : (
+        <Row title="Uninstall" text="Removes the game's files from this computer. Your saves in the cloud stay where they are.">
+          <Button onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" /> Uninstall</Button>
+        </Row>
+      ))}
 
       {job?.state === 'failed' && (
         <ErrorNotice message={job.error ?? ''} fallback={`The ${job.kind} didn't finish.`} onRetry={() => onJobAction('retry', job.id)} />
