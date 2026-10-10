@@ -53,7 +53,7 @@ async function waitFor(port, ms = 30000) {
 }
 
 console.log('» building the Go core');
-run('go', ['build', '-tags', 'core', '-o', path.join(here, '.build/platypus-core'), '.'], repo);
+run('go', ['build', '-o', path.join(here, '.build/platypus-core'), './cmd/platypus-core'], repo);
 console.log('» building the shell');
 run('node', ['scripts/build.mjs'], here);
 

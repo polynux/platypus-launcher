@@ -1,5 +1,6 @@
 import * as WailsApp from '../../wailsjs/go/main/App';
 import { BrowserOpenURL, EventsOn } from '../../wailsjs/runtime/runtime';
+import type { CoreApi } from '../gen/api';
 
 /** What the Electron shell's preload script exposes as window.platypus (electron/src/preload.ts). */
 export interface PlatypusBridge {
@@ -29,15 +30,16 @@ export function backendAvailable(): boolean {
 }
 
 /**
- * The Go App's methods, typed by the generated Wails bindings. Under Electron
- * (window.platypus exists) every method goes through the bridge by name; under
- * Wails it is the generated binding itself.
+ * The Go App's methods. Under Electron (window.platypus exists) every method
+ * goes through the bridge by name, typed by the generated CoreApi
+ * (src/gen/api.ts, from `go run ./cmd/gen-ts`); under Wails it is the
+ * generated Wails binding itself (kept until step 2 removes it).
  */
-export const App: typeof WailsApp = new Proxy({} as typeof WailsApp, {
+export const App: CoreApi = new Proxy({} as CoreApi, {
   get(_, name) {
     const bridge = window.platypus;
     if (bridge && typeof name === 'string') return (...args: unknown[]) => bridge.invoke(name, args);
-    return WailsApp[name as keyof typeof WailsApp];
+    return WailsApp[name as keyof typeof WailsApp] as unknown;
   },
 });
 

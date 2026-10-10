@@ -1,10 +1,9 @@
-//go:build !core
-
 package main
 
 import (
 	"context"
 	"embed"
+	"net/http"
 	"os"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"platypus/internal/app"
 )
 
 //go:embed all:frontend/dist
@@ -25,7 +25,7 @@ func main() {
 		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
 	// Create an instance of the app structure
-	app := NewApp()
+	application := app.NewApp()
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -33,18 +33,20 @@ func main() {
 		Width:  1024,
 		Height: 768,
 		AssetServer: &assetserver.Options{
-			Assets:     assets,
-			Middleware: assetserver.ChainMiddleware(steamArt, app.customArt),
+			Assets: assets,
+			Middleware: assetserver.ChainMiddleware(app.SteamArt, func(next http.Handler) http.Handler {
+				return app.CustomArt(application, next)
+			}),
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		Linux:            &linux.Options{WebviewGpuPolicy: gpuPolicy(os.Getenv("PLATYPUS_GPU"))},
 		OnStartup: func(ctx context.Context) {
-			app.host = wailsHost{ctx}
-			app.startup(ctx)
+			app.SetHost(application, wailsHost{ctx})
+			app.Startup(application, ctx)
 		},
-		OnShutdown: app.shutdown,
+		OnShutdown: func(ctx context.Context) { app.Shutdown(application, ctx) },
 		Bind: []interface{}{
-			app,
+			application,
 		},
 	})
 
