@@ -26,5 +26,6 @@ linux:
     - tar.gz
   category: Game
   executableName: platypus
+  syncDesktopName: true
   icon: packaging/icons/platypus.png
   description: Game launcher for Linux

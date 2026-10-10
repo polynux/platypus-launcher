@@ -7,6 +7,7 @@
   "description": "Desktop shell for the Platypus Go core (issue #29)",
   "author": "Guillaume Dorce",
   "main": "dist/main.cjs",
+  "desktopName": "io.github.polynux.platypus",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build.mjs",

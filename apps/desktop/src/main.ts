@@ -176,11 +176,15 @@ function createWindow(): void {
     if (app.isPackaged && isReloadOrInspect(input)) e.preventDefault();
   });
   // Remember the window for the next run (clamped to the displays then).
-  win.on('close', () => {
-    saveState(statePath, { ...win.getBounds(), maximized: win.isMaximized() });
-  });
+  // Saved on close for a window the user closes, and again in before-quit:
+  // app.exit() never delivers close, so a SIGTERM quit would lose it.
+  win.on('close', () => saveWindowState(statePath, win));
   if (maximized) win.maximize();
   void win.loadURL(`${APP_ORIGIN}/`);
+}
+
+function saveWindowState(statePath: string, win: BrowserWindow): void {
+  saveState(statePath, { ...win.getBounds(), maximized: win.isMaximized() });
 }
 
 app.on('second-instance', () => {
@@ -195,6 +199,9 @@ app.on('before-quit', (e) => {
   if (quitting || !core) return;
   quitting = true;
   e.preventDefault();
+  for (const w of BrowserWindow.getAllWindows()) {
+    saveWindowState(path.join(app.getPath('userData'), 'window-state.json'), w);
+  }
   // The core stops games it started, the plugins and a last cloud sync; give it time.
   void core.close().finally(() => app.exit(0));
 });
