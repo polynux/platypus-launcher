@@ -151,7 +151,7 @@ func applyArt(g *types.Game, root string) {
 		}
 		return fallback
 	}
-	g.CoverURL = pick(cdn+g.StoreAppID+"/library_600x900_2x.jpg", "library_600x900_2x.jpg", "library_600x900.jpg", "library_capsule.jpg")
+	g.CoverURL = pick(cdn+g.StoreAppID+"/library_600x900.jpg", "library_600x900.jpg", "library_600x900_2x.jpg", "library_capsule.jpg")
 	g.BannerURL = pick(cdn+g.StoreAppID+"/header.jpg", "header.jpg", "library_header.jpg")
 	g.HeroURL = pick(cdn+g.StoreAppID+"/library_hero.jpg", "library_hero.jpg")
 }
