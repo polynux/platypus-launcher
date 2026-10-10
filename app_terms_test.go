@@ -253,3 +253,37 @@ func TestAcceptanceSurvivesAReinstallAndARestart(t *testing.T) {
 		t.Fatalf("after a restart pending = %+v, want none", pending)
 	}
 }
+
+// Every way to queue an install or an update is refused before acceptance:
+// the dialog can't be bypassed by a folder, an options choice or a version.
+// The ones that reach the gate name the terms; the others stop earlier (the
+// game has no options, or no version is picked) and queue nothing either way.
+func TestEveryQueueEntryPointWaitsForTheAcceptance(t *testing.T) {
+	e := versionsApp(t, termsProtocols, termsCaps)
+	game := licensedGame()
+	installed := game
+	installed.IsInstalled = true
+	folder := filepath.Join(t.TempDir(), "Licensed")
+	attempts := map[string]struct {
+		queue     func() error
+		wantTerms bool
+	}{
+		"InstallGameTo":            {func() error { _, err := e.a.InstallGameTo(game, folder); return err }, true},
+		"UpdateGame":               {func() error { _, err := e.a.UpdateGame(installed); return err }, true},
+		"InstallGameWithOptions":   {func() error { _, err := e.a.InstallGameWithOptions(game, map[string]any{}); return err }, false},
+		"InstallGameWithOptionsTo": {func() error { _, err := e.a.InstallGameWithOptionsTo(game, map[string]any{}, folder); return err }, false},
+		"InstallGameVersion":       {func() error { _, err := e.a.InstallGameVersion(game, types.VersionTarget{}); return err }, false},
+		"UpdateGameVersion":        {func() error { _, err := e.a.UpdateGameVersion(installed, types.VersionTarget{}); return err }, false},
+	}
+	for name, a := range attempts {
+		err := a.queue()
+		if err == nil {
+			t.Errorf("%s before acceptance queued a job", name)
+		} else if a.wantTerms && !strings.Contains(err.Error(), "accept the terms of Echo Licensed") {
+			t.Errorf("%s before acceptance: %v, want a refusal that names the terms", name, err)
+		}
+	}
+	if n := e.calls(t)["game.install"]; n != 0 {
+		t.Fatalf("game.install reached echo %d times before the terms were accepted", n)
+	}
+}
