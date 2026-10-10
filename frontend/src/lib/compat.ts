@@ -4,6 +4,9 @@ import type { Compat, CompatBadge, Game, ProtonRating } from '../types';
 
 /** Compatibility facts for the library and the game page (internal/compat). */
 
+/** The credit PCGamingWiki asks for under every fact read from it (CC BY-NC-SA 3.0). */
+export const PCGW_ATTRIBUTION = 'Source: PCGamingWiki contributors, CC BY-NC-SA 3.0';
+
 export const TIER_LABEL: Record<string, string> = {
   platinum: 'Platinum',
   gold: 'Gold',

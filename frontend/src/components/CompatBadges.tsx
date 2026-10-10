@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ds/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ds/tooltip';
-import type { Compat, CompatBadge, Game } from '../types';
-import { appIdSourceLabel, asOfDate, badgeTitle, cardCompat, ratingLine, TIER_LABEL } from '../lib/compat';
+import type { Compat, CompatBadge, Game, WikiCredit } from '../types';
+import { appIdSourceLabel, asOfDate, badgeTitle, cardCompat, PCGW_ATTRIBUTION, ratingLine, TIER_LABEL } from '../lib/compat';
 import { cx } from './ui';
 
 /** The badge on a library card: Native for a Linux build, else the game's tier.
@@ -53,12 +53,12 @@ export function CompatFacts({ compat }: { compat: Compat }) {
         <div className="space-y-2">
           {drm.length > 0 && (
             <div className="flex flex-wrap gap-1.5" aria-label="DRM">
-              {drm.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}`} badge={b} />)}
+              {drm.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
           {anticheat.length > 0 && (
             <div className="flex flex-wrap gap-1.5" aria-label="Anti-cheat">
-              {anticheat.map((b) => <ProtectionBadge key={`${b.source}-${b.label}`} badge={b} />)}
+              {anticheat.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
           {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/50">{compat.drm_notes}</p>}
@@ -77,11 +77,31 @@ export function CompatFacts({ compat }: { compat: Compat }) {
           </a>
         </p>
       )}
+      {compat.wiki && <WikiCreditLine credit={compat.wiki} />}
       {compat.steam_app_id && (
         <p className="font-mono text-[11px] text-white/35">
           Steam AppID {compat.steam_app_id} ({appIdSourceLabel(compat.steam_app_id_source)})
         </p>
       )}
     </div>
+  );
+}
+
+/** The credit under the facts read from PCGamingWiki: the licence line, the page
+ *  and the licence as links, and the day Hydra read the page. */
+export function WikiCreditLine({ credit }: { credit: WikiCredit }) {
+  return (
+    <p className="font-mono text-[11px] leading-relaxed text-white/45" aria-label="PCGamingWiki credit">
+      {PCGW_ATTRIBUTION}
+      {' · '}
+      <a href={credit.url} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">
+        {credit.title} on PCGamingWiki ↗
+      </a>
+      {' · '}
+      <a href={credit.licence_url} target="_blank" rel="noreferrer" className="text-amber-200/80 hover:text-amber-200">
+        licence ↗
+      </a>
+      {credit.fetched_at > 0 && ` · read ${asOfDate(credit.fetched_at)}`}
+    </p>
   );
 }

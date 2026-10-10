@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render as rtlRender, fireEvent, within } from '@testing-library/react';
 import { LibraryView } from '../LibraryView';
-import { CompatChip, CompatFacts } from '../CompatBadges';
+import { CompatChip, CompatFacts, WikiCreditLine } from '../CompatBadges';
 import { TooltipProvider } from '../ds/tooltip';
 import type { Compat, Game } from '../../types';
 
@@ -52,6 +52,29 @@ describe('CompatFacts', () => {
     expect(within(getByLabelText('Anti-cheat')).getByText('Easy Anti-Cheat')).toBeTruthy();
     expect(getByText('Echo fixture notes')).toBeTruthy();
     expect(getByText(/Steam AppID 620 \(from the store\)/)).toBeTruthy();
+  });
+
+  it('credits PCGamingWiki under the facts it gave: the page, the licence and the day read', () => {
+    const wiki: Compat = {
+      ...full,
+      drm: [{ kind: 'drm-removed', label: 'Denuvo removed', detail: 'Removed.', source: 'PCGamingWiki', checked_at: 1791589136 }],
+      anticheat: [],
+      wiki: { title: 'Portal 2', url: 'https://www.pcgamingwiki.com/wiki/Portal_2', fetched_at: 1791589136, licence_url: 'https://creativecommons.org/licenses/by-nc-sa/3.0/' },
+    };
+    const { getByLabelText, getByRole, getByText } = render(<CompatFacts compat={wiki} />);
+    const credit = getByLabelText('PCGamingWiki credit');
+    expect(credit.textContent).toContain('Source: PCGamingWiki contributors, CC BY-NC-SA 3.0');
+    expect(credit.textContent).toContain('read 2026-10-09');
+    expect(getByRole('link', { name: 'Portal 2 on PCGamingWiki ↗' }).getAttribute('href')).toBe('https://www.pcgamingwiki.com/wiki/Portal_2');
+    expect(getByRole('link', { name: 'licence ↗' }).getAttribute('href')).toBe('https://creativecommons.org/licenses/by-nc-sa/3.0/');
+    expect(getByText('Denuvo removed')).toBeTruthy();
+  });
+
+  it('shows no PCGamingWiki credit when the wiki gave no facts', () => {
+    const { queryByLabelText } = render(<CompatFacts compat={{ ...full, wiki: null }} />);
+    expect(queryByLabelText('PCGamingWiki credit')).toBeNull();
+    const { container } = render(<WikiCreditLine credit={{ title: 'X', url: 'u', fetched_at: 0, licence_url: 'l' }} />);
+    expect(container.textContent).not.toContain('read ');
   });
 
   it('says so when nothing is reported, and leaves out a rating that was never asked for', () => {
