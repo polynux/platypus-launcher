@@ -8,6 +8,7 @@ import { CapabilitySurface } from '../lib/capabilities';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { MODE_HELP, STATE_CHIP, agoLabel, describeCounts } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
+import { ErrorNotice, RawDetails } from './ErrorNotice';
 import { MonoLabel, Panel, SegRow, cx } from './ui';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -133,7 +134,10 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
       </div>
 
       {st && st.message && st.state !== 'synced' && (
-        <p className="text-[12.5px] leading-relaxed text-white/65" data-testid="cloud-message">{st.message}</p>
+        <>
+          <p className="text-[12.5px] leading-relaxed text-white/65" data-testid="cloud-message">{st.message}</p>
+          {st.detail && <div className="mt-1"><RawDetails text={st.detail} /></div>}
+        </>
       )}
       {st && describeCounts(st.counts) && (
         <p className="mt-1.5 font-mono text-[11.5px] text-white/55" data-testid="cloud-counts">{describeCounts(st.counts)}</p>
@@ -178,7 +182,9 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
         </div>
       )}
 
-      {error && <p role="alert" className="mt-2 font-mono text-[11.5px] text-red-300">{error}</p>}
+      {error && (
+        <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't reach the cloud saves just now." onRetry={() => void check()} />
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="neutral" size="sm" onClick={() => void check()} disabled={checking || !!progress}>

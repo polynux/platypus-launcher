@@ -7,6 +7,7 @@ import { JobProgress } from './JobProgress';
 import { MoveDialog } from './MoveDialog';
 import { VerifyDialog } from './VerifyDialog';
 import { MonoLabel, cx } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 /** The folder a game folder sits in ("" when there is none). */
 export function parentFolder(dir?: string): string {
@@ -68,10 +69,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
       )}
 
       {job?.state === 'failed' && (
-        <p className="font-mono text-[11.5px] text-red-300">
-          {job.kind} failed: {job.error}{' '}
-          <Button variant="ghost" size="none" onClick={() => onJobAction('retry', job.id)} className="inline-flex rounded-none px-0 font-mono text-[11.5px] font-normal text-red-300 underline underline-offset-2 hover:bg-transparent hover:text-red-200">retry</Button>
-        </p>
+        <ErrorNotice message={job.error ?? ''} fallback={`The ${job.kind} didn't finish.`} onRetry={() => onJobAction('retry', job.id)} />
       )}
 
       {verifyOpen && <VerifyDialog game={game} jobs={jobs} onClose={() => setVerifyOpen(false)} />}

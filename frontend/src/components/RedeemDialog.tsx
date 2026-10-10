@@ -6,6 +6,7 @@ import { Button } from '@/components/ds/button';
 import { Input } from './ds/input';
 import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -89,7 +90,7 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
                 disabled={busy}
               />
             </label>
-            {error && <p role="alert" className="text-[13px] text-red-300">{error}</p>}
+            {error && <ErrorNotice className="text-[13px]" message={error} fallback="That code didn't go through." />}
             <div className="mt-6 flex gap-2">
               <Button type="button" onClick={onClose} className="flex-1 text-white/70">Cancel</Button>
               <Button type="submit" disabled={!plugin || !code.trim() || busy} className="flex-1 text-sky-100">

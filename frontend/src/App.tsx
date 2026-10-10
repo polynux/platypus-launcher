@@ -29,9 +29,15 @@ import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import { RawDetails } from './components/ErrorNotice';
+import { LibrarySkeleton } from './components/LibrarySkeleton';
+import { hasDetails, plainError } from './lib/plainError';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
-interface Notice { msg: string; kind: NoticeKind }
+interface Notice { msg: string; kind: NoticeKind; raw?: string }
+
+/** What an error toast says when the message is developer text. */
+const TOAST_ERROR_FALLBACK = 'Something went wrong. Try again.';
 
 const NOTICE_STYLE: Record<NoticeKind, string> = {
   ok: 'border-emerald-300/50 text-emerald-100',
@@ -80,9 +86,13 @@ export function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notify = useCallback((msg: string, kind: NoticeKind = 'ok') => {
-    setNotice({ msg, kind });
+    // An error toast says a plain sentence; the raw text waits behind Details,
+    // and the toast stays long enough to open it.
+    const isErr = kind === 'err';
+    const raw = isErr && hasDetails(msg, TOAST_ERROR_FALLBACK) ? msg : undefined;
+    setNotice({ msg: isErr ? plainError(msg, TOAST_ERROR_FALLBACK) : msg, kind, raw });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), 3500);
+    noticeTimer.current = setTimeout(() => setNotice(null), isErr ? 8000 : 3500);
   }, []);
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
@@ -455,9 +465,7 @@ export function App() {
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
 
   const renderView = () => {
-    if (!loaded) {
-      return <div className="p-7 font-mono text-[12px] uppercase tracking-widest text-white/40">scanning library…</div>;
-    }
+    if (!loaded) return <LibrarySkeleton />;
     if (loadError && games.length === 0 && (view.name === 'dashboard' || view.name === 'library')) {
       return (
         <div className="p-7">
@@ -590,6 +598,7 @@ export function App() {
         storeCounts={storeCounts}
         onPickSource={(s) => { setSource(s); setView({ name: 'library' }); }}
         gameCount={installedGames.length}
+        loading={!loaded}
         downloadCount={activeJobs.length}
         authNeeded={warnings.some((w) => w.needs_auth) || plugins.some((x) => x.status === 'unapproved' || x.status === 'changed')}
         fixCount={games.filter(needsAttention).length}
@@ -668,7 +677,10 @@ export function App() {
           style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}
         >
           <span className={cx('h-1.5 w-1.5 flex-none rounded-full', NOTICE_DOT[notice.kind])} />
-          <span title={notice.msg} className="break-words line-clamp-3">{notice.msg}</span>
+          <div className="min-w-0 space-y-1">
+            <span title={notice.msg} className="block break-words line-clamp-3">{notice.msg}</span>
+            {notice.raw && <RawDetails text={notice.raw} />}
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Effect } from 'effect';
-import { ExternalLink, TriangleAlert } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import type { Game, GameTerm } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
@@ -8,6 +8,7 @@ import { LauncherApi } from '../effect/runtime';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { notifyTermsAccepted, termURL } from '../lib/terms';
 import { cx } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -73,9 +74,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
       </ul>
 
       {error && (
-        <p role="alert" className="mt-4 flex items-center gap-1.5 font-mono text-[11.5px] text-red-300">
-          <TriangleAlert className="h-3.5 w-3.5" /> {error}
-        </p>
+        <ErrorNotice className="mt-4" message={error} fallback="Platypus couldn't read the terms just now." />
       )}
 
       <div className="mt-6 flex justify-end gap-2.5">

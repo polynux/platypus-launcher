@@ -13,6 +13,7 @@ import { PluginCapabilities } from './PluginCapabilities';
 import { PluginSettingsPanel } from './PluginSettings';
 import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -568,7 +569,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             </div>
           </div>
         )}
-        {error && <p role="alert" className="mt-3 font-mono text-[11.5px] text-red-300">{error}</p>}
+        {error && <ErrorNotice className="mt-3" message={error} fallback="Platypus couldn't finish that plugin action." />}
         <div className="mt-5 flex gap-2.5">
           <Button type="button" variant="neutral" className="flex-1" onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="primary" className="flex-1" disabled={!canSubmit || submitting}>

@@ -14,6 +14,7 @@ import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { formatBytes } from '../lib/games';
 import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -121,9 +122,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
 
       {!groups && !error && <p className="mt-6 font-mono text-[11.5px] uppercase tracking-widest text-white/40">loading options…</p>}
       {error && (
-        <p role="alert" className="mt-5 rounded-xl bg-red-500/10 px-4 py-3 text-[12.5px] text-red-200">
-          Couldn't read the options: {error}
-        </p>
+        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback="Platypus couldn't read this game's install options." />
       )}
 
       {groups && groups.length === 0 && (

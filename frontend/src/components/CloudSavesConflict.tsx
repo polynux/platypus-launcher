@@ -8,6 +8,7 @@ import { Modal } from './Modal';
 import { LauncherApi } from '../effect/runtime';
 import { fileSize, whenLabel } from '../lib/cloud';
 import { MonoLabel, SegRow, cx } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 type Choice = 'local' | 'remote' | 'later';
 
@@ -90,7 +91,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
       </ul>
 
       {status.backupDir && <p className="mt-3 font-mono text-[11px] text-white/40 select-text">backups: {status.backupDir}</p>}
-      {error && <p role="alert" className="mt-3 font-mono text-[11.5px] text-red-300">{error}</p>}
+      {error && <ErrorNotice className="mt-3" message={error} fallback="Platypus couldn't settle these saves. Nothing was changed on either side." />}
 
       <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
         {onLaunchAnyway && (

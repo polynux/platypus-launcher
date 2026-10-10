@@ -5,6 +5,7 @@ import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
 import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -46,7 +47,7 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
   let body: React.ReactNode;
   let actions: React.ReactNode;
   if (error) {
-    body = <p className="text-red-300">{error}</p>;
+    body = <ErrorNotice message={error} fallback="Platypus couldn't start the check." onRetry={() => start(false)} />;
   } else if (!job) {
     body = <p className="text-white/60">Starting the check…</p>;
   } else if (running) {
@@ -56,7 +57,7 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
       </p>
     );
   } else if (job.state === 'failed') {
-    body = <p className="text-red-300">The check failed: {job.error}</p>;
+    body = <ErrorNotice message={job.error ?? ''} fallback="The check didn't finish." onRetry={() => start(job.repair)} />;
   } else if (job.state === 'canceled') {
     body = <p className="text-white/60">The check was canceled. Nothing was changed.</p>;
   } else if (job.state === 'done' && report) {

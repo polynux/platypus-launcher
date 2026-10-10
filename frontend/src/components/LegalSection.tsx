@@ -6,6 +6,7 @@ import { LauncherApi } from '../effect/runtime';
 import { acceptedLabel, onTermsAccepted, termURL } from '../lib/terms';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime';
 import { MonoLabel } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 /** The store's terms of a game and when the user accepted each (protocol 1.11,
  *  the `terms` capability). Read only: acceptance happens at install. Renders
@@ -34,7 +35,7 @@ function LegalList({ game }: { game: Game }) {
     return () => { live = false; };
   }, [game, accepted]);
 
-  if (error) return <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p>;
+  if (error) return <ErrorNotice message={error} fallback="Platypus couldn't read the terms for this game." />;
   if (!terms || terms.length === 0) return null;
   return (
     <section className="mt-6" aria-label="Legal">

@@ -19,6 +19,8 @@ interface SidebarProps {
   storeCounts: Record<string, number>;
   onPickSource: (s: StoreType) => void;
   gameCount: number;
+  /** The first library scan is still running: counts show as pending, not zero. */
+  loading?: boolean;
   downloadCount: number;
   authNeeded: boolean; // a plugin waits for approval or login
   fixCount: number;
@@ -99,7 +101,11 @@ export function Sidebar(p: SidebarProps) {
               )}
             >
               <span>{n.label}</span>
-              {n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>}
+              {n.key === 'library' && p.loading ? (
+                <span aria-label="counting games" className="h-4 w-7 animate-pulse rounded-full bg-white/15 motion-reduce:animate-none" />
+              ) : (
+                n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>
+              )}
               {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label="needs attention" />}
             </button>
           ))}
@@ -125,7 +131,9 @@ export function Sidebar(p: SidebarProps) {
                 <span className={cx('h-1.5 w-1.5 rounded-full', count ? 'bg-amber-300/60' : 'bg-white/15')} />
                 {s.label}
               </span>
-              <span className="font-mono text-[11px] tabular-nums text-white/40">{count || '—'}</span>
+              <span className="font-mono text-[11px] tabular-nums text-white/40">
+                {p.loading ? <span aria-label="counting games" className="inline-block h-2.5 w-5 animate-pulse rounded bg-white/15 motion-reduce:animate-none" /> : count || '—'}
+              </span>
             </button>
           );
         })}

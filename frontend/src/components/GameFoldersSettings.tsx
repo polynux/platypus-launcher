@@ -6,6 +6,7 @@ import type { GameFolder } from '../types';
 import { Button } from '@/components/ds/button';
 import { freeLabel, shortPath } from '../lib/installLocation';
 import { MonoLabel, Panel } from './ui';
+import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -68,7 +69,7 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
         ))}
       </ul>
       <div className="mt-3 flex min-h-8 items-center justify-between gap-4">
-        {error ? <p role="alert" className="font-mono text-[11.5px] text-red-300">{error}</p> : <span />}
+        {error ? <ErrorNotice message={error} fallback="Platypus couldn't add that folder." /> : <span />}
         <Button variant="neutral" onClick={add} disabled={busy || folders == null}>
           <FolderOpen className="size-3.5" /> Add folder…
         </Button>
