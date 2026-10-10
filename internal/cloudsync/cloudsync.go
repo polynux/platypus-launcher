@@ -253,7 +253,7 @@ func (c *Orchestrator) Check(ctx context.Context, g Game, cc types.CloudContext)
 	st, err := c.status(ctx, g, cc)
 	if err != nil {
 		st = types.CloudStatus{State: types.CloudStateError, CheckedAt: time.Now().Unix(),
-			Message: fmt.Sprintf("Cloud saves couldn't be checked: %v", err)}
+			Message: "Cloud saves couldn't be checked right now.", Detail: err.Error()}
 		c.remember(g.ID, st)
 	}
 	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvStatus, Status: &st})

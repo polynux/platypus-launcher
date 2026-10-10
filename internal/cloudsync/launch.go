@@ -112,7 +112,11 @@ func (c *Orchestrator) prompt(g Game, kind, msg string, st *types.CloudStatus) D
 
 // failed handles a request that ended in an error: the same as an unreachable store.
 func (c *Orchestrator) failed(g Game, mode string, err error, st *types.CloudStatus) Decision {
-	msg := fmt.Sprintf("Cloud saves couldn't be checked: %v", err)
+	msg := "Cloud saves couldn't be checked right now."
+	if st == nil {
+		st = &types.CloudStatus{State: types.CloudStateError, CheckedAt: time.Now().Unix()}
+	}
+	st.Message, st.Detail = msg, err.Error()
 	return c.unreachableMsg(g, mode, msg, st)
 }
 
