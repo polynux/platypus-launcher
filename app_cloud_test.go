@@ -259,6 +259,27 @@ func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
 	}
 }
 
+func TestLaunchWithoutAKnownFolderSkipsTheSyncAndSaysSo(t *testing.T) {
+	a, _ := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending"})
+	g := echoGame(t, a)
+	// A game the library doesn't list has no folder for Platypus to read saves from.
+	g.ID = "p.echo.unknown"
+	push, note, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
+	if blocked || push != nil {
+		t.Fatalf("blocked %v, push %v", blocked, push)
+	}
+	if note == "" {
+		t.Fatal("the skipped sync wasn't reported")
+	}
+	if info := a.cloudInfo(g); info.Skipped == "" {
+		t.Fatal("the cloud saves tab doesn't say the sync is skipped")
+	}
+	g.IsInstalled = false
+	if info := a.cloudInfo(g); info.Skipped != "" {
+		t.Fatalf("a game that isn't installed has no skipped sync to report: %q", info.Skipped)
+	}
+}
+
 func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "1"})
 	g := echoGame(t, a)

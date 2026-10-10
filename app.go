@@ -651,9 +651,9 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		return a.startClient(game, cmd, cl)
 	}
 	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
-	push, msg, blocked := a.cloudBeforeLaunch(game, p, anyway)
+	push, note, blocked := a.cloudBeforeLaunch(game, p, anyway)
 	if blocked {
-		return msg, nil
+		return note, nil
 	}
 	opts = append(opts, push.options()...)
 	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, opts...)
@@ -664,6 +664,9 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		}
 		push.abandon()
 		return "", err
+	}
+	if note != "" {
+		return fmt.Sprintf("Started %s (PID %d) · %s", game.Title, pid, note), nil
 	}
 	return fmt.Sprintf("Started %s (PID %d)", game.Title, pid), nil
 }

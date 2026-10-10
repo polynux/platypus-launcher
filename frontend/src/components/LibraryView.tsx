@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Download, LogIn, Play, Plus, X } from 'lucide-react
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
-import { Cover, EmptyState, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
+import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
 import { CompatChip } from './CompatBadges';
 import { TIER_FILTERS, TIER_LABEL, cardCompat, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
@@ -100,6 +100,16 @@ function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort
           <TooltipContent>{asc ? 'Ascending' : 'Descending'}</TooltipContent>
         </Tooltip>
       )}
+    </div>
+  );
+}
+
+/** A row of chips with its name in front, so each group reads as its own control (two "all" chips are not one). */
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2">
+      <MonoLabel className="flex-none">{label}</MonoLabel>
+      {children}
     </div>
   );
 }
@@ -212,15 +222,23 @@ export function LibraryView(p: LibraryProps) {
             )}
           </div>
           {owned > installedCount && (
-            <SegRow label="Ownership" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
+            <FilterGroup label="show">
+              <SegRow label="Show" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
+            </FilterGroup>
           )}
-          <SegRow label="Source" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
+          <FilterGroup label="store">
+            <SegRow label="Store" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
+          </FilterGroup>
           {hasBorrowed && (
-            <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
+            <FilterGroup label="family">
+              <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
+            </FilterGroup>
           )}
           <TierFilterControl value={tier} onChange={setTier} />
           <SortControl sort={sort} onChange={setSort} />
-          <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
+          <FilterGroup label="view">
+            <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
+          </FilterGroup>
           <Button variant="primary" onClick={p.onAddGame}>
             <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
           </Button>

@@ -695,6 +695,8 @@ export interface CloudInfo {
   busy?: string;
   /** The game is running: its saves are settled after it exits. */
   running?: boolean;
+  /** Why a launch doesn't sync these saves (Platypus doesn't know the game's folder). */
+  skipped?: string;
 }
 
 export interface CloudSettings {
