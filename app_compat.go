@@ -45,6 +45,7 @@ func newCompatService(dataDir string, st *settings.Store) (*compat.Service, erro
 			URL:   compat.AWACYURL,
 			Fetch: compat.NewFetcher("Hydra-Launcher/1.0 (Linux; compatibility metadata)"),
 		},
+		Wiki:   &compat.PCGW{Fetch: compat.NewPCGWFetcher()},
 		Online: st.RatingsOnline,
 	}
 	svc.AntiCheat.Fetch.Interval = 0
@@ -172,7 +173,27 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 		c.DRM = compat.StoreDRM(hints.DRM, a.pluginName(game), now)
 		c.DRMNotes = hints.DRM.Notes
 	}
-	if cat := a.compat.AntiCheatCatalogue(a.baseCtx()); cat != nil {
+	// PCGamingWiki is asked by Steam AppID only; its anti-cheat names win over
+	// AreWeAntiCheatYet's when it names any (see Compat.Wiki).
+	wikiAnticheat := false
+	if c.SteamAppID != "" {
+		if w, ok := a.compat.WikiPage(a.baseCtx(), c.SteamAppID); ok && w.Found {
+			drm := compat.WikiDRMBadges(w.Record, w.FetchedAt, hints != nil && hints.DRM != nil)
+			ac := compat.WikiAntiCheatBadges(w.Record, w.FetchedAt)
+			c.DRM = append(c.DRM, drm...)
+			c.AntiCheat = append(c.AntiCheat, ac...)
+			wikiAnticheat = len(ac) > 0
+			if len(drm)+len(ac) > 0 {
+				c.Wiki = &types.WikiCredit{
+					Title:      w.Record.Title,
+					URL:        compat.PCGWPage(w.Record.Title),
+					FetchedAt:  w.FetchedAt.Unix(),
+					LicenceURL: compat.PCGWLicenceURL,
+				}
+			}
+		}
+	}
+	if cat := a.compat.AntiCheatCatalogue(a.baseCtx()); cat != nil && !wikiAnticheat {
 		if e, ok := cat.BySteam(c.SteamAppID); ok {
 			c.AntiCheat = append(c.AntiCheat, compat.AntiCheatBadges(e, cat.FetchedAt)...)
 		} else if e, ok := cat.ByEpic(game.StoreAppID); ok && game.Store == types.StoreEpic {

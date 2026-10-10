@@ -2,6 +2,7 @@ package compat
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"hydra-launcher/internal/types"
@@ -10,11 +11,6 @@ import (
 // Badges say only what a source said. An unknown fact gets no badge, and a
 // guess (Denuvo, say) is labelled as one.
 //
-// TODO(compat-drm): PCGamingWiki is not used yet. Its DRM taxonomy is the
-// best per-store source, but its content is CC BY-NC-SA and the Cargo API is
-// closed to anonymous callers. Pending the user's decision on the licence and
-// the product model; until then there is no PCGW provider here.
-
 // launcherNames are the display names of the store launchers a plugin may
 // name in drm.launcher. Any other value is shown as the plugin wrote it.
 var launcherNames = map[string]string{
@@ -49,6 +45,55 @@ func StoreDRM(d *types.DRM, source string, checked time.Time) []types.CompatBadg
 	}
 	if d.DenuvoLikely != nil && *d.DenuvoLikely {
 		add("denuvo", "Denuvo likely", "Inferred from the store's ownership check, not confirmed.")
+	}
+	return out
+}
+
+// wikiSource names PCGamingWiki in a badge's source.
+const wikiSource = "PCGamingWiki"
+
+// WikiDRMBadges are the DRM facts PCGamingWiki lists for the Windows version.
+// pluginDRM says the store plugin gave its own DRM facts: those win, so the
+// wiki's current DRM and online notes are left out. Removed DRM is history
+// and is always shown, with its date.
+func WikiDRMBadges(r WikiRecord, checked time.Time, pluginDRM bool) []types.CompatBadge {
+	out := []types.CompatBadge{}
+	add := func(kind, label, detail string) {
+		out = append(out, types.CompatBadge{Kind: kind, Label: label, Detail: detail, Source: wikiSource, CheckedAt: checked.Unix()})
+	}
+	if !pluginDRM {
+		for _, name := range r.DRM {
+			if strings.Contains(strings.ToLower(name), "denuvo") {
+				add("denuvo", name, "PCGamingWiki lists Denuvo for the Windows version.")
+			} else {
+				add("drm", name, fmt.Sprintf("PCGamingWiki lists %s DRM for the Windows version.", name))
+			}
+		}
+		switch r.Online {
+		case "always":
+			add("online", "Always online", "PCGamingWiki says the game needs an internet connection at all times.")
+		case "launch":
+			add("online", "Online to start", "PCGamingWiki says the game needs an internet connection to start.")
+		}
+	}
+	for _, rm := range r.Removed {
+		add("drm-removed", rm.Name+" removed", fmt.Sprintf("PCGamingWiki says %s was removed from the Windows version on %s.", rm.Name, rm.Date))
+	}
+	return out
+}
+
+// WikiAntiCheatBadges are the anti-cheat systems PCGamingWiki names in the
+// game's middleware.
+func WikiAntiCheatBadges(r WikiRecord, checked time.Time) []types.CompatBadge {
+	out := []types.CompatBadge{}
+	for _, name := range r.AntiCheat {
+		out = append(out, types.CompatBadge{
+			Kind:      "anticheat",
+			Label:     name,
+			Detail:    "PCGamingWiki lists it as the game's anti-cheat (middleware).",
+			Source:    wikiSource,
+			CheckedAt: checked.Unix(),
+		})
 	}
 	return out
 }

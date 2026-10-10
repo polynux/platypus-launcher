@@ -203,3 +203,59 @@ func TestRatingsSwitchOffMakesNoRequests(t *testing.T) {
 		t.Fatalf("switching back on: %+v %v", ls, err)
 	}
 }
+
+// fakeWikiSource answers PCGamingWiki from a table (a Steam AppID to a record).
+type fakeWikiSource struct {
+	recs map[string]compat.WikiRecord
+}
+
+func (f *fakeWikiSource) Lookup(_ context.Context, appID string) (compat.WikiRecord, error) {
+	r, ok := f.recs[appID]
+	if !ok {
+		return compat.WikiRecord{}, compat.ErrNotFound
+	}
+	return r, nil
+}
+
+func TestWikiFactsMergeWithThePluginAndCreditTheWiki(t *testing.T) {
+	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
+	env.a.compat.Wiki = &fakeWikiSource{recs: map[string]compat.WikiRecord{
+		"620": {
+			Title:     "Portal 2",
+			DRM:       []string{"Steam"},
+			Removed:   []compat.RemovedDRM{{Name: "Denuvo", Date: "2023-04-10"}},
+			AntiCheat: []string{"Easy Anti-Cheat"},
+		},
+	}}
+	c := env.a.GetGameCompat(env.game)
+	// The plugin's own DRM facts win over the wiki's current DRM; the removed
+	// DRM is history, so it is shown with its date.
+	drm := kinds(c.DRM)
+	if drm["drm"] {
+		t.Errorf("the wiki's current DRM shown beside the plugin's own: %+v", c.DRM)
+	}
+	if !drm["drm-removed"] {
+		t.Errorf("removed DRM not shown: %+v", c.DRM)
+	}
+	ac := c.AntiCheat
+	if len(ac) != 1 || ac[0].Label != "Easy Anti-Cheat" || ac[0].Source != "PCGamingWiki" {
+		t.Fatalf("anti-cheat %+v, want the wiki's name", ac)
+	}
+	if c.Wiki == nil || c.Wiki.Title != "Portal 2" || c.Wiki.URL != "https://www.pcgamingwiki.com/wiki/Portal_2" || c.Wiki.FetchedAt == 0 || c.Wiki.LicenceURL != compat.PCGWLicenceURL {
+		t.Fatalf("credit %+v", c.Wiki)
+	}
+}
+
+func TestNoWikiPageMeansNoWikiFacts(t *testing.T) {
+	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
+	env.a.compat.Wiki = &fakeWikiSource{recs: map[string]compat.WikiRecord{}}
+	c := env.a.GetGameCompat(env.game)
+	if c.Wiki != nil {
+		t.Fatalf("a credit with no page: %+v", c.Wiki)
+	}
+	for _, b := range append(c.DRM, c.AntiCheat...) {
+		if b.Source == "PCGamingWiki" {
+			t.Fatalf("a PCGamingWiki badge without a page: %+v", b)
+		}
+	}
+}
