@@ -12,7 +12,7 @@ import (
 )
 
 // Cache is the on-disk record of what the compat sources answered, in
-// Hydra's data folder. Hits and misses are both kept: a miss ("no reports")
+// Platypus's data folder. Hits and misses are both kept: a miss ("no reports")
 // is an answer too, and it is asked again less often (see Service).
 type Cache struct {
 	mu   sync.Mutex

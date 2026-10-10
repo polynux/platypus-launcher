@@ -95,14 +95,14 @@ describe('the game page keeps only the essentials', () => {
   });
 
   it('draws the user\'s logo in place of the title, keeping the title as its name', () => {
-    page({}, game({ logo_url: '/hydra-art/abc/logo.png?v=1', customized: ['logo'] }));
+    page({}, game({ logo_url: '/platypus-art/abc/logo.png?v=1', customized: ['logo'] }));
     const h1 = screen.getByRole('heading', { level: 1 });
-    expect(within(h1).getByAltText('Echo Tiny').getAttribute('src')).toBe('/hydra-art/abc/logo.png?v=1');
+    expect(within(h1).getByAltText('Echo Tiny').getAttribute('src')).toBe('/platypus-art/abc/logo.png?v=1');
   });
 
   it('puts the user\'s background behind the page', () => {
-    page({}, game({ background_url: '/hydra-art/abc/background.png?v=1' }));
-    expect(screen.getByTestId('game-background').getAttribute('style')).toContain('/hydra-art/abc/background.png?v=1');
+    page({}, game({ background_url: '/platypus-art/abc/background.png?v=1' }));
+    expect(screen.getByTestId('game-background').getAttribute('style')).toContain('/platypus-art/abc/background.png?v=1');
   });
 });
 

@@ -31,7 +31,7 @@ export interface InstallOptionsDialogProps {
 }
 
 /** Choose what an install includes (language, add-ons, packs, toggles), and
- *  change it on an installed game. The store lists the options; Hydra remembers
+ *  change it on an installed game. The store lists the options; Platypus remembers
  *  the choices and checks them again when the install is queued. */
 export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify, embedded }: InstallOptionsDialogProps) {
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);

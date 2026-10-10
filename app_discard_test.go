@@ -4,11 +4,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
-// Discarding deletes files, so Hydra checks the folder it hands the plugin
+// Discarding deletes files, so Platypus checks the folder it hands the plugin
 // before anything leaves the process.
 func TestCheckDiscardDirRefusesDangerousFolders(t *testing.T) {
 	home := t.TempDir()

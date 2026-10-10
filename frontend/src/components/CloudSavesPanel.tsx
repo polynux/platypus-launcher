@@ -144,7 +144,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
         <div role="note" className="mt-3 rounded-xl bg-amber-300/[0.07] px-3.5 py-2.5 text-[12px] leading-relaxed text-white/75 ring-1 ring-amber-300/25">
           <p>
             <span className="font-bold text-amber-200">{client.name} is running.</span>{' '}
-            Hydra doesn't sync this game while it is open, because two programs writing the same saves cause conflicts.
+            Platypus doesn't sync this game while it is open, because two programs writing the same saves cause conflicts.
             {client.canLaunch ? ` Launch it through ${client.name} instead, or close ${client.name} to sync.` : ` Close ${client.name} to sync.`}
           </p>
           {client.canLaunch && (

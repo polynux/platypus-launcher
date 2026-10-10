@@ -14,7 +14,7 @@ import (
 // Values never carry secrets; those go through auth.
 
 // Field kinds core renders. A field of any other kind is dropped on parse, so
-// a plugin can describe kinds an older Hydra doesn't know.
+// a plugin can describe kinds an older Platypus doesn't know.
 const (
 	SettingBool   = "bool"
 	SettingSelect = "select"

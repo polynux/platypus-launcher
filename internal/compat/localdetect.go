@@ -21,7 +21,7 @@ const (
 	scanMaxEntries = 50000
 )
 
-// matchLocal says whether a file or folder name is a marker Hydra knows. Only
+// matchLocal says whether a file or folder name is a marker Platypus knows. Only
 // names that identify a system are matched: not steam_api.dll (every Steam
 // game has one), and nothing guessed for Denuvo.
 func matchLocal(name string) (LocalHit, bool) {

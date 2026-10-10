@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 func echoApp(t *testing.T, manifest string) (*App, *plugins.Manager) {
@@ -50,7 +50,7 @@ func TestStorePluginListsCapabilitiesWithRuntimeAndFeatures(t *testing.T) {
 	t.Setenv("ECHO_OFF", "discard")
 	t.Setenv("ECHO_FEATURES", `{"versions":{"channels":true,"password":false}}`)
 	a, m := echoApp(t, `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-		"protocol":{"versions":["1.0","1.1","1.3"]},"store":"echo","exec":"bin/hydra-echo-app",
+		"protocol":{"versions":["1.0","1.1","1.3"]},"store":"echo","exec":"bin/platypus-echo-app",
 		"capabilities":["library","install","discard","versions","hologram"]}`)
 	if err := m.Approve("echo"); err != nil {
 		t.Fatal(err)
@@ -95,9 +95,9 @@ func TestStorePluginListsCapabilitiesWithRuntimeAndFeatures(t *testing.T) {
 
 func TestStorePluginReportsAnIncompatibleProtocol(t *testing.T) {
 	a, _ := echoApp(t, `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-		"protocol":{"versions":["2.0"]},"store":"echo","exec":"bin/hydra-echo-app"}`)
+		"protocol":{"versions":["2.0"]},"store":"echo","exec":"bin/platypus-echo-app"}`)
 	p := a.ListStorePlugins()[0]
-	if p.Status != "needs-newer-hydra" || p.Problem == "" {
+	if p.Status != "needs-newer-platypus" || p.Problem == "" {
 		t.Fatalf("%+v", p)
 	}
 }

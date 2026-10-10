@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // maxPinID bounds a pinned channel or build id: they come from a plugin, and

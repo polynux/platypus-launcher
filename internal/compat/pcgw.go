@@ -10,9 +10,9 @@ import (
 )
 
 // PCGamingWiki (PCGW) is a per-game source of protection facts, looked up by
-// Steam AppID. The wiki is CC BY-NC-SA 3.0: Hydra shows the credit, the page
+// Steam AppID. The wiki is CC BY-NC-SA 3.0: Platypus shows the credit, the page
 // and the licence wherever a PCGW fact is shown (see Compat.Wiki), and keeps
-// only the facts it reads, not the page. Hydra is non-commercial; any change
+// only the facts it reads, not the page. Platypus is non-commercial; any change
 // to that (a paid tier, ads) ends the permission to use this data.
 
 const (
@@ -23,11 +23,11 @@ const (
 	PCGWAPIURL = "https://www.pcgamingwiki.com/w/api.php"
 	// PCGWLicenceURL is the licence of the wiki's content.
 	PCGWLicenceURL = "https://creativecommons.org/licenses/by-nc-sa/3.0/"
-	// PCGWContact is where PCGW can reach Hydra's maintainers, as its API
-	// policy asks. TODO(compat-pcgw): replace before release.
-	PCGWContact = "https://example.invalid/hydra-launcher"
-	// PCGWUserAgent names Hydra and its contact, as PCGW's API policy asks.
-	PCGWUserAgent = "Hydra-Launcher/1.0 (Linux; compatibility metadata; " + PCGWContact + ")"
+	// PCGWContact is where PCGW can reach Platypus's maintainers, as its API
+	// policy asks: the project's repository.
+	PCGWContact = "https://github.com/polynux/platypus-launcher"
+	// PCGWUserAgent names Platypus and its contact, as PCGW's API policy asks.
+	PCGWUserAgent = "Platypus/1.0 (Linux; compatibility metadata; " + PCGWContact + ")"
 	// PCGWAttribution is the credit shown under every PCGW fact.
 	PCGWAttribution = "Source: PCGamingWiki contributors, CC BY-NC-SA 3.0"
 )
@@ -37,7 +37,7 @@ func PCGWPage(title string) string {
 	return "https://www.pcgamingwiki.com/wiki/" + url.PathEscape(strings.ReplaceAll(title, " ", "_"))
 }
 
-// WikiRecord is what Hydra keeps of a PCGW page: its title and the facts
+// WikiRecord is what Platypus keeps of a PCGW page: its title and the facts
 // ParseWikitext read from it.
 type WikiRecord struct {
 	Title     string       `json:"title"`

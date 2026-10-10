@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Family (the `family` capability, protocol 1.8, docs/plans/launcher-parity.md
 // §2.5): the store's family group, the games members lend (LibraryGame.sharedBy,
 // marked by the store adapter), and the warning a plugin raises while a
-// borrowed game is in use. Hydra shows members and warnings; it never enforces
+// borrowed game is in use. Platypus shows members and warnings; it never enforces
 // exclusions or parental limits, those are the store's rules.
 
 // familyTimeout bounds family.members and family.setPreferredCopy. The plugin
@@ -73,7 +73,7 @@ func (a *App) GetFamilyMembers(source string) ([]types.FamilyMember, error) {
 // played from (family.setPreferredCopy, protocol 1.8). Nothing is sent unless
 // the game is borrowed in the store's current library, the family capability
 // is on for it, and the copy is listed and available there. The store keeps
-// the choice; Hydra reads it back in the library.
+// the choice; Platypus reads it back in the library.
 func (a *App) SetPreferredCopy(game types.Game, ownerID string) error {
 	p, err := a.capabilityGate(game.Source, "family")
 	if err != nil {
@@ -117,7 +117,7 @@ type familyWarningParams struct {
 
 // familyWarning passes a plugin's family.warning on to the UI. It is only
 // taken from a plugin that offers family right now, and only with a message
-// for the user; the id is the store's game id, Hydra's game id is derived from
+// for the user; the id is the store's game id, Platypus's game id is derived from
 // it the same way the library does.
 func (a *App) familyWarning(source string, params json.RawMessage) {
 	var w familyWarningParams

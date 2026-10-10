@@ -4,20 +4,20 @@ import (
 	"fmt"
 	"slices"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Verify files: the `verify` capability (protocol 1.4). The plugin checks the
 // files of an installed game against the store's own copies. A check first
-// reports the damage; the repair is a second run the user asks for, and Hydra
+// reports the damage; the repair is a second run the user asks for, and Platypus
 // only queues it after a check found something (docs/plugins/protocol.md,
 // "Verify and move").
 
 // verifyGate says whether the game's plugin can check this game right now:
 // the plugin is ready, offers verify (which needs protocol 1.4), and the game's
-// own features keep it. Hydra sends nothing when this fails.
+// own features keep it. Platypus sends nothing when this fails.
 func (a *App) verifyGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
@@ -46,7 +46,7 @@ func (a *App) VerifyGame(game types.Game) (types.Job, error) {
 }
 
 // RepairGame queues the second run of a check, which restores the files the
-// last check found damaged or missing. Hydra refuses it unless that check
+// last check found damaged or missing. Platypus refuses it unless that check
 // reported some, so a repair always follows a report the user saw.
 func (a *App) RepairGame(game types.Game) (types.Job, error) {
 	folder, err := a.verifyFolder(game)

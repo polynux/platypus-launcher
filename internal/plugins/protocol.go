@@ -3,8 +3,8 @@ package plugins
 import (
 	"errors"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/types"
 )
 
 // Messages of protocol api 1. docs/plugins/protocol.md describes them for
@@ -49,11 +49,11 @@ type LibraryGame struct {
 	Version         string `json:"version,omitempty"`
 	UpdateAvailable bool   `json:"updateAvailable,omitempty"`
 	SizeBytes       int64  `json:"sizeBytes,omitempty"`
-	// Installable is false for owned games Hydra can't install through this
+	// Installable is false for owned games Platypus can't install through this
 	// plugin (third-party launcher, no Windows/Linux build); Note says why.
 	Installable bool   `json:"installable"`
 	Note        string `json:"note,omitempty"`
-	// Native marks games with a Linux build: Hydra runs them directly, with
+	// Native marks games with a Linux build: Platypus runs them directly, with
 	// no Proton runner and none of the Proton-only settings.
 	Native    bool   `json:"native,omitempty"`
 	CoverURL  string `json:"coverUrl,omitempty"`  // portrait
@@ -99,8 +99,8 @@ type LibraryList struct {
 	Games []LibraryGame `json:"games"`
 }
 
-// LaunchSpec answers game.launchSpec. Either Hydra runs Exe through its
-// runner pipeline, or (Delegate == "store-client") Hydra runs Command, which
+// LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its
+// runner pipeline, or (Delegate == "store-client") Platypus runs Command, which
 // asks the store's own client to start the game, and follows the game through
 // Find.
 type LaunchSpec struct {
@@ -138,7 +138,7 @@ type GameDetails struct {
 	ReleaseDate  string        `json:"releaseDate,omitempty"`
 	HeroURL      string        `json:"heroUrl,omitempty"` // wide background
 	Achievements *Achievements `json:"achievements,omitempty"`
-	// The compat fields below are protocol 1.10 (CompatVersion): Hydra reads
+	// The compat fields below are protocol 1.10 (CompatVersion): Platypus reads
 	// them only from a plugin that speaks it.
 	SteamAppID string   `json:"steamAppId,omitempty"` // the game's Steam AppID, for ratings
 	Platforms  []string `json:"platforms,omitempty"`  // "linux", "windows", "macos"
@@ -153,7 +153,7 @@ type GameDetails struct {
 var CompatVersion = Version{Major: 1, Minor: 10}
 
 // DRM is what the store says about a game's protection. Every field is a
-// pointer or optional: nil (or "") means the store said nothing, and Hydra
+// pointer or optional: nil (or "") means the store said nothing, and Platypus
 // shows no badge for it. Plugins map their own store fields to these:
 //
 //   - Epic: OwnershipToken → DenuvoLikely; CanRunOffline=false → OnlineRequired;
@@ -177,7 +177,7 @@ type Term struct {
 }
 
 // Achievements in game.details are store-level: what the store shows about
-// the game. Whether the user unlocked one is the plugin's business; Hydra
+// the game. Whether the user unlocked one is the plugin's business; Platypus
 // shows the list as "highlighted by the store".
 type Achievements struct {
 	Total int           `json:"total"`
@@ -208,7 +208,7 @@ type JobUpdate struct {
 	Percent *float64 `json:"percent,omitempty"`
 	Error   string   `json:"error,omitempty"`
 	// Installed, on job.done of an install or update, says which version the
-	// plugin put on disk. Hydra appends it to the game's install ledger.
+	// plugin put on disk. Platypus appends it to the game's install ledger.
 	Installed *types.Installed `json:"installed,omitempty"`
 	// Verify, on job.done of a game.verify job, is what the check found.
 	Verify *types.VerifyReport `json:"verify,omitempty"`

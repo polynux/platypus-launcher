@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/compat"
-	"hydra-launcher/internal/dataplug"
-	"hydra-launcher/internal/types"
+	"platypus/internal/compat"
+	"platypus/internal/dataplug"
+	"platypus/internal/types"
 )
 
 // Compat facts (internal/compat, protocol 1.10) around the echo test plugin.
@@ -66,7 +66,7 @@ func compatEnv(t *testing.T, protocols string) (*versionsEnv, *fakeRatingSource)
 		Online:    env.a.settings.RatingsOnline,
 		Now:       time.Now,
 		Scan:      func(string) ([]compat.LocalHit, bool) { return nil, false },
-		AntiCheat: &compat.AntiCheatStore{URL: srv.URL, Fetch: compat.NewFetcher("hydra-test")},
+		AntiCheat: &compat.AntiCheatStore{URL: srv.URL, Fetch: compat.NewFetcher("platypus-test")},
 	}
 	return env, src
 }

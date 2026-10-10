@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // ScanSteamLibrary scans local Steam library folders and installed ACF manifests.
@@ -138,7 +138,7 @@ func isSystemApp(appID, title string) bool {
 
 // ArtURLPrefix is the asset-server route that serves Steam's local library
 // cache (see main.go). Paths after it are relative to appcache/librarycache.
-const ArtURLPrefix = "/hydra-art/steam/"
+const ArtURLPrefix = "/platypus-art/steam/"
 
 const cdn = "https://steamcdn-a.akamaihd.net/steam/apps/"
 

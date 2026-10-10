@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Store is a game source: it lists the library, provides game page metadata
@@ -19,7 +19,7 @@ type Store interface {
 	// Details returns summary, screenshots and achievements for the game page.
 	// A store without a metadata source returns empty details.
 	Details(ctx context.Context, game types.Game) (*types.GameDetails, error)
-	// Launch says how to start the game. nil means Hydra runs the game's own
+	// Launch says how to start the game. nil means Platypus runs the game's own
 	// Executable through the runner pipeline (Steam executable overrides).
 	// preview asks for the command only: the store must not fetch launch
 	// tokens or check for updates.
@@ -48,7 +48,7 @@ type ClientLaunch struct {
 	StartTimeout time.Duration
 }
 
-// DirectLaunch is a validated plugin launch spec Hydra runs itself.
+// DirectLaunch is a validated plugin launch spec Platypus runs itself.
 type DirectLaunch struct {
 	Exe       string
 	Args      []string

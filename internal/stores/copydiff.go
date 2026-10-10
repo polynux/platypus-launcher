@@ -3,7 +3,7 @@ package stores
 import (
 	"slices"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // compareCopies sets the copies of a borrowed game against a baseline: the

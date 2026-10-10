@@ -21,9 +21,9 @@ export function It15Dashboard() {
         {/* INVERTED dark sidebar */}
         <aside className="sticky top-0 flex h-screen w-60 flex-none flex-col bg-[#241b12] p-5 text-[#f0e9dc]">
           <div className="mb-6 flex items-center gap-3 px-1">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[16px] font-black text-[#241b12]">H</span>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[16px] font-black text-[#241b12]">P</span>
             <div>
-              <div className="text-[16px] font-extrabold tracking-tight">Hydra</div>
+              <div className="text-[16px] font-extrabold tracking-tight">Platypus</div>
               <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">game hub</div>
             </div>
           </div>
@@ -207,7 +207,7 @@ export function It15Game() {
               <div className="mb-1.5 font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#241b12]/45">mangohud</div>
               <Seg options={HUD_PRESETS} value={hud} onChange={setHud} />
               <div className="mt-4 space-y-2 font-mono text-[11px]">
-                {[['Runner', game.runner], ['Prefix', `~/.hydra/pfx/${game.id}`]].map(([k, v]) => (
+                {[['Runner', game.runner], ['Prefix', `~/.platypus/pfx/${game.id}`]].map(([k, v]) => (
                   <div key={k} className="flex justify-between border-t border-[#241b12]/8 pt-2"><span className="text-[#241b12]/45">{k}</span><span className="truncate pl-2">{v}</span></div>
                 ))}
               </div>

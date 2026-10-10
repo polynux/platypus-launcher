@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // steamID64 offset: account ID (the userdata folder name) = SteamID64 - this.

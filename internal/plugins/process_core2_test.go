@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // CORE-2: ensure() must not hand out a dead-but-not-yet-cleaned-up

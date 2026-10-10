@@ -18,7 +18,7 @@ export interface MoveDialogProps {
   onQueued: (job: Job) => void;
 }
 
-/** Moves an installed game into a folder the user picks. Hydra checks the room
+/** Moves an installed game into a folder the user picks. Platypus checks the room
  *  and the folder before the move is queued; the game ends up in a folder with
  *  its own name inside the one picked. */
 export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogProps) {
@@ -66,7 +66,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
         <MonoLabel className="mb-2">move</MonoLabel>
         <h2 className="mb-2 text-[18px] font-bold">Move {game.title}</h2>
         <p className="mb-4 text-[13px] text-white/60">
-          The game's folder moves into the folder you pick. If the disk changes, Hydra copies it, checks the copy and removes the
+          The game's folder moves into the folder you pick. If the disk changes, Platypus copies it, checks the copy and removes the
           old folder only then. Canceling leaves the game where it is.
         </p>
         <div className="space-y-2 font-mono text-[11.5px]">

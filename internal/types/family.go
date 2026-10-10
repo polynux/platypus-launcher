@@ -20,7 +20,7 @@ type FamilyMember struct {
 
 // FamilyWarning is a family.warning notification: the plugin tells the user
 // that a game they are playing is about to be taken back by its owner. Game
-// is Hydra's game id; SecondsLeft counts down from the plugin's figure.
+// is Platypus's game id; SecondsLeft counts down from the plugin's figure.
 type FamilyWarning struct {
 	Source      string `json:"source"`
 	GameID      string `json:"game_id"`

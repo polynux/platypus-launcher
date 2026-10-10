@@ -3,7 +3,7 @@ package stores
 import (
 	"testing"
 
-	"hydra-launcher/internal/plugins"
+	"platypus/internal/plugins"
 )
 
 // A term without an id or a version can't be accepted, so it isn't listed;

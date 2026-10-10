@@ -3,7 +3,7 @@
 # folder's plugin.json: its id picks the second friends list (see
 # plugins/echo/social.go). Install echo first: plugins/install.sh echo.
 here=$(cd "$(dirname "$0")" && pwd)
-echo_bin=$here/../../echo/bin/hydra-echo
+echo_bin=$here/../../echo/bin/platypus-echo
 if [ ! -x "$echo_bin" ]; then
   echo "echo-b needs the echo plugin: plugins/install.sh echo" >&2
   exit 1

@@ -164,8 +164,8 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-// SupportedProtocols are the protocol versions this Hydra speaks, oldest
-// first. The first entry is the oldest major kept alive; Hydra keeps
+// SupportedProtocols are the protocol versions this Platypus speaks, oldest
+// first. The first entry is the oldest major kept alive; Platypus keeps
 // supporting the previous major for a deprecation period after a new one.
 //
 // 1.2 adds cloud saves; 1.3 adds versions; 1.4 adds verify and move (and

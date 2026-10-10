@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // The chat capability (protocol 1.9, docs/plugins/protocol.md, "Chat"): the

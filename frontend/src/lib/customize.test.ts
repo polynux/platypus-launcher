@@ -32,9 +32,9 @@ describe('customization helpers', () => {
 describe('mergeCustomization', () => {
   it('carries only the custom fields of a fresh read into the games on screen', () => {
     const prev = [g({ id: 'a', title: 'A', status: 'ready' } as Partial<Game>), g({ id: 'b', title: 'B' })];
-    const fresh = [g({ id: 'a', title: 'Mine', store_title: 'A', cover_url: '/hydra-art/x/cover.png', customized: ['title', 'cover'] }), g({ id: 'b', title: 'B' })];
+    const fresh = [g({ id: 'a', title: 'Mine', store_title: 'A', cover_url: '/platypus-art/x/cover.png', customized: ['title', 'cover'] }), g({ id: 'b', title: 'B' })];
     const next = mergeCustomization(prev, fresh);
-    expect(next[0]).toMatchObject({ id: 'a', title: 'Mine', cover_url: '/hydra-art/x/cover.png', status: 'ready' });
+    expect(next[0]).toMatchObject({ id: 'a', title: 'Mine', cover_url: '/platypus-art/x/cover.png', status: 'ready' });
     expect(next[1]).toBe(prev[1]);
   });
 

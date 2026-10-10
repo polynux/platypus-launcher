@@ -55,7 +55,7 @@ describe('CustomizationTab', () => {
   it('copies a chosen image, marks it as yours and can reset it', async () => {
     const onChanged = vi.fn();
     api.pickImage.mockReturnValue(ok('/home/me/cover.png'));
-    api.setCustomArt.mockReturnValue(ok({ ...empty, art: { cover: '/hydra-art/ab/cover.png?v=1' } }));
+    api.setCustomArt.mockReturnValue(ok({ ...empty, art: { cover: '/platypus-art/ab/cover.png?v=1' } }));
     api.resetCustomArt.mockReturnValue(ok(empty));
     render(<CustomizationTab game={game} onChanged={onChanged} />);
     await waitFor(() => expect(screen.getByLabelText('Custom title')).not.toBeDisabled());
@@ -90,7 +90,7 @@ describe('CustomizationTab', () => {
   });
 
   it('resets everything at once', async () => {
-    api.getCustomization.mockReturnValue(ok({ title: 'PQ', sort_title: '', art: { icon: '/hydra-art/ab/icon.png' } }));
+    api.getCustomization.mockReturnValue(ok({ title: 'PQ', sort_title: '', art: { icon: '/platypus-art/ab/icon.png' } }));
     api.resetCustomization.mockReturnValue(ok(empty));
     render(<CustomizationTab game={game} onChanged={() => {}} />);
     fireEvent.click(await screen.findByText(/reset everything/i));

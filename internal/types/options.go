@@ -11,7 +11,7 @@ import (
 // §2.1): what a store lets the user choose before an install (language, add-on
 // content, optional packs, toggles). DLC is an option group with `dlc: true`.
 // Core only knows the three group kinds below; a group of any other kind is
-// ignored, so a newer plugin can add kinds without breaking this Hydra.
+// ignored, so a newer plugin can add kinds without breaking this Platypus.
 
 const (
 	OptionSelect = "select" // one value of values
@@ -52,7 +52,7 @@ type OptionGroup struct {
 type InstallOptions map[string]any
 
 // GameOptions answers GetGameOptions: the groups the store offers and the
-// choices Hydra would use now (the saved ones, or the defaults).
+// choices Platypus would use now (the saved ones, or the defaults).
 type GameOptions struct {
 	Groups []OptionGroup  `json:"groups"`
 	Chosen InstallOptions `json:"chosen"`
@@ -73,7 +73,7 @@ func NormalizeGroups(in []OptionGroup) []OptionGroup {
 			continue
 		}
 		if !slices.Contains([]string{OptionSelect, OptionMulti, OptionBool}, g.Kind) {
-			continue // a kind this Hydra doesn't know: ignored, not an error
+			continue // a kind this Platypus doesn't know: ignored, not an error
 		}
 		g.Label = fallback(g.Label, g.ID)
 		if g.Kind == OptionBool {

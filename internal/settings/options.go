@@ -3,7 +3,7 @@ package settings
 import (
 	"errors"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Options returns the install-option choices the user made for a game, as

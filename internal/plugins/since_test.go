@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // A capability is only on when the protocol the plugin settled on includes the
@@ -30,7 +30,7 @@ func TestCapabilityNewerThanTheNegotiatedProtocolIsOff(t *testing.T) {
 	err = e.m.Call(ctx(t), "echo", "versions.list", map[string]any{"id": "tiny"}, nil)
 	var re *jsonrpc.Error
 	if !errors.As(err, &re) || re.Code != jsonrpc.CodeMethodNotFound {
-		t.Fatalf("versions.list over 1.1: %v, want -32601 from Hydra's side", err)
+		t.Fatalf("versions.list over 1.1: %v, want -32601 from Platypus's side", err)
 	}
 	if n := echoCalls(t, e)["versions.list"]; n != 0 {
 		t.Fatalf("versions.list reached the plugin %d times", n)
@@ -63,7 +63,7 @@ func TestInstallOptionsArriveWithRevision15(t *testing.T) {
 	}
 }
 
-func TestHydraSpeaksVersionsRevision(t *testing.T) {
+func TestPlatypusSpeaksVersionsRevision(t *testing.T) {
 	if !slices.Contains(SupportedProtocols, Version{1, 3}) {
 		t.Fatalf("SupportedProtocols = %v, want 1.3 in it", SupportedProtocols)
 	}

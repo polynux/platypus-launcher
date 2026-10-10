@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 type call struct {
@@ -560,12 +560,12 @@ func TestAnAbandonedLaunchOwesNothing(t *testing.T) {
 	}
 }
 
-func TestAPushInterruptedByHydraQuittingRunsAtTheNextStart(t *testing.T) {
+func TestAPushInterruptedByPlatypusQuittingRunsAtTheNextStart(t *testing.T) {
 	r := newRig(t, fakeSettings{})
 	r.be.answer("cloud.status", status(types.CloudStatePending, types.CloudCounts{Upload: 1}))
 	jid := r.o.Launching(game, cctx)
 
-	// Hydra quits while the game runs: the game's exit arrives during shutdown.
+	// Platypus quits while the game runs: the game's exit arrives during shutdown.
 	r.o.Shutdown(time.Second)
 	r.o.Exited(game.ID, jid, false)
 	if len(r.be.methods()) != 0 {
@@ -606,7 +606,7 @@ func TestAnInterruptedPushIsResentWithTheSameJobIDButAFailedOneIsNot(t *testing.
 		pushes = append(pushes, p["jobId"].(string))
 		if len(pushes) == 1 {
 			close(blocked)
-			<-ctx.Done() // Hydra quits mid-push
+			<-ctx.Done() // Platypus quits mid-push
 			return nil, ctx.Err()
 		}
 		return status(types.CloudStateOffline, types.CloudCounts{}, func(s *types.CloudStatus) { s.Message = "offline" }), nil

@@ -1,7 +1,7 @@
 // Package cloudsync decides when a game's cloud saves are synced and what the
 // user is asked, and leaves the how to the store plugin (cloud.* requests,
-// docs/plugins/protocol.md "Cloud saves"): a pull before Hydra launches a game
-// itself, a push after it exits, the conflict flow, and the rule that Hydra
+// docs/plugins/protocol.md "Cloud saves"): a pull before Platypus launches a game
+// itself, a push after it exits, the conflict flow, and the rule that Platypus
 // does not sync while the store's own client is running.
 //
 // The package talks to plugins through the narrow Backend interface, so it is
@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Game is the part of a library game the orchestrator needs.
 type Game struct {
-	ID       string // Hydra's game id, p.<plugin>.<store id>
+	ID       string // Platypus's game id, p.<plugin>.<store id>
 	PluginID string
 	StoreID  string // the plugin's id for the game
 	Title    string
@@ -102,7 +102,7 @@ type job struct {
 	done     chan struct{} // closed when the job has ended
 }
 
-// Pending is a push owed for a game that was launched: it survives Hydra
+// Pending is a push owed for a game that was launched: it survives Platypus
 // quitting while the game ran.
 type Pending struct {
 	GameID   string             `json:"game_id"`
@@ -358,7 +358,7 @@ func (c *Orchestrator) cancelAtPlugin(j *job) {
 }
 
 // Progress routes a plugin's cloud.progress notification to the UI. Reports
-// for a job Hydra isn't running are dropped.
+// for a job Platypus isn't running are dropped.
 func (c *Orchestrator) Progress(pluginID string, raw json.RawMessage) {
 	var p types.CloudProgress
 	if json.Unmarshal(raw, &p) != nil || p.JobID == "" {

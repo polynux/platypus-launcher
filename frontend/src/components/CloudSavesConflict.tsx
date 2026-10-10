@@ -25,7 +25,7 @@ interface Props {
 
 /** Saves that changed on this device and in the cloud: per file, both sides'
  *  sizes and dates and a choice (Keep this device / Keep cloud / Decide later).
- *  Hydra never picks for the user. */
+ *  Platypus never picks for the user. */
 export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunchAnyway }: Props) {
   const conflicts = status.conflicts ?? [];
   const [choices, setChoices] = useState<Record<string, Choice>>({});
@@ -52,7 +52,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
       <h2 className="text-[19px] font-extrabold tracking-tight">Saves changed on both sides</h2>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">
         {game.title} has {conflicts.length === 1 ? 'a save file' : `${conflicts.length} save files`} that changed on this device and in the cloud.
-        Hydra won't overwrite either without your say. Keeping the cloud copy backs up the file on this device first;
+        Platypus won't overwrite either without your say. Keeping the cloud copy backs up the file on this device first;
         keeping this device's copy replaces the cloud one.
       </p>
 

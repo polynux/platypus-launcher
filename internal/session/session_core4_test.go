@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // CORE-4: launch secrets must not leak through the game's own stdout into
@@ -55,7 +55,7 @@ drain:
 		t.Fatalf("failure message missing redacted form: %q", failed.Message)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(home, ".local/share/hydra/logs", "game-secret.log"))
+	raw, err := os.ReadFile(filepath.Join(home, ".local/share/platypus/logs", "game-secret.log"))
 	if err != nil {
 		t.Fatalf("reading log: %v", err)
 	}

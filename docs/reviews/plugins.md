@@ -5,7 +5,7 @@
 Reviewed `plugins/epic-legendary`, `plugins/gog-gogdl`, `plugins/amazon-nile`,
 `plugins/echo`, `plugins/install.sh` (+ `new.sh` as the template authors copy),
 `internal/plugtest`, `docs/plugins/protocol.md` against all plugin
-implementations (including `steam-standalone/bin/hydra-steam` for protocol
+implementations (including `steam-standalone/bin/platypus-steam` for protocol
 conformance) and the Go host (`internal/plugins`, `internal/stores`,
 `app_plugins.go`, `internal/jobs`).
 
@@ -26,7 +26,7 @@ no negative launchSpec), which is why all of the above pass CI.
 ### PLUG-1 — Amazon `pending_login` race (same class as the Steam QR race)
 - severity: high
 - category: concurrency
-- file:line: `plugins/amazon-nile/bin/hydra-amazon:110-150` (`auth_begin`),
+- file:line: `plugins/amazon-nile/bin/platypus-amazon:110-150` (`auth_begin`),
   `:153-170` (`auth_complete`); global at `:150`
 - what's wrong: `pending_login = {}` is module-global, written by `auth_begin`
   (`pending_login.update({...})`) and read/cleared by `auth_complete`, with no
@@ -59,13 +59,13 @@ no negative launchSpec), which is why all of the above pass CI.
 ### PLUG-2 — GOG/Amazon uninstall ignores `job.cancel` and deletes anyway
 - severity: high
 - category: correctness / data loss
-- file:line: `plugins/gog-gogdl/bin/hydra-gog:314-321` (`start_job` uninstall
+- file:line: `plugins/gog-gogdl/bin/platypus-gog:314-321` (`start_job` uninstall
   never enters `jobs`), `:437-445` (`follow_uninstall` no cancel check);
-  `plugins/amazon-nile/bin/hydra-amazon:246-248`, `:297-303` (same shape).
-  Contrast `plugins/epic-legendary/bin/hydra-epic:261-277` (uninstall gets a
+  `plugins/amazon-nile/bin/platypus-amazon:246-248`, `:297-303` (same shape).
+  Contrast `plugins/epic-legendary/bin/platypus-epic:261-277` (uninstall gets a
   `Popen` + `jobs[jobId]` entry) + `:280-310` (`follow_job` checks `canceled`).
 - what's wrong: uninstall runs in a bare thread with no entry in `jobs`, so
-  `job.cancel` (`hydra-gog:458-465`, `hydra-amazon:316-323`) finds nothing and
+  `job.cancel` (`platypus-gog:458-465`, `platypus-amazon:316-323`) finds nothing and
   returns `{}`. `follow_uninstall` then unconditionally removes the game dir
   (GOG: `shutil.rmtree`) or runs `nile uninstall`, and emits `job.done`. The
   queue already marked the job canceled and will ignore the late `job.done`
@@ -90,11 +90,11 @@ no negative launchSpec), which is why all of the above pass CI.
 ### PLUG-3 — One-time secrets passed on argv (ps-visible)
 - severity: medium
 - category: security
-- file:line: `plugins/epic-legendary/bin/hydra-epic:122`
-  (`legendary("auth", "--code", code, ...)`); `plugins/gog-gogdl/bin/hydra-gog:171`
-  (`gogdl("auth", "--code", code, ...)`); `plugins/amazon-nile/bin/hydra-amazon:163-166`
+- file:line: `plugins/epic-legendary/bin/platypus-epic:122`
+  (`legendary("auth", "--code", code, ...)`); `plugins/gog-gogdl/bin/platypus-gog:171`
+  (`gogdl("auth", "--code", code, ...)`); `plugins/amazon-nile/bin/platypus-amazon:163-166`
   (`nile("register", "--code", code, "--client-id", ..., "--code-verifier", ...,
-  "--serial", ...)`). Contrast `steam-standalone/bin/hydra-steam:653-658,683`
+  "--serial", ...)`). Contrast `steam-standalone/bin/platypus-steam:653-658,683`
   (password / guard code over stdin JSON, refresh token on stdin, never argv).
 - what's wrong: the authorization code (and for Amazon the PKCE verifier +
   client id + serial) appear in the child argv, visible to any local process via
@@ -197,17 +197,17 @@ no negative launchSpec), which is why all of the above pass CI.
   answers notifications (`{"id": None}` responses, violating JSON-RPC — the Go
   `jsonrpc.Conn` tolerates it, but strict hosts won't); omits `jsonrpc: 2.0` on
   responses; keeps install state in process memory (`INSTALLS`) instead of
-  `$HYDRA_PLUGIN_DATA`, so a restart forgets installs (doc requires
+  `$PLATYPUS_PLUGIN_DATA`, so a restart forgets installs (doc requires
   resumable/idempotent same-`jobId`); `job.cancel` pops from a dict
   `start_job` never fills (no-op); library lists without login (all four real
   plugins gate on auth). Authors who fill only the STORE sections ship these.
 - concrete scenario: scaffold → `install.sh` → install stub game → restart
-  Hydra (plugin process exits) → library shows uninstalled (state lost).
+  Platypus (plugin process exits) → library shows uninstalled (state lost).
   Or: queue an update → plugin does a full reinstall into a fresh dir.
   Or: cancel the stub install → nothing stops (`follow_install` has no handle).
 - proposed fix: fix the template: `update → update`, guard `if "id" not in msg:
   continue`, always set `jsonrpc`, persist `INSTALLS` under
-  `$HYDRA_PLUGIN_DATA/installed.json`, register jobs + honor cancel, gate
+  `$PLATYPUS_PLUGIN_DATA/installed.json`, register jobs + honor cancel, gate
   `library_list` on login with `-32001`. Copy the `out_lock`/`jobs_lock`
   pattern from the real plugins.
 - test that would catch it: run the scaffold through `Suite.Conformance` plus a
@@ -218,19 +218,19 @@ no negative launchSpec), which is why all of the above pass CI.
 ### PLUG-7 — Cross-plugin divergences the suite should pin (auth/size/launch details)
 - severity: medium
 - category: protocol consistency
-- file:line (a) no-`speed`: `hydra-amazon:267-294` (`follow_job` never sets
+- file:line (a) no-`speed`: `platypus-amazon:267-294` (`follow_job` never sets
   `speed`; doc table `protocol.md:134-139` says speed in bytes/s; Epic `:292-301`
   and GOG `:343-356` send it); (b) `installSize` auth-mapping:
-  `hydra-gog:277` (`"auth" in err.lower()` — any stderr containing "auth",
-  e.g. "authoritative", becomes `-32001`); `hydra-amazon:229`
+  `platypus-gog:277` (`"auth" in err.lower()` — any stderr containing "auth",
+  e.g. "authoritative", becomes `-32001`); `platypus-amazon:229`
   (`"logged" in err.lower()`); Epic `:84-85` (exact `Login failed`/`not logged
   in`); (c) `game.details` unknown-id: Epic `:208` raises, GOG `:500-553`
   swallows to `{}` (typo'd id shows empty page, no error); Amazon has no
   `game.details` at all (`:379-392` METHODS) — allowed, but then `game.details`
   coverage in `Conformance` (`plugtest.go:278-282`) asserts nothing, so the
   three behaviors are never compared; (d) Amazon `find_exe` blocklist
-  (`hydra-amazon:355-369`) excludes `uninst/setup/redist/dxsetup` but not
-  `vcredist/dotnet`, which Steam's picker (`hydra-steam:1145-1148,1175`)
+  (`platypus-amazon:355-369`) excludes `uninst/setup/redist/dxsetup` but not
+  `vcredist/dotnet`, which Steam's picker (`platypus-steam:1145-1148,1175`)
   excludes — Amazon can pick `vcredist_x64.exe` as the game exe.
 - concrete scenario: (a) Amazon progress bars never show speed (queue sets
   `Speed=0`, UI shows --). (b) A GOG `info` failure mentioning "auth" in an
@@ -255,11 +255,11 @@ no negative launchSpec), which is why all of the above pass CI.
 - category: docs
 - file:line: `docs/plugins/protocol.md:68-82` (methods table), `:84-86`
   (auth.begin), `:127-144` (jobs), `:146-191` (launch); vs
-  `hydra-steam:519-553` (`qr` in `auth.status`/`auth.begin`, `wait_qr_login`),
-  `hydra-gog:483-490` + `hydra-steam:1246-1260` (`native` inside launchSpec —
+  `platypus-steam:519-553` (`qr` in `auth.status`/`auth.begin`, `wait_qr_login`),
+  `platypus-gog:483-490` + `platypus-steam:1246-1260` (`native` inside launchSpec —
   not in the doc's LaunchSpec, which only defines `native` on library entries
-  `:101-103`), `hydra-gog:264-270` (`platform`/`executable` extra keys on
-  library entries), `hydra-steam:1273-1282` (`mark_needs_client`, not in the
+  `:101-103`), `platypus-gog:264-270` (`platform`/`executable` extra keys on
+  library entries), `platypus-steam:1273-1282` (`mark_needs_client`, not in the
   table at all), `internal/types/models.go:140-149` (`AuthPrompt.QR`,
   `AuthStatus.QR` — implemented, undocumented in `protocol.md`)
 - what's wrong: the doc new plugin authors read doesn't mention the QR flow
@@ -269,8 +269,8 @@ no negative launchSpec), which is why all of the above pass CI.
   (`platform`, `executable`, `genres`-as-debug on Amazon `:218-220`), or the
   `mark_needs_client` out-of-band method. It also says installs go "into
   `installDir`, never anywhere else" (`:131`) while Steam creates
-  `installDir/<game>` (`hydra-steam:1061`) and GOG falls back to `path` itself
-  (`hydra-gog:388-402`) — both compliant in spirit, but the doc never says
+  `installDir/<game>` (`platypus-steam:1061`) and GOG falls back to `path` itself
+  (`platypus-gog:388-402`) — both compliant in spirit, but the doc never says
   subdirs are expected, so `find_game_dir`'s `return path` fallback (two games
   sharing one dir) looks legal.
 - concrete scenario: author implements strictly to the doc, omits `qr`,
@@ -291,35 +291,35 @@ no negative launchSpec), which is why all of the above pass CI.
 - severity: low
 - category: correctness
 - file:line:
-  - GOG orphan title: `hydra-gog:369-385` (`record_install` stores
+  - GOG orphan title: `platypus-gog:369-385` (`record_install` stores
     `"title": job.get("title", "")`) but `start_job` (`:337-338`) never stores
     `title` in `jobs[jobId]` → orphan entries (`:239-243`,
     `title: ig.get("title") or app`) show the numeric id. Scenario: uninstall a
-    game from GOG Galaxy (owned list no longer contains it) → Hydra lists `1234`
+    game from GOG Galaxy (owned list no longer contains it) → Platypus lists `1234`
     instead of `Super Game`. Fix: pass `title` through `start_job` params (the
     queue knows it) or keep the pre-install library title.
   - GOG `playTasks` filter inverted for manifests without `isPrimary`:
-    `hydra-gog:420-426` (`if rel and not task.get("isPrimary"): continue`)
+    `platypus-gog:420-426` (`if rel and not task.get("isPrimary"): continue`)
     skips every task lacking the flag, falling through to the `.sh` walk even
     when `playTasks[0].path` names the real exe. Scenario: Windows game whose
     `goggame-*.info` has no `isPrimary` → launcher picks an arbitrary `.sh`
     or `""` → `couldn't find a start script`. Fix: prefer primary, fall back to
     any task path.
-  - GOG empty-Bearer header: `hydra-gog:115-125` (`api_get` always sends
+  - GOG empty-Bearer header: `platypus-gog:115-125` (`api_get` always sends
     `Authorization: Bearer ` even when `token == ""`, e.g. `platform_of`
     `:302`). Scenario: `products/{id}?expand=downloads` rejects empty bearer
     where anonymous succeeds → Linux games install as Windows. Fix: omit the
     header when token is empty.
-  - Amazon `uuid1` serial: `hydra-amazon:113` (`uuid.uuid1().hex`) embeds MAC +
+  - Amazon `uuid1` serial: `platypus-amazon:113` (`uuid.uuid1().hex`) embeds MAC +
     timestamp, sent to Amazon and logged in calls files. Scenario: state/calls
     files shared in a bug report leak the MAC. Fix: `uuid4`.
   - Shutdown fragility: epic/gog/amazon `main` builds
-    `[j["proc"] for j in jobs.values()]` (`hydra-epic:429-430`,
-    `hydra-gog:607-608`, `hydra-amazon:428-429`); a future entry without `proc`
+    `[j["proc"] for j in jobs.values()]` (`platypus-epic:429-430`,
+    `platypus-gog:607-608`, `platypus-amazon:428-429`); a future entry without `proc`
     raises `KeyError` during shutdown. Steam already uses `j.get("proc")` +
-    `None` guard (`hydra-steam:1412-1415`, `stop_proc(None)` safe). Fix: copy
+    `None` guard (`platypus-steam:1412-1415`, `stop_proc(None)` safe). Fix: copy
     Steam's form.
-  - `amazon setup_env()` (`hydra-amazon:87-91`) mutates `os.environ` on every
+  - `amazon setup_env()` (`platypus-amazon:87-91`) mutates `os.environ` on every
     call with no lock; benign today (same value) but races with any future
     per-login value. Fix: set once at startup.
 - test that would catch them: orphan-title round-trip; fixture
@@ -331,7 +331,7 @@ no negative launchSpec), which is why all of the above pass CI.
 
 1. Share one Python RPC skeleton across epic/gog/amazon/steam (today four
    copies of `send`/`notify`/`RPCError`/`handle`/`main` + three copies of
-   `stop_proc`/`job_cancel`). A `hydra_plugin.py` next to each exec (shipped by
+   `stop_proc`/`job_cancel`). A `platypus_plugin.py` next to each exec (shipped by
    `install.sh`'s module loop) would kill PLUG-6-class drift. Value high,
    effort S-M.
 2. Unify child-CLI error mapping in one helper (`auth-required` iff the CLI's
@@ -351,7 +351,7 @@ no negative launchSpec), which is why all of the above pass CI.
 ## Checked and fine
 
 - Epic launch-env denylist matches host `deniedEnv`/`deniedEnvPrefixes`
-  (`hydra-epic:29-35` vs `internal/stores/launchspec.go:20-31`).
+  (`platypus-epic:29-35` vs `internal/stores/launchspec.go:20-31`).
 - Plugin process lifecycle: own process group + `Pdeathsig`, group kill on
   wait, stdin-close exit, restart backoff + 5-crash give-up
   (`internal/plugins/process.go:156-248`).
@@ -372,10 +372,10 @@ no negative launchSpec), which is why all of the above pass CI.
   `escape`/`client` launch paths, `redact` preview tokens
   (`plugins/echo/main.go:313-436`).
 - Steam secrets hygiene: password/guard/refresh token over stdin, never argv
-  or logs; token files `0600` (`hydra-steam:653-658,949-972,121-136`).
+  or logs; token files `0600` (`platypus-steam:653-658,949-972,121-136`).
 - GOG `install_size` max-language selection with `*` all-zeros noted
-  (`hydra-gog:284-291`); Epic offline `status --json --offline` for auth checks
-  (`hydra-epic:96-100`).
+  (`platypus-gog:284-291`); Epic offline `status --json --offline` for auth checks
+  (`platypus-epic:96-100`).
 - `plugtest` wiring (copy tree, fake PATH, approve-then-ready, queue through
   real `jobs.Queue`) is faithful to `app.go` wiring; per-plugin tests assert
   call shapes (`--base-path`, `--skip-sdl`, redact) beyond conformance.

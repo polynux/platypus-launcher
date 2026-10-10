@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Hydra store plugin for Steam without the Steam client.
+"""Platypus store plugin for Steam without the Steam client.
 
-Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
-over stdin/stdout, one object per line. Logins are done by hydra-steam-dl
+Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+over stdin/stdout, one object per line. Logins are done by platypus-steam-dl
 (Go, next to this file), which logs into Steam with the user's own account
 and Steam Guard over the CM (QR via BeginAuthSessionViaQR + Poll, password
 via GetPasswordRSAPublicKey + BeginAuthSessionViaCredentials + Steam Guard
 code or mobile confirmation); the plugin never stores the password — it
-feeds it to one hydra-steam-dl auth run on stdin, and the refresh token
-Steam issues afterwards stays in $HYDRA_PLUGIN_DATA (refresh.token 0600,
+feeds it to one platypus-steam-dl auth run on stdin, and the refresh token
+Steam issues afterwards stays in $PLATYPUS_PLUGIN_DATA (refresh.token 0600,
 plus token.json/session.json). Downloads are done by the same binary,
 which logs on to a CM with the stored refresh token and spreads chunk
 fetches over many CDN hosts like the Steam client does.
@@ -82,7 +82,7 @@ def log(level, message):
 
 
 def data_dir():
-    d = os.environ.get("HYDRA_PLUGIN_DATA") or os.path.join(os.path.expanduser("~"), ".hydra-steam-standalone")
+    d = os.environ.get("PLATYPUS_PLUGIN_DATA") or os.path.join(os.path.expanduser("~"), ".platypus-steam-standalone")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -92,7 +92,7 @@ def tail(text, n=3):
     return " · ".join(lines[-n:]) if lines else "no output"
 
 
-# Logins run through hydra-steam-dl (Go, next to this file), never through
+# Logins run through platypus-steam-dl (Go, next to this file), never through
 # argv-visible credentials: the password travels on the auth subcommand's
 # stdin and is never logged. See "QR login" below.
 
@@ -306,7 +306,7 @@ def migrate_token(token, account):
 
 
 # --- QR login ---------------------------------------------------------------
-# hydra-steam-dl auth prints the login QR as block-art JSON events on
+# platypus-steam-dl auth prints the login QR as block-art JSON events on
 # stdout (one module = two U+2588 chars wide, "█" = dark module) and waits
 # for the Steam mobile app to approve it. Steam periodically expires and
 # refreshes the challenge URL, so the binary can emit a NEW qr event while
@@ -315,7 +315,7 @@ def migrate_token(token, account):
 # (refresh.token 0600, token.json, session.json); we consider the login
 # done on its result event.
 
-# QR login background state: the hydra-steam-dl auth process, its latest
+# QR login background state: the platypus-steam-dl auth process, its latest
 # art and its result. qr_start_lock serializes start_qr_login so a
 # duplicate auth.begin (React StrictMode sends two back to back) reuses
 # the live session instead of killing it; qr_proc["ready"] wakes waiters
@@ -345,7 +345,7 @@ def _reap(proc):
 
 
 def start_qr_login():
-    """Starts `hydra-steam-dl auth` (QR mode) in the background, tracking
+    """Starts `platypus-steam-dl auth` (QR mode) in the background, tracking
     its QR art. Returns (art text or None, error or None). A duplicate
     call while a session is pending reuses it and returns the current
     art — it never kills and restarts it."""
@@ -381,7 +381,7 @@ def start_qr_login():
         except FileNotFoundError:
             with qr_lock:
                 qr_state.update(state="failed",
-                                error="hydra-steam-dl is missing; reinstall the plugin")
+                                error="platypus-steam-dl is missing; reinstall the plugin")
             return None, qr_state["error"]
         try:
             proc.stdin.write(json.dumps({"mode": "qr"}) + "\n")
@@ -504,7 +504,7 @@ def api_get(url, token=None):
     # reaches the network. Not set in normal runs. The file may carry
     # "_routes": {substring: response} so different endpoints can answer
     # differently; without it the file answers every call (older tests).
-    hook = os.environ.get("HYDRA_STEAM_API_FILE")
+    hook = os.environ.get("PLATYPUS_STEAM_API_FILE")
     if hook:
         with open(hook) as f:
             data = json.load(f)
@@ -618,7 +618,7 @@ def auth_begin(_params):
     instructions = ("Scan the QR code with the Steam mobile app (Steam Guard → scan) "
                     "and just wait — the dialog closes by itself. The code refreshes "
                     "by itself when it expires. Or log in below; your password and "
-                    "the Steam Guard code go to hydra-steam-dl only and are never "
+                    "the Steam Guard code go to platypus-steam-dl only and are never "
                     "stored, and the login key Steam issues stays in this plugin's "
                     "private data folder.")
     if err and not qr:
@@ -733,7 +733,7 @@ pw_sessions = {}  # account -> PWSession waiting for a code
 
 
 class PWSession:
-    """One live `hydra-steam-dl auth` password run, read by a single
+    """One live `platypus-steam-dl auth` password run, read by a single
     background thread into a queue. The password travels on stdin (never
     argv, never logged)."""
 
@@ -744,7 +744,7 @@ class PWSession:
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1, env=dict(os.environ))
         except FileNotFoundError:
-            raise RPCError("hydra-steam-dl is missing; reinstall the plugin")
+            raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
         self.proc, self.account = proc, username
         self.events = queue.Queue()
         self.ended = threading.Event()
@@ -822,7 +822,7 @@ def auth_complete(params):
     guard = (fields.get("guard") or "").strip()
     if not username and not password:
         # Empty form = "I scanned the QR code": wait for the background
-        # hydra-steam-dl auth to be approved by the phone and finish.
+        # platypus-steam-dl auth to be approved by the phone and finish.
         return wait_qr_login()
     if not username or not password:
         raise RPCError("enter your Steam account name and password")
@@ -870,7 +870,7 @@ def status_persona():
 
 
 def wait_qr_login(timeout=300):
-    """Waits for the background hydra-steam-dl auth (QR) to be approved
+    """Waits for the background platypus-steam-dl auth (QR) to be approved
     (the phone confirmed) and reports the result, like a password login."""
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -1032,7 +1032,7 @@ def library_list(_params):
             entry["coverUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_600x900_2x.jpg"
             entry["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
             entry["bannerUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/header.jpg"
-        # Tools, movies, music etc. aren't depot installs Hydra can run.
+        # Tools, movies, music etc. aren't depot installs Platypus can run.
         app_type = (store.get("type") or "").lower()
         if app_type and app_type not in ("game", "demo", "beta", "application"):
             entry["installable"] = False
@@ -1056,24 +1056,24 @@ def mode_note(mode):
     return {
         "none": "Launch mode: no Steamworks — runs directly, fully without Steam.",
         "optional": "Launch mode: Steamworks present but optional — runs directly with SteamAppId set.",
-        "client": "Launch mode: needs the Steam client — Hydra starts the real client hidden.",
+        "client": "Launch mode: needs the Steam client — Platypus starts the real client hidden.",
     }.get(mode, "")
 
 
 def dl_bin():
-    """The Go downloader: bin/hydra-steam-dl next to this file (built by
+    """The Go downloader: bin/platypus-steam-dl next to this file (built by
     install.sh), falling back to PATH (tests put a built copy there)."""
-    sibling = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hydra-steam-dl")
+    sibling = os.path.join(os.path.dirname(os.path.abspath(__file__)), "platypus-steam-dl")
     if os.path.isfile(sibling) and os.access(sibling, os.X_OK):
         return sibling
-    found = shutil.which("hydra-steam-dl")
+    found = shutil.which("platypus-steam-dl")
     if found:
         return found
     return sibling  # missing: the run surfaces it as an error
 
 
 def dl_request(params, extra=None):
-    """The stdin request for hydra-steam-dl: ids plus the refresh token.
+    """The stdin request for platypus-steam-dl: ids plus the refresh token.
     The token travels on stdin, never argv, and is never logged."""
     token = refresh_token()
     if not token:
@@ -1091,14 +1091,14 @@ def dl_request(params, extra=None):
 
 
 def dl_run(subcommand, req, job_id=None, game_dir=None):
-    """Runs hydra-steam-dl and follows its JSON lines: progress
+    """Runs platypus-steam-dl and follows its JSON lines: progress
     notifications until a result or error line. Returns the result dict."""
     try:
         proc = subprocess.Popen([dl_bin(), subcommand], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, bufsize=1, env=dict(os.environ))
     except FileNotFoundError:
-        raise RPCError("hydra-steam-dl is missing; reinstall the plugin")
+        raise RPCError("platypus-steam-dl is missing; reinstall the plugin")
     if job_id is not None:
         with jobs_lock:
             job = jobs.get(job_id) or {}
@@ -1150,7 +1150,7 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
 
 
 def install_size(params):
-    """Depot sizes from hydra-steam-dl: it resolves the app's depots over
+    """Depot sizes from platypus-steam-dl: it resolves the app's depots over
     the CM and sums the manifests (Linux depots first, Windows fallback —
     the same order an install uses)."""
     try:
@@ -1161,7 +1161,7 @@ def install_size(params):
         raise RPCError("couldn't get the size for app {}: {}".format(params["id"], e))
     disk, compressed = int(result.get("disk_bytes") or 0), int(result.get("download_bytes") or 0)
     if disk == 0:
-        raise RPCError("hydra-steam-dl produced no manifest sizes for app {}".format(params["id"]))
+        raise RPCError("platypus-steam-dl produced no manifest sizes for app {}".format(params["id"]))
     return {"downloadBytes": compressed, "diskBytes": disk}
 
 
@@ -1179,10 +1179,10 @@ def start_job(params, kind):
         return {}
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
-        raise RPCError("installDir is missing or relative; Hydra always sends one")
-    # One folder per game under Hydra's install dir, like steamapps/common/<name>.
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
+    # One folder per game under Platypus's install dir, like steamapps/common/<name>.
     game_dir = os.path.join(install_dir, game_dir_name(app))
-    # Hydra resends a job with the same jobId after a crash: run it once. A
+    # Platypus resends a job with the same jobId after a crash: run it once. A
     # job that was just paused or canceled is still winding down: wait for it,
     # then start again from what it left on disk.
     if not claim_job(job_id, {"canceled": False, "id": app, "dir": game_dir, "proc": None}):
@@ -1230,7 +1230,7 @@ def game_dir_name(app):
 
 
 def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
-    """hydra-steam-dl install/update with progress. The binary resolves the
+    """platypus-steam-dl install/update with progress. The binary resolves the
     depots itself (Linux first, Windows fallback — the platform used
     decides `native`); downloads are resumable and verified."""
     with jobs_lock:
@@ -1417,14 +1417,14 @@ def find_native_executable(game_dir):
 #              launch directly with SteamAppId/SteamGameId set so the game
 #              doesn't try to relaunch itself through Steam.
 # 3. "client"  The game needs the real client (fatal SteamAPI_Init failure or
-#              Steam's DRM wrapper): Hydra starts the real Steam client
+#              Steam's DRM wrapper): Platypus starts the real Steam client
 #              hidden (`steam -silent`) and asks it to start the game; the
 #              game runs against the live client for its licence check and
 #              achievements. No Steam API emulators, ever.
 #
 # 2 vs 3 can't be told apart reliably by inspection. The plugin tries direct
 # first; if the game dies within seconds with a Steamworks init error
-# (Hydra's session tracker reports it), retrying on the game page marks it
+# (Platypus's session tracker reports it), retrying on the game page marks it
 # "needs client" and mode 3 is used from then on. Community data plugins can
 # pre-seed that flag.
 
@@ -1478,11 +1478,11 @@ def launch_spec(params):
         if mode == "optional":
             # Tell the game which app it is so SteamAPI_Init-less runs don't
             # try to relaunch through Steam. SteamAppId/SteamGameId are not
-            # on Hydra's launch-env denylist (only STEAM_COMPAT_* are).
+            # on Platypus's launch-env denylist (only STEAM_COMPAT_* are).
             spec["env"]["SteamAppId"] = app
             spec["env"]["SteamGameId"] = app
         return spec
-    # mode == "client": the real client, started hidden. Hydra runs the
+    # mode == "client": the real client, started hidden. Platypus runs the
     # command and follows the game through find.cmdline (Steam's reaper marks
     # the game process with AppId=<id>), so session tracking works.
     return {
@@ -1582,8 +1582,8 @@ def job_cancel(params):
 
 
 # --- discarding a canceled job's data ---------------------------------------
-# Staging lives under $HYDRA_PLUGIN_DATA/jobs/<jobId>.{json,chunks} (written by
-# hydra-steam-dl); start_job also leaves <jobId>.meta.json with the folder the
+# Staging lives under $PLATYPUS_PLUGIN_DATA/jobs/<jobId>.{json,chunks} (written by
+# platypus-steam-dl); start_job also leaves <jobId>.meta.json with the folder the
 # job installs into, so job.discard knows what to delete after a restart.
 
 JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -1651,7 +1651,7 @@ def job_discard(params):
     install_dir = params.get("installDir") or ""
     if kind == "install" and meta.get("dir"):
         game_dir = meta["dir"]
-        # The recorded folder must be a subfolder of the install folder Hydra
+        # The recorded folder must be a subfolder of the install folder Platypus
         # named for this job, and not something that is installed.
         if (os.path.isabs(install_dir) and os.path.isabs(game_dir)
                 and inside(game_dir, install_dir)

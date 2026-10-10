@@ -1,4 +1,4 @@
-# Research: Steam Cloud saves, friends and online status in Hydra
+# Research: Steam Cloud saves, friends and online status in Platypus
 
 Status: research only, written 2026-10-08 on `research/steam-social`. Nothing here
 was tested against the real Steam network. Everything below comes from protocol
@@ -46,13 +46,13 @@ Sources used most often (all fetched during this research):
    `Cloud.GetAppFileChangelist#1`, `ClientFileDownload#1`, `BeginAppUploadBatch#1`, `ClientBeginFileUpload#1`,
    `ClientCommitFileUpload#1`, `CompleteAppUploadBatchBlocking#1`) is what Madeira uses; file bytes move over
    plain HTTP(S) to hosts Steam names in the reply. No new transport.
-2. **The "Steam Cloud error" the user got was a real save conflict, not interference by Hydra.** The official
+2. **The "Steam Cloud error" the user got was a real save conflict, not interference by Platypus.** The official
    client's `cloud_log.txt` shows it attached to the game process (through the Steamworks pipe), ran AutoCloud at exit
    with no launch record and no baseline, and found local saves that differ from cloud saves dated Dec 2024.
    Details in section 2.
-3. **The official client and a Hydra CM session coexist** as long as their `obfuscated_private_ip` "logon IDs"
-   differ. Hydra uses a **fixed** `LoginID = 2718281` and a **random machine ID per logon**. Both need fixing before
-   Hydra holds a long-lived session next to short-lived ones (section 3).
+3. **The official client and a Platypus CM session coexist** as long as their `obfuscated_private_ip` "logon IDs"
+   differ. Platypus uses a **fixed** `LoginID = 2718281` and a **random machine ID per logon**. Both need fixing before
+   Platypus holds a long-lived session next to short-lived ones (section 3).
 4. **Friends and presence need a CM session; the Web API is not a substitute.** The friends list arrives
    unprompted after logon (`CMsgClientFriendsList`, EMsg 767); persona states arrive only once the session sets a
    persona state (`CMsgClientChangeStatus`, 716). No keyless Web API lists friends.
@@ -79,11 +79,11 @@ Two kinds of apps write there:
 A third-party launcher can sync **both** as plain files, because the cloud side is just a file set:
 
 - Auto-Cloud: the local location is computed from `ufs` (section 1.4).
-- Remote-storage API apps: there is no `steam_api` client to write into `userdata/.../remote`, so Hydra would have to
-  **own that directory** (create `<hydra data>/steam-remote/<appid>/` and point the game at it). That requires the game to run
-  against a Steam client, which Hydra's direct launch does not provide, so API-only games are **out of scope until
+- Remote-storage API apps: there is no `steam_api` client to write into `userdata/.../remote`, so Platypus would have to
+  **own that directory** (create `<platypus data>/steam-remote/<appid>/` and point the game at it). That requires the game to run
+  against a Steam client, which Platypus's direct launch does not provide, so API-only games are **out of scope until
   something supplies the Steamworks IPC** — which we must not emulate. [inferred] Such games already need the real
-  client (Hydra's "client required" mode), and the real client then does their cloud sync itself. Hydra can still
+  client (Platypus's "client required" mode), and the real client then does their cloud sync itself. Platypus can still
   *download* such files for backup. Open question for the user (plan, Q-A).
 
 ### 1.2 Service methods, field shapes and order
@@ -158,7 +158,7 @@ So the official model is **three-way**:
   followed by `Upload failed due to conflicts in build list`. [src: local `cloud_log.txt`]
 - timestamps are informational (the dialog shows both dates); SHA-1 + the baseline decide.
 
-A third-party client cannot share `remotecache.vdf` and must not edit it. Hydra needs its **own baseline**
+A third-party client cannot share `remotecache.vdf` and must not edit it. Platypus needs its **own baseline**
 (`path -> last identical SHA`), exactly what Madeira does (`steam-cloud-sync.json`): changed on one side = copy; changed on
 both or no record = **leave alone and ask**. Madeira also never deletes in the cloud and backs up any local file a
 download replaces, and notes "Steam keeps no copy of a cloud file an upload replaces" (so an overwrite must be a
@@ -178,7 +178,7 @@ conscious choice). [src: M `docs/STEAM_CLOUD.md`]
 - `Cloud.ClientConflictResolution#1` (notification: `appid`, `chose_local_files`) reports the user's conflict
   choice to Steam. [src]
 
-Hydra should send these (it is a "device" like any other) so that the user's Steam client and other devices see accurate
+Platypus should send these (it is a "device" like any other) so that the user's Steam client and other devices see accurate
 state, but this is optional for a first version and **[LIVE]**-verified before enabling.
 
 ### 1.4 Auto-Cloud (`ufs`) to real paths
@@ -231,7 +231,7 @@ a Rust tool that talks to the real client; consistent with `root=12` for `WinApp
 **Mapping algorithm** (the official client's observed behaviour in `cloud_log.txt` + Madeira's `location()`):
 
 1. Take each cloud path, split `%Root%` / rest.
-2. Decide the **client OS** the game runs as: `linux` for a native build, `windows` for Proton. Hydra knows this
+2. Decide the **client OS** the game runs as: `linux` for a native build, `windows` for Proton. Platypus knows this
    (`needsWine`, `native` in the launch spec, `internal/runner`).
 3. If the OS is `linux` (or macOS) and a `rootoverrides` entry with matching `root` + `os` exists: new root =
    `useinstead`, then apply `addpath` (prefix) and `pathtransforms` (string find/replace on the relative part).
@@ -244,8 +244,8 @@ a Rust tool that talks to the real client; consistent with `root=12` for `WinApp
    case-insensitive; Madeira resolves each path component case-insensitively). Reject any component `..`, `.`, containing `:`,
    absolute paths, or > 32 components. [src: M]
 
-**Where the Wine profile is in Hydra**, from `internal/runner/launcher.go` (read in this repo): the prefix is
-`~/.local/share/hydra/prefixes/<game.ID>` (or `game.Settings.WinePrefix`), exported as both `WINEPREFIX` and
+**Where the Wine profile is in Platypus**, from `internal/runner/launcher.go` (read in this repo): the prefix is
+`~/.local/share/platypus/prefixes/<game.ID>` (or `game.Settings.WinePrefix`), exported as both `WINEPREFIX` and
 `STEAM_COMPAT_DATA_PATH`. With Proton, `STEAM_COMPAT_DATA_PATH` is the *compat data dir*; Proton puts the real Wine prefix at
 `<compatdata>/pfx` and names the user `steamuser`. So the profile for `WinAppDataLocalLow` is expected at
 `<prefix>/pfx/drive_c/users/steamuser/AppData/LocalLow` **[LIVE]** — I could not inspect a Proton prefix here, and which
@@ -257,7 +257,7 @@ heuristic (try `$USER`, then passwd name, then newest folder under `users/` igno
 **Native vs Proton is also a *Steam-level* concern**: the official client logs `Detected app platform change since last sync - from
 'linux' to 'windows'` followed by `Backup of AutoCloud files in preparation for path changes` / `Restore ... after path changes` (seen for app 7,
 Steam client itself) [src: local `cloud_log.txt`]. Because both platforms share one cloud name, a game run native and later under Proton
-should see its saves moved across. Hydra should treat a platform switch the same way: back up before changing roots.
+should see its saves moved across. Platypus should treat a platform switch the same way: back up before changing roots.
 
 ### 1.5 Prior art: how others do cloud saves
 
@@ -314,8 +314,8 @@ The previous session (2026-10-07 20:36–20:39) shows the same sequence with
 
 ### 2.2 Reading it
 
-- The running Steam client **did** attach to the game. Hydra's `steam-standalone` plugin launches mode-2 games directly with
-  `SteamAppId`/`SteamGameId` set (`plugins/steam-standalone/bin/hydra-steam:1457-1463`). The game's `SteamAPI_Init` finds the running
+- The running Steam client **did** attach to the game. Platypus's `steam-standalone` plugin launches mode-2 games directly with
+  `SteamAppId`/`SteamGameId` set (`plugins/steam-standalone/bin/platypus-steam:1457-1463`). The game's `SteamAPI_Init` finds the running
   client (on Linux through `~/.steam/steam.pipe` / `steam.pid`, which exist and are live on this machine) and the client then
   treats the process like one it started: tracks the PID, shows the user "playing", and runs the **Auto-Cloud sync for the app**.
   Valve's docs describe the attach only as "when you launch your app from Steam itself... automatically have the App ID"
@@ -326,38 +326,38 @@ The previous session (2026-10-07 20:36–20:39) shows the same sequence with
   *different SHA-1s* with no baseline, so it created a conflict and aborted the upload. A genuine data conflict: the account's cloud
   has older SUPERHOT saves (Dec 2024, from another machine or profile) and this machine has newer, different ones.
   Steam shows that as the "Steam Cloud error" toast; no conflict dialog appears because it does not own the launch.
-- **Hydra did nothing wrong on the wire**: it has no cloud code today. The error is a consequence of "official client running + direct launch of
+- **Platypus did nothing wrong on the wire**: it has no cloud code today. The error is a consequence of "official client running + direct launch of
   a Steamworks game", combined with no one reconciling the two saves *before* launch.
 
-### 2.3 What this means for Hydra
+### 2.3 What this means for Platypus
 
 1. **Detect the official client** (read-only): `~/.steam/steam.pid` (and `/proc/<pid>/comm == steam`) plus `~/.steam/steam.pipe`.
    Also `pgrep -x steam`. No interference needed.
-2. **Two writers on one save directory is the danger.** If Hydra pulls the cloud saves before launch and the attached official client then
+2. **Two writers on one save directory is the danger.** If Platypus pulls the cloud saves before launch and the attached official client then
    runs its own exit sync with *no baseline* (ChangeNumber 0, no record), it may still report a conflict. Because the client's exit sync starts
-   within seconds of the process ending (log: process removed 13:25:27, exit sync 13:25:35), Hydra's post-exit push cannot be relied on to go first. Whether a
-   Hydra pre-pull makes the client's exit sync benign (local SHA == cloud SHA at start; after play local != baseline) is **[LIVE]**.
+   within seconds of the process ending (log: process removed 13:25:27, exit sync 13:25:35), Platypus's post-exit push cannot be relied on to go first. Whether a
+   Platypus pre-pull makes the client's exit sync benign (local SHA == cloud SHA at start; after play local != baseline) is **[LIVE]**.
 3. **Safety risk for Proton games:** the attached client computes Windows roots in *its own* compat data
-   (`steamapps/compatdata/<appid>/pfx`), not in Hydra's prefix (`~/.local/share/hydra/prefixes/<id>`). It will find **no files**
+   (`steamapps/compatdata/<appid>/pfx`), not in Platypus's prefix (`~/.local/share/platypus/prefixes/<id>`). It will find **no files**
    there, and the log shows what it does with files it knew about and no longer finds: `File ... no longer matches any patterns (2).
    Removing from cloud` then `FileForget(...)` (here ignored because of pending cloud changes). Files the client has never seen are
    not touched, but a Proton-launched game with a known baseline could have cloud copies *forgotten* (`persist_state = 1`). [src: log; the
    consequence for a known-baseline Proton case is **[LIVE]**]. This is why "do nothing while the official client is running and the game links `steam_api`" is not a safe default
    for Proton games either.
-4. **Defer vs warn.** Recommended policy (details in the plan): if the official client is running and the game would attach to it, Hydra
+4. **Defer vs warn.** Recommended policy (details in the plan): if the official client is running and the game would attach to it, Platypus
    **does not run its own cloud sync for that launch**, tells the user why, and offers "Launch through Steam" (the existing
-   `delegate: store-client` mode, where Steam does the full sequence including its conflict dialog). Hydra runs its own sync only when
+   `delegate: store-client` mode, where Steam does the full sequence including its conflict dialog). Platypus runs its own sync only when
    the official client is **not** running or the game does not link Steamworks (`mode: none`). This needs the user's decision (plan, Q-B).
 
 ---
 
 ## 3. Session conflicts and what the logon flags do
 
-### 3.1 What Hydra sends today
+### 3.1 What Platypus sends today
 
 `internal/steamcm/wire.go: logonBody` [src: repo]: protocol 65580, `client_package_version` 1771, `client_os_type` = `LinuxUnknown`,
 `obfuscated_private_ip` = `LoginID` (a **constant**, `2718281`) in both the legacy field 2 and `CMsgIPAddress` field 11, `should_remember_password=1`,
-`machine_id` = a **fresh random** KeyValues blob (`BB3`/`FF2`/`3B3` = SHA-1 of random nonces) on *every* logon, `chat_mode=2`, `machine_name="Hydra"`,
+`machine_id` = a **fresh random** KeyValues blob (`BB3`/`FF2`/`3B3` = SHA-1 of random nonces) on *every* logon, `chat_mode=2`, `machine_name="Platypus"`,
 `supports_rate_limit_response=1`, `access_token` = refresh token. Sessions today are short-lived (library listing, depot download jobs).
 
 ### 3.2 What Steam does with two logons of one account
@@ -371,13 +371,13 @@ From node-steam-user's README and source [src]:
 Forum reports back this up ("multiple sessions with differing logon IDs work fine"; "you can only have one logon instance *playing a game*
 at the same time") [src: dev.doctormckay.com topics 4715, 1518; search results, not re-verified in source]. So:
 
-- **Hydra vs the official client:** different logon IDs, they coexist. The official client's ID is a function of its real private IP, Hydra's is
+- **Platypus vs the official client:** different logon IDs, they coexist. The official client's ID is a function of its real private IP, Platypus's is
   `2718281`; collision probability is negligible. The existing comment in `steamcm.go` ("a fixed value keeps a logon from kicking an
   existing session") is right for that purpose.
-- **Hydra vs Hydra: BROKEN design once sessions overlap.** All Hydra sessions share `LoginID = 2718281`. Today they never overlap.
+- **Platypus vs Platypus: BROKEN design once sessions overlap.** All Platypus sessions share `LoginID = 2718281`. Today they never overlap.
   A persistent social session plus a depot download or a cloud sync (each does `Dial`) would kick each other with
   `LogonSessionReplaced (34)` and make the long-lived one reconnect-loop. **Fix: a distinct `obfuscated_private_ip` per role** (e.g. social = base+1, cloud
-  = base+2, depot job = random per process). **[LIVE]** that two Hydra logons with different IDs both stay up.
+  = base+2, depot job = random per process). **[LIVE]** that two Platypus logons with different IDs both stay up.
 - **Machine ID:** random per logon means Steam sees a new device each time. With a refresh token this does not trigger a Guard challenge in
   our tests so far, but a persistent social session should send a **stable** `machine_id` (node-steam-user derives one from the account name;
   `09-logon.js: createMachineID`). Stable also reduces "new device" signals. **[LIVE]**.
@@ -390,18 +390,18 @@ at the same time") [src: dev.doctormckay.com topics 4715, 1518; search results, 
 - Steam allows **one session to be playing at a time per account**. `CMsgClientPlayingSessionState { playing_blocked (2), playing_app (3) }`
   (EMsg 9600) is sent right after logon if another session is playing, and whenever it changes; `CMsgClientKickPlayingSession { only_stop_game }` (9601)
   forcibly stops the other session. node-steam-user wraps this as `playingState` / `kickPlayingSession` / `gamesPlayed(apps, force)`. [src]
-- A Hydra session that is **logged on but not reporting any game** does not block the official client from launching anything. A session that *does* report a game
+- A Platypus session that is **logged on but not reporting any game** does not block the official client from launching anything. A session that *does* report a game
   (`ClientGamesPlayed`) will make the official client's next launch say "Steam is currently being used to play X elsewhere" (and vice versa: our report is
-  `playing_blocked` while the official client plays). Hydra must **never** use `kickPlayingSession`/`force`; if blocked, just skip reporting
+  `playing_blocked` while the official client plays). Platypus must **never** use `kickPlayingSession`/`force`; if blocked, just skip reporting
   and show "Playing in Steam". [inferred from the message definitions; the exact dialog text is **[LIVE]**]
 
 ### 3.4 Logon flags that matter
 
-| Field | Meaning | Hydra choice |
+| Field | Meaning | Platypus choice |
 |---|---|---|
 | `obfuscated_private_ip` (11, legacy 2) | logon ID; collision = replaced session | unique per role (see above) |
 | `client_os_type` (7) | shown as platform in some UIs | keep `LinuxUnknown` (-203), matches `remotecache.vdf "ostype"` |
-| `machine_name` (96) | name Steam shows in "devices / playing on" | "Hydra" (maybe `Hydra on <host>`) |
+| `machine_name` (96) | name Steam shows in "devices / playing on" | "Platypus" (maybe `Platypus on <host>`) |
 | `machine_id` (30) | device identity | stable per install |
 | `chat_mode` (33) | 2 = new chat | keep 2 (needed to receive modern chat notifications; chat out of scope) |
 | `ui_mode` (32) / `CMsgClientCurrentUIMode` (5597) | icon beside status in friends list | leave default; optional |
@@ -409,7 +409,7 @@ at the same time") [src: dev.doctormckay.com topics 4715, 1518; search results, 
 | `client_instance_id` (100) / response (27) | per-session id returned by the CM | store only in memory |
 | `should_remember_password` (8) | refresh-token logon | already 1 |
 
-There is **no logon flag that makes Steam treat Hydra as a "web client" that never kicks anything** other than the distinct logon ID. A *web*
+There is **no logon flag that makes Steam treat Platypus as a "web client" that never kicks anything** other than the distinct logon ID. A *web*
 logon (`web_logon_nonce`, `client_os_type = 4294966596` (-700 Web), `ui_mode = 4`) is what steamcommunity's chat uses in node-steam-user
 (`09-logon.js` lines 104-117) but needs a nonce from the website; not applicable.
 
@@ -451,15 +451,15 @@ data and fine to cache in memory/disk for the UI.
 
 To receive friend data the session must call `ClientChangeStatus`. If the user is running the official client at the same time, **one
 account with two sessions has one persona** [inferred]. `CMsgClientPersonaState.Friend.online_session_instances` (7) and `persona_set_by_user` (10)
-suggest Steam aggregates per-session states, but the **rule (does Hydra's `Invisible` hide the user while Steam says Online? does Hydra's `Online`
+suggest Steam aggregates per-session states, but the **rule (does Platypus's `Invisible` hide the user while Steam says Online? does Platypus's `Online`
 override the user's `Away`?) is unknown** and decides the feature's UX. **[LIVE]**, plan live check L4. Safe candidates for a first version:
-(a) Hydra requests **Invisible (7)** to read friends without changing visibility, if the aggregation lets the official session win; (b) only go online
-when the user explicitly chooses a status in Hydra.
+(a) Platypus requests **Invisible (7)** to read friends without changing visibility, if the aggregation lets the official session win; (b) only go online
+when the user explicitly chooses a status in Platypus.
 
 ### 4.3 In-game presence
 
 Reporting `ClientGamesPlayed` with the app's real `game_id` is what the official client does and what makes friends see "In-game: X" and
-credits playtime. For a game the user owns, started by Hydra via its own pipeline, that is the same observable behaviour as the official client's. It does
+credits playtime. For a game the user owns, started by Platypus via its own pipeline, that is the same observable behaviour as the official client's. It does
 **not** make the game believe anything (no API emulation), but it does record playtime on the account and take the "playing" slot
 (3.3). This is a product + policy call, listed in the plan (Q-D). A non-Steam-style `game_id` (high bits set, `game_extra_info` = title) shows the title to friends
 without crediting the real app's playtime; the official client uses that for "Add a Non-Steam Game". [src: node-steam-user `gamesPlayed` doc: string = non-Steam game by name]
@@ -471,7 +471,7 @@ Probably not for the same fidelity, and the keyless surface is very small:
 - `ISteamUser/GetFriendList` and `GetPlayerSummaries` (personastate, `gameid`, `gameextrainfo`) need a **Web API key** and the target's
   profile/friend list to be public [src: Valve wiki/search results]. A launcher cannot ship a key per user and must not ask for one.
 - The keyless method list (`GET https://api.steampowered.com/ISteamWebAPIUtil/GetSupportedAPIList/v1/`, fetched during this research) has no friends/presence
-  method. Methods that accept a user `access_token` (as `IPlayerService/GetOwnedGames` does in `hydra-steam`) exist for some `IPlayerService`
+  method. Methods that accept a user `access_token` (as `IPlayerService/GetOwnedGames` does in `platypus-steam`) exist for some `IPlayerService`
   calls, e.g. `GetFriendsGameplayInfo` (per-app, in `steammessages_player.steamclient.proto`) and `GetPlayerLinkDetails` (already used for the persona name).
   Whether any `IFriendsList…` service accepts the access token over HTTP is **unknown [LIVE]**; I found no definition in the protobuf repo for a
   `FriendsList` service. Do not plan on it.
@@ -483,9 +483,9 @@ Probably not for the same fidelity, and the keyless surface is very small:
 
 | # | Risk / unknown | Why it matters | Mitigation / test |
 |---|---|---|---|
-| R1 | Fixed `LoginID` makes overlapping Hydra sessions kick each other (`LogonSessionReplaced`) | breaks the persistent social session or running downloads | unique ID per role; L1 |
+| R1 | Fixed `LoginID` makes overlapping Platypus sessions kick each other (`LogonSessionReplaced`) | breaks the persistent social session or running downloads | unique ID per role; L1 |
 | R2 | Random `machine_id` per logon | looks like a new device each time | stable per install; L1 |
-| R3 | Official client attaches to Hydra-launched Steamworks games and runs its own cloud sync with no baseline | the exact error the user saw; possible conflict even after Hydra's pull; for Proton, client looks in its own compatdata and may *forget* cloud files it knew | detect + defer policy; L3 |
+| R3 | Official client attaches to Platypus-launched Steamworks games and runs its own cloud sync with no baseline | the exact error the user saw; possible conflict even after Platypus's pull; for Proton, client looks in its own compatdata and may *forget* cloud files it knew | detect + defer policy; L3 |
 | R4 | Upload overwrites cloud copies irreversibly ("Steam keeps no copy of a cloud file an upload replaces", Madeira) | user data loss | upload only when baseline proves cloud == last synced, or explicit user choice; keep local backup of what a download replaces; never delete in cloud |
 | R5 | Game still writing at exit (Unity flush, child processes) | partial files uploaded | wait for process-group exit + two stable stat/SHA passes 2 s apart (Madeira does this) |
 | R6 | Proton profile path/symlink layout unknown (`steamuser` vs `$USER`, `Documents` symlinks) | wrong directory => "nothing to sync" or writes outside the prefix | discover + EvalSymlinks + confine to prefix/home; L2 |
@@ -504,15 +504,15 @@ Probably not for the same fidelity, and the keyless surface is very small:
 
 Everything below uses the user's real account and so needs their go-ahead; none was done here.
 
-- **L1 Logon coexistence.** Official client running; Hydra logs on with two different logon IDs plus a stable machine ID; confirm neither side gets
+- **L1 Logon coexistence.** Official client running; Platypus logs on with two different logon IDs plus a stable machine ID; confirm neither side gets
   `ClientLoggedOff`, and the official client stays logged in. Repeat with equal IDs to confirm the kick (`34`), then stop.
 - **L2 Read-only cloud listing.** `Cloud.GetAppFileChangelist` for 3-5 owned Auto-Cloud games (SUPERHOT, Hades, Stardew Valley …); compare
   the computed local path for each file with the `Found N files that match <path>` lines the official client logged for the same games, native and Proton.
-- **L3 Attach behaviour.** With the official client running and Hydra's cloud code *off*: launch an Auto-Cloud game; then with Hydra having
+- **L3 Attach behaviour.** With the official client running and Platypus's cloud code *off*: launch an Auto-Cloud game; then with Platypus having
   pre-pulled the cloud copy first. Check `cloud_log.txt` for a conflict at exit in each case. Do it with a throwaway-save game first.
-- **L4 Presence aggregation.** Official client Online; Hydra logs on and sets Invisible; ask a friend (or a second account) what they see;
-  vice versa. Then Hydra reports Away while the official client is Online.
-- **L5 Playing session.** Hydra reports `ClientGamesPlayed` for an owned app; start another game in the official client; observe the dialog;
+- **L4 Presence aggregation.** Official client Online; Platypus logs on and sets Invisible; ask a friend (or a second account) what they see;
+  vice versa. Then Platypus reports Away while the official client is Online.
+- **L5 Playing session.** Platypus reports `ClientGamesPlayed` for an owned app; start another game in the official client; observe the dialog;
   stop in both orders.
 - **L6 Upload round trip** on a disposable save: batch begin -> block PUT/POST -> commit -> complete; confirm the official client sees the new change number and
   file. Confirm what happens to `pending_remote_operations` during/after.

@@ -33,8 +33,8 @@ const STATUS: Record<PluginStatus, { label: string; variant: BadgeVariant }> = {
   disabled: { label: 'disabled', variant: 'neutral' },
   'missing-requirements': { label: 'missing a tool', variant: 'bronze' },
   invalid: { label: 'invalid', variant: 'borked' },
-  'needs-newer-hydra': { label: 'needs a newer Hydra', variant: 'bronze' },
-  'too-old': { label: 'too old for this Hydra', variant: 'bronze' },
+  'needs-newer-platypus': { label: 'needs a newer Platypus', variant: 'bronze' },
+  'too-old': { label: 'too old for this Platypus', variant: 'bronze' },
 };
 
 const BUILT_IN = [
@@ -102,7 +102,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Plugins</h1>
           <p className="mt-0.5 max-w-xl text-[12.5px] text-white/50">
-            Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Hydra only runs the ones you approve.
+            Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.
           </p>
         </div>
         <div className="flex gap-2">
@@ -118,7 +118,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       <MonoLabel className="mb-3">store plugins</MonoLabel>
       {plugins.filter((p) => p.kind === 'store').length === 0 ? (
         <EmptyState label="no store plugins">
-          Put a plugin folder in ~/.local/share/hydra/plugins and rescan. From Hydra's source: plugins/install.sh epic-legendary.
+          Put a plugin folder in ~/.local/share/platypus/plugins and rescan. From Platypus's source: plugins/install.sh epic-legendary.
         </EmptyState>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
@@ -277,7 +277,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     {p.problem && <p className="font-mono text-[11.5px] text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
                       <p className="mt-auto text-[12px] text-white/55">
-                        JSON only — fix recipes and tweaks. It can't run anything, so Hydra applies it without asking.
+                        JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.
                       </p>
                     )}
                   </Panel>
@@ -354,7 +354,7 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
           <ManifestRow label="runs" items={[`${p.dir}/${p.exec}`]} empty="" />
           <ManifestRow label="sha-256" items={[p.hash]} empty="" />
           <ManifestRow label="can" items={p.declared} empty="nothing declared" />
-          <ManifestRow label="needs hydra" items={p.needs} empty="nothing in particular" />
+          <ManifestRow label="needs platypus" items={p.needs} empty="nothing in particular" />
           {p.protocol_versions && <ManifestRow label="speaks" items={[`protocol ${p.protocol_versions} over ${p.transport ?? 'jsonrpc-stdio'}`]} empty="" />}
           <ManifestRow label="network" items={p.network} empty="no hosts declared" />
           <ManifestRow label="reads" items={p.read} empty="no paths declared" />
@@ -370,7 +370,7 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
         <div className="mt-4 flex gap-3 rounded-xl bg-white/[0.04] px-3.5 py-3 text-[11.5px] leading-relaxed text-white/60">
           <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300/80" />
           <p>
-            A store plugin runs with your user's permissions. The hosts and paths above are what it declares; Hydra doesn't enforce them yet. Hydra does check
+            A store plugin runs with your user's permissions. The hosts and paths above are what it declares; Platypus doesn't enforce them yet. Platypus does check
             every game it launches is inside the plugin's install folder. Approve plugins you trust.
           </p>
         </div>
@@ -525,7 +525,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
-        <p className="mt-1 text-[12px] text-white/55">Your login stays with {plugin.name}'s own tool; Hydra doesn't store it.</p>
+        <p className="mt-1 text-[12px] text-white/55">Your login stays with {plugin.name}'s own tool; Platypus doesn't store it.</p>
         {!prompt && !error && (
           <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/45"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
         )}

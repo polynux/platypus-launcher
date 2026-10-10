@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // How long the size of an install is remembered. A store's figure changes with

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // The social capability (protocol 1.6, docs/plugins/protocol.md, "Social"):

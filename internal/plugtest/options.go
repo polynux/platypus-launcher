@@ -6,8 +6,8 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/types"
 )
 
 // The install-options capability (protocol 1.5, docs/plugins/protocol.md,

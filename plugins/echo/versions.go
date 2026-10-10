@@ -2,11 +2,11 @@ package main
 
 // The fake `versions` capability: a few channels (one behind a password), a
 // handful of builds, a typed build id with a link, install honouring `target`,
-// and `installed` on job.done. State lives in HYDRA_PLUGIN_DATA/state.json like
+// and `installed` on job.done. State lives in PLATYPUS_PLUGIN_DATA/state.json like
 // the rest of echo's. See docs/plugins/protocol.md, "Versions".
 //
-// Channels: latest (build b300), beta (b310, password "hydra-beta"), legacy
-// (b100). Builds: b310, b300, b290, b200, b100, plus every build Hydra's ledger
+// Channels: latest (build b300), beta (b310, password "platypus-beta"), legacy
+// (b100). Builds: b310, b300, b290, b200, b100, plus every build Platypus's ledger
 // says was installed here ("archive"), plus any build typed as `manual`
 // (b followed by digits). Knob ECHO_VERSIONS_OFF takes a comma list of
 // channels, builds, manual, links and leaves those parts out of versions.list.
@@ -19,7 +19,7 @@ import (
 )
 
 // testPassword unlocks the beta channel. Fixed so tests and the UI can use it.
-const testPassword = "hydra-beta"
+const testPassword = "platypus-beta"
 
 const latestChannel, latestBuild = "latest", "b300"
 
@@ -154,7 +154,7 @@ func resolveTarget(game string, t *targetParam) (versionRec, error) {
 			}
 			return versionRec{Build: b.id, Channel: channel, Name: b.name}, nil
 		}
-		// A build Hydra's ledger remembers: echo can refetch any build id.
+		// A build Platypus's ledger remembers: echo can refetch any build id.
 		if manualBuild.MatchString(t.Build) {
 			return versionRec{Build: t.Build, Channel: channel, Name: "build " + t.Build}, nil
 		}

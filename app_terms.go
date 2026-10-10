@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Terms (protocol 1.11, the `terms` capability, docs/plugins/protocol.md
-// "Terms"): the agreements a store lists for a game. Hydra shows them before an
+// "Terms"): the agreements a store lists for a game. Platypus shows them before an
 // install, and before an update that comes with a new term version, with a
-// link to each one. The user accepts them; Hydra never does. Acceptance is kept
+// link to each one. The user accepts them; Platypus never does. Acceptance is kept
 // per (term id, version) in settings.json, and a store that keeps it too gets
 // game.acceptTerms when the user accepts.
 
@@ -85,7 +85,7 @@ func (a *App) GetGameTerms(game types.Game) ([]types.GameTerm, error) {
 // Only versions the store lists now are accepted, so a dialog that is out of
 // date can't accept a version that has changed since. If the store keeps
 // acceptance too, it is told first (game.acceptTerms, optional); the record
-// is kept in Hydra either way.
+// is kept in Platypus either way.
 func (a *App) AcceptGameTerms(game types.Game, refs []types.TermRef) error {
 	ctx := appCtx(a)
 	terms, err := a.gameTerms(ctx, game)
@@ -121,7 +121,7 @@ func (a *App) AcceptGameTerms(game types.Game, refs []types.TermRef) error {
 
 // termsGate refuses an install or update while the user hasn't accepted the
 // current version of a term. The install dialog accepts the terms first (see
-// AcceptGameTerms); Hydra never accepts on the user's behalf. A job that was
+// AcceptGameTerms); Platypus never accepts on the user's behalf. A job that was
 // queued after its acceptance is not asked again when it starts.
 func (a *App) termsGate(game types.Game) error {
 	terms, err := a.gameTerms(appCtx(a), game)

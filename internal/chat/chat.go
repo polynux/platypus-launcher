@@ -25,7 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // Methods core calls. The notifications the plugin sends are the constants below.

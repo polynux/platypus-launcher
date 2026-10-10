@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hydra-launcher/internal/steam"
+	"platypus/internal/steam"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -22,7 +22,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "hydra-launcher",
+		Title:  "Platypus",
 		Width:  1024,
 		Height: 768,
 		AssetServer: &assetserver.Options{

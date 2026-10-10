@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 const (
@@ -24,11 +24,11 @@ const (
 	// Shown as the reason of a "stopped" event when the user asked for it.
 	stoppedByUserMsg = "Stopped by user"
 
-	// Every direct launch carries HYDRA_SESSION=<random token> in its
+	// Every direct launch carries PLATYPUS_SESSION=<random token> in its
 	// environment. Children inherit it, so a forced stop can find
 	// descendants that daemonized out of the process group (wineserver)
 	// without matching on process names.
-	tokenEnv = "HYDRA_SESSION"
+	tokenEnv = "PLATYPUS_SESSION"
 )
 
 // ErrNotRunning is returned by Stop when the game isn't tracked.
@@ -47,7 +47,7 @@ func WithStopHook(hook func(force bool)) StartOption {
 
 // ExitInfo says how a direct launch ended.
 type ExitInfo struct {
-	// Stopped: the user asked Hydra to stop it.
+	// Stopped: the user asked Platypus to stop it.
 	Stopped bool
 	// Failed: it died within moments of starting with an error, so it never
 	// really ran.
@@ -63,7 +63,7 @@ func WithOnExit(fn func(ExitInfo)) StartOption {
 }
 
 // prepareForStop puts the launch in its own process group (so a stop reaches
-// wrappers, Wine and the game, and never Hydra) and tags its environment.
+// wrappers, Wine and the game, and never Platypus) and tags its environment.
 func prepareForStop(cmd *exec.Cmd, e *entry) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -197,7 +197,7 @@ func (t *Tracker) emitStopped(gameID string, e *entry) {
 }
 
 // killGroup signals pid's process group, but only when pid leads its own group
-// (never Hydra's); otherwise just pid.
+// (never Platypus's); otherwise just pid.
 func killGroup(pid int, sig syscall.Signal) {
 	if pg, err := syscall.Getpgid(pid); err == nil && pg == pid && pg != syscall.Getpgrp() {
 		_ = syscall.Kill(-pid, sig)

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/compat"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/compat"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 // Compatibility and protection: the ProtonDB rating, the native flag, DRM and
@@ -37,14 +37,14 @@ type compatHint struct {
 // newCompatService opens the compat cache in dataDir.
 func newCompatService(dataDir string, st *settings.Store) (*compat.Service, error) {
 	cache, err := compat.OpenCache(filepath.Join(dataDir, "compat-cache.json"))
-	fetch := compat.NewFetcher("Hydra-Launcher/1.0 (Linux; compatibility metadata)")
+	fetch := compat.NewFetcher("Platypus/1.0 (Linux; compatibility metadata)")
 	svc := &compat.Service{
 		Cache:   cache,
 		Ratings: &compat.ProtonDB{Fetch: fetch},
 		AntiCheat: &compat.AntiCheatStore{
 			Path:  filepath.Join(dataDir, "compat-awacy.json"),
 			URL:   compat.AWACYURL,
-			Fetch: compat.NewFetcher("Hydra-Launcher/1.0 (Linux; compatibility metadata)"),
+			Fetch: compat.NewFetcher("Platypus/1.0 (Linux; compatibility metadata)"),
 		},
 		Wiki:   &compat.PCGW{Fetch: compat.NewPCGWFetcher()},
 		Online: st.RatingsOnline,

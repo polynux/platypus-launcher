@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Install options: the `install-options` capability (protocol 1.5,
@@ -48,7 +48,7 @@ func (a *App) optionsOffered(ctx context.Context, game types.Game) bool {
 	return game.Features == nil || slices.Contains(game.Features, "install-options")
 }
 
-// optionsGate is optionsOffered with the reasons the UI can show. Hydra sends
+// optionsGate is optionsOffered with the reasons the UI can show. Platypus sends
 // no game.options or option choices when it fails.
 func (a *App) optionsGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
@@ -130,7 +130,7 @@ func (a *App) optionsForJob(ctx context.Context, j types.Job) (types.InstallOpti
 }
 
 // GetGameOptions lists what the install dialog asks for a game, and the
-// choices Hydra would use now (the saved ones, or the defaults).
+// choices Platypus would use now (the saved ones, or the defaults).
 func (a *App) GetGameOptions(game types.Game) (types.GameOptions, error) {
 	if _, err := a.optionsGate(game); err != nil {
 		return types.GameOptions{}, err
@@ -157,7 +157,7 @@ func (a *App) InstallGameWithOptions(game types.Game, options map[string]any) (t
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Hydra", game.Title)
+		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
 	}
 	return a.queueWithOptions(jobs.KindInstall, game, options)
 }

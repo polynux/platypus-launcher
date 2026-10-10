@@ -155,7 +155,7 @@ actual stdout/stderr are written **verbatim** to the per-game log and kept in
 game that echoes its arguments (extremely common with `--help`-style logging,
 and exactly what the echo test plugin's `game.sh` does: `echo "echo game $*"`)
 leaks the real secret (e.g. `-AUTH_PASSWORD=s3cret-…`) into
-`~/.local/share/hydra/logs/<game>.log` (mode `0644`) and into the session
+`~/.local/share/platypus/logs/<game>.log` (mode `0644`) and into the session
 `failed` event shown in the UI.
 
 **Concrete scenario.** Install and launch echo `tiny` for real
@@ -167,7 +167,7 @@ token, while the preview correctly showed `-AUTH_PASSWORD=***`.
 **Proposed fix.** Thread the `redact` prefixes into `StartDirect` (or into a
 redacting `io.Writer`) and filter both the log file and the tail buffer,
 e.g. replace `prefix + rest-of-token` with `prefix***` per line. Alternatively
-document that plugins must never echo secrets — but Hydra already promises
+document that plugins must never echo secrets — but Platypus already promises
 redaction in "previews and logs" (`protocol.md:172-173`), so the log side
 must be fixed in core.
 
@@ -239,7 +239,7 @@ unconditionally — including to the `xdg-open steam://rungameid/<id>` command.
 `xdg-open` then treats `-novid` etc. as additional files/URLs to open.
 
 **Concrete scenario.** No `steam`/`flatpak` binary present, game has launch
-args `-novid -fullscreen`: Hydra runs
+args `-novid -fullscreen`: Platypus runs
 `xdg-open steam://rungameid/620 -novid -fullscreen`. The game starts without
 its args (or the open fails / opens junk), depending on the handler.
 
@@ -259,7 +259,7 @@ its args (or the open fails / opens junk), depending on the handler.
 **What's wrong.** `PreviewLaunchCommand(game)` is called "on every change"
 in the settings dialog (`protocol.md:175`), but the preview path runs the
 full `BuildCommand`, which `MkdirAll`s
-`~/.local/share/hydra/prefixes/<gameID>` for every non-native game. Mere
+`~/.local/share/platypus/prefixes/<gameID>` for every non-native game. Mere
 previewing creates on-disk state.
 
 **Concrete scenario.** Open settings for a never-launched Windows game,
@@ -374,7 +374,7 @@ append-only with no rotation (`plugin-<id>.log` gets stderr plus every
 `log` notification). Plugin output may include tokens/paths; combined with
 CORE-4, secrets can sit in a world-readable file that grows forever.
 
-**Fix.** Create/keep logs at `0600` (like `HYDRA_PLUGIN_DATA/state.json`
+**Fix.** Create/keep logs at `0600` (like `PLATYPUS_PLUGIN_DATA/state.json`
 in the echo plugin) and add size-based rotation/truncation.
 **Test:** log file mode `0600`; 10k log notifications keep the file under
 the cap. **Effort:** S.
@@ -397,7 +397,7 @@ doc says "(bubblewrap sandbox, plan milestone 8)". One of them is stale.
 `j.Total` from the size probe `if j.Total == 0`, so a retried job keeps a
 stale total even when the plugin now reports a different size. (b) `Notify`
 ignores `Bytes == 0` (`if u.Bytes > 0`), so a plugin can never reset a
-resumed job's byte counter to zero — Hydra keeps the pre-crash value.
+resumed job's byte counter to zero — Platypus keeps the pre-crash value.
 
 **Scenario.** Flaky install reports 50% → crash → plugin restarts from 0
 and reports `bytes: 0`: UI keeps showing the old bytes until the counter
@@ -460,7 +460,7 @@ Ranked by value/effort (highest first):
   group kill, `initialize` handshake with API check, backoff + give-up
   design (modulo CORE-2/CORE-10).
 - `jsonrpc/conn.go`: 32 MB line cap, stray non-JSON lines skipped without
-  dropping the connection, plugin→Hydra requests rejected with
+  dropping the connection, plugin→Platypus requests rejected with
   `MethodNotFound`, concurrent calls with per-call channels, pending cleanup
   on cancel/close, `Notify` without response.
 - `stores/launchspec.go` direct path: absolute exe, symlink resolution,

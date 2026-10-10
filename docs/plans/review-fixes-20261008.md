@@ -12,10 +12,10 @@ Each finding names its file and line, a scenario, the fix and a test. This plan 
 
 | WS | Branch / worktree | Findings | Files owned |
 |---|---|---|---|
-| A, Steam downloader | `fix/steam-dl` / `~/dev/hydra-fix-steam-dl` | STEAM-1, 2, 3, 4 (Go side), 5, 6, 10, 11, 12, 14, 17 | `internal/depot`, `internal/steamcm`, `plugins/steam-standalone/cmd/hydra-steam-dl` |
-| B, Plugins (Python and scripts) | `fix/plugins` / `~/dev/hydra-fix-plugins` | STEAM-7, 8, 9, 13, 15, 16, 18; PLUG-1 to 9 | `plugins/*/bin/*`, `plugins/install.sh`, `plugins/new.sh`, `internal/plugtest`, `docs/plugins/protocol.md` |
-| C, Core and sessions | `fix/core` / `~/dev/hydra-fix-core` | CORE-1 to 15, FE-2 (the frontend half of CORE-1) | `*.go` at the root, `internal/{plugins,jobs,session,runner,settings,steam,stores,dataplug,fixes,types,jsonrpc}`, plus the session parts of `frontend/src/App.tsx` |
-| D, Frontend | `fix/frontend` / `~/dev/hydra-fix-frontend` | FE-1, 3 to 14 | `frontend/src` (not the session wiring that C owns) |
+| A, Steam downloader | `fix/steam-dl` / `~/dev/platypus-fix-steam-dl` | STEAM-1, 2, 3, 4 (Go side), 5, 6, 10, 11, 12, 14, 17 | `internal/depot`, `internal/steamcm`, `plugins/steam-standalone/cmd/platypus-steam-dl` |
+| B, Plugins (Python and scripts) | `fix/plugins` / `~/dev/platypus-fix-plugins` | STEAM-7, 8, 9, 13, 15, 16, 18; PLUG-1 to 9 | `plugins/*/bin/*`, `plugins/install.sh`, `plugins/new.sh`, `internal/plugtest`, `docs/plugins/protocol.md` |
+| C, Core and sessions | `fix/core` / `~/dev/platypus-fix-core` | CORE-1 to 15, FE-2 (the frontend half of CORE-1) | `*.go` at the root, `internal/{plugins,jobs,session,runner,settings,steam,stores,dataplug,fixes,types,jsonrpc}`, plus the session parts of `frontend/src/App.tsx` |
+| D, Frontend | `fix/frontend` / `~/dev/platypus-fix-frontend` | FE-1, 3 to 14 | `frontend/src` (not the session wiring that C owns) |
 
 Shared edges:
 - **CORE-1 / FE-2.** C adds the backend snapshot API, regenerates the wailsjs bindings, and wires the frontend for it. D doesn't touch the session code.
@@ -32,16 +32,16 @@ Shared edges:
 - Never log or print secrets, and never put them in argv.
 - Never `git add -A`; one commit per finding or tight group.
 - Tests go first where the report names one: it must fail on the old code.
-- No `wails dev`. Port 34115 belongs to the user's session in `~/dev/hydra-steam-depot-dl`, and that worktree must not be edited.
+- No `wails dev`. Port 34115 belongs to the user's session in `~/dev/platypus-steam-depot-dl`, and that worktree must not be edited.
 - No real logins or downloads.
 - If a finding turns out to be wrong, say so in the final report and skip it.
 
 ## Status (2026-10-08, 07:30)
-- **A to D: done.** Merged into `integ/review-fixes` (worktree `~/dev/hydra-integ`). The only conflict was App.tsx loadData (FE-3 combined with CORE-1); resolved in the merge commit.
+- **A to D: done.** Merged into `integ/review-fixes` (worktree `~/dev/platypus-integ`). The only conflict was App.tsx loadData (FE-3 combined with CORE-1); resolved in the merge commit.
 - **Corrections from the lead's review:**
   - STEAM-12: the job-state flusher marshalled the live map outside its lock, a fatal concurrent map write;
   - CORE-2: no replay of non-idempotent plugin calls after a crash;
-  - PLUG-5: install.sh deleted the hydra-steam-dl helper it had just built.
+  - PLUG-5: install.sh deleted the platypus-steam-dl helper it had just built.
 - **Leftovers, done on integ:**
   - Retry button for plugins that gave up (CORE-10);
   - `title` sent in install/update params;
@@ -63,10 +63,10 @@ Shared edges:
 ## Status — live validation (2026-10-08, 07:45)
 
 Live validation of the rewritten Steam downloader on KAMI (app 272040, single depot 272041, manifest
-`6869307445582119673`, ~55 MB compressed / 81 MB disk), branch `integ/review-fixes`, hydra-steam-dl built from
+`6869307445582119673`, ~55 MB compressed / 81 MB disk), branch `integ/review-fixes`, platypus-steam-dl built from
 this worktree and run from a temp dir first on PATH (the plugin's sibling-binary preference falls back to PATH
-when `bin/hydra-steam-dl` is not shipped). Plugin exec driven over stdin JSON-RPC with the real login
-(`HYDRA_PLUGIN_DATA=~/.local/share/hydra/plugin-data/steam-standalone`). The cancel landed mid-flight, so no
+when `bin/platypus-steam-dl` is not shipped). Plugin exec driven over stdin JSON-RPC with the real login
+(`PLATYPUS_PLUGIN_DATA=~/.local/share/platypus/plugin-data/steam-standalone`). The cancel landed mid-flight, so no
 CDN throttling was needed.
 
 | Step | Result | Numbers |
@@ -75,7 +75,7 @@ CDN throttling was needed.
 | 2 fresh install (STEAM-1, STEAM-5) | PASS (after one fix) | TTFB 8.9 s (CM logon, PICS, depot key, CDN list, manifest); 81.0 MB streamed in 1.6 s, avg 51 MB/s, peak ~108 MB/s; 32 connections from the first progress event (STEAM-5 seeding), distinct hosts ramping 1→32 in ~0.5 s; peak RSS (VmHWM) 73.5 MiB (~68 MiB on the resume run, 81.5 MiB on the third install) |
 | 3 cancel + same-jobId resume (STEAM-12) | PASS | `job.cancel` at 41.1 % (33.3 MB in); staging kept 35 chunks (30.8 MB) plus a job-state checkpoint; the rerun with the same jobId resumed from 38.1 % (30,885,999 bytes) and finished ~2 s later with `job.done` |
 | 4 SHA-1 vs manifest | PASS | independent Python manifest parser (zip container + protobuf + AES filename decryption, hashlib, no Go code): 274 files, 81,078,597 bytes, 0 mismatches, 0 missing, 29 dir entries plus 2 zero-chunk placeholders |
-| 5 verify/repair (STEAM-2) | PASS | deleted `puzzles/StageD/SDL8_art2.xml`, corrupted 27 bytes of `fonts/Ubuntu-R.ttf` at offset 1000; `hydra-steam-dl verify` → `bad:2 fixed:2` in 9 s; both files byte-identical to backups afterwards; full SHA-1 sweep clean |
+| 5 verify/repair (STEAM-2) | PASS | deleted `puzzles/StageD/SDL8_art2.xml`, corrupted 27 bytes of `fonts/Ubuntu-R.ttf` at offset 1000; `platypus-steam-dl verify` → `bad:2 fixed:2` in 9 s; both files byte-identical to backups afterwards; full SHA-1 sweep clean |
 | 6 uninstall + login check | PASS | `~/Games/steam`, `jobs/` (state + staging) and `installed.json` all empty afterwards; `auth.status` still `loggedIn: rUwUe` |
 
 **Fix found live, committed on this branch (test first against the fakes):**

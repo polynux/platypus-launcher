@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 var wikiChecked = time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)

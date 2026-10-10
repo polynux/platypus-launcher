@@ -68,7 +68,7 @@ declare global {
 // with an explicit error instead of silently substituting fake data.
 function wailsUnavailable(op: string): Error {
   return new Error(
-    `Hydra backend not available (${op}). The UI must run inside the Wails app — use \`wails dev -tags webkit2_41\`, not a plain vite server.`
+    `Platypus backend not available (${op}). The UI must run inside the Wails app — use \`wails dev -tags webkit2_41\`, not a plain vite server.`
   );
 }
 
@@ -214,7 +214,7 @@ export const LauncherApi = {
   setCloudPluginMode: (pluginId: string, mode: CloudMode | '') => call<void>('SetCloudPluginMode', () => App.SetCloudPluginMode(pluginId, mode)),
   setCloudGameMode: (gameId: string, mode: CloudMode | '') => call<void>('SetCloudGameMode', () => App.SetCloudGameMode(gameId, mode)),
   // Game versions (the `versions` capability). The plugin lists channels and
-  // builds; Hydra adds the install history and its pin.
+  // builds; Platypus adds the install history and its pin.
   getGameVersions: (game: Game) =>
     call<VersionInfo>('GetGameVersions', async () => {
       const v = (await App.GetGameVersions(backend(game))) as unknown as VersionInfo;
@@ -262,7 +262,7 @@ export const LauncherApi = {
   moveGame: (game: Game, parent: string) => call<Job>('MoveGame', () => App.MoveGame(backend(game), parent)),
 
   // Install options (the `install-options` capability). The store lists the
-  // groups; Hydra adds the choices it would use now (saved, or the defaults).
+  // groups; Platypus adds the choices it would use now (saved, or the defaults).
   getGameOptions: (game: Game) =>
     call<GameOptions>('GetGameOptions', async () => {
       const o = (await App.GetGameOptions(backend(game))) as unknown as GameOptions;
@@ -313,7 +313,7 @@ export const LauncherApi = {
   pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
 
   // Family (the `family` capability, protocol 1.8): the store's family group.
-  // Shown only; Hydra enforces none of its rules.
+  // Shown only; Platypus enforces none of its rules.
   getFamilyMembers: (source: string) =>
     call<FamilyMember[]>('GetFamilyMembers', async () => (await App.GetFamilyMembers(source)) ?? []),
   // The lender whose copy a borrowed game is played from (family.setPreferredCopy).
@@ -348,7 +348,7 @@ export const LauncherApi = {
   discardJob: (id: string) => call<void>('DiscardJob', () => App.DiscardJob(id)),
   pauseAllJobs: () => call<void>('PauseAllJobs', () => App.PauseAllJobs()),
   resumeAllJobs: () => call<void>('ResumeAllJobs', () => App.ResumeAllJobs()),
-  // How long a canceled download's data is kept before Hydra deletes it (0 = right away).
+  // How long a canceled download's data is kept before Platypus deletes it (0 = right away).
   setCancelCleanupDays: (days: number) =>
     call<LauncherSettings>('SetCancelCleanupDays', () => App.SetCancelCleanupDays(days)),
 

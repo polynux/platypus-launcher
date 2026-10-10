@@ -77,7 +77,7 @@ type Game struct {
 	// a plugin game with a playtime report (playtime capability, protocol 1.7),
 	// else the local value. The two parts ride along for the tooltip.
 	PlaytimeMin int `json:"playtime_minutes,omitempty"`
-	// PlaytimeLocalMin is nil when Hydra has no local record (plugin games);
+	// PlaytimeLocalMin is nil when Platypus has no local record (plugin games);
 	// PlaytimeStoreMin is nil without a store report, and 0 is a real report.
 	PlaytimeLocalMin *int   `json:"playtime_local_minutes,omitempty"`
 	PlaytimeStoreMin *int   `json:"playtime_store_minutes,omitempty"`
@@ -85,9 +85,9 @@ type Game struct {
 	Version          string `json:"version,omitempty"`
 	// Plugin games only.
 	UpdateAvailable bool   `json:"update_available,omitempty"`
-	Installable     bool   `json:"installable,omitempty"`    // Hydra can install it through the plugin
+	Installable     bool   `json:"installable,omitempty"`    // Platypus can install it through the plugin
 	Note            string `json:"note,omitempty"`           // e.g. "Needs the EA app"
-	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Hydra lets the plugin launch from
+	OutsideFolder   bool   `json:"outside_folder,omitempty"` // installed outside the folders Platypus lets the plugin launch from
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
@@ -111,7 +111,7 @@ type Game struct {
 	// CopyCompare sets the borrowed game's copies against the baseline copy
 	// (nil with fewer than two copies). Computed by core, see stores/copydiff.go.
 	CopyCompare *CopyComparison `json:"copy_compare,omitempty"`
-	// What the user changed about the game's look (Hydra's own customization,
+	// What the user changed about the game's look (Platypus's own customization,
 	// never the plugin's): StoreTitle is the title the store gave when Title is
 	// the user's, SortTitle orders the library, the *URL fields are the user's
 	// images and Customized names every part that is theirs (title, sort_title
@@ -180,10 +180,10 @@ type StorePlugin struct {
 	// Offers lists every declared capability with its state and depth flags,
 	// for the Plugins view.
 	Offers []PluginCapability `json:"offers"`
-	// Needs are the capabilities Hydra must know for the plugin to run.
+	// Needs are the capabilities Platypus must know for the plugin to run.
 	Needs []string `json:"needs"`
 	// Warnings are things that don't stop the plugin, e.g. capabilities this
-	// Hydra ignores because it doesn't know them.
+	// Platypus ignores because it doesn't know them.
 	Warnings []string `json:"warnings"`
 	// Initialized is true once the plugin has answered initialize in this
 	// session; Protocol is the negotiated version ("1.1").
@@ -213,7 +213,7 @@ type PluginCapability struct {
 	Name string `json:"name"`
 	// On: the plugin offers it right now (see StorePlugin.Capabilities).
 	On bool `json:"on"`
-	// Known: this Hydra has it in its registry; unknown names are ignored.
+	// Known: this Platypus has it in its registry; unknown names are ignored.
 	Known bool `json:"known"`
 	// Orchestrated: core has code that uses it. Known but not orchestrated
 	// capabilities are recognised and not used yet.
@@ -254,12 +254,12 @@ type AuthField struct {
 	Placeholder string `json:"placeholder,omitempty"`
 }
 
-// LauncherSettings are Hydra-wide settings, persisted in settings.json.
+// LauncherSettings are Platypus-wide settings, persisted in settings.json.
 type LauncherSettings struct {
 	GamesFolder        string `json:"games_folder"` // store plugins install into <GamesFolder>/<plugin>
 	DefaultGamesFolder string `json:"default_games_folder"`
 	// CancelCleanupDays is how long a canceled download's partial data is
-	// kept before Hydra deletes it; 0 deletes it right away.
+	// kept before Platypus deletes it; 0 deletes it right away.
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
@@ -309,7 +309,7 @@ type DRM struct {
 	Notes          string `json:"notes,omitempty"`
 }
 
-// Tweak is a launch setting Hydra suggests for every game, based on the
+// Tweak is a launch setting Platypus suggests for every game, based on the
 // detected hardware and session, independent of the ProtonDB tier.
 type Tweak struct {
 	ID       string            `json:"id"`
@@ -334,7 +334,7 @@ type Job struct {
 	ID          string  `json:"id"`
 	Kind        string  `json:"kind"` // "install" | "update" | "uninstall"
 	Source      string  `json:"source"`
-	GameID      string  `json:"game_id"`       // Hydra's game id
+	GameID      string  `json:"game_id"`       // Platypus's game id
 	StoreGameID string  `json:"store_game_id"` // the plugin's game id
 	Title       string  `json:"title"`
 	State       string  `json:"state"` // "queued" | "running" | "paused" | "done" | "failed" | "canceled"
@@ -385,7 +385,7 @@ type VerifyReport struct {
 
 // MoveCheck is what a move would do, before it is queued: where the game ends
 // up, what it needs and what the destination has free. PluginMoves says the
-// plugin does the move itself (game.move) rather than Hydra.
+// plugin does the move itself (game.move) rather than Platypus.
 type MoveCheck struct {
 	To          string `json:"to"`
 	NeedBytes   int64  `json:"need_bytes"`
@@ -414,7 +414,7 @@ type InstallLocation struct {
 	Exists    bool   `json:"exists"`
 }
 
-// InstallFolderCheck is what Hydra found out about a folder the user picked
+// InstallFolderCheck is what Platypus found out about a folder the user picked
 // to install into, before anything is queued.
 type InstallFolderCheck struct {
 	Folder    string `json:"folder"`

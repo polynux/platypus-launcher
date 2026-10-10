@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
 // Install options, review fixes: what a job sends is checked when it starts

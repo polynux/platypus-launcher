@@ -23,7 +23,7 @@ func TestGameFeaturesAbsentMeansEveryRuntimeCapability(t *testing.T) {
 
 func TestGameFeaturesNarrowAndAreClampedToTheRuntimeSet(t *testing.T) {
 	t.Setenv("ECHO_OFF", "launch")
-	// tiny: a subset, with a capability that is off and one Hydra never heard of.
+	// tiny: a subset, with a capability that is off and one Platypus never heard of.
 	// slow: explicitly none. The other games say nothing.
 	t.Setenv("ECHO_GAME_FEATURES", `{"tiny":["install","launch","hologram","install"],"slow":[]}`)
 	e := newEchoEnv(t)

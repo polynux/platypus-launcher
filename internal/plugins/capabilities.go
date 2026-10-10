@@ -14,10 +14,10 @@ type Capability struct {
 	// Since is the protocol revision that introduced the capability. All
 	// revisions are additive to api 1.
 	Since string `json:"since"`
-	// Methods are the requests Hydra sends once the plugin offers the
+	// Methods are the requests Platypus sends once the plugin offers the
 	// capability; the plugin must implement them.
 	Methods []string `json:"methods"`
-	// OptionalMethods may be missing: the plugin answers -32601, Hydra
+	// OptionalMethods may be missing: the plugin answers -32601, Platypus
 	// notes it for the rest of that plugin run and stops asking.
 	OptionalMethods []string `json:"optionalMethods,omitempty"`
 	// Surfaces are the places in the UI that appear only when the plugin
@@ -96,7 +96,7 @@ var registry = []Capability{
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:
-// Hydra sends them to any plugin that speaks the revision that defines them,
+// Platypus sends them to any plugin that speaks the revision that defines them,
 // and remembers a -32601 answer like any optional method. game.relocated
 // (protocol 1.4) tells a plugin that core moved its game folder.
 var capabilityFreeOptional = []string{"game.relocated"}
@@ -127,7 +127,7 @@ func MethodOffered(method, capability string, caps []string) bool {
 
 // WithinProtocol splits caps into the capabilities a plugin that settled on
 // protocol v can offer and the ones introduced by a later revision, which
-// stay off for it. Names this Hydra doesn't know pass (they do nothing).
+// stay off for it. Names this Platypus doesn't know pass (they do nothing).
 func WithinProtocol(caps []string, v Version) (kept, later []string) {
 	kept = []string{}
 	for _, name := range caps {
@@ -171,7 +171,7 @@ func (c Capability) clone() Capability {
 	return c
 }
 
-// Registry returns every capability this Hydra knows, in registration order.
+// Registry returns every capability this Platypus knows, in registration order.
 func Registry() []Capability {
 	out := make([]Capability, len(registry))
 	for i, c := range registry {

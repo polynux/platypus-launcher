@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/stats"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/stats"
+	"platypus/internal/types"
 )
 
 // Playtime, achievements and redeem: the `playtime`, `achievements` and
@@ -45,13 +45,13 @@ type statsCache struct {
 	// a failed read may be tried again.
 	inflight map[string]bool
 	retryAt  map[string]time.Time
-	// sources maps a launched game's Hydra id to its store, so a session end
+	// sources maps a launched game's Platypus id to its store, so a session end
 	// refreshes only that store. debounces holds the pending refresh per store.
 	sources   map[string]string
 	debounces map[string]*time.Timer
 	// delay is the session-end debounce; zero means playtimeDebounce.
 	delay        time.Duration
-	achievements map[string]achievementsEntry // by Hydra game id
+	achievements map[string]achievementsEntry // by Platypus game id
 	redeemMu     sync.Mutex                   // one submission at a time
 	// changed tells the UI that a playtime report changed a library value.
 	// info and warn are the Wails log calls; tests leave all three nil.
@@ -185,7 +185,7 @@ func (a *App) refreshPlaytime(plugin string) error {
 	return nil
 }
 
-// noteSource remembers the store of a game Hydra launched.
+// noteSource remembers the store of a game Platypus launched.
 func (c *statsCache) noteSource(gameID, source string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

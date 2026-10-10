@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
 // The folder a move, check or repair acts on is the one the library reports,

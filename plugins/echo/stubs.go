@@ -1,6 +1,6 @@
 package main
 
-// stubs answer the methods of capabilities Hydra recognises but has no
+// stubs answer the methods of capabilities Platypus recognises but has no
 // orchestrator for yet (docs/plugins/protocol.md, "Capabilities"), so the
 // conformance suite can check that a plugin declaring one really answers it.
 // Methods about one game want an id and answer -32602 without it, like a real

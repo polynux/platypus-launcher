@@ -12,16 +12,16 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/cloudsync"
-	"hydra-launcher/internal/runner"
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/cloudsync"
+	"platypus/internal/runner"
+	"platypus/internal/session"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// cloudShutdownGrace is how long Hydra waits for running cloud syncs when it
+// cloudShutdownGrace is how long Platypus waits for running cloud syncs when it
 // quits. A push cut short stays owed (cloud.json) and runs at the next start.
 const cloudShutdownGrace = 3 * time.Second
 
@@ -55,7 +55,7 @@ func (a *App) startCloud(ctx context.Context, dataDir string) {
 	a.cloud.Resume()
 }
 
-// cloudGame says whether the game has cloud saves Hydra can sync: it comes
+// cloudGame says whether the game has cloud saves Platypus can sync: it comes
 // from a plugin that offers cloud-saves and the game's features include it.
 func (a *App) cloudGame(game types.Game) (cloudsync.Game, bool) {
 	if a.cloud == nil || a.plugins == nil || game.Source == "" || game.StoreAppID == "" {
@@ -146,7 +146,7 @@ func (c *cloudLaunch) abandon() {
 	}
 }
 
-// cloudBeforeLaunch syncs a game's cloud saves before Hydra starts it. anyway
+// cloudBeforeLaunch syncs a game's cloud saves before Platypus starts it. anyway
 // is the user's "launch anyway" for this launch only. blocked means the launch
 // waits for the user (msg says on what); otherwise sync, when not nil, registers
 // the post-exit push.
@@ -182,7 +182,7 @@ func (a *App) cloudInfo(game types.Game) types.CloudInfo {
 	return info
 }
 
-// GetCloudInfo returns what Hydra knows about the game's cloud saves without
+// GetCloudInfo returns what Platypus knows about the game's cloud saves without
 // asking the plugin: the modes and the last status of this session.
 func (a *App) GetCloudInfo(game types.Game) types.CloudInfo {
 	return a.cloudInfo(game)
@@ -194,7 +194,7 @@ func (a *App) GetCloudInfo(game types.Game) types.CloudInfo {
 func (a *App) CheckCloudSaves(game types.Game) (types.CloudInfo, error) {
 	g, ok := a.cloudGame(game)
 	if !ok {
-		return a.cloudInfo(game), errors.New("this game has no cloud saves Hydra can sync")
+		return a.cloudInfo(game), errors.New("this game has no cloud saves Platypus can sync")
 	}
 	if _, err := a.cloud.Check(a.ctx, g, a.cloudContextFor(game)); err != nil {
 		return a.cloud.Info(g), err
@@ -210,7 +210,7 @@ func (a *App) ResolveCloudSaves(game types.Game, choices map[string]string) (typ
 	defer unlock()
 	g, ok := a.cloudGame(game)
 	if !ok {
-		return a.cloudInfo(game), errors.New("this game has no cloud saves Hydra can sync")
+		return a.cloudInfo(game), errors.New("this game has no cloud saves Platypus can sync")
 	}
 	if a.isRunning(game.ID) {
 		// The game writes its saves while it runs: settle them after it exits.

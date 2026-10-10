@@ -5,7 +5,7 @@ Status: proposed, written 2026-10-09. Nothing implemented. Evidence, sources and
 Cloud saves and social already have their own plan: [steam-cloud-social.md](steam-cloud-social.md); this plan
 only adds what is missing around them.
 
-Rules that bind every item (product direction): Hydra replaces the official launchers; each store's feature
+Rules that bind every item (product direction): Platypus replaces the official launchers; each store's feature
 set is replicated in its plugin; core offers store-agnostic capabilities; nothing store-specific in core. Hard
 limits: no DRM or licence bypass, no Steam API emulator, nothing that modifies game files, no client-identity
 spoofing. Live checks use the user's real accounts and wait for their go-ahead.
@@ -18,7 +18,7 @@ Today: a flat manifest list, a hard-coded `knownCapabilities`, unknown names mak
 | # | Change | Why |
 |---|---|---|
 | C1 | **Capability registry as data** in `internal/plugins`: `name -> { since, methods[], optionalMethods[], surfaces[] }`. Manifest validation, conformance (`plugtest`) and the gate in `stores.Plugin` all read it. | Adding a capability becomes one table row plus its orchestrator; no scattered `if`. |
-| C2 | **Unknown capability names are ignored with a warning**, not invalid (only a malformed name is). A manifest field `"needs": ["cloud-saves"]` lists capabilities core *must* know; if one is missing the plugin shows "needs a newer Hydra" and does not start. | An older Hydra can still list and approve newer plugins; a plugin can still refuse to run half-featured. |
+| C2 | **Unknown capability names are ignored with a warning**, not invalid (only a malformed name is). A manifest field `"needs": ["cloud-saves"]` lists capabilities core *must* know; if one is missing the plugin shows "needs a newer Platypus" and does not start. | An older Platypus can still list and approve newer plugins; a plugin can still refuse to run half-featured. |
 | C3 | **Manifest = promise, `initialize` = reality.** `initialize` returns `capabilities` (a subset of the manifest) and `features` (depth flags per capability, e.g. `"versions": {"channels":true,"builds":true,"password":false}`). Replaces today's "equal to the manifest" rule with "subset of the manifest". Missing tool or logged-out state switch features off without changing files. | Honest UI; the manifest hash is not touched when a tool appears. |
 | C4 | **Per-game availability:** `LibraryGame.features: ["versions","dlc","cloud"]` (optional, subset of capabilities). | The Versions control must not appear for a game with one build. If a plugin omits it, core treats every declared capability as available and handles empty results. |
 | C5 | **Surfaces bound to capabilities.** A UI surface declares its capability (and per-game feature) and renders nothing otherwise; a declined/unavailable state carries a plugin-written reason (as `CloudStatus.message`). The Plugins view lists capabilities with their `features`. | Matches "UI surfaces appear only when a plugin offers them". |
@@ -32,7 +32,7 @@ Sizes: C1-C3 and C6 are S-M together (manifest, process, plugtest, docs); C4-C5 
 New or extended capabilities, in manifest form. Shapes only; field names are proposals and become fixed when
 written into `docs/plugins/protocol.md` and `internal/plugtest`. All additions are additive to api 1.
 
-| Capability | Methods (Hydra → plugin) | Core owns | Plugin owns |
+| Capability | Methods (Platypus → plugin) | Core owns | Plugin owns |
 |---|---|---|---|
 | `install-options` | `game.options {id}`; `game.install`/`game.update` gain `options` | the install dialog, remembering choices | what the options are |
 | `versions` | `versions.list`, `versions.unlock`; `game.install`/`game.update` gain `target` | picker UI, pinning, install ledger | channels/builds, passwords, archive |
@@ -72,7 +72,7 @@ versions.list { id } -> {
                 channel: null, source: "store"|"archive"|"manual", available: bool } ],
   manual:   { label: "Steam manifest ids", hint: "one per depot, from SteamDB" } | null,
   pinned:   { kind: "build"|"channel", id: "…" } | null }
-versions.unlock { id, channel, password } -> { unlocked }     # plugin keeps the password in HYDRA_PLUGIN_DATA
+versions.unlock { id, channel, password } -> { unlocked }     # plugin keeps the password in PLATYPUS_PLUGIN_DATA
 game.install / game.update { ..., target: { channel?: "beta", build?: "…", manual?: {…} } }
 job.done { jobId, installed?: { build, channel, versionName, archiveRef } }   # feeds the ledger
 ```
@@ -92,7 +92,7 @@ job.done { jobId, installed?: { build, channel, versionName, archiveRef } }   # 
   `archive` from the ledger; Epic fills only `archive` (and hides the capability for games with no entries);
   Ubisoft does not declare `versions`.
 - Safety: before installing a different build the UI warns that cloud saves or online play may not match (a
-  downgrade can corrupt saves); Hydra backs up nothing itself but `cloud.*` pull-before-launch still protects
+  downgrade can corrupt saves); Platypus backs up nothing itself but `cloud.*` pull-before-launch still protects
   the cloud copy.
 
 ### 2.3 `verify` and `move`
@@ -117,7 +117,7 @@ redeem.submit { code }   -> { message, titles?: ["…"] }                       
 
 `achievements.list` supersedes the catalogue-only `game.details.achievements` when the user's progress is
 available; stores that can't see it leave `unlockedAt` out. Unlocking achievements is never offered: it is the
-game's job through the store SDK, and Hydra won't emulate that. Core merges playtime as `max(local, store)` in
+game's job through the store SDK, and Platypus won't emulate that. Core merges playtime as `max(local, store)` in
 display only and never writes it back (Steam's in-game reporting belongs to `social.setPlaying`).
 
 ### 2.5 `family` (Steam first; GOG/Epic/Ubisoft have no equivalent)
@@ -186,7 +186,7 @@ Ubisoft A ~2 weeks including live iteration.
 | L-V3 | Epic: after a real game update, install from the manifest saved before the update (`legendary install --manifest`) | versions (Epic) | opportunistic; needs an update to happen |
 | L-V4 | Steam: password branch flow on a game with a known beta password the user owns | versions (Steam) | none |
 | L-U1 | Ubisoft Connect in a Wine prefix on this machine: does the login webview work under the user's Proton/Wine, where do `cache/configuration/configurations` and `ownership` land, does the cache list owned-but-uninstalled games, does `uplay://` reach the client from `wine start`, and does the `find` cmdline match work | Ubisoft | needs the user's Ubisoft login; no download needed for the first three |
-| L-U2 | Ubisoft: `uplay://install/<id>` of a small game from Hydra; progress visibility | Ubisoft | downloads a game |
+| L-U2 | Ubisoft: `uplay://install/<id>` of a small game from Platypus; progress visibility | Ubisoft | downloads a game |
 | L-F1 | Steam Families: what the CM sends for a family group (group membership, borrowed library, in-use state) | family | read-only, user's real group |
 | L-S1 | Run each new method against real plugin binaries once the conformance suite passes | all | per item |
 
@@ -195,8 +195,8 @@ Ubisoft A ~2 weeks including live iteration.
 | Question | Decision |
 |---|---|
 | Q-U1 Ubisoft web API | Recommended: local cache only, no official app id. |
-| Q-U2 Ubisoft downloads | Recommended: Ubisoft Connect does the downloading in a Hydra-managed Wine prefix. Ideally a light, headless setup that Hydra drives programmatically. |
-| Q-V1 Steam rollback | OK (branches, passwords, install ledger, typed manifest id). The UI shows a link to the game's depots on SteamDB so the user can look up a manifest id themselves; Hydra never scrapes SteamDB. |
+| Q-U2 Ubisoft downloads | Recommended: Ubisoft Connect does the downloading in a Platypus-managed Wine prefix. Ideally a light, headless setup that Platypus drives programmatically. |
+| Q-V1 Steam rollback | OK (branches, passwords, install ledger, typed manifest id). The UI shows a link to the game's depots on SteamDB so the user can look up a manifest id themselves; Platypus never scrapes SteamDB. |
 | Q-V2 Order | As in the roadmap. |
 | Q-LIC Licence | Permissive: MIT or Apache-2.0 (user leaning away from GPL). Final pick pending. |
 | Q-REDEEM | OK. |
@@ -212,14 +212,14 @@ Real store plugins (Steam, GOG, Epic, Ubisoft) implement them later.
 ## 5. Open product questions for the user
 
 - **Q-U1. Ubisoft web API.** Library, friends and playtime need Ubisoft Connect's own application id. Sending it
-  from Hydra is "acting as the official client" (the Galaxy plugin does exactly that). Accept for this plugin,
+  from Platypus is "acting as the official client" (the Galaxy plugin does exactly that). Accept for this plugin,
   or stay on the local cache only (recommended)?
 - **Q-U2. Ubisoft downloads.** Accept "the Ubisoft Connect client does the downloading, inside a shared Wine
-  prefix Hydra manages", with no native downloader (recommended)?
-- **Q-V1. Steam rollback.** Accept: Steam branches + passwords + Hydra's own install history + a typed manifest
+  prefix Platypus manages", with no native downloader (recommended)?
+- **Q-V1. Steam rollback.** Accept: Steam branches + passwords + Platypus's own install history + a typed manifest
   id, but no browsing of every historic build (Steam does not list them; SteamDB forbids scraping)?
 - **Q-V2. Order.** Versions (GOG first) before verify/move/DLC, as in the roadmap, or the other way round?
-- **Q-LIC. Hydra's licence.** No LICENSE file exists. MIT-licensed Playnite code can be ported with attribution
+- **Q-LIC. Platypus's licence.** No LICENSE file exists. MIT-licensed Playnite code can be ported with attribution
   under most choices; GPL tools stay external. Decide before porting the Ubisoft cache reader.
 - **Q-REDEEM. Redeem keys in the app.** Acceptable for Steam/GOG/Epic/Ubisoft (the plugin forwards to the store)?
 - **Q-SOCIAL. Merged friends.** One friends list per store (the Steam plan's sidebar summary) or a merged

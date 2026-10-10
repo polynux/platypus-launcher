@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/types"
+	"platypus/internal/session"
+	"platypus/internal/types"
 )
 
 func TestStopGameNotRunningIsAClearError(t *testing.T) {

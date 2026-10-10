@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // capsEnv installs echo declaring caps in its manifest.

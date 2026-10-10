@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// System is what Hydra knows about the machine when applying data plugins:
+// System is what Platypus knows about the machine when applying data plugins:
 // tweaks declare which machines they apply to, fixes match by game.
 type System struct {
 	GPUVendors []string // "nvidia", "amd", "intel"

@@ -8,9 +8,9 @@ export type VersionChoice =
 
 /** Shown before installing a version other than the one the user has. A
  *  downgrade can corrupt saves, and online play may refuse a mismatched build;
- *  Hydra backs nothing up itself. */
+ *  Platypus backs nothing up itself. */
 export const VERSION_WARNING =
-  'Cloud saves and online play may not match this version. An older build can corrupt saves made by a newer one, and Hydra backs nothing up itself.';
+  'Cloud saves and online play may not match this version. An older build can corrupt saves made by a newer one, and Platypus backs nothing up itself.';
 
 export const SOURCE_LABEL: Record<VersionBuildSource, string> = {
   store: 'from the store',

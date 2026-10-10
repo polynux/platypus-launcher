@@ -1,7 +1,7 @@
 // Package fakesteam builds the fake Steam content the steam-standalone
 // tests download: fixture depots (encrypted with a test key), an httptest
 // fake CDN serving their manifests and chunks, and the fake-CM state that
-// points hydra-steam-dl at them. Both the plugin's own tests and the
+// points platypus-steam-dl at them. Both the plugin's own tests and the
 // conformance suite use it, so the two harnesses can't drift apart.
 //
 // Variants ride the FAKE_DD_STATE file (kept for historical reasons) with
@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // Fixture is one fake depot: manifest, encrypted chunks and expected sizes.

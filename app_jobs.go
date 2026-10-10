@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // jobBackend runs queue jobs through the owning plugin.
@@ -70,9 +70,9 @@ func (a *App) jobTargetGate(j types.Job) error {
 
 // installParams builds the params for game.install/game.update/game.uninstall
 // from a job. Plugins may key their own records on `title` (GOG keeps it in
-// its installed index, steam-standalone names its dl request), so Hydra sends
+// its installed index, steam-standalone names its dl request), so Platypus sends
 // the title the job already has. Branches and their passwords are plugin-side
-// choices: Hydra sends no branch key at all — an empty one must not leak into
+// choices: Platypus sends no branch key at all — an empty one must not leak into
 // the params. installDir only makes sense where files land. options are the
 // install-option choices as optionsForJob checked them (nil sends none).
 func installParams(j types.Job, options types.InstallOptions) map[string]any {
@@ -140,7 +140,7 @@ func (a *App) jobFinished(j types.Job) {
 }
 
 // queueJob checks the game's plugin can run the job and queues it, for the
-// version in target (nil = the plugin's own default). Hydra picks the install
+// version in target (nil = the plugin's own default). Platypus picks the install
 // folder; plugins never choose paths.
 func (a *App) queueJob(kind string, game types.Game, target *types.VersionTarget) (types.Job, error) {
 	return a.queueJobWith(kind, game, target, nil)
@@ -196,7 +196,7 @@ func (a *App) InstallGame(game types.Game) (types.Job, error) {
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Hydra", game.Title)
+		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
 	}
 	target, err := a.pinnedTarget(game)
 	if err != nil {
@@ -281,7 +281,7 @@ func (a *App) ResumeAllJobs() error {
 }
 
 // SetCancelCleanupDays sets how many days a canceled download's data is kept
-// before Hydra deletes it (0 = right away). It applies to downloads that are
+// before Platypus deletes it (0 = right away). It applies to downloads that are
 // already canceled too.
 func (a *App) SetCancelCleanupDays(days int) (types.LauncherSettings, error) {
 	if err := a.settings.SetCancelCleanupDays(days); err != nil {

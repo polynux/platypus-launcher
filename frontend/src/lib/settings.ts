@@ -120,7 +120,7 @@ export function toBackendGame(game: Game): Game {
   };
 }
 
-/** Steam launches through `steam -applaunch`, so Hydra's env never reaches the
+/** Steam launches through `steam -applaunch`, so Platypus's env never reaches the
  *  game. This is the equivalent string to paste into Steam → Properties → Launch options. */
 export function steamLaunchOptions(game: Game): string {
   const g = toBackendGame(game);

@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 func TestRebasePathOnlyTouchesPathsInsideTheFolder(t *testing.T) {
@@ -55,7 +55,7 @@ func TestLibraryShowsTheFolderCoreMovedTo(t *testing.T) {
 		t.Fatalf("install dir = %q", g.InstallDir)
 	}
 	if g.OutsideFolder {
-		t.Fatal("the moved game is shown outside the folders Hydra launches from")
+		t.Fatal("the moved game is shown outside the folders Platypus launches from")
 	}
 
 	// A plugin that has moved the game itself reports the new folder, and

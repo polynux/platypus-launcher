@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
 // Install options (protocol 1.5) around the echo test plugin. The echo
 // manifest offers install-options only over 1.5; the protocol list here is
-// what Hydra and the manifest both speak.
+// what Platypus and the manifest both speak.
 
 const optionsProtocols = `["1.0","1.1","1.3","1.5"]`
 const optionsCaps = `["library","install","auth","discard","versions","install-options"]`

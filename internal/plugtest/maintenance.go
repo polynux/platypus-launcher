@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/types"
 )
 
 // checkVerify holds a plugin offering `verify` to docs/plugins/protocol.md

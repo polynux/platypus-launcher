@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/plugtest"
+	"platypus/internal/plugins"
+	"platypus/internal/plugtest"
 )
 
 func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
@@ -25,11 +25,11 @@ func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
 
 	pyMethod := regexp.MustCompile(`(?m)^\s+"([a-z]+\.[A-Za-z]+)":\s`)
 	methods := map[string]string{}
-	scripts, _ := filepath.Glob("../../plugins/*/bin/hydra-*")
+	scripts, _ := filepath.Glob("../../plugins/*/bin/platypus-*")
 	for _, p := range scripts {
 		data, err := os.ReadFile(p)
 		if err != nil || !strings.HasPrefix(string(data), "#!/usr/bin/env python3") {
-			continue // the built hydra-steam-dl binary
+			continue // the built platypus-steam-dl binary
 		}
 		_, after, ok := strings.Cut(string(data), "\nMETHODS = {")
 		if !ok {

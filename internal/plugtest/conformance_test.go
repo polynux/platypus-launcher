@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/plugtest"
-	"hydra-launcher/internal/types"
-	"hydra-launcher/plugins/steam-standalone/fakesteam"
+	"platypus/internal/plugins"
+	"platypus/internal/plugtest"
+	"platypus/internal/types"
+	"platypus/plugins/steam-standalone/fakesteam"
 )
 
 // echo builds from source and answers everything itself, no external CLI.
@@ -27,9 +27,9 @@ func TestConformanceEcho(t *testing.T) {
 	plugtest.Suite{
 		ID:      "echo",
 		CopyDir: "../../plugins/echo",
-		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
-			"hydra-launcher/plugins/echo"},
-		BuildOut: "plugins/echo/bin/hydra-echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/platypus-echo",
+			"platypus/plugins/echo"},
+		BuildOut: "plugins/echo/bin/platypus-echo",
 		// Echo's uninstall is instant, so there is nothing for job.cancel to stop.
 		NoUninstallCancel: true,
 		Login: func(t *testing.T, s *plugtest.Session) {
@@ -50,9 +50,9 @@ func echoAllCapabilities(env map[string]string) plugtest.Suite {
 	return plugtest.Suite{
 		ID:      "echo",
 		CopyDir: "../../plugins/echo",
-		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
-			"hydra-launcher/plugins/echo"},
-		BuildOut: "plugins/echo/bin/hydra-echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/platypus-echo",
+			"platypus/plugins/echo"},
+		BuildOut: "plugins/echo/bin/platypus-echo",
 		Env:      env,
 		EditManifest: func(m map[string]any) {
 			var names []string
@@ -132,7 +132,7 @@ func TestHandshakeEchoWithoutNegotiation(t *testing.T) {
 	echoAllCapabilities(map[string]string{"ECHO_NO_PROTOCOL": "1"}).Handshake(t)
 }
 
-// A plugin that speaks only 1.0 and says so negotiates 1.0 with a Hydra that
+// A plugin that speaks only 1.0 and says so negotiates 1.0 with a Platypus that
 // speaks 1.1 too.
 func TestHandshakeEchoOlderPlugin(t *testing.T) {
 	s := echoAllCapabilities(map[string]string{"ECHO_PROTOCOLS": "1.0"})
@@ -190,7 +190,7 @@ func TestConformanceGog(t *testing.T) {
 		ID:      "gog-gogdl",
 		CopyDir: "../../plugins/gog-gogdl",
 		FakeCLI: map[string]string{"gogdl": "../../plugins/gog-gogdl/testdata/gogdl"},
-		Env:     map[string]string{"FAKE_GOGDL_STATE": state, "HYDRA_GOG_API_FILE": api},
+		Env:     map[string]string{"FAKE_GOGDL_STATE": state, "PLATYPUS_GOG_API_FILE": api},
 		// The API file answers every id; unknown-id details is unit-tested in
 		// plugins/gog-gogdl.
 		NoUnknownDetails: true,
@@ -260,7 +260,7 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 	return cmd, ""
 }
 
-// steam-standalone logs in and downloads through hydra-steam-dl (built
+// steam-standalone logs in and downloads through platypus-steam-dl (built
 // from source) against a fake CM and a fake CDN (see fakesteam); the
 // plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
@@ -283,7 +283,7 @@ func TestConformanceSteamStandalone(t *testing.T) {
 	// exported here too — Suite.Env applies only at plugin start.
 	t.Setenv("FAKE_CM_STATE", cmState)
 	_, endpoint := startFakeCM(t, "../../plugins/steam-standalone/testdata/fake_cm.py")
-	// hydra-steam-dl comes from a PATH copy (the copied plugin tree has no
+	// platypus-steam-dl comes from a PATH copy (the copied plugin tree has no
 	// built binary); it was built once in TestMain, before any test could
 	// override HOME. The fake CDN serves the fixture depot and the fake CM
 	// points the downloader at it.
@@ -298,12 +298,12 @@ func TestConformanceSteamStandalone(t *testing.T) {
 		// Steam's store answers success:false for delisted apps and unknown ids
 		// alike, so an unknown id gets an empty page, not an error.
 		NoUnknownDetails: true,
-		Env: map[string]string{"FAKE_DD_STATE": state, "HYDRA_STEAM_API_FILE": api,
-			"HYDRA_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
+		Env: map[string]string{"FAKE_DD_STATE": state, "PLATYPUS_STEAM_API_FILE": api,
+			"PLATYPUS_STEAM_CM_SERVER": endpoint, "FAKE_CM_STATE": cmState},
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus
 			err := s.Call("auth.complete", map[string]any{
-				"fields": map[string]string{"username": "HydraUser", "password": "correct-horse", "guard": "ABC12"}}, &st)
+				"fields": map[string]string{"username": "PlatypusUser", "password": "correct-horse", "guard": "ABC12"}}, &st)
 			if err != nil || !st.LoggedIn {
 				t.Fatalf("login: %+v, %v", st, err)
 			}
@@ -349,9 +349,9 @@ func echoCloudSuite(env map[string]string) plugtest.Suite {
 	return plugtest.Suite{
 		ID:      "echo",
 		CopyDir: "../../plugins/echo",
-		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/hydra-echo",
-			"hydra-launcher/plugins/echo"},
-		BuildOut: "plugins/echo/bin/hydra-echo",
+		BuildCmd: []string{"go", "build", "-o", "plugins/echo/bin/platypus-echo",
+			"platypus/plugins/echo"},
+		BuildOut: "plugins/echo/bin/platypus-echo",
 		Env:      env,
 		Login: func(t *testing.T, s *plugtest.Session) {
 			var st types.AuthStatus

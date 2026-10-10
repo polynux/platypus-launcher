@@ -3,13 +3,13 @@ package main
 import (
 	"testing"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
 // Install params: plugins now accept `title` in game.install/game.update (GOG
 // records it into its installed index, steam-standalone keys its dl request
-// on it), and steam-standalone accepts branch/branchPassword. Hydra sends the
+// on it), and steam-standalone accepts branch/branchPassword. Platypus sends the
 // title the job already has, and sends no branch at all — an empty one must
 // be omitted, and building branch/password UI is explicitly out of scope.
 

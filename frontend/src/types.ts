@@ -1,4 +1,4 @@
-// Storefronts Hydra knows by name; store plugins may report others.
+// Storefronts Platypus knows by name; store plugins may report others.
 export type StoreType = 'steam' | 'epic' | 'gog' | 'ubisoft' | 'custom' | (string & {});
 
 export interface ProtonVersion {
@@ -152,7 +152,7 @@ export interface Game {
   update_available?: boolean;
   installable?: boolean;
   note?: string;
-  /** Installed outside the folders Hydra lets its plugin launch from. */
+  /** Installed outside the folders Platypus lets its plugin launch from. */
   outside_folder?: boolean;
   /** Linux build: runs without Proton, so runner and Proton-only settings don't apply. */
   native?: boolean;
@@ -170,7 +170,7 @@ export interface Game {
   preferred_copy?: string;
   /** The borrowed game's copies set against the baseline copy (two or more copies). */
   copy_compare?: CopyComparison | null;
-  /** What the user changed about the game's look (Hydra's customization): when
+  /** What the user changed about the game's look (Platypus's customization): when
    *  `title` is theirs, `store_title` is the store's. The *_url fields are their
    *  images; `customized` names every part that is theirs. */
   store_title?: string;
@@ -202,7 +202,7 @@ export interface InstallLocation {
   exists: boolean;
 }
 
-/** What Hydra found out about a folder picked to install into. */
+/** What Platypus found out about a folder picked to install into. */
 export interface InstallFolderCheck {
   folder: string;
   free_bytes: number;
@@ -358,7 +358,7 @@ export interface Library {
 
 export type PluginStatus =
   | 'ready' | 'invalid' | 'unapproved' | 'changed' | 'disabled' | 'missing-requirements'
-  | 'needs-newer-hydra' | 'too-old';
+  | 'needs-newer-platypus' | 'too-old';
 
 export interface PluginRequirement {
   bin: string;
@@ -370,14 +370,14 @@ export interface PluginCapability {
   name: string;
   /** The plugin offers it right now. */
   on: boolean;
-  /** This Hydra has it in its registry; unknown ones are ignored. */
+  /** This Platypus has it in its registry; unknown ones are ignored. */
   known: boolean;
   /** Core has code that uses it; known but not orchestrated = not used yet. */
   orchestrated: boolean;
   features: Record<string, boolean>;
 }
 
-/** A store plugin found in ~/.local/share/hydra/plugins. Kind "data" is a
+/** A store plugin found in ~/.local/share/platypus/plugins. Kind "data" is a
  *  JSON-only plugin (fixes, tweaks): no code, no approval, always on. */
 export interface StorePlugin {
   id: string;
@@ -399,7 +399,7 @@ export interface StorePlugin {
   /** Every declared capability with its state and depth flags. */
   offers: PluginCapability[];
   needs: string[];
-  /** Things that don't stop the plugin, e.g. capabilities this Hydra ignores. */
+  /** Things that don't stop the plugin, e.g. capabilities this Platypus ignores. */
   warnings: string[];
   initialized: boolean;
   /** Negotiated protocol version ("1.1"). */
@@ -500,7 +500,7 @@ export interface MoveCheck {
   to: string;
   need_bytes: number;
   free_bytes: number;
-  /** The plugin moves the game itself (game.move); otherwise Hydra does. */
+  /** The plugin moves the game itself (game.move); otherwise Platypus does. */
   plugin_moves: boolean;
 }
 
@@ -532,7 +532,7 @@ export interface VersionBuild {
   publishedAt?: string;
   channel?: string;
   source: VersionBuildSource;
-  /** Hydra fills it in: false means the plugin can't fetch the build now. */
+  /** Platypus fills it in: false means the plugin can't fetch the build now. */
   available: boolean;
   current?: boolean;
 }
@@ -547,7 +547,7 @@ export interface VersionPin {
   id: string;
 }
 
-/** A row of the install history Hydra keeps for the game. */
+/** A row of the install history Platypus keeps for the game. */
 export interface LedgerEntry {
   store: string;
   game: string;
@@ -567,25 +567,25 @@ export interface VersionInfo {
   links: VersionLink[];
   /** The plugin's verdict relative to the pin (see the protocol doc). */
   updateAvailable: boolean;
-  /** Hydra's own pin. */
+  /** Platypus's own pin. */
   pinned: VersionPin | null;
   ledger: LedgerEntry[];
 }
 
-/** Hydra-wide settings, persisted in ~/.local/share/hydra/settings.json. */
+/** Platypus-wide settings, persisted in ~/.local/share/platypus/settings.json. */
 export interface LauncherSettings {
   games_folder: string;
   default_games_folder: string;
-  /** How long a canceled download's partial data is kept before Hydra deletes
+  /** How long a canceled download's partial data is kept before Platypus deletes
    *  it, in days; 0 deletes it right away. */
   cancel_cleanup_days: number;
   /** "Fetch ratings online": absent from older backends, which means on. */
   ratings_online?: boolean;
 }
 
-/** A ProtonDB summary as Hydra holds it (internal/types/compat.go). */
+/** A ProtonDB summary as Platypus holds it (internal/types/compat.go). */
 export interface ProtonRating {
-  /** A medal Hydra shows, "" when there's no reliable one. */
+  /** A medal Platypus shows, "" when there's no reliable one. */
   tier: string;
   confidence: string;
   total: number;
@@ -611,7 +611,7 @@ export interface CompatBadge {
 export interface WikiCredit {
   title: string;
   url: string;
-  /** Unix seconds: when Hydra read the page. */
+  /** Unix seconds: when Platypus read the page. */
   fetched_at: number;
   licence_url: string;
 }
@@ -677,7 +677,7 @@ export interface CloudStatus {
   conflicts?: CloudConflict[] | null;
   checkedAt?: number; // unix seconds
   backupDir?: string;
-  /** The store's own client, when the plugin reports it. Hydra doesn't sync while it runs. */
+  /** The store's own client, when the plugin reports it. Platypus doesn't sync while it runs. */
   client?: { running: boolean; name: string; canLaunch?: boolean } | null;
 }
 
@@ -763,7 +763,7 @@ export interface SocialFriend {
   name: string;
   avatarUrl?: string;
   state: FriendState;
-  /** id is Hydra's game key when the game is in the library; absent otherwise. */
+  /** id is Platypus's game key when the game is in the library; absent otherwise. */
   game?: { id?: string; title: string };
   lastSeen?: number;
 }

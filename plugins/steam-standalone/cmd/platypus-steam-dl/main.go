@@ -1,8 +1,8 @@
-// Command hydra-steam-dl downloads Steam depots for the steam-standalone
+// Command platypus-steam-dl downloads Steam depots for the steam-standalone
 // plugin, replacing DepotDownloader for installs and logins. It speaks
 // one subcommand per argv:
 //
-//	hydra-steam-dl size|install|update|verify|auth
+//	platypus-steam-dl size|install|update|verify|auth
 //
 // The request (app id, branch, dirs, and the refresh token) arrives as one
 // JSON object on stdin — the token never goes in argv (visible in
@@ -14,22 +14,22 @@
 // is interactive (qr/code-needed/waiting events, code replies on stdin —
 // see auth.go) and stores the login where the plugin finds it.
 //
-// State lives in HYDRA_PLUGIN_DATA: job files under jobs/ and installed
+// State lives in PLATYPUS_PLUGIN_DATA: job files under jobs/ and installed
 // manifests under manifests/<app>/, like the plan's disk layout.
 package main
 
 import (
 	"context"
-	"os/signal"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 )
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("error", "usage: hydra-steam-dl size|install|update|verify|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|auth")
 	}
 	if os.Args[1] == "auth" {
 		if err := runAuth(context.Background()); err != nil {
@@ -68,7 +68,7 @@ func main() {
 	case "verify":
 		runErr = runVerify(ctx, req)
 	default:
-		fatal("error", "usage: hydra-steam-dl size|install|update|verify|auth")
+		fatal("error", "usage: platypus-steam-dl size|install|update|verify|auth")
 	}
 	if runErr != nil {
 		if ce, ok := runErr.(cmErr); ok && ce.auth {
@@ -110,7 +110,7 @@ func fatal(code, msg string) {
 // data folder, when the request carried none on stdin. It tightens a
 // pre-existing 0644 file to 0600 on first touch.
 func tokenFromFile() string {
-	dir := os.Getenv("HYDRA_PLUGIN_DATA")
+	dir := os.Getenv("PLATYPUS_PLUGIN_DATA")
 	if dir == "" {
 		return ""
 	}

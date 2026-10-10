@@ -2,11 +2,11 @@ package main
 
 // The fake `terms` capability (protocol 1.11, docs/plugins/protocol.md,
 // "Terms"): the game "licensed" lists two terms in game.details, an end user
-// licence and a privacy notice. Hydra asks the user to accept them before an
+// licence and a privacy notice. Platypus asks the user to accept them before an
 // install. The ECHO_TERMS_BUMP knob (or `config` termsBump) changes the licence
 // version, so it asks again. game.acceptTerms records what the user accepted
 // in state.json (see "recorded"); ECHO_MISSING=game.acceptTerms makes echo a
-// store that doesn't keep acceptance, which Hydra then keeps alone.
+// store that doesn't keep acceptance, which Platypus then keeps alone.
 
 import (
 	"encoding/json"

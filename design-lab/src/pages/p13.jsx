@@ -25,8 +25,8 @@ export function It13Dashboard() {
         {/* slim stat sidebar + library table = the whole page */}
         <aside className="sticky top-0 flex h-screen w-52 flex-none flex-col border-r border-white/[0.06] bg-black/25 p-4">
           <div className="mb-5 flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-rose-500 text-[13px] font-black text-[#141009]">H</span>
-            <span className="text-[14px] font-extrabold">Hydra</span>
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-amber-300 to-rose-500 text-[13px] font-black text-[#141009]">P</span>
+            <span className="text-[14px] font-extrabold">Platypus</span>
           </div>
           {[['Dashboard', true], ['All games', false], ['Downloads', false], ['Achievements', false], ['Activity', false], ['Runners', false]].map(([l, a]) => (
             <button key={l} className={`mb-0.5 rounded-lg px-3 py-2 text-left text-[12.5px] font-semibold ${a ? 'bg-amber-300/12 text-amber-200' : 'text-white/50 hover:text-white'}`}>{l}</button>

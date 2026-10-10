@@ -30,7 +30,7 @@ export interface VersionsDialogProps {
 
 /** Pick which version of a game to install or switch to, hold it there (pin),
  *  or return to the latest. The plugin supplies channels, builds and the typed
- *  input; Hydra adds the install history and the pin. */
+ *  input; Platypus adds the install history and the pin. */
 export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, embedded }: VersionsDialogProps) {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -370,7 +370,7 @@ function ChannelRow({
 }
 
 /** The password goes to the plugin and is dropped from state as soon as it is
- *  sent: Hydra keeps it nowhere. */
+ *  sent: Platypus keeps it nowhere. */
 function UnlockForm({
   channel, game, onUnlocked, onNotify,
 }: { channel: VersionChannel; game: Game; onUnlocked: () => Promise<void> | void; onNotify: VersionsDialogProps['onNotify'] }) {

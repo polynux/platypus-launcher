@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
 )
 
 // CORE-10 UI wiring: the Plugins view offers a Retry action only for plugins
@@ -24,15 +24,15 @@ func installEchoApp(t *testing.T, pluginsDir string) {
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	echoBin := filepath.Join(t.TempDir(), "hydra-echo-app")
-	out, err := exec.Command("go", "build", "-o", echoBin, "hydra-launcher/plugins/echo").CombinedOutput()
+	echoBin := filepath.Join(t.TempDir(), "platypus-echo-app")
+	out, err := exec.Command("go", "build", "-o", echoBin, "platypus/plugins/echo").CombinedOutput()
 	if err != nil {
 		t.Fatalf("building echo plugin: %v: %s", err, out)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "bin/hydra-echo-app"), mustRead(t, echoBin), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "bin/platypus-echo-app"), mustRead(t, echoBin), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","api":1,"store":"echo","exec":"bin/hydra-echo-app"}`
+	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","api":1,"store":"echo","exec":"bin/platypus-echo-app"}`
 	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Tests the GOG plugin through Hydra's real plugin path (manager, JSON-RPC,
+// Tests the GOG plugin through Platypus's real plugin path (manager, JSON-RPC,
 // job queue, launch-spec validation) against testdata/gogdl, a fake CLI that
 // prints the real gogdl's output formats. It doesn't reach GOG.
 package gog_test
@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 const id = "gog-gogdl"
@@ -50,7 +50,7 @@ func setup(t *testing.T) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string)
 	root := t.TempDir()
 	plug := filepath.Join(root, "plugins", id)
 	copyFile(t, "plugin.json", filepath.Join(plug, "plugin.json"), 0o644)
-	copyFile(t, "bin/hydra-gog", filepath.Join(plug, "bin/hydra-gog"), 0o755)
+	copyFile(t, "bin/platypus-gog", filepath.Join(plug, "bin/platypus-gog"), 0o755)
 	bin := filepath.Join(root, "fakebin")
 	copyFile(t, "testdata/gogdl", filepath.Join(bin, "gogdl"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -61,7 +61,7 @@ func setup(t *testing.T) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string)
 	// the account library listing, and the product API under _test.
 	userdata := filepath.Join(root, "userdata.json")
 	os.WriteFile(userdata, []byte(`{"username": "GogUser", "totalPages": 1, "products": [{"id": 1234, "title": "Super Game", "isGame": true, "image": "//img.gog/box"}], "_test": {"id": 1234, "title": "Super Game", "description": {"lead": "A super game."}, "genres": [{"name": "Action"}], "release_date": "2019-09-20T00:00:00Z", "downloads": {"installers": [{"os": "linux", "language": "en-US"}]}, "screenshots": [{"formatter_template_url": "//images.gog.com/x_{formatter}.png", "formatted_images": [{"formatter_name": "ggvgl", "image_url": "https://images.gog.com/x_ggvgl.jpg"}]}]}}`), 0o644)
-	t.Setenv("HYDRA_GOG_API_FILE", userdata)
+	t.Setenv("PLATYPUS_GOG_API_FILE", userdata)
 
 	sets, _ := settings.Open(filepath.Join(root, "settings.json"))
 	var q *jobs.Queue

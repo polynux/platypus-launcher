@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Hydra store plugin for GOG, wrapping gogdl.
+"""Platypus store plugin for GOG, wrapping gogdl.
 
-Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
 over stdin/stdout, one object per line. Everything store-specific is done by
 the `gogdl` CLI (Heroic's downloader, Heroic-Games-Launcher/heroic-gogdl),
 which keeps the user's tokens in its own auth file; this plugin only passes it
 paths and a one-time authorization code, and never stores credentials.
 
 GOG games are DRM-free: gogdl downloads offline installers and unpacks them,
-and the games run without any GOG client. Hydra runs them through its own
+and the games run without any GOG client. Platypus runs them through its own
 runner pipeline.
 
 gogdl notes that shape this plugin:
   - `--auth-config-path` picks where tokens live; the plugin points it into
-    $HYDRA_PLUGIN_DATA so Hydra's sandbox rules hold.
+    $PLATYPUS_PLUGIN_DATA so Platypus's sandbox rules hold.
   - `auth --code <code>` exchanges a code from the OAuth login page.
   - `auth` (no arguments) prints the stored credentials as JSON, which is how
     login state is checked without network.
@@ -38,7 +38,7 @@ import urllib.request
 
 API = 1
 CODE_AUTH_REQUIRED = -32001
-# GOG's login page for Hydra's client id (gogdl's own OAuth client). The page
+# GOG's login page for Platypus's client id (gogdl's own OAuth client). The page
 # redirects to embed.gog.com/on_login_success?... with the code in the query.
 LOGIN_URL = ("https://auth.gog.com/auth?client_id=46899977096215655&response_type=code"
              "&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient")
@@ -79,7 +79,7 @@ def log(level, message):
 
 def auth_file():
     """Where gogdl keeps its tokens: the plugin's private data folder."""
-    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
     os.makedirs(data, exist_ok=True)
     return os.path.join(data, "gogdl-auth.json")
 
@@ -120,11 +120,11 @@ def credentials():
 def api_get(url, token):
     # Test hook: tests point this at a file with the response, so nothing
     # reaches the network. Not set in normal runs.
-    hook = os.environ.get("HYDRA_GOG_API_FILE")
+    hook = os.environ.get("PLATYPUS_GOG_API_FILE")
     if hook:
         with open(hook) as f:
             return json.load(f)
-    headers = {"User-Agent": "gogdl (Hydra Launcher)"}
+    headers = {"User-Agent": "gogdl (Platypus)"}
     if token:  # anonymous endpoints can reject an empty Bearer
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, headers=headers)
@@ -260,7 +260,7 @@ def library_list(_params):
 def known_titles():
     """Titles the account listing returned, so an install whose account entry
     later vanishes keeps its name instead of the numeric id."""
-    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
     try:
         with open(os.path.join(data, "titles.json")) as f:
             t = json.load(f)
@@ -275,7 +275,7 @@ def remember_titles(new):
         if all(known.get(k) == v for k, v in new.items()):
             return
         known.update(new)
-        data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+        data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
         try:
             write_json_atomic(os.path.join(data, "titles.json"), known)
         except OSError:
@@ -292,7 +292,7 @@ def write_json_atomic(path, obj):
 
 def installed_games():
     """gogdl doesn't list installs, so the plugin scans its own state file."""
-    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
     try:
         with open(os.path.join(data, "installed.json")) as f:
             return json.load(f)
@@ -301,7 +301,7 @@ def installed_games():
 
 
 def save_installed(state):
-    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
     write_json_atomic(os.path.join(data, "installed.json"), state)
 
 
@@ -368,13 +368,13 @@ def start_job(params, kind):
         return {}
     path = params.get("installDir") or ""
     if not os.path.isabs(path):
-        raise RPCError("installDir is missing or relative; Hydra always sends one")
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
     if kind == "update" and app in installed_games():
         cmd = ["update", app, "--path", path]
     else:
         cmd = ["download", app, "--path", path]
     cmd += ["--platform", platform_of(app), "--skip-dlcs", "--max-workers", "4"]
-    # Hydra resends a job with the same jobId after a crash: run it once. A job
+    # Platypus resends a job with the same jobId after a crash: run it once. A job
     # just paused or canceled is still stopping: wait, then resume from what
     # gogdl left in the game folder.
     if not claim_job(job_id, {"proc": None, "canceled": False, "id": app, "path": path}):
@@ -578,7 +578,7 @@ def job_cancel(params):
 # files (.gogdl-resume, the download cache) inside that folder, so deleting the
 # folder deletes everything. The plugin can't know the folder's name before
 # gogdl has made it, so it remembers which folders appeared in the install folder
-# while an install job ran ($HYDRA_PLUGIN_DATA/jobs-meta.json) and job.discard
+# while an install job ran ($PLATYPUS_PLUGIN_DATA/jobs-meta.json) and job.discard
 # deletes exactly those, never one that is installed.
 
 meta_lock = threading.RLock()
@@ -586,7 +586,7 @@ JOB_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 def meta_file():
-    return os.path.join(os.environ.get("HYDRA_PLUGIN_DATA") or ".", "jobs-meta.json")
+    return os.path.join(os.environ.get("PLATYPUS_PLUGIN_DATA") or ".", "jobs-meta.json")
 
 
 def load_meta():
@@ -852,7 +852,7 @@ def main():
         # Library listing and logins can take seconds; keep reading so
         # job.cancel stays responsive.
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
-    # stdin closed: Hydra is shutting down. Interrupted installs resume later.
+    # stdin closed: Platypus is shutting down. Interrupted installs resume later.
     with jobs_lock:
         procs = [j.get("proc") for j in jobs.values()]
     for p in procs:

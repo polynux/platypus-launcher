@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/relocate"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/relocate"
+	"platypus/internal/types"
 )
 
 // Move: the `move` capability (protocol 1.4) takes an installed game to
@@ -287,7 +287,7 @@ func (a *App) runCoreMove(ctx context.Context, j types.Job) {
 		},
 	})
 	if err != nil {
-		// Hydra is stopping: the job stays running in the queue and resumes
+		// Platypus is stopping: the job stays running in the queue and resumes
 		// from the same folders at the next start (relocate left no copy).
 		if a.ctx.Err() != nil {
 			return
@@ -314,14 +314,14 @@ func (a *App) recordMove(j types.Job, from, to string) error {
 		rel.From = prev.From
 	}
 	if err := a.settings.SetRelocation(j.GameID, rel); err != nil {
-		return fmt.Errorf("the game is in %s but Hydra could not record it: %w", to, err)
+		return fmt.Errorf("the game is in %s but Platypus could not record it: %w", to, err)
 	}
 	return nil
 }
 
 // tellPluginRelocated tells a plugin that speaks 1.4 that core moved its game
 // (game.relocated). When the plugin accepts, it knows the new folder, and
-// Hydra's record is dropped. A plugin without the method keeps the record,
+// Platypus's record is dropped. A plugin without the method keeps the record,
 // which maps what it reports to the new folder.
 func (a *App) tellPluginRelocated(j types.Job) {
 	if !a.plugins.Runtime(j.Source).Speaks(plugins.Version{Major: 1, Minor: 4}) {

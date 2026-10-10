@@ -24,7 +24,7 @@ import (
 	"runtime"
 	"strings"
 
-	"hydra-launcher/internal/steam"
+	"platypus/internal/steam"
 )
 
 // DepotRef is one depot to download: its id, manifest id and branch.

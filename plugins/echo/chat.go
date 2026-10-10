@@ -23,7 +23,7 @@ import (
 //	        sendCrash: 1 }    the next chat.send exits the process: a transport error, retried once
 //
 // ECHO_CHAT_TICK sets tick at start. `recorded` reports the chat.send calls
-// Hydra made under "chat" (text and clientId, in order) and the markRead calls.
+// Platypus made under "chat" (text and clientId, in order) and the markRead calls.
 
 const (
 	chatBotID     = "7656119800000009" // Ivy Chen: the echo bot

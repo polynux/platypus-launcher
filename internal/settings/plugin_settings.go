@@ -134,7 +134,7 @@ func (s *Store) PrunePlugins(keep func(pluginID string) bool) error {
 }
 
 // PruneGames forgets the per-game values of one plugin's games that are not in
-// keep (Hydra game ids). Call it with a library that was listed in full: a
+// keep (Platypus game ids). Call it with a library that was listed in full: a
 // game missing from a partial list would lose its values.
 func (s *Store) PruneGames(source string, keep map[string]bool) error {
 	s.mu.Lock()

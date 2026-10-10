@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Terms (protocol 1.11) around the echo test plugin: the game "licensed" lists
@@ -85,7 +85,7 @@ func TestInstallWaitsForTheUsersAcceptance(t *testing.T) {
 	}
 	accepted := e.a.settings.AcceptedTerms(game.ID)
 	if len(accepted) != 2 || accepted[0].At == 0 {
-		t.Fatalf("Hydra recorded %+v, want both versions with a date", accepted)
+		t.Fatalf("Platypus recorded %+v, want both versions with a date", accepted)
 	}
 	if pending, _ := e.a.GetGameTerms(game); len(types.Pending(pending)) != 0 {
 		t.Fatalf("still pending after acceptance: %+v", pending)
@@ -176,7 +176,7 @@ func TestTermsStayOffBelowProtocol111(t *testing.T) {
 	}
 }
 
-func TestAStoreWithoutServerAcceptanceKeepsTheRecordInHydra(t *testing.T) {
+func TestAStoreWithoutServerAcceptanceKeepsTheRecordInPlatypus(t *testing.T) {
 	t.Setenv("ECHO_MISSING", "game.acceptTerms")
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
@@ -185,7 +185,7 @@ func TestAStoreWithoutServerAcceptanceKeepsTheRecordInHydra(t *testing.T) {
 		t.Fatalf("a store without game.acceptTerms refused the local record: %v", err)
 	}
 	if n := len(e.a.settings.AcceptedTerms(game.ID)); n != 2 {
-		t.Fatalf("Hydra recorded %d acceptances, want 2", n)
+		t.Fatalf("Platypus recorded %d acceptances, want 2", n)
 	}
 }
 
@@ -202,7 +202,7 @@ func TestAcceptingAnUnlistedTermIsRefused(t *testing.T) {
 }
 
 // Acceptance is kept per game and term version, in settings.json. A plugin
-// reinstall and a fresh approval (new files, new hash) and a Hydra restart
+// reinstall and a fresh approval (new files, new hash) and a Platypus restart
 // don't touch it: only a new version asks again.
 func TestAcceptanceSurvivesAReinstallAndARestart(t *testing.T) {
 	e := versionsApp(t, termsProtocols, termsCaps)

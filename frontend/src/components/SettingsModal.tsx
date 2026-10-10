@@ -147,7 +147,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
       {isSteamClient && (
         <div className="mb-6 rounded-2xl bg-sky-300/[0.07] p-4 ring-1 ring-sky-300/25">
           <p className="text-[12.5px] leading-relaxed text-sky-100/85">
-            Steam games start through the Steam client, which picks the Proton version and ignores Hydra's env vars.
+            Steam games start through the Steam client, which picks the Proton version and ignores Platypus's env vars.
             To apply these settings, paste this into Steam → Properties → Launch options:
           </p>
           <div className="mt-2.5 flex items-center gap-2">
@@ -373,7 +373,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
           {dirty && <div role="status" className="font-mono text-[11.5px] text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
-            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/hydra/prefixes/${game.id}`}
+            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/platypus/prefixes/${game.id}`}
           </div>
         </div>
       </div>

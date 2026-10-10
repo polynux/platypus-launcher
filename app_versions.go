@@ -11,9 +11,9 @@ import (
 	"time"
 	"unicode"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -42,7 +42,7 @@ const (
 // now: the plugin is ready, the capability is on at runtime (which needs a
 // protocol that includes it), and the game's own `features` keep it. The
 // features are read from the store's library, not from the caller's copy of
-// the game. Hydra sends no versions request when this fails.
+// the game. Platypus sends no versions request when this fails.
 func (a *App) versionsGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
@@ -85,7 +85,7 @@ func (a *App) libraryCopy(game types.Game) (types.Game, error) {
 }
 
 // GetGameVersions asks the game's plugin which channels and builds it can
-// install, with Hydra's install history for the game and its pin. Nothing is
+// install, with Platypus's install history for the game and its pin. Nothing is
 // sent to the plugin when it doesn't offer versions for this game.
 func (a *App) GetGameVersions(game types.Game) (types.VersionInfo, error) {
 	if _, err := a.versionsGate(game); err != nil {
@@ -177,7 +177,7 @@ func httpURL(raw string) string {
 }
 
 // UnlockVersionChannel hands a channel's password to the plugin, which checks
-// it and keeps it. Hydra stores it nowhere and does not log it; a target only
+// it and keeps it. Platypus stores it nowhere and does not log it; a target only
 // ever names the channel.
 func (a *App) UnlockVersionChannel(game types.Game, channel, password string) (bool, error) {
 	if _, err := a.versionsGate(game); err != nil {
@@ -226,7 +226,7 @@ func (a *App) InstallGameVersion(game types.Game, target types.VersionTarget) (t
 		return types.Job{}, fmt.Errorf("%s is already installed; switch its version instead", game.Title)
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Hydra", game.Title)
+		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
 	}
 	return a.queueVersionJob("install", game, target)
 }
@@ -269,7 +269,7 @@ func (a *App) pinnedTarget(game types.Game) (*types.VersionTarget, error) {
 
 // withArchiveRef gives a build from the install history the reference the
 // history kept for it, so the plugin can fetch it again. The UI never sends
-// the reference; Hydra looks it up here, for the latest install of the build.
+// the reference; Platypus looks it up here, for the latest install of the build.
 func (a *App) withArchiveRef(gameID string, t types.VersionTarget) types.VersionTarget {
 	if t.Build == "" {
 		return t
@@ -285,7 +285,7 @@ func (a *App) withArchiveRef(gameID string, t types.VersionTarget) types.Version
 // validateTarget bounds what the UI may ask a plugin to install and returns the
 // target as it is to be sent: typed values are trimmed. A target is a channel,
 // a build or manual values; it has no room for a password or an archive
-// reference, which Hydra adds itself.
+// reference, which Platypus adds itself.
 func validateTarget(t types.VersionTarget) (types.VersionTarget, error) {
 	if t.Channel == "" && t.Build == "" && len(t.Manual) == 0 {
 		return t, errors.New("pick a channel, a build, or type what the store asks for")

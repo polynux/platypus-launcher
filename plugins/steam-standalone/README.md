@@ -1,8 +1,8 @@
 # steam-standalone
 
-A Hydra store plugin for Steam without the Steam client, with its own Go
+A Platypus store plugin for Steam without the Steam client, with its own Go
 depot downloader and Steam login. Install, update and launch the games
-your own Steam account owns, with Hydra's runner pipeline handling
+your own Steam account owns, with Platypus's runner pipeline handling
 Proton, wrappers and session tracking.
 
 See [docs/plugins/protocol.md](../../docs/plugins/protocol.md) for the
@@ -21,18 +21,18 @@ for the design ("Steam without the Steam client").
 plugins/install.sh steam-standalone
 ```
 
-Then approve it in Hydra's Plugins view and log in with your Steam account.
+Then approve it in Platypus's Plugins view and log in with your Steam account.
 
 ## Auth
 
-Login goes through hydra-steam-dl (Go, in the plugin's `bin/`): QR via
+Login goes through platypus-steam-dl (Go, in the plugin's `bin/`): QR via
 `BeginAuthSessionViaQR` + poll, or your account name, password and (when
 Steam asks) the Steam Guard code via `GetPasswordRSAPublicKey` +
 `BeginAuthSessionViaCredentials` (RSA-encrypted, never stored). The
 password is used for that run only and never written anywhere. Steam
 issues a refresh token, which the helper persists in the plugin's private
-`HYDRA_PLUGIN_DATA` folder (`refresh.token` 0600, plus `token.json` /
-`session.json`), so you don't log in every time and Hydra never sees
+`PLATYPUS_PLUGIN_DATA` folder (`refresh.token` 0600, plus `token.json` /
+`session.json`), so you don't log in every time and Platypus never sees
 credentials. Logging out wipes that folder.
 
 The library listing calls Steam's Web API (`IPlayerService/GetOwnedGames`).
@@ -44,13 +44,13 @@ installed or not.
 ## Install
 
 Downloads go to `<Games folder>/steam/<game name>/`, one folder per game like
-Steam's `steamapps/common`. Sizes for Hydra's free-space check come from the
+Steam's `steamapps/common`. Sizes for Platypus's free-space check come from the
 Go downloader resolving the app's depots over the CM and summing the
 manifests (Linux depots first, Windows fallback — the same order an install
 uses). Installs are resumable: staged chunks survive a crash under
-`HYDRA_PLUGIN_DATA/jobs/`, and Hydra re-issues the same job after a crash.
+`PLATYPUS_PLUGIN_DATA/jobs/`, and Platypus re-issues the same job after a crash.
 The scheduler spreads chunk fetches over many CDN hosts like the Steam
-client ( honouring the Steam client's download region, `HYDRA_STEAM_CELLID`
+client ( honouring the Steam client's download region, `PLATYPUS_STEAM_CELLID`
 to override).
 
 ## Launch modes
@@ -65,7 +65,7 @@ files, shown on the game page:
    `SteamAPI_Init` fails. The game launches directly with `SteamAppId` /
    `SteamGameId` set so it doesn't try to relaunch itself through Steam.
 3. **Client required** — the game needs the real Steam client (fatal
-   `SteamAPI_Init` failure or Steam's DRM wrapper). Hydra starts the real
+   `SteamAPI_Init` failure or Steam's DRM wrapper). Platypus starts the real
    client hidden (`steam -silent`) and asks it to start the game; the game
    runs against the live client for its licence check. No Steam API
    emulators are used or supported, ever.

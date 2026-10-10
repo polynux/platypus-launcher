@@ -16,8 +16,8 @@ const SHAPE: Record<ArtKindInfo['shape'], string> = {
   square: 'aspect-square w-14',
 };
 
-/** The user's own title and art for a game. It is Hydra's, not the store's: the
- *  images are copied into Hydra's data folder, and a reset brings the store's
+/** The user's own title and art for a game. It is Platypus's, not the store's: the
+ *  images are copied into Platypus's data folder, and a reset brings the store's
  *  back. The plugin never hears of any of it. */
 export function CustomizationTab({ game, onChanged }: {
   game: Game;
@@ -79,7 +79,7 @@ export function CustomizationTab({ game, onChanged }: {
   return (
     <div className="space-y-6">
       <p className="text-[12.5px] leading-relaxed text-white/55">
-        Change how {storeTitle} looks in Hydra. Images are copied into Hydra's own folder, so the file you pick can move or go.
+        Change how {storeTitle} looks in Platypus. Images are copied into Platypus's own folder, so the file you pick can move or go.
         This stays on this computer and never reaches the store.
       </p>
 

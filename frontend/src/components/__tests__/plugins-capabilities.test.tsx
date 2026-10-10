@@ -60,8 +60,8 @@ describe('Plugins view lists capabilities', () => {
     expect(rows).toHaveLength(4);
     expect(text('library')).toContain('on');
     expect(text('verify')).toContain('off right now');
-    expect(text('versions')).toContain('not used by Hydra yet');
-    expect(text('hologram')).toContain('unknown to this Hydra');
+    expect(text('versions')).toContain('not used by Platypus yet');
+    expect(text('hologram')).toContain('unknown to this Platypus');
   });
 
   it('shows depth flags: what is on and what is off', () => {
@@ -80,21 +80,21 @@ describe('Plugins view lists capabilities', () => {
   });
 
   it('shows warnings and the negotiated protocol', () => {
-    const { container } = view(plugin({ warnings: ['offers "hologram", which this Hydra doesn\'t know; it is ignored'] }));
-    expect(container.textContent).toContain('which this Hydra doesn\'t know');
+    const { container } = view(plugin({ warnings: ['offers "hologram", which this Platypus doesn\'t know; it is ignored'] }));
+    expect(container.textContent).toContain('which this Platypus doesn\'t know');
     expect(container.textContent).toContain('protocol 1.1');
   });
 
-  it('lists a plugin that needs a newer Hydra, with the reason and no way to approve it', () => {
-    const { container, queryByText } = view(plugin({ status: 'needs-newer-hydra', problem: 'needs a newer Hydra (speaks protocol 2.0; Hydra speaks 1.0, 1.1)' }));
-    expect(container.textContent).toContain('needs a newer Hydra');
+  it('lists a plugin that needs a newer Platypus, with the reason and no way to approve it', () => {
+    const { container, queryByText } = view(plugin({ status: 'needs-newer-platypus', problem: 'needs a newer Platypus (speaks protocol 2.0; Platypus speaks 1.0, 1.1)' }));
+    expect(container.textContent).toContain('needs a newer Platypus');
     expect(container.textContent).toContain('speaks protocol 2.0');
     expect(queryByText('Review and approve')).toBeNull();
     expect(queryByText('Disable')).toBeNull();
   });
 
   it('a plugin that is too old says so', () => {
-    const { container } = view(plugin({ status: 'too-old', problem: 'too old for this Hydra (speaks protocol 1.0; Hydra speaks 2.0)' }));
-    expect(container.textContent).toContain('too old for this Hydra');
+    const { container } = view(plugin({ status: 'too-old', problem: 'too old for this Platypus (speaks protocol 1.0; Platypus speaks 2.0)' }));
+    expect(container.textContent).toContain('too old for this Platypus');
   });
 });

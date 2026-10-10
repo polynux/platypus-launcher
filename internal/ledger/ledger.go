@@ -1,5 +1,5 @@
 // Package ledger keeps the install history of every plugin game, in
-// ~/.local/share/hydra/install-history.json: which build was installed when,
+// ~/.local/share/platypus/install-history.json: which build was installed when,
 // and the opaque reference its plugin needs to fetch it again. Stores like
 // Steam and Epic don't list old builds, so this is the only way back to one
 // the user once had (docs/plans/launcher-parity.md §2.2).
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 const (

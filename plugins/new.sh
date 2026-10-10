@@ -1,7 +1,7 @@
 #!/bin/sh
 # Scaffolds a minimal working store plugin: plugins/<id>/ with a manifest, a
 # Python stub that speaks the whole protocol (api 1), and a README. The stub
-# lists one fake game, installs it into the folder Hydra hands it, and launches
+# lists one fake game, installs it into the folder Platypus hands it, and launches
 # it — enough to approve in the Plugins view and try end to end with no other
 # tooling. Replace the marked sections with real store calls.
 #
@@ -26,11 +26,11 @@ cat > "$dest/plugin.json" <<EOF
   "name": "$(echo "$id" | sed 's/-/ /g; s/\b./\u&/') (stub)",
   "version": "0.1.0",
   "author": "you",
-  "description": "Scaffolded store plugin: lists one game, installs and launches it. Edit bin/hydra-$id.",
+  "description": "Scaffolded store plugin: lists one game, installs and launches it. Edit bin/platypus-$id.",
   "manifestVersion": 1,
   "protocol": { "versions": ["1.0"], "transport": "jsonrpc-stdio" },
   "store": "$store",
-  "exec": "bin/hydra-$id",
+  "exec": "bin/platypus-$id",
   "capabilities": ["library", "install", "launch", "auth"],
   "requires": [{ "bin": "python3", "hint": "install python3 from your distribution" }],
   "install_dir": "$store",
@@ -38,7 +38,7 @@ cat > "$dest/plugin.json" <<EOF
 }
 EOF
 
-cat > "$dest/bin/hydra-$id" <<'EOF'
+cat > "$dest/bin/platypus-$id" <<'EOF'
 #!/usr/bin/env python3
 """A minimal store plugin (api 1): JSON-RPC over stdin/stdout, one object per
 line. See docs/plugins/protocol.md. Everything between BEGIN/END STORE markers
@@ -144,7 +144,7 @@ def library_list(_params):
 
 
 def data_dir():
-    d = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    d = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -164,8 +164,8 @@ def save_installs(state):
 
 
 def install_path(app):
-    # Where the game landed. Hydra picks the folder and passes it to
-    # game.install; it survives restarts in HYDRA_PLUGIN_DATA/installed.json
+    # Where the game landed. Platypus picks the folder and passes it to
+    # game.install; it survives restarts in PLATYPUS_PLUGIN_DATA/installed.json
     # so the same jobId stays resumable and idempotent.
     return load_installs().get(app, "")
 
@@ -190,17 +190,17 @@ def start_job(params, kind):
         ev = threading.Event()
         with jobs_lock:
             if job_id in jobs:
-                return {}  # Hydra resends a jobId after a crash: run it once
+                return {}  # Platypus resends a jobId after a crash: run it once
             jobs[job_id] = {"canceled": False, "event": ev}
         threading.Thread(target=follow_uninstall, args=(job_id, app, ev), daemon=True).start()
         return {}
     install_dir = params.get("installDir") or ""
     if not os.path.isabs(install_dir):
-        raise RPCError("installDir is missing or relative; Hydra always sends one")
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
     ev = threading.Event()
     with jobs_lock:
         if job_id in jobs:
-            return {}  # Hydra resends a jobId after a crash: run it once
+            return {}  # Platypus resends a jobId after a crash: run it once
         jobs[job_id] = {"canceled": False, "event": ev}
     threading.Thread(target=follow_install, args=(job_id, app, install_dir, kind, ev), daemon=True).start()
     return {}
@@ -281,7 +281,7 @@ def launch_spec(params):
 
 
 def game_details(params):
-    # Returning an error is fine: Hydra shows the library entry without detail.
+    # Returning an error is fine: Platypus shows the library entry without detail.
     raise RPCError("no store metadata", -32601)
 
 
@@ -348,16 +348,16 @@ if __name__ == "__main__":
     main()
 EOF
 
-chmod 755 "$dest/bin/hydra-$id"
+chmod 755 "$dest/bin/platypus-$id"
 
 # The quoted heredoc kept the Python free of shell expansion; fill in the
 # plugin name afterwards.
-sed -i "s/STUBNAME/$id (stub)/" "$dest/bin/hydra-$id"
+sed -i "s/STUBNAME/$id (stub)/" "$dest/bin/platypus-$id"
 
 cat > "$dest/README.md" <<EOF
 # $id
 
-A Hydra store plugin for $store, scaffolded with \`plugins/new.sh\`. See
+A Platypus store plugin for $store, scaffolded with \`plugins/new.sh\`. See
 [docs/plugins/protocol.md](../../docs/plugins/protocol.md) for the protocol
 and [docs/plugins/data-plugins.md](../../docs/plugins/data-plugins.md) for
 JSON-only plugins (fix recipes, tweak packs).
@@ -368,25 +368,25 @@ JSON-only plugins (fix recipes, tweak packs).
 plugins/install.sh $id
 \`\`\`
 
-Then approve it in Hydra's Plugins view and log in (any code works in the
-stub). It lists one "Stub Game" that installs into Hydra's games folder and
+Then approve it in Platypus's Plugins view and log in (any code works in the
+stub). It lists one "Stub Game" that installs into Platypus's games folder and
 "plays" for three seconds.
 
 ## Make it real
 
-Everything to change lives in \`bin/hydra-$id\` between the BEGIN/END STORE
+Everything to change lives in \`bin/platypus-$id\` between the BEGIN/END STORE
 markers and the \`GAMES\` table:
 
 1. \`auth_begin\`/\`auth_complete\`: hand the user the store's login page and
    exchange what they paste for tokens. Keep tokens on disk (the plugin's
-   \`HYDRA_PLUGIN_DATA\` folder is private); never log them.
+   \`PLATYPUS_PLUGIN_DATA\` folder is private); never log them.
 2. \`library_list\`: the games the user owns, installed or not. Set \`native\`
    when a game ships a Linux build.
 3. \`install_size\`/\`start_job\`: drive the store's download, reporting
-   \`job.progress\` notifications; installs must be resumable (Hydra re-issues
+   \`job.progress\` notifications; installs must be resumable (Platypus re-issues
    the same \`jobId\` after a crash).
-4. \`launch_spec\`: the executable inside the install folder Hydra passed to
-   \`game.install\`; Hydra runs it (Proton, wrappers, session tracking).
+4. \`launch_spec\`: the executable inside the install folder Platypus passed to
+   \`game.install\`; Platypus runs it (Proton, wrappers, session tracking).
 5. \`plugin.json\`: list the command-line tools you need in \`requires\` and the
    hosts/paths you touch in \`permissions\` — the Plugins view shows both
    before the user approves.

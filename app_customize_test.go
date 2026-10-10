@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/customize"
-	"hydra-launcher/internal/types"
+	"platypus/internal/customize"
+	"platypus/internal/types"
 )
 
 func customApp(t *testing.T) *App {
@@ -60,7 +60,7 @@ func TestCustomizationReachesTheLibraryAndResets(t *testing.T) {
 	}
 	for name, u := range map[string]string{"cover": g.CoverURL, "banner": g.BannerURL, "hero": g.HeroURL, "logo": g.LogoURL, "icon": g.IconURL, "background": g.BackgroundURL} {
 		if !strings.HasPrefix(u, customize.URLPrefix) {
-			t.Errorf("%s = %q, want a Hydra art url", name, u)
+			t.Errorf("%s = %q, want a Platypus art url", name, u)
 		}
 	}
 	if want := []string{"title", "sort_title", "cover", "banner", "logo", "icon", "background"}; !slices.Equal(g.Customized, want) {

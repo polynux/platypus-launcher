@@ -26,7 +26,7 @@ interface FriendsModalProps {
   labels: Record<string, string>;
   /** The store plugins, for the family of each store that offers it. */
   plugins: StorePlugin[];
-  /** Whether a Hydra game key is in the library (a friend's game links there). */
+  /** Whether a Platypus game key is in the library (a friend's game links there). */
   inLibrary: (gameId: string) => boolean;
   onClose: () => void;
   onSetEnabled: (plugin: string, enabled: boolean) => void;

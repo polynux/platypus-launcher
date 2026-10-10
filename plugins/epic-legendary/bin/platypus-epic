@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Hydra store plugin for the Epic Games Store, wrapping legendary.
+"""Platypus store plugin for the Epic Games Store, wrapping legendary.
 
-Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
 over stdin/stdout, one object per line. Everything store-specific is done by
 the `legendary` CLI, which keeps the user's login in ~/.config/legendary; this
 plugin never sees or stores credentials beyond passing the one-time
@@ -9,7 +9,7 @@ authorization code to `legendary auth`.
 
 It only installs and launches games the logged-in account owns, through
 Epic's own APIs. Launch specs carry Epic's normal launch arguments (an
-exchange code for the game's online services), and Hydra runs the game
+exchange code for the game's online services), and Platypus runs the game
 through its own runner pipeline.
 """
 
@@ -28,8 +28,8 @@ CODE_AUTH_REQUIRED = -32001
 LOGIN_URL = "https://legendary.gl/epiclogin"
 NOT_LOGGED_IN = "<not logged in>"
 
-# Env keys Hydra refuses in launch specs (see internal/stores/launchspec.go).
-# legendary adds WINEPREFIX and friends from its own config; Hydra owns those.
+# Env keys Platypus refuses in launch specs (see internal/stores/launchspec.go).
+# legendary adds WINEPREFIX and friends from its own config; Platypus owns those.
 DENIED_ENV_PREFIXES = ("LD_", "DYLD_", "WINE", "PROTON_", "STEAM_COMPAT_", "VK_",
                        "__EGL_", "__GLX_", "LIBGL_", "GST_", "GTK_", "GIO_", "QT_",
                        "XDG_", "PYTHON", "PERL", "RUBY", "NODE_")
@@ -188,7 +188,7 @@ def library_list(_params):
         store = custom_attr(meta, "ThirdPartyManagedApp") or custom_attr(meta, "ThirdPartyManagedProvider")
         if store:
             entry["installable"] = False
-            entry["note"] = f"Installed and launched through {store}; Hydra can't install it."
+            entry["note"] = f"Installed and launched through {store}; Platypus can't install it."
         elif custom_attr(meta, "partnerLinkType") == "ubisoft":
             entry["note"] = "Needs Ubisoft Connect at runtime."
         elif not entry["installable"]:
@@ -272,7 +272,7 @@ def start_job(params, kind):
         args = ["-y", "install", app, "--update-only", "--skip-sdl"]
     else:
         args = ["-y", "uninstall", app]
-    # Hydra resends a job with the same jobId after a crash: run it once. A job
+    # Platypus resends a job with the same jobId after a crash: run it once. A job
     # just paused or canceled is still stopping: wait, then let legendary pick
     # up from its resume file.
     if not claim_job(job_id, {"proc": None, "canceled": False}):
@@ -354,7 +354,7 @@ def stop_proc(proc, grace=15):
     """SIGINT lets legendary save its resume state; SIGKILL if it hangs.
 
     legendary stays in the plugin's process group, so if the plugin itself
-    dies, Hydra's group kill takes legendary with it."""
+    dies, Platypus's group kill takes legendary with it."""
     try:
         proc.send_signal(signal.SIGINT)
         proc.wait(timeout=grace)
@@ -380,7 +380,7 @@ def job_cancel(params):
 # (tmp/<app>.resume); a canceled install leaves both. The plugin can't know the
 # game folder's name before legendary has made it, so it remembers which
 # folders appeared in the install folder while an install job ran
-# ($HYDRA_PLUGIN_DATA/jobs-meta.json) and job.discard deletes exactly those,
+# ($PLATYPUS_PLUGIN_DATA/jobs-meta.json) and job.discard deletes exactly those,
 # never one that is installed.
 
 meta_lock = threading.RLock()
@@ -389,7 +389,7 @@ APP_RE = re.compile(r"[A-Za-z0-9_.-]{1,128}")
 
 
 def meta_file():
-    return os.path.join(os.environ.get("HYDRA_PLUGIN_DATA") or ".", "jobs-meta.json")
+    return os.path.join(os.environ.get("PLATYPUS_PLUGIN_DATA") or ".", "jobs-meta.json")
 
 
 def load_meta():
@@ -632,7 +632,7 @@ def main():
         # Library listing and logins take seconds; keep reading meanwhile so
         # job.cancel stays responsive.
         threading.Thread(target=handle, args=(msg,), daemon=True).start()
-    # stdin closed: Hydra is shutting down. Interrupted installs resume later.
+    # stdin closed: Platypus is shutting down. Interrupted installs resume later.
     with jobs_lock:
         procs = [j.get("proc") for j in jobs.values()]
     for p in procs:

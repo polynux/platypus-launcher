@@ -1,7 +1,7 @@
 package types
 
 // Cloud saves (protocol 1.2, capability `cloud-saves`; docs/plugins/protocol.md,
-// "Cloud saves"). The first group is the wire format between Hydra and a store
+// "Cloud saves"). The first group is the wire format between Platypus and a store
 // plugin; the second is what the orchestrator tells the UI.
 
 // Cloud sync states, as CloudStatus.State carries them.
@@ -16,13 +16,13 @@ const (
 
 // Cloud sync modes, per plugin and per game.
 const (
-	CloudOff  = "off"  // Hydra never syncs this game
+	CloudOff  = "off"  // Platypus never syncs this game
 	CloudAsk  = "ask"  // sync clean cases, ask on a conflict or when the store is unreachable
 	CloudAuto = "auto" // like ask, but go on without asking once the user confirmed an unreachable store for the game
 )
 
-// CloudContext is what Hydra knows about the launch a call is for. The plugin
-// maps its store's save locations through it and never learns Hydra's prefix
+// CloudContext is what Platypus knows about the launch a call is for. The plugin
+// maps its store's save locations through it and never learns Platypus's prefix
 // layout.
 type CloudContext struct {
 	// OS is the client OS of the launch: "linux" for a native build, "windows"
@@ -47,11 +47,11 @@ type CloudStatus struct {
 	Conflicts []CloudConflict `json:"conflicts,omitempty"`
 	CheckedAt int64           `json:"checkedAt,omitempty"` // unix seconds
 	BackupDir string          `json:"backupDir,omitempty"`
-	// Stamp is an opaque fingerprint of the local save files. Hydra compares
+	// Stamp is an opaque fingerprint of the local save files. Platypus compares
 	// two readings to know the game stopped writing; absent, it compares the
 	// counts and conflicts.
 	Stamp string `json:"stamp,omitempty"`
-	// Client reports the store's own client. While it runs, Hydra does not sync.
+	// Client reports the store's own client. While it runs, Platypus does not sync.
 	Client *CloudClient `json:"client,omitempty"`
 }
 
@@ -152,7 +152,7 @@ type CloudEvent struct {
 	Title string `json:"title,omitempty"`
 }
 
-// Normalize makes a plugin's status safe to act on: a state this Hydra
+// Normalize makes a plugin's status safe to act on: a state this Platypus
 // doesn't know becomes an error that says so, and negative counts are zeroed.
 func (s *CloudStatus) Normalize() {
 	switch s.State {

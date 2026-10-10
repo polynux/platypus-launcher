@@ -1,5 +1,5 @@
 // Package jsonrpc is a JSON-RPC 2.0 client over a byte stream with one JSON
-// object per line, which is how Hydra talks to store plugins over stdio.
+// object per line, which is how Platypus talks to store plugins over stdio.
 // Batches are not supported.
 package jsonrpc
 
@@ -209,8 +209,8 @@ func (c *Conn) read(r io.Reader) {
 		}
 		switch {
 		case m.Method != "" && m.ID != nil:
-			// Plugins may only send notifications to Hydra.
-			c.reply(m.ID, &Error{Code: CodeMethodNotFound, Message: "hydra accepts no requests: " + m.Method})
+			// Plugins may only send notifications to Platypus.
+			c.reply(m.ID, &Error{Code: CodeMethodNotFound, Message: "platypus accepts no requests: " + m.Method})
 		case m.Method != "":
 			if c.onNotify != nil {
 				c.onNotify(m.Method, m.Params)

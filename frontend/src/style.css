@@ -24,7 +24,7 @@
   --color-text-body: #a8a29e;
   --color-text-faint: #78716c;
 
-  /* shadcn semantic tokens, mapped onto Hydra's palette so ds/ components inherit the look. */
+  /* shadcn semantic tokens, mapped onto Platypus's palette so ds/ components inherit the look. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

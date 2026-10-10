@@ -4,7 +4,7 @@ import { formatBytes } from './games';
 export const CLOUD_MODES: CloudMode[] = ['off', 'ask', 'auto'];
 
 export const MODE_HELP: Record<CloudMode, string> = {
-  off: "Hydra doesn't sync this game's saves.",
+  off: "Platypus doesn't sync this game's saves.",
   ask: 'Syncs on its own when nothing clashes; asks when saves changed on both sides or the store is unreachable.',
   auto: 'Like ask, but once you launch anyway while the store is unreachable it stops asking for this game. Conflicts always ask.',
 };

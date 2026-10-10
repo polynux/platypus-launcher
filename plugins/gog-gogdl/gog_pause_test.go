@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/types"
 )
 
 func (b backend) Discard(ctx context.Context, j types.Job) error {
@@ -132,7 +132,7 @@ func TestGogDiscardAfterARestartedPlugin(t *testing.T) {
 	game := firstGame(t, store)
 	j, _ := q.Add(jobs.KindInstall, id, game.ID, game.StoreAppID, game.Title, folder)
 	waitFor(t, q, j.ID, started, "first progress")
-	// Cancel in Hydra's queue only, then call discard from a fresh plugin
+	// Cancel in Platypus's queue only, then call discard from a fresh plugin
 	// process: nothing in memory knows the job.
 	if err := q.Cancel(context.Background(), j.ID); err != nil {
 		t.Fatal(err)

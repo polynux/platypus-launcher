@@ -12,7 +12,7 @@ const (
 	ChannelPassword = "password" // locked until versions.unlock accepted a password
 
 	BuildStore   = "store"   // listed by the store
-	BuildArchive = "archive" // from Hydra's install history (the ledger)
+	BuildArchive = "archive" // from Platypus's install history (the ledger)
 	BuildManual  = "manual"  // typed by the user
 
 	PinBuild   = "build"
@@ -28,7 +28,7 @@ type VersionTarget struct {
 	Channel string            `json:"channel,omitempty"`
 	Build   string            `json:"build,omitempty"`
 	Manual  map[string]string `json:"manual,omitempty"`
-	// ArchiveRef is the install history's reference for Build, added by Hydra
+	// ArchiveRef is the install history's reference for Build, added by Platypus
 	// for a build it remembers; the UI never sends it.
 	ArchiveRef json.RawMessage `json:"archiveRef,omitempty"`
 }
@@ -53,11 +53,11 @@ type VersionBuild struct {
 	Name        string `json:"name,omitempty"`
 	PublishedAt string `json:"publishedAt,omitempty"`
 	Channel     string `json:"channel,omitempty"`
-	// Source says where the entry came from: "store", "archive" (Hydra's
+	// Source says where the entry came from: "store", "archive" (Platypus's
 	// install history) or "manual" (typed by the user).
 	Source string `json:"source,omitempty"`
 	// Available is false for a build the plugin knows but can't fetch now.
-	// Absent means true; Hydra fills it in.
+	// Absent means true; Platypus fills it in.
 	Available *bool `json:"available,omitempty"`
 	// Current: this build is the installed one.
 	Current bool `json:"current,omitempty"`
@@ -70,7 +70,7 @@ type VersionManual struct {
 }
 
 // VersionLink points at a page that helps the user pick a version, such as the
-// game's depots on SteamDB. Hydra only opens it in the browser.
+// game's depots on SteamDB. Platypus only opens it in the browser.
 type VersionLink struct {
 	Label string `json:"label"`
 	URL   string `json:"url"`
@@ -90,12 +90,12 @@ func (p VersionPin) Target() VersionTarget {
 	return VersionTarget{Build: p.ID}
 }
 
-// LedgerEntry is one install Hydra performed: a row of the per-game install
-// history. ArchiveRef is opaque to Hydra (Epic: a saved manifest's name; Steam:
+// LedgerEntry is one install Platypus performed: a row of the per-game install
+// history. ArchiveRef is opaque to Platypus (Epic: a saved manifest's name; Steam:
 // the depot → manifest ids); the plugin reads it back to refetch the build.
 type LedgerEntry struct {
 	Store       string          `json:"store"` // plugin id
-	Game        string          `json:"game"`  // Hydra's game id
+	Game        string          `json:"game"`  // Platypus's game id
 	Build       string          `json:"build"`
 	Channel     string          `json:"channel,omitempty"`
 	VersionName string          `json:"versionName,omitempty"`
@@ -113,7 +113,7 @@ type Installed struct {
 }
 
 // VersionInfo answers versions.list, and is what the UI shows. The plugin
-// fills the first part; Hydra adds the ledger and its own pin.
+// fills the first part; Platypus adds the ledger and its own pin.
 type VersionInfo struct {
 	Channels []VersionChannel `json:"channels"`
 	Builds   []VersionBuild   `json:"builds"`
@@ -123,7 +123,7 @@ type VersionInfo struct {
 	// whether the installed version differs from it; without one, whether a
 	// newer build exists.
 	UpdateAvailable bool `json:"updateAvailable"`
-	// Pinned is Hydra's pin, never the plugin's echo of it.
+	// Pinned is Platypus's pin, never the plugin's echo of it.
 	Pinned *VersionPin `json:"pinned"`
 	// Ledger is the game's install history, oldest first.
 	Ledger []LedgerEntry `json:"ledger"`

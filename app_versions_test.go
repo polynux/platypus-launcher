@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/ledger"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/ledger"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // A whole App around the echo test plugin: settings, install queue, ledger and
@@ -30,7 +30,7 @@ type versionsEnv struct {
 }
 
 const versionsManifest = `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-	"protocol":{"versions":%s},"store":"echo","exec":"bin/hydra-echo-app",
+	"protocol":{"versions":%s},"store":"echo","exec":"bin/platypus-echo-app",
 	"capabilities":%s}`
 
 func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
@@ -325,7 +325,7 @@ func TestPinSurvivesARestart(t *testing.T) {
 }
 
 func TestPasswordsNeverReachCoreFiles(t *testing.T) {
-	const wrong, right = "not-the-password-hunter2", "hydra-beta" // echo's fixed test password
+	const wrong, right = "not-the-password-hunter2", "platypus-beta" // echo's fixed test password
 	e := versionsApp(t, allVersions, echoCaps)
 
 	// Locked until unlocked: the install is refused with a message.
@@ -366,7 +366,7 @@ func TestPasswordsNeverReachCoreFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Nothing Hydra wrote holds a password: not the queue, the settings, the
+	// Nothing Platypus wrote holds a password: not the queue, the settings, the
 	// install history, nor its logs.
 	var files []string
 	filepath.WalkDir(e.root, func(path string, d os.DirEntry, err error) error {

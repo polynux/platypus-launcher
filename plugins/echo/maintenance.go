@@ -6,7 +6,7 @@ package main
 // how many files are damaged, a check reports them, and a repair (repair:true)
 // restores them. Move renames the game's folder and records the new one; a
 // move can be cancelled with job.cancel before it renames anything. The
-// relocated call takes the new folder of a game that Hydra moved itself.
+// relocated call takes the new folder of a game that Platypus moved itself.
 // See docs/plugins/protocol.md, "Verify and move".
 
 import (
@@ -176,8 +176,8 @@ func startMove(p params) (any, error) {
 	return nil, nil
 }
 
-// relocated records a folder Hydra moved for this game (game.relocated). The
-// game must be where Hydra says it was.
+// relocated records a folder Platypus moved for this game (game.relocated). The
+// game must be where Platypus says it was.
 func relocated(p params) (any, error) {
 	stMu.Lock()
 	defer stMu.Unlock()

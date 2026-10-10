@@ -65,7 +65,7 @@ export function App() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
-  // Games Hydra launched that are starting or running, keyed by game id.
+  // Games Platypus launched that are starting or running, keyed by game id.
   const [sessions, setSessions] = useState<Record<string, SessionEvent>>({});
   const [tweaks, setTweaks] = useState<Tweak[]>([]);
   const [dismissedHero, setDismissedHero] = useState<ReadonlySet<string>>(() => new Set());

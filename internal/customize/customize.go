@@ -1,7 +1,7 @@
 // Package customize keeps the user's own look for a game: a title, a sort
 // title and the images of its page and library entry (cover, banner, logo, icon,
 // background). It is core-only: nothing here touches a plugin's data. Images
-// are copied into Hydra's data folder, so the original file can move or go,
+// are copied into Platypus's data folder, so the original file can move or go,
 // and are checked first (a known image type, a size cap). Resetting a part
 // brings the store's own art back.
 package customize
@@ -63,7 +63,7 @@ const (
 	MaxTitleLen = 200
 
 	// URLPrefix is where the asset server serves the images (see Handler).
-	URLPrefix = "/hydra-art/"
+	URLPrefix = "/platypus-art/"
 )
 
 // Entry is what the user changed about one game.
@@ -294,7 +294,7 @@ func (s *Store) saveLocked() error {
 }
 
 // imageExt names the image type of the first bytes of a file, or "" for a
-// type Hydra doesn't take. The type comes from the content, never from the
+// type Platypus doesn't take. The type comes from the content, never from the
 // file's name; SVG is refused (it can carry script).
 func imageExt(head []byte) string {
 	switch {

@@ -16,7 +16,7 @@ import (
 func testFetcher(client *http.Client) (*Fetcher, *[]time.Duration) {
 	var mu sync.Mutex
 	var waits []time.Duration
-	f := NewFetcher("hydra-test")
+	f := NewFetcher("platypus-test")
 	f.Client = client
 	f.Jitter = 0
 	f.Now = func() time.Time { return time.Unix(1000, 0) }
@@ -29,7 +29,7 @@ func testFetcher(client *http.Client) (*Fetcher, *[]time.Duration) {
 	return f, &waits
 }
 
-func TestFetcherSendsHydraUserAgent(t *testing.T) {
+func TestFetcherSendsPlatypusUserAgent(t *testing.T) {
 	var ua string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ua = r.Header.Get("User-Agent")
@@ -37,11 +37,11 @@ func TestFetcherSendsHydraUserAgent(t *testing.T) {
 	}))
 	defer srv.Close()
 	f, _ := testFetcher(srv.Client())
-	f.UserAgent = "Hydra-Launcher/9 (test)"
+	f.UserAgent = "Platypus/9 (test)"
 	if _, err := f.Get(context.Background(), srv.URL); err != nil {
 		t.Fatal(err)
 	}
-	if ua != "Hydra-Launcher/9 (test)" {
+	if ua != "Platypus/9 (test)" {
 		t.Fatalf("user agent %q", ua)
 	}
 }

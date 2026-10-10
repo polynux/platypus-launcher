@@ -1,4 +1,4 @@
-// Tests the Amazon plugin through Hydra's real plugin path (manager, JSON-RPC,
+// Tests the Amazon plugin through Platypus's real plugin path (manager, JSON-RPC,
 // job queue, launch-spec validation) against testdata/nile, a fake CLI that
 // prints the real nile's output formats. It doesn't reach Amazon.
 package amazon_test
@@ -16,11 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 const id = "amazon-nile"
@@ -67,7 +67,7 @@ func setup(t *testing.T) (*plugins.Manager, *jobs.Queue, *stores.Plugin, string)
 	root := t.TempDir()
 	plug := filepath.Join(root, "plugins", id)
 	copyFile(t, "plugin.json", filepath.Join(plug, "plugin.json"), 0o644)
-	copyFile(t, "bin/hydra-amazon", filepath.Join(plug, "bin/hydra-amazon"), 0o755)
+	copyFile(t, "bin/platypus-amazon", filepath.Join(plug, "bin/platypus-amazon"), 0o755)
 	bin := filepath.Join(root, "fakebin")
 	copyFile(t, "testdata/nile", filepath.Join(bin, "nile"), 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))

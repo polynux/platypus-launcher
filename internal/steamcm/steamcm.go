@@ -51,14 +51,14 @@ const (
 	// The obfuscated private ip doubles as the login id. The base is
 	// fixed so one-shot logons differ from the official client's
 	// (derived from its private ip); per-role values and the one-shot
-	// random pick (LoginIDFor) keep Hydra's own sessions from kicking
+	// random pick (LoginIDFor) keep Platypus's own sessions from kicking
 	// each other (plan D8, research R1).
 	LoginIDBase = 2718281
-	MachineName = "Hydra"
+	MachineName = "Platypus"
 )
 
 // LoginRole names what a logon session is for: each role gets its own
-// logon id so that overlapping Hydra sessions (a persistent social or
+// logon id so that overlapping Platypus sessions (a persistent social or
 // cloud session next to one-shot depot/auth jobs) never replace each
 // other (LogonSessionReplaced, EResult 34).
 type LoginRole int

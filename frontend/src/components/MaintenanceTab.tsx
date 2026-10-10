@@ -49,7 +49,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
         </Row>
       </CapabilitySurface>
 
-      <Row title="Move" text="Moves the game's folder to another folder or disk. Hydra checks the room first and keeps the old copy until the new one is checked.">
+      <Row title="Move" text="Moves the game's folder to another folder or disk. Platypus checks the room first and keeps the old copy until the new one is checked.">
         <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> Move…</Button>
       </Row>
 

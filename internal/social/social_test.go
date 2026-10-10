@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // fakeBackend is a plugin that records what it is sent. It answers social.state

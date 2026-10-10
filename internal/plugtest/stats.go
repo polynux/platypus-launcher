@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/types"
 )
 
 // The achievements, playtime and redeem capabilities (protocol 1.7,

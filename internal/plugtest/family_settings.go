@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // The family and settings capabilities (protocol 1.8, docs/plugins/protocol.md,

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"hydra-launcher/internal/customize"
-	"hydra-launcher/internal/types"
+	"platypus/internal/customize"
+	"platypus/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )

@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
-	"hydra-launcher/internal/depot"
-	"hydra-launcher/internal/steamcm"
+	"platypus/internal/depot"
+	"platypus/internal/steamcm"
 )
 
 type fetchedDepot struct {
@@ -50,17 +50,17 @@ func tokenFresh(expiry, now time.Time) bool {
 }
 
 func dataDir() string {
-	if d := os.Getenv("HYDRA_PLUGIN_DATA"); d != "" {
+	if d := os.Getenv("PLATYPUS_PLUGIN_DATA"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra-steam-standalone")
+	return filepath.Join(home, ".platypus-steam-standalone")
 }
 
-// cellID mirrors the plugin's download region: HYDRA_STEAM_CELLID wins,
+// cellID mirrors the plugin's download region: PLATYPUS_STEAM_CELLID wins,
 // else the Steam client's CellIDServerOverride, else 0 (CM decides).
 func cellID() uint32 {
-	if env := strings.TrimSpace(os.Getenv("HYDRA_STEAM_CELLID")); env != "" {
+	if env := strings.TrimSpace(os.Getenv("PLATYPUS_STEAM_CELLID")); env != "" {
 		if n, err := strconv.Atoi(env); err == nil && n > 0 {
 			return uint32(n)
 		}

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func waitExit(t *testing.T, ch <-chan ExitInfo) ExitInfo {

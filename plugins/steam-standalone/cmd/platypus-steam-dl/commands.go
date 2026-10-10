@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 func runSize(ctx context.Context, req request) error {
@@ -160,7 +160,7 @@ func runUpdate(ctx context.Context, req request) error {
 	// cancelled update resumes instead of restarting from zero.
 	jobID := req.JobID
 	if jobID == "" {
-		jobID = "update-"+fmt.Sprint(req.AppID)
+		jobID = "update-" + fmt.Sprint(req.AppID)
 	}
 	ustate := &depot.JobState{AppID: req.AppID, ManifestID: manifestGID(depots), Done: map[string]bool{}, Total: countChunks(depots)}
 	for id := range stagingIDs(ss.dataDir, jobID) {

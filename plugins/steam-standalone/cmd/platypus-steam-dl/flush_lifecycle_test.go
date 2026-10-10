@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // STEAM-12: after a finished install the plugin's jobs folder must not

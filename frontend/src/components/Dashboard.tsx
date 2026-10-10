@@ -39,7 +39,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
       <div className="p-7">
         <WelcomeBanner installed={0} owned={ownedCount ?? 0} fixes={0} />
         <EmptyState label="no titles found">
-          Hydra didn't find any installed games. Install something in Steam, or add a game from the Library.
+          Platypus didn't find any installed games. Install something in Steam, or add a game from the Library.
         </EmptyState>
       </div>
     );

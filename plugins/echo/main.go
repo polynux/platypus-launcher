@@ -1,4 +1,4 @@
-// Command hydra-echo is a fake store plugin for tests and for trying the
+// Command platypus-echo is a fake store plugin for tests and for trying the
 // plugin UI without a real store: a login that accepts the code "letmein", a
 // small library, installs that write a tiny shell-script "game" with fake
 // progress, and launch specs for each launch path. It never downloads
@@ -13,7 +13,7 @@
 //	huge     claims 32 PiB, so the free-space check refuses it
 //	flaky    the plugin crashes once mid-install, then resumes
 //	client   always installed; "launches" through a store client (sleep 5.0421)
-//	escape   always installed outside the install folder; Hydra must refuse it
+//	escape   always installed outside the install folder; Platypus must refuse it
 //	ana, ben borrowed from the family (family.go): installed, launched through a store client
 //	shared   lent by ana and ben, whose copies differ (family.go): the user picks one
 //
@@ -33,10 +33,10 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.11); it answers the highest Hydra also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.11); it answers the highest Platypus also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
-//	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Hydra knows
+//	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Platypus knows
 //	ECHO_VERSIONS_OFF  parts of versions.list to leave out: channels, builds, manual, links (see versions.go)
 //	ECHO_FAMILY_IN_USE borrowed game ids that are in use: launching them answers -32002 (see family.go)
 //	ECHO_FAMILY_WARN   seconds: launching a borrowed game also raises family.warning with that count
@@ -50,7 +50,7 @@
 // (chat.go, protocol 1.9) its ECHO_CHAT_TICK and `config` chat knobs.
 // Verify and move (maintenance.go, protocol 1.4) need no env knobs: `config`
 // {damage: {"tiny": 3}} sets the damaged files a check finds. Switch `move` off
-// (ECHO_OFF=move) and Hydra moves the game folder itself and sends
+// (ECHO_OFF=move) and Platypus moves the game folder itself and sends
 // game.relocated, which echo accepts.
 //
 // `config` takes {off, extra, features, gameFeatures, unavailable, missing,
@@ -103,7 +103,7 @@ type game struct {
 	stepMs   int
 	native   bool
 	note     string
-	external string // always installed here, outside Hydra's folder
+	external string // always installed here, outside Platypus's folder
 	client   bool
 	details  bool   // answers game.details with store metadata
 	terms    bool   // lists terms in game.details (terms.go)
@@ -116,7 +116,7 @@ var games = map[string]game{
 	"huge":   {title: "Echo Huge", size: 32 << 50, steps: 10, stepMs: 100, native: true},
 	"flaky":  {title: "Echo Flaky", size: 8 << 20, steps: 20, stepMs: 100, native: true, note: "The plugin crashes once while installing this."},
 	"client": {title: "Echo Client", client: true, note: "Launches through a store client (a 5 s sleep)."},
-	"escape": {title: "Echo Escape", external: "/usr/bin", note: "Installed outside the plugin's folder: Hydra must refuse to launch it."},
+	"escape": {title: "Echo Escape", external: "/usr/bin", note: "Installed outside the plugin's folder: Platypus must refuse to launch it."},
 	"ana":    {title: "Echo Borrowed Quest", lentBy: "ana", native: true},
 	"ben":    {title: "Echo Borrowed Kart", lentBy: "ben", native: true},
 	// lentBy is the copy a game is played from until the user picks another.
@@ -127,7 +127,7 @@ var games = map[string]game{
 
 var order = []string{"tiny", "slow", "huge", "flaky", "client", "escape", "ana", "ben", "shared", "licensed"}
 
-// state is persisted in $HYDRA_PLUGIN_DATA/state.json.
+// state is persisted in $PLATYPUS_PLUGIN_DATA/state.json.
 type state struct {
 	LoggedIn  bool              `json:"loggedIn"`
 	Installed map[string]string `json:"installed"` // id → install path
@@ -187,7 +187,7 @@ type knobs struct {
 }
 
 // defaultProtocols is what echo speaks: 1.0 to 1.11, so it meets the highest
-// revision Hydra offers (the negotiation picks the best both speak).
+// revision Platypus offers (the negotiation picks the best both speak).
 var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"}
 
 var (
@@ -249,7 +249,7 @@ func configure(raw json.RawMessage) {
 	set("settingsDelayMs", &kn.SettingsDelayMs)
 }
 
-// manifestCapabilities reads the capabilities plugin.json declares; Hydra runs
+// manifestCapabilities reads the capabilities plugin.json declares; Platypus runs
 // the plugin from its folder.
 func manifestCapabilities() []string {
 	var m struct {
@@ -285,7 +285,7 @@ func manifestAccepts(v string) bool {
 }
 
 // negotiate answers the highest protocol version that echo speaks, its
-// manifest declares and Hydra offered ("major.minor", compared numerically).
+// manifest declares and Platypus offered ("major.minor", compared numerically).
 func negotiate(offered []string) (string, bool) {
 	speaks := csv("ECHO_PROTOCOLS")
 	if len(speaks) == 0 {
@@ -317,7 +317,7 @@ func initializeResult(p params) (map[string]any, error) {
 			picked, ok = v, true
 		}
 		if !ok {
-			return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("no protocol version in common with Hydra's %v", p.Protocols)}
+			return nil, &rpcError{Code: -32602, Message: fmt.Sprintf("no protocol version in common with Platypus's %v", p.Protocols)}
 		}
 		res["protocol"] = picked
 	}
@@ -377,7 +377,7 @@ func notify(method string, params any) {
 }
 
 func statePath() string {
-	dir := os.Getenv("HYDRA_PLUGIN_DATA")
+	dir := os.Getenv("PLATYPUS_PLUGIN_DATA")
 	if dir == "" {
 		return ""
 	}
@@ -472,7 +472,7 @@ type params struct {
 	InstallDir string            `json:"installDir"`
 	Preview    bool              `json:"preview"`
 	Fields     map[string]string `json:"fields"`
-	Protocols  []string          `json:"protocols"` // initialize: the versions Hydra speaks
+	Protocols  []string          `json:"protocols"` // initialize: the versions Platypus speaks
 
 	// family.setPreferredCopy: the owner whose copy of the game is picked.
 	OwnerID string `json:"ownerId"`
@@ -519,7 +519,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		notify("log", map[string]string{"level": "info", "message": "echo initialized"})
 		res, err := initializeResult(p)
 		if err == nil && os.Getenv("ECHO_FUTURE") != "" {
-			notify("future.news", map[string]any{"headline": "a newer Hydra would show this"})
+			notify("future.news", map[string]any{"headline": "a newer Platypus would show this"})
 		}
 		return res, err
 	case "config":
@@ -552,7 +552,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return authStatus(), nil
 	case "auth.begin":
 		return map[string]any{
-			"url":          "https://example.com/hydra-echo-login",
+			"url":          "https://example.com/platypus-echo-login",
 			"instructions": "Echo has no real login page. Type the code letmein.",
 			"fields":       []map[string]any{{"id": "code", "label": "Code", "placeholder": "letmein"}},
 		}, nil
@@ -580,7 +580,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 			return nil, fmt.Errorf("unknown game %q", p.ID)
 		}
 		// A game without metadata answers an empty object, not -32601: -32601
-		// means the method isn't implemented, and Hydra would stop asking for
+		// means the method isn't implemented, and Platypus would stop asking for
 		// every game for the rest of the run.
 		facts := compatFor(p.ID)
 		out := map[string]any{}
@@ -700,7 +700,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 // discardJob throws away the data a canceled install left. For this fake
 // store that is the saved resume point (state.json's partial map) and the
 // "crashed mid-install" memory — a canceled flaky would otherwise resume from
-// its own crash rather than from what Hydra knows — as well as an install
+// its own crash rather than from what Platypus knows — as well as an install
 // folder the game never finished into. A game the store still reports as
 // installed is never touched: its folder lives inside the same map.
 func discardJob(p params) (any, error) {
@@ -805,7 +805,7 @@ func startInstall(p params) (any, error) {
 	stop := make(chan struct{})
 	jobsMu.Lock()
 	if _, running := cancels[p.JobID]; running {
-		// Hydra resends a job with the same jobId after a crash: run it once.
+		// Platypus resends a job with the same jobId after a crash: run it once.
 		jobsMu.Unlock()
 		return map[string]any{}, nil
 	}

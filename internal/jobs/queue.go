@@ -1,5 +1,5 @@
 // Package jobs runs store-plugin installs, updates and uninstalls one at a
-// time, and persists the queue in ~/.local/share/hydra/jobs.json so an
+// time, and persists the queue in ~/.local/share/platypus/jobs.json so an
 // interrupted install resumes after a crash or restart.
 package jobs
 
@@ -18,9 +18,9 @@ import (
 	"syscall"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 const (
@@ -130,7 +130,7 @@ type file struct {
 	Jobs    []*types.Job `json:"jobs"`
 }
 
-// Open loads the queue. Jobs that were running when Hydra stopped are queued
+// Open loads the queue. Jobs that were running when Platypus stopped are queued
 // again; plugins resume their downloads where the files left off.
 func Open(path string, b Backend, emit func([]types.Job)) (*Queue, error) {
 	q := &Queue{
@@ -470,7 +470,7 @@ func (q *Queue) Cancel(ctx context.Context, id string) error {
 	q.changed(true)
 	q.mu.Unlock()
 	if state == StateRunning {
-		// Best effort: the job is canceled for Hydra either way, and later
+		// Best effort: the job is canceled for Platypus either way, and later
 		// notifications for it are ignored.
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -653,7 +653,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 	case u.Percent != nil:
 		j.Percent = min(max(*u.Percent, 0), 100)
 		// A plugin that reports only a percentage still gets a byte readout,
-		// estimated from the size Hydra queued the job with.
+		// estimated from the size Platypus queued the job with.
 		if u.Bytes == 0 && j.Total > 0 {
 			j.Bytes = int64(j.Percent / 100 * float64(j.Total))
 		}

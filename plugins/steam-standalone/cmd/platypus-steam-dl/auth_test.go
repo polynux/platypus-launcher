@@ -12,7 +12,7 @@ import (
 // secret and stays 0644.
 func TestStoreTokenFiles0600(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HYDRA_PLUGIN_DATA", dir)
+	t.Setenv("PLATYPUS_PLUGIN_DATA", dir)
 	// Pre-create the token files world-readable, like the pre-fix saves.
 	os.WriteFile(filepath.Join(dir, "refresh.token"), []byte("stale\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "token.json"), []byte(`{"refresh_token":"stale"}`), 0o644)

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/social"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/social"
+	"platypus/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )

@@ -164,7 +164,7 @@ export function GlassGame() {
             </div>
             <div className="rounded-3xl border border-white/[0.08] bg-[#161a24]/90 p-6">
               <h3 className="mb-3 text-[15px] font-bold">Details</h3>
-              {[['Runner', game.runner], ['DX layer', game.dx], ['Playtime', `${game.hours}h`], ['Last played', game.last], ['Prefix', '~/.hydra/pfx/nightreign']].map(([k, v]) => (
+              {[['Runner', game.runner], ['DX layer', game.dx], ['Playtime', `${game.hours}h`], ['Last played', game.last], ['Prefix', '~/.platypus/pfx/nightreign']].map(([k, v]) => (
                 <div key={k} className="flex justify-between border-b border-white/[0.06] py-2.5 font-mono text-[11.5px] last:border-0">
                   <span className="text-white/35">{k}</span><span className="text-white/85">{v}</span>
                 </div>

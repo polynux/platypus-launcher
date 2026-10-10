@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Bounds on what a plugin may send and what the UI may send back.
@@ -105,7 +105,7 @@ func PlaytimeByGame(in PlaytimeReply) map[string]int {
 	return out
 }
 
-// MergePlaytime is the playtime Hydra shows: the larger of the local record
+// MergePlaytime is the playtime Platypus shows: the larger of the local record
 // and the store's. It is display-only; neither side is written back.
 func MergePlaytime(local, store int) int {
 	return max(local, store, 0)

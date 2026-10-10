@@ -16,10 +16,10 @@ import (
 var ErrNotFound = errors.New("no data for this app")
 
 // ErrPaused is returned without asking the server: the source answered 429
-// several times in a row, and Hydra waits before it asks again.
+// several times in a row, and Platypus waits before it asks again.
 var ErrPaused = errors.New("paused after repeated rate limits")
 
-// StatusError is an HTTP answer Hydra can't use.
+// StatusError is an HTTP answer Platypus can't use.
 type StatusError struct{ Status int }
 
 func (e *StatusError) Error() string { return fmt.Sprintf("server answered %d", e.Status) }
@@ -31,7 +31,7 @@ const (
 	maxRetryAfter = 10 * time.Minute
 )
 
-// Fetcher is how Hydra talks to the compat sources: politely. At most
+// Fetcher is how Platypus talks to the compat sources: politely. At most
 // Concurrency requests run at once, each one at least Interval after the
 // last (plus up to Jitter), and a 429 or 5xx is retried with exponential
 // backoff, honouring Retry-After. Repeated limited pause the whole fetcher.
@@ -57,7 +57,7 @@ type Fetcher struct {
 	limited int       // consecutive rate limits
 }
 
-// NewFetcher returns a fetcher with Hydra's defaults: two requests at once, about
+// NewFetcher returns a fetcher with Platypus's defaults: two requests at once, about
 // one a second, three retries from 2 s.
 func NewFetcher(userAgent string) *Fetcher {
 	return &Fetcher{
@@ -162,7 +162,7 @@ func (f *Fetcher) send(ctx context.Context, url string) (answer, error) {
 	}
 }
 
-// answer is one HTTP response, reduced to what Hydra reads.
+// answer is one HTTP response, reduced to what Platypus reads.
 type answer struct {
 	status     int
 	body       []byte

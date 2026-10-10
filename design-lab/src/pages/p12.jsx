@@ -36,9 +36,9 @@ export function It12Dashboard() {
       <div className="mx-auto flex max-w-[1560px]">
         <aside className="sticky top-0 flex h-screen w-60 flex-none flex-col border-r border-white/[0.07] bg-black/30 p-5 backdrop-blur-sm">
           <div className="mb-6 flex items-center gap-3 px-1">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[16px] font-black text-[#161009]">H</span>
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[16px] font-black text-[#161009]">P</span>
             <div>
-              <div className="text-[16px] font-extrabold tracking-tight">Hydra</div>
+              <div className="text-[16px] font-extrabold tracking-tight">Platypus</div>
               <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">game hub</div>
             </div>
           </div>

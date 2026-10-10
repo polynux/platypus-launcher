@@ -8,7 +8,7 @@ import (
 )
 
 // ProtonDBSummaryURL is the per-app summary endpoint. It is undocumented, so
-// it can change without notice; Hydra fetches one app at a time, at runtime,
+// it can change without notice; Platypus fetches one app at a time, at runtime,
 // and never bundles ProtonDB's dump (ODbL share-alike).
 const ProtonDBSummaryURL = "https://www.protondb.com/api/v1/reports/summaries/"
 
@@ -61,7 +61,7 @@ func (p *ProtonDB) Summary(ctx context.Context, appID string) (Summary, error) {
 // reliableConfidence are the ProtonDB confidence levels a tier is shown for.
 var reliableConfidence = map[string]bool{"strong": true, "good": true, "moderate": true}
 
-// minReports is how many reports a tier needs before Hydra shows it.
+// minReports is how many reports a tier needs before Platypus shows it.
 const minReports = 5
 
 // knownTiers are the ProtonDB medals; "pending", "native" and others are not

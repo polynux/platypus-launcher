@@ -116,7 +116,7 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Downloads</h1>
           <p className="mt-0.5 text-[12.5px] text-white/50">
-            Installs, updates and uninstalls run one at a time. A paused download keeps its data and resumes from there; an interrupted install resumes when Hydra starts again.
+            Installs, updates and uninstalls run one at a time. A paused download keeps its data and resumes from there; an interrupted install resumes when Platypus starts again.
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // ClientLauncher is a store that can start a game through its own client on
-// request, which the user asks for when the client is running and Hydra won't
+// request, which the user asks for when the client is running and Platypus won't
 // sync cloud saves behind its back (game.launchSpec with "via": "client").
 type ClientLauncher interface {
 	LaunchViaClient(ctx context.Context, game types.Game) (*ClientLaunch, error)

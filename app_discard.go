@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Discard asks the job's plugin to delete the partial data of a canceled
-// download. Plugins own their staging folders; Hydra only checks the install
+// download. Plugins own their staging folders; Platypus only checks the install
 // folder it names and which job it is about.
 func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 	p, ok := b.a.plugins.Plugin(j.Source)
@@ -58,7 +58,7 @@ func checkDiscardDir(dir, gamesRoot string) error {
 	return checkFolder(dir, gamesRoot, "clean")
 }
 
-// checkFolder is the guard for every folder Hydra lets a plugin or a move
+// checkFolder is the guard for every folder Platypus lets a plugin or a move
 // write into: action ("clean", "move into") names what would be done to it in
 // the messages.
 func checkFolder(dir, gamesRoot, action string) error {

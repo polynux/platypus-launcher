@@ -4,7 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Relocation returns the folder core moved a game to, if it moved it.

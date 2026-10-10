@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/session"
+	"platypus/internal/plugins"
+	"platypus/internal/session"
 )
 
 // Env keys a plugin may not set: they change which code runs (loader, wine
-// DLL overrides, Vulkan layers, interpreters) or where Hydra's own files are.
+// DLL overrides, Vulkan layers, interpreters) or where Platypus's own files are.
 // A denylist rather than an allowlist because games need arbitrary env.
 var (
 	deniedEnv = map[string]bool{
@@ -43,7 +43,7 @@ func envAllowed(key string) bool {
 	return true
 }
 
-// ValidateSpec checks a plugin's launch spec before Hydra runs anything:
+// ValidateSpec checks a plugin's launch spec before Platypus runs anything:
 //   - direct: the executable and working dir must be inside one of folders
 //     (the plugin's install folder, or folders the user allowed), after
 //     resolving symlinks, and no env key may be on the denylist;

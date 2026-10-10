@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // setCMState edits the fake CM's knobs (logon_eresult, service_eresult,

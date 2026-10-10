@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Badges say only what a source said. An unknown fact gets no badge, and a
@@ -25,7 +25,7 @@ var launcherNames = map[string]string{
 const maxLauncher = 60
 
 // StoreDRM turns a store's protection facts into badges. source names the
-// store, checked is when Hydra read the facts.
+// store, checked is when Platypus read the facts.
 func StoreDRM(d *types.DRM, source string, checked time.Time) []types.CompatBadge {
 	if d == nil {
 		return nil

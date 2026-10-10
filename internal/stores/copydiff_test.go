@@ -3,8 +3,8 @@ package stores
 import (
 	"testing"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 func dlc(kind string, ids ...string) []types.GameDLC {

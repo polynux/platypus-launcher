@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Wails only logs through its own contexts, so the tests drop the warnings. It
@@ -71,7 +71,7 @@ func familyAppNotStarted(t *testing.T, protocols, caps string) *familyEnv {
 	a.stores = stores.NewRegistry(a.pluginStores)
 	installEchoApp(t, pluginsDir)
 	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-		"protocol":{"versions":` + protocols + `},"store":"echo","exec":"bin/hydra-echo-app",
+		"protocol":{"versions":` + protocols + `},"store":"echo","exec":"bin/platypus-echo-app",
 		"capabilities":` + caps + `,"requires":[{"bin":"sleep","hint":"part of coreutils"}]}`
 	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
@@ -547,7 +547,7 @@ func TestSettingAPreferredCopyIsSentStoredAndReadBackAfterARestart(t *testing.T)
 		t.Fatalf("after the pick: shared by %+v, preferred %q: the copy played is Ben's", shared.SharedBy, shared.PreferredCopy)
 	}
 
-	// The choice lives in HYDRA_PLUGIN_DATA: echo reads it back after a crash.
+	// The choice lives in PLATYPUS_PLUGIN_DATA: echo reads it back after a crash.
 	if err := e.m.Call(context.Background(), "echo", "crash", nil, nil); err == nil {
 		t.Fatal("crash answered")
 	}

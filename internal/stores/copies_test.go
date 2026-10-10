@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/plugins"
+	"platypus/internal/plugins"
 )
 
 // Copies are the store's words, cut down to what the picker can show: an

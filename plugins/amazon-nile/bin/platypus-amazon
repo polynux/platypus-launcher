@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Hydra store plugin for Amazon Prime Gaming, wrapping nile.
+"""Platypus store plugin for Amazon Prime Gaming, wrapping nile.
 
-Speaks Hydra's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
+Speaks Platypus's plugin protocol (api 1, docs/plugins/protocol.md): JSON-RPC 2.0
 over stdin/stdout, one object per line. The store-specific work is done by the
 `nile` CLI (imLinguin/nile); this plugin drives it and never stores
 credentials.
@@ -10,10 +10,10 @@ Login is Amazon's device registration: the plugin generates a device serial,
 client id and PKCE verifier, shows nile's sign-in URL, and the user pastes the
 address Amazon redirects to. `nile register --code … --client-id … --code-verifier …
 --serial …` finishes it. nile keeps everything encrypted in
-$NILE_CONFIG_PATH, which the plugin points into $HYDRA_PLUGIN_DATA so Hydra's
-sandbox rules hold. Nothing reaches Hydra.
+$NILE_CONFIG_PATH, which the plugin points into $PLATYPUS_PLUGIN_DATA so Platypus's
+sandbox rules hold. Nothing reaches Platypus.
 
-Amazon titles are Windows games; launch specs say needsWine and Hydra picks
+Amazon titles are Windows games; launch specs say needsWine and Platypus picks
 the runner.
 """
 
@@ -92,7 +92,7 @@ _env_lock = threading.Lock()
 
 
 def setup_env():
-    data = os.environ.get("HYDRA_PLUGIN_DATA") or "."
+    data = os.environ.get("PLATYPUS_PLUGIN_DATA") or "."
     path = os.path.join(data, "nile-config")
     with _env_lock:
         if os.environ.get("NILE_CONFIG_PATH") != path:
@@ -296,12 +296,12 @@ def start_job(params, kind):
         return {}
     base = params.get("installDir") or ""
     if not os.path.isabs(base):
-        raise RPCError("installDir is missing or relative; Hydra always sends one")
+        raise RPCError("installDir is missing or relative; Platypus always sends one")
     cmd = [kind if kind in ("install", "update") else "install", app]
     if kind == "update":
         cmd = ["update", app]
     cmd += ["--base-path", base]
-    # Hydra resends a job with the same jobId after a crash: run it once.
+    # Platypus resends a job with the same jobId after a crash: run it once.
     with jobs_lock:
         if job_id in jobs:
             return {}

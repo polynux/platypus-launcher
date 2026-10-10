@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func TestNewAntiCheatKeepsTheCatalogueBadgeAndAddsOnlyNewNames(t *testing.T) {

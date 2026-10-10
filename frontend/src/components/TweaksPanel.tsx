@@ -4,7 +4,7 @@ import { Button } from '@/components/ds/button';
 import { MonoLabel, Panel, TogglePill, cx } from './ui';
 import { setTweak, tweakApplied } from '../lib/settings';
 
-/** The tweaks Hydra suggests for this machine, one switch each. `framed` wraps
+/** The tweaks Platypus suggests for this machine, one switch each. `framed` wraps
  *  them in a panel of their own; the settings dialog's tab doesn't need one. */
 export function TweaksPanel({
   game,

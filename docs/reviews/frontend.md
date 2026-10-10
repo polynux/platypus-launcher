@@ -139,7 +139,7 @@ Reviewed `frontend/src` (App, all components, effect runtime, lib, types, style)
 3. **Hoist `authBegin` into the Log-in click and add explicit `ActiveSessions()` hydration.** Value: ends the whole StrictMode-login family and the second-window blindness. Effort: M.
 4. **Normalize backend payloads at the edge (`runtime.ts`).** Coerce `null` lists to `[]`, default `warnings`/`jobs`/`plugins`, strip/derive frontend-only settings fields in one place instead of every consumer. Value: removes FE-10-class crashes permanently. Effort: S.
 5. **Virtualize or paginate Library table/cards past ~200 rows + `useMemo` the filters.** Value: plugin libraries will outgrow the current full-render; cheap insurance now. Effort: M.
-6. **Unify wording: "Launcher settings" (per-game modal) vs "Settings" (global view) vs "Suggested tweaks" vs "Fixes".** Rename global view to "Hydra settings" and keep "Fixes" for curated/ProtonDB only. Value: ends the most common confusion in the IA. Effort: S.
+6. **Unify wording: "Launcher settings" (per-game modal) vs "Settings" (global view) vs "Suggested tweaks" vs "Fixes".** Rename global view to "Platypus settings" and keep "Fixes" for curated/ProtonDB only. Value: ends the most common confusion in the IA. Effort: S.
 
 ## Checked and fine
 

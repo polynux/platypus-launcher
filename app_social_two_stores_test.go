@@ -8,7 +8,7 @@ import (
 
 // installEchoB puts echo-b next to echo: its folder holds the manifest and the
 // wrapper from plugins/echo-b, and the wrapper runs echo's program, which
-// Hydra installs as echo/bin/hydra-echo (the name the wrapper expects).
+// Platypus installs as echo/bin/platypus-echo (the name the wrapper expects).
 func installEchoB(t *testing.T, pluginsDir string) {
 	t.Helper()
 	dir := filepath.Join(pluginsDir, "echo-b")
@@ -20,13 +20,13 @@ func installEchoB(t *testing.T, pluginsDir string) {
 		mode     os.FileMode
 	}{
 		{"plugins/echo-b/plugin.json", "plugin.json", 0o644},
-		{"plugins/echo-b/bin/hydra-echo-b", "bin/hydra-echo-b", 0o755},
+		{"plugins/echo-b/bin/platypus-echo-b", "bin/platypus-echo-b", 0o755},
 	} {
 		if err := os.WriteFile(filepath.Join(dir, f.to), mustRead(t, f.from), f.mode); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "bin", "hydra-echo"), mustRead(t, filepath.Join(pluginsDir, "echo", "bin", "hydra-echo-app")), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginsDir, "echo", "bin", "platypus-echo"), mustRead(t, filepath.Join(pluginsDir, "echo", "bin", "platypus-echo-app")), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }

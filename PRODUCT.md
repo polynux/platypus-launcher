@@ -16,7 +16,7 @@ Linux gamers with mixed-store libraries (Steam, GOG, Epic, sideloaded). By defau
 
 ## Product Purpose
 
-Hydra Launcher unifies a Linux gamer's multi-store library in one place and gives per-game control over Proton/Wine runner configuration and community fixes. Success: a user opens it and every installed game is there with sensible defaults; power options exist but never intrude.
+Platypus unifies a Linux gamer's multi-store library in one place and gives per-game control over Proton/Wine runner configuration and community fixes. Success: a user opens it and every installed game is there with sensible defaults; power options exist but never intrude.
 
 ## Positioning
 
@@ -34,13 +34,13 @@ Linux desktop (WebKitGTK webview inside Wails), dark rooms, desktop sessions (Wa
 - Fixes browser: curated fixes + ProtonDB tier data (curated data real; ProtonDB fetch exists)
 - Plugin registry: in-memory defaults; toggling has no runtime effect yet (known placeholder)
 - Custom game addition is currently local-state only (no backend persistence binding yet)
-- Per-game settings and the Games folder persist in ~/.local/share/hydra/settings.json (sideloaded games and their settings are still session-only)
-- Store plugins (docs/plugins/protocol.md): approve, enable/disable and log in from the Plugins view; their games merge into the library (installed/owned); install, update, uninstall through a resumable download queue; launches validated and run through Hydra's runner pipeline
+- Per-game settings and the Games folder persist in ~/.local/share/platypus/settings.json (sideloaded games and their settings are still session-only)
+- Store plugins (docs/plugins/protocol.md): approve, enable/disable and log in from the Plugins view; their games merge into the library (installed/owned); install, update, uninstall through a resumable download queue; launches validated and run through Platypus's runner pipeline
 - Epic via legendary (plugins/epic-legendary) is the first real store plugin; legendary is required, not bundled
 
 ## Brand Commitments
 
-- Name: Hydra Launcher (user-chosen)
+- Name: Platypus (user-chosen)
 - Voice: technical but welcoming; no hype
 
 ## Evidence on Hand

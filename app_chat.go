@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"hydra-launcher/internal/chat"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/social"
+	"platypus/internal/chat"
+	"platypus/internal/plugins"
+	"platypus/internal/social"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )

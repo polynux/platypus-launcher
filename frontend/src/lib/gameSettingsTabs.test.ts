@@ -38,7 +38,7 @@ describe('settingsTabs', () => {
     expect(tabs).toEqual(['general', 'versions', 'plugin', 'customization']);
   });
 
-  it("has no versions tab for a game Hydra can't install", () => {
+  it("has no versions tab for a game Platypus can't install", () => {
     expect(settingsTabs({ game: game({ is_installed: false, installable: false }), plugin: plugin(ALL), tweaks: [] })).not.toContain('versions');
   });
 

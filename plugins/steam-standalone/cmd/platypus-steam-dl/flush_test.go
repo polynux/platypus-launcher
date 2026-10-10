@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // STEAM-12: job state must flush on a timer as well as every N chunks, so

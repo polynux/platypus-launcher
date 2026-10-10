@@ -9,7 +9,7 @@ import { CopyCompareDialog } from './CopyCompareDialog';
 import { Panel, cx } from './ui';
 
 /** Which family copy a borrowed game is played from, and the choice between
- *  the lenders' copies (family, protocol 1.8). Hydra shows the copies and
+ *  the lenders' copies (family, protocol 1.8). Platypus shows the copies and
  *  sends the pick; the store decides what a copy allows. Renders nothing for
  *  the user's own games. */
 export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: StorePlugin | undefined; onChanged: () => void }) {

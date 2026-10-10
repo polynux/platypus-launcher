@@ -4,7 +4,7 @@ package main
 // "Plugin settings"): one schema with every kind core renders (bool, select,
 // text, number), a per-game field, and a kind core doesn't know, which core
 // must drop. settings.apply keeps the values in memory only, the way a plugin
-// that doesn't persist them relies on Hydra to send them again on start.
+// that doesn't persist them relies on Platypus to send them again on start.
 // `config` answers what was last applied, so tests can read it back.
 
 import (

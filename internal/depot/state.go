@@ -1,7 +1,7 @@
 // Job state and installed manifests: resume, updates and verify support.
-// State lives in HYDRA_PLUGIN_DATA/jobs/<job>.json (manifest ids and
+// State lives in PLATYPUS_PLUGIN_DATA/jobs/<job>.json (manifest ids and
 // completed chunk ids, flushed as chunks land); the installed manifest per
-// depot in HYDRA_PLUGIN_DATA/manifests/<app>/<depot>_<gid>.manifest.
+// depot in PLATYPUS_PLUGIN_DATA/manifests/<app>/<depot>_<gid>.manifest.
 package depot
 
 import (

@@ -22,11 +22,11 @@ import (
 //	social: { connection: "online" | "connecting" | "reconnecting" | "replaced" | "loggedOut" | "offline",
 //	          tick: 500 }   the connection state to report; the incremental push interval (0 = none)
 //
-// `recorded` answers the setStatus and setPlaying calls Hydra made, in order.
+// `recorded` answers the setStatus and setPlaying calls Platypus made, in order.
 // ECHO_UNAVAILABLE=social.start makes the start fail, like a store that is down.
 //
 // echo-b is this same binary under another plugin.json (plugins/echo-b runs it):
-// its manifest id picks a second friends list with its own user, so Hydra can
+// its manifest id picks a second friends list with its own user, so Platypus can
 // show two stores at once. See manifestID.
 
 // socialFixture is the friends list echo serves.
@@ -91,7 +91,7 @@ func loadSocial() {
 	}
 }
 
-// manifestID is the id in the plugin.json of the working directory (Hydra runs
+// manifestID is the id in the plugin.json of the working directory (Platypus runs
 // a plugin from its folder). echo's own folder, or no manifest, is "echo".
 func manifestID() string {
 	var m struct {
@@ -207,7 +207,7 @@ func socialSetPlaying(raw json.RawMessage) (any, error) {
 	return map[string]any{}, nil
 }
 
-// socialRecorded answers `recorded`: the calls Hydra made to set the status
+// socialRecorded answers `recorded`: the calls Platypus made to set the status
 // and what the user plays.
 func socialRecorded() any {
 	socialMu.Lock()

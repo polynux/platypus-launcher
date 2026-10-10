@@ -4,7 +4,7 @@ import (
 	"errors"
 	"slices"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // AcceptedTerms lists the term versions the user accepted for a game, oldest

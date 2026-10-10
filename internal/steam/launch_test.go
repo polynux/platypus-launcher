@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // CORE-7: the xdg-open fallback must not receive launch arguments (the

@@ -5,7 +5,7 @@ import (
 	"os/user"
 	"path/filepath"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Context builds the CloudContext for a launch. windows says the game runs

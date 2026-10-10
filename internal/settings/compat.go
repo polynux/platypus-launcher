@@ -7,7 +7,7 @@ import (
 
 var errBadAppID = errors.New("a Steam AppID is a number")
 
-// RatingsOnline says whether Hydra may fetch compatibility ratings and
+// RatingsOnline says whether Platypus may fetch compatibility ratings and
 // anti-cheat data from the network. On until the user switches it off.
 func (s *Store) RatingsOnline() bool {
 	s.mu.Lock()

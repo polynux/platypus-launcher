@@ -3,7 +3,7 @@ package settings
 import (
 	"fmt"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // CloudPluginMode is the plugin's default cloud sync mode, "" when the user

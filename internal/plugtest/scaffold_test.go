@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugtest"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/plugtest"
+	"platypus/internal/types"
 )
 
 // scaffold runs new.sh from a temp copy (it writes next to itself) and
@@ -61,7 +61,7 @@ func TestConformanceScaffold(t *testing.T) {
 }
 
 // An install must survive the plugin process dying: the scaffold keeps its
-// state under $HYDRA_PLUGIN_DATA / on disk, not in memory.
+// state under $PLATYPUS_PLUGIN_DATA / on disk, not in memory.
 func TestScaffoldInstallSurvivesRestart(t *testing.T) {
 	s := scaffold(t)
 	sess := s.Start(t)

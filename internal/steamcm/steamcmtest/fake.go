@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"hydra-launcher/internal/depot"
-	"hydra-launcher/internal/steamcm"
+	"platypus/internal/depot"
+	"platypus/internal/steamcm"
 )
 
 // Push is one unsolicited message the fake can send a client.
@@ -103,7 +103,7 @@ type Fake struct {
 }
 
 // New starts the fake and registers its cleanup; the return value is
-// the "host:port" the client dials (HYDRA_STEAM_CM_SERVER shape).
+// the "host:port" the client dials (PLATYPUS_STEAM_CM_SERVER shape).
 func New(t *testing.T, cfg Config) *Fake {
 	t.Helper()
 	f := &Fake{t: t, cfg: cfg}

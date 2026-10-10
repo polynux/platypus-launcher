@@ -88,7 +88,7 @@ export function CompatFacts({ compat }: { compat: Compat }) {
 }
 
 /** The credit under the facts read from PCGamingWiki: the licence line, the page
- *  and the licence as links, and the day Hydra read the page. */
+ *  and the licence as links, and the day Platypus read the page. */
 export function WikiCreditLine({ credit }: { credit: WikiCredit }) {
   return (
     <p className="font-mono text-[11px] leading-relaxed text-white/45" aria-label="PCGamingWiki credit">

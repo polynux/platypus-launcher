@@ -11,9 +11,9 @@ import (
 	"slices"
 	"strings"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Plugin is a store backed by a store plugin process.
@@ -197,7 +197,7 @@ var familyRoles = []string{"adult", "child"}
 
 // FamilyMembers asks the plugin for the family group (protocol 1.8). Members
 // without an id are dropped; roles and avatars are normalized like the rest
-// of the plugin's data. Hydra shows them and enforces nothing.
+// of the plugin's data. Platypus shows them and enforces nothing.
 func (s *Plugin) FamilyMembers(ctx context.Context) ([]types.FamilyMember, error) {
 	var wire []struct {
 		ID        string `json:"id"`
@@ -272,7 +272,7 @@ func rebasePath(p, from, to string) string {
 
 var unsafeIDChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
-// GameID is Hydra's id for a plugin game. It's used in file names (wine
+// GameID is Platypus's id for a plugin game. It's used in file names (wine
 // prefix, launch log), so the plugin's id is reduced to safe characters, with
 // a hash suffix when that changed it so ids stay unique.
 func GameID(source, id string) string {

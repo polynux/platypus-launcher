@@ -11,14 +11,14 @@ import (
 	"time"
 )
 
-// AWACYURL is AreWeAntiCheatYet's games.json (MIT). Hydra fetches it at most
+// AWACYURL is AreWeAntiCheatYet's games.json (MIT). Platypus fetches it at most
 // weekly, into the cache, and shows "AreWeAntiCheatYet" wherever it is used.
 const AWACYURL = "https://raw.githubusercontent.com/AreWeAntiCheatYet/AreWeAntiCheatYet/master/games.json"
 
 // AWACYAttribution is the credit shown with every anti-cheat fact.
 const AWACYAttribution = "AreWeAntiCheatYet (MIT)"
 
-// AntiCheatGame is one entry of games.json, the fields Hydra reads.
+// AntiCheatGame is one entry of games.json, the fields Platypus reads.
 type AntiCheatGame struct {
 	Name        string                     `json:"name"`
 	Slug        string                     `json:"slug"`

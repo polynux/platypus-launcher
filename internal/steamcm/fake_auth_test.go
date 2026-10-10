@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // Auth knobs for the fake (see fakeConfigAuth below).

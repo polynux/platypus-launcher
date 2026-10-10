@@ -16,7 +16,7 @@ import (
 type installEnv struct {
 	t     *testing.T
 	tree  string // stands in for the repo: tree/go.mod, tree/plugins/...
-	dest  string // HYDRA_PLUGINS
+	dest  string // PLATYPUS_PLUGINS
 	build string // tree/plugins
 }
 
@@ -57,7 +57,7 @@ func (e *installEnv) write(rel, body string) {
 func (e *installEnv) install(name string) (string, error) {
 	e.t.Helper()
 	cmd := exec.Command("sh", e.path("plugins/install.sh"), name)
-	cmd.Env = append(os.Environ(), "HYDRA_PLUGINS="+e.dest)
+	cmd.Env = append(os.Environ(), "PLATYPUS_PLUGINS="+e.dest)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -70,8 +70,8 @@ func (e *installEnv) installed(name, rel string) bool {
 
 func TestInstallScriptRemovesFilesDeletedUpstream(t *testing.T) {
 	e := newInstallEnv(t)
-	e.write("plugins/p/plugin.json", `{"id": "p", "exec": "bin/hydra-p"}`)
-	e.write("plugins/p/bin/hydra-p", "#!/bin/sh\n")
+	e.write("plugins/p/plugin.json", `{"id": "p", "exec": "bin/platypus-p"}`)
+	e.write("plugins/p/bin/platypus-p", "#!/bin/sh\n")
 	e.write("plugins/p/bin/old_helper.py", "x = 1\n")
 	if out, err := e.install("p"); err != nil {
 		t.Fatalf("install: %v\n%s", err, out)
@@ -86,20 +86,20 @@ func TestInstallScriptRemovesFilesDeletedUpstream(t *testing.T) {
 	if e.installed("p", "bin/old_helper.py") {
 		t.Fatal("a file deleted upstream stayed in the installed plugin")
 	}
-	if !e.installed("p", "bin/hydra-p") {
+	if !e.installed("p", "bin/platypus-p") {
 		t.Fatal("the exec was removed")
 	}
 }
 
 func TestInstallScriptParsesManifestAsJSON(t *testing.T) {
 	e := newInstallEnv(t)
-	e.write("plugins/p/plugin.json", `{"id": "p", "description": "see \"exec\": \"bin/evil\" in the docs", "exec": "bin/hydra-p"}`)
-	e.write("plugins/p/bin/hydra-p", "#!/bin/sh\n")
+	e.write("plugins/p/plugin.json", `{"id": "p", "description": "see \"exec\": \"bin/evil\" in the docs", "exec": "bin/platypus-p"}`)
+	e.write("plugins/p/bin/platypus-p", "#!/bin/sh\n")
 	e.write("plugins/p/bin/evil", "#!/bin/sh\n")
 	if out, err := e.install("p"); err != nil {
 		t.Fatalf("install: %v\n%s", err, out)
 	}
-	if !e.installed("p", "bin/hydra-p") {
+	if !e.installed("p", "bin/platypus-p") {
 		t.Fatal("the real exec wasn't installed")
 	}
 }
@@ -120,8 +120,8 @@ func TestInstallScriptInstallsDataPlugins(t *testing.T) {
 // cleanup of upstream-deleted files must leave it alone.
 func TestInstallScriptKeepsBuiltHelpersOnReinstall(t *testing.T) {
 	e := newInstallEnv(t)
-	e.write("plugins/p/plugin.json", `{"id": "p", "exec": "bin/hydra-p"}`)
-	e.write("plugins/p/bin/hydra-p", "#!/bin/sh\n")
+	e.write("plugins/p/plugin.json", `{"id": "p", "exec": "bin/platypus-p"}`)
+	e.write("plugins/p/bin/platypus-p", "#!/bin/sh\n")
 	e.write("plugins/p/cmd/helper/main.go", "package main\n\nfunc main() {}\n")
 	for i := 0; i < 2; i++ {
 		if out, err := e.install("p"); err != nil {

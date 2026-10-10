@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // CORE-8: previewing a launch must not create on-disk state. A real launch
@@ -19,14 +19,14 @@ func TestPreviewDoesNotCreatePrefix(t *testing.T) {
 	if _, _, err := BuildCommand(game, r, Target{Exe: "/tmp/game.exe"}, true); err != nil {
 		t.Fatalf("preview BuildCommand: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".local/share/hydra/prefixes")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".local/share/platypus/prefixes")); !os.IsNotExist(err) {
 		t.Fatalf("preview created prefixes dir: %v", err)
 	}
 
 	if _, _, err := BuildCommand(game, r, Target{Exe: "/tmp/game.exe"}, false); err != nil {
 		t.Fatalf("launch BuildCommand: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".local/share/hydra/prefixes", "preview-game")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".local/share/platypus/prefixes", "preview-game")); err != nil {
 		t.Fatalf("launch did not create prefix: %v", err)
 	}
 }

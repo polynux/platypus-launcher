@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 type installedCall struct {
@@ -60,7 +60,7 @@ func TestTargetIsKeptWithTheJobAndSurvivesARestart(t *testing.T) {
 		t.Fatalf("saved queue lost the target: %s", raw)
 	}
 
-	// A new run of Hydra resumes the job with the same target.
+	// A new run of Platypus resumes the job with the same target.
 	again, err := Open(path, &fakeBackend{}, nil)
 	if err != nil {
 		t.Fatal(err)

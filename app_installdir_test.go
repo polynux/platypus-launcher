@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 // Install location around the echo test plugin: the folder the user picks
@@ -61,16 +61,16 @@ func TestCheckInstallFolderGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]string{
-		"relative":          "Games/here",
-		"empty":             "",
-		"root":              "/",
-		"system folder":     "/usr/share/games",
-		"home itself":       home,
-		"a file":            file,
-		"inside a file":     filepath.Join(file, "sub"),
-		"symlink to /usr":   link,
-		"below a symlink":   filepath.Join(link, "x"),
-		"hydra data folder": filepath.Join(home, ".local/share/hydra/plugins"),
+		"relative":             "Games/here",
+		"empty":                "",
+		"root":                 "/",
+		"system folder":        "/usr/share/games",
+		"home itself":          home,
+		"a file":               file,
+		"inside a file":        filepath.Join(file, "sub"),
+		"symlink to /usr":      link,
+		"below a symlink":      filepath.Join(link, "x"),
+		"platypus data folder": filepath.Join(home, ".local/share/platypus/plugins"),
 	}
 	for name, folder := range cases {
 		if _, err := e.a.CheckInstallFolder(folder); err == nil {
@@ -164,7 +164,7 @@ func TestInstallGameToRefusesWithoutQueueingAnything(t *testing.T) {
 	}
 	e.game.IsInstalled, e.game.Installable = false, false
 	if _, err := e.a.InstallGameTo(e.game, t.TempDir()); err == nil {
-		t.Error("a game Hydra can't install was queued")
+		t.Error("a game Platypus can't install was queued")
 	}
 }
 

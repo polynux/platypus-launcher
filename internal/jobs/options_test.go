@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // Empty choices are no choices: a job that sent `options: {}` in memory would

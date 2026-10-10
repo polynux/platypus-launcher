@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"hydra-launcher/internal/steam"
+	"platypus/internal/steam"
 )
 
 // Depot filters mirror DepotDownloader's defaults: oslist must contain the

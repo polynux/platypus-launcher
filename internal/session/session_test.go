@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // CORE-1: a window that subscribes after launch must still see the running

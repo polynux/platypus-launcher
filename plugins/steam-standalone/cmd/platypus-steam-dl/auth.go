@@ -1,7 +1,7 @@
 // Auth subcommand (phase 6): QR and password logins in Go, replacing
 // DepotDownloader. Speaks JSON lines like the other subcommands:
 //
-//	hydra-steam-dl auth
+//	platypus-steam-dl auth
 //
 // Stdin starts with one request line:
 //
@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/skip2/go-qrcode"
-	"hydra-launcher/internal/steamcm"
+	"platypus/internal/steamcm"
 )
 
 type authRequest struct {

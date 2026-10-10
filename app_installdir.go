@@ -9,9 +9,9 @@ import (
 	"strings"
 	"syscall"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 // Install location: where a game installs. Core owns installDir (plugins never
@@ -60,7 +60,7 @@ func existingAncestor(dir string) (string, error) {
 // checkInstallFolder validates a folder to install into and returns it clean.
 // The folder doesn't have to exist (the plugin creates it), but its nearest
 // existing parent must be a folder the user can write to; the folder, as
-// symlinks resolve, must pass checkFolder; and it must not be inside Hydra's
+// symlinks resolve, must pass checkFolder; and it must not be inside Platypus's
 // own data folder.
 func (a *App) checkInstallFolder(folder string) (string, error) {
 	clean, err := settings.CleanFolder(folder)
@@ -85,7 +85,7 @@ func (a *App) checkInstallFolder(folder string) (string, error) {
 		return "", err
 	}
 	if data, err := settings.DataDir(); err == nil && (resolved == data || strings.HasPrefix(resolved, data+string(filepath.Separator))) {
-		return "", fmt.Errorf("refusing to install into Hydra's own data folder (%s)", data)
+		return "", fmt.Errorf("refusing to install into Platypus's own data folder (%s)", data)
 	}
 	if err := syscall.Access(anc, 2); err != nil { // W_OK
 		return "", fmt.Errorf("you can't write to %s", anc)
@@ -93,7 +93,7 @@ func (a *App) checkInstallFolder(folder string) (string, error) {
 	return clean, nil
 }
 
-// CheckInstallFolder says what Hydra knows about a folder to install into: the
+// CheckInstallFolder says what Platypus knows about a folder to install into: the
 // clean path and the room there. Refusals come back as the error.
 func (a *App) CheckInstallFolder(folder string) (types.InstallFolderCheck, error) {
 	clean, err := a.checkInstallFolder(folder)
@@ -178,7 +178,7 @@ func (a *App) InstallGameTo(game types.Game, folder string) (types.Job, error) {
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Hydra", game.Title)
+		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
 	}
 	target, err := a.pinnedTarget(game)
 	if err != nil {
@@ -194,7 +194,7 @@ func (a *App) InstallGameWithOptionsTo(game types.Game, options map[string]any, 
 		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Hydra", game.Title)
+		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
 	}
 	return a.queueWithOptionsIn(jobs.KindInstall, game, options, folder)
 }

@@ -69,7 +69,7 @@ function FamiliesList({ plugin }: { plugin: StorePlugin }) {
           {members.map((m) => <MemberRow key={m.id} member={m} />)}
         </ul>
       )}
-      <p className="text-[11.5px] leading-relaxed text-white/40">Shown as the store reports them. Hydra doesn't enforce the family's rules.</p>
+      <p className="text-[11.5px] leading-relaxed text-white/40">Shown as the store reports them. Platypus doesn't enforce the family's rules.</p>
     </section>
   );
 }

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/types"
 )
 
 // echoEnv is the whole plugin path wired the way app.go wires it, around the
@@ -55,7 +55,7 @@ func newEchoEnv(t *testing.T) *echoEnv {
 	if err := os.MkdirAll(filepath.Join(pluginDir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("go", "build", "-o", filepath.Join(pluginDir, "bin/hydra-echo"), "hydra-launcher/plugins/echo").CombinedOutput()
+	out, err := exec.Command("go", "build", "-o", filepath.Join(pluginDir, "bin/platypus-echo"), "platypus/plugins/echo").CombinedOutput()
 	if err != nil {
 		t.Fatalf("build echo: %s", out)
 	}

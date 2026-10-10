@@ -200,12 +200,12 @@ describe('Channel passwords', () => {
         { id: 'beta', name: 'Beta', requires: 'password', unlocked: true },
       ],
     }));
-    fireEvent.change(screen.getByLabelText('Password for Beta'), { target: { value: 'hydra-beta' } });
+    fireEvent.change(screen.getByLabelText('Password for Beta'), { target: { value: 'platypus-beta' } });
     fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
     await waitFor(() => expect(onNotify).toHaveBeenCalledWith('Beta unlocked'));
     await waitFor(() => expect((screen.getByRole('radio', { name: 'Beta' }) as HTMLButtonElement).disabled).toBe(false));
     expect(screen.queryByLabelText('Password for Beta')).toBeNull();
-    expect(document.body.textContent).not.toContain('hydra-beta');
+    expect(document.body.textContent).not.toContain('platypus-beta');
   });
 
   it('shows the plugin’s own message when unlocking fails', async () => {

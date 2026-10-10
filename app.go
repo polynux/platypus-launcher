@@ -14,19 +14,19 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/chat"
-	"hydra-launcher/internal/cloudsync"
-	"hydra-launcher/internal/compat"
-	"hydra-launcher/internal/dataplug"
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/ledger"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/runner"
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/social"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/chat"
+	"platypus/internal/cloudsync"
+	"platypus/internal/compat"
+	"platypus/internal/dataplug"
+	"platypus/internal/jobs"
+	"platypus/internal/ledger"
+	"platypus/internal/plugins"
+	"platypus/internal/runner"
+	"platypus/internal/session"
+	"platypus/internal/settings"
+	"platypus/internal/social"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -54,7 +54,7 @@ type App struct {
 	social      *social.Manager // friends lists of plugins with the social capability
 	chat        *chat.Manager   // conversations with friends (the chat capability, protocol 1.9)
 	socialMu    sync.Mutex
-	socialGames map[string]socialGame // launched store games by Hydra game id, for "playing"
+	socialGames map[string]socialGame // launched store games by Platypus game id, for "playing"
 	// familyEmit delivers family.warning notifications to the UI (the
 	// "family" event). Nil until the window exists; tests replace it.
 	familyEmit func(types.FamilyWarning)
@@ -184,7 +184,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.jobs.Run(runCtx)
 }
 
-// shutdown stops games Hydra started directly and every store plugin.
+// shutdown stops games Platypus started directly and every store plugin.
 // Steam-launched games belong to the Steam client and keep running. Running
 // installs stay "running" in jobs.json and resume on the next start.
 func (a *App) shutdown(ctx context.Context) {
@@ -704,7 +704,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 	}
 }
 
-// GetLauncherSettings returns Hydra-wide settings.
+// GetLauncherSettings returns Platypus-wide settings.
 func (a *App) GetLauncherSettings() types.LauncherSettings {
 	return a.launcherSettings()
 }

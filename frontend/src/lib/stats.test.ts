@@ -18,7 +18,7 @@ describe('playtime tooltip', () => {
     expect(playtimeTooltip({ ...base, playtime_store_minutes: 0, playtime_minutes: 0 })).toBe('store 0 h');
   });
 
-  it('leaves out the local part when Hydra has no local record', () => {
+  it('leaves out the local part when Platypus has no local record', () => {
     expect(playtimeTooltip({ ...base, playtime_store_minutes: 90, playtime_minutes: 90 })).toBe('store 1.5 h');
   });
 

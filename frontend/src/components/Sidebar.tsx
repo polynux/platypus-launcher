@@ -61,9 +61,9 @@ export function Sidebar(p: SidebarProps) {
   return (
     <aside className="flex h-full w-56 flex-none flex-col border-r border-white/[0.06] bg-black/25 p-4">
       <div className="mb-5 flex items-center gap-2.5 px-1.5">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">H</span>
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">P</span>
         <div>
-          <div className="text-[15px] font-extrabold tracking-tight">Hydra</div>
+          <div className="text-[15px] font-extrabold tracking-tight">Platypus</div>
           <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/40">game hub</div>
         </div>
       </div>
@@ -175,7 +175,7 @@ export function Sidebar(p: SidebarProps) {
           );
         })}
         <div className="px-1.5 font-mono text-[12px] text-white/55">
-          hydra v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
+          platypus v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
       </div>
     </aside>

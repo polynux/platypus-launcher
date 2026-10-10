@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // StoreClient fetches public app metadata from the Steam Store API and caches

@@ -1,6 +1,6 @@
 package amazon_test
 
-// Unit-level checks of hydra-amazon helpers (PLUG-7, PLUG-9), run by loading
+// Unit-level checks of platypus-amazon helpers (PLUG-7, PLUG-9), run by loading
 // the script as a module so no network or nile is involved.
 
 import (
@@ -13,7 +13,7 @@ import (
 
 const pyLoad = `
 import importlib.machinery, importlib.util, sys
-loader = importlib.machinery.SourceFileLoader("ha", "bin/hydra-amazon")
+loader = importlib.machinery.SourceFileLoader("ha", "bin/platypus-amazon")
 spec = importlib.util.spec_from_loader("ha", loader)
 ha = importlib.util.module_from_spec(spec)
 loader.exec_module(ha)
@@ -68,7 +68,7 @@ first = os.environ["NILE_CONFIG_PATH"]
 ha.setup_env()
 print(first == os.environ["NILE_CONFIG_PATH"] == os.path.join(sys.argv[1], "nile-config"))
 `, data)
-	cmd.Env = append(os.Environ(), "HYDRA_PLUGIN_DATA="+data)
+	cmd.Env = append(os.Environ(), "PLATYPUS_PLUGIN_DATA="+data)
 	out, err := cmd.CombinedOutput()
 	if err != nil || strings.TrimSpace(string(out)) != "True" {
 		t.Fatalf("%v: %s", err, out)

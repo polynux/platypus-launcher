@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // CORE-15a: a retried job must pick up the fresh size probe instead of

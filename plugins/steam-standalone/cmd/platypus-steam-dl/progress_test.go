@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 // STEAM-11: multi-depot progress must not jump backwards at depot

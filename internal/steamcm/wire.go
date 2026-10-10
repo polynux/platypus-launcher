@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"hydra-launcher/internal/depot"
+	"platypus/internal/depot"
 )
 
 const protoMask = 0x80000000
@@ -188,7 +188,7 @@ func machineIDBody(seed []byte) []byte {
 
 // machineSeed returns the stored per-install nonce (32 random bytes,
 // created on first use) or nil when there is nowhere to store it. The
-// file sits under HYDRA_PLUGIN_DATA with 0600 permissions, next to the
+// file sits under PLATYPUS_PLUGIN_DATA with 0600 permissions, next to the
 // refresh token.
 func machineSeed(dir string) []byte {
 	if dir == "" {

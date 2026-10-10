@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // fakeStore is a plugin that offers chat: it keeps the history per friend,
@@ -422,7 +422,7 @@ func TestUnreadAndAlerts(t *testing.T) {
 	})
 }
 
-// The store's own unread count replaces Hydra's, and the alert is off when the
+// The store's own unread count replaces Platypus's, and the alert is off when the
 // store's messages are off.
 func TestUnreadNotificationAndAlertSetting(t *testing.T) {
 	h := newHarness(t)

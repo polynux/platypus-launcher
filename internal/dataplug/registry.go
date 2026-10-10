@@ -5,13 +5,13 @@ import (
 	"slices"
 	"strings"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 //go:embed builtin
 var builtinFS embed.FS
 
-// Builtin is Hydra's own fixes and tweaks, in the data plugin format and read
+// Builtin is Platypus's own fixes and tweaks, in the data plugin format and read
 // through the same loader as any plugin's data. It can't fail: the embedded
 // files are validated by tests.
 func Builtin() *Data {

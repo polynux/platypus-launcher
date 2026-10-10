@@ -1,7 +1,7 @@
 package main
 
 // Fake cloud saves (capability cloud-saves, protocol 1.2): echo keeps one
-// record per game in $HYDRA_PLUGIN_DATA/cloud.json and moves files between
+// record per game in $PLATYPUS_PLUGIN_DATA/cloud.json and moves files between
 // "device" and "cloud" by changing counts. Nothing touches the disk but the
 // record and a backup folder.
 //
@@ -93,7 +93,7 @@ func loadCloud() {
 }
 
 func cloudPath() string {
-	if dir := os.Getenv("HYDRA_PLUGIN_DATA"); dir != "" {
+	if dir := os.Getenv("PLATYPUS_PLUGIN_DATA"); dir != "" {
 		return filepath.Join(dir, "cloud.json")
 	}
 	return ""
@@ -160,7 +160,7 @@ func cloudRec(id string) *cloudRecord {
 }
 
 var stickyMessages = map[string]string{
-	"unsupported": "Echo's saves go through a storage API that Hydra can't sync from outside the game (test knob).",
+	"unsupported": "Echo's saves go through a storage API that Platypus can't sync from outside the game (test knob).",
 	"offline":     "Echo's cloud can't be reached right now (test knob).",
 	"error":       "Echo's cloud answered with an error (test knob).",
 }
@@ -195,7 +195,7 @@ func cloudStatus(id string, r *cloudRecord, churn bool) map[string]any {
 		st["conflicts"] = r.Conflicts
 	}
 	if r.Backups > 0 {
-		st["backupDir"] = filepath.Join(os.Getenv("HYDRA_PLUGIN_DATA"), "cloud-backups", id)
+		st["backupDir"] = filepath.Join(os.Getenv("PLATYPUS_PLUGIN_DATA"), "cloud-backups", id)
 	}
 	switch cloudKn.Client {
 	case "":

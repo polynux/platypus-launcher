@@ -1,6 +1,6 @@
 import type { CopyComparison, CopyDiff, FamilyMember, Game, GameCopy } from '../types';
 
-/** The role as the Families section names it. A role Hydra doesn't know is
+/** The role as the Families section names it. A role Platypus doesn't know is
  *  shown as none. */
 export function roleLabel(role: string): string {
   return role === 'adult' || role === 'child' ? role : '';

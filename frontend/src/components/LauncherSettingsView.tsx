@@ -74,7 +74,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <div className="p-7">
       <header className="mb-6">
         <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-0.5 text-[12.5px] text-white/50">Hydra-wide settings, saved in ~/.local/share/hydra/settings.json.</p>
+        <p className="mt-0.5 text-[12.5px] text-white/50">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
       </header>
 
       <Panel as="section" className="max-w-2xl">
@@ -124,7 +124,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       <Panel as="section" className="mt-4 max-w-2xl">
         <h2 className="text-[14px] font-bold">Canceled downloads</h2>
         <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
-          How long Hydra keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
+          How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
           time. 0 deletes it right away; a paused download is never touched.
         </p>
         <form
@@ -163,7 +163,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   );
 }
 
-/** "Fetch game info online" and the credits for the data Hydra shows. Off, Hydra
+/** "Fetch game info online" and the credits for the data Platypus shows. Off, Platypus
  *  keeps what it fetched before and asks the network for nothing new. */
 export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
   const [on, setOn] = useState<boolean | null>(null);
@@ -189,7 +189,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
         <div>
           <h2 className="text-[14px] font-bold">Ratings, protection and anti-cheat data</h2>
           <p className="mt-1 text-[12.5px] leading-relaxed text-white/55">
-            Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Hydra shows what it saved before and asks nothing new.
+            Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.
           </p>
         </div>
         <Switch aria-label="Fetch game info online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />

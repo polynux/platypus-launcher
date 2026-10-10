@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // ScanProtonVersions scans Steam, compatibilitytools.d, and Lutris for Proton/Wine runners.

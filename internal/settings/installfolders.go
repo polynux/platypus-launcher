@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// MaxRecentInstall is how many folders Hydra remembers from "Install to…".
+// MaxRecentInstall is how many folders Platypus remembers from "Install to…".
 const MaxRecentInstall = 5
 
 // MaxGameFolders caps the list of extra library folders.

@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // Methods core calls. Notifications the plugin sends are the constants below.
@@ -63,7 +63,7 @@ type Self struct {
 	State     string `json:"state"`
 }
 
-// Game is what a friend plays. ID is Hydra's key (p.<plugin>.<id>) when the
+// Game is what a friend plays. ID is Platypus's key (p.<plugin>.<id>) when the
 // game is in the library, and empty otherwise.
 type Game struct {
 	ID    string `json:"id,omitempty"`
@@ -142,7 +142,7 @@ type Manager struct {
 
 // playingGame is the game the user plays on a plugin's store.
 type playingGame struct {
-	gameID  string // Hydra's key, to match the stop
+	gameID  string // Platypus's key, to match the stop
 	storeID string // the plugin's id for the game, as social.setPlaying takes it
 }
 
@@ -360,7 +360,7 @@ func (m *Manager) SetStatus(ctx context.Context, pluginID, state string) error {
 	}
 	err := m.opt.Backend.Call(ctx, pluginID, MethodSetStatus, map[string]string{"state": state}, nil)
 	if isMethodMissing(err) {
-		return errors.New("this store doesn't let Hydra change your status")
+		return errors.New("this store doesn't let Platypus change your status")
 	}
 	return err
 }

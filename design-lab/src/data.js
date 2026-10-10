@@ -14,7 +14,7 @@ export const GAMES = [
   { id: 'silent-2', title: 'Silent Hills 2 (2024)', store: 'GOG', runner: runnerName(0), tier: 'silver', hours: 12, last: '2 weeks ago', size: '48.6 GB', dx: 'DXVK 2.5.1', status: 'tweak', cover: img('hyd-sh2', 600, 900), wide: img('hyd-sh2-w', 1200, 500), verdict: 'Needs stutter-fix collection + 4GB patch. Fog volume shader compile hitch on first run.' },
   { id: 'kcd-2', title: 'Kingdom Come II', store: 'Steam', runner: runnerName(1), tier: 'gold', hours: 95, last: 'yesterday', size: '98 GB', dx: 'VKD3D 2.14', status: 'ready', cover: img('hyd-kcd', 600, 900), wide: img('hyd-kcd-w', 1200, 500), verdict: 'PipeWire audio fix required, one registry verb. CPU-bound in Kuttenberg; -1 core parked helps.' },
   { id: 'moonstone', title: 'Moonstone Island', store: 'Epic', runner: runnerName(2), tier: 'platinum', hours: 28, last: 'today', size: '1.9 GB', dx: 'native', status: 'ready', cover: img('hyd-moon', 600, 900), wide: img('hyd-moon-w', 1200, 500), verdict: 'Native. Deck-verified. Nothing to report.' },
-  { id: 'wolf-old', title: 'Wolfenstein: Old Blood', store: 'Steam', runner: runnerName(3), tier: 'gold', hours: 0, last: 'never', size: '21.3 GB', dx: 'DXVK 2.4', status: 'idle', cover: img('hyd-wolf', 600, 900), wide: img('hyd-wolf-w', 1200, 500), verdict: 'idTech6 Vulkan. Historically flawless. Installed, not yet launched under Hydra.' },
+  { id: 'wolf-old', title: 'Wolfenstein: Old Blood', store: 'Steam', runner: runnerName(3), tier: 'gold', hours: 0, last: 'never', size: '21.3 GB', dx: 'DXVK 2.4', status: 'idle', cover: img('hyd-wolf', 600, 900), wide: img('hyd-wolf-w', 1200, 500), verdict: 'idTech6 Vulkan. Historically flawless. Installed, not yet launched under Platypus.' },
   { id: 'deltarune', title: 'Deltarune', store: 'Epic', runner: runnerName(4), tier: 'platinum', hours: 9, last: 'last month', size: '0.9 GB', dx: 'native', status: 'ready', cover: img('hyd-delta', 600, 900), wide: img('hyd-delta-w', 1200, 500), verdict: 'Native, tiny, perfect.' },
   { id: 'helldivers', title: 'Helldivers 2', store: 'Steam', runner: runnerName(5), tier: 'silver', hours: 154, last: '1h ago', size: '52 GB', dx: 'VKD3D 2.14', status: 'tweak', cover: img('hyd-hell', 600, 900), wide: img('hyd-hell-w', 1200, 500), verdict: 'nProtect saga continues: requires EAC bridge + launch flag. Verified working 10.1.' },
   { id: 'deep-rock', title: 'Deep Rock Galactic', store: 'Steam', runner: runnerName(0), tier: 'platinum', hours: 240, last: '3h ago', size: '28 GB', dx: 'DXVK 2.5.1', status: 'ready', cover: img('hyd-drg', 600, 900), wide: img('hyd-drg-w', 1200, 500), verdict: 'Bosco approves. Rock and stone.' },
@@ -55,7 +55,7 @@ export const PIPELINE = [
   { chain: 'gamemoderun', env: 'GPU_BOOST=auto' },
   { chain: 'gamescope -w 2560 -h 1440 -r 144 -f', env: 'GAMESCOPE_CURSOR=auto' },
   { chain: 'mangohud --preset 4', env: 'MANGOHUD_CONFIG_FILE=~/.config/MangoHud/p4' },
-  { chain: '~/.steam/compatibilitytools.d/GE-Proton10-4/proton run', env: 'STEAM_COMPAT_DATA_PATH=~/.local/share/hydra/prefixes/cyber-2077' },
+  { chain: '~/.steam/compatibilitytools.d/GE-Proton10-4/proton run', env: 'STEAM_COMPAT_DATA_PATH=~/.local/share/platypus/prefixes/cyber-2077' },
   { chain: 'bin/x64/Cyberpunk2077.exe', env: 'PROTON_ENABLE_NVAPI=1' },
 ];
 
@@ -132,7 +132,7 @@ export function protonSettingsFor(game) {
     dxvk: DXVK_VERSIONS[idx % 3],
     vkd3d: VKD3D_VERSIONS[idx % 3],
     shaderCache: 'on',
-    prefix: `~/.hydra/prefixes/${game.id}`,
+    prefix: `~/.platypus/prefixes/${game.id}`,
     env: idx % 2 ? ['PROTON_LOG=1'] : [],
     winetricks: WINETRICKS.slice(0, 2 + (idx % 3)),
     flags: PROTON_FLAGS.map((f, i) => ({ ...f, on: idx % PROTON_FLAGS.length === i ? !f.on : f.on })),

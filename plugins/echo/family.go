@@ -10,7 +10,7 @@ package main
 //
 // The "shared" game is lent by both members, and their copies differ (DLC).
 // Its copies are listed in library.list; the user's pick (family.setPreferredCopy)
-// is kept in state.json in HYDRA_PLUGIN_DATA, so it survives a restart. The
+// is kept in state.json in PLATYPUS_PLUGIN_DATA, so it survives a restart. The
 // ECHO_COPY_IN_USE and ECHO_COPY_UNAVAILABLE knobs (owner ids; `config`
 // copyInUse and copyUnavailable) mark one member's copy in use or unavailable.
 

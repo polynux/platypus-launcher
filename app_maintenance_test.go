@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/session"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Verify and move against the echo plugin, through the same App wiring as
@@ -176,7 +176,7 @@ func TestMoveByThePluginWhenItOffersMove(t *testing.T) {
 		t.Fatalf("the plugin didn't move the game: %v", err)
 	}
 	if _, ok := e.a.settings.Relocation(game.ID); ok {
-		t.Fatal("Hydra recorded a core move for a move the plugin made")
+		t.Fatal("Platypus recorded a core move for a move the plugin made")
 	}
 	if got := e.libraryTiny(t); got.InstallDir != filepath.Join(parent, "tiny") {
 		t.Fatalf("library shows %q after the move", got.InstallDir)
@@ -206,7 +206,7 @@ func TestMoveByCoreWhenThePluginHasNoMoveAndTellsIt(t *testing.T) {
 	if _, err := os.Stat(from); !os.IsNotExist(err) {
 		t.Fatalf("the old folder is still there: %v", err)
 	}
-	// echo accepts game.relocated, so it knows the new folder and Hydra's
+	// echo accepts game.relocated, so it knows the new folder and Platypus's
 	// record is dropped.
 	if _, ok := e.a.settings.Relocation(game.ID); ok {
 		t.Fatal("the record stayed although the plugin took the new folder")

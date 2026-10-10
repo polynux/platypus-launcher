@@ -5,9 +5,9 @@ import { MonoLabel, cx } from './ui';
 
 /** Why a capability isn't doing anything, in words. */
 function stateOf(c: PluginCapability, initialized: boolean): { text: string; tone: string } {
-  if (!c.known) return { text: 'unknown to this Hydra · ignored', tone: 'text-white/40' };
+  if (!c.known) return { text: 'unknown to this Platypus · ignored', tone: 'text-white/40' };
   if (!c.on) return { text: 'off right now', tone: 'text-orange-200' };
-  if (!c.orchestrated) return { text: `${initialized ? 'on' : 'declared'} · not used by Hydra yet`, tone: 'text-white/55' };
+  if (!c.orchestrated) return { text: `${initialized ? 'on' : 'declared'} · not used by Platypus yet`, tone: 'text-white/55' };
   return { text: initialized ? 'on' : 'declared', tone: 'text-emerald-300' };
 }
 

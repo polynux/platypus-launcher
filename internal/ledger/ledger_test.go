@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func entry(game, build, channel string) types.LedgerEntry {

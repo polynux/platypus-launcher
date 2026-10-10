@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/stats"
-	"hydra-launcher/internal/types"
+	"platypus/internal/stats"
+	"platypus/internal/types"
 )
 
 // statsManifest declares the 1.7 stats capabilities over protocols that include 1.7.
 const statsManifest = `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-	"protocol":{"versions":["1.0","1.1","1.2","1.3","1.4","1.5","1.6","1.7"]},"store":"echo","exec":"bin/hydra-echo-app",
+	"protocol":{"versions":["1.0","1.1","1.2","1.3","1.4","1.5","1.6","1.7"]},"store":"echo","exec":"bin/platypus-echo-app",
 	"capabilities":["library","install","launch","auth","achievements","playtime","redeem"]}`
 
 // statsApp is an approved, initialized echo offering the stats capabilities.

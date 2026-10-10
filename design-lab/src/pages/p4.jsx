@@ -28,8 +28,8 @@ export function WorkshopBench() {
       {/* top bar */}
       <header className="border-b border-stone-200 bg-white">
         <div className="mx-auto flex max-w-[1200px] items-center gap-3 px-8 py-3.5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500 text-[14px] font-black text-white">H</span>
-          <span className="text-[15px] font-bold">Hydra</span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500 text-[14px] font-black text-white">P</span>
+          <span className="text-[15px] font-bold">Platypus</span>
           <span className="mx-3 h-4 w-px bg-stone-200" />
           <span className="font-mono text-[11px] text-stone-400">workshop / cyberpunk-2077</span>
           <div className="ml-auto flex items-center gap-2">
@@ -126,7 +126,7 @@ export function WorkshopBench() {
             {[
               ['Runner', runner],
               ['Renderer', dxvk],
-              ['Prefix', '~/.hydra/prefixes/cyber-2077'],
+              ['Prefix', '~/.platypus/prefixes/cyber-2077'],
               ['Display', opts.gamescope ? 'gamescope 2560×1440' : 'native Wayland'],
               ['Overlay', opts.mangohud ? 'MangoHud preset 4' : 'off'],
               ['Anti-cheat', opts.eac ? 'EAC bridge bound' : 'off'],

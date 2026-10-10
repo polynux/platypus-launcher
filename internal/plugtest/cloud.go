@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/types"
 )
 
 // The keys docs/plugins/protocol.md ("Cloud saves") defines for the cloud.*
@@ -83,7 +83,7 @@ func checkCloudStatus(t *testing.T, what string, raw json.RawMessage) types.Clou
 	return st
 }
 
-// checkCloud drives cloud.* the way Hydra does: parameter errors, the shape of
+// checkCloud drives cloud.* the way Platypus does: parameter errors, the shape of
 // every answer, the idempotent jobId, resolve, and the cloud.progress shape.
 func (s *Session) checkCloud(t *testing.T, game types.Game) {
 	t.Helper()
@@ -115,7 +115,7 @@ func (s *Session) checkCloud(t *testing.T, game types.Game) {
 			t.Fatalf("%s: %v", m, err)
 		}
 		checkCloudStatus(t, m, first)
-		// A repeated jobId is the same job: Hydra resends one after a restart.
+		// A repeated jobId is the same job: Platypus resends one after a restart.
 		if err := s.call(m, params, &again); err != nil {
 			t.Fatalf("%s with a repeated jobId: %v", m, err)
 		}

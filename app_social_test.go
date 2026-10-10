@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/social"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/social"
+	"platypus/internal/types"
 )
 
 // socialEnv is an App around the echo plugin with its real manifest, which
@@ -75,7 +75,7 @@ func writeEchoManifest(t *testing.T, path string) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatal(err)
 	}
-	m["exec"] = "bin/hydra-echo-app"
+	m["exec"] = "bin/platypus-echo-app"
 	out, _ := json.Marshal(m)
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		t.Fatal(err)

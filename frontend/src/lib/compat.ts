@@ -86,7 +86,7 @@ export function gameCompat(game: Game): Promise<Compat> {
 
 /** Fired on window when a game's facts are replaced, so every view showing
  *  them (the game page and the settings modal, say) takes the new answer. */
-export const COMPAT_CHANGED = 'hydra:compat-changed';
+export const COMPAT_CHANGED = 'platypus:compat-changed';
 
 /** Replaces a game's cached facts, after the user changed its Steam AppID. */
 export function setGameCompat(id: string, c: Compat): void {

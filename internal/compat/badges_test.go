@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func boolp(b bool) *bool { return &b }

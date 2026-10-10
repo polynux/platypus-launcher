@@ -1,6 +1,6 @@
 package gog_test
 
-// Unit-level checks of hydra-gog helpers (PLUG-9), run by loading the script
+// Unit-level checks of platypus-gog helpers (PLUG-9), run by loading the script
 // as a module so no network or gogdl is involved.
 
 import (
@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
+	"platypus/internal/jobs"
 )
 
 const pyLoad = `
 import importlib.machinery, importlib.util, sys
-loader = importlib.machinery.SourceFileLoader("hg", "bin/hydra-gog")
+loader = importlib.machinery.SourceFileLoader("hg", "bin/platypus-gog")
 spec = importlib.util.spec_from_loader("hg", loader)
 hg = importlib.util.module_from_spec(spec)
 loader.exec_module(hg)
@@ -73,7 +73,7 @@ print("authorization" in reqs[0], reqs[1].get("authorization"))
 	}
 }
 
-// A game installed through Hydra whose account entry later vanishes (removed
+// A game installed through Platypus whose account entry later vanishes (removed
 // from the library, or listed under another account) keeps the title it had.
 func TestGogOrphanKeepsTitle(t *testing.T) {
 	m, q, store, folder := setup(t)
@@ -106,7 +106,7 @@ func TestGogOrphanKeepsTitle(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	// The account no longer lists the game.
-	api := os.Getenv("HYDRA_GOG_API_FILE")
+	api := os.Getenv("PLATYPUS_GOG_API_FILE")
 	os.WriteFile(api, []byte(`{"totalPages": 1, "products": []}`), 0o644)
 	lib, err = store.Library(ctx)
 	if err != nil || len(lib) != 1 {
@@ -133,7 +133,7 @@ ts = [threading.Thread(target=hg.record_install, args=({"id": a, "path": "/tmp/x
 [t.start() for t in ts]; [t.join() for t in ts]
 print(sorted(hg.installed_games()))
 `)
-	cmd.Env = append(os.Environ(), "HYDRA_PLUGIN_DATA="+data)
+	cmd.Env = append(os.Environ(), "PLATYPUS_PLUGIN_DATA="+data)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)

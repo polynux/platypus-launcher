@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/settings"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/settings"
 )
 
 var (
@@ -27,13 +27,13 @@ var (
 func buildEcho(t *testing.T) string {
 	t.Helper()
 	echoOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "hydra-echo-")
+		dir, err := os.MkdirTemp("", "platypus-echo-")
 		if err != nil {
 			echoErr = err
 			return
 		}
-		echoBin = filepath.Join(dir, "hydra-echo")
-		out, err := exec.Command("go", "build", "-o", echoBin, "hydra-launcher/plugins/echo").CombinedOutput()
+		echoBin = filepath.Join(dir, "platypus-echo")
+		out, err := exec.Command("go", "build", "-o", echoBin, "platypus/plugins/echo").CombinedOutput()
 		if err != nil {
 			echoErr = errors.New(string(out))
 		}
@@ -56,7 +56,7 @@ func install(t *testing.T, pluginsDir string, edit func(m map[string]any)) strin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "bin/hydra-echo"), bin, 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "bin/platypus-echo"), bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile("../../plugins/echo/plugin.json")
@@ -197,10 +197,10 @@ func TestEchoInitialize(t *testing.T) {
 	}
 
 	var got map[string]any
-	if err := e.m.Call(ctx(t), "echo", "echo", map[string]any{"hello": "hydra"}, &got); err != nil {
+	if err := e.m.Call(ctx(t), "echo", "echo", map[string]any{"hello": "platypus"}, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got["hello"] != "hydra" {
+	if got["hello"] != "platypus" {
 		t.Fatalf("echo = %v", got)
 	}
 
@@ -291,7 +291,7 @@ func TestChangedHashDisables(t *testing.T) {
 	}
 	pid := e.m.Running("echo")
 
-	tamper(t, filepath.Join(e.plugins, "echo/bin/hydra-echo"))
+	tamper(t, filepath.Join(e.plugins, "echo/bin/platypus-echo"))
 
 	p := e.discover(t)["echo"]
 	if p.Status != StatusChanged {
@@ -409,7 +409,7 @@ func TestHashCheckedAtStart(t *testing.T) {
 	e := newEnv(t)
 	e.ready(t)
 	// Swapped after discovery but before the first start.
-	tamper(t, filepath.Join(e.plugins, "echo/bin/hydra-echo"))
+	tamper(t, filepath.Join(e.plugins, "echo/bin/platypus-echo"))
 	if _, err := e.m.Initialize(ctx(t), "echo"); err == nil || !strings.Contains(err.Error(), "changed") {
 		t.Fatalf("modified executable started: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestMissingRequirement(t *testing.T) {
 	install(t, e.plugins, func(m map[string]any) {
 		m["requires"] = []map[string]string{
 			{"bin": "sh", "hint": "always there"},
-			{"bin": "hydra-no-such-tool", "hint": "pipx install hydra-no-such-tool"},
+			{"bin": "platypus-no-such-tool", "hint": "pipx install platypus-no-such-tool"},
 		}
 	})
 	e.discover(t)
@@ -451,7 +451,7 @@ func TestMissingRequirement(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := e.discover(t)["echo"]
-	if p.Status != StatusMissing || len(p.Missing) != 1 || p.Missing[0].Hint != "pipx install hydra-no-such-tool" {
+	if p.Status != StatusMissing || len(p.Missing) != 1 || p.Missing[0].Hint != "pipx install platypus-no-such-tool" {
 		t.Fatalf("missing requirement: %+v", p)
 	}
 	if _, err := e.m.Initialize(ctx(t), "echo"); err == nil {
@@ -486,7 +486,7 @@ func TestInvalidManifests(t *testing.T) {
 			e := newEnv(t)
 			dir := install(t, e.plugins, edit)
 			if edit == nil {
-				os.Chmod(filepath.Join(dir, "bin/hydra-echo"), 0o644)
+				os.Chmod(filepath.Join(dir, "bin/platypus-echo"), 0o644)
 			}
 			p := e.discover(t)["echo"]
 			if p.Status != StatusInvalid || p.Problem == "" {
@@ -502,7 +502,7 @@ func TestInvalidManifests(t *testing.T) {
 func TestExecSymlinkOutsideFolder(t *testing.T) {
 	e := newEnv(t)
 	dir := install(t, e.plugins, nil)
-	bin := filepath.Join(dir, "bin/hydra-echo")
+	bin := filepath.Join(dir, "bin/platypus-echo")
 	os.Remove(bin)
 	if err := os.Symlink(buildEcho(t), bin); err != nil {
 		t.Fatal(err)

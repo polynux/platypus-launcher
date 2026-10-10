@@ -1,5 +1,5 @@
 // Package plugtest drives any store plugin through every protocol method it
-// declares, the way Hydra drives it (see docs/plugins/protocol.md). The
+// declares, the way Platypus drives it (see docs/plugins/protocol.md). The
 // conformance suite lives here, not in one plugin's tests, so each plugin
 // package only wires up its own plugin-specific bits: where its fake CLI is
 // and how to log in and pick a game from its library.
@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jobs"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Suite describes one plugin under test. CopyDir is the plugin's source folder
@@ -52,7 +52,7 @@ type Suite struct {
 	PickGame func(t *testing.T, games []types.Game) types.Game
 
 	// Escape, when set, returns a library game the plugin reports as
-	// installed outside its folder; Hydra must refuse to launch it.
+	// installed outside its folder; Platypus must refuse to launch it.
 	Escape func(t *testing.T, games []types.Game) *types.Game
 	// NoSpeed excludes the check that job.progress carries a speed (a
 	// plugin whose tool reports none).
@@ -375,7 +375,7 @@ func (s Suite) Conformance(t *testing.T) {
 		}
 	}
 	game := s.PickGame(t, games)
-	// Strict wire check: only keys docs/plugins/protocol.md defines. Hydra
+	// Strict wire check: only keys docs/plugins/protocol.md defines. Platypus
 	// ignores the rest today, but authors copy whatever the bundled plugins
 	// send, so extras spread.
 	var rawLib struct {
@@ -595,7 +595,7 @@ func (s Suite) Conformance(t *testing.T) {
 		t.Fatalf("canceled install left the game installed: %+v", g)
 	}
 
-	// The same jobId sent twice (Hydra resends after a crash) runs once.
+	// The same jobId sent twice (Platypus resends after a crash) runs once.
 	if !s.NoDuplicateJobID {
 		dup := map[string]any{"id": game.StoreAppID, "installDir": sess.Folder, "jobId": "dup-job-1"}
 		if err := sess.call("game.install", dup, nil); err != nil {
@@ -720,9 +720,9 @@ func (s *Session) checkVersions(t *testing.T, game types.Game, doneJob string, u
 var probeSkip = []string{"library", "install", "launch", "auth", "discard"}
 
 // checkHandshake holds the plugin to docs/plugins/protocol.md's rules for
-// initialize: it answers a protocol version Hydra offered and the manifest
+// initialize: it answers a protocol version Platypus offered and the manifest
 // declares, its capabilities are a subset of the manifest's, its features
-// belong to capabilities it offers, and Hydra's gate matches what it said.
+// belong to capabilities it offers, and Platypus's gate matches what it said.
 func (s *Session) checkHandshake(t *testing.T) {
 	t.Helper()
 	p, _ := s.m.Plugin(s.id)
@@ -746,14 +746,14 @@ func (s *Session) checkHandshake(t *testing.T) {
 			t.Fatalf("initialize protocol: %v", err)
 		}
 		if !slices.Contains(plugins.SupportedProtocols, v) || !offered.Contains(v) {
-			t.Fatalf("initialize answered protocol %s; Hydra offered %v and the manifest declares %s", v, offer, offered)
+			t.Fatalf("initialize answered protocol %s; Platypus offered %v and the manifest declares %s", v, offer, offered)
 		}
 		if best, _ := plugins.Negotiate(offered, plugins.SupportedProtocols); best != v {
 			t.Fatalf("initialize answered protocol %s, but the highest both sides speak is %s", v, best)
 		}
 	}
 	if rt := s.m.Runtime(s.id); !rt.Initialized || rt.Protocol == "" {
-		t.Fatalf("Hydra has no negotiated protocol after initialize: %+v", rt)
+		t.Fatalf("Platypus has no negotiated protocol after initialize: %+v", rt)
 	}
 
 	// Subset rule: initialize may switch capabilities off, never on.

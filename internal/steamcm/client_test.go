@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/depot"
-	"hydra-launcher/internal/steamcm"
-	"hydra-launcher/internal/steamcm/steamcmtest"
+	"platypus/internal/depot"
+	"platypus/internal/steamcm"
+	"platypus/internal/steamcm/steamcmtest"
 )
 
 // testToken is a JWT-shaped refresh token; only sub matters.
@@ -37,7 +37,7 @@ func fastConfig(role steamcm.LoginRole) steamcm.ClientConfig {
 // real Steam network.
 func useFake(t *testing.T, f *steamcmtest.Fake) {
 	t.Helper()
-	t.Setenv("HYDRA_STEAM_CM_SERVER", f.Host())
+	t.Setenv("PLATYPUS_STEAM_CM_SERVER", f.Host())
 }
 
 // heartbeatSeconds=1 on the fake, so the client's cadence is 1s: two

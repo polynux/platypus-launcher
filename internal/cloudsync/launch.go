@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
-// BeforeLaunch runs the pre-launch step for a game Hydra is about to start
+// BeforeLaunch runs the pre-launch step for a game Platypus is about to start
 // itself. It reads the cloud state, stops there when the store's own client is
 // running, pulls what changed only in the cloud, and tells the caller whether
 // to go on. When the user has to decide (a conflict, an unreachable store, the
@@ -137,7 +137,7 @@ func (c *Orchestrator) unreachableMsg(g Game, mode, msg string, st *types.CloudS
 	return c.prompt(g, types.CloudPromptOffline, msg, st)
 }
 
-// clientRunning is the official-client policy: Hydra doesn't sync while the
+// clientRunning is the official-client policy: Platypus doesn't sync while the
 // store's own client runs. If the plugin can start the game through the
 // client the user is offered that; otherwise the launch goes on unsynced and
 // the game page explains.
@@ -145,7 +145,7 @@ func (c *Orchestrator) clientRunning(g Game, st types.CloudStatus) Decision {
 	name := st.Client.Name
 	if st.Client.CanLaunch {
 		return c.prompt(g, types.CloudPromptClient,
-			fmt.Sprintf("%s is running. Two programs writing the same saves can cause a cloud conflict, so Hydra won't sync this game while it is open.", name), &st)
+			fmt.Sprintf("%s is running. Two programs writing the same saves can cause a cloud conflict, so Platypus won't sync this game while it is open.", name), &st)
 	}
 	msg := fmt.Sprintf("Not synced: %s is running and would write the same saves. Close %s to sync this game.", name, name)
 	c.emit(types.CloudEvent{GameID: g.ID, Kind: types.CloudEvSkipped, Message: msg, Status: &st, Client: name})
@@ -166,7 +166,7 @@ func (c *Orchestrator) Confirm(gameID string) {
 
 // Launching records the push the game will owe when it exits and returns its
 // job id: the exit and an abandoned launch name their own record by it. Call
-// it before the game starts, so a Hydra that quits while it runs still pushes
+// it before the game starts, so a Platypus that quits while it runs still pushes
 // next time.
 func (c *Orchestrator) Launching(g Game, cc types.CloudContext) string {
 	c.mu.Lock()
@@ -204,7 +204,7 @@ func (c *Orchestrator) Exited(gameID, jobID string, failed bool) {
 		return
 	}
 	if closing {
-		return // Hydra is quitting: the push stays owed and runs at the next start
+		return // Platypus is quitting: the push stays owed and runs at the next start
 	}
 	if run := c.startPostExit(pending); run != nil {
 		go run()
@@ -240,7 +240,7 @@ func (c *Orchestrator) Wait() { c.wg.Wait() }
 
 // startPostExit claims the game for its post-exit push and returns the work,
 // or nil when there is nothing to do now (mode off, a job already running,
-// Hydra quitting). The claim is made before the work runs, so
+// Platypus quitting). The claim is made before the work runs, so
 // a launch right after the exit already finds the push to cancel.
 func (c *Orchestrator) startPostExit(p Pending) (run func()) {
 	g := Game{ID: p.GameID, PluginID: p.PluginID, StoreID: p.StoreID, Title: p.Title}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 func TestPinsPersistAndClear(t *testing.T) {

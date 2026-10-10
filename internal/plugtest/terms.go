@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"hydra-launcher/internal/jsonrpc"
+	"platypus/internal/jsonrpc"
 )
 
 // The terms capability (protocol 1.11, docs/plugins/protocol.md, "Terms"): the

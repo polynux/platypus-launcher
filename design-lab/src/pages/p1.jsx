@@ -35,7 +35,7 @@ export function SwissSpecSheet() {
       <header className="border-b border-neutral-900 px-8 pb-4 pt-6">
         <div className="flex items-start justify-between">
           <div className="flex items-baseline gap-3">
-            <span className="text-[26px] font-black leading-none tracking-tighter">HYDRA</span>
+            <span className="text-[26px] font-black leading-none tracking-tighter">PLATYPUS</span>
             <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">library index / rev 47</span>
           </div>
           <div className="text-right font-mono text-[10px] uppercase leading-relaxed tracking-wider text-neutral-500">
@@ -78,7 +78,7 @@ export function SwissSpecSheet() {
         <div className="mt-6 grid grid-cols-3 gap-6 font-mono text-[10px] leading-relaxed text-neutral-500">
           <p className="col-span-2">
             NOTE — tier figures reflect community reports aggregated nightly; runner column shows the effective binary after per-game override.
-            Sizes are on-disk after deduplication across prefixes. A hollow dot marks titles never launched under Hydra.
+            Sizes are on-disk after deduplication across prefixes. A hollow dot marks titles never launched under Platypus.
           </p>
           <div className="border-t border-neutral-900 pt-2 text-neutral-900">
             <div className="flex justify-between"><span>STEAM</span><span>14</span></div>

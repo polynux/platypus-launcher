@@ -197,7 +197,7 @@ export function GamePage(p: GamePageProps) {
     ],
     ['DX layer', game.native ? 'not used' : s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
     ['Wrappers', [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || 'none'],
-    ['Launch via', viaSteam ? 'Steam client' : plugin ? `Hydra · ${plugin.name}` : 'Hydra'],
+    ['Launch via', viaSteam ? 'Steam client' : plugin ? `Platypus · ${plugin.name}` : 'Platypus'],
     [
       'ProtonDB',
       !info
@@ -298,8 +298,8 @@ export function GamePage(p: GamePageProps) {
           <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
             <p className="font-bold text-amber-200">Installed outside {plugin.name}'s folder</p>
             <p>
-              Hydra only launches {plugin.name} games from <span className="font-mono text-[12px]">{plugin.install_folder}</span> or folders you allow.
-              This one is in <span className="font-mono text-[12px] text-white/90">{game.install_dir}</span>, probably from before Hydra managed it.
+              Platypus only launches {plugin.name} games from <span className="font-mono text-[12px]">{plugin.install_folder}</span> or folders you allow.
+              This one is in <span className="font-mono text-[12px] text-white/90">{game.install_dir}</span>, probably from before Platypus managed it.
             </p>
           </div>
           <Button onClick={() => p.onAllowFolder(game.install_dir)} className="flex-none">
@@ -609,7 +609,7 @@ function AchievementsSection({
         <p className="mb-4 text-[12px] text-white/55">
           {viaSteam
             ? "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here."
-            : 'The store lists these achievements; your progress there isn\'t available to Hydra.'}
+            : 'The store lists these achievements; your progress there isn\'t available to Platypus.'}
         </p>
       )}
       <div className="ach-grid">

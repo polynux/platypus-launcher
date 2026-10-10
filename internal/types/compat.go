@@ -13,7 +13,7 @@ type Compat struct {
 	Native bool `json:"native"`
 	// ProtonDB is the community rating, nil when there is none to show.
 	ProtonDB *ProtonRating `json:"protondb,omitempty"`
-	// RatingsOnline says whether Hydra may fetch ratings from the network
+	// RatingsOnline says whether Platypus may fetch ratings from the network
 	// (the "Fetch ratings online" setting).
 	RatingsOnline bool `json:"ratings_online"`
 	// DRM are the store's protection facts (plugin game.details, protocol 1.10).

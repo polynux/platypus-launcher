@@ -19,9 +19,9 @@ program.
    plugins/install.sh echo-b
    ```
 
-   Both land in `~/.local/share/hydra/plugins`.
+   Both land in `~/.local/share/platypus/plugins`.
 
-2. Open **Plugins**, then **Review and approve** on Echo (and Echo B). Hydra
+2. Open **Plugins**, then **Review and approve** on Echo (and Echo B). Platypus
    runs a plugin only after you approve it. Then **Rescan** if they are not listed.
 
 3. Log in: on Echo's card click **Log in**, and type the code `letmein`. Echo B

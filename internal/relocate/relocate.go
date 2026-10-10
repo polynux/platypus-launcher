@@ -25,13 +25,13 @@ import (
 	"syscall"
 )
 
-// StageSuffix names the temporary copy: "<destination>.hydra-move".
-const StageSuffix = ".hydra-move"
+// StageSuffix names the temporary copy: "<destination>.platypus-move".
+const StageSuffix = ".platypus-move"
 
 // markerName is the file a move writes into its staging folder before it
 // copies anything, and into the destination once the copy is renamed there. It
 // is removed when the move completes and is never counted as part of the game.
-const markerName = ".hydra-move-marker.json"
+const markerName = ".platypus-move-marker.json"
 
 // ErrExists means the destination is already taken. A move never merges into
 // or overwrites an existing folder.
@@ -235,7 +235,7 @@ func copyMove(ctx context.Context, from, to, realFrom, realTo string, m marker, 
 	return Result{}, nil
 }
 
-// finish completes a move that was placed at to before Hydra stopped: the
+// finish completes a move that was placed at to before Platypus stopped: the
 // destination must still hold the size the move copied, then the caller
 // records the move, the marker goes and the source is removed.
 func finish(from, to string, m marker, opts Options) (Result, error) {
@@ -257,7 +257,7 @@ func finish(from, to string, m marker, opts Options) (Result, error) {
 }
 
 // clearStage removes a staging folder an earlier move left. Only a folder
-// with the marker is Hydra's to delete; anything else is refused.
+// with the marker is Platypus's to delete; anything else is refused.
 func clearStage(stage string) error {
 	if _, err := os.Lstat(stage); errors.Is(err, fs.ErrNotExist) {
 		return nil

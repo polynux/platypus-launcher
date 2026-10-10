@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"hydra-launcher/internal/cloudsync"
-	"hydra-launcher/internal/jobs"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/session"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/cloudsync"
+	"platypus/internal/jobs"
+	"platypus/internal/plugins"
+	"platypus/internal/session"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 const echoCloudManifest = `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
-	"protocol":{"versions":["1.0","1.1","1.2"]},"store":"echo","exec":"bin/hydra-echo-app",
+	"protocol":{"versions":["1.0","1.1","1.2"]},"store":"echo","exec":"bin/platypus-echo-app",
 	"requires":[{"bin":"sleep"}],
 	"capabilities":["library","install","launch","auth","cloud-saves"]}`
 
@@ -126,7 +126,7 @@ func TestCloudGameNeedsThePluginTheCapabilityAndTheGameFeature(t *testing.T) {
 }
 
 func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
-	a, _ := cloudApp(t, []plugins.Version{{Major: 1, Minor: 0}, {Major: 1, Minor: 1}}, nil) // an older Hydra: speaks up to 1.1
+	a, _ := cloudApp(t, []plugins.Version{{Major: 1, Minor: 0}, {Major: 1, Minor: 1}}, nil) // an older Platypus: speaks up to 1.1
 	g := echoGame(t)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
 		t.Fatal(err)

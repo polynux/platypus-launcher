@@ -7,10 +7,10 @@ import (
 	"slices"
 	"sync"
 
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/settings"
-	"hydra-launcher/internal/stores"
-	"hydra-launcher/internal/types"
+	"platypus/internal/plugins"
+	"platypus/internal/settings"
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // Plugin settings (the `settings` capability, protocol 1.8, docs/plugins/

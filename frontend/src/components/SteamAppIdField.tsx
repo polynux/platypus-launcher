@@ -12,7 +12,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** The Steam AppID the ratings use for a game, set by the user. It saves on its
  *  own, apart from the form's Save: a Steam AppID is the only thing it changes.
- *  Hydra never looks a game up by its title; the links are for checking by hand. */
+ *  Platypus never looks a game up by its title; the links are for checking by hand. */
 export function SteamAppIdField({ game }: { game: Game }) {
   const { compat, update } = useCompat(game);
   const userSet = compat?.steam_app_id_source === 'user' ? compat.steam_app_id ?? '' : '';

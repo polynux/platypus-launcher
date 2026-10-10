@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"hydra-launcher/internal/jsonrpc"
-	"hydra-launcher/internal/plugins"
-	"hydra-launcher/internal/types"
+	"platypus/internal/jsonrpc"
+	"platypus/internal/plugins"
+	"platypus/internal/types"
 )
 
 // Terms (protocol 1.11, the `terms` capability, docs/plugins/protocol.md
@@ -60,7 +60,7 @@ func hasTerm(list []types.GameTerm, id string) bool {
 
 // AcceptTerms tells the store that the user accepted the terms (game.acceptTerms,
 // optional). IsNotOffered is returned for a plugin that doesn't keep acceptance
-// server-side; the caller then keeps the record in Hydra alone.
+// server-side; the caller then keeps the record in Platypus alone.
 func (s *Plugin) AcceptTerms(ctx context.Context, storeAppID string, terms []types.TermRef) error {
 	list := make([]map[string]string, 0, len(terms))
 	for _, t := range terms {

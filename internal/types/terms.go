@@ -2,7 +2,7 @@ package types
 
 // Terms are the agreements a store asks the user to accept before a game is
 // installed (protocol 1.11, the `terms` capability, docs/plugins/protocol.md
-// "Terms"). Hydra records each acceptance by term id and version, and asks
+// "Terms"). Platypus records each acceptance by term id and version, and asks
 // again when the version changes. Acceptance is never automatic.
 
 // GameTerm is one term of a game, with the user's acceptance of its current

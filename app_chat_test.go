@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"hydra-launcher/internal/chat"
+	"platypus/internal/chat"
 )
 
 const (
@@ -326,7 +326,7 @@ func TestChatSendRetriesAfterACrash(t *testing.T) {
 	}
 }
 
-// Hydra refuses a send that is empty or too long before the plugin sees it.
+// Platypus refuses a send that is empty or too long before the plugin sees it.
 func TestChatRefusesBadTextLocally(t *testing.T) {
 	a, _ := chatEnv(t)
 	if err := a.ChatSend("echo", chatAna, "   "); err == nil {

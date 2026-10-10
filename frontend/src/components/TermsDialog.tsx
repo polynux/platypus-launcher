@@ -22,7 +22,7 @@ export interface TermsDialogProps {
 }
 
 /** The store's terms before an install or an update: each one with a link to
- *  read it, and "I accept" or Cancel. Hydra records the acceptance; it never
+ *  read it, and "I accept" or Cancel. Platypus records the acceptance; it never
  *  accepts for the user, and the dialog offers nothing that would. */
 export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogProps) {
   const [busy, setBusy] = useState(false);
@@ -46,7 +46,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
     <Modal label={`Terms for ${game.title}`} onClose={onCancel} size="md" dismissable={!busy}>
       <h2 className="text-[20px] font-extrabold tracking-tight">Terms for {game.title}</h2>
       <p className="mt-1 text-[12.5px] text-white/50">
-        Read these before {game.title} is installed. Hydra doesn't accept them for you.
+        Read these before {game.title} is installed. Platypus doesn't accept them for you.
       </p>
 
       <ul className="mt-5 space-y-2" aria-label="Terms to accept">

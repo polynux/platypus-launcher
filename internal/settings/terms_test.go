@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hydra-launcher/internal/types"
+	"platypus/internal/types"
 )
 
 // The acceptance record survives a restart, keeps one line per (term, version)

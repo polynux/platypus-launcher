@@ -16,18 +16,18 @@ import (
 )
 
 // APIVersion is the major protocol version of the legacy "api" field and of
-// the HYDRA_PLUGIN_API variable. The versions Hydra speaks, with minors, are
+// the PLATYPUS_PLUGIN_API variable. The versions Platypus speaks, with minors, are
 // SupportedProtocols.
 const APIVersion = 1
 
-// ManifestVersion is the manifest schema this Hydra reads. A manifest naming
-// a newer one is listed ("needs a newer Hydra") but never interpreted.
+// ManifestVersion is the manifest schema this Platypus reads. A manifest naming
+// a newer one is listed ("needs a newer Platypus") but never interpreted.
 const ManifestVersion = 1
 
 // ManifestFile is the manifest's name inside a plugin folder.
 const ManifestFile = "plugin.json"
 
-// Plugin kinds. "store" is the default: an executable Hydra talks to over
+// Plugin kinds. "store" is the default: an executable Platypus talks to over
 // JSON-RPC. "data" is JSON only — fix recipes and tweak packs — and needs no
 // approval because it can't run anything.
 const (
@@ -64,9 +64,9 @@ type Manifest struct {
 	Kind         string   `json:"kind"`
 	Data         []string `json:"data"`
 	Capabilities []string `json:"capabilities"`
-	// Needs lists capabilities this Hydra must know for the plugin to be
+	// Needs lists capabilities this Platypus must know for the plugin to be
 	// worth running: if one is not in the registry the plugin is listed and
-	// can be approved, but doesn't start ("needs a newer Hydra"). Every
+	// can be approved, but doesn't start ("needs a newer Platypus"). Every
 	// entry must also be in Capabilities.
 	Needs    []string      `json:"needs"`
 	Requires []Requirement `json:"requires"`
@@ -84,7 +84,7 @@ type ProtocolSpec struct {
 	Transport string `json:"transport"`
 }
 
-// IncompatibleError says a plugin can't run on this Hydra, and why. Status
+// IncompatibleError says a plugin can't run on this Platypus, and why. Status
 // is StatusNeedsNewer or StatusTooOld; Reason is shown to the user.
 type IncompatibleError struct {
 	Status Status
@@ -106,19 +106,19 @@ func (m Manifest) Offered() (VersionSet, string) {
 	return VersionSet{List: []Version{{m.API, 0}}}, DefaultTransport
 }
 
-// Compatible says whether this Hydra can run the plugin: it knows the
+// Compatible says whether this Platypus can run the plugin: it knows the
 // transport and shares a protocol version with it. supported is the versions
-// Hydra speaks (SupportedProtocols). nil means yes.
+// Platypus speaks (SupportedProtocols). nil means yes.
 func (m Manifest) Compatible(supported []Version) *IncompatibleError {
 	if m.IsData() {
 		if m.API > APIVersion {
-			return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (data plugin format %d)", m.API)}
+			return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Platypus (data plugin format %d)", m.API)}
 		}
 		return nil
 	}
 	offered, transport := m.Offered()
 	if _, ok := LookupTransport(transport); !ok {
-		return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (transport %q)", transport)}
+		return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Platypus (transport %q)", transport)}
 	}
 	if _, ok := Negotiate(offered, supported); ok {
 		return nil
@@ -132,12 +132,12 @@ func (m Manifest) Compatible(supported []Version) *IncompatibleError {
 		}
 	}
 	if top, bounded := offered.Highest(); bounded && top.Less(oldest) {
-		return &IncompatibleError{StatusTooOld, fmt.Sprintf("too old for this Hydra (speaks protocol %s; Hydra speaks %s)", offered, strings.Join(list, ", "))}
+		return &IncompatibleError{StatusTooOld, fmt.Sprintf("too old for this Platypus (speaks protocol %s; Platypus speaks %s)", offered, strings.Join(list, ", "))}
 	}
-	return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (speaks protocol %s; Hydra speaks %s)", offered, strings.Join(list, ", "))}
+	return &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Platypus (speaks protocol %s; Platypus speaks %s)", offered, strings.Join(list, ", "))}
 }
 
-// Requirement is a command-line tool the plugin wraps. Hydra never installs
+// Requirement is a command-line tool the plugin wraps. Platypus never installs
 // it; Hint tells the user how.
 type Requirement struct {
 	Bin  string `json:"bin"`
@@ -167,7 +167,7 @@ func LoadManifest(dir string) (Manifest, error) {
 	}
 	if json.Unmarshal(data, &head) == nil && head.ManifestVersion > ManifestVersion {
 		_ = json.Unmarshal(data, &m) // whatever still reads (the id, the name) is for display
-		return m, &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Hydra (manifest format %d)", head.ManifestVersion)}
+		return m, &IncompatibleError{StatusNeedsNewer, fmt.Sprintf("needs a newer Platypus (manifest format %d)", head.ManifestVersion)}
 	}
 	if err := json.Unmarshal(data, &m); err != nil {
 		return m, fmt.Errorf("%s: %w", ManifestFile, err)
@@ -188,7 +188,7 @@ func LoadManifest(dir string) (Manifest, error) {
 }
 
 // UnknownCapabilities returns the declared capabilities missing from the
-// registry. Hydra ignores them.
+// registry. Platypus ignores them.
 func (m Manifest) UnknownCapabilities() []string {
 	var out []string
 	for _, c := range m.Capabilities {
@@ -286,7 +286,7 @@ func (m Manifest) validate() error {
 	default:
 		bad("kind %q must be %q or %q", m.Kind, KindStore, KindData)
 	}
-	// A well-formed name Hydra doesn't know is not an error (UnknownCapabilities
+	// A well-formed name Platypus doesn't know is not an error (UnknownCapabilities
 	// reports it as a warning); a malformed one is.
 	for i, c := range m.Capabilities {
 		switch {
