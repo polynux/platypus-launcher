@@ -5,9 +5,9 @@ import { Core } from './core.ts';
 import { APP_ORIGIN, csp, isAppURL, isArtPath, safePath, staticFile, webURL } from './security.ts';
 
 // Where things are. run.mjs sets these; the defaults are the repo layout.
-const repo = path.resolve(import.meta.dirname, '..', '..');
-const coreBinary = process.env.PLATYPUS_CORE ?? path.join(repo, 'electron', '.build', 'platypus-core');
-const distDir = path.resolve(process.env.PLATYPUS_FRONTEND_DIST ?? path.join(repo, 'frontend', 'dist'));
+const repo = path.resolve(import.meta.dirname, '..', '..', '..');
+const coreBinary = process.env.PLATYPUS_CORE ?? path.join(repo, 'apps', 'desktop', '.build', 'platypus-core');
+const distDir = path.resolve(process.env.PLATYPUS_FRONTEND_DIST ?? path.join(repo, 'apps', 'ui', 'dist'));
 // Set when the page comes from a Vite dev server (hot reload, looser CSP).
 const devURL = process.env.PLATYPUS_DEV_URL ? new URL(process.env.PLATYPUS_DEV_URL) : undefined;
 const devPort = devURL ? Number(devURL.port) : undefined;

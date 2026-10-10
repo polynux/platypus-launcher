@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Wails v2 (Go backend + WebKitGTK 4.1 webview) with React 18, Effect-TS, TypeScript, Tailwind CSS 4, Vite.
+Go core over stdio JSON-RPC, React 18 UI (Effect-TS, TypeScript, Tailwind CSS 4, Vite) in a desktop shell (Electron + Chromium).
 
 ## Users
 
@@ -26,7 +26,7 @@ Launcher-free installs: Platypus installs, updates and uninstalls owned games th
 
 ## Operating Context
 
-Linux desktop (WebKitGTK webview inside Wails), dark rooms, desktop sessions (Wayland/X11). Users often have Steam running simultaneously. Gaming sessions happen at night; the launcher is glanced at briefly between sessions and stared at during troubleshooting.
+Linux desktop (Chromium view inside the desktop shell), dark rooms, desktop sessions (Wayland/X11). Users often have Steam running simultaneously. Gaming sessions happen at night; the launcher is glanced at briefly between sessions and stared at during troubleshooting.
 
 ## Capabilities and Constraints
 

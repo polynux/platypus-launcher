@@ -1,6 +1,6 @@
 // `node scripts/run.mjs dev|start`: builds the Go core and the shell, then runs
-// Electron. `dev` serves the frontend from Vite (hot reload); `start` uses
-// frontend/dist (built if missing, or with --rebuild).
+// the desktop app. `dev` serves the UI from Vite (hot reload); `start` uses
+// apps/ui/dist (built if missing, or with --rebuild).
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
@@ -13,8 +13,8 @@ if (mode !== 'dev' && mode !== 'start') {
 }
 const rebuild = process.argv.includes('--rebuild');
 const here = path.resolve(import.meta.dirname, '..');
-const repo = path.resolve(here, '..');
-const frontend = path.join(repo, 'frontend');
+const repo = path.resolve(here, '..', '..');
+const frontend = path.join(repo, 'apps', 'ui');
 const run = (cmd, args, cwd, env = {}) => execFileSync(cmd, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } });
 
 // Electron: PLATYPUS_ELECTRON, else the npm package's download, else the system one.
@@ -78,7 +78,7 @@ if (mode === 'dev') {
   env.PLATYPUS_DEV_URL = `http://127.0.0.1:${port}`;
   env.PLATYPUS_DEVTOOLS = '1';
 } else if (rebuild || !existsSync(path.join(frontend, 'dist/index.html'))) {
-  console.log('» building the frontend');
+  console.log('» building the UI');
   run('bun', ['run', 'build'], frontend);
 }
 

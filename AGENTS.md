@@ -1,6 +1,18 @@
 # Platypus
 
-Linux game launcher (Wails v2 Go backend, React frontend) with store plugins over a versioned JSON-RPC protocol.
+Linux game launcher (Go core, React UI in a desktop shell) with store plugins over a versioned JSON-RPC protocol.
+
+## Repository layout
+
+- `cmd/platypus-core`: the core (the App without a window, over stdio JSON-RPC).
+- `cmd/gen-ts`: regenerates the UI's typed core bridge (`apps/ui/src/gen`).
+- `internal/…`: the App and its packages (plugins, jobs, sessions, runners, …).
+- `apps/ui`: the React + TypeScript UI (Effect-TS, Tailwind, Vite).
+- `apps/desktop`: the desktop shell (Electron + Chromium) around the core.
+- `plugins/`: store plugins and their install/scaffold scripts.
+- `packaging/`: icons and (later) the distributable build config.
+- `tools/design-lab`: the UI design mockup (dev server, port 5175).
+- `docs/`: user and contributor docs (`docs/electron.md` describes the shell).
 
 ## Agent skills
 

@@ -68,7 +68,7 @@ type Game struct {
 	IsInstalled bool         `json:"is_installed"`
 	Settings    GameSettings `json:"settings"`
 	// SettingsExtra carries saved per-game settings keys the backend
-	// doesn't model (frontend-only controls like sync_mode), so
+	// doesn't model (UI-only controls like sync_mode), so
 	// sideloaded games don't lose them in the emitted library (CORE-9).
 	SettingsExtra map[string]any `json:"settings_extra,omitempty"`
 	FixInfo       *GameFixInfo   `json:"fix_info,omitempty"`
@@ -173,7 +173,7 @@ type StorePlugin struct {
 	Requires    []PluginRequirement `json:"requires"`
 	// Capabilities is what the plugin offers right now: its last
 	// initialize's answer, or the declared list until it has run. UI
-	// surfaces test this, through the frontend's capability helper.
+	// surfaces test this, through the UI's capability helper.
 	Capabilities []string `json:"capabilities"`
 	// Declared is the manifest's list: the promise the user approved.
 	Declared []string `json:"declared"`

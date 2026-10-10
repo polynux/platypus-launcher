@@ -61,7 +61,7 @@ func (a *App) RepairGame(game types.Game) (types.Job, error) {
 }
 
 // verifyFolder checks a check or repair of game can run now, and returns the
-// folder it runs in: the one the library reports, not the frontend's copy.
+// folder it runs in: the one the library reports, not the UI's copy.
 func (a *App) verifyFolder(game types.Game) (string, error) {
 	if !game.IsInstalled {
 		return "", fmt.Errorf("%s is not installed", game.Title)

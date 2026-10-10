@@ -313,7 +313,7 @@ func (a *App) customGames() []types.Game {
 			Settings:    types.GameSettings{UseGameMode: true},
 		}
 		// Saved per-game settings win over the defaults. Keys the backend
-		// doesn't model (frontend-only controls like sync_mode) are kept
+		// doesn't model (UI-only controls like sync_mode) are kept
 		// opaquely so sideloaded games don't lose them (CORE-9).
 		if saved, ok := a.settings.GameSettings()[g.ID]; ok {
 			if data, err := json.Marshal(saved); err == nil {

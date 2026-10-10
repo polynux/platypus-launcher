@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "platypus-ui",
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {

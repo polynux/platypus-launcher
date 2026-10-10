@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  // Under the Electron shell (electron/scripts/run.mjs dev) the page is
+  // Under the desktop shell (apps/desktop/scripts/run.mjs dev) the page is
   // app://platypus and Vite sits behind it, so hot reload must dial Vite itself.
   server: process.env.PLATYPUS_VITE_PORT
     ? { hmr: { protocol: 'ws', host: '127.0.0.1', clientPort: Number(process.env.PLATYPUS_VITE_PORT) } }

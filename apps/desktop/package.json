@@ -1,10 +1,10 @@
 {
-  "name": "platypus-electron",
+  "name": "platypus-desktop",
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
   "type": "module",
-  "description": "Electron shell for the Platypus Go core (spike, issue #29)",
+  "description": "Desktop shell for the Platypus Go core (issue #29)",
   "main": "dist/main.cjs",
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -1,5 +1,5 @@
 // Runs in the sandboxed renderer before the page. It is the page's only way
-// out: the three calls of the bridge (frontend/src/effect/bridge.ts), each a
+// out: the three calls of the bridge (apps/ui/src/effect/bridge.ts), each a
 // message to the main process, which checks it.
 import { contextBridge, ipcRenderer } from 'electron';
 

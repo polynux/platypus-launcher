@@ -3,10 +3,16 @@ build/bin/
 build/windows/
 dist/
 
-# Node / Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+# Node (root workspace install + per-app installs)
+node_modules/
+apps/ui/node_modules/
+apps/ui/dist/
+apps/ui/.vite/
+apps/desktop/node_modules/
+apps/desktop/.build/
+apps/desktop/dist/
+tools/design-lab/node_modules/
+tools/design-lab/dist/
 
 # Go artifacts
 *.exe
@@ -23,10 +29,6 @@ Thumbs.db
 *.swp
 *~
 
-# Design lab
-design-lab/node_modules/
-design-lab/dist/
-
 # Impeccable working state
 .impeccable/
 
@@ -39,8 +41,4 @@ plugins/echo/bin/
 
 # Root build output
 /platypus
-
-# Electron shell
-electron/node_modules/
-electron/.build/
-electron/dist/
+/platypus-core
