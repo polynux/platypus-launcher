@@ -237,7 +237,8 @@ def library_list(_params):
             "title": title,
             "installed": app in installed,
             "installable": True,
-            "coverUrl": f"{img}_product_card_v2_mobile_slider_639_2.jpg" if img else "",
+            # The _2 (2x) variant answers 400 for some products; the 639 px one always exists and is plenty for a card.
+            "coverUrl": f"{img}_product_card_v2_mobile_slider_639.jpg" if img else "",
             "heroUrl": f"{img}_scaled_1366x768.jpg" if img else "",
             "bannerUrl": f"{img}.jpg" if img else "",
         }
