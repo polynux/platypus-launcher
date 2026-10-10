@@ -19,6 +19,12 @@ import (
 var assets embed.FS
 
 func main() {
+	// WebKitGTK's DMA-BUF renderer fails on some drivers (NVIDIA on Wayland:
+	// "Error 71 (Protocol error) dispatching to Wayland display"). GPU
+	// compositing still works without it, so turn it off unless the user chose.
+	if _, set := os.LookupEnv("WEBKIT_DISABLE_DMABUF_RENDERER"); !set {
+		_ = os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	}
 	// Create an instance of the app structure
 	app := NewApp()
 
@@ -69,8 +75,9 @@ func steamArt(next http.Handler) http.Handler {
 
 // gpuPolicy picks WebKitGTK's hardware acceleration. Always composites on the
 // GPU, so scrolling doesn't repaint the whole window on the CPU (a free-spinning
-// mouse wheel stutters otherwise). PLATYPUS_GPU=ondemand or never is the way
-// out on a driver where accelerated WebKitGTK shows a blank window.
+// mouse wheel stutters otherwise). Wails' own default, used before, is never.
+// PLATYPUS_GPU=never (or ondemand) is the way out on a driver where
+// accelerated WebKitGTK misbehaves.
 func gpuPolicy(v string) linux.WebviewGpuPolicy {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "ondemand", "on-demand":
