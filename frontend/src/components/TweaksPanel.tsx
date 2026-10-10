@@ -41,7 +41,7 @@ export function TweaksPanel({
         list.length === 0 ? null : (
           <div key={label} className="mt-3">
             <MonoLabel className="mb-1.5">{label}</MonoLabel>
-            <div className="space-y-1.5">
+            <div className="divide-y divide-white/[0.07]">
               {list.map((t) => {
                 const on = tweakApplied(game.settings, t);
                 return (
@@ -50,7 +50,7 @@ export function TweaksPanel({
                     role="switch"
                     aria-checked={on}
                     onClick={() => onChange(setTweak(game.settings, t, !on), `${on ? 'Removed' : 'Applied'} "${t.title}"`)}
-                    className={cx('flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ring-1 transition', on ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06] hover:bg-white/[0.04]')}
+                    className="flex w-full items-start gap-3 py-2.5 text-left transition hover:text-white"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-[12.5px] font-semibold text-white/90">{t.title}</span>

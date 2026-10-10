@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowDown, ArrowUp, Download, LogIn, Play, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, LogIn, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
@@ -82,7 +82,7 @@ function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {SORT_OPTIONS.map(([v, l]) => <SelectItem key={v || DEFAULT_SORT} value={v || DEFAULT_SORT}>{v ? l : 'sort: default'}</SelectItem>)}
+          {SORT_OPTIONS.map(([v, l]) => <SelectItem key={v || DEFAULT_SORT} value={v || DEFAULT_SORT}>{v ? l : 'default'}</SelectItem>)}
         </SelectContent>
       </Select>
       {sort && (
@@ -124,7 +124,7 @@ function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (
       <SelectContent>
         {TIER_FILTERS.map((t) => (
           <SelectItem key={t} value={t}>
-            {t === 'all' ? 'tier: all' : t === 'none' ? 'no rating' : t === 'native' ? 'native' : TIER_LABEL[t] ?? t}
+            {t === 'all' ? 'all' : t === 'none' ? 'no rating' : t === 'native' ? 'native' : TIER_LABEL[t] ?? t}
           </SelectItem>
         ))}
       </SelectContent>
@@ -159,6 +159,9 @@ export function LibraryView(p: LibraryProps) {
   // The filter is only in effect while the control shows: once the borrowed
   // games are gone (uninstalled, logged out) it would hide the whole library.
   const lendingFilter = hasBorrowed ? lending : 'all';
+  // The less-used filters sit behind the Filters toggle; the toggle counts the ones that are in effect.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const extraFilters = [p.ownership === 'owned', lendingFilter !== 'all', tier !== 'all', sort !== null].filter(Boolean).length;
   const q = p.search.trim().toLowerCase();
   const owned = p.games.length;
   const installedCount = p.games.filter((g) => g.is_installed).length;
@@ -186,14 +189,26 @@ export function LibraryView(p: LibraryProps) {
 
   return (
     <div className="p-7">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">Library</h1>
-          <p className="mt-0.5 text-[12.5px] tabular-nums text-white/50">
-            {filtered.length} shown · {installedCount} installed{owned > installedCount ? ` · ${owned} owned` : ''}
-            {p.lastScan ? ` · scanned ${clock(p.lastScan)}` : ''}
-          </p>
+      <header className="mb-6 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[23px] font-extrabold tracking-tight">Library</h1>
+            <p className="mt-0.5 text-[12.5px] tabular-nums text-white/50">
+              {filtered.length} shown · {installedCount} installed{owned > installedCount ? ` · ${owned} owned` : ''}
+              {p.lastScan ? ` · scanned ${clock(p.lastScan)}` : ''}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <FilterGroup label="view">
+              <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
+            </FilterGroup>
+            <Button variant="primary" onClick={p.onAddGame}>
+              <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
+            </Button>
+          </div>
         </div>
+
+        {/* One row: search, the store, and a Filters toggle for the less-used groups (each keeps its label). */}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative">
             <Input
@@ -221,28 +236,40 @@ export function LibraryView(p: LibraryProps) {
               </Tooltip>
             )}
           </div>
-          {owned > installedCount && (
-            <FilterGroup label="show">
-              <SegRow label="Show" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
-            </FilterGroup>
-          )}
           <FilterGroup label="store">
             <SegRow label="Store" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
           </FilterGroup>
-          {hasBorrowed && (
-            <FilterGroup label="family">
-              <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
-            </FilterGroup>
-          )}
-          <TierFilterControl value={tier} onChange={setTier} />
-          <SortControl sort={sort} onChange={setSort} />
-          <FilterGroup label="view">
-            <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
-          </FilterGroup>
-          <Button variant="primary" onClick={p.onAddGame}>
-            <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
+          <Button
+            variant="neutral"
+            aria-expanded={filtersOpen}
+            aria-controls="library-filters"
+            onClick={() => setFiltersOpen((o) => !o)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+            {extraFilters > 0 && <Badge variant="accent" className="h-5 rounded-full tracking-normal tabular-nums">{extraFilters}</Badge>}
           </Button>
         </div>
+
+        {filtersOpen && (
+          <div id="library-filters" className="flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
+            {owned > installedCount && (
+              <FilterGroup label="show">
+                <SegRow label="Show" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
+              </FilterGroup>
+            )}
+            {hasBorrowed && (
+              <FilterGroup label="family">
+                <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
+              </FilterGroup>
+            )}
+            <FilterGroup label="tier">
+              <TierFilterControl value={tier} onChange={setTier} />
+            </FilterGroup>
+            <FilterGroup label="sort">
+              <SortControl sort={sort} onChange={setSort} />
+            </FilterGroup>
+          </div>
+        )}
       </header>
 
       {p.warnings.length > 0 && (

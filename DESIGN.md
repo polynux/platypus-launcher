@@ -69,8 +69,9 @@ Read `PRODUCT.md` for product truth. Design summary:
 | **Game page** | Screenshots/summary/achievements by default; settings behind modal | click a game card |
 | **Settings modal** | Launcher settings for one game | "⚙ Launcher settings" |
 
-Secondary sidebar targets (Downloads, Achievements, Activity full log, Runners, Fix DB):
+Secondary sidebar targets (Downloads, Activity full log, Fixes, Runners, Plugins, Settings):
 build as simple stub views with honest empty states (§7.5) — do not fabricate content.
+The launcher-wide Settings view is reached from the sidebar footer, not the main nav (§4).
 
 ---
 
@@ -166,23 +167,34 @@ source of truth for controls. Import via `@/components/ds/<name>`. Never use nat
 | `Tooltip` (`TooltipProvider`, `Tooltip`, `TooltipTrigger`, `TooltipContent`) | Radix, 300ms delay | Icon-only buttons; wrap the app once in `TooltipProvider`. |
 | `Label`, `Separator` | mono micro-label; `bg-white/[0.07]` hairline | Form field captions; dividers. |
 
-## 4. Sidebar spec (w-56; fixed, never scrolls)
+## 4. Sidebar spec (w-56; brand, search and footer pinned; the nav and sources scroll when the window is short)
 
 1. **Brand:** 36px amber→rose gradient rounded-xl tile "P"; "Platypus" 15px extrabold;
    `GAME HUB` mono 11px `text-white/30`.
 2. **Search:** styled input with lucide `Search` icon absolute-left; `rounded-xl bg-white/[0.06] px-3.5 py-2.5 text-[12px] placeholder-white/30`. Live-filters library.
-3. **Nav** (12.5px semibold, `px-3 py-2 rounded-xl mb-0.5`): Dashboard, Library (count badge),
-   Downloads (badge only >0), Achievements, Activity. Active: `bg-amber-300/12 text-amber-200`.
-   Hover: `hover:bg-white/[0.05] hover:text-white`.
+3. **Nav** (12.5px semibold, `px-3 py-2 rounded-xl mb-0.5`), two groups:
+   - **Main:** Dashboard, Library (count badge), Downloads (badge only >0), Activity.
+   - **Tools** (collapsible; mono uppercase header with a chevron, `aria-expanded`): Fixes (count
+     badge when >0), Runners (count badge when >0), Plugins (amber dot when a plugin needs
+     attention). Items are indented. The open state is remembered per machine
+     (`platypus.sidebar.toolsOpen`) and starts closed, so the main group and sources fit a
+     1024×640 window. It opens by itself while a tool is the current view (not stored). While
+     closed, the header shows the summed badge and the attention dot, and amber text when a tool is the current view.
+   Active: `bg-amber-300/12 text-amber-200` + `aria-current="page"`. Hover: `hover:bg-white/[0.05] hover:text-white`.
+   Keyboard: every item is a native button in tab order; focus shows an amber `focus-visible` ring.
 4. **Sources:** mono `SOURCES` label; rows Steam/GOG/Epic — dot `h-1.5 w-1.5 bg-amber-300/50`,
    count mono `text-[11px] text-white/25`. Click → Library pre-filtered.
+   **Settings** is not in the nav: it sits in the footer above the account block, with the same
+   active state and `aria-current`.
 5. **Friends panel** (pinned `mt-auto`, **`flex-none`, fixed content** — this fixes the
    "friends list bugged" squeeze bug; never grows with content):
    - Header: `FRIENDS` mono + `● 2 online` `text-emerald-300`.
-   - Exactly 3 visible rows in `rounded-2xl bg-white/[0.05] p-2.5`: 32px avatar
-     `rounded-lg`, presence dot bottom-right with boxShadow ring; name 11.5px bold;
-     status mono 11px uppercase (in-game = `text-emerald-300/80` + game; away =
-     `text-white/30` + "away · 3h"). "See all friends" link if more. Real presence data
+   - Exactly 3 visible rows in `rounded-2xl bg-white/[0.05] p-2.5`: 24px avatar
+     `rounded-lg`, presence dot bottom-right with boxShadow ring. Each account row is two lines:
+     the account name on its own line (full width, truncated, full name as `title`), and below it
+     the store plus status in mono 11px uppercase `text-white/55` (in-game = `text-emerald-300/80` +
+     game; away = `text-white/30` + "away · 3h"). The store never takes width from the name.
+     "See all friends" link if more. Real presence data
      only — until friends/presence are real backend features, this panel is a **stub:
      render "Friends — coming soon" honest empty state** OR omit; do not fabricate.
      (The mockup shows fake friends; the app must not.)

@@ -7,11 +7,13 @@ import { NumberField } from '@/components/ds/number-field';
 import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
-import { MonoLabel, Panel } from './ui';
+import { MonoLabel } from './ui';
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
 import { ErrorNotice } from './ErrorNotice';
 
+/** A settings section: a hairline and air, not a card (no card inside the page). */
+const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface LauncherSettingsViewProps {
@@ -73,12 +75,12 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
   return (
     <div className="p-7">
-      <header className="mb-6">
+      <header className="mb-2">
         <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
         <p className="mt-0.5 text-[12.5px] text-white/50">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
       </header>
 
-      <Panel as="section" className="max-w-2xl">
+      <section className={SECTION}>
         <div className="mb-1 flex items-baseline justify-between gap-4">
           <h2 className="text-[14px] font-bold">Games folder</h2>
           {saved && <MonoLabel>{isDefault ? 'default' : 'custom'}</MonoLabel>}
@@ -118,11 +120,11 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
             </Button>
           )}
         </div>
-      </Panel>
+      </section>
 
       <GameFoldersSettings onNotify={onNotify} />
 
-      <Panel as="section" className="mt-4 max-w-2xl">
+      <section className={SECTION}>
         <h2 className="text-[14px] font-bold">Canceled downloads</h2>
         <p className="mb-4 text-[12.5px] leading-relaxed text-white/55">
           How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
@@ -155,7 +157,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         <div className="mt-2.5 flex min-h-4 items-center gap-4">
           {cleanupError ? <ErrorNotice message={cleanupError} fallback="Platypus couldn't clean up those folders." /> : <span />}
         </div>
-      </Panel>
+      </section>
 
       <RatingsSetting onNotify={onNotify} />
 
@@ -185,7 +187,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       .finally(() => setBusy(false));
   };
   return (
-    <Panel as="section" className="mt-4 max-w-2xl">
+    <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">Ratings, protection and anti-cheat data</h2>
@@ -200,6 +202,6 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
         <p>Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.</p>
         <p>Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet).</p>
       </div>
-    </Panel>
+    </section>
   );
 }

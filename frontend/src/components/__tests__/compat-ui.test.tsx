@@ -95,6 +95,7 @@ describe('Library tier filter', () => {
 
   it('shows native builds with their badge and narrows the grid by tier', () => {
     const { container, getByLabelText, getByRole, getAllByText } = lib(games);
+    fireEvent.click(getByRole('button', { name: /^Filters/ }));
     expect(shown(container)).toEqual(['plat', 'nat', 'none', 'bork']);
     expect(getAllByText('Native').length).toBe(1);
     fireEvent.pointerDown(getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
