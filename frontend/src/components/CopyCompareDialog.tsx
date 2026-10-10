@@ -33,7 +33,7 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
   return (
     <Modal label={`Compare copies of ${game.title}`} onClose={onClose} size="lg">
       <h2 className="text-[20px] font-extrabold tracking-tight">Compare copies</h2>
-      <p className="mt-1 text-[12.5px] text-white/55">
+      <p className="mt-1 text-[12.5px] text-white/70">
         {game.title} · compared with {baseline.owner_name}'s copy ({why})
       </p>
 
@@ -83,7 +83,7 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
           </tbody>
         </table>
         {rows.length === 0 && (
-          <p className="px-4 py-6 text-center text-[12.5px] text-white/55">
+          <p className="px-4 py-6 text-center text-[12.5px] text-white/70">
             {!differencesOnly ? 'No add-ons to show.' : soundtracks ? 'The copies have the same add-ons.' : 'No differences in the add-ons. Show soundtracks to see theirs.'}
           </p>
         )}

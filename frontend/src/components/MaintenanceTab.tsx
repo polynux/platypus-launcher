@@ -50,7 +50,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   if (active) {
     return (
       <div className="space-y-3">
-        <p className="text-[12.5px] text-white/55">{game.title} is busy; its files can't be changed until this finishes.</p>
+        <p className="text-[12.5px] text-white/70">{game.title} is busy; its files can't be changed until this finishes.</p>
         <JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} />
       </div>
     );

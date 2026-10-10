@@ -64,7 +64,7 @@ function FamiliesList({ plugin }: { plugin: StorePlugin }) {
       <MonoLabel>families</MonoLabel>
       {error && <ErrorNotice message={error} fallback="Platypus couldn't read the family members." />}
       {!error && members === null && <p className="font-mono text-hint text-white/55">loading…</p>}
-      {members && members.length === 0 && <p className="text-[12px] text-white/55">No family members on this account.</p>}
+      {members && members.length === 0 && <p className="text-[12px] text-white/70">No family members on this account.</p>}
       {members && members.length > 0 && (
         <ul aria-label="Family members" className="space-y-2">
           {members.map((m) => <MemberRow key={m.id} member={m} />)}

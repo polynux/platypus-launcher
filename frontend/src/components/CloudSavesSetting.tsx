@@ -16,7 +16,7 @@ export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
   return (
     <Panel as="section" className="mt-4 max-w-2xl">
       <h2 className="mb-1 text-[14px] font-bold">Cloud saves</h2>
-      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/55">
+      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
         Whether Platypus syncs each store's save files to its cloud. Each game can override its store's choice on its page.
       </p>
       <div className="space-y-4">

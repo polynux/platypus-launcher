@@ -142,7 +142,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       {!embedded && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? 'Version' : 'Choose a version'}</h2>
-          <p className="mt-1 text-[12.5px] text-white/55">
+          <p className="mt-1 text-[12.5px] text-white/70">
             {game.title} · {plugin.name}
           </p>
         </>
@@ -235,7 +235,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                   className="w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[12px] text-white placeholder-white/55 outline-none ring-amber-300/50 transition focus:ring-1"
                 />
               </label>
-              {info.manual.hint && <p className="mt-1 text-[12px] text-white/55">{info.manual.hint}</p>}
+              {info.manual.hint && <p className="mt-1 text-[12px] text-white/70">{info.manual.hint}</p>}
             </section>
           )}
 

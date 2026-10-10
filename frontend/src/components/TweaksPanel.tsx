@@ -28,7 +28,7 @@ export function TweaksPanel({
   ];
   const body = (
     <>
-      <p className="text-[12px] leading-relaxed text-white/55">
+      <p className="text-[12px] leading-relaxed text-white/70">
         Based on this machine, not the game's rating: a platinum game can still need them on your GPU.
         {viaSteam && (
           <>

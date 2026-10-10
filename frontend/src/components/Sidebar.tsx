@@ -100,7 +100,7 @@ export function Sidebar(p: SidebarProps) {
       className={cx(
         'mb-0.5 flex w-full items-center justify-between rounded-xl py-2 pr-3 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
         indent ? 'pl-7' : 'px-3',
-        active === n.key ? 'bg-amber-300/12 text-amber-200' : 'text-white/55 hover:bg-white/[0.05] hover:text-white'
+        active === n.key ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.05] hover:text-white'
       )}
     >
       <span>{n.label}</span>
@@ -181,7 +181,7 @@ export function Sidebar(p: SidebarProps) {
             <button
               key={s.key}
               onClick={() => p.onPickSource(s.key)}
-              className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] text-white/55 transition hover:bg-white/[0.04] hover:text-white"
+              className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] text-white/70 transition hover:bg-white/[0.04] hover:text-white"
             >
               <span className="flex items-center gap-2">
                 <span className={cx('h-1.5 w-1.5 rounded-full', count ? 'bg-amber-300/60' : 'bg-white/15')} />
@@ -208,7 +208,7 @@ export function Sidebar(p: SidebarProps) {
           aria-current={active === 'settings' ? 'page' : undefined}
           className={cx(
             'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
-            active === 'settings' ? 'bg-amber-300/12 text-amber-200' : 'text-white/55 hover:bg-white/[0.05] hover:text-white'
+            active === 'settings' ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.05] hover:text-white'
           )}
         >
           <Settings className="h-3.5 w-3.5" aria-hidden />
@@ -250,7 +250,7 @@ export function Sidebar(p: SidebarProps) {
             </div>
           );
         })}
-        <div className="px-1.5 font-mono text-[12px] text-white/55">
+        <div className="truncate px-1.5 font-mono text-[12px] text-white/55">
           platypus v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
       </div>

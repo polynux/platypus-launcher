@@ -381,7 +381,7 @@ export function GamePage(p: GamePageProps) {
             ) : details?.summary ? (
               <p className="text-[13px] leading-relaxed text-white/70">{details.summary}</p>
             ) : (
-              <p className="text-[13px] text-white/55">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
+              <p className="text-[13px] text-white/70">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
             )}
             {about.length > 0 && <p className="mt-3 font-mono text-[12px] text-white/55">{about.join('  ·  ')}</p>}
           </Panel>
@@ -605,7 +605,7 @@ function AchievementsSection({
           <div className="h-full rounded-full bg-amber-300" style={{ width: `${pct}%` }} />
         </div>
       ) : (
-        <p className="mb-4 text-[12px] text-white/55">
+        <p className="mb-4 text-[12px] text-white/70">
           {viaSteam
             ? "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here."
             : 'The store lists these achievements; your progress there isn\'t available to Platypus.'}

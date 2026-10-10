@@ -124,14 +124,14 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
 
   if (error && !view) return <SettingError message={error} />;
   if (!view) return null;
-  if (view.groups.length === 0) return emptyText ? <p className="text-[12.5px] text-white/55">{emptyText}</p> : null;
+  if (view.groups.length === 0) return emptyText ? <p className="text-[12.5px] text-white/70">{emptyText}</p> : null;
   const body = (
     <div className="space-y-4">
       {view.groups.map((g) => (
         <div key={g.id} className="space-y-2.5">
           <div>
             <MonoLabel>{g.label}</MonoLabel>
-            {g.description && <p className="mt-1 text-[12px] leading-relaxed text-white/55">{g.description}</p>}
+            {g.description && <p className="mt-1 text-[12px] leading-relaxed text-white/70">{g.description}</p>}
           </div>
           {g.fields.map((f) => (
             <div key={f.id} className="flex items-center justify-between gap-4">

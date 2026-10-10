@@ -115,7 +115,7 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Downloads</h1>
-          <p className="mt-0.5 text-[12.5px] text-white/55">
+          <p className="mt-0.5 text-[12.5px] text-white/70">
             Installs, updates and uninstalls run one at a time. A paused download keeps its data and resumes from there; an interrupted install resumes when Platypus starts again.
           </p>
         </div>

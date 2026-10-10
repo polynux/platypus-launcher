@@ -211,7 +211,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               </div>
             ) : (
               <div>
-                <p className="mb-2 text-[12px] leading-relaxed text-white/55">The Proton or Wine build that runs this Windows game.</p>
+                <p className="mb-2 text-[12px] leading-relaxed text-white/70">The Proton or Wine build that runs this Windows game.</p>
                 <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
                   <SelectItem value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</SelectItem>
                   {runnerMissing && <SelectItem value={selectedRunner}>{selectedRunner} (missing)</SelectItem>}
@@ -229,7 +229,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                       ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
                       : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
                 </div>
-                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/55">No Proton or Wine runners detected.</p>}
+                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/70">No Proton or Wine runners detected.</p>}
               </div>
             )}
             <AdvancedFold set={runnerSet}>
@@ -237,13 +237,13 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 <div>
                   <MonoLabel className="mb-1.5">sync</MonoLabel>
                   <SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.</p>
                 </div>
               )}
               {!native && (
                 <div>
                   <MonoLabel className="mb-2">proton flags</MonoLabel>
-                  <p className="mb-2 text-[12px] leading-relaxed text-white/55">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
+                  <p className="mb-2 text-[12px] leading-relaxed text-white/70">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
                   <div className="divide-y divide-white/[0.07]">
                     {PROTON_FLAGS.map((f) => {
                       const on = flags.includes(f.key);
@@ -283,14 +283,14 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 <div>
                   <MonoLabel className="mb-1.5">dx layer</MonoLabel>
                   <SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} />
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.</p>
                 </div>
                 <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
                 <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
                 <div>
                   <MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel>
                   <SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} />
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/55">DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0.</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0.</p>
                 </div>
               </div>
             </SettingGroup>
@@ -299,7 +299,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           <SettingGroup label="launch">
             <div>
               <MonoLabel className="mb-2">pipeline</MonoLabel>
-              <p className="mb-2 text-[12px] leading-relaxed text-white/55">Each switch wraps the launch command in one more program.</p>
+              <p className="mb-2 text-[12px] leading-relaxed text-white/70">Each switch wraps the launch command in one more program.</p>
               <div className="divide-y divide-white/[0.07]">
                 {([
                   ['use_gamemode', 'gamemode', 'Wrap the launch in gamemoderun'],
