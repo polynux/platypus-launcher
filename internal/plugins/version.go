@@ -171,8 +171,10 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // 1.2 adds cloud saves; 1.3 adds versions; 1.4 adds verify and move (and
 // game.relocated); 1.5 adds install options and DLC; 1.6 adds social
 // (friends and own status); 1.7 adds achievements, playtime and redeem; 1.8
-// adds family and plugin settings; 1.9 adds chat with friends (needs social).
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}}
+// adds family and plugin settings; 1.9 adds chat with friends (needs social);
+// 1.10 adds the compat fields of game.details (Steam AppID hint, platforms,
+// DRM facts).
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

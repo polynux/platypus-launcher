@@ -540,6 +540,44 @@ export interface LauncherSettings {
   /** How long a canceled download's partial data is kept before Hydra deletes
    *  it, in days; 0 deletes it right away. */
   cancel_cleanup_days: number;
+  /** "Fetch ratings online": absent from older backends, which means on. */
+  ratings_online?: boolean;
+}
+
+/** A ProtonDB summary as Hydra holds it (internal/types/compat.go). */
+export interface ProtonRating {
+  /** A medal Hydra shows, "" when there's no reliable one. */
+  tier: string;
+  confidence: string;
+  total: number;
+  /** Unix seconds: when ProtonDB answered. */
+  fetched_at: number;
+  stale?: boolean;
+  no_reports?: boolean;
+  few_reports?: boolean;
+  url: string;
+}
+
+/** One DRM or anti-cheat fact, with its source and when it was checked. */
+export interface CompatBadge {
+  kind: string;
+  label: string;
+  detail: string;
+  source: string;
+  /** Unix seconds. */
+  checked_at: number;
+}
+
+/** A game's compatibility and protection facts (GetGameCompat). */
+export interface Compat {
+  steam_app_id?: string;
+  steam_app_id_source?: 'user' | 'plugin' | 'steam' | '';
+  native: boolean;
+  protondb?: ProtonRating | null;
+  ratings_online: boolean;
+  drm: CompatBadge[] | null;
+  drm_notes?: string;
+  anticheat: CompatBadge[] | null;
 }
 
 export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak' | 'cloud';

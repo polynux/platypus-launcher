@@ -110,12 +110,16 @@ export function GetGameAchievements(arg1) {
   return window['go']['main']['App']['GetGameAchievements'](arg1);
 }
 
+export function GetGameCompat(arg1) {
+  return window['go']['main']['App']['GetGameCompat'](arg1);
+}
+
 export function GetGameDetails(arg1) {
   return window['go']['main']['App']['GetGameDetails'](arg1);
 }
 
-export function GetGameFix(arg1, arg2) {
-  return window['go']['main']['App']['GetGameFix'](arg1, arg2);
+export function GetGameFix(arg1) {
+  return window['go']['main']['App']['GetGameFix'](arg1);
 }
 
 export function GetGameFolders() {
@@ -354,6 +358,10 @@ export function SetCustomTitle(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetCustomTitle'](arg1, arg2, arg3);
 }
 
+export function SetGameSteamAppID(arg1, arg2) {
+  return window['go']['main']['App']['SetGameSteamAppID'](arg1, arg2);
+}
+
 export function SetGamesFolder(arg1) {
   return window['go']['main']['App']['SetGamesFolder'](arg1);
 }
@@ -368,6 +376,10 @@ export function SetPluginInstallFolder(arg1, arg2) {
 
 export function SetPreferredCopy(arg1, arg2) {
   return window['go']['main']['App']['SetPreferredCopy'](arg1, arg2);
+}
+
+export function SetRatingsOnline(arg1) {
+  return window['go']['main']['App']['SetRatingsOnline'](arg1);
 }
 
 export function SetSocialEnabled(arg1, arg2) {

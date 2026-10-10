@@ -403,6 +403,13 @@ func (s Suite) Conformance(t *testing.T) {
 	var rawDetails json.RawMessage
 	if err := sess.call("game.details", map[string]any{"id": game.StoreAppID}, &rawDetails); err == nil {
 		checkKeys(t, "game.details", rawDetails, DetailsKeys)
+		// The compat fields (protocol 1.10): drm is an object of its own.
+		var details map[string]json.RawMessage
+		if json.Unmarshal(rawDetails, &details) == nil {
+			if drm, ok := details["drm"]; ok {
+				checkKeys(t, "game.details drm", drm, DRMKeys)
+			}
+		}
 	}
 	if !s.NoUnknownDetails {
 		// An unknown id is an error (or the method is absent), never data or
@@ -797,7 +804,9 @@ var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
 		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
-		"releaseDate", "heroUrl", "achievements"}
+		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm"}
+	// The drm block of game.details (protocol 1.10, "Compat").
+	DRMKeys    = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "find", "startTimeout"}
 

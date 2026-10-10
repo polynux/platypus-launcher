@@ -1,4 +1,4 @@
-# Store plugin protocol (1.9, draft)
+# Store plugin protocol (1.10, draft)
 
 A store plugin is a folder in `~/.local/share/hydra/plugins/<id>/` with a
 `plugin.json` and an executable. Hydra starts the executable on demand and talks
@@ -408,7 +408,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Hydra speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Hydra. Hydra checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Hydra
@@ -434,9 +434,10 @@ that doesn't know it.
   capabilities (`family.members`, `family.setPreferredCopy`, `settings.schema`, `settings.apply`), `sharedBy`,
   `copies` and `preferredCopy` on library entries and the `family.warning` notification (see [Family](#family-18) and
   [Plugin settings](#plugin-settings-18)). 1.9: the `chat` capability (`chat.history`, `chat.send`, `chat.markRead`) and
-  the `chat.*` notifications (see [Chat](#chat-19)). A capability whose `since` is newer than the negotiated protocol is
+  the `chat.*` notifications (see [Chat](#chat-19)). 1.10: the compat fields of `game.details` (`steamAppId`,
+  `platforms`, `drm`; see [Compat](#compat-110)). A capability whose `since` is newer than the negotiated protocol is
   off for that plugin (Hydra drops it from the runtime set and logs it), so a plugin that only agreed to 1.1 never
-  receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8 or 1.9 method.
+  receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9 or 1.10 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -939,6 +940,41 @@ Message = { id, from: "self" | friendId, text, sentAt }
 - **Gating.** Hydra sends no chat method when `chat` is off for the plugin, when the negotiated protocol is older than
   1.9, or when the plugin doesn't offer `social`.
 - **Errors.** An unknown friend is `-32602`. A store that can't reach the friend answers an error, which Hydra shows.
+
+## Compat (1.10)
+
+Protocol 1.10 adds three optional fields to the answer of `game.details`. They
+are metadata for the launcher's compatibility facts: the ProtonDB rating of a
+game, its native Linux build, and the DRM facts the store states. No capability
+and no new method: a plugin sends the fields it knows, and Hydra reads them only
+from a plugin that negotiated 1.10 or later.
+
+```
+game.details { id } -> { ..., steamAppId?, platforms?, drm? }
+drm = { drmFree?, onlineRequired?, launcher?, denuvoLikely?, notes? }
+```
+
+- **steamAppId.** The game's Steam AppID, as a string of digits, when the store knows it (for example a GOG or Epic
+  game that is also on Steam). Hydra uses it to look up the ProtonDB rating. Hydra never matches a game by its title:
+  without a `steamAppId` a game has no rating, unless the user sets one in the game settings, which wins over this
+  hint. A value that isn't digits is ignored.
+- **platforms.** The store's platform names: `"linux"`, `"windows"`, `"macos"`. A game with `"linux"` is shown as a
+  native Linux game, not with a ProtonDB tier.
+- **drm.** Every field is optional, and a missing field is unknown: Hydra shows no badge for it, and never a guessed
+  one. `drmFree` true is "DRM-free"; `onlineRequired` true is "Online required"; `launcher` names the store launcher
+  the game runs through (`"ubisoft-connect"`, `"ea-app"`, or any other name, shown as written); `denuvoLikely` true is
+  "Denuvo likely", never "Denuvo", because it is an inference. `notes` is free text, shown on the game page.
+
+Mapping hints for plugins, from their own store fields:
+
+- Epic: `OwnershipToken` → `denuvoLikely`; `CanRunOffline` false → `onlineRequired`; `ThirdPartyManagedApp` →
+  `launcher`.
+- GOG: `drmFree` true by policy.
+
+- **Gating.** Hydra reads the compat fields only when the negotiated protocol is 1.10 or later. An older plugin's
+  `game.details` is read as before, and its compat fields are ignored.
+- **Anti-cheat** is not sent by plugins. Hydra gets it from the AreWeAntiCheatYet catalogue (MIT, credited in the
+  About view) and from the markers it finds in an installed game's folder.
 
 ## Out of scope
 

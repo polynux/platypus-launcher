@@ -24,6 +24,7 @@ import type {
   GameDetails,
   RedeemResult,
   GameFixInfo,
+  Compat,
   GameSettings,
   GameOptions,
   InstallChoices,
@@ -83,6 +84,11 @@ function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error
 // Games cross to Go with their structured settings folded into env_vars.
 const backend = (g: Game) => toBackendGame(g) as never;
 
+/** A compat answer with its lists present, whatever Go sent (nil slices arrive as null). */
+function normalizeCompat(c: Compat): Compat {
+  return { ...c, drm: c.drm ?? [], anticheat: c.anticheat ?? [] };
+}
+
 /** A customization with every field present, whatever Go sent. */
 function normalizeCustomization(c: unknown): Customization {
   const x = (c ?? {}) as Partial<Customization>;
@@ -110,13 +116,25 @@ export const LauncherApi = {
 
   previewCommand: (game: Game) => call<string>('PreviewLaunchCommand', () => App.PreviewLaunchCommand(backend(game))),
 
-  // Curated fix first, then ProtonDB summary (Steam ids only). Resolves null
-  // when neither has data.
+  // Curated fix first, then the ProtonDB tier (through the Steam AppID that
+  // applies to the game). Resolves null when neither has data worth showing.
   getGameFix: (game: Game) =>
     call<GameFixInfo | null>('GetGameFix', async () => {
-      const fix = (await App.GetGameFix(game.source === 'steam' ? game.store_app_id : '', game.title)) as unknown as GameFixInfo | null;
+      const fix = (await App.GetGameFix(backend(game))) as unknown as GameFixInfo | null;
       return fix && (fix.tier || fix.description) ? fix : null;
     }),
+
+  // Compatibility and protection facts: ProtonDB rating, native build, DRM and
+  // anti-cheat (internal/compat). Lists are normalized to [] at the edge.
+  getGameCompat: (game: Game) =>
+    call<Compat>('GetGameCompat', async () => normalizeCompat((await App.GetGameCompat(backend(game))) as unknown as Compat)),
+
+  // Saves the Steam AppID the user chose for a game's ratings ("" clears it).
+  setGameSteamAppID: (game: Game, appId: string) =>
+    call<Compat>('SetGameSteamAppID', async () => normalizeCompat((await App.SetGameSteamAppID(backend(game), appId)) as unknown as Compat)),
+
+  // The "Fetch ratings online" switch.
+  setRatingsOnline: (on: boolean) => call<LauncherSettings>('SetRatingsOnline', () => App.SetRatingsOnline(on)),
 
   // Summary, screenshots and achievements for the game page (Steam only).
   // Go marshals nil slices as null; normalize null lists to [] at the edge

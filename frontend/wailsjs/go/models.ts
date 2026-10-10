@@ -581,6 +581,97 @@ export namespace types {
 	    }
 	}
 	
+	export class CompatBadge {
+	    kind: string;
+	    label: string;
+	    detail: string;
+	    source: string;
+	    checked_at: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompatBadge(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.label = source["label"];
+	        this.detail = source["detail"];
+	        this.source = source["source"];
+	        this.checked_at = source["checked_at"];
+	    }
+	}
+	export class ProtonRating {
+	    tier: string;
+	    confidence: string;
+	    total: number;
+	    fetched_at: number;
+	    stale?: boolean;
+	    no_reports?: boolean;
+	    few_reports?: boolean;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProtonRating(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tier = source["tier"];
+	        this.confidence = source["confidence"];
+	        this.total = source["total"];
+	        this.fetched_at = source["fetched_at"];
+	        this.stale = source["stale"];
+	        this.no_reports = source["no_reports"];
+	        this.few_reports = source["few_reports"];
+	        this.url = source["url"];
+	    }
+	}
+	export class Compat {
+	    steam_app_id?: string;
+	    steam_app_id_source?: string;
+	    native: boolean;
+	    protondb?: ProtonRating;
+	    ratings_online: boolean;
+	    drm: CompatBadge[];
+	    drm_notes?: string;
+	    anticheat: CompatBadge[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Compat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.steam_app_id = source["steam_app_id"];
+	        this.steam_app_id_source = source["steam_app_id_source"];
+	        this.native = source["native"];
+	        this.protondb = this.convertValues(source["protondb"], ProtonRating);
+	        this.ratings_online = source["ratings_online"];
+	        this.drm = this.convertValues(source["drm"], CompatBadge);
+	        this.drm_notes = source["drm_notes"];
+	        this.anticheat = this.convertValues(source["anticheat"], CompatBadge);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class Customization {
 	    title: string;
 	    sort_title: string;
@@ -595,6 +686,26 @@ export namespace types {
 	        this.title = source["title"];
 	        this.sort_title = source["sort_title"];
 	        this.art = source["art"];
+	    }
+	}
+	export class DRM {
+	    drm_free?: boolean;
+	    online_required?: boolean;
+	    launcher?: string;
+	    denuvo_likely?: boolean;
+	    notes?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DRM(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.drm_free = source["drm_free"];
+	        this.online_required = source["online_required"];
+	        this.launcher = source["launcher"];
+	        this.denuvo_likely = source["denuvo_likely"];
+	        this.notes = source["notes"];
 	    }
 	}
 	export class FamilyMember {
@@ -870,6 +981,9 @@ export namespace types {
 	    release_date: string;
 	    hero_url?: string;
 	    achievements?: Achievements;
+	    steam_app_id?: string;
+	    platforms?: string[];
+	    drm?: DRM;
 	
 	    static createFrom(source: any = {}) {
 	        return new GameDetails(source);
@@ -885,6 +999,9 @@ export namespace types {
 	        this.release_date = source["release_date"];
 	        this.hero_url = source["hero_url"];
 	        this.achievements = this.convertValues(source["achievements"], Achievements);
+	        this.steam_app_id = source["steam_app_id"];
+	        this.platforms = source["platforms"];
+	        this.drm = this.convertValues(source["drm"], DRM);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1173,6 +1290,7 @@ export namespace types {
 	    games_folder: string;
 	    default_games_folder: string;
 	    cancel_cleanup_days: number;
+	    ratings_online: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new LauncherSettings(source);
@@ -1183,6 +1301,7 @@ export namespace types {
 	        this.games_folder = source["games_folder"];
 	        this.default_games_folder = source["default_games_folder"];
 	        this.cancel_cleanup_days = source["cancel_cleanup_days"];
+	        this.ratings_online = source["ratings_online"];
 	    }
 	}
 	export class LedgerEntry {
@@ -1313,6 +1432,7 @@ export namespace types {
 	        this.hint = source["hint"];
 	    }
 	}
+	
 	
 	export class ProtonVersion {
 	    id: string;

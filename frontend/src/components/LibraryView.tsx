@@ -4,6 +4,8 @@ import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugi
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
 import { Cover, EmptyState, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
+import { CompatChip } from './CompatBadges';
+import { TIER_FILTERS, TIER_LABEL, cardCompat, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
@@ -102,6 +104,24 @@ function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort
   );
 }
 
+/** Filters the library by compatibility: native builds, a ProtonDB tier, or none. */
+function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (v: TierFilter) => void }) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as TierFilter)}>
+      <SelectTrigger aria-label="Filter by tier" className="w-40 uppercase tracking-wider">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {TIER_FILTERS.map((t) => (
+          <SelectItem key={t} value={t}>
+            {t === 'all' ? 'tier: all' : t === 'none' ? 'no rating' : t === 'native' ? 'native' : TIER_LABEL[t] ?? t}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function jobLabel(j: Job): string {
   if (j.state === 'queued') return `${j.kind} queued`;
   return j.percent >= 0 ? `${j.kind === 'uninstall' ? 'removing' : 'installing'} ${Math.round(j.percent)}%` : j.phase ?? j.kind;
@@ -122,6 +142,7 @@ function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string
 
 export function LibraryView(p: LibraryProps) {
   const [sort, setSort] = useState<Sort | null>(null);
+  const [tier, setTier] = useState<TierFilter>('all');
   // Family: the games borrowed from a family member, when the library has any.
   const [lending, setLending] = useState<'all' | 'with-me'>('all');
   const hasBorrowed = p.games.some((g) => g.shared_by != null);
@@ -135,7 +156,12 @@ export function LibraryView(p: LibraryProps) {
   // A store can drop to zero games (logout, uninstall) while selected: its chip is gone, so show all.
   const source = sources.includes(p.source) ? p.source : 'all';
   const filtered = p.games.filter(
-    (g) => (p.ownership === 'owned' || g.is_installed) && (source === 'all' || g.store === source) && (lendingFilter === 'all' || g.shared_by != null) && g.title.toLowerCase().includes(q)
+    (g) =>
+      (p.ownership === 'owned' || g.is_installed) &&
+      (source === 'all' || g.store === source) &&
+      (lendingFilter === 'all' || g.shared_by != null) &&
+      (tier === 'all' || tierFilterValue(g) === tier) &&
+      g.title.toLowerCase().includes(q)
   );
   const jobOf = (g: Game) => p.jobs.find((j) => j.game_id === g.id);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
@@ -192,6 +218,7 @@ export function LibraryView(p: LibraryProps) {
           {hasBorrowed && (
             <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
           )}
+          <TierFilterControl value={tier} onChange={setTier} />
           <SortControl sort={sort} onChange={setSort} />
           <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
           <Button variant="primary" onClick={p.onAddGame}>
@@ -291,6 +318,7 @@ export function LibraryView(p: LibraryProps) {
                       <div className="truncate font-mono text-[11px] uppercase tracking-wider text-white/40">
                         {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.update_available && 'update'].filter(Boolean).join(' · ')}
                       </div>
+                      {cardCompat(g) && <CompatChip game={g} className="mt-1.5" />}
                     </div>
                   </button>
                 );
@@ -320,7 +348,7 @@ export function LibraryView(p: LibraryProps) {
               <SortHead k="last" label="last played" sort={sort} onSort={toggleSort} right />
             </div>
             {tableRows.map((g, i) => {
-              const tier = g.fix_info?.tier;
+              const tier = g.native ? 'native' : g.fix_info?.tier;
               return (
                 <div key={g.id} role="row" className={cx('grid items-center gap-3 px-4 py-2 transition hover:bg-amber-300/[0.05]', TABLE_COLS, i % 2 && 'bg-white/[0.015]')}>
                   <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />

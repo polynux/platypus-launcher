@@ -10,12 +10,15 @@ import { InstallOptionsDialog } from './InstallOptionsDialog';
 import { InstallDialog } from './InstallDialog';
 import { GameSettingsModal } from './GameSettingsModal';
 import { JobProgress } from './JobProgress';
+import { CompatFacts } from './CompatBadges';
+import { useCompat } from '../lib/useCompat';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
+import { TIER_LABEL, ratingLine } from '../lib/compat';
 import { normalizeSettings } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
@@ -155,6 +158,8 @@ export function GamePage(p: GamePageProps) {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
   const { details, error, loading } = useDetails(game);
+  // ProtonDB, native, DRM and anti-cheat facts (internal/compat); null while loading.
+  const { compat: info } = useCompat(game);
   const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
   const hero = useHero(game, details);
   useEffect(() => { setShot(0); setLightbox(false); setSettingsTab(null); setInstallTo(false); setOptionsOpen(false); }, [game.id]);
@@ -193,10 +198,26 @@ export function GamePage(p: GamePageProps) {
     ['DX layer', game.native ? 'not used' : s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
     ['Wrappers', [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || 'none'],
     ['Launch via', viaSteam ? 'Steam client' : plugin ? `Hydra · ${plugin.name}` : 'Hydra'],
+    [
+      'ProtonDB',
+      !info
+        ? '…'
+        : info.protondb
+          ? ratingLine(info.protondb)
+          : info.native
+            ? 'not rated · native build'
+            : info.steam_app_id
+              ? 'not fetched yet'
+              : 'no Steam AppID',
+    ],
   ];
   const compat = fix
     ? needsAttention(game) ? attentionReason(game) : fix.description
-    : 'No compatibility reports loaded for this title yet.';
+    : info?.protondb?.tier
+      ? `ProtonDB rates this title ${TIER_LABEL[info.protondb.tier] ?? info.protondb.tier}, from community reports.`
+      : info?.protondb?.no_reports
+        ? 'ProtonDB has no reports for this title.'
+        : 'No compatibility reports loaded for this title yet.';
 
   const about = [
     details?.genres?.length ? details.genres.slice(0, 3).join(' · ') : null,
@@ -380,13 +401,7 @@ export function GamePage(p: GamePageProps) {
                 </div>
               ))}
             </div>
-            {game.source === 'steam' && (
-              <Button asChild variant="link" size="sm" className="mt-3 flex w-full">
-                <a href={`https://www.protondb.com/app/${game.store_app_id}`} target="_blank" rel="noreferrer">
-                  protondb reports ↗
-                </a>
-              </Button>
-            )}
+            {info && <CompatFacts compat={info} />}
           </Panel>
 
           {isPluginGame(game) && game.is_installed && plugin && (

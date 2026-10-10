@@ -16,8 +16,8 @@ import (
 
 	"hydra-launcher/internal/chat"
 	"hydra-launcher/internal/cloudsync"
+	"hydra-launcher/internal/compat"
 	"hydra-launcher/internal/dataplug"
-	"hydra-launcher/internal/fixes"
 	"hydra-launcher/internal/jobs"
 	"hydra-launcher/internal/ledger"
 	"hydra-launcher/internal/plugins"
@@ -40,19 +40,21 @@ const (
 
 // App struct
 type App struct {
-	ctx          context.Context
-	stop         context.CancelFunc
-	plugins      *plugins.Manager
-	settings     *settings.Store
-	jobs         *jobs.Queue
-	fixesService *fixes.Service
-	stores       *stores.Registry
-	sessions     *session.Tracker
-	cloud        *cloudsync.Orchestrator
-	social       *social.Manager // friends lists of plugins with the social capability
-	chat         *chat.Manager   // conversations with friends (the chat capability, protocol 1.9)
-	socialMu     sync.Mutex
-	socialGames  map[string]socialGame // launched store games by Hydra game id, for "playing"
+	ctx      context.Context
+	stop     context.CancelFunc
+	plugins  *plugins.Manager
+	settings *settings.Store
+	jobs     *jobs.Queue
+	// compat is the ProtonDB, anti-cheat and install-marker metadata (app_compat.go).
+	compat      *compat.Service
+	compatHints compatHintCache
+	stores      *stores.Registry
+	sessions    *session.Tracker
+	cloud       *cloudsync.Orchestrator
+	social      *social.Manager // friends lists of plugins with the social capability
+	chat        *chat.Manager   // conversations with friends (the chat capability, protocol 1.9)
+	socialMu    sync.Mutex
+	socialGames map[string]socialGame // launched store games by Hydra game id, for "playing"
 	// familyEmit delivers family.warning notifications to the UI (the
 	// "family" event). Nil until the window exists; tests replace it.
 	familyEmit func(types.FamilyWarning)
@@ -81,7 +83,7 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	a := &App{fixesService: fixes.NewService(), data: dataplug.NewRegistry()}
+	a := &App{data: dataplug.NewRegistry()}
 	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
 	return a
 }
@@ -108,6 +110,14 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		// Open still returns usable defaults.
 		wruntime.LogErrorf(ctx, "settings: %v", err)
+	}
+
+	a.compat, err = newCompatService(dataDir, a.settings)
+	if err != nil {
+		wruntime.LogErrorf(ctx, "compat: %v", err)
+	}
+	if a.compat != nil {
+		a.compat.Warn = func(format string, args ...any) { wruntime.LogWarningf(ctx, "compat: "+format, args...) }
 	}
 
 	if err := a.openCustomization(dataDir); err != nil {
@@ -383,18 +393,6 @@ func sourceWarning(source string, err error) types.SourceWarning {
 		NeedsAuth:   plugins.IsAuthRequired(err),
 		Unavailable: plugins.IsUnavailable(err),
 	}
-}
-
-// GetGameFix returns the curated fix from data plugins, or a live ProtonDB
-// summary for a game without one.
-func (a *App) GetGameFix(storeAppID string, title string) *types.GameFixInfo {
-	if fix := a.data.Fix(title, storeAppID); fix != nil {
-		return fix
-	}
-	if fix, err := a.fixesService.FetchProtonDBFix(storeAppID); err == nil {
-		return fix
-	}
-	return nil
 }
 
 // GetGameDetails returns summary, screenshots and achievements for the game
@@ -687,6 +685,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		GamesFolder:        a.settings.GamesFolder(),
 		DefaultGamesFolder: settings.DefaultGamesFolder(),
 		CancelCleanupDays:  a.settings.CancelCleanupDays(),
+		RatingsOnline:      a.settings.RatingsOnline(),
 	}
 }
 

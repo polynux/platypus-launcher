@@ -58,9 +58,11 @@ export function GetFamilyMembers(arg1:string):Promise<Array<types.FamilyMember>>
 
 export function GetGameAchievements(arg1:types.Game):Promise<types.AchievementProgress>;
 
+export function GetGameCompat(arg1:types.Game):Promise<types.Compat>;
+
 export function GetGameDetails(arg1:types.Game):Promise<types.GameDetails>;
 
-export function GetGameFix(arg1:string,arg2:string):Promise<types.GameFixInfo>;
+export function GetGameFix(arg1:types.Game):Promise<types.GameFixInfo>;
 
 export function GetGameFolders():Promise<Array<types.GameFolder>>;
 
@@ -180,6 +182,8 @@ export function SetCustomArt(arg1:string,arg2:string,arg3:string):Promise<types.
 
 export function SetCustomTitle(arg1:string,arg2:string,arg3:string):Promise<types.Customization>;
 
+export function SetGameSteamAppID(arg1:types.Game,arg2:string):Promise<types.Compat>;
+
 export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;
 
 export function SetPluginEnabled(arg1:string,arg2:boolean):Promise<void>;
@@ -187,6 +191,8 @@ export function SetPluginEnabled(arg1:string,arg2:boolean):Promise<void>;
 export function SetPluginInstallFolder(arg1:string,arg2:string):Promise<void>;
 
 export function SetPreferredCopy(arg1:types.Game,arg2:string):Promise<void>;
+
+export function SetRatingsOnline(arg1:boolean):Promise<types.LauncherSettings>;
 
 export function SetSocialEnabled(arg1:string,arg2:boolean):Promise<void>;
 
