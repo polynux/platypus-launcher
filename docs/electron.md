@@ -61,10 +61,12 @@ The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GTK/WebKit l
 
 ## What the spike does not do
 
-- Types: the frontend still uses `frontend/wailsjs/go/models.ts` and the
-  generated `App.d.ts` (kept current with `wails generate module`). A proper
-  generator should emit TS from the Go structs and the method list that
-  `initialize` already returns.
+- Types: the Electron path is typed by `go run ./cmd/gen-ts`, which reflects
+  over the App's exported methods and the structs they exchange
+  (`internal/gents`) into `frontend/src/gen/` (checked in; a Go test fails
+  when it is stale). The Wails path still uses `frontend/wailsjs/go/models.ts`
+  and the generated `App.d.ts` (kept current with `wails generate module`)
+  until step 2 removes it.
 - Packaging (electron-builder / AppImage), auto-update, a menu, the window
   icon, remembering window size/position.
 - Event delivery when no window is open (events are dropped, as in Wails).

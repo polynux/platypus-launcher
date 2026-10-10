@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, backendAvailable, onEvent } from './bridge';
+import { coreMethods } from '../gen/api';
 
 vi.mock('../../wailsjs/go/main/App', () => ({ GetLibrary: vi.fn(async () => 'wails') }));
 vi.mock('../../wailsjs/runtime/runtime', () => ({ BrowserOpenURL: vi.fn(), EventsOn: vi.fn(() => () => {}) }));
@@ -24,6 +25,12 @@ describe('backend bridge', () => {
 
   it('without the bridge, methods are the Wails bindings', async () => {
     await expect(App.GetLibrary()).resolves.toBe('wails');
+  });
+
+  it('the generated method list covers the bridge surface', () => {
+    for (const name of ['GetLibrary', 'LaunchGame', 'ListJobs', 'GetGameSettings', 'ChatOpen', 'SocialViews'] as const) {
+      expect(coreMethods).toContain(name);
+    }
   });
 
   it('under Electron, events come from the bridge', () => {
