@@ -55,10 +55,10 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
             <Badge variant="bronze" className="bg-orange-400 text-[#130f0a]">
               {hero.fix_info?.source === 'protondb' ? 'needs attention' : 'fix available'}
             </Badge>
-            <h2 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
+            <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
               {hero.fix_info?.source === 'protondb' ? `${hero.title} may need tweaks` : `${hero.title} has a community fix`}
-            </h2>
-            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/60">{attentionReason(hero)}</p>
+            </h1>
+            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/70">{attentionReason(hero)}</p>
             <div className="mt-3.5 flex gap-2.5">
               <Button variant="primary" onClick={() => onOpenGame(hero.id)}>Open game</Button>
               <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>Later</Button>
@@ -115,7 +115,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <div>
             <h2 className="mb-2.5 text-[15px] font-bold">Waiting on you</h2>
             {waiting.length === 0 ? (
-              <p className="rounded-2xl bg-white/[0.03] p-4 text-[12px] text-white/55 ring-1 ring-white/[0.05]">
+              <p className="rounded-2xl bg-white/[0.03] p-4 text-[12px] text-white/70 ring-1 ring-white/[0.05]">
                 Nothing needs attention. Curated fixes and low ProtonDB ratings show up here.
               </p>
             ) : (
@@ -130,7 +130,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
                       {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/55">{attentionReason(g)}</p>
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/70">{attentionReason(g)}</p>
                   </button>
                 ))}
                 {waiting.length > 3 && (

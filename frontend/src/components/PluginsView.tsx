@@ -102,7 +102,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">Plugins</h1>
-          <p className="mt-0.5 max-w-xl text-[12.5px] text-white/55">
+          <p className="mt-0.5 max-w-xl text-[12.5px] text-white/70">
             Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.
           </p>
         </div>
@@ -132,7 +132,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 <div>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
+                      <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
                       <p className="font-mono text-hint text-white/55">
                         v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
                       </p>
@@ -158,7 +158,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         {r.hint && <> · <span className="select-text">{r.hint}</span></>}
                       </div>
                     ))}
-                    <p className="mt-1.5 text-[12px] text-white/55">Then rescan.</p>
+                    <p className="mt-1.5 text-[12px] text-white/70">Then rescan.</p>
                   </div>
                 )}
 
@@ -267,7 +267,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   <Panel key={p.id} className="flex flex-col gap-2">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <h3 className="truncate text-[14px] font-bold">{p.name}</h3>
+                        <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
                         <p className="font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
                       </div>
                       <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
@@ -277,7 +277,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                     {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
-                      <p className="mt-auto text-[12px] text-white/55">
+                      <p className="mt-auto text-[12px] text-white/70">
                         JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.
                       </p>
                     )}
@@ -526,7 +526,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
-        <p className="mt-1 text-[12px] text-white/55">Your login stays with {plugin.name}'s own tool; Platypus doesn't store it.</p>
+        <p className="mt-1 text-[12px] text-white/70">Your login stays with {plugin.name}'s own tool; Platypus doesn't store it.</p>
         {!prompt && !error && (
           <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/55"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
         )}
