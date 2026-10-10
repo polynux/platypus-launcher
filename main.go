@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 )
 
 //go:embed all:frontend/dist
@@ -30,6 +32,7 @@ func main() {
 			Middleware: assetserver.ChainMiddleware(steamArt, app.customArt),
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		Linux:            &linux.Options{WebviewGpuPolicy: gpuPolicy(os.Getenv("PLATYPUS_GPU"))},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
@@ -62,4 +65,19 @@ func steamArt(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "max-age=86400")
 		http.ServeFile(w, r, filepath.Join(root, "appcache/librarycache", clean))
 	})
+}
+
+// gpuPolicy picks WebKitGTK's hardware acceleration. Always composites on the
+// GPU, so scrolling doesn't repaint the whole window on the CPU (a free-spinning
+// mouse wheel stutters otherwise). PLATYPUS_GPU=ondemand or never is the way
+// out on a driver where accelerated WebKitGTK shows a blank window.
+func gpuPolicy(v string) linux.WebviewGpuPolicy {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "ondemand", "on-demand":
+		return linux.WebviewGpuPolicyOnDemand
+	case "never", "off":
+		return linux.WebviewGpuPolicyNever
+	default:
+		return linux.WebviewGpuPolicyAlways
+	}
 }
