@@ -71,7 +71,7 @@ export function SteamAppIdField({ game }: { game: Game }) {
           Save
         </Button>
       </form>
-      <p className="mt-2 text-[12px] leading-relaxed text-white/55">
+      <p className="mt-2 text-[12px] leading-relaxed text-white/70">
         {effective
           ? `Currently ${effective} (${appIdSourceLabel(compat?.steam_app_id_source)}).`
           : 'No Steam AppID for this game, so there is no ProtonDB rating.'}{' '}

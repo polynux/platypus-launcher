@@ -145,7 +145,7 @@ export function EmptyState({ label, children, action }: { label: string; childre
   return (
     <div className="rounded-3xl border border-dashed border-white/15 p-10 text-center">
       <MonoLabel>{label}</MonoLabel>
-      <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-white/55">{children}</p>
+      <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-white/70">{children}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -169,7 +169,7 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
   if (!current) {
     return (
       <div className={cx('grid place-items-center bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-3 text-center', className)}>
-        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/55">{title}</span>
+        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/85">{title}</span>
       </div>
     );
   }

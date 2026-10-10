@@ -46,7 +46,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
   return (
     <Modal label={`Terms for ${game.title}`} onClose={onCancel} size="md" dismissable={!busy}>
       <h2 className="text-[20px] font-extrabold tracking-tight">Terms for {game.title}</h2>
-      <p className="mt-1 text-[12.5px] text-white/55">
+      <p className="mt-1 text-[12.5px] text-white/70">
         Read these before {game.title} is installed. Platypus doesn't accept them for you.
       </p>
 

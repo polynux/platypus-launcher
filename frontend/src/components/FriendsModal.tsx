@@ -108,7 +108,7 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
       </header>
 
       {!view.enabled ? (
-        <p className="text-[12.5px] text-white/55">Friends are off for {label}. Turn them on to see who is online.</p>
+        <p className="text-[12.5px] text-white/70">Friends are off for {label}. Turn them on to see who is online.</p>
       ) : (
         <>
           {line && (
@@ -163,7 +163,7 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
           )}
 
           {total === 0 && (
-            <p className="text-[12.5px] text-white/55">
+            <p className="text-[12.5px] text-white/70">
               {view.friends.length === 0 ? `No friends on ${label} yet.` : `No friends match “${query.trim()}”.`}
             </p>
           )}

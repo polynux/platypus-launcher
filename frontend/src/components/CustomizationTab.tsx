@@ -79,7 +79,7 @@ export function CustomizationTab({ game, onChanged }: {
 
   return (
     <div className="space-y-6">
-      <p className="text-[12.5px] leading-relaxed text-white/55">
+      <p className="text-[12.5px] leading-relaxed text-white/70">
         Change how {storeTitle} looks in Platypus. Images are copied into Platypus's own folder, so the file you pick can move or go.
         This stays on this computer and never reaches the store.
       </p>

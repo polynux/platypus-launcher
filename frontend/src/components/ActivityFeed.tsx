@@ -6,7 +6,7 @@ import { Panel, EVENT_DOT, EVENT_TEXT, clock, cx } from './ui';
 export function ActivityFeed({ events, limit }: { events: ActivityEvent[]; limit?: number }) {
   const rows = limit ? events.slice(0, limit) : events;
   if (rows.length === 0) {
-    return <p className="py-3 text-[12.5px] text-white/55">Nothing yet this session. Launches, scans and setting changes show up here.</p>;
+    return <p className="py-3 text-[12.5px] text-white/70">Nothing yet this session. Launches, scans and setting changes show up here.</p>;
   }
   return (
     <ul className="divide-y divide-white/[0.05]">

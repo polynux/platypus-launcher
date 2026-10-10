@@ -114,7 +114,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       {!embedded && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? 'Install options' : 'Add-ons & options'}</h2>
-          <p className="mt-1 text-[12.5px] text-white/55">
+          <p className="mt-1 text-[12.5px] text-white/70">
             {game.title} · {plugin.name}
           </p>
         </>

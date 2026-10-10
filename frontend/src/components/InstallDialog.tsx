@@ -51,7 +51,7 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
   return (
     <Modal label={`Install ${game.title}`} onClose={onClose} size="md" dismissable={!busy}>
       <h2 className="text-[20px] font-extrabold tracking-tight">Install {game.title}</h2>
-      <p className="mt-1 text-[12.5px] text-white/55">{plugin.name}</p>
+      <p className="mt-1 text-[12.5px] text-white/70">{plugin.name}</p>
 
       <div className="mt-5 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-hint">
         <div className="flex justify-between gap-4">

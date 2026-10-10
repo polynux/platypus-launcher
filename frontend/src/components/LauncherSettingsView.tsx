@@ -77,7 +77,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <div className="p-7">
       <header className="mb-2">
         <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/55">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
+        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
       </header>
 
       <section className={SECTION}>
@@ -85,7 +85,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
           <h2 className="text-[14px] font-bold">Games folder</h2>
           {saved && <MonoLabel>{isDefault ? 'default' : 'custom'}</MonoLabel>}
         </div>
-        <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/55">
+        <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
           Store plugins install games here, each in its own subfolder, for example{' '}
           <span className="font-mono text-hint text-white/75">{(saved?.games_folder ?? '~/Games') + '/epic'}</span>. Steam keeps using its own
           library folders.
@@ -126,7 +126,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
       <section className={SECTION}>
         <h2 className="text-[14px] font-bold">Canceled downloads</h2>
-        <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/55">
+        <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
           How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
           time. 0 deletes it right away; a paused download is never touched.
         </p>
@@ -191,7 +191,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">Ratings, protection and anti-cheat data</h2>
-          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/55">
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
             Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.
           </p>
         </div>

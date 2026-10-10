@@ -101,9 +101,9 @@ export function ChatPanel(p: ChatPanelProps) {
             <LinkButton onClick={p.onLoadOlder}>Load older messages</LinkButton>
           </div>
         )}
-        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/55">Loading…</p>}
+        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/70">Loading…</p>}
         {p.view?.loaded && messages.length === 0 && (
-          <p className="text-[12.5px] text-white/55">No messages yet. Say hello.</p>
+          <p className="text-[12.5px] text-white/70">No messages yet. Say hello.</p>
         )}
         {messages.map((m) => (
           <MessageRow key={messageKey(m)} message={m} onResend={p.onResend} />

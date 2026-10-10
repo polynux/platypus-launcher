@@ -61,7 +61,7 @@ export function CompatFacts({ compat }: { compat: Compat }) {
               {anticheat.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
-          {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/55">{compat.drm_notes}</p>}
+          {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/70">{compat.drm_notes}</p>}
         </div>
       ) : (
         <p className="font-mono text-hint text-white/55">No DRM or anti-cheat reported for this game.</p>
