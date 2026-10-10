@@ -40,8 +40,6 @@ export function CheckMove(arg1:types.Game,arg2:string):Promise<types.MoveCheck>;
 
 export function ChooseGameFolder():Promise<string>;
 
-export function ChooseGamesFolder():Promise<string>;
-
 export function ChoosePluginInstallFolder(arg1:string):Promise<string>;
 
 export function ClearFinishedJobs():Promise<void>;
@@ -116,6 +114,8 @@ export function ListSessions():Promise<Array<types.SessionEvent>>;
 
 export function ListStorePlugins():Promise<Array<types.StorePlugin>>;
 
+export function MakeDefaultGameFolder(arg1:string):Promise<Array<types.GameFolder>>;
+
 export function MoveGame(arg1:types.Game,arg2:string):Promise<types.Job>;
 
 export function OpenPluginsFolder():Promise<void>;
@@ -187,8 +187,6 @@ export function SetCustomArt(arg1:string,arg2:string,arg3:string):Promise<types.
 export function SetCustomTitle(arg1:string,arg2:string,arg3:string):Promise<types.Customization>;
 
 export function SetGameSteamAppID(arg1:types.Game,arg2:string):Promise<types.Compat>;
-
-export function SetGamesFolder(arg1:string):Promise<types.LauncherSettings>;
 
 export function SetPluginEnabled(arg1:string,arg2:boolean):Promise<void>;
 

@@ -74,10 +74,6 @@ export function ChooseGameFolder() {
   return window['go']['main']['App']['ChooseGameFolder']();
 }
 
-export function ChooseGamesFolder() {
-  return window['go']['main']['App']['ChooseGamesFolder']();
-}
-
 export function ChoosePluginInstallFolder(arg1) {
   return window['go']['main']['App']['ChoosePluginInstallFolder'](arg1);
 }
@@ -226,6 +222,10 @@ export function ListStorePlugins() {
   return window['go']['main']['App']['ListStorePlugins']();
 }
 
+export function MakeDefaultGameFolder(arg1) {
+  return window['go']['main']['App']['MakeDefaultGameFolder'](arg1);
+}
+
 export function MoveGame(arg1, arg2) {
   return window['go']['main']['App']['MoveGame'](arg1, arg2);
 }
@@ -368,10 +368,6 @@ export function SetCustomTitle(arg1, arg2, arg3) {
 
 export function SetGameSteamAppID(arg1, arg2) {
   return window['go']['main']['App']['SetGameSteamAppID'](arg1, arg2);
-}
-
-export function SetGamesFolder(arg1) {
-  return window['go']['main']['App']['SetGamesFolder'](arg1);
 }
 
 export function SetPluginEnabled(arg1, arg2) {

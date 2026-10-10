@@ -16,7 +16,9 @@ import (
 	"platypus/internal/types"
 )
 
-const fileVersion = 1
+// fileVersion 2 keeps the game folders in one list, the default first (see
+// installfolders.go). Version 1 kept the default in games_folder.
+const fileVersion = 2
 
 // PluginState is what the user decided for a store plugin. Hash pins the
 // plugin's executable: if it changes, the plugin stays disabled until the user
@@ -32,8 +34,10 @@ type PluginState struct {
 }
 
 type file struct {
-	Version     int    `json:"version"`
-	GamesFolder string `json:"games_folder,omitempty"` // "" = DefaultGamesFolder
+	Version int `json:"version"`
+	// GamesFolder is version 1's default game folder. Version 2 keeps it in
+	// GameFolders; it is read once, by migrate.
+	GamesFolder string `json:"games_folder,omitempty"`
 	// Per-game settings exactly as the UI saved them, so fields the backend
 	// doesn't model (sync mode, winetricks, …) survive a restart.
 	Games   map[string]map[string]any `json:"games,omitempty"`
@@ -73,9 +77,9 @@ type file struct {
 	// PluginSettings are each plugin's plugin-wide settings values, and
 	// PluginGameSettings each game's per-game values (the `settings`
 	// capability, see plugin_settings.go). Values never hold secrets.
-	// GameFolders are extra library folders to install into, besides the Games
-	// folder; RecentInstall the folders games were last installed into by hand,
-	// newest first (see installfolders.go).
+	// GameFolders are the game folders, the default first: where installs go,
+	// then the library folders (see installfolders.go). RecentInstall the
+	// folders games were last installed into by hand, newest first.
 	GameFolders        []string                    `json:"game_folders,omitempty"`
 	RecentInstall      []string                    `json:"recent_install_folders,omitempty"`
 	PluginSettings     map[string]map[string]any   `json:"plugin_settings,omitempty"`
@@ -131,6 +135,7 @@ func Open(path string) (*Store, error) {
 		s.data = file{}
 		return s, fmt.Errorf("settings file is corrupt, moved to %s: %w", bad, err)
 	}
+	s.migrate()
 	return s, nil
 }
 
@@ -143,54 +148,6 @@ func DefaultGamesFolder() string {
 	return filepath.Join(home, "Games")
 }
 
-// GamesFolder is the base folder store plugins install into, each in its own
-// subfolder.
-func (s *Store) GamesFolder() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.data.GamesFolder == "" {
-		return DefaultGamesFolder()
-	}
-	return s.data.GamesFolder
-}
-
-// SetGamesFolder validates and saves the Games folder. "~/" is expanded and an
-// empty path resets to the default. The folder doesn't have to exist yet; it
-// is created on the first install.
-func (s *Store) SetGamesFolder(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "~" || strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("cannot determine home directory: %w", err)
-		}
-		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
-	}
-	if path != "" {
-		if !filepath.IsAbs(path) {
-			return "", fmt.Errorf("games folder must be an absolute path, got %q", path)
-		}
-		path = filepath.Clean(path)
-		if st, err := os.Stat(path); err == nil && !st.IsDir() {
-			return "", fmt.Errorf("%s is a file, not a folder", path)
-		}
-		if path == DefaultGamesFolder() {
-			path = ""
-		}
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	prev := s.data.GamesFolder
-	s.data.GamesFolder = path
-	if err := s.save(); err != nil {
-		s.data.GamesFolder = prev
-		return "", err
-	}
-	if path == "" {
-		return DefaultGamesFolder(), nil
-	}
-	return path, nil
-}
 
 // Canceled downloads keep their partial data this many days by default.
 const (

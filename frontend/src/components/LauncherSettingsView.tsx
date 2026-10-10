@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
-import { FolderOpen } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings, StorePlugin } from '../types';
 import { NumberField } from '@/components/ds/number-field';
 import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
-import { Input } from '@/components/ds/input';
-import { MonoLabel } from './ui';
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
 import { ErrorNotice } from './ErrorNotice';
@@ -24,7 +21,6 @@ interface LauncherSettingsViewProps {
 
 export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
-  const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cleanupDays, setCleanupDays] = useState<number | ''>('');
@@ -32,28 +28,9 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
   useEffect(() => {
     Effect.runPromise(LauncherApi.getLauncherSettings())
-      .then((s) => { setSaved(s); setDraft(s.games_folder); setCleanupDays(s.cancel_cleanup_days); })
+      .then((s) => { setSaved(s); setCleanupDays(s.cancel_cleanup_days); })
       .catch((e) => setError(errMsg(e)));
   }, []);
-
-  const save = (path: string) => {
-    setBusy(true);
-    setError(null);
-    Effect.runPromise(LauncherApi.setGamesFolder(path))
-      .then((s) => {
-        setSaved(s);
-        setDraft(s.games_folder);
-        onNotify('Games folder saved');
-      })
-      .catch((e) => setError(errMsg(e)))
-      .finally(() => setBusy(false));
-  };
-
-  const browse = () => {
-    Effect.runPromise(LauncherApi.chooseGamesFolder())
-      .then((path) => { if (path) save(path); })
-      .catch((e) => onNotify(errMsg(e), 'err'));
-  };
 
   const saveCleanupDays = (days: number) => {
     setBusy(true);
@@ -70,57 +47,13 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
   const cleanupDirty = saved != null && typeof cleanupDays === 'number' && cleanupDays !== saved.cancel_cleanup_days;
 
-  const dirty = saved != null && draft.trim() !== saved.games_folder;
-  const isDefault = saved != null && saved.games_folder === saved.default_games_folder;
-
   return (
     <div className="p-7">
       <header className="mb-2">
         <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
         <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
       </header>
-
-      <section className={SECTION}>
-        <div className="mb-1 flex items-baseline justify-between gap-4">
-          <h2 className="text-[14px] font-bold">Games folder</h2>
-          {saved && <MonoLabel>{isDefault ? 'default' : 'custom'}</MonoLabel>}
-        </div>
-        <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-          Store plugins install games here, each in its own subfolder, for example{' '}
-          <span className="font-mono text-hint text-white/75">{(saved?.games_folder ?? '~/Games') + '/epic'}</span>. Steam keeps using its own
-          library folders.
-        </p>
-
-        <form
-          className="flex flex-wrap gap-2"
-          onSubmit={(e) => { e.preventDefault(); if (dirty) save(draft); }}
-        >
-          <label className="min-w-64 flex-1">
-            <span className="sr-only">Games folder path</span>
-            <Input
-              value={draft}
-              onChange={(e) => { setDraft(e.target.value); setError(null); }}
-              placeholder={saved?.default_games_folder ?? '~/Games'}
-              spellCheck={false}
-              disabled={!saved}
-              aria-invalid={error != null}
-            />
-          </label>
-          <Button variant="neutral" onClick={browse} disabled={!saved || busy}>
-            <FolderOpen className="size-3.5" /> Browse
-          </Button>
-          <Button type="submit" variant="primary" disabled={!dirty || busy}>Save</Button>
-        </form>
-
-        <div className="mt-2.5 flex min-h-4 items-center justify-between gap-4">
-          {error ? <ErrorNotice message={error} fallback="Platypus couldn't save that setting." /> : <span />}
-          {saved && !isDefault && (
-            <Button variant="link" size="none" onClick={() => save('')} disabled={busy} className="flex-none text-hint">
-              reset to {saved.default_games_folder.replace(/^\/home\/[^/]+/, '~')}
-            </Button>
-          )}
-        </div>
-      </section>
+      {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't load the settings." />}
 
       <GameFoldersSettings onNotify={onNotify} />
 

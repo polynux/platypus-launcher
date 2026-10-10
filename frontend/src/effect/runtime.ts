@@ -164,12 +164,6 @@ export const LauncherApi = {
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 
-  // Empty path resets to the default (~/Games). Rejects relative paths and files.
-  setGamesFolder: (path: string) => call<LauncherSettings>('SetGamesFolder', () => App.SetGamesFolder(path)),
-
-  // Native folder picker. Resolves '' when the user cancels.
-  chooseGamesFolder: () => call<string>('ChooseGamesFolder', () => App.ChooseGamesFolder()),
-
   // Saved per-game settings, keyed by game id, exactly as saveGameSettings stored them.
   getGameSettings: () => call<Record<string, GameSettings>>('GetGameSettings', async () => (await App.GetGameSettings()) ?? {}),
 
@@ -293,10 +287,11 @@ export const LauncherApi = {
   installGameTo: (game: Game, folder: string) => call<Job>('InstallGameTo', () => App.InstallGameTo(backend(game), folder)),
   installGameWithOptionsTo: (game: Game, choices: InstallChoices, folder: string) =>
     call<Job>('InstallGameWithOptionsTo', () => App.InstallGameWithOptionsTo(backend(game), choices, folder)),
-  // Settings → Game folders: the user's libraries (the default one first).
+  // Settings → Game folders: the default folder (where installs go) first, then the libraries.
   getGameFolders: () => call<GameFolder[]>('GetGameFolders', async () => (await App.GetGameFolders()) ?? []),
   addGameFolder: (path: string) => call<GameFolder[]>('AddGameFolder', async () => (await App.AddGameFolder(path)) ?? []),
   removeGameFolder: (path: string) => call<GameFolder[]>('RemoveGameFolder', async () => (await App.RemoveGameFolder(path)) ?? []),
+  makeDefaultGameFolder: (path: string) => call<GameFolder[]>('MakeDefaultGameFolder', async () => (await App.MakeDefaultGameFolder(path)) ?? []),
   chooseGameFolder: () => call<string>('ChooseGameFolder', () => App.ChooseGameFolder()),
 
   // Customization: the user's title and art for a game. Core only; a game's

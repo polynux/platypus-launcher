@@ -10,8 +10,8 @@ import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** The folders games can be installed into, in Settings. The Games folder is
- *  the default one; the others show up in each game's "Install to…" step. */
+/** The game folders in Settings: the default one, where installs go, then the
+ *  library folders. Each game's "Install to…" step offers all of them. */
 export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
   const [folders, setFolders] = useState<GameFolder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +36,15 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
       .catch((e) => setError(errMsg(e)));
   };
 
+  const defaultPath = folders?.find((f) => f.is_default)?.path;
+
   return (
     <section className="max-w-2xl border-t border-white/[0.07] py-6">
       <h2 className="text-[14px] font-bold">Game folders</h2>
       <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-        Where a game can be installed. Each game's “Install to…” step offers these folders next to the Games folder; a store's games go in
-        their own subfolder.
+        Where games install. A store's games go in their own subfolder of the default folder, for example{' '}
+        <span className="font-mono text-hint text-white/75">{shortPath(defaultPath ?? '~/Games') + '/epic'}</span>. Each game's “Install to…” step
+        offers every folder here. Steam keeps using its own library folders.
       </p>
       <ul className="divide-y divide-white/[0.06] border-y border-white/[0.07]" aria-label="Game folders">
         {(folders ?? []).map((f) => (
@@ -55,21 +58,33 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
             {f.is_default ? (
               <MonoLabel>default</MonoLabel>
             ) : (
-              <Button
-                variant="neutral"
-                size="icon"
-                aria-label={`Remove ${f.path}`}
-                disabled={busy}
-                onClick={() => run(Effect.runPromise(LauncherApi.removeGameFolder(f.path)), 'Game folder removed')}
-              >
-                <X className="size-3.5" />
-              </Button>
+              <>
+                <Button
+                  variant="link"
+                  size="none"
+                  aria-label={`Make ${f.path} the default folder`}
+                  disabled={busy}
+                  className="flex-none text-hint"
+                  onClick={() => run(Effect.runPromise(LauncherApi.makeDefaultGameFolder(f.path)), 'Default game folder changed')}
+                >
+                  make default
+                </Button>
+                <Button
+                  variant="neutral"
+                  size="icon"
+                  aria-label={`Remove ${f.path}`}
+                  disabled={busy}
+                  onClick={() => run(Effect.runPromise(LauncherApi.removeGameFolder(f.path)), 'Game folder removed')}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </>
             )}
           </li>
         ))}
       </ul>
       <div className="mt-3 flex min-h-8 items-center justify-between gap-4">
-        {error ? <ErrorNotice message={error} fallback="Platypus couldn't add that folder." /> : <span />}
+        {error ? <ErrorNotice message={error} fallback="Platypus couldn't change the game folders." /> : <span />}
         <Button variant="neutral" onClick={add} disabled={busy || folders == null}>
           <FolderOpen className="size-3.5" /> Add folder…
         </Button>

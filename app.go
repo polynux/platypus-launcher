@@ -722,21 +722,6 @@ func (a *App) GetLauncherSettings() types.LauncherSettings {
 	return a.launcherSettings()
 }
 
-// SetGamesFolder saves the base folder store plugins install into. An empty
-// path resets it to ~/Games.
-func (a *App) SetGamesFolder(path string) (types.LauncherSettings, error) {
-	if _, err := a.settings.SetGamesFolder(path); err != nil {
-		return a.launcherSettings(), err
-	}
-	return a.launcherSettings(), nil
-}
-
-// ChooseGamesFolder opens a folder picker at the current Games folder.
-// Returns "" if the user cancels.
-func (a *App) ChooseGamesFolder() (string, error) {
-	return a.chooseFolder("Games folder", a.settings.GamesFolder())
-}
-
 func (a *App) chooseFolder(title, start string) (string, error) {
 	if _, err := os.Stat(start); err != nil {
 		start, _ = os.UserHomeDir()
