@@ -94,6 +94,7 @@ func startCoverServer() {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		_, _ = w.Write(coverJPEG(v))
 	})
+	serveTrailer(mux)
 	mux.HandleFunc("/shot/", func(w http.ResponseWriter, r *http.Request) {
 		v, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/shot/"), ".jpg"))
 		if err != nil {

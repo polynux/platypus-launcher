@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +19,16 @@ import (
 	"platypus/internal/settings"
 	"platypus/internal/types"
 )
+
+func httpGet(url string) ([]byte, error) {
+	c := &http.Client{Timeout: 10 * time.Second}
+	resp, err := c.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+}
 
 // echoEnv is the whole plugin path wired the way app.go wires it, around the
 // real echo plugin binary.
@@ -191,6 +203,28 @@ func TestEchoDetails(t *testing.T) {
 	if d.Summary == "" || len(d.Genres) != 1 || d.ReleaseDate != "2024-01-01" ||
 		d.Achievements == nil || d.Achievements.Total != 2 || d.Achievements.Unlocked != -1 || len(d.Achievements.List) != 2 {
 		t.Fatalf("details: %+v", d)
+	}
+	// Media and richer facts (protocol 1.12): sanitized HTML, validated
+	// URLs, bounded lists, local video.
+	if !strings.Contains(d.DescriptionHTML, "Installs in a second") || strings.Contains(d.DescriptionHTML, "script") {
+		t.Errorf("description not sanitized: %q", d.DescriptionHTML)
+	}
+	if d.Website != "https://example.com/echo-tiny" || d.StoreURL != "https://example.com/store/echo-tiny" {
+		t.Errorf("links: %+v", d)
+	}
+	if len(d.Languages) != 2 || d.Controller != "full" || d.AgeRating != "12+" || len(d.Tags) != 2 {
+		t.Errorf("facts: %+v", d)
+	}
+	if d.Requirements == nil || !strings.Contains(d.Requirements.Minimum, "512 MB RAM") {
+		t.Errorf("requirements: %+v", d.Requirements)
+	}
+	if len(d.Videos) != 1 || !strings.HasPrefix(d.Videos[0].URL, "http://127.0.0.1:") || d.Videos[0].MIME != "video/mp4" {
+		t.Errorf("videos: %+v", d.Videos)
+	} else {
+		resp, err := httpGet(d.Videos[0].URL)
+		if err != nil || len(resp) == 0 {
+			t.Errorf("trailer not served locally: %v", err)
+		}
 	}
 	// A game the plugin has no metadata for shows the library entry only.
 	d, err = e.store.Details(e.ctx(t), e.game(t, "slow"))
