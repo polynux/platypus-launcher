@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { Game } from '../types';
 import { Cover, EmptyState, SegRow, TierBadge, TweakDot } from './ui';
 import { Badge } from './ds/badge';
-import { attentionReason, needsAttention, storeLabel } from '../lib/games';
+import { attentionReason, coverImages, needsAttention, storeLabel } from '../lib/games';
 
 type Filter = 'attention' | 'all';
 
@@ -44,7 +44,7 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
             const f = g.fix_info!;
             return (
               <button key={g.id} onClick={() => onOpenGame(g.id)} className="flex w-full gap-4 rounded-2xl bg-white/[0.045] p-4 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40">
-                <Cover src={g.cover_url} title={g.title} className="h-24 w-16 flex-none rounded-xl ring-1 ring-white/10" />
+                <Cover src={coverImages(g)} title={g.title} className="h-24 w-16 flex-none rounded-xl ring-1 ring-white/10" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2.5">
                     {needsAttention(g) && <TweakDot />}

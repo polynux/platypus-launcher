@@ -4,7 +4,7 @@ import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
-import { attentionReason, byRecent, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
+import { attentionReason, byRecent, coverImages, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 
@@ -96,7 +96,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
             {continueGames.map((g) => (
               <button key={g.id} onClick={() => onOpenGame(g.id)} className={cardClass}>
                 <div className="relative">
-                  <Cover src={g.cover_url} title={g.title} className="aspect-[3/4] w-full" />
+                  <Cover src={coverImages(g)} title={g.title} className="aspect-[3/4] w-full" />
                   {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
                 </div>
                 <div className="px-3 py-2.5">
@@ -175,7 +175,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
       {games.map((g) => (
         <li key={g.id}>
           <button onClick={() => onOpenGame(g.id)} className="-mx-1 flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-white/[0.04]">
-            <Cover src={g.cover_url} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
+            <Cover src={coverImages(g)} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
               <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store)}</div>

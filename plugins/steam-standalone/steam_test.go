@@ -664,6 +664,48 @@ func TestSteamStoreDetailsCached(t *testing.T) {
 	}
 }
 
+// Art URLs are computable from the app id alone: a library scan with no
+// Store entry (delisted id, or past the per-scan Store budget) still lists
+// covers, and the UI falls back from the portrait to the header (issue #26).
+func TestSteamLibraryArtWithoutStore(t *testing.T) {
+	e := setup(t)
+	e.login()
+	// The Store knows nothing before the first scan: no cache, no entries.
+	api := os.Getenv("PLATYPUS_STEAM_API_FILE")
+	raw, err := os.ReadFile(api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	json.Unmarshal(raw, &doc)
+	doc["_test"] = map[string]any{}
+	raw, _ = json.Marshal(doc)
+	os.WriteFile(api, raw, 0o644)
+
+	lib := e.library()
+	if len(lib) != 2 {
+		t.Fatalf("library: %d games, want 2", len(lib))
+	}
+	for _, g := range lib {
+		base := "https://cdn.cloudflare.steamstatic.com/steam/apps/" + g.StoreAppID
+		if g.CoverURL != base+"/library_600x900.jpg" {
+			t.Fatalf("game %s cover: %q", g.StoreAppID, g.CoverURL)
+		}
+		if g.BannerURL != base+"/header.jpg" {
+			t.Fatalf("game %s banner: %q", g.StoreAppID, g.BannerURL)
+		}
+		if g.HeroURL != base+"/library_hero_2x.jpg" {
+			t.Fatalf("game %s hero: %q", g.StoreAppID, g.HeroURL)
+		}
+	}
+	// Titles still come from the owned list, and the tool/game split from
+	// the (empty) Store answer defaults to installable.
+	game := e.find(lib, "4321")
+	if game.Title != "Standalone Game" {
+		t.Fatalf("title without store: %q", game.Title)
+	}
+}
+
 // Downloads use the Steam client's download region (or PLATYPUS_STEAM_CELLID)
 // as the server-list cell id platypus-steam-dl requests.
 func TestSteamDownloadCellID(t *testing.T) {

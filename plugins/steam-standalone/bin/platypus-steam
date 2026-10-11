@@ -993,6 +993,19 @@ def persona_name(steamid):
 
 
 
+def art_urls(app):
+    """CDN art for an app id, without any Store lookup: the portrait, the
+    wide hero and the landscape header. Older titles 404 on the portrait;
+    the UI falls back to the header (cropped into the portrait card) and
+    remembers the miss, so the 404 isn't requested on every render."""
+    base = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}"
+    return {
+        "coverUrl": f"{base}/library_600x900.jpg",
+        "heroUrl": f"{base}/library_hero_2x.jpg",
+        "bannerUrl": f"{base}/header.jpg",
+    }
+
+
 def library_list(_params):
     if not logged_in():
         raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
@@ -1028,10 +1041,9 @@ def library_list(_params):
             if ig.get("native"):
                 entry["native"] = True
             entry["note"] = mode_note(ig.get("mode") or "none")
-        if store:
-            entry["coverUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_600x900.jpg"
-            entry["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
-            entry["bannerUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/header.jpg"
+        # Art needs no Store lookup: always set it, so games past the Store
+        # budget (or with no Store entry at all) still show covers.
+        entry.update(art_urls(app))
         # Tools, movies, music etc. aren't depot installs Platypus can run.
         app_type = (store.get("type") or "").lower()
         if app_type and app_type not in ("game", "demo", "beta", "application"):
@@ -1041,13 +1053,15 @@ def library_list(_params):
     save_store_cache()
     for app, ig in installed.items():  # installed but missing from the owned list
         if not any(e["id"] == app for e in out):
-            out.append({
+            missing = {
                 "id": app, "title": ig.get("title") or f"App {app}",
                 "installable": False, "installed": True,
                 "installPath": ig.get("path", ""),
                 "native": True if ig.get("native") else False,
                 "note": mode_note(ig.get("mode") or "none"),
-            })
+            }
+            missing.update(art_urls(app))
+            out.append(missing)
     return {"games": out}
 
 
