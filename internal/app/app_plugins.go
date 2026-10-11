@@ -86,6 +86,7 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		InstallFolder:        folder,
 		DefaultInstallFolder: def,
 		ExtraFolders:         nonNil(extra),
+		IconURL:              a.plugins.IconURL(m.ID),
 	}
 }
 

@@ -562,6 +562,7 @@ export namespace types {
     install_folder: string;
     default_install_folder: string;
     extra_folders: string[];
+    icon_url?: string;
   }
 
   export type StoreType = string;

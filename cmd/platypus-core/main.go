@@ -113,7 +113,8 @@ func (h coreHost) OpenDirectory(d app.DirectoryDialog) (string, error) {
 
 type artServer struct{ url, token string }
 
-// serveArt serves the Steam library cache and the user's custom art over HTTP
+// serveArt serves the Steam library cache, the user's custom art and the
+// store plugin logos over HTTP
 // on 127.0.0.1, for the shell's art protocol to fetch from. Every request must
 // carry this run's random token, so another local process can't read the art
 // (or probe the file paths) through the port.
@@ -127,7 +128,7 @@ func serveArt(a *app.App) (artServer, error) {
 	if err != nil {
 		return artServer{}, err
 	}
-	handler := app.SteamArt(app.CustomArt(a, http.NotFoundHandler()))
+	handler := app.SteamArt(app.PluginArt(a, app.CustomArt(a, http.NotFoundHandler())))
 	go http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Platypus-Token")), []byte(token)) != 1 {
 			http.Error(w, "forbidden", http.StatusForbidden)
