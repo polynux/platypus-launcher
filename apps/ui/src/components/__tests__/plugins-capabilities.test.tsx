@@ -16,6 +16,7 @@ vi.mock('../../effect/runtime', () => ({
   onSocial: () => () => {},
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
+  onAuth: () => () => {},
 }));
 
 import { PluginsView } from '../PluginsView';

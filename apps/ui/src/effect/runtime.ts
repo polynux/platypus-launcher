@@ -405,3 +405,14 @@ export function onSocial(cb: (v: SocialView) => void): () => void {
 export function onChat(cb: (e: ChatEvent) => void): () => void {
   return onEvent('chat', cb);
 }
+
+/** A plugin's login state after a background refresh found it changed. */
+export interface AuthEvent {
+  plugin: string;
+  status: AuthStatus;
+}
+
+/** Subscribe to login-state changes: every background refresh that found a new state. Returns the unsubscribe function. */
+export function onAuth(cb: (e: AuthEvent) => void): () => void {
+  return onEvent('auth', cb);
+}

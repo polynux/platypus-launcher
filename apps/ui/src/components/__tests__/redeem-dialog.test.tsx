@@ -24,6 +24,7 @@ vi.mock('../../effect/runtime', () => ({
   onSocial: () => () => {},
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
+  onAuth: () => () => {},
 }));
 
 import { RedeemDialog } from '../RedeemDialog';

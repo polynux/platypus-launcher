@@ -183,6 +183,9 @@ func (a *App) SaveGameSettingsFields(game types.Game, patch map[string]any) (typ
 // saved, gets nothing. A failure is logged: the values stay saved and the next
 // start tries again.
 func (a *App) pluginReady(source string) {
+	// The plugin (re)started: whatever the old process answered about the
+	// login is gone with it.
+	a.invalidateAuth(source)
 	if !a.plugins.Has(source, "settings") {
 		return
 	}
