@@ -288,6 +288,7 @@ export namespace types {
     steam_app_id?: string;
     platforms?: string[];
     drm?: types.DRM | null;
+    store_url?: string;
   }
 
   export interface GameFixInfo {
@@ -570,6 +571,8 @@ export namespace types {
     default_install_folder: string;
     extra_folders: string[];
     icon_url?: string;
+    storefront_url?: string;
+    storefront_domains?: string[];
   }
 
   export type StoreType = string;

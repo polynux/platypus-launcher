@@ -18,5 +18,6 @@
     "network": ["*.amazon.com", "*.amazon.dev", "*.a2z.com"],
     "read": [],
     "write": []
-  }
+  },
+  "storefront": { "url": "https://gaming.amazon.com/", "domains": ["gaming.amazon.com", "amazon.com"] }
 }

@@ -57,6 +57,7 @@ export interface CoreApi {
   InstallGameVersion(game: types.Game, target: types.VersionTarget): Promise<types.Job>;
   InstallGameWithOptions(game: types.Game, options: Record<string, unknown>): Promise<types.Job>;
   InstallGameWithOptionsTo(game: types.Game, options: Record<string, unknown>, folder: string): Promise<types.Job>;
+  InvalidateLibrary(source: string): Promise<void>;
   LaunchGame(game: types.Game): Promise<string>;
   LaunchGameAnyway(game: types.Game, prompt: string): Promise<string>;
   LaunchGameViaClient(game: types.Game): Promise<string>;
@@ -172,6 +173,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'InstallGameVersion',
   'InstallGameWithOptions',
   'InstallGameWithOptionsTo',
+  'InvalidateLibrary',
   'LaunchGame',
   'LaunchGameAnyway',
   'LaunchGameViaClient',

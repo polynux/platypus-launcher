@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -156,6 +157,7 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		Developers:  d.Developers,
 		Publishers:  d.Publishers,
 		ReleaseDate: d.ReleaseDate,
+		StoreURL:    storeURL(d.StoreURL),
 	}
 	// The compat fields are protocol 1.10: an older plugin's answer has none.
 	if s.m.Runtime(s.ID()).Speaks(plugins.CompatVersion) {
@@ -292,4 +294,32 @@ func webURL(raw string) string {
 		return ""
 	}
 	return u.String()
+}
+
+// isLoopback reports whether host is a loopback address for store-URL
+// purposes: 127.0.0.0/8, ::1, or localhost (the test plugin's local page).
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// storeURL keeps a store page link (issue #17): https, or an http loopback
+// page for the test plugin. Anything else is dropped.
+func storeURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Scheme == "https" {
+		return u.String()
+	}
+	if u.Scheme == "http" && isLoopback(u.Hostname()) {
+		return u.String()
+	}
+	return ""
 }

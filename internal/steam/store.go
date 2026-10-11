@@ -125,5 +125,10 @@ func (c *StoreClient) Details(root, appID string) (*types.GameDetails, error) {
 		}
 		d.Achievements = ach
 	}
+	// The store page for the game (issue #17): the game page offers it as
+	// "Open in store".
+	if appID != "" {
+		d.StoreURL = "https://store.steampowered.com/app/" + appID + "/"
+	}
 	return d, nil
 }

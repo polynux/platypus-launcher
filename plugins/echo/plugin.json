@@ -12,5 +12,6 @@
   "capabilities": ["library", "install", "launch", "auth", "discard", "cloud-saves", "versions", "verify", "move", "install-options", "social", "achievements", "playtime", "redeem", "family", "settings", "chat", "terms"],
   "requires": [{ "bin": "sleep", "hint": "part of coreutils" }],
   "install_dir": "echo",
-  "permissions": { "network": [], "read": [], "write": [] }
+  "permissions": { "network": [], "read": [], "write": [] },
+  "storefront": { "url": "http://127.0.0.1:18427/store/", "domains": ["127.0.0.1"] }
 }

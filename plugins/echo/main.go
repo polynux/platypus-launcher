@@ -609,6 +609,12 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 					},
 				},
 			}
+			// The game's page on the local test store (issue #17): the game
+			// page offers it as "Open in store". Absent when the port is
+			// taken (no local storefront then).
+			if sb := storeBaseURL(); sb != "" {
+				out["storeUrl"] = sb + "/store/game/" + p.ID
+			}
 			if g.terms {
 				out["terms"] = termsList(p.ID)
 			}

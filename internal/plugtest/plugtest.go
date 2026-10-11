@@ -807,7 +807,7 @@ var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
 		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
-		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms"}
+		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms", "storeUrl"}
 	// The drm block of game.details (protocol 1.10, "Compat").
 	DRMKeys    = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",

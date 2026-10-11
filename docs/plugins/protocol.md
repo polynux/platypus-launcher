@@ -55,6 +55,13 @@ layout with `"kind": "data"` and need no approval; see
   plugin from starting; the Plugins view shows the hint.
 - `permissions` are shown to the user before approval. They aren't enforced yet
   (bubblewrap sandbox, plan milestone 8).
+- `storefront` declares the store's official website for the embedded store
+  view (issue #17): `{ "url": "https://store.example/", "domains":
+  ["store.example", "www.example"] }`. `url` must be https and its host inside
+  `domains`, which are plain hostnames (no wildcards, paths, ports or IPs).
+  Top-level navigation in the view may go anywhere (checkout uses payment
+  providers), but the address strip warns outside the declared domains. Omit
+  `storefront` when the store has no website to embed (no store section entry).
 
 Platypus runs nothing until the user approves the plugin, which pins the SHA-256 of
 the whole plugin folder: `plugin.json` plus every regular file under it, in
@@ -186,7 +193,8 @@ entry's art and title only.
   "screenshots": ["https://…"], "genres": ["Comedy"],
   "developers": ["House House"], "publishers": ["Panic"],
   "releaseDate": "2019-09-20", "heroUrl": "https://…",
-  "achievements": { "total": 12, "list": [{ "id": "prank", "name": "First prank", "icon": "https://…", "globalPercent": 84.1 }] }
+  "achievements": { "total": 12, "list": [{ "id": "prank", "name": "First prank", "icon": "https://…", "globalPercent": 84.1 }] },
+  "storeUrl": "https://store.example/game/prank"
 }
 ```
 
@@ -198,7 +206,10 @@ both.)
 Every URL must be http(s); Platypus drops others. `achievements` describes what
 the store shows about the game — if the plugin can't see the user's progress,
 leave it out rather than guess. Keep `list` short (a highlight, say 10) and let
-`total` carry the real count; Platypus notes the truncation.
+`total` carry the real count; Platypus notes the truncation. `storeUrl` is the
+game's page on the store's website (an https link; anything else is dropped):
+the game page offers it as "Open in store", which deep-links into the embedded
+store view when the plugin declares a `storefront`.
 
 ## Jobs
 

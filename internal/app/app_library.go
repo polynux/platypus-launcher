@@ -104,6 +104,13 @@ func (a *App) invalidateLibrary(source string) {
 	a.library.invalidate(source)
 }
 
+// InvalidateLibrary drops one source's cached listing, so the next GetLibrary
+// lists it again. The store view calls it when it closes (issue #17): what
+// was bought in the embedded store appears in the library.
+func (a *App) InvalidateLibrary(source string) {
+	a.invalidateLibrary(source)
+}
+
 // invalidateLibraries drops every cached listing: the plugin set itself may
 // have changed, so no entry can be trusted.
 func (a *App) invalidateLibraries() {

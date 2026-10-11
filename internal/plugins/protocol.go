@@ -146,6 +146,10 @@ type GameDetails struct {
 	// Terms are the agreements the user accepts before an install (1.11, the
 	// `terms` capability: docs/plugins/protocol.md, "Terms").
 	Terms []Term `json:"terms,omitempty"`
+	// StoreURL is the game's page on the store's website (issue #17): the
+	// game page offers it as "Open in store". An https link; anything else
+	// is dropped.
+	StoreURL string `json:"storeUrl,omitempty"`
 }
 
 // CompatVersion is the first protocol revision whose game.details carries the

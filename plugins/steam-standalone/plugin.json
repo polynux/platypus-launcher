@@ -19,5 +19,6 @@
     "network": ["*.steampowered.com", "*.steamcontent.com", "*.steamserver.net", "*.valve.net"],
     "read": [],
     "write": []
-  }
+  },
+  "storefront": { "url": "https://store.steampowered.com/", "domains": ["steampowered.com", "steamcommunity.com", "steamstatic.com"] }
 }
