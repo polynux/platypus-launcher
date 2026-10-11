@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
-import { LauncherApi } from '../effect/runtime';
+import { LauncherApi, onAuth } from '../effect/runtime';
 import { openExternal } from '../lib/external';
 import { Modal } from './Modal';
 import { EmptyState, MonoLabel, Panel, cx } from './ui';
@@ -45,11 +45,28 @@ const BUILT_IN = [
 
 const hasAuth = (p: StorePlugin) => offers(p, 'auth');
 
+type AuthState = AuthStatus | { error: string };
+
+// Login states outlive one visit: the core serves its cached state instantly
+// and refreshes it in the background, so a revisit shows the last known state
+// at once instead of flashing "checking login…" while the refresh runs.
+const authCache = new Map<string, AuthState>();
+
+/** Forgets every cached login state (tests). */
+export function resetPluginsAuthCache(): void {
+  authCache.clear();
+}
+
 export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
-  const [auth, setAuth] = useState<Record<string, AuthStatus | { error: string }>>({});
+  const [auth, setAuth] = useState<Record<string, AuthState>>(() => Object.fromEntries(authCache));
   const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
   const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const storeAuth = useCallback((id: string, s: AuthState) => {
+    authCache.set(id, s);
+    setAuth((a) => ({ ...a, [id]: s }));
+  }, []);
 
   const refresh = useCallback(
     (rescan = false) =>
@@ -62,16 +79,22 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
   // Login state of every approved plugin with a login. Asking starts the plugin.
   const readyIds = plugins.filter((p) => p.status === 'ready' && hasAuth(p)).map((p) => p.id).join(',');
   // StrictMode mounts effects twice: only ask once per plugin id (FE-7).
+  // The core answers a known state from its cache at once and refreshes it
+  // in the background; the answer below only seeds the state, whose update
+  // (or the auth event) re-renders.
   const statusFetched = useRef(new Set<string>());
   useEffect(() => {
     for (const id of readyIds ? readyIds.split(',') : []) {
       if (statusFetched.current.has(id)) continue;
       statusFetched.current.add(id);
       Effect.runPromise(LauncherApi.authStatus(id))
-        .then((s) => setAuth((a) => ({ ...a, [id]: s })))
-        .catch((e) => setAuth((a) => ({ ...a, [id]: { error: errMsg(e) } })));
+        .then((s) => storeAuth(id, s))
+        .catch((e) => storeAuth(id, { error: errMsg(e) }));
     }
-  }, [readyIds]);
+  }, [readyIds, storeAuth]);
+
+  // A background refresh that finds a changed state arrives as an event.
+  useEffect(() => onAuth((e) => storeAuth(e.plugin, e.status)), [storeAuth]);
 
   const act = (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => {
     setBusy(id + what);
@@ -88,7 +111,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
     act(
       p.id,
       'logout',
-      LauncherApi.logout(p.id).pipe(Effect.tap((s: AuthStatus) => Effect.sync(() => setAuth((a) => ({ ...a, [p.id]: s }))))),
+      LauncherApi.logout(p.id).pipe(Effect.tap((s: AuthStatus) => Effect.sync(() => storeAuth(p.id, s)))),
       `Logged out of ${p.name}`
     );
 
@@ -319,7 +342,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           onDone={(s) => {
             const p = loggingIn;
             setLoggingIn(null);
-            setAuth((a) => ({ ...a, [p.id]: s }));
+            storeAuth(p.id, s);
             onNotify(`Logged in to ${p.name}${s.user ? ` as ${s.user}` : ''}`);
             onLibraryChanged();
           }}
@@ -459,6 +482,18 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
     const timers: ReturnType<typeof setTimeout>[] = [];
     let failures = 0;
     let attempts = 0;
+    // A background refresh may notice the login first: finish the moment it
+    // does, and redraw the QR code when it reports a new one.
+    const offAuth = onAuth((e) => {
+      if (e.plugin !== plugin.id || stop) return;
+      if (e.status.loggedIn) {
+        onDoneRef.current(e.status);
+        return;
+      }
+      if (e.status.qr) {
+        setPrompt((p) => (p && p.qr !== e.status.qr ? { ...p, qr: e.status.qr } : p));
+      }
+    });
     const schedule = (ms: number) => {
       if (stop) return;
       // Don't hammer a hidden tab; poll at most every 15s there.
@@ -499,6 +534,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
     schedule(1500);
     return () => {
       stop = true;
+      offAuth();
       timers.forEach(clearTimeout);
     };
   }, [qrPending, plugin.id]);

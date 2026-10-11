@@ -236,6 +236,14 @@ type AuthStatus struct {
 	QR string `json:"qr,omitempty"`
 }
 
+// AuthEvent reports a plugin's login state after a background refresh found
+// it changed (issue #28): the Plugins view asked once, shows the cached
+// state, and updates when this arrives on the "auth" event.
+type AuthEvent struct {
+	Plugin string     `json:"plugin"`
+	Status AuthStatus `json:"status"`
+}
+
 // AuthPrompt is what the login dialog shows: a page to open, if any, a QR
 // code to scan, if any, then the fields to fill in. QR holds the code as
 // block-art text ("\u2588" = dark module, two chars per module, one row per

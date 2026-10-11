@@ -108,6 +108,7 @@ func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
 	}
 	// The plugin set itself may have changed: no cached listing survives it.
 	a.invalidateLibraries()
+	a.invalidateAuthAll()
 	a.syncDataPlugins(found)
 	a.forgetSettingsOfRemoved(found)
 	a.failStoppedJobs()
@@ -141,6 +142,8 @@ func (a *App) ApprovePlugin(id string) error {
 	}
 	// An approved plugin joins the library: list it again.
 	a.invalidateLibrary(id)
+	// Approval may restart the plugin: its cached login state is not its own.
+	a.invalidateAuth(id)
 	a.failStoppedJobs()
 	a.syncSocial()
 	return nil
@@ -154,6 +157,8 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 	// A disabled plugin leaves the library (pruned on the next scan); an
 	// enabled one joins it. Either way its entry can't be served again.
 	a.invalidateLibrary(id)
+	// Enabling restarts the plugin: its cached login state is not its own.
+	a.invalidateAuth(id)
 	a.failStoppedJobs()
 	a.syncSocial()
 	return nil
@@ -169,6 +174,8 @@ func (a *App) RetryPlugin(id string) error {
 	// The plugin starts again on the next call: a cached failure from the
 	// crashed period must not be served.
 	a.invalidateLibrary(id)
+	// A restart drops whatever the old process answered about the login.
+	a.invalidateAuth(id)
 	return nil
 }
 
@@ -197,14 +204,6 @@ func (a *App) authCall(id, method string, params, result any) error {
 	ctx, cancel := context.WithTimeout(a.ctx, authTimeout)
 	defer cancel()
 	return a.plugins.Call(ctx, id, method, params, result)
-}
-
-// PluginAuthStatus asks the plugin whether the user is logged in. It starts
-// the plugin if needed.
-func (a *App) PluginAuthStatus(id string) (types.AuthStatus, error) {
-	var st types.AuthStatus
-	err := a.authCall(id, "auth.status", nil, &st)
-	return st, err
 }
 
 // PluginAuthBegin starts a login. The URL, if any, is opened by the UI in the
@@ -245,6 +244,10 @@ func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.Aut
 		a.invalidateLibrary(id)
 		a.socialLoggedIn(id)
 	}
+	if err == nil {
+		// The plugin just said what the login state is: cache it fresh.
+		a.setAuthStatus(id, st)
+	}
 	return st, err
 }
 
@@ -255,6 +258,8 @@ func (a *App) PluginLogout(id string) (types.AuthStatus, error) {
 	if err == nil {
 		// A logout changes what the store lists: list it again.
 		a.invalidateLibrary(id)
+		// The plugin just said what the login state is: cache it fresh.
+		a.setAuthStatus(id, st)
 	}
 	return st, err
 }

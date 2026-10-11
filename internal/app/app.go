@@ -86,6 +86,10 @@ type App struct {
 	// one's fresh cache instead of listing the same slow stores twice.
 	library libraryCache
 	scanMu  sync.Mutex
+	// auth caches one login state per plugin: the Plugins view asks on every
+	// visit, and asking costs the plugin a store round trip (app_auth.go,
+	// issue #28). Served immediately, refreshed in the background.
+	auth authCache
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
@@ -167,6 +171,8 @@ func (a *App) startup(ctx context.Context) {
 		OnNotify: a.pluginNotify,
 		OnExit: func(id string, err error) {
 			a.host.Warnf("plugin %s exited: %v", id, err)
+			// The process is gone: its cached login state died with it.
+			a.invalidateAuth(id)
 			a.jobs.PluginExited(id, err)
 			if a.social != nil {
 				a.social.Exited(id)
