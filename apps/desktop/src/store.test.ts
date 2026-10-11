@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  blockedHost,
   canOpenStore,
   explicitStoreURL,
   insideDomains,
   isLoopbackHost,
   navigationAllowed,
   popupURL,
+  shouldCloseView,
   storePartition,
   stripState,
   validPluginId,
@@ -76,19 +78,45 @@ test('only ready plugins with a storefront open', () => {
   assert.ok(!canOpenStore({ ...steam, storefront_url: undefined }));
 });
 
-test('top-level navigation allows http(s) anywhere, nothing else', () => {
-  assert.ok(navigationAllowed('https://checkout.stripe.com/pay'));
-  assert.ok(navigationAllowed('http://127.0.0.1:18427/store/'));
-  assert.ok(!navigationAllowed('steam://install/620'));
-  assert.ok(!navigationAllowed('com.epicgames.launcher://open'));
-  assert.ok(!navigationAllowed('file:///etc/passwd'));
-  assert.ok(!navigationAllowed('javascript:alert(1)'));
-  assert.ok(!navigationAllowed('nonsense'));
+test('top-level navigation stays inside the declared domains', () => {
+  const domains = steam.storefront_domains!;
+  assert.ok(navigationAllowed('https://store.steampowered.com/app/620/', domains));
+  assert.ok(navigationAllowed('https://steamcommunity.com/login/', domains));
+  // Third-party payment providers are NOT allow-listed: leaving for one is
+  // blocked and the toolbar offers to open it in the browser instead.
+  assert.ok(!navigationAllowed('https://checkout.stripe.com/pay', domains));
+  assert.ok(!navigationAllowed('https://paypal.com/pay', domains));
+  assert.ok(!navigationAllowed('http://127.0.0.1:18427/store/', domains));
+  assert.ok(!navigationAllowed('steam://install/620', domains));
+  assert.ok(!navigationAllowed('com.epicgames.launcher://open', domains));
+  assert.ok(!navigationAllowed('file:///etc/passwd', domains));
+  assert.ok(!navigationAllowed('javascript:alert(1)', domains));
+  assert.ok(!navigationAllowed('nonsense', domains));
+  assert.ok(!navigationAllowed('https://store.steampowered.com/', []));
 });
 
-test('popups open http(s) only', () => {
-  assert.equal(popupURL('https://store.steampowered.com/login/'), 'https://store.steampowered.com/login/');
-  assert.equal(popupURL('steam://install/620'), '');
+test('blocked attempts name the outside host, silently refuse other schemes', () => {
+  const domains = steam.storefront_domains!;
+  assert.equal(blockedHost('https://checkout.stripe.com/pay', domains), 'checkout.stripe.com');
+  assert.equal(blockedHost('https://store.steampowered.com/app/620/', domains), '');
+  assert.equal(blockedHost('steam://install/620', domains), '');
+  assert.equal(blockedHost('nonsense', domains), '');
+});
+
+test('popups open inside the domains only', () => {
+  const domains = steam.storefront_domains!;
+  assert.equal(popupURL('https://store.steampowered.com/login/', domains), 'https://store.steampowered.com/login/');
+  assert.equal(popupURL('https://checkout.stripe.com/pay', domains), '');
+  assert.equal(popupURL('steam://install/620', domains), '');
+});
+
+test('a stale close never hides the newly shown view', () => {
+  assert.ok(shouldCloseView('echo', 'echo'));
+  assert.ok(!shouldCloseView('echo-c', 'echo'));
+  assert.ok(!shouldCloseView(null, 'echo'));
+  assert.ok(!shouldCloseView('echo', ''));
+  assert.ok(shouldCloseView('echo', undefined));
+  assert.ok(!shouldCloseView(null, undefined));
 });
 
 test('the strip names the host and flags outside domains', () => {
