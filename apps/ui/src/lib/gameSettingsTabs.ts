@@ -38,7 +38,8 @@ export function settingsTabs({ game, plugin, tweaks }: TabContext): GameSettings
   if (installed && tweaks.length > 0) tabs.push('tweaks');
   tabs.push('customization');
   // Verify and uninstall need the plugin; a move is core's, for any installed plugin game.
-  if (fromPlugin && installed) tabs.push('maintenance');
+  // Custom games get Maintenance for Remove from library (no plugin needed).
+  if ((fromPlugin && installed) || game.store === 'custom') tabs.push('maintenance');
   return tabs;
 }
 

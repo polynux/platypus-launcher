@@ -162,7 +162,7 @@ export type CompatBadge = gen.CompatBadge;
 export type WikiCredit = gen.WikiCredit;
 export type Compat = gen.Compat;
 
-export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'tweak' | 'cloud';
+export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'remove' | 'tweak' | 'cloud';
 
 export interface ActivityEvent {
   id: number;

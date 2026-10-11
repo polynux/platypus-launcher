@@ -18,9 +18,9 @@ export function parentFolder(dir?: string): string {
 }
 
 /** What is done to an installed game's files: check them, move them, remove them. */
-export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, onNotify, onClose }: {
+export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, onNotify, onClose, onRemove }: {
   game: Game;
-  plugin: StorePlugin;
+  plugin?: StorePlugin;
   job?: Job;
   jobs: Job[];
   onJob: (kind: GameJobKind) => void;
@@ -28,6 +28,8 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Closes the settings: a removed game has nothing left to set. */
   onClose: () => void;
+  /** Removes a sideloaded game from the library (custom games only). */
+  onRemove?: () => void;
 }) {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -55,6 +57,32 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
       </div>
     );
   }
+  // Sideloaded games have no plugin actions: only forgetting them in Platypus.
+  // Their files stay where they are.
+  if (game.store === 'custom') {
+    const removeText = game.install_dir
+      ? `Removes ${game.title} from Platypus. Its files stay in ${game.install_dir}.`
+      : `Removes ${game.title} from Platypus. Its files stay on disk.`;
+    return (
+      <div className="space-y-5">
+        {confirm ? (
+          <Row title="Remove from library" text={removeText}>
+            <div className="flex gap-2">
+              <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>Cancel</Button>
+              <Button variant="danger" onClick={() => { setConfirm(false); onRemove?.(); onClose(); }}>
+                <Trash2 className="h-3.5 w-3.5" /> Remove from library
+              </Button>
+            </div>
+          </Row>
+        ) : (
+          <Row title="Remove from library" text={removeText}>
+            <Button onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" /> Remove from library</Button>
+          </Row>
+        )}
+      </div>
+    );
+  }
+  if (!plugin) return null;
   return (
     <div className="space-y-5">
       <CapabilitySurface plugin={plugin} capability="verify" game={game}>

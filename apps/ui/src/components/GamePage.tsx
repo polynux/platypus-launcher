@@ -82,6 +82,8 @@ interface GamePageProps {
   onVersionsChanged?: () => void;
   /** The family copy a borrowed game is played from changed: the library should reload. */
   onCopyChanged?: () => void;
+  /** Removes a sideloaded game from the library (custom games only). */
+  onRemove?: () => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -441,6 +443,7 @@ export function GamePage(p: GamePageProps) {
           onChanged={() => p.onVersionsChanged?.()}
           onCustomized={() => p.onCustomized?.()}
           onCopied={() => p.onNotify?.('Copied to clipboard')}
+          onRemove={p.onRemove}
         />
       )}
       {installTo && plugin && (

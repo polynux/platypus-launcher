@@ -39,6 +39,8 @@ export interface GameSettingsModalProps {
   /** The game's look changed: the library should reload. */
   onCustomized: () => void;
   onCopied: () => void;
+  /** Removes a sideloaded game from the library (custom games only). */
+  onRemove?: () => void;
 }
 
 /** Everything about one game that is not playing it, in one place. A tab shows
@@ -156,8 +158,8 @@ function TabBody({ tab, onOpenGeneral, ...p }: GameSettingsModalProps & { tab: G
     case 'customization':
       return <CustomizationTab game={game} onChanged={p.onCustomized} />;
     case 'maintenance':
-      return plugin ? (
-        <MaintenanceTab game={game} plugin={plugin} job={p.job} jobs={p.jobs} onJob={p.onJob} onJobAction={p.onJobAction} onNotify={p.onNotify} onClose={p.onClose} />
+      return (plugin || game.store === 'custom') ? (
+        <MaintenanceTab game={game} plugin={plugin} job={p.job} jobs={p.jobs} onJob={p.onJob} onJobAction={p.onJobAction} onNotify={p.onNotify} onClose={p.onClose} onRemove={p.onRemove} />
       ) : null;
     default:
       return null;

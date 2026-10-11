@@ -129,6 +129,50 @@ describe('Verify and move in the game settings', () => {
   });
 });
 
+describe('Remove from library for sideloaded games', () => {
+  const custom = (o: Partial<Game> = {}): Game => game({
+    id: 'custom-1', source: 'custom', store: 'custom', store_app_id: 'custom',
+    title: 'Sideloaded Gem', install_dir: '/games/sideload', executable: '/games/sideload/gem',
+    features: null, ...o,
+  });
+
+  it('shows only Remove from library, no Verify/Move/Uninstall', () => {
+    render(<GamePage game={custom()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    expect(screen.getByRole('button', { name: 'Remove from library' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Move/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull();
+    expect(screen.getByText(/Removes Sideloaded Gem from Platypus\. Its files stay in \/games\/sideload\./)).toBeTruthy();
+  });
+
+  it('asks to confirm; Cancel or Escape backs out without removing', () => {
+    const onRemove = vi.fn();
+    render(<GamePage game={custom()} {...base} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(onRemove).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Remove from library' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Remove from library' })).toBeTruthy();
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it('confirming calls onRemove once and closes the settings', () => {
+    const onRemove = vi.fn();
+    render(<GamePage game={custom()} {...base} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Settings for Sideloaded Gem' })).toBeNull();
+  });
+});
+
 describe('VerifyDialog', () => {
   it('starts a check when it opens and offers a repair after damage is found', async () => {
     api.verifyGame.mockResolvedValue(job({ id: 'check-1' }));

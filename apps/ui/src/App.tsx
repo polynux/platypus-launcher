@@ -504,6 +504,22 @@ export function App() {
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
+  // Forgetting a sideloaded game: the backend drops it (files stay on disk),
+  // the page goes back to where it came from (it would otherwise say "not
+  // found"), and the activity says what left.
+  const removeGame = (game: Game) => {
+    const back = view.name === 'game' ? view.from : 'library' as const;
+    Effect.runPromise(LauncherApi.removeCustomGame(game.id))
+      .then(() => {
+        setGames((prev) => prev.filter((x) => x.id !== game.id));
+        invalidateGameDetailsCache(game.id);
+        setView({ name: back } as View);
+        notify(`Removed "${game.title}"`);
+        log({ type: 'remove', game: game.title, detail: `Removed ${game.title} from library`, meta: game.install_dir || undefined });
+      })
+      .catch((err) => notify(errMsg(err), 'err'));
+  };
+
   const installedGames = useMemo(() => games.filter((g) => g.is_installed), [games]);
   const storeCounts = useMemo(
     () => installedGames.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
@@ -635,6 +651,7 @@ export function App() {
             onNotify={notify}
             onVersionsChanged={() => loadData('update')}
             onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
+            onRemove={() => removeGame(currentGame)}
           />
         ) : (
           <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>

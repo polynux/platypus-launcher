@@ -42,9 +42,10 @@ describe('settingsTabs', () => {
     expect(settingsTabs({ game: game({ is_installed: false, installable: false }), plugin: plugin(ALL), tweaks: [] })).not.toContain('versions');
   });
 
-  it('gives Steam and sideloaded games only the core tabs', () => {
+  it('gives Steam only the core tabs; sideloaded games get Maintenance for removing', () => {
     expect(settingsTabs({ game: game({ source: 'steam', store: 'steam' as never }), tweaks: [] })).toEqual(['general', 'customization']);
-    expect(settingsTabs({ game: game({ source: 'custom' }), tweaks: [tweak] })).toEqual(['general', 'tweaks', 'customization']);
+    expect(settingsTabs({ game: game({ source: 'custom', store: 'custom' as never }), tweaks: [tweak] })).toEqual(['general', 'tweaks', 'customization', 'maintenance']);
+    expect(settingsTabs({ game: game({ source: 'custom', store: 'custom' as never }), tweaks: [] })).toEqual(['general', 'customization', 'maintenance']);
   });
 
   it('opens the tab asked for only if the game has it', () => {
