@@ -14,6 +14,7 @@ import (
 
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
+	"platypus/internal/sanitize"
 	"platypus/internal/types"
 )
 
@@ -174,9 +175,54 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		if u = webURL(u); u != "" {
 			out.Screenshots = append(out.Screenshots, u)
 		}
+		if len(out.Screenshots) >= maxScreenshots {
+			break
+		}
 	}
 	if d.HeroURL = webURL(d.HeroURL); d.HeroURL != "" {
 		out.HeroURL = d.HeroURL
+	}
+	// The media and richer facts are protocol 1.12: an older plugin's answer
+	// carries none. HTML is sanitized in core so the UI only renders
+	// known-safe markup; URLs are https (or the local art server); lists and
+	// lengths are bounded.
+	if s.m.Runtime(s.ID()).Speaks(plugins.MediaVersion) {
+		// Cut the input, not the output: cutting sanitized markup could end
+		// inside a tag. The sanitizer closes whatever the cut left open.
+		desc := d.DescriptionHTML
+		if r := []rune(desc); len(r) > maxDescriptionRunes {
+			desc = string(r[:maxDescriptionRunes])
+		}
+		out.DescriptionHTML = sanitize.HTML(desc)
+		out.Website = sanitize.HTTPSURL(d.Website)
+		out.Languages = sanitize.Strings(d.Languages, maxListItems, maxCopyText)
+		switch d.Controller {
+		case "full", "partial":
+			out.Controller = d.Controller
+		}
+		if d.Requirements != nil {
+			min := sanitize.Clip(sanitize.HTML(d.Requirements.Minimum), maxRequirementsRunes)
+			rec := sanitize.Clip(sanitize.HTML(d.Requirements.Recommended), maxRequirementsRunes)
+			if min != "" || rec != "" {
+				out.Requirements = &types.GameRequirements{Minimum: min, Recommended: rec}
+			}
+		}
+		out.AgeRating = sanitize.Clip(d.AgeRating, maxCopyText)
+		out.Tags = sanitize.Strings(d.Tags, maxListItems, maxCopyText)
+		for _, v := range d.Videos {
+			if len(out.Videos) >= maxVideos {
+				break
+			}
+			u := sanitize.MediaURL(v.URL)
+			if u == "" {
+				continue
+			}
+			mime := videoMIME(v.MIME, u)
+			out.Videos = append(out.Videos, types.GameVideo{
+				URL: u, Thumbnail: sanitize.MediaURL(v.Thumbnail),
+				Title: sanitize.Clip(v.Title, maxCopyText), MIME: mime,
+			})
+		}
 	}
 	if d.Achievements != nil && d.Achievements.Total > 0 {
 		list := make([]types.Achievement, 0, len(d.Achievements.List))
@@ -285,6 +331,36 @@ func GameID(source, id string) string {
 		out += "-" + hex.EncodeToString(sum[:4])
 	}
 	return out
+}
+
+// Bounds for the media and richer facts (protocol 1.12) of game.details.
+const (
+	maxScreenshots       = 30
+	maxVideos            = 20
+	maxListItems         = 100
+	maxDescriptionRunes  = 200_000
+	maxRequirementsRunes = 50_000
+)
+
+// videoMIME keeps known video types, guesses from the URL suffix, else ""
+// (unknown: the player sniffs it). HLS (.m3u8) is dropped by the plugins,
+// never served here.
+func videoMIME(raw, u string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "video/mp4", "video/webm":
+		return strings.ToLower(strings.TrimSpace(raw))
+	}
+	lower := strings.ToLower(u)
+	if i := strings.Index(lower, "?"); i >= 0 {
+		lower = lower[:i]
+	}
+	switch {
+	case strings.HasSuffix(lower, ".mp4"):
+		return "video/mp4"
+	case strings.HasSuffix(lower, ".webm"):
+		return "video/webm"
+	}
+	return ""
 }
 
 // webURL keeps http(s) art URLs and drops anything else (file:, javascript:).

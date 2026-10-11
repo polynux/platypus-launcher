@@ -316,10 +316,35 @@ type GameDetails struct {
 	SteamAppID string   `json:"steam_app_id,omitempty"`
 	Platforms  []string `json:"platforms,omitempty"`
 	DRM        *DRM     `json:"drm,omitempty"`
-	// StoreURL is the game's page on the store's website (issue #17): the
-	// game page offers it as "Open in store". Empty when the plugin gave
-	// none (or nothing usable).
-	StoreURL string `json:"store_url,omitempty"`
+	// Media and richer facts (protocol 1.12): sanitized HTML for the
+	// description and requirements, links, languages, controller support,
+	// age rating, tags and videos. The UI renders DescriptionHTML and
+	// Requirements as markup; core sanitizes them (internal/sanitize) so
+	// only the allowlist reaches the page.
+	DescriptionHTML string            `json:"description_html,omitempty"`
+	Website         string            `json:"website,omitempty"`
+	StoreURL        string            `json:"store_url,omitempty"`
+	Languages       []string          `json:"languages,omitempty"`
+	Controller      string            `json:"controller,omitempty"` // "full" | "partial" | ""
+	Requirements    *GameRequirements `json:"requirements,omitempty"`
+	AgeRating       string            `json:"age_rating,omitempty"`
+	Tags            []string          `json:"tags,omitempty"`
+	Videos          []GameVideo       `json:"videos,omitempty"`
+}
+
+// GameRequirements are the store's system requirements, sanitized HTML or
+// plain text, as the game page's min/recommended tabs show them.
+type GameRequirements struct {
+	Minimum     string `json:"minimum,omitempty"`
+	Recommended string `json:"recommended,omitempty"`
+}
+
+// GameVideo is one trailer or clip of the game page's media strip.
+type GameVideo struct {
+	URL       string `json:"url"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	Title     string `json:"title,omitempty"`
+	MIME      string `json:"mime,omitempty"`
 }
 
 // DRM is the store's protection facts for a game (see plugins.DRM).

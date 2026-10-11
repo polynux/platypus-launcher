@@ -6,10 +6,12 @@ import (
 	"html"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"platypus/internal/sanitize"
 	"platypus/internal/types"
 )
 
@@ -26,13 +28,22 @@ func NewStoreClient() *StoreClient {
 }
 
 type storeApp struct {
-	ShortDescription string `json:"short_description"`
-	HeaderImage      string `json:"header_image"`
-	Developers       []string
-	Publishers       []string
-	Genres           []struct {
+	ShortDescription  string `json:"short_description"`
+	DetailedDescription string `json:"detailed_description"`
+	AboutTheGame      string `json:"about_the_game"`
+	SupportedLanguages string `json:"supported_languages"`
+	ControllerSupport string `json:"controller_support"`
+	RequiredAge       any    `json:"required_age"`
+	Website           string `json:"website"`
+	HeaderImage       string `json:"header_image"`
+	Developers        []string
+	Publishers        []string
+	Genres            []struct {
 		Description string `json:"description"`
 	} `json:"genres"`
+	Categories []struct {
+		Description string `json:"description"`
+	} `json:"categories"`
 	ReleaseDate struct {
 		Date string `json:"date"`
 	} `json:"release_date"`
@@ -40,6 +51,14 @@ type storeApp struct {
 		Thumb string `json:"path_thumbnail"`
 		Full  string `json:"path_full"`
 	} `json:"screenshots"`
+	Movies []struct {
+		Name      string `json:"name"`
+		Thumbnail string `json:"thumbnail"`
+		MP4       map[string]string `json:"mp4"`
+		WebM      map[string]string `json:"webm"`
+	} `json:"movies"`
+	PcRequirements    any `json:"pc_requirements"`
+	LinuxRequirements any `json:"linux_requirements"`
 	Achievements struct {
 		Total       int `json:"total"`
 		Highlighted []struct {
@@ -110,7 +129,14 @@ func (c *StoreClient) Details(root, appID string) (*types.GameDetails, error) {
 		d.Summary = strings.TrimSpace(html.UnescapeString(tagRe.ReplaceAllString(a.ShortDescription, "")))
 	}
 	for _, s := range a.Screenshots {
-		d.Screenshots = append(d.Screenshots, s.Full)
+		if len(d.Screenshots) >= 30 {
+			break
+		}
+		if u := sanitize.MediaURL(s.Full); u != "" {
+			d.Screenshots = append(d.Screenshots, u)
+		} else if u := sanitize.MediaURL(s.Thumb); u != "" {
+			d.Screenshots = append(d.Screenshots, u)
+		}
 	}
 	for _, g := range a.Genres {
 		d.Genres = append(d.Genres, g.Description)
@@ -118,6 +144,41 @@ func (c *StoreClient) Details(root, appID string) (*types.GameDetails, error) {
 	d.Developers = a.Developers
 	d.Publishers = a.Publishers
 	d.ReleaseDate = a.ReleaseDate.Date
+	// Richer facts (protocol 1.12): sanitized HTML, validated URLs, bounded lists.
+	desc := a.DetailedDescription
+	if desc == "" || (a.AboutTheGame != "" && len([]rune(a.AboutTheGame)) > len([]rune(desc))) {
+		if a.AboutTheGame != "" {
+			desc = a.AboutTheGame
+		}
+	}
+	if desc != "" {
+		if h := sanitize.HTML(desc); h != "" {
+			r := []rune(h)
+			if len(r) > 200_000 {
+				h = string(r[:200_000])
+			}
+			d.DescriptionHTML = h
+		}
+	}
+	d.Website = sanitize.HTTPSURL(a.Website)
+	d.StoreURL = "https://store.steampowered.com/app/" + appID + "/"
+	d.Languages = parseLanguages(a.SupportedLanguages)
+	if c := strings.ToLower(strings.TrimSpace(a.ControllerSupport)); c == "full" || c == "partial" {
+		d.Controller = c
+	}
+	if req := requirementsOf(a.PcRequirements, a.LinuxRequirements); req != nil {
+		d.Requirements = req
+	}
+	if age := requiredAge(a.RequiredAge); age != "" {
+		d.AgeRating = age
+	}
+	d.Tags = sanitize.Strings(categoryNames(a.Categories), 100, 200)
+	for _, v := range videosOf(a.Movies) {
+		if len(d.Videos) >= 20 {
+			break
+		}
+		d.Videos = append(d.Videos, v)
+	}
 	if d.Achievements == nil && a.Achievements.Total > 0 {
 		ach := &types.Achievements{Total: a.Achievements.Total, Unlocked: -1}
 		for _, h := range a.Achievements.Highlighted {
@@ -131,4 +192,158 @@ func (c *StoreClient) Details(root, appID string) (*types.GameDetails, error) {
 		d.StoreURL = "https://store.steampowered.com/app/" + appID + "/"
 	}
 	return d, nil
+}
+
+// parseLanguages turns the Store's supported_languages HTML ("English<strong>*</strong>,
+// French, …") into plain language names.
+func parseLanguages(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	text := html.UnescapeString(tagRe.ReplaceAllString(strings.ReplaceAll(raw, "<br", ",<br"), " "))
+	text = strings.ReplaceAll(text, "*", " ")
+	parts := strings.Split(text, ",")
+	out := []string{}
+	seen := map[string]bool{}
+	for _, p := range parts {
+		p = strings.Join(strings.Fields(strings.TrimSpace(p)), " ")
+		if p == "" || seen[p] || len(out) >= 100 {
+			if p != "" {
+				seen[p] = true
+			}
+			continue
+		}
+		if len([]rune(p)) > 60 {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
+}
+
+// requirementsOf merges pc and linux requirements ({minimum, recommended} as
+// HTML strings, or false when absent) into sanitized requirements.
+func requirementsOf(pc, linux any) *types.GameRequirements {
+	min, rec := requirementSide(pc)
+	if lmin, lrec := requirementSide(linux); lmin != "" {
+		if min == "" {
+			min = lmin
+		}
+		if rec == "" {
+			rec = lrec
+		}
+	}
+	if min == "" && rec == "" {
+		return nil
+	}
+	return &types.GameRequirements{Minimum: min, Recommended: rec}
+}
+
+func requirementSide(v any) (min, rec string) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	if s, ok := m["minimum"].(string); ok && s != "" {
+		if h := sanitize.HTML(s); h != "" {
+			r := []rune(h)
+			if len(r) > 50_000 {
+				h = string(r[:50_000])
+			}
+			min = h
+		}
+	}
+	if s, ok := m["recommended"].(string); ok && s != "" {
+		if h := sanitize.HTML(s); h != "" {
+			r := []rune(h)
+			if len(r) > 50_000 {
+				h = string(r[:50_000])
+			}
+			rec = h
+		}
+	}
+	return min, rec
+}
+
+// requiredAge renders the Store's required_age (number or numeric string;
+// 0 means no restriction) as "17+" style text, "" when none.
+func requiredAge(v any) string {
+	var n int
+	switch t := v.(type) {
+	case float64:
+		n = int(t)
+	case int:
+		n = t
+	case string:
+		n, _ = strconv.Atoi(strings.TrimSpace(t))
+	}
+	if n <= 0 {
+		return ""
+	}
+	if n > 21 {
+		n = 21
+	}
+	return strconv.Itoa(n) + "+"
+}
+
+func categoryNames(in []struct {
+	Description string `json:"description"`
+}) []string {
+	out := make([]string, 0, len(in))
+	for _, c := range in {
+		out = append(out, c.Description)
+	}
+	return out
+}
+
+// videosOf picks playable files from the Store's movies: mp4 480/max or
+// webm first; HLS-only entries are skipped.
+func videosOf(movies []struct {
+	Name      string `json:"name"`
+	Thumbnail string `json:"thumbnail"`
+	MP4       map[string]string `json:"mp4"`
+	WebM      map[string]string `json:"webm"`
+}) []types.GameVideo {
+	out := []types.GameVideo{}
+	for _, m := range movies {
+		u, mime := pickMovie(m.MP4, m.WebM)
+		if u == "" {
+			continue
+		}
+		if u = sanitize.MediaURL(u); u == "" {
+			continue
+		}
+		out = append(out, types.GameVideo{
+			URL: u, Thumbnail: sanitize.MediaURL(m.Thumbnail),
+			Title: sanitize.Clip(m.Name, 200), MIME: mime,
+		})
+	}
+	return out
+}
+
+func pickMovie(mp4, webm map[string]string) (string, string) {
+	if u := mp4["480"]; u != "" {
+		return u, "video/mp4"
+	}
+	if u := mp4["max"]; u != "" {
+		return u, "video/mp4"
+	}
+	for _, v := range mp4 {
+		if v != "" {
+			return v, "video/mp4"
+		}
+	}
+	if u := webm["480"]; u != "" {
+		return u, "video/webm"
+	}
+	if u := webm["max"]; u != "" {
+		return u, "video/webm"
+	}
+	for _, v := range webm {
+		if v != "" {
+			return v, "video/webm"
+		}
+	}
+	return "", ""
 }

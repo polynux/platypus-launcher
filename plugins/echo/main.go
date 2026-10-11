@@ -33,7 +33,7 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.11); it answers the highest Platypus also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.12); it answers the highest Platypus also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Platypus knows
@@ -189,9 +189,9 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: 1.0 to 1.11, so it meets the highest
+// defaultProtocols is what echo speaks: 1.0 to 1.12, so it meets the highest
 // revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12"}
 
 var (
 	knobMu  sync.Mutex
@@ -621,6 +621,9 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 			}
 			if g.terms {
 				out["terms"] = termsList(p.ID)
+			}
+			for k, v := range mediaFor(p.ID) {
+				out[k] = v
 			}
 		}
 		for k, v := range facts {

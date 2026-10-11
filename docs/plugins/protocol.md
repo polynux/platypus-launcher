@@ -1,4 +1,4 @@
-# Store plugin protocol (1.11, draft)
+# Store plugin protocol (1.12, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -110,7 +110,7 @@ other errors can contain.
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
-| `game.details` | `{ id }` | `GameDetails` (with `terms` from 1.11) |
+| `game.details` | `{ id }` | `GameDetails` (with `terms` from 1.11, media from 1.12) |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
 | `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
 | `game.update` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
@@ -194,16 +194,33 @@ entry's art and title only.
   "developers": ["House House"], "publishers": ["Panic"],
   "releaseDate": "2019-09-20", "heroUrl": "https://…",
   "achievements": { "total": 12, "list": [{ "id": "prank", "name": "First prank", "icon": "https://…", "globalPercent": 84.1 }] },
-  "storeUrl": "https://store.example/game/prank"
+  "descriptionHtml": "<p>A troublesome goose.</p>",
+  "website": "https://…", "storeUrl": "https://…",
+  "languages": ["English", "French"], "controller": "full",
+  "requirements": { "minimum": "<p>…</p>", "recommended": "<p>…</p>" },
+  "ageRating": "12+", "tags": ["Comedy", "Puzzle"],
+  "videos": [{ "url": "https://…/trailer.mp4", "thumbnail": "https://…", "title": "Trailer", "mime": "video/mp4" }]
 }
 ```
+
+The media and richer facts (`descriptionHtml`, `website`, `storeUrl`,
+`languages`, `controller`, `requirements`, `ageRating`, `tags`, `videos`) are
+protocol 1.12 (see [Media](#media-112)): Platypus reads them only from a
+plugin that negotiated 1.12 or later. An older plugin's answer carries none.
 
 For an id the store doesn't know, `game.details` fails with an error; a game the
 store knows but has no metadata for gets `{}`. (Steam's store answers
 `success: false` for delisted games and unknown ids alike, so it returns `{}` for
 both.)
 
-Every URL must be http(s); Platypus drops others. `achievements` describes what
+Every URL must be http(s); Platypus drops others. Media URLs (`videos[].url`,
+`videos[].thumbnail`) must be https, except the local art server's loopback
+http URLs; `website` and `storeUrl` must be https. HTML from stores is
+untrusted: `descriptionHtml` and `requirements` are sanitized in core to a
+small allowlist (`p`, `br`, `ul`, `ol`, `li`, `b`, `strong`, `i`, `em`,
+`h2`-`h4`, `a[href https]`) — no `img`/`iframe`/`style`/`script` — and the UI
+renders only that. Lists and lengths are bounded (screenshots 30, videos 20,
+languages/tags 100). `achievements` describes what
 the store shows about the game — if the plugin can't see the user's progress,
 leave it out rather than guess. Keep `list` short (a highlight, say 10) and let
 `total` carry the real count; Platypus notes the truncation. `storeUrl` is the
@@ -426,7 +443,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -455,9 +472,12 @@ that doesn't know it.
   the `chat.*` notifications (see [Chat](#chat-19)). 1.10: the compat fields of `game.details` (`steamAppId`,
   `platforms`, `drm`; see [Compat](#compat-110)). 1.11: the `terms` capability (`terms` on `game.details`, the optional
   `game.acceptTerms`, see [Terms](#terms-111)), and the DLC `kind` and copy `exclude` of `copies` (see [Family](#family-18)).
+  1.12: the media and richer facts of `game.details` (`descriptionHtml`, `website`, `storeUrl`, `languages`,
+  `controller`, `requirements` (`minimum`, `recommended`), `ageRating`, `tags`, `videos` (`url`, `thumbnail`,
+  `title`, `mime`); see [Media](#media-112)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10 or 1.11 method.
+  1.10, 1.11 or 1.12 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -1003,6 +1023,42 @@ Mapping hints for plugins, from their own store fields:
   `game.details` is read as before, and its compat fields are ignored.
 - **Anti-cheat** is not sent by plugins. Platypus gets it from the AreWeAntiCheatYet catalogue (MIT, credited in the
   About view) and from the markers it finds in an installed game's folder.
+
+## Media (1.12)
+
+Protocol 1.12 adds the game page's media and richer facts to the answer of
+`game.details`. No capability and no new method: a plugin sends the fields it
+knows, and Platypus reads them only from a plugin that negotiated 1.12 or
+later.
+
+```
+game.details { id } -> { ..., descriptionHtml?, website?, storeUrl?, languages?, controller?, requirements?, ageRating?, tags?, videos? }
+requirements = { minimum?, recommended? }
+videos = [{ url, thumbnail?, title?, mime? }]
+```
+
+- **descriptionHtml.** The store's long description as HTML. Untrusted: core
+  sanitizes it to `p`, `br`, `ul`, `ol`, `li`, `b`, `strong`, `i`, `em`,
+  `h2`-`h4` and `a[href https]` — no `img`/`iframe`/`style`/`script` — and the
+  UI renders only that. The game page shows it collapsed with a "Show more".
+- **requirements.** `minimum` and `recommended` are the store's system
+  requirements, sanitized like `descriptionHtml` (or plain text). Shown as
+  min/recommended tabs.
+- **languages.** The store's supported languages as plain names
+  (`["English", "French"]`). Shown in the details grid.
+- **controller.** `"full"` or `"partial"` when the store states controller
+  support; anything else is ignored.
+- **ageRating.** Free text like `"12+"`. Shown in the details grid.
+- **tags.** Plain tag names (store categories/genres). Shown with the genres.
+- **website**, **storeUrl.** `https` URLs, opened in the browser. The store
+  page opens in the embedded store view when available, else the browser.
+- **videos.** Trailers/clips. `url` must be `https` (or the local art
+  server's loopback http); `thumbnail` the same; `mime` is `video/mp4` or
+  `video/webm` (guessed from the suffix when missing). Prefer mp4 480/max or
+  webm; HLS-only entries are skipped. The media strip shows thumbnails;
+  the lightbox plays with controls, muted, never autoplay with sound.
+- **Gating.** Platypus reads these fields only when the negotiated protocol
+  is 1.12 or later.
 ## Terms (1.11)
 
 The `terms` capability (protocol 1.11) lists the agreements a store asks the user to accept before a game is installed:

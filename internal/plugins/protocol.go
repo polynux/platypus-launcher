@@ -146,15 +146,45 @@ type GameDetails struct {
 	// Terms are the agreements the user accepts before an install (1.11, the
 	// `terms` capability: docs/plugins/protocol.md, "Terms").
 	Terms []Term `json:"terms,omitempty"`
-	// StoreURL is the game's page on the store's website (issue #17): the
-	// game page offers it as "Open in store". An https link; anything else
-	// is dropped.
-	StoreURL string `json:"storeUrl,omitempty"`
+	// Media and richer facts below are protocol 1.12 (MediaVersion): Platypus
+	// reads them only from a plugin that speaks it. DescriptionHTML and the
+	// requirements are sanitized HTML (internal/sanitize); the UI renders
+	// them as markup. URLs are https (or the local art server); videos never
+	// autoplay with sound.
+	DescriptionHTML string        `json:"descriptionHtml,omitempty"`
+	Website         string        `json:"website,omitempty"`
+	StoreURL        string        `json:"storeUrl,omitempty"`
+	Languages       []string      `json:"languages,omitempty"`
+	Controller      string        `json:"controller,omitempty"` // "full" | "partial" | ""
+	Requirements    *Requirements `json:"requirements,omitempty"`
+	AgeRating       string        `json:"ageRating,omitempty"`
+	Tags            []string      `json:"tags,omitempty"`
+	Videos          []Video       `json:"videos,omitempty"`
+}
+
+// Requirements are the store's system requirements (game.details,
+// protocol 1.12).
+type Requirements struct {
+	Minimum     string `json:"minimum,omitempty"`
+	Recommended string `json:"recommended,omitempty"`
+}
+
+// Video is one trailer or clip (game.details, protocol 1.12).
+type Video struct {
+	URL       string `json:"url"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	Title     string `json:"title,omitempty"`
+	MIME      string `json:"mime,omitempty"`
 }
 
 // CompatVersion is the first protocol revision whose game.details carries the
 // compat fields (SteamAppID, Platforms, DRM).
 var CompatVersion = Version{Major: 1, Minor: 10}
+
+// MediaVersion is the first protocol revision whose game.details carries the
+// media and richer facts (DescriptionHTML, Website, StoreURL, Languages,
+// Controller, Requirements, AgeRating, Tags, Videos).
+var MediaVersion = Version{Major: 1, Minor: 12}
 
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus

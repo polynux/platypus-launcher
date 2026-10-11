@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, ExternalLink, FolderCheck, FolderInput, Maximize2, RefreshCw, Settings2, Trophy } from 'lucide-react';
+import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CopyPicker } from './CopyPicker';
-import { Lightbox } from './Lightbox';
+import { Lightbox, toMediaItems, type MediaItem } from './Lightbox';
+import { ExternalLink } from './ExternalLink';
+import { openExternal } from '../lib/external';
 import { InstallOptionsDialog } from './InstallOptionsDialog';
 import { InstallDialog } from './InstallDialog';
 import { GameSettingsModal } from './GameSettingsModal';
@@ -194,6 +196,8 @@ export function GamePage(p: GamePageProps) {
   const active = job && (job.state === 'queued' || job.state === 'running');
   const fix = game.fix_info;
   const shots = details?.screenshots ?? [];
+  const videos = (details as unknown as { videos?: { url: string; thumbnail?: string; title?: string; mime?: string }[] | null } | null)?.videos ?? [];
+  const media: MediaItem[] = useMemo(() => toMediaItems(shots, videos ?? []), [details]);
   const ach = details?.achievements;
   const canChooseVersion = !!plugin && game.installable !== false && offers(plugin, 'versions', { game });
   const canChooseOptions = !!plugin && game.installable !== false && offers(plugin, 'install-options', { game });
@@ -239,13 +243,6 @@ export function GamePage(p: GamePageProps) {
       : info?.protondb?.no_reports
         ? 'ProtonDB has no reports for this title.'
         : 'No compatibility reports loaded for this title yet.';
-
-  const about = [
-    details?.genres?.length ? details.genres.slice(0, 3).join(' · ') : null,
-    details?.developers?.length ? details.developers.join(', ') : null,
-    details?.publishers?.length ? details.publishers.join(', ') : null,
-    details?.release_date || null,
-  ].filter(Boolean) as string[];
 
   return (
     <TooltipProvider>
@@ -324,7 +321,7 @@ export function GamePage(p: GamePageProps) {
                       aria-label={`Open ${game.title} in ${plugin.name}`}
                       className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70"
                     >
-                      <ExternalLink className="h-[18px] w-[18px]" />
+                      <StoreIcon className="h-[18px] w-[18px]" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Open in store</TooltipContent>
@@ -373,59 +370,19 @@ export function GamePage(p: GamePageProps) {
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
         <div className="min-w-0 space-y-5">
-          {shots.length > 0 && (
-            <div className="space-y-3">
-              <Tooltip>
-              <TooltipTrigger asChild>
-              <button
-                onClick={() => setLightbox(true)}
-                aria-label="Open screenshots in slideshow"
-                className="group relative block w-full cursor-zoom-in overflow-hidden rounded-3xl bg-black/40 ring-1 ring-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
-              >
-                <img key={shot} src={shots[shot]} alt={`${game.title} screenshot ${shot + 1}`} className="aspect-video w-full object-cover" />
-                <span aria-hidden className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-white/80 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                  <Maximize2 size={15} />
-                </span>
-              </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Open slideshow</TooltipContent>
-              </Tooltip>
-              <ScrollArea orientation="horizontal" type="always" viewportRef={strip} data-testid="shot-strip">
-                {/* Padding keeps the active ring and rounded corners inside the viewport; pb leaves room for the overlay bar. */}
-                <div data-testid="shot-strip-inner" className="flex w-max gap-2.5 px-1.5 pb-3.5 pt-1.5">
-                  {shots.map((src, i) => (
-                    <button
-                      key={src}
-                      data-thumb
-                      onClick={() => setShot(i)}
-                      onDoubleClick={() => setLightbox(true)}
-                      aria-label={`Show screenshot ${i + 1}`}
-                      aria-pressed={i === shot}
-                      className={cx('aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300', i === shot ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
-                    >
-                      <img src={src} alt="" loading="lazy" className="h-full w-full object-contain" />
-                    </button>
-                  ))}
-                </div>
-              </ScrollArea>
-              {lightbox && <Lightbox images={shots} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
-            </div>
+          {media.length > 0 && (
+            <MediaStrip game={game} media={media} index={shot} onIndex={setShot} onOpen={() => setLightbox(true)} stripRef={strip} />
           )}
+          {lightbox && media.length > 0 && <Lightbox items={media} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
 
-          <Panel className="bg-white/[0.05]">
-            <h2 className="mb-2 text-[15px] font-bold">About</h2>
-            {loading ? (
-              <div className="space-y-2">
-                <div className="h-3 w-full animate-pulse rounded bg-white/[0.06]" />
-                <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.06]" />
-              </div>
-            ) : details?.summary ? (
-              <p className="text-[13px] leading-relaxed text-white/70">{details.summary}</p>
-            ) : (
-              <p className="text-[13px] text-white/70">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
-            )}
-            {about.length > 0 && <p className="mt-3 font-mono text-[12px] text-white/55">{about.join('  ·  ')}</p>}
-          </Panel>
+          <AboutSection
+            game={game}
+            details={details}
+            loading={loading}
+            error={error}
+            compatUrls={{ protondb: info?.protondb?.url, wiki: info?.wiki?.url }}
+            onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
+          />
         </div>
 
         <aside className="min-w-0 space-y-5">
@@ -507,6 +464,240 @@ export function GamePage(p: GamePageProps) {
       )}
     </div>
     </TooltipProvider>
+  );
+}
+
+/** The store's HTML (description, requirements): core sanitizes it to the
+ *  allowlist, so rendering it as markup is safe. Links open in the browser. */
+function SafeHtml({ html, testid }: { html: string; testid?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest?.('a');
+      if (!a) return;
+      const href = a.getAttribute('href');
+      if (!href) return;
+      e.preventDefault();
+      openExternal(href);
+    };
+    el.addEventListener('click', onClick);
+    return () => el.removeEventListener('click', onClick);
+  }, []);
+  return (
+    <div
+      ref={ref}
+      data-testid={testid}
+      dangerouslySetInnerHTML={{ __html: html }}
+      className="space-y-2 text-[13px] leading-relaxed text-white/70 [&_a]:text-amber-200/90 [&_a]:underline [&_a]:decoration-amber-200/40 [&_a]:underline-offset-2 [&_h2]:text-[14px] [&_h2]:font-bold [&_h2]:text-white/85 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:text-white/85 [&_h4]:text-[13px] [&_h4]:font-bold [&_h4]:text-white/85 [&_li]:ml-4 [&_li]:list-disc [&_ul]:space-y-1"
+    />
+  );
+}
+
+/** Screenshots + video thumbnails: lazy, nothing heavy on first paint. The
+ *  hero shows the selected item; videos show their thumbnail with a play
+ *  badge and open click-to-play in the lightbox (never autoplay with sound). */
+function MediaStrip({ game, media, index, onIndex, onOpen, stripRef }: {
+  game: Game;
+  media: MediaItem[];
+  index: number;
+  onIndex: (i: number) => void;
+  onOpen: () => void;
+  stripRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const cur = media[index] ?? media[0];
+  const thumbLabel = (m: MediaItem, i: number) =>
+    m.kind === 'video' ? `Play trailer ${m.title ? `"${m.title}" ` : ''}(${i + 1} of ${media.length})` : `Show screenshot ${i + 1}`;
+  return (
+    <div className="space-y-3">
+      <Tooltip>
+      <TooltipTrigger asChild>
+      <button
+        onClick={onOpen}
+        aria-label={cur?.kind === 'video' ? 'Open trailer in viewer' : 'Open screenshots in slideshow'}
+        className="group relative block w-full cursor-zoom-in overflow-hidden rounded-3xl bg-black/40 ring-1 ring-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+      >
+        {cur?.kind === 'video' ? (
+          cur.thumbnail ? (
+            <img key={cur.src} src={cur.thumbnail} alt={`${game.title} trailer thumbnail`} loading="lazy" className="aspect-video w-full object-cover" />
+          ) : (
+            <span key={cur.src} className="grid aspect-video w-full place-items-center bg-black/60">
+              <Play className="h-10 w-10 text-white/80" />
+            </span>
+          )
+        ) : (
+          cur && <img key={cur.src} src={cur.src} alt={`${game.title} screenshot ${index + 1}`} className="aspect-video w-full object-cover" />
+        )}
+        {cur?.kind === 'video' && (
+          <span aria-hidden className="absolute inset-0 grid place-items-center">
+            <span className="grid h-14 w-14 place-items-center rounded-full bg-black/65 ring-1 ring-white/20 transition group-hover:scale-105">
+              <Play className="h-6 w-6 fill-white text-white" />
+            </span>
+          </span>
+        )}
+        <span aria-hidden className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg bg-black/60 text-white/80 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+          <Maximize2 size={15} />
+        </span>
+      </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Open viewer</TooltipContent>
+      </Tooltip>
+      <ScrollArea orientation="horizontal" type="always" viewportRef={stripRef} data-testid="shot-strip">
+        {/* Padding keeps the active ring and rounded corners inside the viewport; pb leaves room for the overlay bar. */}
+        <div data-testid="shot-strip-inner" className="flex w-max gap-2.5 px-1.5 pb-3.5 pt-1.5">
+          {media.map((m, i) => (
+            <button
+              key={`${m.kind}-${m.src}`}
+              data-thumb
+              onClick={() => onIndex(i)}
+              onDoubleClick={onOpen}
+              aria-label={thumbLabel(m, i)}
+              aria-pressed={i === index}
+              className={cx('relative aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300', i === index ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
+            >
+              {m.kind === 'video' ? (
+                m.thumbnail ? (
+                  <img src={m.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="grid h-full w-full place-items-center"><Play className="h-5 w-5 text-white/80" /></span>
+                )
+              ) : (
+                <img src={m.src} alt="" loading="lazy" className="h-full w-full object-contain" />
+              )}
+              {m.kind === 'video' && (
+                <span aria-hidden className="absolute inset-0 grid place-items-center">
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-black/65 ring-1 ring-white/20">
+                    <Play className="h-3.5 w-3.5 fill-white text-white" />
+                  </span>
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+function controllerLabel(c?: string): string | null {
+  if (c === 'full') return 'Full controller support';
+  if (c === 'partial') return 'Partial controller support';
+  return null;
+}
+
+/** The About section: formatted description (collapsed + Show more), details
+ *  grid, requirements tabs and links. Calm by default: secondary details live
+ *  here, not in the hero. */
+function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }: {
+  game: Game;
+  details: GameDetails | null;
+  loading: boolean;
+  error: string | null;
+  compatUrls: { protondb?: string; wiki?: string };
+  /** Opens the store page in the embedded store view, when the plugin has one. */
+  onOpenStore?: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [reqTab, setReqTab] = useState<'minimum' | 'recommended'>('minimum');
+  useEffect(() => { setExpanded(false); setReqTab('minimum'); }, [game.id]);
+  const d = details as unknown as (GameDetails & {
+    description_html?: string; website?: string; store_url?: string;
+    languages?: string[]; controller?: string;
+    requirements?: { minimum?: string; recommended?: string } | null;
+    age_rating?: string; tags?: string[]; videos?: unknown[];
+  }) | null;
+  const html = d?.description_html || '';
+  const summary = details?.summary || '';
+  const genres = [...(details?.genres ?? []), ...((d?.tags ?? []).filter((t) => !(details?.genres ?? []).includes(t)) ?? [])];
+  const controller = controllerLabel(d?.controller);
+  const rows: [string, string][] = [
+    ...(details?.developers?.length ? [['Developer', details.developers.join(', ')] as [string, string]] : []),
+    ...(details?.publishers?.length ? [['Publisher', details.publishers.join(', ')] as [string, string]] : []),
+    ...(details?.release_date ? [['Release', details.release_date] as [string, string]] : []),
+    ...(genres.length ? [['Genres', genres.join(' · ')] as [string, string]] : []),
+    ...((d?.languages?.length ?? 0) ? [['Languages', (d?.languages ?? []).join(', ')] as [string, string]] : []),
+    ...(controller ? [['Controller', controller] as [string, string]] : []),
+    ...(d?.age_rating ? [['Age rating', d.age_rating] as [string, string]] : []),
+  ];
+  const req = d?.requirements;
+  const links: [string, string][] = [
+    ...(d?.website ? [['Website', d.website] as [string, string]] : []),
+    ...(d?.store_url ? [['Store page', d.store_url] as [string, string]] : []),
+    ...(compatUrls.protondb ? [['ProtonDB', compatUrls.protondb] as [string, string]] : []),
+    ...(compatUrls.wiki ? [['PCGamingWiki', compatUrls.wiki] as [string, string]] : []),
+  ];
+  return (
+    <Panel className="bg-white/[0.05]">
+      <h2 className="mb-2 text-[15px] font-bold">About</h2>
+      {loading ? (
+        <div className="space-y-2">
+          <div className="h-3 w-full animate-pulse rounded bg-white/[0.06]" />
+          <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.06]" />
+        </div>
+      ) : html ? (
+        <>
+          <div className={expanded ? '' : 'max-h-[104px] overflow-hidden'} data-testid="about-html-wrap">
+            <SafeHtml html={html} testid="about-html" />
+          </div>
+          <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-1.5 rounded px-0 font-mono text-[12px] underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/85">
+            {expanded ? 'Show less' : 'Show more'}
+          </Button>
+        </>
+      ) : summary ? (
+        <p className="text-[13px] leading-relaxed text-white/70">{summary}</p>
+      ) : (
+        <p className="text-[13px] text-white/70">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
+      )}
+      {rows.length > 0 && (
+        <dl data-testid="details-grid" className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-white/[0.06] pt-3">
+          {rows.map(([k, v]) => (
+            <div key={k} className="min-w-0">
+              <dt className="font-mono text-hint uppercase tracking-widest text-white/45">{k}</dt>
+              <dd className="truncate text-[12.5px] text-white/80" title={v}>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {req && (req.minimum || req.recommended) && (
+        <div className="mt-4 border-t border-white/[0.06] pt-3" data-testid="requirements">
+          <div role="tablist" aria-label="System requirements" className="mb-2 flex gap-1.5">
+            {(['minimum', 'recommended'] as const).filter((k) => req[k]).map((k) => (
+              <Button
+                key={k}
+                role="tab"
+                aria-selected={reqTab === k}
+                data-testid={`req-tab-${k}`}
+                variant="ghost"
+                size="none"
+                onClick={() => setReqTab(k)}
+                className={reqTab === k ? 'rounded-lg bg-white/[0.08] px-2.5 py-1 font-mono text-[12px] text-white' : 'rounded-lg px-2.5 py-1 font-mono text-[12px] text-white/55 hover:bg-transparent hover:text-white/80'}
+              >
+                {k === 'minimum' ? 'Minimum' : 'Recommended'}
+              </Button>
+            ))}
+          </div>
+          <div role="tabpanel" data-testid="req-panel">
+            <SafeHtml html={req[reqTab] ?? req.minimum ?? req.recommended ?? ''} />
+          </div>
+        </div>
+      )}
+      {links.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[12px]" data-testid="about-links">
+          {links.map(([label, href]) =>
+            label === 'Store page' && onOpenStore ? (
+              <button key={label} type="button" onClick={onOpenStore} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
+                {label}
+              </button>
+            ) : (
+            <ExternalLink key={label} href={href} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
+              {label} ↗
+            </ExternalLink>
+            ),
+          )}
+        </div>
+      )}
+    </Panel>
   );
 }
 
