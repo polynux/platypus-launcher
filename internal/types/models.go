@@ -206,6 +206,11 @@ type StorePlugin struct {
 	InstallFolder        string   `json:"install_folder"`
 	DefaultInstallFolder string   `json:"default_install_folder"`
 	ExtraFolders         []string `json:"extra_folders"` // other folders the user allowed launching from
+	// IconURL is the address the UI draws the plugin's logo from ("" when it
+	// has none): a locally served file from the plugin folder, never the
+	// network. The sidebar Sources and the Plugins view show it, with a
+	// monogram tile as fallback.
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 // PluginCapability is one declared capability as the Plugins view shows it.

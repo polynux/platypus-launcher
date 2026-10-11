@@ -8,6 +8,7 @@
   "protocol": { "versions": ["1.0"], "transport": "jsonrpc-stdio" },
   "store": "epic",
   "exec": "bin/platypus-epic",
+  "icon": "icon.svg",
   "capabilities": ["library", "install", "launch", "auth", "discard"],
   "requires": [
     { "bin": "legendary", "hint": "uv tool install legendary-gl (or pipx install legendary-gl)" },

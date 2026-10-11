@@ -59,6 +59,10 @@ type Manifest struct {
 	Protocol *ProtocolSpec `json:"protocol"`
 	Store    string        `json:"store"`
 	Exec     string        `json:"exec"`
+	// Icon is the plugin's logo inside its folder (e.g. "icon.svg"): SVG
+	// preferred, PNG accepted. It is served locally to the UI; a missing or
+	// invalid file only means no logo (see IconPath), never a broken plugin.
+	Icon string `json:"icon,omitempty"`
 	// Kind is "store" (default) or "data". A data plugin has no exec and
 	// lists its JSON files in Data.
 	Kind         string   `json:"kind"`
@@ -311,6 +315,17 @@ func (m Manifest) validate() error {
 	}
 	if m.InstallDir != "" && !filepath.IsLocal(m.InstallDir) {
 		bad("install_dir %q must be a relative folder name", m.InstallDir)
+	}
+	if m.Icon != "" {
+		if !filepath.IsLocal(m.Icon) {
+			bad("icon %q must be a path inside the plugin folder", m.Icon)
+		} else {
+			switch strings.ToLower(filepath.Ext(m.Icon)) {
+			case ".svg", ".png":
+			default:
+				bad("icon %q must be an SVG or PNG file", m.Icon)
+			}
+		}
 	}
 	for _, p := range append(append([]string{}, m.Permissions.Read...), m.Permissions.Write...) {
 		if !filepath.IsAbs(p) && p != "~" && !strings.HasPrefix(p, "~/") {

@@ -10,6 +10,7 @@ import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
 import { PluginCapabilities } from './PluginCapabilities';
+import { PluginLogo } from './PluginLogo';
 import { PluginSettingsPanel } from './PluginSettings';
 import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
@@ -154,11 +155,14 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
               <Panel key={p.id} className="flex flex-col gap-4">
                 <div>
                   <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
-                      <p className="font-mono text-hint text-white/55">
-                        v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <PluginLogo src={p.icon_url} name={p.name} />
+                      <div className="min-w-0">
+                        <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
+                        <p className="font-mono text-hint text-white/55">
+                          v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
+                        </p>
+                      </div>
                     </div>
                     <Badge variant={st.variant} className="flex-none">{st.label}</Badge>
                   </div>
@@ -289,9 +293,12 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 return (
                   <Panel key={p.id} className="flex flex-col gap-2">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
-                        <p className="font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <PluginLogo src={p.icon_url} name={p.name} />
+                        <div className="min-w-0">
+                          <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
+                          <p className="font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+                        </div>
                       </div>
                       <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
                         {p.status === 'ready' ? 'data' : st.label}

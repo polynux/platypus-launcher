@@ -30,6 +30,11 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 kind=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("kind",""))' "$src/plugin.json")
 exec_rel=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("exec",""))' "$src/plugin.json")
+icon_rel=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("icon",""))' "$src/plugin.json")
+case "$icon_rel" in
+  "") ;;
+  /*|../*|*/../*) echo "$name/plugin.json icon escapes the folder: $icon_rel" >&2; exit 1 ;;
+esac
 
 # Data plugins (kind: data, no exec) are JSON only: copy the listed data
 # files plus the manifest.
@@ -47,6 +52,10 @@ if [ "$kind" = "data" ]; then
     fi
   done
   cp "$src/plugin.json" "$dest/plugin.json.new" && mv -f "$dest/plugin.json.new" "$dest/plugin.json"
+  if [ -n "$icon_rel" ] && [ -f "$src/$icon_rel" ]; then
+    mkdir -p "$dest/$(dirname "$icon_rel")"
+    cp "$src/$icon_rel" "$dest/$icon_rel.new" && mv -f "$dest/$icon_rel.new" "$dest/$icon_rel"
+  fi
   trap - EXIT INT TERM
   echo "installed $name in $dest"
   exit 0
@@ -131,6 +140,12 @@ if [ -d "$dest/$exec_dir" ]; then
       rm -f "$f"
     fi
   done
+fi
+# The logo from the manifest ("icon": "icon.svg"), if any, ships with the
+# plugin: the core serves it locally to the UI.
+if [ -n "$icon_rel" ] && [ -f "$src/$icon_rel" ]; then
+  mkdir -p "$dest/$(dirname "$icon_rel")"
+  cp "$src/$icon_rel" "$dest/$icon_rel.new" && mv -f "$dest/$icon_rel.new" "$dest/$icon_rel"
 fi
 cp "$src/plugin.json" "$dest/plugin.json.new" && mv -f "$dest/plugin.json.new" "$dest/plugin.json"
 trap - EXIT INT TERM
