@@ -8,6 +8,7 @@
   "protocol": { "versions": ["1.0"], "transport": "jsonrpc-stdio" },
   "store": "steam",
   "exec": "bin/platypus-steam",
+  "icon": "icon.svg",
   "capabilities": ["library", "install", "launch", "auth", "discard"],
   "requires": [
     { "bin": "python3", "hint": "install python3 from your distribution" },
