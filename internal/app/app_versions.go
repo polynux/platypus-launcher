@@ -63,14 +63,13 @@ func (a *App) versionsGate(game types.Game) (plugins.Plugin, error) {
 }
 
 // libraryCopy is the game as its store's library lists it now, found by id.
+// It reads through the library cache, so opening the versions dialog doesn't
+// re-list the store on its own.
 func (a *App) libraryCopy(game types.Game) (types.Game, error) {
-	s, ok := a.stores.Get(game.Source)
-	if !ok {
+	if _, ok := a.stores.Get(game.Source); !ok {
 		return types.Game{}, fmt.Errorf("%s isn't in your library", game.Title)
 	}
-	ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
-	defer cancel()
-	games, err := s.Library(ctx)
+	games, err := a.sourceLibrary(game.Source)
 	if err != nil {
 		return types.Game{}, fmt.Errorf("couldn't check %s's library: %w", game.Title, err)
 	}
