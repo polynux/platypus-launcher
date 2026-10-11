@@ -80,6 +80,7 @@ export interface CoreApi {
   RemoveCustomGame(id: string): Promise<void>;
   RemoveGameFolder(path: string): Promise<types.GameFolder[]>;
   RepairGame(game: types.Game): Promise<types.Job>;
+  RescanLibrary(): Promise<types.Library>;
   RescanPlugins(): Promise<types.StorePlugin[]>;
   ResetCustomArt(gameID: string, kind: string): Promise<types.Customization>;
   ResetCustomization(gameID: string): Promise<types.Customization>;
@@ -192,6 +193,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'RemoveCustomGame',
   'RemoveGameFolder',
   'RepairGame',
+  'RescanLibrary',
   'RescanPlugins',
   'ResetCustomArt',
   'ResetCustomization',

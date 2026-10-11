@@ -86,10 +86,20 @@ function normalizeCustomization(c: unknown): Customization {
 
 export const LauncherApi = {
   // Every source merged; plugin failures arrive as warnings, not errors.
+  // Sources the backend listed recently come from its cache: a quiet read
+  // costs no store call. A manual rescan lists everything again.
   getLibrary: () =>
     call<Library>('GetLibrary', async () => {
       const lib = await App.GetLibrary();
       if (!lib || !Array.isArray(lib.games)) throw new Error('GetLibrary returned unexpected payload');
+      return { games: lib.games, warnings: lib.warnings ?? [] };
+    }),
+
+  // The manual "Rescan": every source is listed again, bypassing the cache.
+  rescanLibrary: () =>
+    call<Library>('RescanLibrary', async () => {
+      const lib = await App.RescanLibrary();
+      if (!lib || !Array.isArray(lib.games)) throw new Error('RescanLibrary returned unexpected payload');
       return { games: lib.games, warnings: lib.warnings ?? [] };
     }),
 
