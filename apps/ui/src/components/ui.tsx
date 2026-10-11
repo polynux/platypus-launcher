@@ -152,6 +152,15 @@ export function EmptyState({ label, children, action }: { label: string; childre
   );
 }
 
+/** Whether a loaded image holds no real art: a 200 with an empty or
+ *  undecodable body decodes to 0x0, and some CDNs answer 200 with a 1x1
+ *  placeholder instead of a 404. Real covers, banners and heroes are
+ *  hundreds of pixels across, so anything at most 1px in either dimension
+ *  is a miss, just like a 404. */
+function isBadRender(img: HTMLImageElement): boolean {
+  return img.naturalWidth <= 1 || img.naturalHeight <= 1;
+}
+
 /** Cover image with a typographic fallback when the CDN has no art. Tries
  *  each source in order; a URL that 404'd recently is skipped without a
  *  request (see lib/coverMisses) instead of refetching on every render. */
@@ -167,11 +176,22 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
     if (current) coverMisses.markBad(current);
     setFailed({ key, idx: idx + 1 });
   }, [key, idx, current]);
-  // A cached 404 can fail before React attaches onError; catch it on mount.
+  // A missing image can fail before React attaches onError (a cached 404) or
+  // load with no pixels at all: a 200 with an empty or undecodable body, or
+  // the 1x1 placeholder some CDNs return instead of a 404. Neither fires
+  // onError yet nothing shows, so the decoded dimensions decide too: real
+  // covers, banners and heroes are hundreds of pixels across.
+  const loaded = React.useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      if (isBadRender(e.currentTarget)) fail();
+    },
+    [fail],
+  );
+  // A cached failure can finish before React attaches any handler; catch it on mount.
   const img = React.useRef<HTMLImageElement>(null);
   React.useEffect(() => {
     const el = img.current;
-    if (el?.complete && el.naturalWidth === 0) fail();
+    if (el?.complete && isBadRender(el)) fail();
   }, [current, fail]);
   if (!current) {
     return (
@@ -180,7 +200,7 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
       </div>
     );
   }
-  return <img ref={img} src={current} alt="" loading="lazy" decoding="async" onError={fail} className={cx('object-cover', className)} />;
+  return <img ref={img} src={current} alt="" loading="lazy" decoding="async" onError={fail} onLoad={loaded} className={cx('object-cover', className)} />;
 }
 
 export function relTime(ts: number, now = Date.now()): string {
