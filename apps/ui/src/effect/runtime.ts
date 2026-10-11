@@ -148,6 +148,9 @@ export const LauncherApi = {
         genres: d.genres ?? [],
         developers: d.developers ?? [],
         publishers: d.publishers ?? [],
+        languages: (d as { languages?: string[] | null }).languages ?? [],
+        tags: (d as { tags?: string[] | null }).tags ?? [],
+        videos: (d as { videos?: GameDetails['videos'] | null }).videos ?? [],
         achievements: d.achievements ? { ...d.achievements, list: d.achievements.list ?? [] } : d.achievements,
       };
     }),

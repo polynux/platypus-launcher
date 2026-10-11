@@ -288,6 +288,15 @@ export namespace types {
     steam_app_id?: string;
     platforms?: string[];
     drm?: types.DRM | null;
+    description_html?: string;
+    website?: string;
+    store_url?: string;
+    languages?: string[];
+    controller?: string;
+    requirements?: types.GameRequirements | null;
+    age_rating?: string;
+    tags?: string[];
+    videos?: types.GameVideo[];
   }
 
   export interface GameFixInfo {
@@ -309,6 +318,11 @@ export namespace types {
   export interface GameOptions {
     groups: types.OptionGroup[];
     chosen: types.InstallOptions;
+  }
+
+  export interface GameRequirements {
+    minimum?: string;
+    recommended?: string;
   }
 
   export interface GameSettings {
@@ -334,6 +348,13 @@ export namespace types {
     url?: string;
     version: string;
     accepted_at?: number;
+  }
+
+  export interface GameVideo {
+    url: string;
+    thumbnail?: string;
+    title?: string;
+    mime?: string;
   }
 
   export interface InstallFolderCheck {

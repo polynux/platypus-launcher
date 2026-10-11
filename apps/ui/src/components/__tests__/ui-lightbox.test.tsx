@@ -51,8 +51,8 @@ describe('Lightbox', () => {
     render(<Harness />);
     fireEvent.click(screen.getByText('open'));
     const dialog = screen.getByRole('dialog');
-    screen.getByLabelText('Next screenshot').focus();
+    screen.getByLabelText('Next media').focus();
     fireEvent.keyDown(dialog, { key: 'Tab' });
-    expect(document.activeElement).toBe(screen.getByLabelText('Close slideshow'));
+    expect(document.activeElement).toBe(screen.getByLabelText('Close viewer'));
   });
 });
