@@ -58,8 +58,9 @@ export function staticFile(root: string, requestPath: string): string | null {
 /**
  * The Content-Security-Policy of the app page. Scripts only from the app
  * itself; images may come from the web (store covers) and from the loopback
- * (a plugin's local image server); nothing connects out. The dev policy adds
- * what Vite's refresh runtime needs.
+ * (a plugin's local image server); videos (trailers) come from https store
+ * CDNs and the loopback art server, never with sound autoplay; nothing
+ * connects out. The dev policy adds what Vite's refresh runtime needs.
  */
 export function csp(devPort?: number): string {
   const dev = devPort !== undefined;
@@ -68,6 +69,7 @@ export function csp(devPort?: number): string {
     dev ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*",
+    "media-src 'self' https: http://127.0.0.1:* http://localhost:*",
     "font-src 'self' data:",
     dev ? `connect-src 'self' ws://127.0.0.1:${devPort}` : "connect-src 'self'",
     "base-uri 'none'",

@@ -82,7 +82,7 @@ func TestProtocolDocMentionsEveryMethodAndKey(t *testing.T) {
 		}
 	}
 
-	for _, set := range [][]string{plugtest.LibraryKeys, plugtest.DetailsKeys, plugtest.LaunchKeys,
+	for _, set := range [][]string{plugtest.LibraryKeys, plugtest.DetailsKeys, plugtest.DRMKeys, plugtest.RequirementsKeys, plugtest.VideoKeys, plugtest.LaunchKeys,
 		plugtest.CloudStatusKeys, plugtest.CloudCountsKeys, plugtest.CloudConflictKeys, plugtest.CloudFileKeys, plugtest.CloudClientKeys, plugtest.CloudProgressKeys,
 		plugtest.VersionListKeys, plugtest.VersionChannelKeys, plugtest.VersionBuildKeys,
 		plugtest.VersionManualKeys, plugtest.VersionLinkKeys,

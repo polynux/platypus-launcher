@@ -1508,9 +1508,49 @@ def launch_spec(params):
     }
 
 
+def _languages(raw):
+    """Supported languages HTML ("English<strong>*</strong>, French, ...") to plain names."""
+    if not raw:
+        return []
+    text = re.sub(r"<br\s*/?>", ",", raw, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    out = []
+    for part in text.replace("*", " ").split(","):
+        name = " ".join(part.split())
+        if name and name not in out and len(out) < 100 and len(name) <= 60:
+            out.append(name)
+    return out
+
+
+def _requirement_side(v):
+    if not isinstance(v, dict):
+        return "", ""
+    lo, hi = "", ""
+    if isinstance(v.get("minimum"), str) and v["minimum"]:
+        lo = v["minimum"][:50000]
+    if isinstance(v.get("recommended"), str) and v["recommended"]:
+        hi = v["recommended"][:50000]
+    return lo, hi
+
+
+def _movie_url(movie):
+    """Prefer mp4 480/max or webm; HLS-only entries are skipped."""
+    for key in ("mp4", "webm"):
+        clips = movie.get(key) or {}
+        if not isinstance(clips, dict):
+            continue
+        for quality in ("480", "max"):
+            if clips.get(quality):
+                return clips[quality], "video/mp4" if key == "mp4" else "video/webm"
+        for u in clips.values():
+            if u:
+                return u, "video/mp4" if key == "mp4" else "video/webm"
+    return "", ""
+
+
 def game_details(params):
     """Public store metadata, no login needed (same API the built-in Steam
-    store uses)."""
+    store uses). Richer facts are protocol 1.12; core sanitizes the HTML."""
     app = str(params["id"])
     try:
         data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app}&l=english")
@@ -1538,6 +1578,46 @@ def game_details(params):
     if date:
         out["releaseDate"] = date
     out["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
+    # Richer facts (protocol 1.12): raw store HTML/URLs; core validates.
+    desc = d.get("detailed_description") or ""
+    if d.get("about_the_game") and len(d["about_the_game"]) > len(desc):
+        desc = d["about_the_game"]
+    if desc:
+        out["descriptionHtml"] = desc[:200000]
+    if d.get("website"):
+        out["website"] = d["website"]
+    out["storeUrl"] = f"https://store.steampowered.com/app/{app}/"
+    langs = _languages(d.get("supported_languages") or "")
+    if langs:
+        out["languages"] = langs
+    if str(d.get("controller_support") or "").lower() in ("full", "partial"):
+        out["controller"] = str(d["controller_support"]).lower()
+    pc_min, pc_rec = _requirement_side(d.get("pc_requirements"))
+    lx_min, lx_rec = _requirement_side(d.get("linux_requirements"))
+    minimum, recommended = pc_min or lx_min, pc_rec or lx_rec
+    if minimum or recommended:
+        out["requirements"] = {k: v for k, v in (("minimum", minimum), ("recommended", recommended)) if v}
+    try:
+        age = int(str(d.get("required_age") or "0").strip())
+    except ValueError:
+        age = 0
+    if age > 0:
+        out["ageRating"] = f"{min(age, 21)}+"
+    tags = [c.get("description") for c in (d.get("categories") or []) if isinstance(c, dict) and c.get("description")]
+    if tags:
+        out["tags"] = tags[:100]
+    videos = []
+    for m in (d.get("movies") or [])[:20]:
+        if not isinstance(m, dict):
+            continue
+        url, mime = _movie_url(m)
+        if not url:
+            continue
+        videos.append({k: v for k, v in (
+            ("url", url), ("thumbnail", m.get("thumbnail") or ""),
+            ("title", (m.get("name") or "")[:200]), ("mime", mime)) if v})
+    if videos:
+        out["videos"] = videos
     return {k: v for k, v in out.items() if v}
 
 
