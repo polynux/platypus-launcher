@@ -7,6 +7,7 @@ import { Input } from './ds/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { storeLabel } from '../lib/games';
 import { FriendsSummary } from './FriendsSummary';
+import { PluginLogo } from './PluginLogo';
 import type { SessionEvent, SocialView, StoreType, View } from '../types';
 
 type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'settings';
@@ -18,6 +19,8 @@ interface SidebarProps {
   onSearch: (q: string) => void;
   storeCounts: Record<string, number>;
   onPickSource: (s: StoreType) => void;
+  /** Plugin logos by store (and plugin id): the Sources rows' tiles. */
+  sourceLogos?: Record<string, string>;
   gameCount: number;
   /** The first library scan is still running: counts show as pending, not zero. */
   loading?: boolean;
@@ -184,7 +187,7 @@ export function Sidebar(p: SidebarProps) {
               className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] text-white/70 transition hover:bg-white/[0.04] hover:text-white"
             >
               <span className="flex items-center gap-2">
-                <span className={cx('h-1.5 w-1.5 rounded-full', count ? 'bg-amber-300/60' : 'bg-white/15')} />
+                <PluginLogo src={p.sourceLogos?.[s.key]} name={s.label} size="xs" />
                 {s.label}
               </span>
               <span className="font-mono text-hint tabular-nums text-white/55">

@@ -498,6 +498,18 @@ export function App() {
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  // Plugin logos by store (and id) for the sidebar Sources rows: the store's
+  // own plugin first, so a branded row never takes another plugin's mark.
+  const sourceLogos = useMemo(() => {
+    const logos: Record<string, string> = {};
+    const sorted = [...plugins].sort((a, b) => (a.store === a.id ? 0 : 1) - (b.store === b.id ? 0 : 1));
+    for (const p of sorted) {
+      if (!p.icon_url) continue;
+      logos[p.store] ??= p.icon_url;
+      logos[p.id] ??= p.icon_url;
+    }
+    return logos;
+  }, [plugins]);
   // Conversations with friends (chat capability): unread badges, the open chat, alerts.
   const chat = useChat(social, notify, socialLabels);
   // Redeem is one entry for every ready store that offers it (none: no entry).
@@ -647,6 +659,7 @@ export function App() {
         onSearch={setSearch}
         storeCounts={storeCounts}
         onPickSource={(s) => { setSource(s); setView({ name: 'library' }); }}
+        sourceLogos={sourceLogos}
         gameCount={installedGames.length}
         loading={!loaded}
         downloadCount={activeJobs.length}
