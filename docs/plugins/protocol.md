@@ -59,8 +59,14 @@ layout with `"kind": "data"` and need no approval; see
   view (issue #17): `{ "url": "https://store.example/", "domains":
   ["store.example", "www.example"] }`. `url` must be https and its host inside
   `domains`, which are plain hostnames (no wildcards, paths, ports or IPs).
-  Top-level navigation in the view may go anywhere (checkout uses payment
-  providers), but the address strip warns outside the declared domains. Omit
+  Navigation in the view (links, server redirects, popups, `window.open`,
+  form posts) stays inside `domains` (exact or subdomain match): leaving them
+  never loads, and the toolbar offers to open the address in the user's
+  browser instead (never auto-opened). Third-party payment providers are NOT
+  listed there: paying through one shows that offer. The address strip's
+  outside tint is only a fallback for a page that somehow committed outside.
+  List every one of the store's own hosts checkout may need (e.g. Valve's own
+  checkout hosts for Steam); don't add third-party processors. Omit
   `storefront` when the store has no website to embed (no store section entry).
 
 Platypus runs nothing until the user approves the plugin, which pins the SHA-256 of
