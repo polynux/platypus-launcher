@@ -142,8 +142,16 @@ func setup(t *testing.T) *env {
 	  "_test": {
 	    "4321": {"success": true, "data": {"type": "game", "name": "Standalone Game",
 	      "short_description": "A standalone game.", "genres": [{"description": "Action"}],
+	      "categories": [{"description": "Single-player"}],
 	      "screenshots": [{"path_full": "https://cdn.steam/4321_ss.jpg"}],
-	      "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"}}},
+	      "movies": [{"name": "Trailer", "thumbnail": "https://cdn.steam/4321_tr.jpg",
+	        "mp4": {"480": "https://cdn.steam/4321_tr.mp4", "max": "https://cdn.steam/4321_tr_max.mp4"}}],
+	      "developers": ["Dev"], "publishers": ["Pub"], "release_date": {"date": "2019-09-20"},
+	      "detailed_description": "<p>A standalone <b>game</b>.</p><script>alert(1)</script>",
+	      "supported_languages": "English<strong>*</strong>, French",
+	      "controller_support": "full",
+	      "pc_requirements": {"minimum": "<p><strong>Minimum:</strong> 2 GB RAM</p>", "recommended": "<p>4 GB RAM</p>"},
+	      "required_age": 17, "website": "https://example.com/standalone"}},
 	    "4322": {"success": true, "data": {"type": "tool", "name": "Tool Thing"}}
 	  }
 	}`), 0o644)
@@ -606,10 +614,25 @@ func TestSteamLibraryInstallLaunchUninstall(t *testing.T) {
 		t.Fatalf("game script: %s, %v", out, err)
 	}
 
-	// Details come from the store API.
+	// Details come from the store API, richer facts included (protocol 1.12).
 	d, err := e.store.Details(context.Background(), *game)
 	if err != nil || d.Summary != "A standalone game." || len(d.Screenshots) != 1 || len(d.Genres) != 1 {
 		t.Fatalf("details: %+v, %v", d, err)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<b>game</b>") || strings.Contains(d.DescriptionHTML, "script") {
+		t.Fatalf("description not sanitized: %q", d.DescriptionHTML)
+	}
+	if len(d.Languages) != 2 || d.Controller != "full" || d.AgeRating != "17+" {
+		t.Fatalf("facts: %+v", d)
+	}
+	if d.Requirements == nil || !strings.Contains(d.Requirements.Minimum, "2 GB RAM") {
+		t.Fatalf("requirements: %+v", d.Requirements)
+	}
+	if len(d.Tags) != 1 || len(d.Videos) != 1 || d.Videos[0].MIME != "video/mp4" {
+		t.Fatalf("tags/videos: %+v", d)
+	}
+	if d.Website != "https://example.com/standalone" || !strings.Contains(d.StoreURL, "4321") {
+		t.Fatalf("links: %+v", d)
 	}
 
 	// Uninstall removes the folder and the installed flag.
