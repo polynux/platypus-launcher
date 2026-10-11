@@ -1,8 +1,8 @@
 // `node scripts/run.mjs dev|start`: builds the Go core and the shell, then runs
 // the desktop app. `dev` serves the UI from Vite (hot reload); `start` uses
-// apps/ui/dist (built if missing, or with --rebuild).
+// apps/ui/dist (rebuilt when missing or older than the UI sources, or with --rebuild).
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
@@ -27,6 +27,21 @@ function electronBinary() {
   } catch {}
   console.error('» Electron is not downloaded (run `bun install` at the repo root; package.json trusts electron so its install script runs). Falling back to the system electron, which may be too old.');
   return 'electron';
+}
+
+// The UI build is stale when it is missing or any of its inputs changed after
+// it: otherwise `start` would keep serving an old bundle after a pull or merge.
+function uiStale() {
+  const built = path.join(frontend, 'dist/index.html');
+  if (!existsSync(built)) return true;
+  const at = statSync(built).mtimeMs;
+  const newer = (p) => {
+    const s = statSync(p);
+    if (!s.isDirectory()) return s.mtimeMs > at;
+    return readdirSync(p).some((name) => newer(path.join(p, name)));
+  };
+  const inputs = ['src', 'public', 'index.html', 'package.json', 'vite.config.ts', 'tsconfig.json'];
+  return inputs.map((p) => path.join(frontend, p)).some((p) => existsSync(p) && newer(p));
 }
 
 function freePort() {
@@ -83,7 +98,7 @@ if (mode === 'dev') {
   await waitFor(port);
   env.PLATYPUS_DEV_URL = `http://127.0.0.1:${port}`;
   env.PLATYPUS_DEVTOOLS = '1';
-} else if (rebuild || !existsSync(path.join(frontend, 'dist/index.html'))) {
+} else if (rebuild || uiStale()) {
   console.log('» building the UI');
   run('bun', ['run', 'build'], frontend);
 }
