@@ -4,11 +4,34 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 type Reply = { ok: true; result: unknown } | { ok: false; error: string };
+type StoreReply = { ok: true } | { ok: false; error: string };
+
+export interface StoreBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface StoreEvent {
+  kind: 'navigated' | 'loading';
+  pluginId: string;
+  url: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  title: string;
+  loading: boolean;
+}
 
 const listeners = new Map<string, Set<(data: unknown) => void>>();
+const storeListeners = new Set<(ev: StoreEvent) => void>();
 
 ipcRenderer.on('platypus:event', (_e, name: string, data: unknown) => {
   for (const cb of listeners.get(name) ?? []) cb(data);
+});
+
+ipcRenderer.on('platypus:store-event', (_e, ev: StoreEvent) => {
+  for (const cb of storeListeners) cb(ev);
 });
 
 contextBridge.exposeInMainWorld('platypus', {
@@ -27,5 +50,35 @@ contextBridge.exposeInMainWorld('platypus', {
   },
   openExternal(url: string): void {
     ipcRenderer.send('platypus:openExternal', url);
+  },
+  // The embedded store view (issue #17): the native view over the Store
+  // page's content area. Main validates every call (known enabled plugin,
+  // addresses inside its domains).
+  store: {
+    async open(pluginId: string, url?: string): Promise<void> {
+      const reply = (await ipcRenderer.invoke('platypus:store-open', pluginId, url)) as StoreReply;
+      if (!reply.ok) throw new Error(reply.error);
+    },
+    setBounds(rect: StoreBounds): void {
+      ipcRenderer.send('platypus:store-bounds', rect);
+    },
+    back(): void {
+      ipcRenderer.send('platypus:store-back');
+    },
+    forward(): void {
+      ipcRenderer.send('platypus:store-forward');
+    },
+    reload(): void {
+      ipcRenderer.send('platypus:store-reload');
+    },
+    close(): void {
+      ipcRenderer.send('platypus:store-close');
+    },
+    onEvent(cb: (ev: StoreEvent) => void): () => void {
+      storeListeners.add(cb);
+      return () => {
+        storeListeners.delete(cb);
+      };
+    },
   },
 });
