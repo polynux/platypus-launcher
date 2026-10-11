@@ -20,5 +20,5 @@
     "read": [],
     "write": []
   },
-  "storefront": { "url": "https://store.steampowered.com/", "domains": ["steampowered.com", "steamcommunity.com", "steamstatic.com"] }
+  "storefront": { "url": "https://store.steampowered.com/", "domains": ["steampowered.com", "steamcommunity.com", "steamstatic.com", "valvesoftware.com"] }
 }

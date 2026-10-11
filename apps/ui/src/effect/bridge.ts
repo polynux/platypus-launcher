@@ -21,8 +21,9 @@ export interface StoreBridge {
   back(): void;
   forward(): void;
   reload(): void;
-  /** Hides the native view, keeping it alive for a fast return. */
-  close(): void;
+  /** Hides the native view, keeping it alive for a fast return. Names its
+   * plugin so a stale close never hides the newly shown view. */
+  close(pluginId?: string): void;
   /** Subscribes to the view's navigation events. Returns the unsubscribe function. */
   onEvent(cb: (ev: StoreEvent) => void): () => void;
 }
@@ -35,9 +36,10 @@ export interface StoreBounds {
   height: number;
 }
 
-/** A navigation event from the embedded store view. */
+/** A navigation event from the embedded store view. 'blocked' carries the
+ * attempted outside address: the toolbar offers to open it in the browser. */
 export interface StoreEvent {
-  kind: 'navigated' | 'loading';
+  kind: 'navigated' | 'loading' | 'blocked';
   pluginId: string;
   url: string;
   canGoBack: boolean;

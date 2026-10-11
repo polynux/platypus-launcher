@@ -37,10 +37,11 @@ setup. To look first without touching anything, use a scratch home:
 there with `PLATYPUS_PLUGINS=/tmp/platypus-try/.local/share/platypus/plugins sh plugins/install.sh echo`.
 
 Environment: `PLATYPUS_ELECTRON` (binary), `PLATYPUS_ELECTRON_ARGS` (extra
-flags, e.g. `--ozone-platform=x11`), `PLATYPUS_DEVTOOLS=1` (F12, dev only),
-`PLATYPUS_REMOTE_DEBUGGING_PORT` (for Playwright over CDP, dev only,
-loopback). A packaged app ignores both debug variables: no remote debugging
-in production.
+flags, e.g. `--ozone-platform=x11`), `PLATYPUS_DEVTOOLS=1` (F12, dev only —
+`bun run dev` sets it; `bun run start` honours it when set in the
+environment), `PLATYPUS_REMOTE_DEBUGGING_PORT` (for Playwright over CDP, dev
+only, loopback). A packaged app ignores both debug variables: no remote
+debugging in production.
 
 The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GUI toolkit linked).
 
@@ -112,6 +113,9 @@ containers; a normal desktop does not need it.)
   SIGINT) shuts the core down first so its games and plugin helpers die with
   it. There is deliberately no app menu and no tray icon (follow-up if asked
   for); reload and DevTools keys are disabled in production.
+- Store view: each embedded store view and store popup answers F12 /
+  Ctrl+Shift+I with DevTools for its own contents (detached), under the same
+  conditions as the main window (development with `PLATYPUS_DEVTOOLS=1`).
 - Packaging (electron-builder / AppImage), auto-update.
 - Event delivery when no window is open (events are dropped).
 - `GPU`: history — `PLATYPUS_GPU` and the DMA-BUF switch concerned only

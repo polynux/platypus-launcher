@@ -5,11 +5,14 @@
 //
 // A store plugin declares its official website in its manifest
 // (`storefront: { url, domains }`, validated by the core in
-// internal/plugins/manifest.go): the view opens there. Top-level navigation
-// may then go anywhere over http(s) — checkout wanders to payment providers
-// outside the declared domains — but the address strip warns about hosts
-// outside them. Anything that isn't http(s) never loads: popups of it are
-// refused, top-level attempts are ignored, downloads are cancelled.
+// internal/plugins/manifest.go): the view opens there, and top-level
+// navigation (links, redirects, popups, form posts) stays inside those
+// domains: the host must equal or be a subdomain of a declared domain. An
+// attempt to leave them never loads; the toolbar offers to open it in the
+// user's browser instead (never auto-opened). The address strip's outside
+// tint is only a fallback for a page that somehow committed outside.
+// Anything that isn't http(s) never loads: popups of it are refused,
+// top-level attempts are ignored, downloads are cancelled.
 
 /** A store plugin as the open call needs it (a row of ListStorePlugins). */
 export interface StorePluginInfo {
@@ -91,8 +94,9 @@ export function allowHTTPStorefront(pluginId: string, env: NodeJS.ProcessEnv = p
  * The address an explicit open may load for the plugin (the storefront, or a
  * deep link from a game page), or '' when refused. An explicit address must
  * be https and inside the plugin's domains — http loopback only for the test
- * plugin. In-page navigation is looser (see navigationAllowed): checkout
- * uses payment providers outside the domains.
+ * plugin. In-page navigation follows the same allow list (see
+ * navigationAllowed): leaving the domains is blocked with an offer to open
+ * the address in the browser.
  */
 export function explicitStoreURL(plugin: StorePluginInfo, rawURL: unknown): string {
   const fallback = typeof plugin.storefront_url === 'string' ? plugin.storefront_url : '';
@@ -125,23 +129,57 @@ export function canOpenStore(plugin: StorePluginInfo | undefined): boolean {
 }
 
 /**
- * Whether a top-level navigation may load: anything over http(s) (checkout
- * wanders to payment providers); anything else (steam://, epic://, file:,
- * javascript:) is blocked. The address strip (stripState) tells the user
- * when the host left the declared domains.
+ * Whether a top-level navigation may load: http(s) inside the plugin's
+ * declared domains. Checkout that needs more of the store's own hosts lists
+ * them in the manifest's `domains` (Valve's own checkout hosts for Steam);
+ * third-party payment providers are NOT listed: leaving for one is blocked
+ * and the toolbar offers to open it in the browser instead (never
+ * auto-opened). Anything that isn't http(s) (steam://, epic://, file:,
+ * javascript:) never loads.
  */
-export function navigationAllowed(rawURL: string): boolean {
+export function navigationAllowed(rawURL: string, domains: string[] = []): boolean {
+  let u: URL;
   try {
-    const u = new URL(rawURL);
-    return u.protocol === 'https:' || u.protocol === 'http:';
+    u = new URL(rawURL);
   } catch {
     return false;
   }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+  return insideDomains(u.hostname.toLowerCase(), domains);
 }
 
-/** A popup's address when it may open in the child window, or '' when blocked (non-http(s) never opens). */
-export function popupURL(rawURL: string): string {
-  return navigationAllowed(rawURL) ? rawURL : '';
+/**
+ * The host of a blocked navigation attempt: an http(s) address outside the
+ * plugin's domains. '' when the address may load (or has no host to name,
+ * e.g. a blocked scheme, which is refused silently).
+ */
+export function blockedHost(rawURL: string, domains: string[] = []): string {
+  let u: URL;
+  try {
+    u = new URL(rawURL);
+  } catch {
+    return '';
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+  const host = u.hostname.toLowerCase();
+  return insideDomains(host, domains) ? '' : host;
+}
+
+/** A popup's address when it may open in the child window, or '' when blocked (outside domains or non-http(s) never opens). */
+export function popupURL(rawURL: string, domains: string[] = []): string {
+  return navigationAllowed(rawURL, domains) ? rawURL : '';
+}
+
+/**
+ * Whether closing the view of closingId may hide the shown view: an
+ * explicit close names its plugin, so a stale close (the previous store's
+ * unmount racing the next store's open over separate IPC channels) never
+ * hides the newly shown view. An absent id closes whatever is shown (leaving
+ * the store view entirely).
+ */
+export function shouldCloseView(current: string | null, closingId: unknown): boolean {
+  if (closingId === undefined || closingId === null) return current !== null;
+  return typeof closingId === 'string' && closingId !== '' && current === closingId;
 }
 
 /** What the address strip shows for an address: its host, and whether it left the store's domains. */

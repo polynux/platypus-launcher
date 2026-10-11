@@ -14,7 +14,7 @@ export interface StoreBounds {
 }
 
 export interface StoreEvent {
-  kind: 'navigated' | 'loading';
+  kind: 'navigated' | 'loading' | 'blocked';
   pluginId: string;
   url: string;
   canGoBack: boolean;
@@ -71,8 +71,8 @@ contextBridge.exposeInMainWorld('platypus', {
     reload(): void {
       ipcRenderer.send('platypus:store-reload');
     },
-    close(): void {
-      ipcRenderer.send('platypus:store-close');
+    close(pluginId?: string): void {
+      ipcRenderer.send('platypus:store-close', pluginId);
     },
     onEvent(cb: (ev: StoreEvent) => void): () => void {
       storeListeners.add(cb);

@@ -2,27 +2,35 @@
 // placed over the UI's content area. It is NOT the app page: a separate
 // persistent session per plugin (logins stay, isolated from the launcher and
 // from each other), no preload, no bridge, permissions denied; downloads
-// cancelled; popups open in a child window of the same session (login and
-// payment popups); non-http(s) navigation never loads.
+// cancelled; popups inside the store's domains open in a child window of the
+// same session (login popups); anything outside the plugin's declared
+// storefront.domains never loads — the toolbar offers to open it in the
+// user's browser instead. Non-http(s) navigation never loads.
 //
 // A hidden view stays alive (fast return; its session keeps the login), and
 // is destroyed only when the window closes with the app. Leaving the view
 // hides it; the UI invalidates the plugin's library through the core
 // (InvalidateLibrary) so purchases appear.
-import { BrowserWindow, session, WebContentsView } from 'electron';
+import { app, BrowserWindow, session, WebContentsView } from 'electron';
 import {
+  blockedHost,
   canOpenStore,
   explicitStoreURL,
   navigationAllowed,
   popupURL,
+  shouldCloseView,
   storePartition,
   type StorePluginInfo,
   type StoreRect,
 } from './store.ts';
 
 export interface StoreEvent {
-  /** 'navigated' (url, history, title) or 'loading' (spinner state). */
-  kind: 'navigated' | 'loading';
+  /**
+   * 'navigated' (url, history, title), 'loading' (spinner state), or
+   * 'blocked' (an http(s) navigation to an outside host was refused; url is
+   * the attempted address, the toolbar offers to open it in the browser).
+   */
+  kind: 'navigated' | 'loading' | 'blocked';
   pluginId: string;
   url: string;
   canGoBack: boolean;
@@ -46,6 +54,10 @@ export class StoreViews {
   private held = new Map<string, Held>();
   private current: string | null = null;
   private emit: (e: StoreEvent) => void = () => {};
+  /** The last content-area rect reported: a newly shown view with no stored
+   * bounds yet is placed there (its first show happens before the UI's next
+   * bounds report). */
+  private lastBounds: StoreRect | null = null;
 
   constructor(
     private win: BrowserWindow,
@@ -76,6 +88,58 @@ export class StoreViews {
       title: wc.getTitle(),
       loading,
     });
+  }
+
+  private reportBlocked(id: string, h: Held, url: string): void {
+    const wc = h.view.webContents;
+    let canGoBack = false;
+    let canGoForward = false;
+    try {
+      canGoBack = wc.navigationHistory.canGoBack();
+      canGoForward = wc.navigationHistory.canGoForward();
+    } catch {
+      // The contents may be gone; the notice still names the attempt.
+    }
+    this.emit({
+      kind: 'blocked',
+      pluginId: id,
+      url,
+      canGoBack,
+      canGoForward,
+      title: '',
+      loading: false,
+    });
+  }
+
+  /** F12 / Ctrl+Shift+I while focus is inside the store view or a popup:
+   * development with PLATYPUS_DEVTOOLS opens DevTools for THAT contents
+   * (detached). Production unchanged. */
+  private devtools(wc: Electron.WebContents): void {
+    wc.on('before-input-event', (_e, input) => {
+      if (input.type !== 'keyDown') return;
+      if (!app.isPackaged && process.env.PLATYPUS_DEVTOOLS) {
+        if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+          wc.openDevTools({ mode: 'detach' });
+        }
+      }
+    });
+  }
+
+  /** Refuses a navigation outside the plugin's domains (emitting the
+   * browser-open notice) or to a non-http(s) scheme (silently). */
+  private guard(id: string, h: Held, wc: Electron.WebContents): void {
+    const check = (e: Electron.Event, url: string) => {
+      const domains = h.plugin.storefront_domains ?? [];
+      if (navigationAllowed(url, domains)) return;
+      e.preventDefault();
+      // steam://install and friends: ignored, never loaded, never crashed
+      // on. An http(s) page outside the domains gets the toolbar notice
+      // (open in the browser, never auto-opened).
+      if (blockedHost(url, domains) !== '') this.reportBlocked(id, h, url);
+    };
+    wc.on('will-navigate', (e, url) => check(e, url));
+    // Server redirects (e.g. a storefront bouncing through an outside host).
+    wc.on('will-redirect', (e, url) => check(e, url));
   }
 
   private watch(id: string, h: Held): void {
@@ -120,15 +184,21 @@ export class StoreViews {
         spellcheck: false,
       },
     });
-    view.webContents.on('will-navigate', (e, url) => {
-      if (navigationAllowed(url)) return;
-      // steam://install and friends: ignored, never loaded, never crashed on.
-      e.preventDefault();
-    });
+    h = { view, plugin, bounds: null };
+    view.setVisible(false);
+    this.devtools(view.webContents);
+    this.guard(id, h, view.webContents);
     view.webContents.setWindowOpenHandler(({ url }) => {
-      const child = popupURL(url);
-      if (!child) return { action: 'deny' };
-      // Login and payment popups stay in the store's session, under the main
+      const held = this.held.get(id);
+      const domains = (held?.plugin ?? plugin).storefront_domains ?? [];
+      const child = popupURL(url, domains);
+      if (!child) {
+        // Outside the domains (or a non-http(s) scheme): the same toolbar
+        // notice as a blocked top-level navigation, never auto-opened.
+        if (held && blockedHost(url, domains) !== '') this.reportBlocked(id, held, url);
+        return { action: 'deny' };
+      }
+      // Login popups stay in the store's session, under the main
       // window, sandboxed like the view itself.
       const popup = new BrowserWindow({
         parent: this.win,
@@ -143,34 +213,51 @@ export class StoreViews {
           spellcheck: false,
         },
       });
-      popup.webContents.on('will-navigate', (ev, to) => {
-        if (!navigationAllowed(to)) ev.preventDefault();
+      this.devtools(popup.webContents);
+      if (held) this.guard(id, held, popup.webContents);
+      popup.webContents.setWindowOpenHandler(({ url: nested }) => {
+        // A popup never opens its own child: inside would be a surprise,
+        // outside gets the same notice on the main view.
+        if (held && blockedHost(nested, domains) !== '') this.reportBlocked(id, held, nested);
+        return { action: 'deny' };
       });
-      popup.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       void popup.loadURL(child);
       return { action: 'deny' };
     });
-    h = { view, plugin, bounds: null };
     this.watch(id, h);
     this.held.set(id, h);
     return h;
   }
 
   private show(h: Held): void {
+    // Views stay attached once created and are toggled with setVisible:
+    // detaching (removeChildView) and re-attaching leaves the contents
+    // blank on return (echo → other → echo never painted again, not even
+    // after reload), while setVisible restores painting.
     const content = this.win.contentView;
     if (!content.children.includes(h.view)) content.addChildView(h.view);
-    if (h.bounds) h.view.setBounds(h.bounds);
+    // A view held before any bounds report has none yet: place it where the
+    // content area last was (the UI's next report corrects it).
+    const bounds = h.bounds ?? this.lastBounds;
+    if (bounds) {
+      h.bounds = bounds;
+      h.view.setBounds(bounds);
+    }
+    h.view.setVisible(true);
   }
 
   private hide(h: Held): void {
-    const content = this.win.contentView;
-    if (content.children.includes(h.view)) content.removeChildView(h.view);
+    // Kept attached (and alive) for a fast return; invisible means no
+    // paint and no input.
+    h.view.setVisible(false);
   }
 
   /**
    * Opens the plugin's store (the storefront, or a deep link inside its
    * domains). Throws when the plugin isn't a known, enabled plugin with a
-   * storefront, or the address is refused.
+   * storefront, or the address is refused. Switching stores never closes
+   * through the UI's unmount: open hides the previous view itself, so a
+   * stale close racing over a separate IPC channel can't hide the new one.
    */
   async open(pluginId: string, rawURL?: unknown): Promise<void> {
     const plugins = await this.listPlugins();
@@ -183,12 +270,21 @@ export class StoreViews {
     const h = this.hold(pluginId, plugin!);
     this.current = pluginId;
     this.show(h);
-    if (h.view.webContents.getURL() !== url) await h.view.webContents.loadURL(url);
+    if (h.view.webContents.getURL() !== url) {
+      try {
+        await h.view.webContents.loadURL(url);
+      } catch (err) {
+        // Switching stores mid-load aborts the pending load
+        // (ERR_ABORTED): the new view is already showing, nothing failed.
+        if (!isAbortedLoad(err)) throw err;
+      }
+    }
     this.report(h, 'navigated', h.view.webContents.isLoading());
   }
 
   /** Places the shown view over the UI's content area. */
   setBounds(bounds: StoreRect): void {
+    this.lastBounds = bounds;
     const h = this.currentHeld();
     if (!h) return;
     h.bounds = bounds;
@@ -198,7 +294,11 @@ export class StoreViews {
   /** Re-applies the shown view's bounds (after the window resized). */
   relayout(): void {
     const h = this.currentHeld();
-    if (h?.bounds) h.view.setBounds(h.bounds);
+    const bounds = h?.bounds ?? this.lastBounds;
+    if (h && bounds) {
+      h.bounds = bounds;
+      h.view.setBounds(bounds);
+    }
   }
 
   back(): void {
@@ -215,8 +315,15 @@ export class StoreViews {
     this.currentHeld()?.view.webContents.reload();
   }
 
-  /** Hides the shown view, keeping it alive for a fast return. */
-  close(): void {
+  /**
+   * Hides the shown view, keeping it alive for a fast return. Names its
+   * plugin, so a stale close (the previous store's effect cleanup racing the
+   * next store's open over separate IPC channels) never hides the newly
+   * shown view. An absent id closes whatever is shown (leaving the store
+   * view entirely).
+   */
+  close(pluginId?: unknown): void {
+    if (!shouldCloseView(this.current, pluginId)) return;
     const h = this.currentHeld();
     if (h) this.hide(h);
     this.current = null;
@@ -231,4 +338,11 @@ export class StoreViews {
     this.held.clear();
     this.current = null;
   }
+}
+
+/** Whether a loadURL failure is an interrupted load (switching stores
+ * mid-load), not a real failure worth reporting. */
+function isAbortedLoad(err: unknown): boolean {
+  const msg = err instanceof Error ? `${err.message} ${'code' in err ? String((err as { code: unknown }).code) : ''}` : String(err);
+  return msg.includes('ERR_ABORTED') || msg.includes('-3');
 }
