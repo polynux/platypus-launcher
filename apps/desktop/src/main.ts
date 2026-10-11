@@ -131,7 +131,12 @@ function registerStoreIPC(stores: StoreViews): void {
   ipcMain.on('platypus:store-back', current(() => stores.back()));
   ipcMain.on('platypus:store-forward', current(() => stores.forward()));
   ipcMain.on('platypus:store-reload', current(() => stores.reload()));
-  ipcMain.on('platypus:store-close', current(() => stores.close()));
+  // The close names its plugin: a stale close racing the next store's open
+  // over a separate IPC channel must not hide the newly shown view.
+  ipcMain.on('platypus:store-close', (e, pluginId: unknown) => {
+    if (!fromApp(e)) return;
+    stores.close(pluginId);
+  });
 }
 
 /** Serves app://platypus: the built frontend (or the dev server) and, through the core, the art. */
