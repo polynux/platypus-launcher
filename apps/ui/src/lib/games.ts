@@ -17,6 +17,13 @@ export function attentionReason(g: Game): string {
     : 'ProtonDB rates this title bronze. It may need tweaks to run well.';
 }
 
+/** Portrait images to try in order. Older Steam titles 404 on the portrait
+ *  (library_600x900.jpg) and only have the landscape header: the card crops
+ *  it (object-cover) instead of showing a title placeholder. */
+export function coverImages(g: Game): string[] {
+  return [...new Set([g.cover_url, g.banner_url, g.hero_url].filter(Boolean))];
+}
+
 /** Wide images to try in order. Steam's header.jpg is only 460px wide, so prefer
  *  the library hero art when it exists. */
 export function heroImages(g: Game): string[] {

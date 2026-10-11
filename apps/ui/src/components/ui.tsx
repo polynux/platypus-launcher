@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ActivityType } from '../types';
 import { cn } from '@/lib/utils';
+import { coverMisses } from '../lib/coverMisses';
 import { buttonVariantClass } from './ds/button';
 import { Badge } from './ds/badge';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
@@ -151,15 +152,21 @@ export function EmptyState({ label, children, action }: { label: string; childre
   );
 }
 
-/** Cover image with a typographic fallback when the CDN has no art. */
+/** Cover image with a typographic fallback when the CDN has no art. Tries
+ *  each source in order; a URL that 404'd recently is skipped without a
+ *  request (see lib/coverMisses) instead of refetching on every render. */
 export function Cover({ src, title, className }: { src?: string | string[]; title: string; className?: string }) {
-  const sources = (Array.isArray(src) ? src : [src]).filter(Boolean) as string[];
+  const all = (Array.isArray(src) ? src : [src]).filter(Boolean) as string[];
+  const sources = all.filter((s) => !coverMisses.isBad(s));
   const key = sources.join('|');
   // Track which source list the failure index belongs to so a new list starts at 0.
   const [failed, setFailed] = React.useState({ key, idx: 0 });
   const idx = failed.key === key ? failed.idx : 0;
   const current = sources[idx];
-  const fail = React.useCallback(() => setFailed({ key, idx: idx + 1 }), [key, idx]);
+  const fail = React.useCallback(() => {
+    if (current) coverMisses.markBad(current);
+    setFailed({ key, idx: idx + 1 });
+  }, [key, idx, current]);
   // A cached 404 can fail before React attaches onError; catch it on mount.
   const img = React.useRef<HTMLImageElement>(null);
   React.useEffect(() => {

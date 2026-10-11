@@ -158,6 +158,11 @@ directly, with no Proton runner and without the Proton-only settings (DX layer,
 sync mode, Proton flags), on its game page too. `native` belongs on library
 entries only; a launch spec says the same through `needsWine`.
 
+Art: the Library's portrait cards show `coverUrl`, falling back to
+`bannerUrl` then `heroUrl` (cropped) when the portrait 404s, and Platypus
+remembers misses for a while instead of requesting them on every render —
+so always send the landscape images even for games with no portrait art.
+
 Send only the keys listed here. Platypus ignores unknown keys, but new plugins copy
 what the bundled ones send, so the conformance suite (`internal/plugtest`)
 rejects extras on `library.list`, `game.details` and `game.launchSpec`. To add a

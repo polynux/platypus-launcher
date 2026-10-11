@@ -11,7 +11,7 @@ import { Badge } from './ds/badge';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
-import { byRecent, formatBytes, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
+import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 import { WindowedGrid, WindowedRows } from './WindowedList';
@@ -163,7 +163,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
   return (
     <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'flex h-full flex-col')}>
       <div className="relative flex-none">
-        <Cover src={g.cover_url} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
+        <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
         {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
         {g.shared_by && (
           <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">Shared by {g.shared_by.name}</Badge>
@@ -201,7 +201,7 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { g
       <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />
       <span role="cell" className="min-w-0">
         <button onClick={() => onOpen(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
-          <Cover src={g.cover_url} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
+          <Cover src={coverImages(g)} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
           <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
           {g.shared_by && <Badge variant="neutral" className="flex-none">Shared by {g.shared_by.name}</Badge>}
         </button>
