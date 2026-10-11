@@ -32,6 +32,7 @@ import type {
   Job,
   LauncherSettings,
   Library,
+  MigrationNotice,
   MoveCheck,
   ProtonVersion,
   SessionEvent,
@@ -160,6 +161,16 @@ export const LauncherApi = {
   removeCustomGame: (id: string) => call<void>('RemoveCustomGame', () => App.RemoveCustomGame(id)),
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
+
+  // The one-time Hydra→Platypus migration notice (issue #14). Resolves null
+  // when there is nothing to show. Go marshals nil slices as null; normalize
+  // null lists to [] at the edge so consumers never crash on list.map.
+  migrationNotice: () =>
+    call<MigrationNotice | null>('MigrationNotice', async () => {
+      const n = await App.MigrationNotice();
+      return n ? { ...n, set_aside: n.set_aside ?? [], warnings: n.warnings ?? [] } : null;
+    }),
+  dismissMigrationNotice: () => call<void>('DismissMigrationNotice', () => App.DismissMigrationNotice()),
 
   // Saved per-game settings, keyed by game id, exactly as saveGameSettings stored them.
   getGameSettings: () => call<Record<string, GameSettings>>('GetGameSettings', async () => (await App.GetGameSettings()) ?? {}),

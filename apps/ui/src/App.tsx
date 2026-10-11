@@ -18,6 +18,7 @@ import { RedeemDialog } from './components/RedeemDialog';
 import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
 import { TermsHost } from './components/TermsHost';
+import { MigrationNotice as MigrationBanner } from './components/MigrationNotice';
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
@@ -28,7 +29,7 @@ import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, Job, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import { RawDetails } from './components/ErrorNotice';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { hasDetails, plainError } from './lib/plainError';
@@ -85,6 +86,9 @@ export function App() {
 
   const [notice, setNotice] = useState<Notice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The one-time Hydra→Platypus migration notice (issue #14). Null when there
+  // is nothing to show; dismissing persists it in the core and hides it here.
+  const [migration, setMigration] = useState<MigrationNotice | null>(null);
   const notify = useCallback((msg: string, kind: NoticeKind = 'ok') => {
     // An error toast says a plain sentence; the raw text waits behind Details,
     // and the toast stays long enough to open it.
@@ -251,6 +255,7 @@ export function App() {
   const started = useRef(false);
   useEffect(() => {
     Effect.runPromise(LauncherApi.getTweaks()).then(setTweaks).catch(() => {});
+    Effect.runPromise(LauncherApi.migrationNotice()).then(setMigration).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -512,6 +517,13 @@ export function App() {
   // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
 
+  // Dismissing the migration notice persists it in the core (it never
+  // returns) and hides the banner at once, without waiting for a relaunch.
+  const dismissMigration = () => {
+    setMigration(null);
+    Effect.runPromise(LauncherApi.dismissMigrationNotice()).catch((err) => notify(errMsg(err), 'err'));
+  };
+
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
 
   const renderView = () => {
@@ -665,6 +677,15 @@ export function App() {
       />
 
       <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
+        {migration && (
+          <div className="px-7 pt-7">
+            <MigrationBanner
+              notice={migration}
+              onOpenPlugins={() => setView({ name: 'plugins' })}
+              onDismiss={dismissMigration}
+            />
+          </div>
+        )}
         {renderView()}
       </main>
 

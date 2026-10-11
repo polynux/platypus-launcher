@@ -402,6 +402,13 @@ export namespace types {
     warnings: types.SourceWarning[];
   }
 
+  export interface MigrationNotice {
+    moved: boolean;
+    copied: boolean;
+    set_aside: string[];
+    warnings: string[];
+  }
+
   export interface MoveCheck {
     to: string;
     need_bytes: number;
