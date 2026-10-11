@@ -409,6 +409,18 @@ func (s Suite) Conformance(t *testing.T) {
 			if drm, ok := details["drm"]; ok {
 				checkKeys(t, "game.details drm", drm, DRMKeys)
 			}
+			if req, ok := details["requirements"]; ok {
+				checkKeys(t, "game.details requirements", req, RequirementsKeys)
+			}
+			if rawVideos, ok := details["videos"]; ok {
+				var videos []json.RawMessage
+				if err := json.Unmarshal(rawVideos, &videos); err != nil {
+					t.Errorf("game.details videos isn't a list: %s", rawVideos)
+				}
+				for _, v := range videos {
+					checkKeys(t, "game.details video", v, VideoKeys)
+				}
+			}
 		}
 		if has("terms") {
 			sess.checkTerms(t, game.StoreAppID, rawDetails)
@@ -807,9 +819,13 @@ var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
 		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
-		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms"}
+		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",
+		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos"}
 	// The drm block of game.details (protocol 1.10, "Compat").
 	DRMKeys    = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
+	// requirements and a video of game.details (protocol 1.12, "Media").
+	RequirementsKeys = []string{"minimum", "recommended"}
+	VideoKeys        = []string{"url", "thumbnail", "title", "mime"}
 	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "find", "startTimeout"}
 
