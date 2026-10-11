@@ -120,6 +120,10 @@ export type SettingsSaved = gen.SettingsSaved;
 export type SourceWarning = gen.SourceWarning;
 export type Library = gen.Library;
 
+/** The one-time Hydra→Platypus migration notice (issue #14). Null when there
+ *  is nothing to show. Go sends nil slices as null; normalize at the edge. */
+export type MigrationNotice = gen.MigrationNotice;
+
 export type PluginStatus =
   | 'ready' | 'invalid' | 'unapproved' | 'changed' | 'disabled' | 'missing-requirements'
   | 'needs-newer-platypus' | 'too-old';

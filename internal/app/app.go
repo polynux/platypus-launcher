@@ -89,6 +89,9 @@ type App struct {
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
+	// migration is what the Hydra→Platypus data move did at startup
+	// (internal/migrate); MigrationNotice shows it once (issue #14).
+	migration migrate.Report
 }
 
 // NewApp creates a new App application struct
@@ -115,7 +118,7 @@ func (a *App) startup(ctx context.Context) {
 	// Before anything opens a data file: the previous data folder moves to
 	// its new name, and the paths stored in it follow (internal/migrate).
 	if home, err := os.UserHomeDir(); err == nil {
-		migrate.Run(home, migrate.Options{
+		a.migration = migrate.Run(home, migrate.Options{
 			Info: func(format string, args ...any) { a.host.Infof(format, args...) },
 			Warn: func(format string, args ...any) { a.host.Warnf(format, args...) },
 		})

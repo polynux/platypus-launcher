@@ -87,6 +87,9 @@ type file struct {
 	// FetchRatings is the "Fetch ratings online" switch. A pointer: unset
 	// means on (see compat.go).
 	FetchRatings *bool `json:"fetch_ratings,omitempty"`
+	// MigrationNoticeDismissed remembers that the user dismissed the one-time
+	// Hydra→Platypus migration notice (issue #14), so it never returns.
+	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`
 	// CompatAppIDs are the Steam AppIDs the user set for ratings, by Platypus's
 	// game id (see compat.go).
 	CompatAppIDs map[string]string `json:"compat_app_ids,omitempty"`

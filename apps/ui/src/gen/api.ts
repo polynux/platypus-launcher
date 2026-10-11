@@ -28,6 +28,7 @@ export interface CoreApi {
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
   DiscardJob(id: string): Promise<void>;
+  DismissMigrationNotice(): Promise<void>;
   ForceStopGame(gameID: string): Promise<void>;
   GetCloudInfo(game: types.Game): Promise<types.CloudInfo>;
   GetCloudSettings(): Promise<types.CloudSettings>;
@@ -63,6 +64,7 @@ export interface CoreApi {
   ListSessions(): Promise<types.SessionEvent[]>;
   ListStorePlugins(): Promise<types.StorePlugin[]>;
   MakeDefaultGameFolder(path: string): Promise<types.GameFolder[]>;
+  MigrationNotice(): Promise<types.MigrationNotice | null>;
   MoveGame(game: types.Game, parent: string): Promise<types.Job>;
   OpenPluginsFolder(): Promise<void>;
   PauseAllJobs(): Promise<void>;
@@ -141,6 +143,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ChoosePluginInstallFolder',
   'ClearFinishedJobs',
   'DiscardJob',
+  'DismissMigrationNotice',
   'ForceStopGame',
   'GetCloudInfo',
   'GetCloudSettings',
@@ -176,6 +179,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ListSessions',
   'ListStorePlugins',
   'MakeDefaultGameFolder',
+  'MigrationNotice',
   'MoveGame',
   'OpenPluginsFolder',
   'PauseAllJobs',

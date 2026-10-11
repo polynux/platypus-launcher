@@ -401,6 +401,22 @@ type Relocation struct {
 	To   string `json:"to"`
 }
 
+// MigrationNotice is the one-time notice shown after the Hydra→Platypus data
+// move (internal/migrate, issue #14): what happened and what to do. Nil (from
+// MigrationNotice) means there is nothing to show.
+type MigrationNotice struct {
+	// Moved: the old folder was renamed. Copied: it was copied and the old
+	// one kept. One of them is always true when a notice exists.
+	Moved  bool `json:"moved"`
+	Copied bool `json:"copied"`
+	// SetAside lists plugin builds that predate the rename, moved out of
+	// plugins/ until they are reinstalled and approved again.
+	SetAside []string `json:"set_aside"`
+	// Warnings are things that did not finish (failed copies, paths not
+	// rewritten), in plain words.
+	Warnings []string `json:"warnings"`
+}
+
 // InstallLocation is a place the install dialog offers: Folder is the install
 // folder the plugin is sent (games land in a folder of their own inside it).
 // Kind is "default" (the store's install folder), "library" (inside one of the
