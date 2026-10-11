@@ -5,6 +5,7 @@ import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
+import { StoreView } from './components/StoreView';
 import { AddGameModal } from './components/AddGameModal';
 import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
@@ -395,6 +396,15 @@ export function App() {
   const jobStates = useRef(new Map<string, string>());
   const loadRef = useRef(loadData);
   loadRef.current = loadData;
+  // Leaving the embedded store view: what was bought there appears in the
+  // library (the backend dropped the source's cached listing, so the update
+  // re-lists only it).
+  const closeStore = useCallback((pluginId: string) => {
+    setView({ name: 'library' });
+    Effect.runPromise(LauncherApi.invalidateLibrary(pluginId))
+      .then(() => loadRef.current('update'))
+      .catch((err) => notify(errMsg(err), 'err'));
+  }, [notify]);
   useEffect(() => {
     const apply = (list: Job[], initial = false) => {
       setJobs(list);
@@ -503,6 +513,12 @@ export function App() {
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
+  // Enabled plugins that declare a storefront: the sidebar's Store section
+  // and the embedded store view (issue #17).
+  const storePlugins = useMemo(
+    () => plugins.filter((p) => p.status === 'ready' && p.storefront_url).sort((a, b) => a.name.localeCompare(b.name)),
+    [plugins],
+  );
   // Plugin logos by store (and id) for the sidebar Sources rows: the store's
   // own plugin first, so a branded row never takes another plugin's mark.
   const sourceLogos = useMemo(() => {
@@ -660,6 +676,24 @@ export function App() {
         );
       case 'settings':
         return <LauncherSettingsView onNotify={notify} plugins={plugins} />;
+      case 'store': {
+        const plugin = storePlugins.find((x) => x.id === view.plugin);
+        if (!plugin) {
+          return (
+            <div className="p-7">
+              <EmptyState label="store unavailable">This store is no longer available. It may have been disabled or removed.</EmptyState>
+            </div>
+          );
+        }
+        return (
+          <StoreView
+            plugin={plugin}
+            initialUrl={view.url}
+            onClose={() => closeStore(plugin.id)}
+            onNotify={notify}
+          />
+        );
+      }
     }
   };
 
@@ -689,6 +723,9 @@ export function App() {
         canRedeem={redeemStores.length > 0}
         onRedeem={() => setRedeemOpen(true)}
         friendsUnread={chat.unread}
+        stores={storePlugins}
+        activeStore={view.name === 'store' ? view.plugin : null}
+        onOpenStore={(id) => setView({ name: 'store', plugin: id })}
       />
 
       <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">

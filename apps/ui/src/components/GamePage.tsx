@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, RefreshCw, Settings2, Trophy } from 'lucide-react';
+import { ArrowLeft, Download, ExternalLink, FolderCheck, FolderInput, Maximize2, RefreshCw, Settings2, Trophy } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
@@ -314,6 +314,22 @@ export function GamePage(p: GamePageProps) {
                 </TooltipTrigger>
                 <TooltipContent>Game settings</TooltipContent>
               </Tooltip>
+              {plugin?.storefront_url && details?.store_url && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="neutral"
+                      size="none"
+                      onClick={() => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url })}
+                      aria-label={`Open ${game.title} in ${plugin.name}`}
+                      className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70"
+                    >
+                      <ExternalLink className="h-[18px] w-[18px]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in store</TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
         </div>

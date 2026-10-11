@@ -104,6 +104,11 @@ export const LauncherApi = {
       return { games: lib.games, warnings: lib.warnings ?? [] };
     }),
 
+  // Drops one source's cached listing so the next read lists it again. The
+  // store view calls it when it closes (issue #17): what was bought in the
+  // embedded store appears in the library.
+  invalidateLibrary: (source: string) => call<void>('InvalidateLibrary', () => App.InvalidateLibrary(source)),
+
   getProtonVersions: () => call<ProtonVersion[]>('GetProtonVersions', async () => (await App.GetProtonVersions()) ?? []),
 
   launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
