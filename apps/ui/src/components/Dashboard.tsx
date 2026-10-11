@@ -2,6 +2,7 @@ import React from 'react';
 import type { ActivityEvent, Game, ProtonVersion, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
+import { CompatChip } from './CompatBadges';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { attentionReason, byRecent, coverImages, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
@@ -105,6 +106,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                     {hoursPlayed(g) != null ? `${hoursPlayed(g)}h · ` : ''}
                     {runnerShort(g.settings.runner_id, runners)}
                   </div>
+                  {!g.native && <CompatChip game={g} className="mt-1.5" />}
                 </div>
               </button>
             ))}
@@ -180,6 +182,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
               <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store)}</div>
             </div>
+            {!g.native && <CompatChip game={g} className="flex-none" />}
           </button>
         </li>
       ))}
