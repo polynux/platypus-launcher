@@ -582,6 +582,7 @@ export function App() {
             onOwnership={setOwnership}
             warnings={warnings}
             plugins={plugins}
+            sourceLogos={sourceLogos}
             jobs={activeJobs}
             lastScan={lastScan}
             onOpenGame={openGame}
@@ -608,6 +609,7 @@ export function App() {
             onSaveSettings={(st) => saveSettings(currentGame.id, st)}
             onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
             plugin={plugins.find((x) => x.id === currentGame.source)}
+            sourceLogos={sourceLogos}
             job={jobFor(currentGame.id)}
             jobs={jobs}
             onJob={(kind) => runJob(kind, currentGame)}
