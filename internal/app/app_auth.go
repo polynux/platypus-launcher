@@ -26,11 +26,17 @@ type authCache struct {
 	// inflight is the auth.status call currently running by plugin id, slow
 	// or background: never two concurrent auth.status calls for one plugin.
 	inflight map[string]*authFlight
+	// gen counts, by plugin id, the writes and invalidations that don't come
+	// from a round trip (login, logout, approve, restart…). A round trip
+	// stores its answer only if gen didn't move while it ran: a check that
+	// started before a logout must not put the old "logged in" back.
+	gen map[string]uint64
 }
 
 // authFlight is one auth.status round trip. A background refresh has no
 // waiter: its caller already answered from the cache.
 type authFlight struct {
+	gen    uint64 // auth.gen[id] when the round trip started
 	done   chan struct{}
 	status types.AuthStatus
 	err    error
@@ -50,7 +56,7 @@ func (a *App) PluginAuthStatus(id string) (types.AuthStatus, error) {
 	}
 	if st, ok := a.auth.entries[id]; ok {
 		if _, busy := a.auth.inflight[id]; !busy {
-			f := &authFlight{done: make(chan struct{})}
+			f := &authFlight{gen: a.auth.gen[id], done: make(chan struct{})}
 			a.auth.inflight[id] = f
 			go a.refreshAuthStatus(id, f)
 		}
@@ -68,7 +74,7 @@ func (a *App) PluginAuthStatus(id string) (types.AuthStatus, error) {
 	var st types.AuthStatus
 	err := a.authCall(id, "auth.status", nil, &st)
 	a.auth.mu.Lock()
-	if err == nil {
+	if err == nil && a.auth.gen[id] == f.gen {
 		a.auth.set(id, st)
 	}
 	f.status, f.err = st, err
@@ -87,9 +93,18 @@ func (c *authCache) join(id string) (*authFlight, bool) {
 	if c.inflight == nil {
 		c.inflight = map[string]*authFlight{}
 	}
-	f := &authFlight{done: make(chan struct{})}
+	f := &authFlight{gen: c.gen[id], done: make(chan struct{})}
 	c.inflight[id] = f
 	return f, true
+}
+
+// bump marks a write or invalidation that isn't a round trip's answer, so a
+// round trip running meanwhile discards its older answer. Call with auth.mu held.
+func (c *authCache) bump(id string) {
+	if c.gen == nil {
+		c.gen = map[string]uint64{}
+	}
+	c.gen[id]++
 }
 
 // set stores a fresh state. Call with auth.mu held.
@@ -107,6 +122,16 @@ func (a *App) refreshAuthStatus(id string, f *authFlight) {
 	err := a.authCall(id, "auth.status", nil, &st)
 	a.auth.mu.Lock()
 	changed := false
+	if err == nil && a.auth.gen[id] != f.gen {
+		// A login, logout or invalidation happened meanwhile: this answer
+		// predates it and must not replace what it stored.
+		// A read that joined this flight still gets the plugin's answer.
+		f.status = st
+		close(f.done)
+		delete(a.auth.inflight, id)
+		a.auth.mu.Unlock()
+		return
+	}
 	if err == nil {
 		if prev, ok := a.auth.entries[id]; !ok || prev != st {
 			changed = true
@@ -132,6 +157,7 @@ func (a *App) refreshAuthStatus(id string, f *authFlight) {
 func (a *App) setAuthStatus(id string, st types.AuthStatus) {
 	a.auth.mu.Lock()
 	prev, ok := a.auth.entries[id]
+	a.auth.bump(id)
 	a.auth.set(id, st)
 	a.auth.mu.Unlock()
 	if !ok || prev != st {
@@ -144,6 +170,7 @@ func (a *App) setAuthStatus(id string, st types.AuthStatus) {
 func (a *App) invalidateAuth(id string) {
 	a.auth.mu.Lock()
 	defer a.auth.mu.Unlock()
+	a.auth.bump(id)
 	delete(a.auth.entries, id)
 }
 
@@ -152,6 +179,12 @@ func (a *App) invalidateAuth(id string) {
 func (a *App) invalidateAuthAll() {
 	a.auth.mu.Lock()
 	defer a.auth.mu.Unlock()
+	for id := range a.auth.entries {
+		a.auth.bump(id)
+	}
+	for id := range a.auth.inflight {
+		a.auth.bump(id)
+	}
 	a.auth.entries = map[string]types.AuthStatus{}
 }
 

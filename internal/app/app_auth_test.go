@@ -310,3 +310,38 @@ func TestAuthRefreshEmitsEventOnChange(t *testing.T) {
 	}
 	t.Fatal("no auth event after the refresh found a changed login state")
 }
+
+// A background check that started before a logout must not put the old
+// "logged in" back when it answers after it.
+func TestAuthStaleRefreshDoesNotOverwriteLogout(t *testing.T) {
+	t.Setenv("ECHO_AUTH_STATUS_DELAY_MS", "400")
+	e, _ := authEnv(t)
+
+	if st, err := e.a.PluginAuthStatus("echo"); err != nil || !st.LoggedIn {
+		t.Fatalf("first status = %+v, %v; want logged in", st, err)
+	}
+	// Serves the cache and starts a slow background check (answers "logged in").
+	if _, err := e.a.PluginAuthStatus("echo"); err != nil {
+		t.Fatal(err)
+	}
+	// The logout lands while that check is still running.
+	e.a.setAuthStatus("echo", types.AuthStatus{LoggedIn: false})
+	waitAuthCalls(t, e, 2)
+	// Let the refresh store (or discard) its answer.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		e.a.auth.mu.Lock()
+		_, busy := e.a.auth.inflight["echo"]
+		e.a.auth.mu.Unlock()
+		if !busy {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	e.a.auth.mu.Lock()
+	got := e.a.auth.entries["echo"]
+	e.a.auth.mu.Unlock()
+	if got.LoggedIn {
+		t.Fatalf("cached state = %+v after a logout during a refresh, want logged out", got)
+	}
+}
