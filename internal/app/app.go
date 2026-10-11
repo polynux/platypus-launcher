@@ -21,6 +21,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/ledger"
 	"platypus/internal/migrate"
+	"platypus/internal/playlog"
 	"platypus/internal/plugins"
 	"platypus/internal/runner"
 	"platypus/internal/session"
@@ -78,6 +79,9 @@ type App struct {
 	tweaks       []types.Tweak
 	// stats caches the store playtime and the achievement progress (protocol 1.7).
 	stats statsCache
+	// playlog is Platypus's own session log (issue #15): the local side of
+	// the playtime and last-played numbers applyPlaytime merges.
+	playlog *playlog.Log
 	// sizes caches what the store says an install needs (app_installsize.go).
 	sizes sizeCache
 	// library caches one listing per source; a finished job, a plugin change
@@ -114,6 +118,7 @@ func (a *App) startup(ctx context.Context) {
 	a.sessions = session.NewTracker(func(e types.SessionEvent) {
 		a.host.Emit("session", e)
 		a.socialSession(e)
+		a.playSession(e)
 		if e.State == "stopped" || e.State == "failed" {
 			a.schedulePlaytimeRefresh(e.GameID)
 		}
@@ -164,6 +169,11 @@ func (a *App) startup(ctx context.Context) {
 	a.jobs.SetOnInstalled(a.recordInstall)
 	a.jobs.SetOnFinished(a.jobFinished)
 
+	// The session log opens after the data folder move above, so a crash
+	// recovery reads the folder in use. Dangling sessions close at their
+	// last heartbeat inside Open.
+	a.openPlaylog(dataDir)
+
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
 	a.plugins = plugins.NewManager(plugins.Options{
@@ -210,6 +220,7 @@ func (a *App) startup(ctx context.Context) {
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
 	go a.jobs.Run(runCtx)
+	go a.playHeartbeatLoop(runCtx)
 }
 
 // shutdown stops games Platypus started directly and every store plugin.
@@ -226,6 +237,13 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 	if a.sessions != nil {
 		a.sessions.StopAll()
+	}
+	// Sessions still open belong to games the shutdown just killed (or to
+	// Steam games that keep running): close them at their last heartbeat so
+	// the next start finds nothing dangling. A crash skips this and Open
+	// recovers them instead.
+	if a.playlog != nil {
+		a.playlog.CloseAllAtHeartbeat()
 	}
 	if a.social != nil {
 		a.social.StopAll()
@@ -392,7 +410,7 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 		a.startPlaytimeOnce(s.ID())
 	}
 	lib.Games = append(lib.Games, a.customGames()...)
-	a.stats.applyPlaytime(lib.Games)
+	a.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
 	a.applyCustomization(lib.Games)
 	a.applyFixes(lib.Games)
