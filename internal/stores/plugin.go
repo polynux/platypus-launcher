@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -157,6 +158,7 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		Developers:  d.Developers,
 		Publishers:  d.Publishers,
 		ReleaseDate: d.ReleaseDate,
+		StoreURL:    storeURL(d.StoreURL),
 	}
 	// The compat fields are protocol 1.10: an older plugin's answer has none.
 	if s.m.Runtime(s.ID()).Speaks(plugins.CompatVersion) {
@@ -185,12 +187,14 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 	// known-safe markup; URLs are https (or the local art server); lists and
 	// lengths are bounded.
 	if s.m.Runtime(s.ID()).Speaks(plugins.MediaVersion) {
-		out.DescriptionHTML = sanitize.HTML(d.DescriptionHTML)
-		if len([]rune(out.DescriptionHTML)) > maxDescriptionRunes {
-			out.DescriptionHTML = string([]rune(out.DescriptionHTML)[:maxDescriptionRunes])
+		// Cut the input, not the output: cutting sanitized markup could end
+		// inside a tag. The sanitizer closes whatever the cut left open.
+		desc := d.DescriptionHTML
+		if r := []rune(desc); len(r) > maxDescriptionRunes {
+			desc = string(r[:maxDescriptionRunes])
 		}
+		out.DescriptionHTML = sanitize.HTML(desc)
 		out.Website = sanitize.HTTPSURL(d.Website)
-		out.StoreURL = sanitize.HTTPSURL(d.StoreURL)
 		out.Languages = sanitize.Strings(d.Languages, maxListItems, maxCopyText)
 		switch d.Controller {
 		case "full", "partial":
@@ -366,4 +370,32 @@ func webURL(raw string) string {
 		return ""
 	}
 	return u.String()
+}
+
+// isLoopback reports whether host is a loopback address for store-URL
+// purposes: 127.0.0.0/8, ::1, or localhost (the test plugin's local page).
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// storeURL keeps a store page link (issue #17): https, or an http loopback
+// page for the test plugin. Anything else is dropped.
+func storeURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Scheme == "https" {
+		return u.String()
+	}
+	if u.Scheme == "http" && isLoopback(u.Hostname()) {
+		return u.String()
+	}
+	return ""
 }

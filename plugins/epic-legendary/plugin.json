@@ -19,5 +19,6 @@
     "network": ["*.epicgames.com", "*.epicgames.dev", "*.unrealengine.com", "legendary.gl"],
     "read": ["~/.config/legendary"],
     "write": ["~/.config/legendary"]
-  }
+  },
+  "storefront": { "url": "https://store.epicgames.com/", "domains": ["store.epicgames.com", "epicgames.com"] }
 }

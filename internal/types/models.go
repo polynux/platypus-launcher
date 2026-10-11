@@ -211,6 +211,11 @@ type StorePlugin struct {
 	// network. The sidebar Sources and the Plugins view show it, with a
 	// monogram tile as fallback.
 	IconURL string `json:"icon_url,omitempty"`
+	// StorefrontURL is the store's official website the launcher embeds
+	// (issue #17), "" when the plugin declares none. StorefrontDomains are
+	// the plain hostnames it belongs to (checkout may wander outside them).
+	StorefrontURL     string   `json:"storefront_url,omitempty"`
+	StorefrontDomains []string `json:"storefront_domains,omitempty"`
 }
 
 // PluginCapability is one declared capability as the Plugins view shows it.

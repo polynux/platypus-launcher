@@ -87,7 +87,28 @@ func (a *App) storePlugin(p plugins.Plugin) types.StorePlugin {
 		DefaultInstallFolder: def,
 		ExtraFolders:         nonNil(extra),
 		IconURL:              a.plugins.IconURL(m.ID),
+		StorefrontURL:        storefrontURL(m),
+		StorefrontDomains:    storefrontDomains(m),
 	}
+}
+
+// storefrontURL is the store's official website the launcher embeds (issue
+// #17), "" when the plugin declares none.
+func storefrontURL(m plugins.Manifest) string {
+	if m.Storefront == nil {
+		return ""
+	}
+	return m.Storefront.URL
+}
+
+// storefrontDomains are the hostnames the storefront belongs to. Never nil
+// on the wire (Go sends nil slices as null; the UI normalizes at the edge,
+// but an empty list here reads cleaner).
+func storefrontDomains(m plugins.Manifest) []string {
+	if m.Storefront == nil || m.Storefront.Domains == nil {
+		return []string{}
+	}
+	return m.Storefront.Domains
 }
 
 // ListStorePlugins returns the plugins found by the last scan.

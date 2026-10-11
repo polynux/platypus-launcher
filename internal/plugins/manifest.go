@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,6 +80,21 @@ type Manifest struct {
 	// the plugin id.
 	InstallDir  string      `json:"install_dir"`
 	Permissions Permissions `json:"permissions"`
+	// Storefront is the store's official website, embedded in the launcher
+	// (issue #17). Nil when the plugin declares none (no store view).
+	Storefront *Storefront `json:"storefront,omitempty"`
+}
+
+// Storefront is the store's official website as a plugin declares it: the
+// page the launcher embeds, and the domains that page belongs to (checkout
+// may wander to payment providers outside them; the UI warns about that).
+type Storefront struct {
+	// URL is the store's front page. Production plugins use https; the test
+	// plugin may use an http loopback page (see allowHTTPStorefront).
+	URL string `json:"url"`
+	// Domains are the plain hostnames the storefront belongs to (no
+	// wildcards, paths, ports or IPs — except loopback for the test plugin).
+	Domains []string `json:"domains"`
 }
 
 // ProtocolSpec is the manifest's protocol declaration.
@@ -335,6 +352,102 @@ func (m Manifest) validate() error {
 	for _, h := range m.Permissions.Network {
 		if strings.TrimSpace(h) == "" {
 			bad("network permission entries can't be empty")
+		}
+	}
+	if err := m.validateStorefront(); err != nil {
+		bad("%s", err.Error())
+	}
+	return errors.Join(errs...)
+}
+
+// allowHTTPStorefront says an http loopback storefront page is acceptable:
+// only for the test plugin (echo, echo-b), or when the operator explicitly
+// opts in. Production stores are https-only; the exception exists so the test
+// plugin can serve a local page with no network (issue #17).
+func allowHTTPStorefront(m Manifest) bool {
+	if os.Getenv("PLATYPUS_ALLOW_HTTP_STOREFRONT") != "" {
+		return true
+	}
+	return m.ID == "echo" || m.ID == "echo-b"
+}
+
+// isLoopbackHost reports whether host is a loopback address for storefront
+// purposes: 127.0.0.0/8, ::1, or localhost.
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+var domainRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$`)
+
+// validateStorefront checks the manifest's storefront declaration (issue #17):
+// an https URL whose host belongs to the declared domains, which are plain
+// hostnames (no wildcards, paths, ports or IPs). The test exception (see
+// allowHTTPStorefront) additionally permits an http loopback URL with a
+// loopback domain, so the test plugin's local page validates.
+func (m Manifest) validateStorefront() error {
+	sf := m.Storefront
+	if sf == nil {
+		return nil
+	}
+	if m.IsData() {
+		return errors.New("a data plugin has no storefront")
+	}
+	var errs []error
+	bad := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
+	test := allowHTTPStorefront(m)
+
+	u, err := url.Parse(sf.URL)
+	if err != nil || u.Host == "" {
+		bad("storefront.url %q is not a URL", sf.URL)
+		return errors.Join(errs...)
+	}
+	host := strings.ToLower(u.Hostname())
+	switch u.Scheme {
+	case "https":
+	case "http":
+		if !(test && isLoopbackHost(host)) {
+			bad("storefront.url %q must be https (http is only for the test plugin's local page)", sf.URL)
+		}
+	default:
+		bad("storefront.url %q must be https (http is only for the test plugin's local page)", sf.URL)
+	}
+	if len(sf.Domains) == 0 {
+		bad("storefront.domains is required when a storefront url is declared")
+	}
+	if len(sf.Domains) > 16 {
+		bad("storefront.domains lists more than 16 domains")
+	}
+	seen := map[string]bool{}
+	for _, d := range sf.Domains {
+		dl := strings.ToLower(d)
+		switch {
+		case seen[dl]:
+			bad("storefront.domains lists %q twice", d)
+		case test && isLoopbackHost(dl):
+			// The test plugin's local page.
+		case net.ParseIP(dl) != nil:
+			bad("storefront.domains entry %q must be a hostname, not an IP", d)
+		case !domainRe.MatchString(dl):
+			bad("storefront.domains entry %q must be a plain hostname (no wildcards, paths or ports)", d)
+		}
+		seen[dl] = true
+	}
+	if err == nil && u.Host != "" && len(errs) == 0 {
+		inside := false
+		for d := range seen {
+			if host == d || strings.HasSuffix(host, "."+d) {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			bad("storefront.url host %q is not inside storefront.domains", host)
 		}
 	}
 	return errors.Join(errs...)

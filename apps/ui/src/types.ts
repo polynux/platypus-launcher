@@ -182,7 +182,11 @@ export type View =
   | { name: 'runners' }
   | { name: 'plugins' }
   | { name: 'downloads' }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  // The embedded store view (issue #17): the plugin's official website in a
+  // native view over the page. url is a deep link from a game page (inside
+  // the plugin's domains); absent means the storefront.
+  | { name: 'store'; plugin: string; url?: string };
 
 // ---- Cloud saves (protocol 1.2; docs/plugins/protocol.md "Cloud saves") ----
 

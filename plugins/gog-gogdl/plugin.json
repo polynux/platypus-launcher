@@ -19,5 +19,6 @@
     "network": ["*.gog.com"],
     "read": [],
     "write": []
-  }
+  },
+  "storefront": { "url": "https://www.gog.com/", "domains": ["gog.com"] }
 }

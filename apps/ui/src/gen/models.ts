@@ -591,6 +591,8 @@ export namespace types {
     default_install_folder: string;
     extra_folders: string[];
     icon_url?: string;
+    storefront_url?: string;
+    storefront_domains?: string[];
   }
 
   export type StoreType = string;

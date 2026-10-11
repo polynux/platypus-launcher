@@ -41,6 +41,11 @@ interface SidebarProps {
   onRedeem: () => void;
   /** Unread messages from friends across the stores: the friends block's badge. */
   friendsUnread?: number;
+  /** Enabled plugins that declare a storefront (the embedded store section). Empty when none. */
+  stores?: { id: string; name: string; icon_url?: string }[];
+  /** The store whose embedded view is shown, if any. */
+  activeStore?: string | null;
+  onOpenStore?: (pluginId: string) => void;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -62,7 +67,9 @@ function readToolsOpen(): boolean {
 type NavItem = { key: NavKey; label: string; count?: number; dot?: boolean };
 
 export function Sidebar(p: SidebarProps) {
-  const active: NavKey = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
+  const active: NavKey | 'store' = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
+  // Enabled plugins that declare a storefront: the embedded store section (issue #17).
+  const storeEntries = p.stores ?? [];
   const [toolsOpen, setToolsOpen] = useState(readToolsOpen);
   const toggleTools = () => {
     setToolsOpen((open) => {
@@ -196,6 +203,25 @@ export function Sidebar(p: SidebarProps) {
             </button>
           );
         })}
+        {storeEntries.length > 0 && (
+          <>
+            <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">store</div>
+            {storeEntries.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => p.onOpenStore?.(s.id)}
+                aria-current={p.activeStore === s.id ? 'page' : undefined}
+                className={cx(
+                  'mb-0.5 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[12.5px] transition',
+                  p.activeStore === s.id ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.04] hover:text-white'
+                )}
+              >
+                <PluginLogo src={s.icon_url} name={s.name} size="xs" />
+                {s.name}
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
       {/* Pinned footer: fixed content, never grows. The friends block is the only part that changes size. */}

@@ -5,6 +5,8 @@ import { Core } from './core.ts';
 import { resolvePaths } from './paths.ts';
 import { APP_ORIGIN, csp, isAppURL, isArtPath, safePath, staticFile, webURL } from './security.ts';
 import { isReloadOrInspect } from './shortcuts.ts';
+import { validPluginId, validStoreBounds, type StorePluginInfo } from './store.ts';
+import { StoreViews } from './storeview.ts';
 import { clampState, DEFAULT_STATE, loadState, saveState } from './window-state.ts';
 
 // Where things are: next to the app in production, the repo build outputs in
@@ -40,6 +42,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 
 let core: Core | undefined;
 let quitting = false;
+let storesRef: StoreViews | undefined;
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -99,6 +102,38 @@ function registerIPC(): void {
   });
 }
 
+/**
+ * The embedded store view's bridge (issue #17): open / bounds / history /
+ * close, validated here like the core calls. Plugin and address checks live
+ * in store.ts (pure, tested); only the app page may call.
+ */
+function registerStoreIPC(stores: StoreViews): void {
+  ipcMain.handle('platypus:store-open', async (e, pluginId: unknown, url: unknown) => {
+    if (!fromApp(e)) return { ok: false, error: 'refused: not the app page' };
+    if (!validPluginId(pluginId)) return { ok: false, error: `refused: not a plugin id` };
+    try {
+      await stores.open(pluginId as string, url);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+  const current = (fn: () => void) => (e: Electron.IpcMainEvent, ...args: unknown[]) => {
+    void args;
+    if (!fromApp(e)) return;
+    fn();
+  };
+  ipcMain.on('platypus:store-bounds', (e, raw: unknown) => {
+    if (!fromApp(e)) return;
+    const bounds = validStoreBounds(raw);
+    if (bounds) stores.setBounds(bounds);
+  });
+  ipcMain.on('platypus:store-back', current(() => stores.back()));
+  ipcMain.on('platypus:store-forward', current(() => stores.forward()));
+  ipcMain.on('platypus:store-reload', current(() => stores.reload()));
+  ipcMain.on('platypus:store-close', current(() => stores.close()));
+}
+
 /** Serves app://platypus: the built frontend (or the dev server) and, through the core, the art. */
 function registerAppProtocol(): void {
   const policy = csp(devPort);
@@ -131,7 +166,7 @@ function decodeURIComponentSafe(s: string): string {
   }
 }
 
-function createWindow(): void {
+function createWindow(): StoreViews {
   const statePath = path.join(app.getPath('userData'), 'window-state.json');
   const saved = loadState(statePath);
   const state = clampState(saved ?? DEFAULT_STATE, screen.getAllDisplays().map((d) => d.workArea));
@@ -179,8 +214,23 @@ function createWindow(): void {
   // Saved on close for a window the user closes, and again in before-quit:
   // app.exit() never delivers close, so a SIGTERM quit would lose it.
   win.on('close', () => saveWindowState(statePath, win));
+  // The embedded store view (issue #17): one native view per store plugin,
+  // over the UI's content area. The open call checks the plugin against the
+  // core's list: known, enabled (ready), with a storefront.
+  const stores = new StoreViews(win, async (): Promise<StorePluginInfo[]> => {
+    if (!core) return [];
+    try {
+      return (await core.call('ListStorePlugins', [])) as StorePluginInfo[];
+    } catch {
+      return [];
+    }
+  });
+  // The embedded store view keeps its place over the content area.
+  win.on('resize', () => stores.relayout());
+  win.on('closed', () => stores.destroy());
   if (maximized) win.maximize();
   void win.loadURL(`${APP_ORIGIN}/`);
+  return stores;
 }
 
 function saveWindowState(statePath: string, win: BrowserWindow): void {
@@ -202,6 +252,7 @@ app.on('before-quit', (e) => {
   for (const w of BrowserWindow.getAllWindows()) {
     saveWindowState(path.join(app.getPath('userData'), 'window-state.json'), w);
   }
+  storesRef?.destroy();
   // The core stops games it started, the plugins and a last cloud sync; give it time.
   void core.close().finally(() => app.exit(0));
 });
@@ -230,5 +281,12 @@ void app.whenReady().then(async () => {
   }
   registerIPC();
   registerAppProtocol();
-  createWindow();
+  const stores = createWindow();
+  registerStoreIPC(stores);
+  // Store views never get the platypus bridge; their events reach the app
+  // page as store events on its own channel.
+  stores.onEvent((ev) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send('platypus:store-event', ev);
+  });
+  storesRef = stores;
 });

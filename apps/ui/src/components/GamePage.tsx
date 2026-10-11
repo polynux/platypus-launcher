@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Settings2, Trophy } from 'lucide-react';
+import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
 import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
@@ -311,6 +311,22 @@ export function GamePage(p: GamePageProps) {
                 </TooltipTrigger>
                 <TooltipContent>Game settings</TooltipContent>
               </Tooltip>
+              {plugin?.storefront_url && details?.store_url && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="neutral"
+                      size="none"
+                      onClick={() => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url })}
+                      aria-label={`Open ${game.title} in ${plugin.name}`}
+                      className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70"
+                    >
+                      <StoreIcon className="h-[18px] w-[18px]" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open in store</TooltipContent>
+                </Tooltip>
+              )}
             </div>
           </div>
         </div>
@@ -359,7 +375,14 @@ export function GamePage(p: GamePageProps) {
           )}
           {lightbox && media.length > 0 && <Lightbox items={media} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
 
-          <AboutSection game={game} details={details} loading={loading} error={error} compatUrls={{ protondb: info?.protondb?.url, wiki: info?.wiki?.url }} />
+          <AboutSection
+            game={game}
+            details={details}
+            loading={loading}
+            error={error}
+            compatUrls={{ protondb: info?.protondb?.url, wiki: info?.wiki?.url }}
+            onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
+          />
         </div>
 
         <aside className="min-w-0 space-y-5">
@@ -566,12 +589,14 @@ function controllerLabel(c?: string): string | null {
 /** The About section: formatted description (collapsed + Show more), details
  *  grid, requirements tabs and links. Calm by default: secondary details live
  *  here, not in the hero. */
-function AboutSection({ game, details, loading, error, compatUrls }: {
+function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }: {
   game: Game;
   details: GameDetails | null;
   loading: boolean;
   error: string | null;
   compatUrls: { protondb?: string; wiki?: string };
+  /** Opens the store page in the embedded store view, when the plugin has one. */
+  onOpenStore?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [reqTab, setReqTab] = useState<'minimum' | 'recommended'>('minimum');
@@ -659,11 +684,17 @@ function AboutSection({ game, details, loading, error, compatUrls }: {
       )}
       {links.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[12px]" data-testid="about-links">
-          {links.map(([label, href]) => (
+          {links.map(([label, href]) =>
+            label === 'Store page' && onOpenStore ? (
+              <button key={label} type="button" onClick={onOpenStore} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
+                {label}
+              </button>
+            ) : (
             <ExternalLink key={label} href={href} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
               {label} ↗
             </ExternalLink>
-          ))}
+            ),
+          )}
         </div>
       )}
     </Panel>
