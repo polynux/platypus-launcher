@@ -434,6 +434,10 @@ func main() {
 	loadSocial()
 	loadChat()
 	loadCompat()
+	// The local test storefront (issue #17): serving it from startup means
+	// the embedded store view finds it even when no game page was opened
+	// first. A taken port only means no local storefront this run.
+	go storeBaseURL()
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64<<10), 32<<20)
 	for in.Scan() {
