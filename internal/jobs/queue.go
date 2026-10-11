@@ -102,8 +102,9 @@ type Queue struct {
 	// onInstalled is called, outside the queue's lock, when an install or
 	// update reports the version it put on disk (job.done's `installed`).
 	onInstalled func(job types.Job, installed types.Installed)
-	// onFinished is called, outside the lock, when an install or an uninstall
-	// is done: the game's folder is what the plugin says it is now.
+	// onFinished is called, outside the lock, when an install, an update, an
+	// uninstall or a move is done: the game's folder and version are what the
+	// plugin says they are now. A verify only reports, so it doesn't call it.
 	onFinished func(job types.Job)
 
 	mu  sync.Mutex
@@ -315,8 +316,8 @@ func (q *Queue) SetOnInstalled(f func(job types.Job, installed types.Installed))
 	q.mu.Unlock()
 }
 
-// SetOnFinished registers the callback for installs and uninstalls that are
-// done. The job is as it was when it ended.
+// SetOnFinished registers the callback for installs, updates, uninstalls and
+// moves that are done. The job is as it was when it ended.
 func (q *Queue) SetOnFinished(f func(job types.Job)) {
 	q.mu.Lock()
 	q.onFinished = f
@@ -614,7 +615,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
 			installed(job, *u.Installed)
 		}
-		if (job.Kind == KindInstall || job.Kind == KindUninstall) && finished != nil {
+		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindMove) && finished != nil {
 			finished(job)
 		}
 		q.finish(job.ID, StateDone, "")

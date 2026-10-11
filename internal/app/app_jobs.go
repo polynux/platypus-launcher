@@ -126,11 +126,20 @@ func (a *App) heldByJob(game types.Game) error {
 	return fmt.Errorf("%s is being %s; launch it once that finishes", game.Title, what)
 }
 
-// jobFinished keeps the relocation record true to the folders. A finished
-// uninstall leaves nothing at the moved folder for it to name, and a finished
+// jobFinished drops the finished job's source from the library cache and keeps
+// the relocation record true to the folders. The queue runs it before the job
+// reads as done, so the rescan the jobs event triggers re-lists the source
+// instead of serving what it listed before the install. A finished uninstall
+// leaves nothing at the moved folder for the record to name, and a finished
 // install puts the game where the plugin says it belongs: either way an old
-// record must not send the library and launches to the stale copy.
+// record must not send the library and launches to the stale copy. A move
+// keeps its record: the plugin still reports the old folder, which maps to
+// the new one.
 func (a *App) jobFinished(j types.Job) {
+	a.invalidateLibrary(j.Source)
+	if j.Kind != jobs.KindInstall && j.Kind != jobs.KindUninstall {
+		return
+	}
 	if _, ok := a.settings.Relocation(j.GameID); !ok {
 		return
 	}

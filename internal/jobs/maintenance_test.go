@@ -251,3 +251,49 @@ func TestFinishedHookRunsForInstallsAndUninstalls(t *testing.T) {
 		t.Fatalf("finished hook saw %v, want [install]", seen)
 	}
 }
+
+// Updates and moves change what the store lists, so the finished hook sees
+// them like installs and uninstalls (the library cache drops their source);
+// a verify only reports and still doesn't call it.
+func TestFinishedHookRunsForUpdatesAndMoves(t *testing.T) {
+	b := &fakeBackend{}
+	q, _ := newQueue(t, b)
+	var mu sync.Mutex
+	var seen []string
+	q.SetOnFinished(func(j types.Job) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, j.Kind)
+	})
+	dir := filepath.Join(t.TempDir(), "Games", "echo")
+	up, err := q.Add(KindUpdate, "echo", "g-up", "tiny", "Tiny", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.waitStarts(1, time.Second)
+	waitState(t, q, up.ID, StateRunning)
+	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: up.ID})
+	mv, err := q.AddMove("echo", "g-mv", "tiny", "Tiny", dir, dir+"-to")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.waitStarts(2, time.Second)
+	waitState(t, q, mv.ID, StateRunning)
+	q.Notify("echo", "job.done", plugins.JobUpdate{JobID: mv.ID})
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		mu.Lock()
+		got := append([]string(nil), seen...)
+		mu.Unlock()
+		if len(got) == 2 {
+			if got[0] != KindUpdate || got[1] != KindMove {
+				t.Fatalf("finished hook saw %v, want [update move]", got)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("finished hook saw %v, want [update move]", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

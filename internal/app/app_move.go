@@ -123,9 +123,9 @@ func (a *App) currentFolder(game types.Game) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%s doesn't come from a store plugin", game.Title)
 	}
-	ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
-	defer cancel()
-	lib, err := a.pluginStore(p).Library(ctx)
+	// Through the library cache: planning a move doesn't re-list the store
+	// on its own.
+	lib, err := a.sourceLibrary(game.Source)
 	if err != nil {
 		return "", fmt.Errorf("reading %s's library: %w", p.Manifest.Name, err)
 	}
@@ -321,6 +321,8 @@ func (a *App) recordMove(j types.Job, from, to string) error {
 	if err := a.settings.SetRelocation(j.GameID, rel); err != nil {
 		return fmt.Errorf("the game is in %s but Platypus could not record it: %w", to, err)
 	}
+	// The game's folder changed: the cached listing still names the old one.
+	a.invalidateLibrary(j.Source)
 	return nil
 }
 

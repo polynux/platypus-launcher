@@ -136,8 +136,13 @@ export function App() {
 
   // When a session started before this window mounted (CORE-1).
   const sessionStart = useRef<Record<string, number>>({});
+  // reason is what the read is for: 'startup' fills an empty window,
+  // 'rescan' is the manual Rescan (every source is listed again), 'update'
+  // refreshes after something changed (a job, a pin, a plugin). An update
+  // reads through the backend cache, so it re-lists only the source the
+  // change invalidated; a rescan bypasses the cache.
   const loadData = useCallback(
-    (reason: 'startup' | 'rescan') => {
+    (reason: 'startup' | 'rescan' | 'update') => {
       setScanning(true);
       // Each source resolves independently: one rejection must not discard
       // the other three successes (FE-3). Settle each call on its own
@@ -152,8 +157,9 @@ export function App() {
       // Unreadable saved settings shouldn't block the library.
       const savedCall = settle(LauncherApi.getGameSettings());
       savedSettings.current = savedCall.then((r) => (r.ok ? r.value : {}));
+      const libraryCall = settle(reason === 'rescan' ? LauncherApi.rescanLibrary() : LauncherApi.getLibrary());
       return Promise.all([
-        settle(LauncherApi.getLibrary()),
+        libraryCall,
         settle(LauncherApi.getProtonVersions()),
         settle(LauncherApi.listPlugins()),
         savedCall,
@@ -219,9 +225,11 @@ export function App() {
             setLoadError(null);
             if (reason === 'rescan') notify('Library rescanned');
           }
-          // Rescans can change store metadata (login, reinstall): evict the
-          // details cache so the next visit refetches (FE-6).
-          if (reason === 'rescan') invalidateGameDetailsCache();
+          // Updates can change store metadata (login, reinstall, a new pin):
+          // evict the details cache so the next visit refetches (FE-6). Only
+          // the manual rescan says so out loud; an update already notified
+          // what changed (the finished job, the pin, the plugin).
+          if (reason !== 'startup') invalidateGameDetailsCache();
           setLastScan(Date.now());
         })
         .catch((err) => {
@@ -376,24 +384,25 @@ export function App() {
       });
   };
 
-  // The install queue. A finished install or uninstall changes the library,
-  // so it triggers a rescan.
+  // The install queue. A finished install, update, uninstall or move changes
+  // the library, so it refreshes it: the backend dropped that source from its
+  // cache when the job finished, so the refresh re-lists only it.
   const jobStates = useRef(new Map<string, string>());
   const loadRef = useRef(loadData);
   loadRef.current = loadData;
   useEffect(() => {
     const apply = (list: Job[], initial = false) => {
       setJobs(list);
-      let rescan = false;
+      let refresh = false;
       for (const j of list) {
         const prev = jobStates.current.get(j.id);
         jobStates.current.set(j.id, j.state);
         if (initial || prev === j.state) continue;
         const verb = j.kind === 'uninstall' ? 'Uninstalled' : j.kind === 'update' ? 'Updated' : 'Installed';
         if (j.state === 'done') {
-          rescan = true;
-          // Optimistic flip so the game page updates before the rescan
-          // round-trip (FE-4); the rescan reconciles afterwards.
+          refresh = true;
+          // Optimistic flip so the game page updates before the refresh
+          // round-trip (FE-4); the refresh reconciles afterwards.
           setGames((prev) => optimisticGamesAfterJob(prev, j));
           notify(`${verb} ${j.title}`);
           log({ type: 'download', game: j.title, detail: `${verb} ${j.title}`, meta: j.source });
@@ -402,7 +411,7 @@ export function App() {
           log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error });
         }
       }
-      if (rescan) loadRef.current('rescan');
+      if (refresh) loadRef.current('update');
     };
     Effect.runPromise(LauncherApi.listJobs()).then((l) => apply(l, true)).catch(() => {});
     return onJobs((l) => apply(l));
@@ -410,9 +419,9 @@ export function App() {
 
   // A silent library read: no rescan notice and no details-cache eviction.
   // Only the fields `merge` names are taken from the fresh read. A failed read
-  // keeps what is shown; the next rescan reconciles it. Every read lists every
-  // store (a plugin may spawn its CLI for it), so asks that come while one is
-  // out share the next single read instead of each starting their own.
+  // keeps what is shown; the next rescan reconciles it. Reads go through the
+  // backend cache, so asks that come while one is out share the next single
+  // read instead of each starting their own.
   const quietRead = useRef<{ running: boolean; waiting: Set<(prev: Game[], fresh: Game[]) => Game[]> }>({ running: false, waiting: new Set() });
   const refreshLibraryQuietly = useCallback((merge: (prev: Game[], fresh: Game[]) => Game[]) => {
     const q = quietRead.current;
@@ -463,7 +472,7 @@ export function App() {
     Effect.runPromise(LauncherApi.allowGameFolder(game.source, folder))
       .then(() => {
         notify(`Games in ${folder} can be launched now`);
-        loadData('rescan');
+        loadData('update');
       })
       .catch((err) => notify(errMsg(err), 'err'));
   };
@@ -582,7 +591,7 @@ export function App() {
             onAllowFolder={(folder) => allowFolder(currentGame, folder)}
             onNavigate={setView}
             onNotify={notify}
-            onVersionsChanged={() => loadData('rescan')}
+            onVersionsChanged={() => loadData('update')}
             onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
           />
         ) : (
@@ -600,7 +609,7 @@ export function App() {
             plugins={plugins}
             warnings={warnings}
             onPlugins={onPluginsChanged}
-            onLibraryChanged={() => loadData('rescan')}
+            onLibraryChanged={() => loadData('update')}
             onNotify={notify}
           />
         );

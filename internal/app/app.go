@@ -80,6 +80,12 @@ type App struct {
 	stats statsCache
 	// sizes caches what the store says an install needs (app_installsize.go).
 	sizes sizeCache
+	// library caches one listing per source; a finished job, a plugin change
+	// or a manual rescan invalidates explicitly (app_library.go, issue #27).
+	// scanMu serializes concurrent scans so the second serves the first
+	// one's fresh cache instead of listing the same slow stores twice.
+	library libraryCache
+	scanMu  sync.Mutex
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
@@ -356,44 +362,6 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 // RemoveCustomGame forgets a hand-added game; its files stay on disk.
 func (a *App) RemoveCustomGame(id string) error {
 	return a.settings.RemoveCustomGame(id)
-}
-
-// GetLibrary lists every source and returns the merged library. Steam failing
-// fails the scan, as before; a plugin failing (logged out, crashed) only adds
-// a warning, so one broken plugin can't hide the rest of the library.
-//
-// Sources answer at their own pace (Steam reads local files, a store plugin
-// may wait on its store): each time one finishes while others are still out,
-// the library of those finished is sent as a "library-partial" event, so the
-// window can show it before the slowest plugin answers.
-func (a *App) GetLibrary() (types.Library, error) {
-	all := a.stores.All()
-	results := make([][]types.Game, len(all))
-	errs := make([]error, len(all))
-	finished := make(chan int, len(all))
-	for i, s := range all {
-		go func() {
-			ctx, cancel := context.WithTimeout(a.ctx, libraryTimeout)
-			defer cancel()
-			results[i], errs[i] = s.Library(ctx)
-			finished <- i
-		}()
-	}
-	done := make([]bool, len(all))
-	for left := len(all); left > 0; left-- {
-		done[<-finished] = true // the channel hands over the writes of results[i] and errs[i]
-		if left > 1 && a.libraryEmit != nil {
-			if lib, err := a.assembleLibrary(all, results, errs, done); err == nil && len(lib.Games) > 0 {
-				a.libraryEmit(lib)
-			}
-		}
-	}
-	lib, err := a.assembleLibrary(all, results, errs, done)
-	if err != nil {
-		return types.Library{}, err
-	}
-	a.forgetRemovedGameSettings(all, results, errs)
-	return lib, nil
 }
 
 // assembleLibrary merges what the finished sources returned with the sideloaded

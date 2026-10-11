@@ -106,6 +106,8 @@ func (a *App) RescanPlugins() ([]types.StorePlugin, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The plugin set itself may have changed: no cached listing survives it.
+	a.invalidateLibraries()
 	a.syncDataPlugins(found)
 	a.forgetSettingsOfRemoved(found)
 	a.failStoppedJobs()
@@ -137,6 +139,8 @@ func (a *App) ApprovePlugin(id string) error {
 	if err := a.plugins.Approve(id); err != nil {
 		return err
 	}
+	// An approved plugin joins the library: list it again.
+	a.invalidateLibrary(id)
 	a.failStoppedJobs()
 	a.syncSocial()
 	return nil
@@ -147,6 +151,9 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 	if err := a.plugins.SetEnabled(id, enabled); err != nil {
 		return err
 	}
+	// A disabled plugin leaves the library (pruned on the next scan); an
+	// enabled one joins it. Either way its entry can't be served again.
+	a.invalidateLibrary(id)
 	a.failStoppedJobs()
 	a.syncSocial()
 	return nil
@@ -156,7 +163,13 @@ func (a *App) SetPluginEnabled(id string, enabled bool) error {
 // restarts it. The Plugins view offers it after a give-up (CORE-10);
 // UI wiring belongs to workstream D.
 func (a *App) RetryPlugin(id string) error {
-	return a.plugins.RetryPlugin(id)
+	if err := a.plugins.RetryPlugin(id); err != nil {
+		return err
+	}
+	// The plugin starts again on the next call: a cached failure from the
+	// crashed period must not be served.
+	a.invalidateLibrary(id)
+	return nil
 }
 
 // OpenPluginsFolder opens the plugins folder in the file manager.
@@ -228,6 +241,8 @@ func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.Aut
 	var st types.AuthStatus
 	err := a.authCall(id, "auth.complete", map[string]any{"fields": fields}, &st)
 	if err == nil && st.LoggedIn {
+		// A login changes what the store lists: list it again.
+		a.invalidateLibrary(id)
 		a.socialLoggedIn(id)
 	}
 	return st, err
@@ -237,13 +252,22 @@ func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.Aut
 func (a *App) PluginLogout(id string) (types.AuthStatus, error) {
 	var st types.AuthStatus
 	err := a.authCall(id, "auth.logout", nil, &st)
+	if err == nil {
+		// A logout changes what the store lists: list it again.
+		a.invalidateLibrary(id)
+	}
 	return st, err
 }
 
 // SetPluginInstallFolder overrides where the plugin installs games; "" restores
 // <Games folder>/<plugin>.
 func (a *App) SetPluginInstallFolder(id, path string) error {
-	return a.plugins.SetInstallFolder(id, path)
+	if err := a.plugins.SetInstallFolder(id, path); err != nil {
+		return err
+	}
+	// The folders feed the library's launch checks: list it again.
+	a.invalidateLibrary(id)
+	return nil
 }
 
 // ChoosePluginInstallFolder opens a folder picker at the plugin's install
@@ -256,5 +280,10 @@ func (a *App) ChoosePluginInstallFolder(id string) (string, error) {
 // AllowGameFolder lets a plugin's games launch from a folder outside its
 // install folder (games its CLI installed before Platypus).
 func (a *App) AllowGameFolder(pluginID, path string) error {
-	return a.plugins.AllowFolder(pluginID, path)
+	if err := a.plugins.AllowFolder(pluginID, path); err != nil {
+		return err
+	}
+	// The folders feed the library's launch checks: list it again.
+	a.invalidateLibrary(pluginID)
+	return nil
 }
