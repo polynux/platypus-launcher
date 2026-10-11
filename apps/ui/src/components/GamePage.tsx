@@ -444,6 +444,7 @@ export function GamePage(p: GamePageProps) {
           onCustomized={() => p.onCustomized?.()}
           onCopied={() => p.onNotify?.('Copied to clipboard')}
           onRemove={p.onRemove}
+          running={!!session || p.launching}
         />
       )}
       {installTo && plugin && (

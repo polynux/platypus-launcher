@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Effect } from 'effect';
-import type { Game, Job, MoveCheck, StorePlugin } from '../../types';
+import type { Game, Job, MoveCheck, SessionEvent, StorePlugin } from '../../types';
 
 const api = vi.hoisted(() => ({
   verifyGame: vi.fn(),
@@ -170,6 +170,48 @@ describe('Remove from library for sideloaded games', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog', { name: 'Settings for Sideloaded Gem' })).toBeNull();
+  });
+
+  it('asks on the confirm row, unlike the first row which explains', () => {
+    render(<GamePage game={custom()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    expect(screen.getByText(/Removes Sideloaded Gem from Platypus\. Its files stay in \/games\/sideload\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(screen.getByText(/Remove Sideloaded Gem from Platypus\? Its files stay in \/games\/sideload\./)).toBeTruthy();
+    expect(screen.queryByText(/Removes Sideloaded Gem from Platypus\. Its files stay in \/games\/sideload\./)).toBeNull();
+  });
+
+  it('disables Remove while the custom game is running, with no confirm step', () => {
+    const onRemove = vi.fn();
+    const session = { game_id: 'custom-1', state: 'running' } as SessionEvent;
+    const { unmount } = render(<GamePage {...base} game={custom()} session={session} onRemove={onRemove} />);
+    openTab('Maintenance');
+    expect(screen.getByText(/Stop Sideloaded Gem before removing it from the library\./)).toBeTruthy();
+    const remove = screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' });
+    expect(remove.disabled).toBe(true);
+    fireEvent.click(remove);
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(onRemove).not.toHaveBeenCalled();
+    unmount();
+
+    // Launching counts as running too.
+    render(<GamePage {...base} game={custom()} launching onRemove={onRemove} />);
+    openTab('Maintenance');
+    expect(screen.getByText(/Stop Sideloaded Gem before removing it from the library\./)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' }).disabled).toBe(true);
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it('closes the confirm row if the game starts while it is open', () => {
+    const onRemove = vi.fn();
+    const { rerender } = render(<GamePage {...base} game={custom()} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    rerender(<GamePage {...base} game={custom()} launching onRemove={onRemove} />);
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' }).disabled).toBe(true);
+    expect(onRemove).not.toHaveBeenCalled();
   });
 });
 

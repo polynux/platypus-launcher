@@ -18,7 +18,7 @@ export function parentFolder(dir?: string): string {
 }
 
 /** What is done to an installed game's files: check them, move them, remove them. */
-export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, onNotify, onClose, onRemove }: {
+export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, onNotify, onClose, onRemove, running }: {
   game: Game;
   plugin?: StorePlugin;
   job?: Job;
@@ -30,11 +30,16 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   onClose: () => void;
   /** Removes a sideloaded game from the library (custom games only). */
   onRemove?: () => void;
+  /** The game is starting or running: it can't leave the library until it stops. */
+  running?: boolean;
 }) {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   useEffect(() => { setConfirm(false); setVerifyOpen(false); setMoveOpen(false); }, [game.id]);
+  // A game that starts while the confirm row is open closes it: a running
+  // game can't be removed, so there is nothing left to answer.
+  useEffect(() => { if (running) setConfirm(false); }, [running]);
   // While the uninstall waits for an answer, Escape only backs out of it. The window's capture
   // phase runs before the dialog's own Escape handler, so the settings stay open.
   useEffect(() => {
@@ -58,15 +63,25 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
     );
   }
   // Sideloaded games have no plugin actions: only forgetting them in Platypus.
-  // Their files stay where they are.
+  // Their files stay where they are. A running game can't leave the library
+  // until it stops, so its Remove button waits disabled with no confirm step.
   if (game.store === 'custom') {
-    const removeText = game.install_dir
-      ? `Removes ${game.title} from Platypus. Its files stay in ${game.install_dir}.`
-      : `Removes ${game.title} from Platypus. Its files stay on disk.`;
+    if (running) {
+      return (
+        <div className="space-y-5">
+          <Row title="Remove from library" text={`Stop ${game.title} before removing it from the library.`}>
+            <Button disabled><Trash2 className="h-3.5 w-3.5" /> Remove from library</Button>
+          </Row>
+        </div>
+      );
+    }
+    const stay = game.install_dir ? `Its files stay in ${game.install_dir}.` : `Its files stay on disk.`;
+    const removeText = `Removes ${game.title} from Platypus. ${stay}`;
+    const removeConfirmText = `Remove ${game.title} from Platypus? ${stay}`;
     return (
       <div className="space-y-5">
         {confirm ? (
-          <Row title="Remove from library" text={removeText}>
+          <Row title="Remove from library" text={removeConfirmText}>
             <div className="flex gap-2">
               <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>Cancel</Button>
               <Button variant="danger" onClick={() => { setConfirm(false); onRemove?.(); onClose(); }}>

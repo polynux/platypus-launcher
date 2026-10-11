@@ -504,16 +504,20 @@ export function App() {
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
-  // Forgetting a sideloaded game: the backend drops it (files stay on disk),
-  // the page goes back to where it came from (it would otherwise say "not
-  // found"), and the activity says what left.
+  // Forgetting a sideloaded game: the backend drops it (files stay on disk).
+  // A running game can't leave the library until it stops, or it could no
+  // longer be stopped from the launcher. Leaving the page only happens when
+  // the user is still on this game's page: a navigation meanwhile wins.
   const removeGame = (game: Game) => {
-    const back = view.name === 'game' ? view.from : 'library' as const;
+    if (sessions[game.id] || launchingId === game.id) {
+      notify(`Stop "${game.title}" before removing it`, 'err');
+      return;
+    }
     Effect.runPromise(LauncherApi.removeCustomGame(game.id))
       .then(() => {
         setGames((prev) => prev.filter((x) => x.id !== game.id));
         invalidateGameDetailsCache(game.id);
-        setView({ name: back } as View);
+        setView((v) => (v.name === 'game' && v.id === game.id ? { name: v.from } : v));
         notify(`Removed "${game.title}"`);
         log({ type: 'remove', game: game.title, detail: `Removed ${game.title} from library`, meta: game.install_dir || undefined });
       })

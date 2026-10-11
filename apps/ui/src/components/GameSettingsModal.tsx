@@ -41,6 +41,8 @@ export interface GameSettingsModalProps {
   onCopied: () => void;
   /** Removes a sideloaded game from the library (custom games only). */
   onRemove?: () => void;
+  /** The game is starting or running: destructive actions wait. */
+  running?: boolean;
 }
 
 /** Everything about one game that is not playing it, in one place. A tab shows
@@ -159,7 +161,7 @@ function TabBody({ tab, onOpenGeneral, ...p }: GameSettingsModalProps & { tab: G
       return <CustomizationTab game={game} onChanged={p.onCustomized} />;
     case 'maintenance':
       return (plugin || game.store === 'custom') ? (
-        <MaintenanceTab game={game} plugin={plugin} job={p.job} jobs={p.jobs} onJob={p.onJob} onJobAction={p.onJobAction} onNotify={p.onNotify} onClose={p.onClose} onRemove={p.onRemove} />
+        <MaintenanceTab game={game} plugin={plugin} job={p.job} jobs={p.jobs} onJob={p.onJob} onJobAction={p.onJobAction} onNotify={p.onNotify} onClose={p.onClose} onRemove={p.onRemove} running={p.running} />
       ) : null;
     default:
       return null;
