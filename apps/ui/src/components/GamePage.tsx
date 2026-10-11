@@ -17,6 +17,7 @@ import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
+import { PluginLogo } from './PluginLogo';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
 import { TIER_LABEL, ratingLine } from '../lib/compat';
 import { normalizeSettings } from '../lib/settings';
@@ -65,6 +66,8 @@ interface GamePageProps {
   onCustomized?: () => void;
   plugin?: StorePlugin; // plugin games only
   job?: Job; // the game's active job, or its last failed one
+  /** Plugin logos by store (and plugin id): the store badge and details row. */
+  sourceLogos?: Record<string, string>;
   onJob: (kind: GameJobKind) => void;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
   /** Every job in the queue: the verify dialog follows its own. */
@@ -199,6 +202,10 @@ export function GamePage(p: GamePageProps) {
   const events = activity.filter((e) => e.game === game.title).slice(0, 6);
   const hours = hoursPlayed(game);
   const last = lastPlayedLabel(game);
+  // The store's logo: the game's own plugin first (game.source is its id),
+  // then its store. A missing logo falls back to a monogram tile in PluginLogo.
+  const storeLogo = p.sourceLogos?.[game.source] ?? p.sourceLogos?.[game.store];
+  const storeName = storeLabel(game.store);
 
   const facts: [string, string][] = [
     [
@@ -262,7 +269,12 @@ export function GamePage(p: GamePageProps) {
           <div className="min-w-0 flex-1 basis-72">
             <div className="mb-2.5 flex flex-wrap gap-2">
               {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
-              <Badge className="bg-black/50 text-white/75">{storeLabel(game.store)}</Badge>
+              <Badge className="bg-black/50 text-white/75" data-testid="store-badge">
+                <span className="inline-flex items-center gap-1.5">
+                  <PluginLogo src={storeLogo} name={storeName} size="xs" />
+                  <span>{storeName}</span>
+                </span>
+              </Badge>
               {formatBytes(game.size_bytes) && <Badge className="bg-black/50 text-white/75">{formatBytes(game.size_bytes)}</Badge>}
               {!game.is_installed && <Badge className="bg-black/50 text-white/55">not installed</Badge>}
               {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">update available</Badge>}
@@ -419,7 +431,7 @@ export function GamePage(p: GamePageProps) {
           </Panel>
 
           {isPluginGame(game) && game.is_installed && plugin && (
-            <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} />
+            <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} sourceLogos={p.sourceLogos} />
           )}
 
           {isPluginGame(game) && plugin && <CopyPicker game={game} plugin={plugin} onChanged={() => p.onCopyChanged?.()} />}
@@ -559,28 +571,40 @@ function InstallationPanel({
   plugin,
   job,
   onJobAction,
+  sourceLogos,
 }: {
   game: Game;
   plugin: StorePlugin;
   job?: Job;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  sourceLogos?: Record<string, string>;
 }) {
   const active = job && (job.state === 'queued' || job.state === 'running');
+  const storeLogo = sourceLogos?.[game.source] ?? sourceLogos?.[game.store];
+  const storeName = storeLabel(game.store);
+  const storeText = `${storeName} · ${plugin.name}`;
+  const storeValue = (
+    <span className="inline-flex items-center gap-1.5" data-testid="store-row">
+      <PluginLogo src={storeLogo} name={storeName} size="xs" />
+      <span>{storeText}</span>
+    </span>
+  );
+  const rows: [string, React.ReactNode, string][] = [
+    ['Store', storeValue, storeText],
+    // A game the store lists as installed may have no folder Platypus can name: say so.
+    ['Folder', game.install_dir || (game.is_installed ? 'not known to Platypus' : '—'), game.install_dir || ''],
+    ['Version', game.version || '—', game.version || ''],
+    ...(game.pinned ? [['Pinned to', pinLabel(game.pinned), pinLabel(game.pinned)] as [string, React.ReactNode, string]] : []),
+    ['Size', formatBytes(game.size_bytes) || '—', formatBytes(game.size_bytes) || ''],
+  ];
   return (
     <Panel className="bg-white/[0.05]">
       <h2 className="mb-2 text-[15px] font-bold">Installation</h2>
       <div className="space-y-2 font-mono text-hint">
-        {[
-          ['Store', `${storeLabel(game.store)} · ${plugin.name}`],
-          // A game the store lists as installed may have no folder Platypus can name: say so.
-          ['Folder', game.install_dir || (game.is_installed ? 'not known to Platypus' : '—')],
-          ['Version', game.version || '—'],
-          ...(game.pinned ? [['Pinned to', pinLabel(game.pinned)]] : []),
-          ['Size', formatBytes(game.size_bytes) || '—'],
-        ].map(([k, v]) => (
+        {rows.map(([k, v, title]) => (
           <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
             <span className="text-white/55">{k}</span>
-            <span className="truncate text-right text-white/85 select-text" title={v}>{v}</span>
+            <span className="truncate text-right text-white/85 select-text" title={title}>{v}</span>
           </div>
         ))}
       </div>

@@ -46,7 +46,7 @@ export function LinkButton({ onClick, children }: { onClick: () => void; childre
 
 export interface SegOption<T extends string> {
   value: T;
-  label: string;
+  label: React.ReactNode;
   title?: string;
 }
 

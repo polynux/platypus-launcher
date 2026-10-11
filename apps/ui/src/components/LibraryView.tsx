@@ -15,6 +15,7 @@ import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, lastPlayed
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 import { WindowedGrid, WindowedRows } from './WindowedList';
+import { PluginLogo } from './PluginLogo';
 
 export type LibraryMode = 'cards' | 'table';
 /** installed: what can be played now; owned: everything store plugins report too. */
@@ -36,6 +37,8 @@ interface LibraryProps {
   plugins: StorePlugin[];
   jobs: Job[]; // queued or running
   lastScan: number | null;
+  /** Plugin logos by store (and plugin id), as the sidebar Sources rows use. */
+  sourceLogos?: Record<string, string>;
   onOpenGame: (id: string) => void;
   onAddGame: () => void;
   onNavigate: (v: View) => void;
@@ -309,7 +312,23 @@ export function LibraryView(p: LibraryProps) {
           {/* One store (or none) has nothing to choose between: the chips show only with two or more. */}
           {sources.length > 2 && (
             <FilterGroup label="store">
-              <SegRow label="Store" value={source} onChange={p.onSource} options={sources.map((s) => ({ value: s, label: s }))} />
+              <SegRow
+                label="Store"
+                value={source}
+                onChange={p.onSource}
+                options={sources.map((s) => ({
+                  value: s,
+                  label:
+                    s === 'all' ? (
+                      'all'
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <PluginLogo src={p.sourceLogos?.[s]} name={storeLabel(s)} size="xs" />
+                        <span>{s}</span>
+                      </span>
+                    ),
+                }))}
+              />
             </FilterGroup>
           )}
           <Button
