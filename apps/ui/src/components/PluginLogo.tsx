@@ -43,7 +43,7 @@ export function PluginLogo({ src, name, size = 'md' }: { src?: string | null; na
   const box = BOX[size];
   if (!src || broken) {
     return (
-      <span aria-hidden className={cx('grid flex-none place-items-center font-extrabold ring-1 ring-white/10', tintFor(name), box)}>
+      <span aria-hidden className={cx('grid flex-none place-items-center font-extrabold leading-none ring-1 ring-white/10', tintFor(name), box)}>
         {monogramFor(name)}
       </span>
     );
