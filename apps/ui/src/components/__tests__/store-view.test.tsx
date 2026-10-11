@@ -141,6 +141,92 @@ describe('StoreView toolbar', () => {
     fireEvent.click(getByTestId('store-close'));
     expect(onClose).toHaveBeenCalledTimes(1);
     unmount();
-    expect(bridge.close).toHaveBeenCalled();
+    expect(bridge.close).toHaveBeenCalledWith('echo');
+  });
+
+  it('goes home to the declared storefront', () => {
+    const bridge = storeBridgeStub();
+    window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    const { getByRole } = render(
+      <TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    bridge.open.mockClear();
+    fireEvent.click(getByRole('button', { name: 'Home' }));
+    expect(bridge.open).toHaveBeenCalledWith('echo');
+  });
+
+  it('switching stores opens the next one without closing first', () => {
+    const bridge = storeBridgeStub();
+    window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    const echoC = { ...plugin, id: 'echo-c', name: 'Echo C' };
+    const { rerender } = render(
+      <TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    expect(bridge.open).toHaveBeenCalledWith('echo', undefined);
+    rerender(
+      <TooltipProvider><StoreView plugin={echoC as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    // The next store opens; no close races it over a separate IPC channel
+    // (that race left the return blank: echo → other → echo never loaded).
+    expect(bridge.open).toHaveBeenCalledWith('echo-c', undefined);
+    expect(bridge.close).not.toHaveBeenCalled();
+  });
+
+  it('returning to a store reopens it without closing first', () => {
+    const bridge = storeBridgeStub();
+    window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    const echoC = { ...plugin, id: 'echo-c', name: 'Echo C' };
+    const { rerender, unmount } = render(
+      <TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    rerender(
+      <TooltipProvider><StoreView plugin={echoC as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    rerender(
+      <TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    expect(bridge.open).toHaveBeenLastCalledWith('echo', undefined);
+    expect(bridge.close).not.toHaveBeenCalled();
+    unmount();
+    expect(bridge.close).toHaveBeenCalledWith('echo');
+  });
+
+  it('offers a blocked outside address in the browser, never auto-opening', () => {
+    const bridge = storeBridgeStub();
+    let listener!: (ev: never) => void;
+    bridge.onEvent = vi.fn((cb: (ev: never) => void) => {
+      listener = cb;
+      return () => {};
+    });
+    const opened: string[] = [];
+    window.platypus = {
+      ...window.platypus!,
+      openExternal: (url: string) => { opened.push(url); },
+      store: bridge,
+    } as typeof window.platypus;
+    const { getByTestId, queryByTestId } = render(
+      <TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>,
+    );
+    expect(queryByTestId('store-blocked')).toBeNull();
+    act(() => {
+      listener({
+        kind: 'blocked', pluginId: 'echo', url: 'https://checkout.example/pay',
+        canGoBack: true, canGoForward: false, title: '', loading: false,
+      } as never);
+    });
+    // The notice names the host and the store; nothing opened by itself.
+    expect(getByTestId('store-blocked').textContent).toMatch(/checkout\.example/);
+    expect(getByTestId('store-blocked').textContent).toMatch(/Echo \(test plugin\)/);
+    expect(opened).toEqual([]);
+    fireEvent.click(getByTestId('store-blocked-open'));
+    expect(opened).toEqual(['https://checkout.example/pay']);
+    // A successful navigation clears the notice.
+    act(() => {
+      listener({
+        kind: 'navigated', pluginId: 'echo', url: 'http://127.0.0.1:18427/store/',
+        canGoBack: false, canGoForward: false, title: 'Echo', loading: false,
+      } as never);
+    });
+    expect(queryByTestId('store-blocked')).toBeNull();
   });
 });
