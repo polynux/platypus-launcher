@@ -36,6 +36,22 @@ test('static files resolve inside the root only', () => {
   assert.equal(staticFile(root, '//etc/passwd'), '/srv/dist/etc/passwd');
 });
 
+test('the policy plays videos from https and the local art server, and stays strict otherwise', () => {
+  const p = csp();
+  const media = p.split(';').map((s) => s.trim()).find((s) => s.startsWith('media-src')) ?? '';
+  const tokens = media.split(/\s+/).slice(1);
+  for (const want of ['https:', 'http://127.0.0.1:*', 'http://localhost:*']) {
+    assert.ok(tokens.includes(want), `${want} not in ${media}`);
+  }
+  // No bare http: (plain web) and no data:/blob: (no inline media).
+  assert.ok(!tokens.includes('http:'), media);
+  assert.ok(!tokens.includes('data:'), media);
+  assert.ok(!tokens.includes('blob:'), media);
+  assert.match(p, /default-src 'none'/);
+  assert.match(p, /object-src 'none'/);
+  assert.match(p, /script-src 'self'(;|$)/);
+});
+
 test('the policy lets scripts in from the app only, and the dev one adds the dev socket', () => {
   const p = csp();
   assert.match(p, /script-src 'self'(;|$)/);
