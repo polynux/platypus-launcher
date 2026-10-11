@@ -204,7 +204,14 @@ func TestHeartbeatRefreshesRunningTrackerSessions(t *testing.T) {
 	if _, err := a.sessions.StartDirect("hg", exec.Command("sleep", "30"), "sleep 30", nil); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(1100 * time.Millisecond) // the heartbeat must land on a later second
+	// The heartbeat only moves when it lands on a later Unix second than the
+	// start: wait for the second boundary instead of a fixed 1100ms sleep,
+	// which wastes a second and still assumes the scheduler is prompt.
+	startSec := time.Now().Unix()
+	boundary := time.Now().Add(5 * time.Second)
+	for time.Now().Unix() <= startSec && time.Now().Before(boundary) {
+		time.Sleep(50 * time.Millisecond)
+	}
 	a.playHeartbeat()
 	raw, err := os.ReadFile(filepath.Join(dir, "play-sessions.json"))
 	if err != nil {
@@ -231,7 +238,7 @@ func TestHeartbeatRefreshesRunningTrackerSessions(t *testing.T) {
 	if err := a.sessions.Stop("hg", true); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for a.sessions.Running("hg") && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}

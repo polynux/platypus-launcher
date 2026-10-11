@@ -227,9 +227,15 @@ func TestFamilyWarningFromAPluginWithFamilyOffIsIgnored(t *testing.T) {
 	if _, err := e.store().Launch(context.Background(), e.libraryGame(t, "ben"), false); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(100 * time.Millisecond)
-	if n := len(e.warnings()); n != 0 {
-		t.Fatalf("%d warnings from a plugin without family", n)
+	// Warnings arrive on their own goroutine: a fixed 100ms sleep would miss
+	// a delayed warning when busy (false pass) or race the launch. Poll for
+	// a full second that none arrives.
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		if n := len(e.warnings()); n != 0 {
+			t.Fatalf("%d warnings from a plugin without family", n)
+		}
 	}
 }
 
@@ -275,9 +281,22 @@ func TestSavedPluginSettingsReachThePluginAndSurviveARestart(t *testing.T) {
 	if err := e.m.Call(context.Background(), "echo", "crash", nil, nil); err == nil {
 		t.Fatal("crash answered")
 	}
+	// The plugin is restarting: config can fail until it is back, so poll
+	// without failing on transient errors.
 	waitFor(t, func() bool {
-		plug := e.config(t, nil)["settings"].(map[string]any)["plugin"].(map[string]any)
-		return plug["region"] == "us"
+		var res map[string]any
+		if err := e.m.Call(context.Background(), "echo", "config", nil, &res); err != nil {
+			return false
+		}
+		plug, ok := res["settings"].(map[string]any)
+		if !ok {
+			return false
+		}
+		inner, ok := plug["plugin"].(map[string]any)
+		if !ok {
+			return false
+		}
+		return inner["region"] == "us"
 	})
 }
 
@@ -342,11 +361,12 @@ func TestSettingsBelowProtocol18AreNeverSent(t *testing.T) {
 	}
 }
 
-// waitFor polls cond for up to two seconds: notifications and the plugin's
-// start hook run on their own goroutines.
+// waitFor polls cond until it holds or the test times out: notifications
+// and the plugin's start hook run on their own goroutines, which can take
+// seconds when the machine is busy.
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatal("condition not reached in time")
@@ -547,7 +567,19 @@ func TestSettingAPreferredCopyIsSentStoredAndReadBackAfterARestart(t *testing.T)
 	if err := e.m.Call(context.Background(), "echo", "crash", nil, nil); err == nil {
 		t.Fatal("crash answered")
 	}
-	waitFor(t, func() bool { return e.libraryGame(t, "shared").PreferredCopy == "ben" })
+	// The plugin is restarting: the library can fail until it is back.
+	waitFor(t, func() bool {
+		games, err := e.store().Library(context.Background())
+		if err != nil {
+			return false
+		}
+		for _, g := range games {
+			if g.StoreAppID == "shared" {
+				return g.PreferredCopy == "ben"
+			}
+		}
+		return false
+	})
 }
 
 func TestSetPreferredCopyIsRefusedWithoutSendingWhenItDoesNotApply(t *testing.T) {

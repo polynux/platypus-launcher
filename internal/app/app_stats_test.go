@@ -188,11 +188,9 @@ func TestSessionEndRefreshesOnlyTheEndedGamesPlugin(t *testing.T) {
 	a.schedulePlaytimeRefresh("p.echo.tiny")
 	a.schedulePlaytimeRefresh("p.echo.tiny")
 	a.schedulePlaytimeRefresh("p.other.game")
-	time.Sleep(300 * time.Millisecond)
-
-	if n := echoCalls(t, a)["playtime.list"]; n != 1 {
-		t.Fatalf("playtime.list reached echo %d times after a burst of session ends, want 1", n)
-	}
+	// The debounce is 10ms but the plugin round trip can take seconds when
+	// the machine is busy: wait for the one read instead of a fixed sleep.
+	waitPlaytime(t, a, "echo", 1)
 	a.stats.mu.Lock()
 	defer a.stats.mu.Unlock()
 	if _, ok := a.stats.playtime["echo"]; !ok {
@@ -200,18 +198,70 @@ func TestSessionEndRefreshesOnlyTheEndedGamesPlugin(t *testing.T) {
 	}
 }
 
+// waitPlaytime polls until the plugin has been asked want times and its
+// report is cached, or the test times out.
+func waitPlaytime(t *testing.T, a *App, plugin string, want int) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		a.stats.mu.Lock()
+		_, cached := a.stats.playtime[plugin]
+		a.stats.mu.Unlock()
+		if n := echoCalls(t, a)["playtime.list"]; n == want && cached {
+			// Let a buggy duplicate have time to land before asserting one.
+			time.Sleep(200 * time.Millisecond)
+			if n := echoCalls(t, a)["playtime.list"]; n == want {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("playtime.list reached %s %d times, want %d (cached=%v)", plugin, echoCalls(t, a)["playtime.list"], want, func() bool {
+		a.stats.mu.Lock()
+		defer a.stats.mu.Unlock()
+		_, ok := a.stats.playtime[plugin]
+		return ok
+	}())
+}
+
 func TestPlaytimeReadIsNotStartedTwiceAtOnce(t *testing.T) {
 	a, _ := statsApp(t, statsManifest)
 	a.startPlaytimeOnce("echo")
 	a.startPlaytimeOnce("echo")
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for !a.stats.isFresh("echo") && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	time.Sleep(50 * time.Millisecond)
-	if n := echoCalls(t, a)["playtime.list"]; n != 1 {
-		t.Fatalf("playtime.list reached echo %d times for two listings at once, want 1", n)
+	if !a.stats.isFresh("echo") {
+		t.Fatal("playtime was never marked fresh")
 	}
+	// The read is done when nothing is inflight; a fixed 50ms sleep would
+	// miss a delayed duplicate when the machine is busy, so watch the count
+	// until it has stayed at one.
+	waitStatsIdle(t, a)
+	stabilize := time.Now().Add(2 * time.Second)
+	for time.Now().Before(stabilize) {
+		time.Sleep(20 * time.Millisecond)
+		if n := echoCalls(t, a)["playtime.list"]; n != 1 {
+			t.Fatalf("playtime.list reached echo %d times for two listings at once, want 1", n)
+		}
+	}
+}
+
+// waitStatsIdle waits until no playtime read is claimed.
+func waitStatsIdle(t *testing.T, a *App) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		a.stats.mu.Lock()
+		busy := len(a.stats.inflight) != 0
+		a.stats.mu.Unlock()
+		if !busy {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("playtime read still inflight after 10s")
 }
 
 func TestPlaytimeClaimIsExclusiveAndAFailureBacksOff(t *testing.T) {

@@ -317,24 +317,32 @@ func TestSizeCacheExpiresAndAnswersConcurrentAsksWithOneCall(t *testing.T) {
 		t.Fatalf("a failure outlived its ttl (%d calls)", calls.Load()-before)
 	}
 
-	// Concurrent asks share one call.
+	// Concurrent asks share one call. Wait until every asker has started so
+	// the test doesn't assume 20ms is enough for them to queue when busy.
 	release := make(chan struct{})
 	var slow atomic.Int32
+	var started atomic.Int32
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			started.Add(1)
 			v, _ := c.get("slow", nil, func() (int64, error) { slow.Add(1); <-release; return 7, nil })
 			if v != 7 {
 				t.Errorf("size = %d", v)
 			}
 		}()
 	}
-	for slow.Load() == 0 {
+	deadline := time.Now().Add(5 * time.Second)
+	for started.Load() < 8 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	time.Sleep(20 * time.Millisecond) // let the others queue behind the first call
+	if started.Load() < 8 {
+		t.Fatal("askers never started")
+	}
+	// Give the started askers time to join the first call's entry.
+	time.Sleep(100 * time.Millisecond)
 	close(release)
 	wg.Wait()
 	if slow.Load() != 1 {

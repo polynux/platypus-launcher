@@ -346,9 +346,18 @@ func TestProgressReachesTheEventsWhileEchoWorks(t *testing.T) {
 	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); blocked {
 		t.Fatal("blocked")
 	}
-	e := ev.find(types.CloudEvProgress)
-	if e == nil || e.GameID != g.ID || e.Phase == "" || e.Total == 0 {
-		t.Fatalf("%+v", e)
+	// Progress is emitted while echo works; under load the emit can lag the
+	// launch step's return, so poll instead of asserting immediately.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		e := ev.find(types.CloudEvProgress)
+		if e != nil && e.GameID == g.ID && e.Phase != "" && e.Total != 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%+v", e)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -433,18 +442,31 @@ func TestGameLaunchesTakeTurns(t *testing.T) {
 		InstallDir: t.TempDir(), IsInstalled: true, Native: true}
 	unlock := a.lockGame(g.ID)
 	acquired := make(chan struct{})
+	trying := make(chan struct{})
 	go func() {
+		close(trying)
 		u := a.lockGame(g.ID)
 		close(acquired)
 		u()
 	}()
+	// Make sure the second launch is actually trying before asserting it
+	// blocks: under load 50ms may pass before it is even scheduled.
+	select {
+	case <-trying:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second launch never started")
+	}
 	select {
 	case <-acquired:
 		t.Fatal("a second launch of the game ran beside the first")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(500 * time.Millisecond):
 	}
 	unlock()
-	<-acquired
+	select {
+	case <-acquired:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second launch never acquired after unlock")
+	}
 }
 
 // A borrowed game in use is refused by the store before the cloud step: the

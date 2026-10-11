@@ -183,10 +183,34 @@ func TestAuthStatusRefreshSingleFlight(t *testing.T) {
 	}
 	wg.Wait()
 	waitAuthCalls(t, e, warm+1)
-	time.Sleep(200 * time.Millisecond)
-	if n := authCalls(t, e); n != warm+1 {
-		t.Fatalf("%d cached readers refreshed the plugin %d times, want 1", callers, n-warm)
+	// The single background refresh has answered: wait until its flight is
+	// gone, then make sure no second refresh follows. A fixed sleep would
+	// miss a delayed duplicate when the machine is busy, so poll the call
+	// count until it has stayed put long enough.
+	waitAuthIdle(t, e)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		if n := authCalls(t, e); n != warm+1 {
+			t.Fatalf("%d cached readers refreshed the plugin %d times, want 1", callers, n-warm)
+		}
 	}
+}
+
+// waitAuthIdle waits until no auth.status round trip is in flight.
+func waitAuthIdle(t *testing.T, e *versionsEnv) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		e.a.auth.mu.Lock()
+		busy := len(e.a.auth.inflight) != 0
+		e.a.auth.mu.Unlock()
+		if !busy {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("auth refresh still in flight after 10s")
 }
 
 // A logout and a login write the fresh state straight into the cache: the
