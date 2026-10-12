@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   getGameVersions: vi.fn(),
   getCustomization: vi.fn(),
   previewCommand: vi.fn(),
+  getLauncherSettings: vi.fn(),
 }));
 
 vi.mock('../../effect/runtime', () => ({
@@ -67,6 +68,7 @@ beforeEach(() => {
   api.getGameOptions.mockResolvedValue({ groups: [], chosen: {} });
   api.getCustomization.mockResolvedValue({ title: '', sort_title: '', art: {} });
   api.previewCommand.mockResolvedValue('wine game.exe');
+  api.getLauncherSettings.mockResolvedValue({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' });
 });
 
 describe('the game page keeps only the essentials', () => {
@@ -221,5 +223,12 @@ describe('the game settings dialog', () => {
     expect(screen.queryByLabelText('wine prefix')).toBeNull();
     // The working directory still applies.
     expect(screen.getByLabelText('working directory')).toBeInTheDocument();
+  });
+
+  it('shows the global prefix folder in the effective-prefix hint (issue #37)', async () => {
+    api.getLauncherSettings.mockResolvedValue({ prefixes_folder: '/mnt/big/prefixes', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' });
+    page({}, game({ id: 'p.echo.tiny' }));
+    fireEvent.click(gear());
+    expect(await screen.findByText(/prefix: \/mnt\/big\/prefixes\/p\.echo\.tiny \(default\)/)).toBeInTheDocument();
   });
 });

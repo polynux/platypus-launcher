@@ -22,15 +22,19 @@ type Target struct {
 
 // BuildLaunchCommand runs the game's configured executable through the
 // pipeline (see BuildCommand).
-func BuildLaunchCommand(game types.Game, runner types.ProtonVersion, preview bool) ([]string, map[string]string, error) {
-	return BuildCommand(game, runner, Target{Exe: game.Executable}, preview)
+func BuildLaunchCommand(game types.Game, runner types.ProtonVersion, preview bool, prefixesFolder string) ([]string, map[string]string, error) {
+	return BuildCommand(game, runner, Target{Exe: game.Executable}, preview, prefixesFolder)
 }
 
 // PrefixPath is the game's Wine prefix (Proton's compat data folder): the one
-// the user set for it, else a folder of its own under Platypus's data.
-func PrefixPath(game types.Game, home string) string {
+// the user set for it, else a folder of its own under the prefixes folder
+// (the user's choice, or Platypus's data when unset).
+func PrefixPath(game types.Game, home, prefixesFolder string) string {
 	if game.Settings.WinePrefix != "" {
 		return game.Settings.WinePrefix
+	}
+	if prefixesFolder != "" {
+		return filepath.Join(prefixesFolder, game.ID)
 	}
 	return filepath.Join(datadir.Path(home), "prefixes", game.ID)
 }
@@ -39,7 +43,7 @@ func PrefixPath(game types.Game, home string) string {
 // steam.IsClientLaunch for the other case), the full Linux gaming command pipeline (gamescope, mangohud, gamemode, proton/wine).
 // When preview is true, no on-disk state is created: the Proton prefix is
 // resolved (so the preview is honest) but not created (CORE-8).
-func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, preview bool) ([]string, map[string]string, error) {
+func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, preview bool, prefixesFolder string) ([]string, map[string]string, error) {
 	var cmdArgs []string
 	env := make(map[string]string)
 	for k, v := range target.Env {
@@ -51,7 +55,7 @@ func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, pr
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	prefixPath := PrefixPath(game, home)
+	prefixPath := PrefixPath(game, home, prefixesFolder)
 
 	if !target.Native {
 		// Proton assumes Steam created the compat data dir; it crashes with a

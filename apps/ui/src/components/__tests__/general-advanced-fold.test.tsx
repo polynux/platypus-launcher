@@ -5,7 +5,10 @@ import { Effect } from 'effect';
 import type { Game } from '../../types';
 
 vi.mock('../../effect/runtime', () => ({
-  LauncherApi: { previewCommand: () => Effect.succeed('cmd' as never) },
+  LauncherApi: {
+    previewCommand: () => Effect.succeed('cmd' as never),
+    getLauncherSettings: () => Effect.succeed({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' } as never),
+  },
 }));
 
 import { SettingsModal } from '../SettingsModal';

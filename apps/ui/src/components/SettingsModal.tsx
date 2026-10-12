@@ -114,6 +114,20 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
+  // The global Wine prefix folder (issue #37), for the effective-prefix
+  // hint below. Unset until loaded; a failure keeps the built-in default.
+  const [prefixesFolder, setPrefixesFolder] = useState<string | null>(null);
+  const [defaultPrefixes, setDefaultPrefixes] = useState('');
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => { setPrefixesFolder(s.prefixes_folder ?? ''); setDefaultPrefixes(s.default_prefixes_folder ?? ''); })
+      .catch(() => {});
+  }, []);
+  const effectivePrefix = draft.wine_prefix
+    || (prefixesFolder ? `${prefixesFolder}/${game.id}`
+      : defaultPrefixes ? `${defaultPrefixes}/${game.id}`
+      : `~/.local/share/platypus/prefixes/${game.id}`);
+
   const isSteamClient = game.store === 'steam' && !game.executable;
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
@@ -502,7 +516,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
-            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/platypus/prefixes/${game.id} (default)`}
+            saved for next launch · prefix: {effectivePrefix}{draft.wine_prefix ? '' : ' (default)'}
           </div>
         </div>
       </div>

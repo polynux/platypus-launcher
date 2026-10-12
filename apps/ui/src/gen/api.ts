@@ -108,6 +108,7 @@ export interface CoreApi {
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
   SetPluginInstallFolder(id: string, path: string): Promise<void>;
   SetPreferredCopy(game: types.Game, ownerID: string): Promise<void>;
+  SetPrefixesFolder(path: string): Promise<types.LauncherSettings>;
   SetRatingsOnline(on: boolean): Promise<types.LauncherSettings>;
   SetSocialEnabled(pluginID: string, enabled: boolean): Promise<void>;
   SetSocialPlaying(pluginID: string, show: boolean): Promise<void>;
@@ -226,6 +227,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetPluginEnabled',
   'SetPluginInstallFolder',
   'SetPreferredCopy',
+  'SetPrefixesFolder',
   'SetRatingsOnline',
   'SetSocialEnabled',
   'SetSocialPlaying',

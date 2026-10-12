@@ -406,6 +406,8 @@ export namespace types {
     default_games_folder: string;
     cancel_cleanup_days: number;
     ratings_online: boolean;
+    prefixes_folder: string;
+    default_prefixes_folder: string;
   }
 
   export interface LedgerEntry {

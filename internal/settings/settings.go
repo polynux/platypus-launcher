@@ -87,6 +87,9 @@ type file struct {
 	// FetchRatings is the "Fetch ratings online" switch. A pointer: unset
 	// means on (see compat.go).
 	FetchRatings *bool `json:"fetch_ratings,omitempty"`
+	// PrefixesFolder is where Wine prefixes are created (issue #37). Empty
+	// means the default (<data>/prefixes).
+	PrefixesFolder string `json:"prefixes_folder,omitempty"`
 	// MigrationNoticeDismissed remembers that the user dismissed the one-time
 	// Hydra→Platypus migration notice (issue #14), so it never returns.
 	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`

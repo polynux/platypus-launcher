@@ -554,7 +554,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 				return nil, err
 			}
 		}
-		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview)
+		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview, a.prefixesFolder())
 		if err != nil {
 			return nil, err
 		}
@@ -569,7 +569,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	if err != nil {
 		return nil, err
 	}
-	args, env, err := runner.BuildLaunchCommand(game, r, preview)
+	args, env, err := runner.BuildLaunchCommand(game, r, preview, a.prefixesFolder())
 	if err != nil {
 		return nil, err
 	}
@@ -733,11 +733,31 @@ func (a *App) stopGame(gameID string, force bool) error {
 
 func (a *App) launcherSettings() types.LauncherSettings {
 	return types.LauncherSettings{
-		GamesFolder:        a.settings.GamesFolder(),
-		DefaultGamesFolder: settings.DefaultGamesFolder(),
-		CancelCleanupDays:  a.settings.CancelCleanupDays(),
-		RatingsOnline:      a.settings.RatingsOnline(),
+		GamesFolder:           a.settings.GamesFolder(),
+		DefaultGamesFolder:    settings.DefaultGamesFolder(),
+		CancelCleanupDays:     a.settings.CancelCleanupDays(),
+		RatingsOnline:         a.settings.RatingsOnline(),
+		PrefixesFolder:        a.settings.PrefixesFolder(),
+		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
 	}
+}
+
+// SetPrefixesFolder saves where Wine prefixes are created ("" resets it to
+// the default). Existing prefixes are neither moved nor deleted.
+func (a *App) SetPrefixesFolder(path string) (types.LauncherSettings, error) {
+	if _, err := a.settings.SetPrefixesFolder(path); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
+// prefixesFolder is where Wine prefixes are created: the user's choice, or
+// "" for the default (see runner.PrefixPath).
+func (a *App) prefixesFolder() string {
+	if a.settings == nil {
+		return ""
+	}
+	return a.settings.PrefixesFolder()
 }
 
 // GetLauncherSettings returns Platypus-wide settings.

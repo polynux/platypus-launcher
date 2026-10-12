@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings, StorePlugin } from '../types';
 import { NumberField } from '@/components/ds/number-field';
+import { Input } from '@/components/ds/input';
 import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
 import { CloudSavesDefaults } from './CloudSavesSetting';
@@ -56,6 +57,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't load the settings." />}
 
       <GameFoldersSettings onNotify={onNotify} />
+
+      <PrefixesFolderSetting onNotify={onNotify} />
 
       <section className={SECTION}>
         <h2 className="text-[14px] font-bold">Canceled downloads</h2>
@@ -134,6 +137,88 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
         <p>Compatibility ratings: ProtonDB community reports (protondb.com).</p>
         <p>Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.</p>
         <p>Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet).</p>
+      </div>
+    </section>
+  );
+}
+
+/** Where new Wine prefixes are created (issue #37): one folder per game in
+ *  this folder, unless the game has its own prefix. Changing it never moves
+ *  or deletes existing prefixes; empty resets it to the default. */
+export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const [saved, setSaved] = useState<LauncherSettings | null>(null);
+  const [folder, setFolder] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => { setSaved(s); setFolder(s.prefixes_folder ?? ''); })
+      .catch((e) => setError(errMsg(e)));
+  }, []);
+
+  const dirty = saved != null && folder.trim() !== (saved.prefixes_folder ?? '');
+  const custom = (saved?.prefixes_folder ?? '') !== '';
+
+  const save = (path: string) => {
+    setBusy(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.setPrefixesFolder(path))
+      .then((s) => {
+        setSaved(s);
+        setFolder(s.prefixes_folder ?? '');
+        onNotify(path ? 'Wine prefix folder saved' : 'Wine prefix folder reset to the default');
+      })
+      .catch((e) => setError(errMsg(e)))
+      .finally(() => setBusy(false));
+  };
+
+  const browse = () => {
+    Effect.runPromise(LauncherApi.pickFolder('Choose the default Wine prefix folder', folder.trim() || saved?.prefixes_folder || saved?.default_prefixes_folder || ''))
+      .then((picked) => { if (picked) { setFolder(picked); setError(null); } })
+      .catch((e) => setError(errMsg(e)));
+  };
+
+  return (
+    <section className={SECTION}>
+      <h2 className="text-[14px] font-bold">Wine prefix folder</h2>
+      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+        Where new Wine prefixes are created, one folder per game. A game's own prefix setting still wins.
+        Changing this folder does not move or delete existing prefixes — games that already have one keep using it.
+      </p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (dirty) save(folder.trim());
+        }}
+      >
+        <Input
+          aria-label="Default Wine prefix folder"
+          value={folder}
+          onChange={(e) => { setFolder(e.target.value); setError(null); }}
+          placeholder={saved?.default_prefixes_folder || 'The default prefix folder'}
+          spellCheck={false}
+          disabled={!saved}
+          className="min-w-0 max-w-xl flex-1"
+        />
+        <Button type="button" variant="neutral" onClick={browse} disabled={!saved || busy}>
+          Browse…
+        </Button>
+        <Button type="submit" variant="primary" disabled={!dirty || busy}>Save</Button>
+        {custom && (
+          <Button type="button" variant="ghost" onClick={() => save('')} disabled={busy}>
+            Reset to default
+          </Button>
+        )}
+      </form>
+      <div className="mt-2.5 flex min-h-4 flex-wrap items-center gap-4">
+        {error ? <ErrorNotice message={error} fallback="Platypus couldn't change the Wine prefix folder." /> : <span />}
+        {saved && (
+          <span className="font-mono text-hint text-white/55">
+            Prefixes are created in {folder.trim() || saved.prefixes_folder || saved.default_prefixes_folder || 'the default folder'}.
+          </span>
+        )}
       </div>
     </section>
   );

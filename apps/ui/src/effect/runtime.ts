@@ -372,6 +372,11 @@ export const LauncherApi = {
   setCancelCleanupDays: (days: number) =>
     call<LauncherSettings>('SetCancelCleanupDays', () => App.SetCancelCleanupDays(days)),
 
+  // Where Wine prefixes are created (issue #37). "" resets it to the
+  // default; changing it never moves or deletes existing prefixes.
+  setPrefixesFolder: (path: string) =>
+    call<LauncherSettings>('SetPrefixesFolder', () => App.SetPrefixesFolder(path)),
+
   // Friends lists of the stores that offer them (protocol 1.6).
   socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),
   setSocialEnabled: (plugin: string, enabled: boolean) =>
