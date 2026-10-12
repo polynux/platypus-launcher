@@ -25,6 +25,9 @@ const (
 	// DefaultCDNBase serves per-app images:
 	// /store_item_assets/steam/apps/<id>/{library_600x900.jpg,library_hero.jpg,header.jpg,logo.png}.
 	DefaultCDNBase = "https://shared.steamstatic.com"
+	// DefaultAPIBase serves the keyless store-browse API (IStoreBrowseService),
+	// which names the real hashed asset paths newer apps keep.
+	DefaultAPIBase = "https://api.steampowered.com"
 	// Timeout bounds one lookup or download.
 	Timeout = 15 * time.Second
 	// MaxImageBytes caps one downloaded image.
@@ -41,13 +44,14 @@ type Candidate struct {
 }
 
 // Client looks art up online. The zero value is not usable; use New or set
-// the fields directly in tests. SearchBase and CDNBase name the endpoints
-// (defaults DefaultSearchBase, DefaultCDNBase); HTTP does the requests
-// (default an http.Client with Timeout).
+// the fields directly in tests. SearchBase, CDNBase and APIBase name the
+// endpoints (defaults DefaultSearchBase, DefaultCDNBase, DefaultAPIBase);
+// HTTP does the requests (default an http.Client with Timeout).
 type Client struct {
 	HTTP       *http.Client
 	SearchBase string
 	CDNBase    string
+	APIBase    string
 }
 
 func (c *Client) http() *http.Client {
@@ -69,6 +73,13 @@ func (c *Client) cdnBase() string {
 		return c.CDNBase
 	}
 	return DefaultCDNBase
+}
+
+func (c *Client) apiBase() string {
+	if c.APIBase != "" {
+		return c.APIBase
+	}
+	return DefaultAPIBase
 }
 
 // New returns a Client for the live Steam endpoints.
@@ -184,6 +195,110 @@ func (c *Client) HeaderURL(appID int) string {
 }
 func (c *Client) LogoURL(appID int) string {
 	return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/logo.png", c.cdnBase(), appID)
+}
+
+// StoreAssets is one app's real art URLs from the store-browse API, plus its
+// store name. Empty URLs mean the app has no such art. Newer apps keep their
+// assets under hashed paths, so the fixed CDN names above all 404 for them;
+// GetItems names the real paths.
+type StoreAssets struct {
+	Name      string
+	CoverURL  string
+	BannerURL string
+	LogoURL   string
+}
+
+// GetItemAssets asks the keyless store-browse API for the app's real asset
+// paths and resolves the cover, banner and logo URLs, preferring the _2x
+// file when the app has one:
+//
+//	cover: library_capsule_2x, else library_capsule;
+//	banner: library_hero_2x, else library_hero, else header_2x, else header;
+//	logo: library_logo_2x, else library_logo.
+//
+// The full URL is the CDN base + "/store_item_assets/" + the asset_url_format
+// with ${FILENAME} replaced by the hashed file path. An error means the API
+// failed; empty URLs with a nil error mean it answered but lists no usable
+// art (the caller falls back to the fixed CDN names).
+func (c *Client) GetItemAssets(appID int) (StoreAssets, error) {
+	if appID <= 0 {
+		return StoreAssets{}, fmt.Errorf("a Steam app id is a number")
+	}
+	input, err := json.Marshal(map[string]any{
+		"ids":     []any{map[string]any{"appid": appID}},
+		"context": map[string]any{"language": "english", "country_code": "US"},
+		"data_request": map[string]any{
+			"include_assets": true,
+		},
+	})
+	if err != nil {
+		return StoreAssets{}, err
+	}
+	u := c.apiBase() + "/IStoreBrowseService/GetItems/v1/?" + url.Values{
+		"input_json": {string(input)},
+	}.Encode()
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return StoreAssets{}, err
+	}
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return StoreAssets{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return StoreAssets{}, fmt.Errorf("steam GetItems returned status %d", resp.StatusCode)
+	}
+	var body struct {
+		Response struct {
+			StoreItems []struct {
+				Name   string            `json:"name"`
+				Assets map[string]string `json:"assets"`
+			} `json:"store_items"`
+		} `json:"response"`
+	}
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := dec.Decode(&body); err != nil {
+		return StoreAssets{}, fmt.Errorf("steam GetItems: %w", err)
+	}
+	if len(body.Response.StoreItems) == 0 {
+		return StoreAssets{}, nil
+	}
+	item := body.Response.StoreItems[0]
+	assets := item.Assets
+	if len(assets) == 0 {
+		return StoreAssets{Name: strings.TrimSpace(item.Name)}, nil
+	}
+	format, ok := assets["asset_url_format"]
+	if !ok || strings.TrimSpace(format) == "" {
+		return StoreAssets{Name: strings.TrimSpace(item.Name)}, nil
+	}
+	pick := func(keys ...string) string {
+		for _, k := range keys {
+			if v := strings.TrimSpace(assets[k]); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	resolve := func(filename string) string {
+		if filename == "" {
+			return ""
+		}
+		path := strings.ReplaceAll(format, "${FILENAME}", filename)
+		base := strings.TrimSuffix(c.cdnBase(), "/")
+		path = strings.TrimPrefix(path, "/")
+		return base + "/store_item_assets/" + path
+	}
+	cover := resolve(pick("library_capsule_2x", "library_capsule"))
+	banner := resolve(pick("library_hero_2x", "library_hero", "header_2x", "header"))
+	logo := resolve(pick("library_logo_2x", "library_logo"))
+	return StoreAssets{
+		Name:      strings.TrimSpace(item.Name),
+		CoverURL:  cover,
+		BannerURL: banner,
+		LogoURL:   logo,
+	}, nil
 }
 
 // imageKind sniffs the first bytes of a download: PNG, JPEG or WebP. The

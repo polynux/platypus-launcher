@@ -209,3 +209,114 @@ func TestParseYear(t *testing.T) {
 		}
 	}
 }
+
+// browseServer serves a fixed GetItems answer for any app id.
+func browseServer(t *testing.T, body string, status int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/IStoreBrowseService/GetItems/v1/") {
+			t.Errorf("browse path = %s, want /IStoreBrowseService/GetItems/v1/", r.URL.Path)
+		}
+		if q := r.URL.Query().Get("input_json"); !strings.Contains(q, "4094660") && !strings.Contains(q, "123") {
+			t.Errorf("input_json = %q, want the app id inside", q)
+		}
+		if status != 0 {
+			w.WriteHeader(status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, body)
+	}))
+}
+
+const rivageBrowse = `{"response":{"store_items":[{"name":"Rivage","assets":{
+	"asset_url_format":"steam/apps/4094660/${FILENAME}?t=1728660000",
+	"library_capsule":"hash_a/library_capsule.jpg",
+	"library_capsule_2x":"hash_b/library_capsule_2x.jpg",
+	"library_hero":"hash_c/library_hero.jpg",
+	"library_hero_2x":"hash_d/library_hero_2x.jpg",
+	"header":"hash_e/header.jpg",
+	"header_2x":"hash_f/header_2x.jpg",
+	"library_logo":"hash_g/logo.png",
+	"library_logo_2x":"hash_h/logo_2x.png"
+}}]}}`
+
+func TestGetItemAssetsPrefers2x(t *testing.T) {
+	srv := browseServer(t, rivageBrowse, 0)
+	defer srv.Close()
+	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
+	got, err := c.GetItemAssets(4094660)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Rivage" {
+		t.Fatalf("name = %q, want Rivage", got.Name)
+	}
+	for url, want := range map[string]string{
+		got.CoverURL:  "hash_b/library_capsule_2x.jpg",
+		got.BannerURL: "hash_d/library_hero_2x.jpg",
+		got.LogoURL:   "hash_h/logo_2x.png",
+	} {
+		if !strings.HasPrefix(url, srv.URL+"/store_item_assets/steam/apps/4094660/") {
+			t.Errorf("url = %q, want the CDN base + store_item_assets prefix", url)
+		}
+		if !strings.Contains(url, want) {
+			t.Errorf("url = %q, want it to contain %q", url, want)
+		}
+		if strings.Contains(url, "${FILENAME}") {
+			t.Errorf("url = %q, want the placeholder substituted", url)
+		}
+	}
+}
+
+func TestGetItemAssetsFallsBackToNon2xAndHeader(t *testing.T) {
+	body := `{"response":{"store_items":[{"name":"Old Game","assets":{
+		"asset_url_format":"steam/apps/123/${FILENAME}?t=1",
+		"library_capsule":"c.jpg",
+		"header":"h.jpg"
+	}}]}}`
+	srv := browseServer(t, body, 0)
+	defer srv.Close()
+	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
+	got, err := c.GetItemAssets(123)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.CoverURL, "c.jpg") {
+		t.Fatalf("cover = %q, want c.jpg", got.CoverURL)
+	}
+	if !strings.Contains(got.BannerURL, "h.jpg") {
+		t.Fatalf("banner = %q, want the header fallback h.jpg", got.BannerURL)
+	}
+	if got.LogoURL != "" {
+		t.Fatalf("logo = %q, want empty when the app has none", got.LogoURL)
+	}
+}
+
+func TestGetItemAssetsEmptyWhenNoAssets(t *testing.T) {
+	for _, body := range []string{
+		`{"response":{"store_items":[]}}`,
+		`{"response":{"store_items":[{"name":"No Art","assets":{}}]}}`,
+		`{"response":{"store_items":[{"name":"No Format","assets":{"library_capsule":"c.jpg"}}]}}`,
+	} {
+		srv := browseServer(t, body, 0)
+		c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
+		got, err := c.GetItemAssets(123)
+		srv.Close()
+		if err != nil {
+			t.Fatalf("body %s: %v", body, err)
+		}
+		if got.CoverURL != "" || got.BannerURL != "" || got.LogoURL != "" {
+			t.Fatalf("body %s gave URLs %+v, want none", body, got)
+		}
+	}
+}
+
+func TestGetItemAssetsErrorWhenAPIFails(t *testing.T) {
+	srv := browseServer(t, "", http.StatusInternalServerError)
+	defer srv.Close()
+	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
+	if _, err := c.GetItemAssets(123); err == nil {
+		t.Fatal("500 gave nil, want an error so the caller falls back to fixed names")
+	}
+}

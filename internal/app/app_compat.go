@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -233,10 +234,28 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 }
 
 // SetGameSteamAppID saves the Steam AppID the user chose for a game's ratings
-// ("" clears it) and returns the game's compat facts.
+// ("" clears it) and returns the game's compat facts. When the game is
+// sideloaded, the "Find artwork online" switch is on, and the id is non-empty
+// and changed, it starts the art apply in the background for that app id
+// (auto semantics: missing or online-sourced kinds only, hand-picked kept).
+// The save never waits for the art; a successful apply emits "library".
 func (a *App) SetGameSteamAppID(game types.Game, appID string) (types.Compat, error) {
+	prev := ""
+	if a.settings != nil {
+		prev = a.settings.CompatAppID(game.ID)
+	}
 	if err := a.settings.SetCompatAppID(game.ID, appID); err != nil {
 		return types.Compat{}, err
+	}
+	next := strings.TrimSpace(appID)
+	if next != "" && next != prev && a.settings != nil && a.settings.ArtworkOnline() && a.isCustomGameID(game.ID) {
+		if id, err := strconv.Atoi(next); err == nil && id > 0 {
+			label := game.Title
+			if strings.TrimSpace(label) == "" {
+				label = next
+			}
+			go a.autoApplyArt(game.ID, id, "", label)
+		}
 	}
 	return a.GetGameCompat(game), nil
 }
