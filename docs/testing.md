@@ -156,9 +156,34 @@ Desktop shell: 31 tests, 0.7 s, unchanged.
 - steamcm heartbeat tests (2 s each) and the 2 s "no duplicate refresh"
   stabilize windows in app auth/stats tests use the product's real
   intervals; shortening them means injecting test clocks.
-- Mass `t.Parallel()` is blocked on `t.Setenv("HOME", …)` (15 call
-  sites in `internal/app`); the App would need explicit dirs instead of
-  HOME reads first.
+- Mass `t.Parallel()` in `internal/app` is done (issue #41, below). Still
+  serial: the `ECHO_*` plugin-knob tests (~20 `t.Setenv` sites; per-test
+  values would need threading through `plugins.Manager.Env` at each call
+  site) and the overlap-sensitive `TestAuthStatusRefreshSingleFlight`.
+
+### Follow-up: XDG paths (issue #41, 2026-10-13)
+
+Folders resolve from `PLATYPUS_*` / XDG variables (`internal/paths`), the
+App takes explicit dirs (`app.Options`, resolved once in `cmd/platypus-core`
+main), and the 41 `t.Setenv("HOME", …)` sites are explicit dirs, so 230
+env-free `internal/app` tests plus the `internal/settings` tests run with
+`t.Parallel()` (`-parallel` caps at GOMAXPROCS = 16). Method as above,
+`-count=1`, `nproc` = 16:
+
+| Package | Before (#40) | After (#41) | How |
+|---|---|---|---|
+| internal/app | 25.1 s | ~8–9 s | parallel env-free tests (serial: `ECHO_*` knobs, singleflight overlap test) |
+| default `go test ./...` wall | 28 s | ~13–30 s | app no longer dominates; wall is now `steam-standalone` (~11–29 s run variance, pre-existing pacing/polling waits) + epic/gog (~10 s) |
+| everything else | — | unchanged | vitest ~13 s, desktop 0.7 s |
+
+`go test -race -count=3 ./internal/app/ ./internal/settings/ ./internal/paths/`
+passes (app ~45 s, settings/paths ~1 s). Full default `go test ./...`:
+35 packages, 0 failures. Two flakes fixed along the way, not ignored:
+`TestInstallLocationsListDefaultLibrariesAndRecents` encoded the old
+temp-`HOME` quirk (a stale default lingering as a library); it now asserts
+the clean list. `TestAuthStatusRefreshSingleFlight` needs all 8 readers to
+overlap one flight, which load breaks (a straggler correctly starts another
+refresh); it stays serial.
 
 ## Categories
 
