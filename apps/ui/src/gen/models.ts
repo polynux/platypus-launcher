@@ -91,8 +91,11 @@ export namespace types {
   }
 
   export interface ArtCandidate {
+    source: string;
+    id: string;
     app_id: number;
     name: string;
+    year?: number;
     thumb_url: string;
   }
 
