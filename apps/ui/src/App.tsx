@@ -24,7 +24,7 @@ import { MigrationNotice as MigrationBanner } from './components/MigrationNotice
 import { cx, EmptyState } from './components/ui';
 import { Button } from './components/ds/button';
 import { TooltipProvider } from './components/ds/tooltip';
-import { LauncherApi, onJobs, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
+import { LauncherApi, onJobs, onLibrary, onLibraryPartial, onPlaytime, onSession, onSocial } from './effect/runtime';
 import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
@@ -465,6 +465,10 @@ export function App() {
   // A plugin's playtime report changed a library value (protocol 1.7).
   useEffect(() => onPlaytime(() => refreshLibraryQuietly(mergePlaytime)), [refreshLibraryQuietly]);
 
+  // The background artwork lookup (issue #36) applied art to a sideloaded
+  // game: take the new art from a quiet read, like a manual customization.
+  useEffect(() => onLibrary(() => refreshLibraryQuietly(mergeCustomization)), [refreshLibraryQuietly]);
+
   const runJob = (kind: 'install' | 'update' | 'uninstall', game: Game) => {
     const op = kind === 'install' ? LauncherApi.installGame : kind === 'update' ? LauncherApi.updateGame : LauncherApi.uninstallGame;
     const queue = kind === 'uninstall' ? Promise.resolve(true) : ensureTerms(game);
@@ -503,6 +507,7 @@ export function App() {
         addCustomGame: (t, e) => Effect.runPromise(LauncherApi.addCustomGame(t, e)),
         saveGameSettings: (id, s) => Effect.runPromise(LauncherApi.saveGameSettings(id, s)),
         removeCustomGame: (id) => Effect.runPromise(LauncherApi.removeCustomGame(id)),
+        setCustomGameYear: (id, y) => Effect.runPromise(LauncherApi.setCustomGameYear(id, y)),
       },
       title,
       executable,

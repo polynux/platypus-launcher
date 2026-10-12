@@ -11,6 +11,7 @@ export interface CoreApi {
   AddCustomGame(title: string, executable: string): Promise<types.Game>;
   AddGameFolder(path: string): Promise<types.GameFolder[]>;
   AllowGameFolder(pluginID: string, path: string): Promise<void>;
+  ApplyOnlineArt(gameID: string, appID: number): Promise<types.Customization>;
   ApprovePlugin(id: string): Promise<void>;
   CancelCloudSync(gameID: string): Promise<boolean>;
   CancelJob(id: string): Promise<void>;
@@ -98,11 +99,14 @@ export interface CoreApi {
   SaveGameSettings(gameID: string, gameSettings: Record<string, unknown>): Promise<void>;
   SaveGameSettingsFields(game: types.Game, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
   SavePluginSettings(source: string, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
+  SearchArtOnline(title: string): Promise<types.ArtCandidate[]>;
+  SetArtworkOnline(on: boolean): Promise<types.LauncherSettings>;
   SetCancelCleanupDays(days: number): Promise<types.LauncherSettings>;
   SetChatAlerts(pluginID: string, on: boolean): Promise<void>;
   SetCloudGameMode(gameID: string, mode: string): Promise<void>;
   SetCloudPluginMode(pluginID: string, mode: string): Promise<void>;
   SetCustomArt(gameID: string, kind: string, path: string): Promise<types.Customization>;
+  SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
@@ -130,6 +134,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'AddCustomGame',
   'AddGameFolder',
   'AllowGameFolder',
+  'ApplyOnlineArt',
   'ApprovePlugin',
   'CancelCloudSync',
   'CancelJob',
@@ -217,11 +222,14 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SaveGameSettings',
   'SaveGameSettingsFields',
   'SavePluginSettings',
+  'SearchArtOnline',
+  'SetArtworkOnline',
   'SetCancelCleanupDays',
   'SetChatAlerts',
   'SetCloudGameMode',
   'SetCloudPluginMode',
   'SetCustomArt',
+  'SetCustomGameYear',
   'SetCustomTitle',
   'SetGameSteamAppID',
   'SetPluginEnabled',

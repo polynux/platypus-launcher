@@ -67,6 +67,10 @@ type Game struct {
 	Executable  string       `json:"executable"`
 	IsInstalled bool         `json:"is_installed"`
 	Settings    GameSettings `json:"settings"`
+	// ReleaseYear is the year the game came out, 0 when unknown. Sideloaded
+	// games carry what the user set; store games only what the library
+	// already knows without extra lookups.
+	ReleaseYear int `json:"release_year,omitempty"`
 	// SettingsExtra carries saved per-game settings keys the backend
 	// doesn't model (UI-only controls like sync_mode), so
 	// sideloaded games don't lose them in the emitted library (CORE-9).
@@ -139,6 +143,20 @@ type Customization struct {
 	Title     string            `json:"title"`
 	SortTitle string            `json:"sort_title"`
 	Art       map[string]string `json:"art"`
+	// ArtSource remembers where the art came from when Platypus found it
+	// online (issue #36), e.g. "steam:12345", with ArtSourceName the store
+	// name for the attribution line. Empty when the art is the store's own
+	// or picked by hand.
+	ArtSource     string `json:"art_source,omitempty"`
+	ArtSourceName string `json:"art_source_name,omitempty"`
+}
+
+// ArtCandidate is one online art search hit (issue #36): a Steam app whose
+// art the user can apply to a sideloaded game.
+type ArtCandidate struct {
+	AppID    int    `json:"app_id"`
+	Name     string `json:"name"`
+	ThumbURL string `json:"thumb_url"`
 }
 
 // Library is the merged library. A source that fails to list (a plugin that
@@ -281,6 +299,9 @@ type LauncherSettings struct {
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
+	// ArtworkOnline is the "Find artwork online" switch for sideloaded games
+	// (issue #36): the background lookup after an add and on-demand search.
+	ArtworkOnline bool `json:"artwork_online"`
 	// PrefixesFolder is where Wine prefixes are created, one folder per
 	// game (see runner.PrefixPath). Empty means the default below.
 	PrefixesFolder string `json:"prefixes_folder"`

@@ -149,6 +149,7 @@ export function mergeCopies(prev: Game[], fresh: Game[]): Game[] {
 
 const CUSTOM_FIELDS = [
   'title', 'store_title', 'sort_title', 'cover_url', 'banner_url', 'hero_url', 'logo_url', 'icon_url', 'background_url',
+  'release_year',
 ] as const;
 
 /** Take only what the user's customization sets (their title and art) from a

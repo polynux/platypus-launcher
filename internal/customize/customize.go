@@ -71,6 +71,12 @@ type Entry struct {
 	Title     string         `json:"title,omitempty"`
 	SortTitle string         `json:"sort_title,omitempty"`
 	Art       map[Kind]Image `json:"art,omitempty"`
+	// ArtSource remembers where the art came from when Platypus found it
+	// online (issue #36), e.g. "steam:12345", with ArtSourceName the store
+	// name ("Hollow Knight") for the attribution line. Empty means the art
+	// is the store's or the user's own.
+	ArtSource     string `json:"art_source,omitempty"`
+	ArtSourceName string `json:"art_source_name,omitempty"`
 }
 
 // Image is one stored image: its file name inside the game's folder and a
@@ -357,7 +363,9 @@ func CheckImage(path string) (string, error) {
 }
 
 // SetArt copies the image at src into the store as kind of gameID, replacing
-// the one it had. The source file is checked first and never modified.
+// the one it had. The source file is checked first and never modified. A
+// hand-picked cover, banner or logo ends the online attribution (see
+// SetArtSource): the visible art is the user's now.
 func (s *Store) SetArt(gameID string, kind Kind, src string) error {
 	if gameID == "" {
 		return errors.New("game id is empty")
@@ -385,6 +393,9 @@ func (s *Store) SetArt(gameID string, kind Kind, src string) error {
 			e.Art = map[Kind]Image{}
 		}
 		e.Art[kind] = Image{File: name, Version: time.Now().UnixNano()}
+		if kind == Cover || kind == Banner || kind == Logo {
+			e.ArtSource, e.ArtSourceName = "", ""
+		}
 		return nil
 	})
 	if err != nil {
@@ -432,7 +443,28 @@ func copyInto(dir, name, src string) error {
 	return nil
 }
 
+// SetArtSource remembers where the game's art came from (issue #36), e.g.
+// source "steam:12345" with the store name for the attribution line. It is
+// only set after an online apply stored art; setting it with no custom art
+// is refused.
+func (s *Store) SetArtSource(gameID, source, name string) error {
+	if gameID == "" {
+		return errors.New("game id is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.updateLocked(gameID, func(e *Entry) error {
+		if len(e.Art) == 0 {
+			return errors.New("no custom art to attribute")
+		}
+		e.ArtSource, e.ArtSourceName = source, name
+		return nil
+	})
+}
+
 // ResetArt drops the custom image of kind: the store's art shows again.
+// Dropping the last of the cover, banner and logo also drops the online
+// attribution (issue #36): there is no looked-up art left to credit.
 func (s *Store) ResetArt(gameID string, kind Kind) error {
 	if !kind.Valid() {
 		return fmt.Errorf("unknown kind of art %q", kind)
@@ -448,6 +480,9 @@ func (s *Store) ResetArt(gameID string, kind Kind) error {
 		if len(e.Art) == 0 {
 			e.Art = nil
 		}
+		if e.ArtSource != "" && !hasOnlineArt(e) {
+			e.ArtSource, e.ArtSourceName = "", ""
+		}
 		return nil
 	})
 	if err != nil {
@@ -455,6 +490,17 @@ func (s *Store) ResetArt(gameID string, kind Kind) error {
 	}
 	_ = os.Remove(filepath.Join(s.gameDir(gameID), img.File))
 	return nil
+}
+
+// hasOnlineArt says whether the entry keeps looked-up art worth crediting:
+// a custom cover, banner or logo.
+func hasOnlineArt(e *Entry) bool {
+	for _, k := range []Kind{Cover, Banner, Logo} {
+		if _, ok := e.Art[k]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Reset drops everything the user changed about a game, files included.

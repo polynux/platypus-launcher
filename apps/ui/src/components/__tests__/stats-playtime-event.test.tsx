@@ -57,6 +57,7 @@ vi.mock('../../effect/runtime', () => ({
   },
   onCloud: () => () => {},
   onLibraryPartial: () => () => {},
+  onLibrary: () => () => {},
 }));
 
 import { App } from '../../App';

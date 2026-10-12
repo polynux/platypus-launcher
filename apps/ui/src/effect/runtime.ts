@@ -14,6 +14,7 @@ import type {
   CloudSettings,
   ArtKind,
   Customization,
+  ArtCandidate,
   GameFolder,
   InstallFolderCheck,
   InstallLocation,
@@ -82,7 +83,7 @@ function normalizeCompat(c: Compat): Compat {
 /** A customization with every field present, whatever Go sent. */
 function normalizeCustomization(c: unknown): Customization {
   const x = (c ?? {}) as Partial<Customization>;
-  return { title: x.title ?? '', sort_title: x.sort_title ?? '', art: x.art ?? {} };
+  return { title: x.title ?? '', sort_title: x.sort_title ?? '', art: x.art ?? {}, art_source: x.art_source ?? '', art_source_name: x.art_source_name ?? '' };
 }
 
 export const LauncherApi = {
@@ -167,6 +168,9 @@ export const LauncherApi = {
   addCustomGame: (title: string, executable: string) =>
     call<Game>('AddCustomGame', () => App.AddCustomGame(title, executable)),
   removeCustomGame: (id: string) => call<void>('RemoveCustomGame', () => App.RemoveCustomGame(id)),
+  // A sideloaded game's release year (0 clears it: unknown).
+  setCustomGameYear: (id: string, year: number) =>
+    call<Game>('SetCustomGameYear', () => App.SetCustomGameYear(id, year)),
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 
@@ -323,6 +327,17 @@ export const LauncherApi = {
     call<Customization>('ResetCustomization', async () => normalizeCustomization(await App.ResetCustomization(gameId))),
   pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
 
+  // Online artwork for sideloaded games (issue #36): Steam's public store
+  // search, then the chosen app's cover, banner and logo into the game's
+  // custom art. The search refuses while the artwork switch is off.
+  searchArtOnline: (title: string) =>
+    call<ArtCandidate[]>('SearchArtOnline', async () => (await App.SearchArtOnline(title)) ?? []),
+  applyOnlineArt: (gameId: string, appId: number) =>
+    call<Customization>('ApplyOnlineArt', async () => normalizeCustomization(await App.ApplyOnlineArt(gameId, appId))),
+
+  // The "Find artwork online" switch.
+  setArtworkOnline: (on: boolean) => call<LauncherSettings>('SetArtworkOnline', () => App.SetArtworkOnline(on)),
+
   // Sideload dialog (issue #32): the native file picker for the game's
   // executable. "" means the user cancelled; a rejection means there is
   // no picker (the text field still works).
@@ -412,6 +427,12 @@ export function onJobs(cb: (jobs: Job[]) => void): () => void {
 /** Subscribe to the partial results of a library scan: the games of the sources that have answered while others are still out. */
 export function onLibraryPartial(cb: (lib: Library) => void): () => void {
   return onEvent('library-partial', cb);
+}
+
+/** Subscribe to background library changes (issue #36): the online artwork
+ *  lookup applied art to a game, so the library should reload its entry. */
+export function onLibrary(cb: (gameId: string) => void): () => void {
+  return onEvent('library', cb);
 }
 
 /** Subscribe to playtime changes: a plugin's report changed a library value. */
