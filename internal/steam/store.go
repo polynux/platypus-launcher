@@ -17,14 +17,38 @@ import (
 
 // StoreClient fetches public app metadata from the Steam Store API and caches
 // it for the session (the endpoint is rate limited to ~200 requests / 5 min).
+// Base overrides the store endpoint (default DefaultStoreBase) and HTTPClient
+// overrides the transport; tests point both at httptest.
 type StoreClient struct {
-	http  *http.Client
-	mu    sync.Mutex
-	cache map[string]*storeApp
+	http       *http.Client
+	HTTPClient *http.Client
+	Base       string
+	mu         sync.Mutex
+	cache      map[string]*storeApp
 }
+
+// DefaultStoreBase serves the public appdetails JSON.
+const DefaultStoreBase = "https://store.steampowered.com"
 
 func NewStoreClient() *StoreClient {
 	return &StoreClient{http: &http.Client{Timeout: 8 * time.Second}, cache: map[string]*storeApp{}}
+}
+
+func (c *StoreClient) storeBase() string {
+	if c != nil && strings.TrimSpace(c.Base) != "" {
+		return strings.TrimSuffix(strings.TrimSpace(c.Base), "/")
+	}
+	return DefaultStoreBase
+}
+
+func (c *StoreClient) httpClient() *http.Client {
+	if c != nil && c.HTTPClient != nil {
+		return c.HTTPClient
+	}
+	if c != nil && c.http != nil {
+		return c.http
+	}
+	return &http.Client{Timeout: 8 * time.Second}
 }
 
 type storeApp struct {
@@ -76,8 +100,8 @@ func (c *StoreClient) app(appID string) (*storeApp, error) {
 	}
 	c.mu.Unlock()
 
-	url := fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%s&l=english", appID)
-	resp, err := c.http.Get(url)
+	url := fmt.Sprintf("%s/api/appdetails?appids=%s&l=english", c.storeBase(), appID)
+	resp, err := c.httpClient().Get(url)
 	if err != nil {
 		return nil, err
 	}

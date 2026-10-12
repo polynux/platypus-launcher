@@ -34,6 +34,8 @@ const (
 	DefaultAPIBase = "https://api.steampowered.com"
 	// DefaultGOGBase serves the keyless GOG catalog search.
 	DefaultGOGBase = "https://catalog.gog.com"
+	// DefaultGOGInfoBase serves the keyless GOG product details.
+	DefaultGOGInfoBase = "https://api.gog.com"
 	// DefaultLutrisBase serves the keyless Lutris games API (which mirrors
 	// IGDB covers).
 	DefaultLutrisBase = "https://lutris.net"
@@ -60,7 +62,9 @@ const (
 // coverVertical, coverHorizontal, logo; Lutris: the upgraded IGDB cover with
 // CoverFallbackURL the lutris.net coverart URL); Steam hits resolve theirs
 // on apply. SteamAppID is a mapped Steam app id from Lutris provider_games,
-// 0 when the hit maps to none.
+// 0 when the hit maps to none. Developers, Publishers and Genres carry the
+// GOG catalog's facts for the info lookup (issue #38); empty for other
+// sources.
 type Candidate struct {
 	Source           string `json:"source"`
 	ID               string `json:"id"`
@@ -73,6 +77,9 @@ type Candidate struct {
 	LogoURL          string `json:"logo_url,omitempty"`
 	CoverFallbackURL string `json:"cover_fallback_url,omitempty"`
 	SteamAppID       int    `json:"steam_app_id,omitempty"`
+	Developers       []string `json:"developers,omitempty"`
+	Publishers       []string `json:"publishers,omitempty"`
+	Genres           []string `json:"genres,omitempty"`
 }
 
 // Client looks art up online. The zero value is not usable; use New or set
@@ -89,6 +96,7 @@ type Client struct {
 	CDNBase    string
 	APIBase    string
 	GOGBase    string
+	GOGInfoBase string
 	LutrisBase string
 	IGDBBase   string
 	Version    string
@@ -127,6 +135,13 @@ func (c *Client) gogBase() string {
 		return c.GOGBase
 	}
 	return DefaultGOGBase
+}
+
+func (c *Client) gogInfoBase() string {
+	if c.GOGInfoBase != "" {
+		return c.GOGInfoBase
+	}
+	return DefaultGOGInfoBase
 }
 
 func (c *Client) lutrisBase() string {
@@ -543,6 +558,23 @@ type gogProduct struct {
 	CoverVertical   string `json:"coverVertical"`
 	CoverHorizontal string `json:"coverHorizontal"`
 	Logo            string `json:"logo"`
+	Developers      []string `json:"developers"`
+	Publishers      []string `json:"publishers"`
+	Genres          []struct {
+		Name string `json:"name"`
+	} `json:"genres"`
+}
+
+// gogCatalogFacts carries the catalog's developer, publisher and genre facts.
+func gogCatalogFacts(p gogProduct) (dev, pub, genres []string) {
+	dev = append([]string{}, p.Developers...)
+	pub = append([]string{}, p.Publishers...)
+	for _, g := range p.Genres {
+		if s := strings.TrimSpace(g.Name); s != "" {
+			genres = append(genres, s)
+		}
+	}
+	return dev, pub, genres
 }
 
 // SearchGOG asks the keyless GOG catalog for title and returns up to
@@ -593,10 +625,12 @@ func (c *Client) SearchGOG(title string) ([]Candidate, error) {
 		if thumb == "" {
 			thumb = cover
 		}
+		dev, pub, genres := gogCatalogFacts(p)
 		out = append(out, Candidate{
 			Source: "gog", ID: id,
 			Name: name, Year: parseYear(p.ReleaseDate), ThumbURL: thumb,
 			CoverURL: cover, BannerURL: banner, LogoURL: logo,
+			Developers: dev, Publishers: pub, Genres: genres,
 		})
 		if len(out) >= MaxCandidates {
 			break
@@ -832,4 +866,136 @@ func MergeCandidates(steam, gog, lutris []Candidate) []Candidate {
 		}
 	}
 	return out
+}
+
+// GOGDetails is the product info for a sideloaded game's details (issue
+// #38): the description HTML plus the release date, languages and store URL.
+// Developers, publishers and genres come from the catalog search hit, not
+// from this endpoint.
+type GOGDetails struct {
+	Title       string
+	Slug        string
+	ReleaseDate string
+	Languages   []string
+	StoreURL    string
+	Lead        string
+	Full        string
+}
+
+// GOGGame fetches one GOG product's description for the info lookup. The
+// User-Agent names Platypus like the art search.
+func (c *Client) GOGGame(id string) (GOGDetails, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return GOGDetails{}, fmt.Errorf("gog product id is empty")
+	}
+	u := strings.TrimSuffix(c.gogInfoBase(), "/") + "/products/" + url.PathEscape(id) + "?expand=description"
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return GOGDetails{}, err
+	}
+	req.Header.Set("User-Agent", c.userAgent())
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return GOGDetails{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return GOGDetails{}, fmt.Errorf("gog has no product %q", id)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return GOGDetails{}, fmt.Errorf("gog product returned status %d", resp.StatusCode)
+	}
+	var body struct {
+		Title       string `json:"title"`
+		Slug        string `json:"slug"`
+		ReleaseDate string `json:"release_date"`
+		Languages   map[string]string `json:"languages"`
+		Links       struct {
+			ProductCard string `json:"product_card"`
+		} `json:"links"`
+		Description struct {
+			Lead string `json:"lead"`
+			Full string `json:"full"`
+		} `json:"description"`
+	}
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 2<<20))
+	if err := dec.Decode(&body); err != nil {
+		return GOGDetails{}, fmt.Errorf("gog product: %w", err)
+	}
+	d := GOGDetails{
+		Title: strings.TrimSpace(body.Title), Slug: strings.TrimSpace(body.Slug),
+		ReleaseDate: strings.TrimSpace(body.ReleaseDate),
+		StoreURL:    strings.TrimSpace(body.Links.ProductCard),
+		Lead: body.Description.Lead, Full: body.Description.Full,
+	}
+	for _, lang := range body.Languages {
+		if s := strings.TrimSpace(lang); s != "" {
+			d.Languages = append(d.Languages, s)
+		}
+	}
+	return d, nil
+}
+
+// LutrisDetails is one Lutris game's info for a sideloaded game's details
+// (issue #38): the plain-text description plus genres and year.
+type LutrisDetails struct {
+	Name        string
+	Slug        string
+	Year        int
+	Description string
+	Genres      []string
+}
+
+// LutrisInfo fetches one Lutris game by slug for the info lookup: the
+// description (plain text), genres and year. The User-Agent names Platypus
+// like the art search.
+func (c *Client) LutrisInfo(slug string) (LutrisDetails, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return LutrisDetails{}, fmt.Errorf("lutris slug is empty")
+	}
+	u := strings.TrimSuffix(c.lutrisBase(), "/") + "/api/games/" + url.PathEscape(slug)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return LutrisDetails{}, err
+	}
+	req.Header.Set("User-Agent", c.userAgent())
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return LutrisDetails{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return LutrisDetails{}, fmt.Errorf("lutris has no game %q", slug)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return LutrisDetails{}, fmt.Errorf("lutris game returned status %d", resp.StatusCode)
+	}
+	var body struct {
+		Name        string `json:"name"`
+		Slug        string `json:"slug"`
+		Year        int    `json:"year"`
+		Description string `json:"description"`
+		Genres      []struct {
+			Name string `json:"name"`
+		} `json:"genres"`
+	}
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := dec.Decode(&body); err != nil {
+		return LutrisDetails{}, fmt.Errorf("lutris game: %w", err)
+	}
+	d := LutrisDetails{
+		Name: strings.TrimSpace(body.Name), Slug: strings.TrimSpace(body.Slug),
+		Year: body.Year, Description: strings.TrimSpace(body.Description),
+	}
+	if d.Slug == "" {
+		d.Slug = slug
+	}
+	for _, g := range body.Genres {
+		if s := strings.TrimSpace(g.Name); s != "" {
+			d.Genres = append(d.Genres, s)
+		}
+	}
+	return d, nil
 }

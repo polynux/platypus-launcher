@@ -71,7 +71,8 @@ func TestSearchParsesItems(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("candidates = %+v, want the 2 valid items", got)
 	}
-	if got[0] != (Candidate{Source: "steam", ID: "123", AppID: 123, Name: "Hollow Knight", ThumbURL: "https://cdn/x/123.jpg"}) {
+	first := got[0]
+	if first.Source != "steam" || first.ID != "123" || first.AppID != 123 || first.Name != "Hollow Knight" || first.ThumbURL != "https://cdn/x/123.jpg" {
 		t.Fatalf("first candidate = %+v", got[0])
 	}
 	if hits.Load() != 1 {
