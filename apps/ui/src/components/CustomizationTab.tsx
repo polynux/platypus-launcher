@@ -5,7 +5,7 @@ import type { ArtCandidate, ArtKind, Customization, Game } from '../types';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { Cover, MonoLabel, cx } from './ui';
-import { LauncherApi } from '../effect/runtime';
+import { LauncherApi, onLibrary } from '../effect/runtime';
 import { ART_KINDS, currentArt, hasCustomization, type ArtKindInfo } from '../lib/customize';
 import { ErrorNotice } from './ErrorNotice';
 
@@ -46,6 +46,20 @@ export function CustomizationTab({ game, onChanged }: {
       (e) => live && setError(errMsg(e)),
     );
     return () => { live = false; };
+  }, [game.id]);
+
+  // The background artwork lookup (an exact-title match or a Steam AppID
+  // change) applied art while this panel was open: reload it for this game
+  // when the "library" event arrives, like the library card does.
+  useEffect(() => {
+    if (typeof onLibrary !== 'function') return;
+    return onLibrary((id: string) => {
+      if (id !== game.id) return;
+      Effect.runPromise(LauncherApi.getCustomization(game.id)).then(
+        (c) => apply(c),
+        () => {},
+      );
+    });
   }, [game.id]);
 
   /** Runs one change, keeps the form in step with what core answers and tells the owner. */

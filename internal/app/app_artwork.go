@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"platypus/internal/customize"
 	"platypus/internal/onlineart"
@@ -75,6 +76,11 @@ func (a *App) ApplyOnlineArt(gameID string, appID int) (types.Customization, err
 	if err != nil {
 		return types.Customization{}, err
 	}
+	if strings.TrimSpace(name) == "" {
+		if store, serr := a.artClient().GetItemAssets(appID); serr == nil && strings.TrimSpace(store.Name) != "" {
+			name = strings.TrimSpace(store.Name)
+		}
+	}
 	if name == "" {
 		name = strconv.Itoa(appID)
 	}
@@ -105,45 +111,104 @@ type artDownload struct {
 var errGameGone = errors.New("the game was removed")
 
 // fetchAndStoreArt downloads the app's cover, banner and logo and stores
-// each into the game's custom art. skipHas leaves kinds the user already set
-// alone (the auto path); otherwise the apply replaces (the manual path: the
-// user's explicit choice). It returns the kinds stored and, separately, a
-// logo download error: the logo is best-effort, so its failure only skips it
-// (the caller warns once) while cover and banner still apply. A cover or
-// banner download error aborts the apply; a 404 on one kind only skips it.
-// When art was stored the lookup's source is remembered for the attribution
-// line. Right before storing, a game that no longer exists aborts with
-// errGameGone: nothing is stored for it.
-func (a *App) fetchAndStoreArt(gameID string, appID int, name string, skipHas bool) (applied []customize.Kind, logoErr, err error) {
+// each into the game's custom art. It first asks the store-browse API for the
+// app's real hashed asset paths (newer apps 404 the fixed CDN names); when
+// that fails or lists no assets it falls back to the fixed CDN names, which
+// older apps still serve. A resolved URL that 404s falls back to its fixed
+// name too. When auto is true (the background paths) a kind is replaced only
+// when it has no art yet or its art came from an earlier online lookup (the
+// game's ArtSource is set); art the user picked by hand (art present and
+// ArtSource empty) is never overwritten. When auto is false (the manual
+// path: the user's explicit choice) the apply replaces what is there.
+// It returns the kinds stored and, separately, a logo download error: the
+// logo is best-effort, so its failure only skips it (the caller warns once)
+// while cover and banner still apply. A cover or banner download error aborts
+// the apply; a 404 on one kind only skips it. When art was stored the
+// lookup's source is remembered for the attribution line, using the GetItems
+// name when the caller had none. Right before storing, a game that no longer
+// exists aborts with errGameGone: nothing is stored for it.
+func (a *App) fetchAndStoreArt(gameID string, appID int, name string, auto bool) (applied []customize.Kind, logoErr, err error) {
 	s := a.custom.get()
 	if s == nil {
 		return nil, nil, fmt.Errorf("customization is not available")
 	}
 	cl := a.artClient()
-	cover, err := cl.Download(cl.CoverURL(appID))
+	storeAssets, storeErr := cl.GetItemAssets(appID)
+	if storeErr != nil {
+		storeAssets = onlineart.StoreAssets{}
+	}
+	effectiveName := name
+	if (effectiveName == "" || effectiveName == strconv.Itoa(appID)) && storeAssets.Name != "" {
+		effectiveName = storeAssets.Name
+	}
+	// downloadOne tries the resolved URL first, then the fixed URL when the
+	// resolved one is absent (404) and differs.
+	downloadOne := func(resolved, fixed string) ([]byte, error) {
+		if resolved != "" {
+			data, err := cl.Download(resolved)
+			if err != nil {
+				return nil, err
+			}
+			if data != nil {
+				return data, nil
+			}
+			if fixed == "" || fixed == resolved {
+				return nil, nil
+			}
+		} else if fixed == "" {
+			return nil, nil
+		}
+		return cl.Download(fixed)
+	}
+	coverURL := ""
+	coverFixed := cl.CoverURL(appID)
+	if storeErr == nil && storeAssets.CoverURL != "" {
+		coverURL = storeAssets.CoverURL
+	}
+	cover, err := downloadOne(coverURL, coverFixed)
 	if err != nil {
 		return nil, nil, err
 	}
-	banner, err := cl.Banner(appID)
-	if err != nil {
-		return nil, nil, err
+	var banner []byte
+	if storeErr == nil && storeAssets.BannerURL != "" {
+		banner, err = downloadOne(storeAssets.BannerURL, "")
+		if err != nil {
+			return nil, nil, err
+		}
+		if banner == nil {
+			banner, err = cl.Banner(appID)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+	} else {
+		banner, err = cl.Banner(appID)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
-	logo, logoErr := cl.Download(cl.LogoURL(appID))
+	logoURL := ""
+	logoFixed := cl.LogoURL(appID)
+	if storeErr == nil && storeAssets.LogoURL != "" {
+		logoURL = storeAssets.LogoURL
+	}
+	logo, logoErr := downloadOne(logoURL, logoFixed)
 	if logoErr != nil {
 		logo = nil
 	}
 	if !a.isCustomGameID(gameID) {
 		return nil, nil, errGameGone
 	}
-	have := s.Get(gameID).Art
+	entry := s.Get(gameID)
+	have := entry.Art
 	want := []artDownload{}
 	for _, d := range []artDownload{{customize.Cover, cover}, {customize.Banner, banner}, {customize.Logo, logo}} {
 		if d.data == nil {
 			continue
 		}
-		if skipHas {
-			if _, ok := have[d.kind]; ok {
-				continue
+		if auto {
+			if _, ok := have[d.kind]; ok && entry.ArtSource == "" {
+				continue // hand-picked: never overwritten by an auto apply
 			}
 		}
 		want = append(want, d)
@@ -156,7 +221,7 @@ func (a *App) fetchAndStoreArt(gameID string, appID int, name string, skipHas bo
 		applied = append(applied, d.kind)
 	}
 	if len(applied) > 0 {
-		if err := s.SetArtSource(gameID, "steam:"+strconv.Itoa(appID), name); err != nil {
+		if err := s.SetArtSource(gameID, "steam:"+strconv.Itoa(appID), effectiveName); err != nil {
 			return applied, nil, err
 		}
 	}
@@ -206,10 +271,8 @@ func (a *App) noteOnlineExtras(gameID string, appID int, year int) {
 // autoArtwork is the background half of the lookup, run after AddCustomGame
 // when the switch is on: it searches and applies automatically ONLY when
 // exactly one result's name matches the title after normalising. Otherwise
-// it does nothing. Art the user set by hand is never overwritten: kinds
-// with custom art are skipped. Failures are silent (at most one warn line)
-// and the placeholder stays. A successful apply emits "library" so the UI
-// refreshes the card's art.
+// it does nothing. The apply shares autoApplyArt with the AppID path, so both
+// replace only missing or online-sourced art, never hand-picked art.
 func (a *App) autoArtwork(gameID, title string) {
 	if !a.settings.ArtworkOnline() {
 		return
@@ -224,22 +287,30 @@ func (a *App) autoArtwork(gameID, title string) {
 	if m == nil {
 		return
 	}
-	applied, logoErr, err := a.fetchAndStoreArt(gameID, m.AppID, m.Name, true)
+	a.autoApplyArt(gameID, m.AppID, m.Name, title)
+}
+
+// autoApplyArt fetches the app's art with auto semantics (missing or
+// online-sourced kinds only, hand-picked kept) and emits "library" when art
+// lands, so the UI refreshes the card. The game-removed guard drops silently;
+// other failures warn once with label; the logo stays best-effort.
+func (a *App) autoApplyArt(gameID string, appID int, name, label string) {
+	applied, logoErr, err := a.fetchAndStoreArt(gameID, appID, name, true)
 	if err != nil {
 		if errors.Is(err, errGameGone) {
 			return // removed mid-flight: drop silently
 		}
-		a.host.Warnf("artwork lookup for %q: %v", title, err)
+		a.host.Warnf("artwork lookup for %q: %v", label, err)
 		return
 	}
 	if logoErr != nil {
-		a.host.Warnf("artwork logo for %q: %v", title, logoErr)
+		a.host.Warnf("artwork logo for %q: %v", label, logoErr)
 	}
 	if len(applied) == 0 {
 		return
 	}
-	if _, year, err := cl.AppInfo(m.AppID); err == nil {
-		a.noteOnlineExtras(gameID, m.AppID, year)
+	if _, year, err := a.artClient().AppInfo(appID); err == nil {
+		a.noteOnlineExtras(gameID, appID, year)
 	}
 	a.host.Emit("library", gameID)
 }

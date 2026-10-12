@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   getLauncherSettings: vi.fn(),
   setArtworkOnline: vi.fn(),
 }));
+const libraryCbs = vi.hoisted(() => ({ list: [] as Array<(id: string) => void> }));
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: new Proxy(api, {
     get: (t, k: string) => (...args: unknown[]) => Effect.tryPromise({
@@ -18,6 +19,10 @@ vi.mock('../../effect/runtime', () => ({
       catch: (e) => (e instanceof Error ? e : new Error(String(e))),
     }),
   }),
+  onLibrary: (cb: (id: string) => void) => {
+    libraryCbs.list.push(cb);
+    return () => {};
+  },
 }));
 
 import { CustomizationTab } from '../CustomizationTab';
@@ -44,6 +49,7 @@ function tab(g: Game = game()) {
 
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
+  libraryCbs.list.length = 0;
   api.getCustomization.mockResolvedValue(emptyCustom);
 });
 
@@ -110,6 +116,26 @@ describe('OnlineArtFinder (issue #36)', () => {
     tab();
     await waitFor(() => expect(api.getCustomization).toHaveBeenCalled());
     expect(screen.queryByTestId('art-attribution')).toBeNull();
+  });
+
+  it('reloads the panel when the library event arrives for its game (AppID auto-apply)', async () => {
+    tab();
+    await waitFor(() => expect(api.getCustomization).toHaveBeenCalled());
+    expect(screen.queryByTestId('art-attribution')).toBeNull();
+    expect(libraryCbs.list.length).toBeGreaterThan(0);
+    api.getCustomization.mockResolvedValue({
+      ...emptyCustom,
+      art: { cover: '/platypus-art/x/cover.png' },
+      art_source: 'steam:4094660',
+      art_source_name: 'Rivage',
+    });
+    libraryCbs.list.forEach((cb) => cb('custom-1'));
+    expect(await screen.findByTestId('art-attribution')).toBeTruthy();
+    // An event for another game leaves this panel alone.
+    api.getCustomization.mockClear();
+    libraryCbs.list.forEach((cb) => cb('other-game'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(api.getCustomization).not.toHaveBeenCalled();
   });
 });
 

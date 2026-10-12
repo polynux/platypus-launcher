@@ -30,6 +30,7 @@ vi.mock('../../effect/runtime', () => ({
   onFamily: () => () => {},
   onSocial: () => () => {},
   onPlaytime: () => () => {},
+  onLibrary: () => () => {},
   onLibraryPartial: () => () => {},
 }));
 
