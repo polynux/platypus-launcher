@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   getGameVersions: vi.fn(),
   getCustomization: vi.fn(),
   previewCommand: vi.fn(),
+  getLauncherSettings: vi.fn(),
 }));
 
 vi.mock('../../effect/runtime', () => ({
@@ -67,6 +68,7 @@ beforeEach(() => {
   api.getGameOptions.mockResolvedValue({ groups: [], chosen: {} });
   api.getCustomization.mockResolvedValue({ title: '', sort_title: '', art: {} });
   api.previewCommand.mockResolvedValue('wine game.exe');
+  api.getLauncherSettings.mockResolvedValue({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' });
 });
 
 describe('the game page keeps only the essentials', () => {
@@ -187,5 +189,46 @@ describe('the game settings dialog', () => {
     fireEvent.click(gear());
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('round-trips the working directory for a game that runs itself (issue #33)', async () => {
+    const props = page();
+    fireEvent.click(gear());
+    const work = await screen.findByLabelText('working directory');
+    fireEvent.change(work, { target: { value: '/home/you/Games/doom' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save config' }));
+    expect(props.onSaveSettings).toHaveBeenCalledOnce();
+    expect(props.onSaveSettings.mock.calls[0][0].working_dir).toBe('/home/you/Games/doom');
+  });
+
+  it('hides the working directory for a game the Steam client starts', () => {
+    page({}, game({ source: 'steam', store: 'steam' as never, store_app_id: '10', executable: '', features: null }), undefined);
+    fireEvent.click(gear());
+    expect(screen.queryByLabelText('working directory')).toBeNull();
+  });
+
+  it('round-trips the Wine prefix and shows the effective path (issue #34)', async () => {
+    const props = page();
+    fireEvent.click(gear());
+    const prefix = await screen.findByLabelText('wine prefix');
+    fireEvent.change(prefix, { target: { value: '/home/you/prefixes/echo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save config' }));
+    expect(props.onSaveSettings).toHaveBeenCalledOnce();
+    expect(props.onSaveSettings.mock.calls[0][0].wine_prefix).toBe('/home/you/prefixes/echo');
+  });
+
+  it('hides the Wine prefix for a native Linux game', () => {
+    page({}, game({ native: true }));
+    fireEvent.click(gear());
+    expect(screen.queryByLabelText('wine prefix')).toBeNull();
+    // The working directory still applies.
+    expect(screen.getByLabelText('working directory')).toBeInTheDocument();
+  });
+
+  it('shows the global prefix folder in the effective-prefix hint (issue #37)', async () => {
+    api.getLauncherSettings.mockResolvedValue({ prefixes_folder: '/mnt/big/prefixes', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' });
+    page({}, game({ id: 'p.echo.tiny' }));
+    fireEvent.click(gear());
+    expect(await screen.findByText(/prefix: \/mnt\/big\/prefixes\/p\.echo\.tiny \(default\)/)).toBeInTheDocument();
   });
 });

@@ -323,6 +323,15 @@ export const LauncherApi = {
     call<Customization>('ResetCustomization', async () => normalizeCustomization(await App.ResetCustomization(gameId))),
   pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
 
+  // Sideload dialog (issue #32): the native file picker for the game's
+  // executable. "" means the user cancelled; a rejection means there is
+  // no picker (the text field still works).
+  pickGameExecutable: (start: string) => call<string>('PickGameExecutable', () => App.PickGameExecutable(start)),
+
+  // Folder picker for the sideload working directory, Wine prefix and
+  // global prefix folder (issues #33, #34, #37). "" means cancelled.
+  pickFolder: (title: string, start: string) => call<string>('PickFolder', () => App.PickFolder(title, start)),
+
   // Family (the `family` capability, protocol 1.8): the store's family group.
   // Shown only; Platypus enforces none of its rules.
   getFamilyMembers: (source: string) =>
@@ -362,6 +371,11 @@ export const LauncherApi = {
   // How long a canceled download's data is kept before Platypus deletes it (0 = right away).
   setCancelCleanupDays: (days: number) =>
     call<LauncherSettings>('SetCancelCleanupDays', () => App.SetCancelCleanupDays(days)),
+
+  // Where Wine prefixes are created (issue #37). "" resets it to the
+  // default; changing it never moves or deletes existing prefixes.
+  setPrefixesFolder: (path: string) =>
+    call<LauncherSettings>('SetPrefixesFolder', () => App.SetPrefixesFolder(path)),
 
   // Friends lists of the stores that offer them (protocol 1.6).
   socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),

@@ -9,6 +9,7 @@ vi.mock('../../effect/runtime', () => ({
     getGameDetails: () => Effect.succeed({ summary: '', screenshots: [], genres: [], developers: [], publishers: [], release_date: '', achievements: null } as never),
     getGameVersions: (g: unknown) => Effect.promise(() => getGameVersions(g)),
     getInstallSize: () => Effect.succeed(0),
+    getLauncherSettings: () => Effect.succeed({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' } as never),
   },
   onJobs: () => () => {},
   onSession: () => () => {},

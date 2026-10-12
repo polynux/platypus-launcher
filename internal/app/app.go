@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -554,7 +555,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 				return nil, err
 			}
 		}
-		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview)
+		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview, a.prefixesFolder())
 		if err != nil {
 			return nil, err
 		}
@@ -569,7 +570,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	if err != nil {
 		return nil, err
 	}
-	args, env, err := runner.BuildLaunchCommand(game, r, preview)
+	args, env, err := runner.BuildLaunchCommand(game, r, preview, a.prefixesFolder())
 	if err != nil {
 		return nil, err
 	}
@@ -733,11 +734,75 @@ func (a *App) stopGame(gameID string, force bool) error {
 
 func (a *App) launcherSettings() types.LauncherSettings {
 	return types.LauncherSettings{
-		GamesFolder:        a.settings.GamesFolder(),
-		DefaultGamesFolder: settings.DefaultGamesFolder(),
-		CancelCleanupDays:  a.settings.CancelCleanupDays(),
-		RatingsOnline:      a.settings.RatingsOnline(),
+		GamesFolder:           a.settings.GamesFolder(),
+		DefaultGamesFolder:    settings.DefaultGamesFolder(),
+		CancelCleanupDays:     a.settings.CancelCleanupDays(),
+		RatingsOnline:         a.settings.RatingsOnline(),
+		PrefixesFolder:        a.settings.PrefixesFolder(),
+		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
 	}
+}
+
+// SetPrefixesFolder saves where Wine prefixes are created ("" resets it to
+// the default). Games whose prefix already exists in the old folder keep it:
+// their wine_prefix is pinned to the existing path, so changing the folder
+// never strands their saves. Nothing is moved or deleted.
+func (a *App) SetPrefixesFolder(path string) (types.LauncherSettings, error) {
+	old := a.settings.PrefixesFolder()
+	if old == "" {
+		old = settings.DefaultPrefixesFolder()
+	}
+	if err := a.pinExistingPrefixes(old); err != nil {
+		return a.launcherSettings(), err
+	}
+	if _, err := a.settings.SetPrefixesFolder(path); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
+// pinExistingPrefixes pins every game's prefix that already exists as a
+// folder of the old effective prefixes folder: a game with no wine_prefix of
+// its own gets one pointing at the existing path. The pins are ordinary
+// per-game settings, so they show in that game's settings. Folders that are
+// not games cannot be told apart, so every subfolder counts; hidden names and
+// non-folders are ignored. Nothing is moved or deleted. A missing old folder
+// means there is nothing to keep.
+func (a *App) pinExistingPrefixes(old string) error {
+	entries, err := os.ReadDir(old)
+	if err != nil {
+		return nil
+	}
+	saved := a.settings.GameSettings()
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		id := e.Name()
+		if cur, ok := saved[id]["wine_prefix"]; ok {
+			if s, _ := cur.(string); strings.TrimSpace(s) != "" {
+				continue // the game already has a prefix of its own
+			}
+		}
+		next := maps.Clone(saved[id])
+		if next == nil {
+			next = map[string]any{}
+		}
+		next["wine_prefix"] = filepath.Join(old, id)
+		if err := a.settings.SetGameSettings(id, next); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// prefixesFolder is where Wine prefixes are created: the user's choice, or
+// "" for the default (see runner.PrefixPath).
+func (a *App) prefixesFolder() string {
+	if a.settings == nil {
+		return ""
+	}
+	return a.settings.PrefixesFolder()
 }
 
 // GetLauncherSettings returns Platypus-wide settings.
@@ -757,7 +822,45 @@ func (a *App) GetGameSettings() map[string]map[string]any {
 	return a.settings.GameSettings()
 }
 
+// cleanGameSettingsPaths validates the path fields of per-game settings and
+// stores them cleaned: working_dir must be an absolute path to an existing
+// directory when set, wine_prefix an absolute path (it is created on demand,
+// so it need not exist yet, but it must not be a file). "~" is expanded and
+// the result Cleaned, so "~/x" is stored as the full path. Empty means the
+// fallback. It mutates gameSettings in place.
+func cleanGameSettingsPaths(gameSettings map[string]any) error {
+	if v, ok := gameSettings["working_dir"]; ok {
+		if s, _ := v.(string); strings.TrimSpace(s) != "" {
+			clean, err := settings.CleanFolder(s)
+			if err != nil {
+				return fmt.Errorf("working directory: %w", err)
+			}
+			st, err := os.Stat(clean)
+			if err != nil {
+				return fmt.Errorf("working directory: %w", err)
+			}
+			if !st.IsDir() {
+				return fmt.Errorf("%s is a file, not a folder", clean)
+			}
+			gameSettings["working_dir"] = clean
+		}
+	}
+	if v, ok := gameSettings["wine_prefix"]; ok {
+		if s, _ := v.(string); strings.TrimSpace(s) != "" {
+			clean, err := settings.CleanFolder(s)
+			if err != nil {
+				return fmt.Errorf("wine prefix: %w", err)
+			}
+			gameSettings["wine_prefix"] = clean
+		}
+	}
+	return nil
+}
+
 // SaveGameSettings persists one game's settings as the UI holds them.
 func (a *App) SaveGameSettings(gameID string, gameSettings map[string]any) error {
+	if err := cleanGameSettingsPaths(gameSettings); err != nil {
+		return err
+	}
 	return a.settings.SetGameSettings(gameID, gameSettings)
 }

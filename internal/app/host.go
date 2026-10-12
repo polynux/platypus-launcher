@@ -24,6 +24,7 @@ type Host interface {
 // FileDialog describes a file picker.
 type FileDialog struct {
 	Title   string       `json:"title"`
+	Default string       `json:"default,omitempty"`
 	Filters []FileFilter `json:"filters,omitempty"`
 }
 

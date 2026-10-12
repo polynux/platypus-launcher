@@ -6,7 +6,8 @@ import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
-import { AddGameModal } from './components/AddGameModal';
+import { AddGameModal, type AddGameOptions } from './components/AddGameModal';
+import { addGameFlow } from './lib/addGame';
 import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
@@ -492,16 +493,26 @@ export function App() {
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
-  const addGame = (title: string, executable: string) => {
-    Effect.runPromise(LauncherApi.addCustomGame(title, executable))
-      .then((game) => {
-        // Sideloaded games lead the library, like before, with their saved settings.
-        setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
-        setAddOpen(false);
-        notify(`Added "${title}"`);
-        log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
-      })
-      .catch((err) => notify(errMsg(err), 'err'));
+  // Adding is all-or-nothing: the modal stays open until the returned promise
+  // settles. The game only joins the library once its advanced options are
+  // saved too; a failed options save removes the new game again and the error
+  // surfaces in the modal.
+  const addGame = (title: string, executable: string, opts?: AddGameOptions) => {
+    return addGameFlow(
+      {
+        addCustomGame: (t, e) => Effect.runPromise(LauncherApi.addCustomGame(t, e)),
+        saveGameSettings: (id, s) => Effect.runPromise(LauncherApi.saveGameSettings(id, s)),
+        removeCustomGame: (id) => Effect.runPromise(LauncherApi.removeCustomGame(id)),
+      },
+      title,
+      executable,
+      opts,
+    ).then(({ game }) => {
+      // Sideloaded games lead the library, like before, with their saved settings.
+      setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
+      notify(`Added "${title}"`);
+      log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
+    });
   };
 
   // Forgetting a sideloaded game: the backend drops it (files stay on disk).

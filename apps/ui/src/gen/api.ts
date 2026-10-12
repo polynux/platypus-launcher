@@ -70,6 +70,8 @@ export interface CoreApi {
   OpenPluginsFolder(): Promise<void>;
   PauseAllJobs(): Promise<void>;
   PauseJob(id: string): Promise<void>;
+  PickFolder(title: string, start: string): Promise<string>;
+  PickGameExecutable(start: string): Promise<string>;
   PickImage(title: string): Promise<string>;
   PickInstallFolder(start: string): Promise<string>;
   PickMoveFolder(start: string): Promise<string>;
@@ -106,6 +108,7 @@ export interface CoreApi {
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
   SetPluginInstallFolder(id: string, path: string): Promise<void>;
   SetPreferredCopy(game: types.Game, ownerID: string): Promise<void>;
+  SetPrefixesFolder(path: string): Promise<types.LauncherSettings>;
   SetRatingsOnline(on: boolean): Promise<types.LauncherSettings>;
   SetSocialEnabled(pluginID: string, enabled: boolean): Promise<void>;
   SetSocialPlaying(pluginID: string, show: boolean): Promise<void>;
@@ -186,6 +189,8 @@ export const coreMethods: (keyof CoreApi)[] = [
   'OpenPluginsFolder',
   'PauseAllJobs',
   'PauseJob',
+  'PickFolder',
+  'PickGameExecutable',
   'PickImage',
   'PickInstallFolder',
   'PickMoveFolder',
@@ -222,6 +227,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetPluginEnabled',
   'SetPluginInstallFolder',
   'SetPreferredCopy',
+  'SetPrefixesFolder',
   'SetRatingsOnline',
   'SetSocialEnabled',
   'SetSocialPlaying',

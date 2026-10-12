@@ -431,7 +431,7 @@ func TestTheCloudContextFallbackFollowsTheLaunchRule(t *testing.T) {
 	if cc.OS != "linux" {
 		t.Fatalf("the fallback picked %q with no runner to launch with", cc.OS)
 	}
-	if cc := cloudContextOf(g, types.ProtonVersion{Path: "/opt/proton/proton"}); cc.OS != "windows" {
+	if cc := cloudContextOf(g, types.ProtonVersion{Path: "/opt/proton/proton"}, ""); cc.OS != "windows" {
 		t.Fatalf("a launch with a runner must be windows, got %q", cc.OS)
 	}
 }

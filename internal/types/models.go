@@ -281,6 +281,12 @@ type LauncherSettings struct {
 	CancelCleanupDays int `json:"cancel_cleanup_days"`
 	// RatingsOnline is the "Fetch ratings online" switch (see compat.go).
 	RatingsOnline bool `json:"ratings_online"`
+	// PrefixesFolder is where Wine prefixes are created, one folder per
+	// game (see runner.PrefixPath). Empty means the default below.
+	PrefixesFolder string `json:"prefixes_folder"`
+	// DefaultPrefixesFolder is <data>/prefixes, used when PrefixesFolder
+	// is empty.
+	DefaultPrefixesFolder string `json:"default_prefixes_folder"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when

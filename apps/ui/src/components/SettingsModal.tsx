@@ -114,6 +114,20 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
+  // The global Wine prefix folder (issue #37), for the effective-prefix
+  // hint below. Unset until loaded; a failure keeps the built-in default.
+  const [prefixesFolder, setPrefixesFolder] = useState<string | null>(null);
+  const [defaultPrefixes, setDefaultPrefixes] = useState('');
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => { setPrefixesFolder(s.prefixes_folder ?? ''); setDefaultPrefixes(s.default_prefixes_folder ?? ''); })
+      .catch(() => {});
+  }, []);
+  const effectivePrefix = draft.wine_prefix
+    || (prefixesFolder ? `${prefixesFolder}/${game.id}`
+      : defaultPrefixes ? `${defaultPrefixes}/${game.id}`
+      : `~/.local/share/platypus/prefixes/${game.id}`);
+
   const isSteamClient = game.store === 'steam' && !game.executable;
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
@@ -374,6 +388,68 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" />
             </label>
 
+            {!isSteamClient && (
+              <div>
+                <MonoLabel className="mb-1.5">working directory <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="working directory"
+                    value={draft.working_dir}
+                    onChange={(e) => set('working_dir', e.target.value)}
+                    placeholder={game.executable ? game.executable.split('/').slice(0, -1).join('/') || '/' : "The executable's folder"}
+                    spellCheck={false}
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => {
+                      Effect.runPromise(LauncherApi.pickFolder('Choose the working directory', draft.working_dir || game.executable))
+                        .then((picked) => { if (picked) set('working_dir', picked); })
+                        .catch(() => {});
+                    }}
+                    className="flex-none"
+                  >
+                    Browse…
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">Where the game runs. Empty means the executable's folder.</p>
+              </div>
+            )}
+
+            {!isSteamClient && !native && (
+              <div>
+                <MonoLabel className="mb-1.5">wine prefix <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="wine prefix"
+                    value={draft.wine_prefix}
+                    onChange={(e) => set('wine_prefix', e.target.value)}
+                    placeholder="The default prefix folder"
+                    spellCheck={false}
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => {
+                      Effect.runPromise(LauncherApi.pickFolder('Choose the Wine prefix folder', draft.wine_prefix || draft.working_dir || game.executable))
+                        .then((picked) => { if (picked) set('wine_prefix', picked); })
+                        .catch(() => {});
+                    }}
+                    className="flex-none"
+                  >
+                    Browse…
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
+                  {draft.wine_prefix
+                    ? 'This prefix, for this game only. Empty falls back to the default prefix folder.'
+                    : 'Empty: this game uses a folder of its own in the default prefix folder. The folder is created on demand.'}
+                </p>
+              </div>
+            )}
+
             <AdvancedFold set={launchSet}>
               {draft.use_gamescope && (
                 <div className="space-y-4 border-l border-white/[0.08] pl-4">
@@ -440,7 +516,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
-            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/platypus/prefixes/${game.id}`}
+            saved for next launch · prefix: {effectivePrefix}{draft.wine_prefix ? '' : ' (default)'}
           </div>
         </div>
       </div>
