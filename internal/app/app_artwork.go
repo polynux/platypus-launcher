@@ -59,6 +59,7 @@ func (a *App) SearchArtOnline(title string) ([]types.ArtCandidate, error) {
 		if len(merged) == 0 {
 			return nil, serr
 		}
+		a.rememberArtCandidates(merged)
 		return convertArtCandidates(merged), nil
 	}
 	if !onlineart.SteamNeedsFallback(title, steam) {
@@ -66,7 +67,9 @@ func (a *App) SearchArtOnline(title string) ([]types.ArtCandidate, error) {
 	}
 	gog, _ := cl.SearchGOG(title)
 	lutris, _ := cl.SearchLutris(title)
-	return convertArtCandidates(onlineart.MergeCandidates(steam, gog, lutris)), nil
+	merged := onlineart.MergeCandidates(steam, gog, lutris)
+	a.rememberArtCandidates(merged)
+	return convertArtCandidates(merged), nil
 }
 
 // convertArtCandidates carries lookup hits over to the RPC type.
@@ -79,6 +82,48 @@ func convertArtCandidates(all []onlineart.Candidate) []types.ArtCandidate {
 		})
 	}
 	return out
+}
+
+// artCacheMax bounds the remembered GOG hits: one search returns at most 8,
+// so this holds about eight searches back.
+const artCacheMax = 64
+
+// artCacheKey names a remembered lookup hit.
+func artCacheKey(source, id string) string { return source + ":" + id }
+
+// rememberArtCandidates keeps the GOG hits of a search answer, so a later
+// apply downloads the exact images the user saw. GOG has no lookup by
+// product id and the apply's game title may differ from the searched title,
+// so re-searching cannot reliably reproduce the hit. Steam hits need no
+// remembering (the Steam apply resolves everything from the app id) and
+// neither do Lutris ones (LutrisGame fetches by slug).
+func (a *App) rememberArtCandidates(all []onlineart.Candidate) {
+	a.artCacheMu.Lock()
+	defer a.artCacheMu.Unlock()
+	for _, c := range all {
+		if c.Source != "gog" || c.ID == "" {
+			continue
+		}
+		if a.artCache == nil {
+			a.artCache = map[string]onlineart.Candidate{}
+		}
+		if len(a.artCache) >= artCacheMax {
+			for k := range a.artCache {
+				delete(a.artCache, k)
+				break
+			}
+		}
+		a.artCache[artCacheKey(c.Source, c.ID)] = c
+	}
+}
+
+// cachedArtCandidate returns the remembered GOG hit for id, if a recent
+// search saw it.
+func (a *App) cachedArtCandidate(source, id string) (onlineart.Candidate, bool) {
+	a.artCacheMu.Lock()
+	defer a.artCacheMu.Unlock()
+	c, ok := a.artCache[artCacheKey(source, id)]
+	return c, ok
 }
 
 // ApplyOnlineArt downloads a candidate's art into the game's custom art,
@@ -166,26 +211,33 @@ func (a *App) customGameTitle(gameID string) string {
 	return ""
 }
 
-// applyGOGArt downloads the GOG product's art with manual semantics. The
-// product is resolved through the catalog search for the game's own title.
+// applyGOGArt downloads the GOG product's art with manual semantics. It
+// applies the remembered hit when a recent search saw the product: the
+// game's own title may differ from the searched title, and GOG has no lookup
+// by product id. Only on a cache miss does it fall back to the catalog
+// search for the game's title; when that misses too the error says to search
+// again, since the title alone cannot reproduce the user's hit.
 func (a *App) applyGOGArt(gameID, productID string) (types.Customization, error) {
+	if hit, ok := a.cachedArtCandidate("gog", productID); ok {
+		return a.applyGOGCandidate(gameID, hit)
+	}
 	cands, err := a.artClient().SearchGOG(a.customGameTitle(gameID))
 	if err != nil {
 		c, _ := a.customization(gameID)
 		return c, err
 	}
-	var hit *onlineart.Candidate
 	for i := range cands {
 		if cands[i].ID == productID {
-			hit = &cands[i]
-			break
+			return a.applyGOGCandidate(gameID, cands[i])
 		}
 	}
-	if hit == nil {
-		c, _ := a.customization(gameID)
-		return c, fmt.Errorf("GOG no longer lists that game")
-	}
-	applied, logoErr, err := a.fetchAndStoreGOGArt(gameID, *hit, false)
+	c, _ := a.customization(gameID)
+	return c, fmt.Errorf("that GOG result is stale: search for the art again, then apply it")
+}
+
+// applyGOGCandidate stores one GOG hit's art with manual semantics.
+func (a *App) applyGOGCandidate(gameID string, hit onlineart.Candidate) (types.Customization, error) {
+	applied, logoErr, err := a.fetchAndStoreGOGArt(gameID, hit, false)
 	if err != nil {
 		c, _ := a.customization(gameID)
 		return c, err

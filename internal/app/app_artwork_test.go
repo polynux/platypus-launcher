@@ -849,6 +849,54 @@ func TestApplyOnlineArtGOGUnknownID(t *testing.T) {
 	}
 }
 
+// Searching "rivage" for a game titled "test" caches the GOG hit, so
+// applying it works even though the saved title would never find it (the
+// reviewer's case: GOG has no lookup by product id).
+func TestApplyOnlineArtGOGUsesSearchCache(t *testing.T) {
+	f := newArtFixture(t)
+	png := testPNG(t)
+	f.search = "" // Steam knows nothing like it, so the fallbacks fire.
+	f.gog = gogProductJSON(f.srv.URL, "4242", "Rivage", "2026.01.01")
+	f.images["gog/cover_4242.jpg"] = png
+	f.images["gog/banner_4242.png"] = png
+	a, _, id := newArtApp(t, f, "test")
+
+	got, err := a.SearchArtOnline("rivage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("search found nothing to cache")
+	}
+
+	c, err := a.ApplyOnlineArt(id, "gog", "4242")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if art := a.artBytes(t, id, "cover"); !bytes.Equal(art, png) {
+		t.Fatal("cover wasn't stored from the cached GOG hit")
+	}
+	if c.ArtSource != "gog:4242" || c.ArtSourceName != "Rivage" {
+		t.Fatalf("attribution = %q/%q, want gog:4242/Rivage", c.ArtSource, c.ArtSourceName)
+	}
+}
+
+// Without a prior search, a GOG apply falls back to the game's own title;
+// when that cannot reproduce the hit the error says to search again.
+func TestApplyOnlineArtGOGCacheMissSaysSearchAgain(t *testing.T) {
+	f := newArtFixture(t)
+	f.gog = gogProductJSON(f.srv.URL, "999", "Some Game", "2020.01.01")
+	a, _, id := newArtApp(t, f, "test")
+
+	_, err := a.ApplyOnlineArt(id, "gog", "1308320804")
+	if err == nil {
+		t.Fatal("stale GOG id = nil, want an error to show")
+	}
+	if !strings.Contains(err.Error(), "search for the art again") {
+		t.Fatalf("error = %q, want it to say to search again", err)
+	}
+}
+
 // A Lutris manual apply stores the upgraded IGDB cover with a lutris:
 // source. Here only the IGDB copy exists: the lutris.net file 404s.
 func TestApplyOnlineArtLutrisUsesIGDBUpgrade(t *testing.T) {

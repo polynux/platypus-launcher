@@ -73,6 +73,13 @@ type App struct {
 	// artwork is the online art lookup for sideloaded games (issue #36).
 	// Nil means the live Steam endpoints; tests inject an httptest client.
 	artwork *onlineart.Client
+	// artCacheMu guards artCache.
+	artCacheMu sync.Mutex
+	// artCache remembers the GOG hits of recent SearchArtOnline calls by
+	// "source:id", so an apply downloads exactly what the user saw: the
+	// apply's game title may differ from the searched title, and GOG has no
+	// lookup by product id. Bounded (artCacheMax); never leaves the process.
+	artCache map[string]onlineart.Candidate
 	// sessionRunning says whether a game has a session open. Nil asks the
 	// session tracker; tests replace it.
 	sessionRunning func(gameID string) bool
