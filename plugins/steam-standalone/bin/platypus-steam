@@ -29,6 +29,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 import zlib
 
@@ -1006,6 +1007,178 @@ def art_urls(app):
     }
 
 
+# --- hashed art assets (IStoreBrowseService/GetItems) ----------------------
+# Newer apps (e.g. Aniimo 4126040) keep their art under hashed asset paths,
+# so the fixed CDN names above all 404 for them. The keyless store-browse
+# API names the real paths, many ids per request; the full URL is the CDN
+# base + "/store_item_assets/" + asset_url_format with ${FILENAME} replaced.
+ART_TTL = 7 * 86400  # resolved asset URLs are refreshed weekly
+ART_BATCH = 200  # app ids per GetItems request (the API accepts this many)
+ART_CDN_BASE = "https://shared.steamstatic.com"
+art_lock = threading.Lock()
+art_cache = None  # app id -> {"cover","hero","banner","at"}, mirrors art-assets.json
+
+
+def getitems_base():
+    """The store-browse API base. Overridable via the environment so tests
+    can point it at a fake endpoint; production is the keyless live API."""
+    return os.environ.get("PLATYPUS_STEAM_GETITEMS_BASE") or "https://api.steampowered.com"
+
+
+def save_art_cache():
+    with art_lock:
+        if art_cache is not None:
+            save_state("art-assets.json", art_cache)
+
+
+def parse_getitems(data):
+    """Real art URLs out of a GetItems response: {appid: {coverUrl,
+    heroUrl, bannerUrl}}. Reads only the string asset values, so numeric
+    fields the API also carries (last_modified etc.) can never break the
+    parse; apps without usable art are simply absent (caller keeps the
+    fixed CDN fallback). Mapping, like internal/onlineart's GetItemAssets:
+    cover library_capsule_2x else library_capsule, hero library_hero_2x
+    else library_hero, banner header_2x else header."""
+    out = {}
+    try:
+        items = (data.get("response") or {}).get("store_items") or []
+    except AttributeError:
+        return {}
+    if not isinstance(items, list):
+        return {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        appid = str(item.get("appid") or "")
+        if not appid:
+            continue
+        assets = item.get("assets") or {}
+        if not isinstance(assets, dict):
+            continue
+        strs = {k: v.strip() for k, v in assets.items()
+                if isinstance(v, str) and v.strip()}
+        fmt = strs.get("asset_url_format") or ""
+        if "${FILENAME}" not in fmt:
+            continue
+
+        def pick(*keys):
+            for k in keys:
+                if strs.get(k):
+                    return strs[k]
+            return ""
+
+        def resolve(name):
+            if not name:
+                return ""
+            return ART_CDN_BASE + "/store_item_assets/" + fmt.replace("${FILENAME}", name)
+        urls = {}
+        cover = resolve(pick("library_capsule_2x", "library_capsule"))
+        hero = resolve(pick("library_hero_2x", "library_hero"))
+        banner = resolve(pick("header_2x", "header"))
+        if cover:
+            urls["coverUrl"] = cover
+        if hero:
+            urls["heroUrl"] = hero
+        if banner:
+            urls["bannerUrl"] = banner
+        if urls:
+            out[appid] = urls
+    return out
+
+
+def fetch_getitems_batch(ids):
+    """One GetItems call for ids (numeric strings) -> parse_getitems's
+    mapping. Keyless: no token is sent. May raise; the caller treats any
+    failure as "keep the cache/fallback"."""
+    payload = {"ids": [{"appid": int(a)} for a in ids],
+               "context": {"language": "english", "country_code": "US"},
+               "data_request": {"include_assets": True}}
+    q = urllib.parse.urlencode({"input_json": json.dumps(payload, separators=(",", ":"))})
+    return parse_getitems(api_get(getitems_base() + "/IStoreBrowseService/GetItems/v1/?" + q))
+
+
+def resolve_art_assets(app_ids, deadline=None):
+    """Hashed art URLs for app ids: fresh cache first, then batched
+    GetItems for the rest (at most ART_BATCH ids per request), cached in
+    art-assets.json with a fetched-at time and refreshed after ART_TTL.
+    Stale cache entries stay usable when the request fails or the time
+    budget (deadline, like STORE_BUDGET) is spent; unknown apps are
+    absent so the caller keeps the fixed CDN fallback. Never raises."""
+    global art_cache
+    ids = []
+    for a in app_ids:
+        a = str(a or "")
+        if a.isdigit() and a not in ids:
+            ids.append(a)
+    if not ids:
+        return {}
+    with art_lock:
+        if art_cache is None:
+            art_cache = load_state("art-assets.json", {})
+        cached = art_cache
+    now = time.time()
+    out = {}
+    need = []
+    fetched = False
+    for a in ids:
+        entry = cached.get(a) or {}
+        if entry and now - entry.get("at", 0) < ART_TTL:
+            # Fresh: whatever was recorded (URLs, or a miss with none).
+            urls = {}
+            if entry.get("cover"):
+                urls["coverUrl"] = entry["cover"]
+            if entry.get("hero"):
+                urls["heroUrl"] = entry["hero"]
+            if entry.get("banner"):
+                urls["bannerUrl"] = entry["banner"]
+            if urls:
+                out[a] = urls
+        else:
+            need.append(a)
+    for i in range(0, len(need), ART_BATCH):
+        if deadline is not None and time.time() >= deadline:
+            break  # budget spent: the rest keep cache/fallback this listing
+        batch = need[i:i + ART_BATCH]
+        try:
+            found = fetch_getitems_batch(batch)
+        except Exception:
+            break  # unreachable: keep cache/fallback, don't fail the listing
+        fetched = True
+        with art_lock:
+            for a in batch:
+                if a in found:
+                    cached[a] = {"cover": found[a].get("coverUrl") or "",
+                                 "hero": found[a].get("heroUrl") or "",
+                                 "banner": found[a].get("bannerUrl") or "",
+                                 "at": now}
+                    out[a] = found[a]
+                else:
+                    # A recorded miss so the app isn't refetched every
+                    # listing; stale URLs are kept (content-addressed art
+                    # usually still serves) and stay usable below.
+                    stale = cached.get(a) or {}
+                    cached[a] = {"cover": stale.get("cover") or "",
+                                 "hero": stale.get("hero") or "",
+                                 "banner": stale.get("banner") or "",
+                                 "at": now}
+            art_cache = cached
+    if fetched:
+        save_art_cache()
+    for a in need:  # stale cache covers failures and timeouts
+        if a not in out:
+            entry = cached.get(a) or {}
+            urls = {}
+            if entry.get("cover"):
+                urls["coverUrl"] = entry["cover"]
+            if entry.get("hero"):
+                urls["heroUrl"] = entry["hero"]
+            if entry.get("banner"):
+                urls["bannerUrl"] = entry["banner"]
+            if urls:
+                out[a] = urls
+    return out
+
+
 def library_list(_params):
     if not logged_in():
         raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
@@ -1062,6 +1235,17 @@ def library_list(_params):
             }
             missing.update(art_urls(app))
             out.append(missing)
+    # Newer apps only have hashed asset paths: resolve the real cover/hero/
+    # banner URLs for every listed app (owned and installed-missing alike)
+    # within the listing's remaining time budget. Failures and timeouts
+    # keep the fixed CDN fallback above, never fail the listing.
+    try:
+        overrides = resolve_art_assets([e["id"] for e in out], deadline)
+    except Exception:
+        overrides = {}
+    for entry in out:
+        if entry["id"] in overrides:
+            entry.update(overrides[entry["id"]])
     return {"games": out}
 
 
@@ -1578,6 +1762,14 @@ def game_details(params):
     if date:
         out["releaseDate"] = date
     out["heroUrl"] = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app}/library_hero_2x.jpg"
+    # Newer apps only have hashed asset paths: prefer the real hero URL
+    # when GetItems names one. Best effort, never fails the details.
+    try:
+        art = resolve_art_assets([app], time.time() + 15)
+        if art.get(app, {}).get("heroUrl"):
+            out["heroUrl"] = art[app]["heroUrl"]
+    except Exception:
+        pass
     # Richer facts (protocol 1.12): raw store HTML/URLs; core validates.
     desc = d.get("detailed_description") or ""
     if d.get("about_the_game") and len(d["about_the_game"]) > len(desc):

@@ -87,6 +87,125 @@ print(hs._source_matches(rt, "/h/account.config", 1700000000.5),
 	}
 }
 
+// STEAM-ART: newer apps (Aniimo 4126040) only have hashed asset paths, so
+// the fixed CDN names 404. resolve_art_assets names the real paths via the
+// keyless GetItems API, preferring the _2x file; numeric asset fields
+// (last_modified etc.) must not break the parse.
+func TestSteamArtAssetsHashed(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+hs.art_cache = None
+def fake_api(url, token=None):
+    assert "GetItems" in url, url
+    assert "access_token" not in url, "GetItems must stay keyless"
+    return {"response": {"store_items": [
+      {"appid": 4126040, "assets": {
+        "asset_url_format": "steam/apps/4126040/${FILENAME}?t=111",
+        "library_capsule": "a/cap.jpg", "library_capsule_2x": "a/cap2x.jpg",
+        "library_hero": "a/hero.jpg", "library_hero_2x": "a/hero2x.jpg",
+        "header": "a/hd.jpg", "header_2x": "a/hd2x.jpg",
+        "last_modified": 1700000000, "flag": True, "nothing": None}},
+      {"appid": 367520, "assets": {
+        "asset_url_format": "steam/apps/367520/${FILENAME}?t=9",
+        "library_capsule": "h/c.jpg", "library_hero": "h/h.jpg", "header": "h/hd.jpg"}}]}}
+hs.api_get = fake_api
+import json
+print(json.dumps(hs.resolve_art_assets(["4126040", "367520"]), sort_keys=True))
+`)
+	want := `{"367520": {"bannerUrl": "https://shared.steamstatic.com/store_item_assets/steam/apps/367520/h/hd.jpg?t=9", "coverUrl": "https://shared.steamstatic.com/store_item_assets/steam/apps/367520/h/c.jpg?t=9", "heroUrl": "https://shared.steamstatic.com/store_item_assets/steam/apps/367520/h/h.jpg?t=9"}, "4126040": {"bannerUrl": "https://shared.steamstatic.com/store_item_assets/steam/apps/4126040/a/hd2x.jpg?t=111", "coverUrl": "https://shared.steamstatic.com/store_item_assets/steam/apps/4126040/a/cap2x.jpg?t=111", "heroUrl": "https://shared.steamstatic.com/store_item_assets/steam/apps/4126040/a/hero2x.jpg?t=111"}}`
+	if got != want {
+		t.Fatalf("resolve_art_assets =\n%s\nwant\n%s", got, want)
+	}
+}
+
+// STEAM-ART: an app GetItems doesn't list, or a failed request, keeps the
+// fixed CDN fallback: the resolver answers {} and never raises.
+func TestSteamArtAssetsFallback(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+hs.art_cache = None
+hs.api_get = lambda url, token=None: {"response": {"store_items": []}}
+print(hs.resolve_art_assets(["4321"]))
+hs.api_get = lambda url, token=None: (_ for _ in ()).throw(IOError("down"))
+print(hs.resolve_art_assets(["4321"]), hs.resolve_art_assets([]))
+print(hs.art_urls("4321"))
+`)
+	lines := strings.Split(got, "\n")
+	if len(lines) != 3 || lines[0] != "{}" || lines[1] != "{} {}" {
+		t.Fatalf("fallback = %q", got)
+	}
+	if !strings.Contains(lines[2], "cdn.cloudflare.steamstatic.com/steam/apps/4321/library_600x900.jpg") {
+		t.Fatalf("fixed CDN fallback changed: %q", lines[2])
+	}
+}
+
+// STEAM-ART: ids resolve in batches of ART_BATCH (one request per batch).
+func TestSteamArtAssetsBatched(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import json, urllib.parse
+hs.art_cache = None
+calls = []
+def fake_api(url, token=None):
+    calls.append(url)
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    ids = [str(i["appid"]) for i in json.loads(q["input_json"][0])["ids"]]
+    return {"response": {"store_items": [
+      {"appid": int(a), "assets": {
+        "asset_url_format": "steam/apps/%s/${FILENAME}?t=1" % a,
+        "library_capsule": "h/c.jpg", "library_hero": "h/h.jpg", "header": "h/hd.jpg"}}
+      for a in ids]}}
+hs.api_get = fake_api
+hs.ART_BATCH = 2
+out = hs.resolve_art_assets(["11", "22", "33", "44", "55"])
+print(len(calls), len(out), sorted(out))
+`)
+	if got != "3 5 ['11', '22', '33', '44', '55']" {
+		t.Fatalf("batching = %q", got)
+	}
+}
+
+// STEAM-ART: the second listing uses the cache (no request); entries older
+// than the TTL are refreshed; a spent budget or failed request still uses
+// stale cache entries instead of failing.
+func TestSteamArtAssetsCacheTTL(t *testing.T) {
+	t.Setenv("PLATYPUS_PLUGIN_DATA", t.TempDir())
+	got := pyRun(t, `
+import time
+hs.art_cache = None
+calls = []
+def fake_api(url, token=None):
+    calls.append(1)
+    return {"response": {"store_items": [{"appid": 77, "assets": {
+      "asset_url_format": "steam/apps/77/${FILENAME}?t=AAA",
+      "library_capsule": "h/c.jpg", "library_hero": "h/h.jpg", "header": "h/hd.jpg"}}]}}
+hs.api_get = fake_api
+first = hs.resolve_art_assets(["77"])
+def boom(url, token=None):
+    raise IOError("network down")
+hs.api_get = boom
+second = hs.resolve_art_assets(["77"])  # fresh cache: no request
+ok_cache = (first == second and len(calls) == 1)
+hs.ART_TTL = -1  # everything is stale now
+def fake2(url, token=None):
+    calls.append(1)
+    return {"response": {"store_items": [{"appid": 77, "assets": {
+      "asset_url_format": "steam/apps/77/${FILENAME}?t=BBB",
+      "library_capsule": "h/c.jpg", "library_hero": "h/h.jpg", "header": "h/hd.jpg"}}]}}
+hs.api_get = fake2
+third = hs.resolve_art_assets(["77"])  # stale: refetched
+ok_refresh = ("BBB" in third["77"]["coverUrl"] and len(calls) == 2)
+hs.ART_TTL = -1
+hs.api_get = boom
+stale = hs.resolve_art_assets(["77"], time.time() - 1)  # spent budget, network down
+ok_stale = (stale == third)
+print(ok_cache, ok_refresh, ok_stale, len(calls))
+`)
+	if got != "True True True 2" {
+		t.Fatalf("cache/ttl = %q", got)
+	}
+}
+
 // STEAM-9: the game's exe often sits in a subfolder of the install.
 func TestSteamFindExecutableSearchesSubfolders(t *testing.T) {
 	dir := t.TempDir()
