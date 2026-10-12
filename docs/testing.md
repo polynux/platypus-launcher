@@ -101,9 +101,64 @@ Nothing enforces this yet — see "Categories" below for the guard.
 ("auth.status never served the refreshed QR code" after its 15 s
 deadline) and passes alone in 1.5 s: a load flake, not a logic failure.
 
-## After (fill in at the end)
+## After (2026-10-13)
 
-(TODO)
+Default run, `nproc` = 16, `-count=1`: **Go 28 s wall + vitest ~13 s +
+desktop 0.7 s ≈ 42 s serial, 0 failures** (was: Go 279 s wall with 1
+load flake + vitest 29 s ≈ 310 s). No test in the default run touches
+the network (refused by guards, see below).
+
+### Go: 28 s wall (was 279 s)
+
+| Package | Before | After | How |
+|---|---|---|---|
+| internal/app | 277.7 s | 25.1 s | echo binary built once per run, not per test (cold GOCACHE was the 8.6 s/fixture); build runs with the real HOME/GOCACHE |
+| internal/plugtest | 80.0 s | 4.5–5.9 s | 6 full protocol conformance suites → slow (`RequireSlow`) |
+| plugins/steam-standalone | 85.9 s | ~11 s | 8 slowest auth/QR/download-pacing tests → slow |
+| internal/stores | 15.3 s | 9.6 s | echo binary built once per run |
+| plugins/epic-legendary | 11.2 s | 10.6 s | unchanged (real Python plugin, kept in default) |
+| plugins/gog-gogdl | 10.9 s | 10.6 s | unchanged (same) |
+| internal/steamcm | 8.8 s | 8.8 s | unchanged (heartbeat intervals are the product's) |
+| internal/session | 6.7 s | 6.7 s | unchanged |
+| everything else | — | ≤ 6 s | — |
+
+Slow suites, opt-in (`PLATYPUS_TEST_SLOW=1`, measured): plugtest 78 s,
+steam-standalone 67 s — both pass.
+
+### Vitest: ~13 s (was 29.1 s), same 642 tests, 0 errors
+
+`pool: 'vmThreads'` (one jsdom per worker, per-file isolation kept):
+29.1 s → 12.4–13.0 s. The pool switch exposed a leaked 300 ms debounce
+timer in `versions-gamepage.test.tsx` (`previewCommand` missing from the
+file's `LauncherApi` mock → unhandled error after teardown); the mock
+now stubs it, like `game-settings-modal.test.tsx` does.
+
+Desktop shell: 31 tests, 0.7 s, unchanged.
+
+### Flakes
+
+- `go test -race -count=5 ./internal/app/`: pass, 210 s.
+- `TestSocialWithTheEchoPlugin` ("not connected to the store" under
+  load): the friends session can flap between the connected-wait and
+  `SetSocialStatus` (the manager reconnects on its own). The test now
+  retries a transient "not connected" with a 15 s deadline instead of
+  failing; wrong statuses and missing methods still fail at once. Same
+  treatment for echo-b in `TestTwoStoresHaveTheirOwnFriends`.
+- `TestSteamQRRefresh` (15 s deadline waited out under full-suite load;
+  passes solo in 1.5 s): moved to slow with the other QR/auth
+  polling tests. `TestSteamLegacyInstallFolderKeepsWorking` varied
+  0.9–10.9 s with load (paced downloads): moved to slow too.
+
+### Follow-ups (not done)
+
+- `TestSteamAuth` takes ~15 s even solo against the fake CM; the wait
+  is in the login polling path, not the test. Worth profiling separately.
+- steamcm heartbeat tests (2 s each) and the 2 s "no duplicate refresh"
+  stabilize windows in app auth/stats tests use the product's real
+  intervals; shortening them means injecting test clocks.
+- Mass `t.Parallel()` is blocked on `t.Setenv("HOME", …)` (15 call
+  sites in `internal/app`); the App would need explicit dirs instead of
+  HOME reads first.
 
 ## Categories
 
@@ -116,7 +171,9 @@ deadline) and passes alone in 1.5 s: a load flake, not a logic failure.
   hosts. None exist yet; the guard fails the default run if one appears.
 - Scripts (root package.json): `test:fast` (default, no network, no
   slow), `test:slow`, `test:network`, `test:all`. `bun run test` keeps
-  meaning what CI and agents use today (fast UI set); see below.
+  meaning what CI and agents use today (UI + desktop only, fast set) —
+  deliberate: CI already runs Go separately, and agents keep a short
+  command for the UI while iterating.
 
 Helpers: `internal/testenv` (`RequireNetwork(t)`, `RequireSlow(t)`).
 Go network guard: `internal/testenv` installs an `http.DefaultTransport`

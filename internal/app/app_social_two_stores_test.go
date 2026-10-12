@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // installEchoB puts echo-b next to echo: its folder holds the manifest and the
@@ -56,8 +57,19 @@ func TestTwoStoresHaveTheirOwnFriends(t *testing.T) {
 		t.Fatalf("both stores show the same user %q", byID["echo"])
 	}
 
-	// A status goes to the store it was set on, and only there.
-	if err := a.SetSocialStatus("echo-b", "busy"); err != nil {
+	// A status goes to the store it was set on, and only there. Like the
+	// single-store test, a transient "not connected" waits for the
+	// reconnect instead of failing.
+	var err error
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		err = a.SetSocialStatus("echo-b", "busy")
+		if err == nil || err.Error() != "not connected to the store" || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
 		t.Fatalf("SetSocialStatus on echo-b: %v", err)
 	}
 	if statuses, _ := echoRecorded(t, a); len(statuses) != 0 {
