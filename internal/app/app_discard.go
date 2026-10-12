@@ -21,7 +21,7 @@ func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 	if !ok || !b.a.plugins.Has(j.Source, "discard") {
 		return jobs.ErrDiscardUnsupported
 	}
-	params, err := discardParams(j, b.a.settings.GamesFolder())
+	params, err := discardParamsFor(j, b.a.settings.GamesFolder(), b.a.homeDir())
 	if err != nil {
 		return err
 	}
@@ -37,6 +37,12 @@ func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 // plugin install folder it ran in. The plugin finds the game's own subfolder
 // itself. Verify and move jobs have no downloaded data, so they have none.
 func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
+	home, _ := os.UserHomeDir()
+	return discardParamsFor(j, gamesRoot, home)
+}
+
+// discardParamsFor is discardParams with an explicit home (issue #41).
+func discardParamsFor(j types.Job, gamesRoot, home string) (map[string]any, error) {
 	if j.Kind == jobs.KindUninstall {
 		return nil, fmt.Errorf("an uninstall has no downloaded data")
 	}
@@ -44,7 +50,7 @@ func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
 		// These work on the installed game: discarding would delete it.
 		return nil, jobs.ErrNoData
 	}
-	if err := checkDiscardDir(j.InstallDir, gamesRoot); err != nil {
+	if err := checkDiscardDirFor(j.InstallDir, gamesRoot, home); err != nil {
 		return nil, err
 	}
 	return map[string]any{"jobId": j.ID, "id": j.StoreGameID, "kind": j.Kind, "installDir": j.InstallDir}, nil
@@ -56,6 +62,11 @@ func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
 // always a subfolder of it, or a folder the user picked on purpose).
 func checkDiscardDir(dir, gamesRoot string) error {
 	home, _ := os.UserHomeDir()
+	return checkDiscardDirFor(dir, gamesRoot, home)
+}
+
+// checkDiscardDirFor is checkDiscardDir with an explicit home (issue #41).
+func checkDiscardDirFor(dir, gamesRoot, home string) error {
 	return checkFolderFor(dir, gamesRoot, "clean", home)
 }
 

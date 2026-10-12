@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,6 +82,10 @@ type Options struct {
 	// Timings overrides the crash/restart timings for tests. Zero fields
 	// keep the defaults.
 	Timings *Timings
+	// Env adds variables to every plugin process's environment (issue #41:
+	// tests pass fake-store knobs like ECHO_STEP_MS directly instead of
+	// setting process-global state, so tests can run parallel).
+	Env map[string]string
 }
 
 type Manager struct {
@@ -89,6 +94,7 @@ type Manager struct {
 	dataDir   string
 	trust     *settings.Store
 	home      string
+	env       map[string]string
 	onNotify  NotifyFunc
 	onExit    func(string, error)
 	onReady   func(string)
@@ -114,6 +120,7 @@ func NewManager(o Options) *Manager {
 		dataDir:   o.DataDir,
 		trust:     o.Settings,
 		home:      home,
+		env:       maps.Clone(o.Env),
 		onNotify:  o.OnNotify,
 		onExit:    o.OnExit,
 		onReady:   o.OnReady,
@@ -482,6 +489,7 @@ func (m *Manager) process(id string) (*process, error) {
 		protocols: m.protocols,
 		offered:   offered,
 		transport: transport,
+		env:       maps.Clone(m.env),
 		onExit:    onExit,
 		onReady:   onReady,
 		id:        id,
