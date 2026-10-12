@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render as rtlRender, fireEvent, within } from '@testing-library/react';
+import { render as rtlRender, cleanup, fireEvent, within } from '@testing-library/react';
 import { Dashboard } from '../Dashboard';
 import { LibraryView, sourceChips } from '../LibraryView';
 import type { Game } from '../../types';
@@ -53,13 +53,37 @@ const lib = (games: Game[], over: Record<string, unknown> = {}) =>
 
 describe('Library', () => {
   it('L1: chips only for stores that have games', () => {
-    expect(sourceChips([mk('a'), mk('b', { store: 'custom' })])).toEqual(['all', 'steam']);
+    expect(sourceChips([mk('a'), mk('b', { store: 'custom' })])).toEqual(['all', 'steam', 'custom']);
     expect(sourceChips([mk('a'), mk('g', { store: 'gog' }), mk('x', { store: 'itch' as Game['store'] })])).toEqual(['all', 'steam', 'gog', 'itch']);
+    // Sideloaded games get their chip last, after plugin stores.
+    expect(sourceChips([mk('a'), mk('x', { store: 'itch' as Game['store'] }), mk('c', { store: 'custom' })])).toEqual(['all', 'steam', 'itch', 'custom']);
     // One store has nothing to choose between: no store chips at all, two or more show them.
     expect(lib([mk('a')]).queryByRole('radio', { name: 'steam' })).toBeNull();
     const { queryByRole } = lib([mk('a'), mk('g', { store: 'gog' })]);
     expect(queryByRole('radio', { name: 'gog' })).toBeTruthy();
     expect(queryByRole('radio', { name: 'steam' })).toBeTruthy();
+  });
+  it('L4: sideloaded chip appears with sideloaded games, absent without; selecting it shows only custom games', () => {
+    // Sideloaded games alone are one store: no chips, like any single store.
+    expect(lib([mk('c', { store: 'custom' })]).queryByRole('radio', { name: 'sideloaded' })).toBeNull();
+    cleanup();
+    // No sideloaded games: no chip.
+    expect(lib([mk('a'), mk('g', { store: 'gog' })]).queryByRole('radio', { name: 'sideloaded' })).toBeNull();
+    cleanup();
+    const games = [mk('a'), mk('c', { store: 'custom', title: 'Sideload Gem' })];
+    const onSource = vi.fn();
+    const { getByRole } = lib(games, { onSource });
+    const chip = getByRole('radio', { name: 'sideloaded' });
+    expect(chip).toBeTruthy();
+    // The chip carries an icon sized like the PluginLogo xs in the other chips.
+    expect(chip.querySelector('svg')?.getAttribute('class')).toMatch(/h-4/);
+    fireEvent.click(chip);
+    expect(onSource).toHaveBeenCalledWith('custom');
+    cleanup();
+    // Filtering by source 'custom' shows only the sideloaded games.
+    const { getAllByRole: rows } = lib(games, { source: 'custom' });
+    const titles = rows('row').slice(1).map((r) => within(r).getAllByRole('cell')[1].textContent);
+    expect(titles).toEqual(['Sideload Gem']);
   });
   it('L2: sorts by title and hours with aria-sort', () => {
     const games = [mk('b', { playtime_minutes: 60 }), mk('a', { playtime_minutes: 600 }), mk('c', { playtime_minutes: 6 })];

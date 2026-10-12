@@ -1,5 +1,5 @@
 import React, { memo, useDeferredValue, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, LogIn, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
@@ -53,10 +53,10 @@ export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver:
 const sortValue = (g: Game, k: SortKey): string | number =>
   k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? sortKey(g) : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
 
-/** Source chips come from what the library really holds: no chip for a store with zero games. */
+/** Source chips come from what the library really holds: no chip for a store with zero games. Sideloaded games get their chip last. */
 export function sourceChips(games: Game[]): (StoreType | 'all')[] {
   const present = new Set(games.map((g) => g.store));
-  return ['all', ...CORE_SOURCES.filter((s) => present.has(s)), ...[...present].filter((s) => s !== 'custom' && !CORE_SOURCES.includes(s))];
+  return ['all', ...CORE_SOURCES.filter((s) => present.has(s)), ...[...present].filter((s) => s !== 'custom' && !CORE_SOURCES.includes(s)), ...(present.has('custom') ? ['custom' as StoreType] : [])];
 }
 
 /** Games with no value for the key (no tier, never played...) stay last in both directions. */
@@ -321,6 +321,11 @@ export function LibraryView(p: LibraryProps) {
                   label:
                     s === 'all' ? (
                       'all'
+                    ) : s === 'custom' ? (
+                      <span className="inline-flex items-center gap-1.5 leading-none">
+                        <PackagePlus className="h-4 w-4" aria-hidden />
+                        <span>sideloaded</span>
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
                         <PluginLogo src={p.sourceLogos?.[s]} name={storeLabel(s)} size="xs" />
