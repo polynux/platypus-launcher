@@ -191,7 +191,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
         <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
           {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.release_year ? String(g.release_year) : null, g.update_available && 'update'].filter(Boolean).join(' · ')}
         </div>
-        {cardCompat(g) && <CompatChip game={g} className="mt-1.5" />}
+        {cardCompat(g) || g.fix_info?.deck ? <CompatChip game={g} className="mt-1.5" /> : null}
       </div>
     </button>
   );

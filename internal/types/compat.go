@@ -13,6 +13,8 @@ type Compat struct {
 	Native bool `json:"native"`
 	// ProtonDB is the community rating, nil when there is none to show.
 	ProtonDB *ProtonRating `json:"protondb,omitempty"`
+	// Deck is Steam's Deck verdict, nil when there is none to show.
+	Deck *DeckRating `json:"deck,omitempty"`
 	// RatingsOnline says whether Platypus may fetch ratings from the network
 	// (the "Fetch ratings online" setting).
 	RatingsOnline bool `json:"ratings_online"`
@@ -50,6 +52,17 @@ type ProtonRating struct {
 	NoReports  bool   `json:"no_reports,omitempty"`
 	FewReports bool   `json:"few_reports,omitempty"`
 	URL        string `json:"url"`
+}
+
+// DeckRating is Steam's Deck verdict for an app. FetchedAt is when Steam
+// answered, so the UI can say "as of"; Stale means a newer answer is being
+// fetched. Notes are the short caveats worth showing, if any.
+type DeckRating struct {
+	Rating    string   `json:"rating"` // "verified" | "playable" | "unsupported"
+	Notes     []string `json:"notes,omitempty"`
+	FetchedAt int64    `json:"fetched_at"` // unix seconds
+	Stale     bool     `json:"stale,omitempty"`
+	URL       string   `json:"url"`
 }
 
 // CompatBadge is one DRM or anti-cheat fact. Kind is the badge's type

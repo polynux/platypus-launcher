@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
 import { PluginLogo } from './PluginLogo';
 import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
-import { TIER_LABEL, ratingLine } from '../lib/compat';
+import { DECK_LABEL, TIER_LABEL, ratingLine } from '../lib/compat';
 import { normalizeSettings } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
@@ -243,6 +243,16 @@ export function GamePage(p: GamePageProps) {
             : info.steam_app_id
               ? 'not fetched yet'
               : 'no Steam AppID',
+    ],
+    [
+      'Steam Deck',
+      !info
+        ? '…'
+        : info.deck?.rating
+          ? DECK_LABEL[info.deck.rating] ?? info.deck.rating
+          : info.steam_app_id
+            ? 'not rated yet'
+            : 'no Steam AppID',
     ],
   ];
   const compat = fix

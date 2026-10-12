@@ -46,6 +46,20 @@ export function tierFilterValue(g: Game): string {
 export const TIER_FILTERS = ['all', 'native', 'platinum', 'gold', 'silver', 'bronze', 'borked', 'none'] as const;
 export type TierFilter = (typeof TIER_FILTERS)[number];
 
+/** What a Steam Deck verdict means for the player, in one word. */
+export const DECK_LABEL: Record<string, string> = {
+  verified: 'Verified',
+  playable: 'Playable',
+  unsupported: 'Unsupported',
+};
+
+/** The tooltip of a Steam Deck badge: the verdict, its caveats, and the source. */
+export function deckTitle(rating: string, notes?: string[] | null): string {
+  const head = `Steam Deck: ${DECK_LABEL[rating] ?? rating}.`;
+  const body = (notes ?? []).filter(Boolean).join(' ');
+  return `${head}${body ? ` ${body}` : ''} Steam Deck compatibility, from Steam.`;
+}
+
 /** YYYY-MM-DD in UTC for a unix time in seconds: the "as of" and "checked on" dates. */
 export function asOfDate(unix: number): string {
   return new Date(unix * 1000).toISOString().slice(0, 10);

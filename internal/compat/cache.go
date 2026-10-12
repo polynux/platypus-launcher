@@ -23,6 +23,7 @@ type Cache struct {
 type cacheFile struct {
 	Version  int                    `json:"version"`
 	ProtonDB map[string]ProtonEntry `json:"protondb,omitempty"`
+	Deck     map[string]DeckEntry   `json:"deck,omitempty"`
 	Local    map[string]LocalEntry  `json:"local,omitempty"`
 	Wiki     map[string]WikiEntry   `json:"pcgw,omitempty"`
 }
@@ -36,6 +37,15 @@ type ProtonEntry struct {
 	Confidence string    `json:"confidence,omitempty"`
 	Total      int       `json:"total,omitempty"`
 	Score      float64   `json:"score,omitempty"`
+}
+
+// DeckEntry is one Steam Deck verdict for a Steam AppID. Found false means
+// Steam has no verdict for the app.
+type DeckEntry struct {
+	Found     bool      `json:"found"`
+	FetchedAt time.Time `json:"fetched_at"`
+	Rating    string    `json:"rating,omitempty"`
+	Notes     []string  `json:"notes,omitempty"`
 }
 
 // WikiEntry is one PCGamingWiki answer for a Steam AppID. Found false means
@@ -90,6 +100,25 @@ func (c *Cache) SetProtonDB(appID string, e ProtonEntry) error {
 		c.data.ProtonDB = map[string]ProtonEntry{}
 	}
 	c.data.ProtonDB[appID] = e
+	return c.saveLocked()
+}
+
+// Deck returns the saved Steam Deck verdict for an AppID.
+func (c *Cache) Deck(appID string) (DeckEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.data.Deck[appID]
+	return e, ok
+}
+
+// SetDeck saves a Steam Deck verdict and writes the file.
+func (c *Cache) SetDeck(appID string, e DeckEntry) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.data.Deck == nil {
+		c.data.Deck = map[string]DeckEntry{}
+	}
+	c.data.Deck[appID] = e
 	return c.saveLocked()
 }
 

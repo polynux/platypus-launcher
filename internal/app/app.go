@@ -475,6 +475,11 @@ func (a *App) applyFixes(games []types.Game) {
 				return compat.Rating{}, false
 			}
 			return a.compat.ProtonDBCached(appID)
+		}, func(appID string) (compat.DeckResult, bool) {
+			if a.compat == nil {
+				return compat.DeckResult{}, false
+			}
+			return a.compat.DeckRatingCached(appID)
 		})
 	}
 }

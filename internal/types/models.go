@@ -43,6 +43,11 @@ type GameFixInfo struct {
 	Winetricks   []string          `json:"winetricks"`    // e.g. ["vcrun2019", "corefonts"]
 	DLLOverrides map[string]string `json:"dll_overrides"` // e.g. {"dxgi": "n,b"}
 	LaunchArgs   string            `json:"launch_args"`   // Recommended launch options
+	// Deck is Steam's Deck verdict ("verified", "playable" or "unsupported"),
+	// "" when Steam has no verdict. DeckNotes are its short caveats, if any.
+	// The library cards read them: a card shows the Deck badge beside the tier.
+	Deck      string   `json:"deck,omitempty"`
+	DeckNotes []string `json:"deck_notes,omitempty"`
 }
 
 // Sources that aren't store plugins. Any other Game.Source is a plugin id.
