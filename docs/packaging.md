@@ -36,4 +36,5 @@ platypus
 
 `PLATYPUS_PLUGINS` only when the plugin folder must live apart from data.
 Steam installs are still found at `~/.local/share/Steam` first;
-`$XDG_DATA_HOME/Steam` joins as an extra candidate.
+`$XDG_DATA_HOME/Steam` joins as an extra candidate. `PLATYPUS_STEAM_ROOT`
+pins the Steam lookup to one folder (packagers, test fixtures).
