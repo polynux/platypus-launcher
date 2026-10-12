@@ -252,8 +252,12 @@ func (c *Client) GetItemAssets(appID int) (StoreAssets, error) {
 	var body struct {
 		Response struct {
 			StoreItems []struct {
-				Name   string            `json:"name"`
-				Assets map[string]string `json:"assets"`
+				Name string `json:"name"`
+				// Assets mixes strings (file paths) with numbers and bools
+				// the lookup ignores (e.g. last_modified); decode raw and
+				// read only the string values, so new or numeric fields
+				// can never break the decode.
+				Assets map[string]json.RawMessage `json:"assets"`
 			} `json:"store_items"`
 		} `json:"response"`
 	}
@@ -265,7 +269,14 @@ func (c *Client) GetItemAssets(appID int) (StoreAssets, error) {
 		return StoreAssets{}, nil
 	}
 	item := body.Response.StoreItems[0]
-	assets := item.Assets
+	assets := map[string]string{}
+	for k, raw := range item.Assets {
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			continue // a number, bool or object: not a file path
+		}
+		assets[k] = s
+	}
 	if len(assets) == 0 {
 		return StoreAssets{Name: strings.TrimSpace(item.Name)}, nil
 	}

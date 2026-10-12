@@ -231,6 +231,10 @@ func browseServer(t *testing.T, body string, status int) *httptest.Server {
 
 const rivageBrowse = `{"response":{"store_items":[{"name":"Rivage","assets":{
 	"asset_url_format":"steam/apps/4094660/${FILENAME}?t=1728660000",
+	"main_capsule":"hash_0/main_capsule.jpg",
+	"small_capsule":"hash_0/small_capsule.jpg",
+	"hero_capsule":"hash_0/hero_capsule.jpg",
+	"page_background":"hash_0/page_bg.jpg",
 	"library_capsule":"hash_a/library_capsule.jpg",
 	"library_capsule_2x":"hash_b/library_capsule_2x.jpg",
 	"library_hero":"hash_c/library_hero.jpg",
@@ -238,7 +242,10 @@ const rivageBrowse = `{"response":{"store_items":[{"name":"Rivage","assets":{
 	"header":"hash_e/header.jpg",
 	"header_2x":"hash_f/header_2x.jpg",
 	"library_logo":"hash_g/logo.png",
-	"library_logo_2x":"hash_h/logo_2x.png"
+	"library_logo_2x":"hash_h/logo_2x.png",
+	"last_modified":1728660000,
+	"package_discount":0,
+	"library_hero_is_animated":false
 }}]}}`
 
 func TestGetItemAssetsPrefers2x(t *testing.T) {
@@ -312,8 +319,39 @@ func TestGetItemAssetsEmptyWhenNoAssets(t *testing.T) {
 	}
 }
 
-func TestGetItemAssetsErrorWhenAPIFails(t *testing.T) {
-	srv := browseServer(t, "", http.StatusInternalServerError)
+// Regression: the live assets object mixes file paths with numbers and
+// bools (last_modified, …). Non-string values must be skipped, never fail
+// the decode — Rivage fell back to the 404 fixed names over this.
+func TestGetItemAssetsIgnoresNonStringFields(t *testing.T) {
+	body := `{"response":{"store_items":[{"name":"Rivage","assets":{
+		"asset_url_format":"steam/apps/4094660/${FILENAME}?t=1728660000",
+		"main_capsule":"hash_0/main_capsule.jpg",
+		"small_capsule":"hash_0/small_capsule.jpg",
+		"hero_capsule":"hash_0/hero_capsule.jpg",
+		"page_background":"hash_0/page_bg.jpg",
+		"library_capsule_2x":"hash_b/cover_2x.jpg",
+		"library_hero_2x":"hash_d/hero_2x.jpg",
+		"last_modified":1728660000,
+		"package_discount":0,
+		"library_hero_is_animated":false,
+		"discount_block":null
+	}}]}}`
+	srv := browseServer(t, body, 0)
+	defer srv.Close()
+	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
+	got, err := c.GetItemAssets(4094660)
+	if err != nil {
+		t.Fatalf("decode with numeric/bool/null asset fields: %v", err)
+	}
+	if !strings.Contains(got.CoverURL, "hash_b/cover_2x.jpg") {
+		t.Fatalf("cover = %q, want the 2x path", got.CoverURL)
+	}
+	if !strings.Contains(got.BannerURL, "hash_d/hero_2x.jpg") {
+		t.Fatalf("banner = %q, want the 2x path", got.BannerURL)
+	}
+}
+
+func TestGetItemAssetsErrorWhenAPIFails(t *testing.T) {	srv := browseServer(t, "", http.StatusInternalServerError)
 	defer srv.Close()
 	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
 	if _, err := c.GetItemAssets(123); err == nil {

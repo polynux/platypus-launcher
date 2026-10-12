@@ -428,12 +428,17 @@ func TestApplyOnlineArtRivageHashedAssets(t *testing.T) {
 	f.detail = `{"4094660":{"success":true,"data":{"name":"Rivage","release_date":{"date":"2025"}}}}`
 	f.browse = `{"name":"Rivage","assets":{
 		"asset_url_format":"steam/apps/4094660/${FILENAME}?t=1728660000",
+		"main_capsule":"hash_0/main_capsule.jpg",
+		"small_capsule":"hash_0/small_capsule.jpg",
+		"hero_capsule":"hash_0/hero_capsule.jpg",
+		"page_background":"hash_0/page_bg.jpg",
 		"library_capsule":"hash_a/rivage_cover.jpg",
 		"library_capsule_2x":"hash_b/rivage_cover_2x.jpg",
 		"library_hero":"hash_c/rivage_hero.jpg",
 		"library_hero_2x":"hash_d/rivage_hero_2x.jpg",
 		"header":"hash_e/rivage_header.jpg",
-		"library_logo":"hash_f/rivage_logo.png"
+		"library_logo":"hash_f/rivage_logo.png",
+		"last_modified":1728660000
 	}}`
 	// Only the hashed files exist; the fixed names all 404.
 	f.images["rivage_cover_2x.jpg"] = png
