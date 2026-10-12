@@ -249,6 +249,14 @@ func (a *App) SetRatingsOnline(on bool) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
+// SetArtworkOnline saves the "Find artwork online" switch (issue #36).
+func (a *App) SetArtworkOnline(on bool) (types.LauncherSettings, error) {
+	if err := a.settings.SetArtworkOnline(on); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
 // pluginName is the name a plugin's game is credited to in the UI.
 func (a *App) pluginName(game types.Game) string {
 	if p, ok := a.plugins.Plugin(game.Source); ok && p.Manifest.Name != "" {

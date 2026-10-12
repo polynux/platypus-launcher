@@ -97,6 +97,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
       <RatingsSetting onNotify={onNotify} />
 
+      <ArtworkSetting onNotify={onNotify} />
+
       <CloudSavesDefaults plugins={plugins} />
     </div>
   );
@@ -142,6 +144,45 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
   );
 }
 
+/** "Find artwork online" for sideloaded games (issue #36): Steam's public
+ *  store search after an add, and the on-demand finder in the art panel. Off,
+ *  nothing goes out: the placeholder art stays and no search runs. */
+export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.artwork_online ?? true))
+      .catch(() => setOn(true));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setArtworkOnline(next))
+      .then((s) => {
+        setOn(s.artwork_online ?? next);
+        onNotify(next ? 'Sideloaded games will look up their art online' : 'Artwork stays offline');
+      })
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <section className={SECTION}>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">Sideloaded artwork lookup</h2>
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+            Find cover and banner art online for games you added by hand, from Steam's public store. Off, Platypus keeps
+            the placeholder and asks nothing new; art you already have stays.
+          </p>
+        </div>
+        <Switch aria-label="Find artwork online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+      </div>
+      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
+        <p>Artwork: Steam store search and CDN images (store.steampowered.com).</p>
+      </div>
+    </section>
+  );
+}
 /** Where new Wine prefixes are created (issue #37): one folder per game in
  *  this folder, unless the game has its own prefix. Changing it never moves
  *  or deletes existing prefixes; empty resets it to the default. */

@@ -87,7 +87,7 @@ func (a *App) customization(gameID string) (types.Customization, error) {
 		return types.Customization{}, fmt.Errorf("customization is not available")
 	}
 	e := s.Get(gameID)
-	c := types.Customization{Title: e.Title, SortTitle: e.SortTitle, Art: map[string]string{}}
+	c := types.Customization{Title: e.Title, SortTitle: e.SortTitle, Art: map[string]string{}, ArtSource: e.ArtSource, ArtSourceName: e.ArtSourceName}
 	for kind := range e.Art {
 		c.Art[string(kind)] = s.URL(gameID, kind)
 	}

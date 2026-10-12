@@ -52,6 +52,8 @@ export type Game = Omit<gen.Game, 'settings' | 'features'> & {
 /** The kinds of art a game can be customized with. */
 export type ArtKind = 'cover' | 'banner' | 'logo' | 'icon' | 'background';
 export type Customization = gen.Customization;
+/** One online art search hit: a Steam app whose art applies to a sideloaded game. */
+export type ArtCandidate = gen.ArtCandidate;
 
 export type InstallLocation = gen.InstallLocation;
 export type InstallFolderCheck = gen.InstallFolderCheck;

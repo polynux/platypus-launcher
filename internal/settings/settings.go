@@ -87,6 +87,9 @@ type file struct {
 	// FetchRatings is the "Fetch ratings online" switch. A pointer: unset
 	// means on (see compat.go).
 	FetchRatings *bool `json:"fetch_ratings,omitempty"`
+	// FindArtwork is the "Find artwork online" switch (issue #36). A
+	// pointer: unset means on, like FetchRatings.
+	FindArtwork *bool `json:"find_artwork,omitempty"`
 	// PrefixesFolder is where Wine prefixes are created (issue #37). Empty
 	// means the default (<data>/prefixes).
 	PrefixesFolder string `json:"prefixes_folder,omitempty"`

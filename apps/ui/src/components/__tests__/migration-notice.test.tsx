@@ -14,6 +14,7 @@ vi.mock('../../effect/runtime', () => ({
   onSession: () => () => {},
   onPlaytime: () => () => {},
   onLibraryPartial: () => () => {},
+  onLibrary: () => () => {},
   onCloud: () => () => {},
   onSocial: () => () => {},
   onChat: () => () => {},

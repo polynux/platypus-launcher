@@ -90,6 +90,12 @@ export namespace types {
     list: types.Achievement[];
   }
 
+  export interface ArtCandidate {
+    app_id: number;
+    name: string;
+    thumb_url: string;
+  }
+
   export interface AuthField {
     id: string;
     label: string;
@@ -202,6 +208,8 @@ export namespace types {
     title: string;
     sort_title: string;
     art: Record<string, string>;
+    art_source?: string;
+    art_source_name?: string;
   }
 
   export interface DRM {
@@ -407,6 +415,7 @@ export namespace types {
     default_games_folder: string;
     cancel_cleanup_days: number;
     ratings_online: boolean;
+    artwork_online: boolean;
     prefixes_folder: string;
     default_prefixes_folder: string;
   }

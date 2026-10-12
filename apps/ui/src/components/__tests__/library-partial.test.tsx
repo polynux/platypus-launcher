@@ -48,6 +48,7 @@ vi.mock('../../effect/runtime', () => ({
     state.partial = cb;
     return () => {};
   },
+  onLibrary: () => () => {},
 }));
 
 import { App } from '../../App';

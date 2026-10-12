@@ -22,6 +22,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/ledger"
 	"platypus/internal/migrate"
+	"platypus/internal/onlineart"
 	"platypus/internal/playlog"
 	"platypus/internal/plugins"
 	"platypus/internal/runner"
@@ -69,6 +70,9 @@ type App struct {
 	moves         coreMoves
 	custom        customStore // the user's titles and art (app_customize.go)
 	ledger        *ledger.Ledger
+	// artwork is the online art lookup for sideloaded games (issue #36).
+	// Nil means the live Steam endpoints; tests inject an httptest client.
+	artwork *onlineart.Client
 	// sessionRunning says whether a game has a session open. Nil asks the
 	// session tracker; tests replace it.
 	sessionRunning func(gameID string) bool
@@ -369,12 +373,15 @@ func (a *App) customGames() []types.Game {
 }
 
 // AddCustomGame saves a game the user added by hand: title plus the path of
-// its executable. It shows up in the library from then on.
+// its executable. It shows up in the library from then on. When the "Find
+// artwork online" switch is on, the cover and banner lookup starts in the
+// background (issue #36) and never blocks the add.
 func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 	g, err := a.settings.AddCustomGame(title, executable)
 	if err != nil {
 		return types.Game{}, err
 	}
+	a.maybeAutoArtwork(g.ID, g.Title)
 	return types.Game{
 		ID:          g.ID,
 		Source:      types.SourceCustom,
@@ -754,6 +761,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		DefaultGamesFolder:    settings.DefaultGamesFolder(),
 		CancelCleanupDays:     a.settings.CancelCleanupDays(),
 		RatingsOnline:         a.settings.RatingsOnline(),
+		ArtworkOnline:         a.settings.ArtworkOnline(),
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
 	}
