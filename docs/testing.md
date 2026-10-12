@@ -165,7 +165,8 @@ Desktop shell: 31 tests, 0.7 s, unchanged.
 
 Folders resolve from `PLATYPUS_*` / XDG variables (`internal/paths`), the
 App takes explicit dirs (`app.Options`, resolved once in `cmd/platypus-core`
-main), and the 41 `t.Setenv("HOME", …)` sites are explicit dirs, so 230
+main), and all 43 `t.Setenv("HOME", …)` sites are explicit dirs (41 in
+`internal/…`, 2 steam-standalone cell-id tests via `PLATYPUS_STEAM_ROOT`), so 230
 env-free `internal/app` tests plus the `internal/settings` tests run with
 `t.Parallel()` (`-parallel` caps at GOMAXPROCS = 16). Method as above,
 `-count=1`, `nproc` = 16:
