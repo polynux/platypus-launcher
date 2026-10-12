@@ -14,8 +14,8 @@ import (
 // one StartDirect wins; losers get ErrAlreadyRunning without starting a
 // process, and their return must not clear the winner's tracking.
 func TestConcurrentStartDirectOnlyOneWins(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	tr := NewTracker(func(e types.SessionEvent) {})
+	tr.SetLogDir(t.TempDir())
 
 	const n = 8
 	cmds := make([]*exec.Cmd, n)
@@ -84,8 +84,8 @@ func TestConcurrentStartDirectOnlyOneWins(t *testing.T) {
 
 // CORE-3: a second WatchClient for the same game must not steal the claim.
 func TestWatchClientSecondClaimFails(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	tr := NewTracker(func(e types.SessionEvent) {})
+	tr.SetLogDir(t.TempDir())
 	never := func() int { return 0 }
 	if !tr.WatchClient("game-wc", "Steam", never, 500*time.Millisecond) {
 		t.Fatal("first WatchClient claim failed")

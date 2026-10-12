@@ -822,14 +822,13 @@ func TestOnlyOneJobRunsPerGame(t *testing.T) {
 }
 
 func TestContextBuildsNativeAndWindowsLaunches(t *testing.T) {
-	t.Setenv("HOME", "/home/u")
 	t.Setenv("XDG_DATA_HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", "/cfg")
-	n := Context(false, "/g/tiny", "/ignored", "ignored")
+	n := ContextFor("/home/u", false, "/g/tiny", "/ignored", "ignored")
 	if n.OS != "linux" || n.Home != "/home/u" || n.XDGData != "/home/u/.local/share" || n.XDGConfig != "/cfg" || n.InstallDir != "/g/tiny" || n.PrefixDir != "" || n.WinUser != "" {
 		t.Fatalf("native: %+v", n)
 	}
-	w := Context(true, "/g/tiny", "/p/pfx", "steamuser")
+	w := ContextFor("/home/u", true, "/g/tiny", "/p/pfx", "steamuser")
 	if w.OS != "windows" || w.PrefixDir != "/p/pfx" || w.WinUser != "steamuser" {
 		t.Fatalf("windows: %+v", w)
 	}

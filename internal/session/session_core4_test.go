@@ -15,10 +15,10 @@ import (
 // the per-game log or the failure message. The game's argv echo contains
 // the raw token; both sinks must carry only the redacted form.
 func TestStartDirectRedactsSecretsInLogAndFailure(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	logDir := t.TempDir()
 	events := make(chan types.SessionEvent, 16)
 	tr := NewTracker(func(e types.SessionEvent) { events <- e })
+	tr.SetLogDir(logDir)
 
 	secret := "-AUTH_PASSWORD=s3cret-xyz-123"
 	cmd := exec.Command("sh", "-c", "echo 'echo game "+secret+"'; exit 1")
@@ -55,7 +55,7 @@ drain:
 		t.Fatalf("failure message missing redacted form: %q", failed.Message)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(home, ".local/share/platypus/logs", "game-secret.log"))
+	raw, err := os.ReadFile(filepath.Join(logDir, "game-secret.log"))
 	if err != nil {
 		t.Fatalf("reading log: %v", err)
 	}
