@@ -184,7 +184,8 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
       <h2 className="text-[14px] font-bold">Wine prefix folder</h2>
       <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
         Where new Wine prefixes are created, one folder per game. A game's own prefix setting still wins.
-        Changing this folder does not move or delete existing prefixes — games that already have one keep using it.
+        Changing this folder does not move or delete existing prefixes. Games that already have a prefix keep it:
+        Platypus pins it in their settings.
       </p>
       <form
         className="flex flex-wrap items-center gap-2"

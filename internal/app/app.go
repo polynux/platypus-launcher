@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -743,12 +744,56 @@ func (a *App) launcherSettings() types.LauncherSettings {
 }
 
 // SetPrefixesFolder saves where Wine prefixes are created ("" resets it to
-// the default). Existing prefixes are neither moved nor deleted.
+// the default). Games whose prefix already exists in the old folder keep it:
+// their wine_prefix is pinned to the existing path, so changing the folder
+// never strands their saves. Nothing is moved or deleted.
 func (a *App) SetPrefixesFolder(path string) (types.LauncherSettings, error) {
+	old := a.settings.PrefixesFolder()
+	if old == "" {
+		old = settings.DefaultPrefixesFolder()
+	}
+	if err := a.pinExistingPrefixes(old); err != nil {
+		return a.launcherSettings(), err
+	}
 	if _, err := a.settings.SetPrefixesFolder(path); err != nil {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil
+}
+
+// pinExistingPrefixes pins every game's prefix that already exists as a
+// folder of the old effective prefixes folder: a game with no wine_prefix of
+// its own gets one pointing at the existing path. The pins are ordinary
+// per-game settings, so they show in that game's settings. Folders that are
+// not games cannot be told apart, so every subfolder counts; hidden names and
+// non-folders are ignored. Nothing is moved or deleted. A missing old folder
+// means there is nothing to keep.
+func (a *App) pinExistingPrefixes(old string) error {
+	entries, err := os.ReadDir(old)
+	if err != nil {
+		return nil
+	}
+	saved := a.settings.GameSettings()
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		id := e.Name()
+		if cur, ok := saved[id]["wine_prefix"]; ok {
+			if s, _ := cur.(string); strings.TrimSpace(s) != "" {
+				continue // the game already has a prefix of its own
+			}
+		}
+		next := maps.Clone(saved[id])
+		if next == nil {
+			next = map[string]any{}
+		}
+		next["wine_prefix"] = filepath.Join(old, id)
+		if err := a.settings.SetGameSettings(id, next); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // prefixesFolder is where Wine prefixes are created: the user's choice, or

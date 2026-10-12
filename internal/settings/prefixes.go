@@ -26,7 +26,8 @@ func (s *Store) PrefixesFolder() string {
 // SetPrefixesFolder saves where Wine prefixes are created. An empty path
 // resets it to the default. Anything else must be an absolute path; it is
 // created on demand at launch, so it need not exist yet. Changing the folder
-// never moves or deletes existing prefixes. Returns the saved path.
+// never moves or deletes existing prefixes (App.SetPrefixesFolder pins the
+// ones already there to their paths first). Returns the saved path.
 func (s *Store) SetPrefixesFolder(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		s.mu.Lock()

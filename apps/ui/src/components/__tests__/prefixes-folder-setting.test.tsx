@@ -86,9 +86,10 @@ describe('PrefixesFolderSetting (issue #37)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/absolute path/);
   });
 
-  it('says changing the folder never moves existing prefixes', async () => {
+  it('says changing the folder never moves existing prefixes, which stay pinned', async () => {
     open();
     await screen.findByLabelText('Default Wine prefix folder');
     expect(screen.getByText(/does not move or delete existing prefixes/)).toBeInTheDocument();
+    expect(screen.getByText(/pins it in their settings/)).toBeInTheDocument();
   });
 });
