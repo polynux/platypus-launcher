@@ -26,8 +26,8 @@ func gameWithID(id string, st *settings.Store) types.Game {
 // whose prefix folder exists in the old folder keeps it (pinned in its
 // settings), while a game with no prefix gets the new folder.
 func TestSetPrefixesFolderPinsExistingPrefixes(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	// The old effective folder is the default: <home>/.local/share/platypus/prefixes.
 	old := filepath.Join(home, ".local/share/platypus", "prefixes")
 
@@ -46,14 +46,14 @@ func TestSetPrefixesFolderPinsExistingPrefixes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	st, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := st.SetGameSettings("g2", map[string]any{"wine_prefix": own}); err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st}
+	a := &App{settings: st, optHome: home}
 
 	next := filepath.Join(home, "new-prefixes")
 	ls, err := a.SetPrefixesFolder(next)
@@ -89,22 +89,22 @@ func TestSetPrefixesFolderPinsExistingPrefixes(t *testing.T) {
 // Resetting to the default pins the same way: the old custom folder's
 // prefixes stay where they are.
 func TestSetPrefixesFolderResetPinsExistingPrefixes(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	custom := filepath.Join(home, "custom-prefixes")
 	g2dir := filepath.Join(custom, "g2")
 	if err := os.MkdirAll(g2dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	st, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.SetPrefixesFolder(custom); err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st}
+	a := &App{settings: st, optHome: home}
 
 	ls, err := a.SetPrefixesFolder("")
 	if err != nil {
@@ -121,18 +121,18 @@ func TestSetPrefixesFolderResetPinsExistingPrefixes(t *testing.T) {
 // Chaining A→B→C keeps the prefixes created under each folder: after two
 // switches, g1 still resolves into A and g2 into B.
 func TestSetPrefixesFolderChainingKeepsEarlierPrefixes(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	folderA := filepath.Join(home, ".local/share/platypus", "prefixes")
 	if err := os.MkdirAll(filepath.Join(folderA, "g1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	st, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st}
+	a := &App{settings: st, optHome: home}
 
 	folderB := filepath.Join(home, "prefixes-B")
 	if _, err := a.SetPrefixesFolder(folderB); err != nil {
@@ -167,13 +167,13 @@ func TestSetPrefixesFolderChainingKeepsEarlierPrefixes(t *testing.T) {
 
 // A missing old folder (fresh user) switches without error and pins nothing.
 func TestSetPrefixesFolderWithoutOldFolder(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	st, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st}
+	a := &App{settings: st, optHome: home}
 	next := filepath.Join(home, "prefixes")
 	if _, err := a.SetPrefixesFolder(next); err != nil {
 		t.Fatalf("SetPrefixesFolder: %v", err)

@@ -194,7 +194,7 @@ func (a *App) planMove(game types.Game, parent string) (string, types.MoveCheck,
 	if err != nil {
 		return "", check, err
 	}
-	if err := checkFolder(from, a.settings.GamesFolder(), "move"); err != nil {
+	if err := checkFolderFor(from, a.settings.GamesFolder(), "move", a.homeDir()); err != nil {
 		return "", check, err
 	}
 	parent = filepath.Clean(parent)
@@ -203,7 +203,7 @@ func (a *App) planMove(game types.Game, parent string) (string, types.MoveCheck,
 	if strings.HasPrefix(to, from+string(filepath.Separator)) {
 		return "", check, fmt.Errorf("%s is inside the game's folder", to)
 	}
-	if err := checkFolder(to, a.settings.GamesFolder(), "move into"); err != nil {
+	if err := checkFolderFor(to, a.settings.GamesFolder(), "move into", a.homeDir()); err != nil {
 		return "", check, err
 	}
 	if _, err := os.Lstat(to); err == nil {

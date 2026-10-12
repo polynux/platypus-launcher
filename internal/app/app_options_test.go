@@ -31,6 +31,7 @@ func groupIDs(groups []types.OptionGroup) []string {
 }
 
 func TestEchoOffersOptionsButCoreIgnoresTheUnknownKind(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	got, err := e.a.GetGameOptions(e.game)
 	if err != nil {
@@ -50,6 +51,7 @@ func TestEchoOffersOptionsButCoreIgnoresTheUnknownKind(t *testing.T) {
 }
 
 func TestOptionsAreRememberedAndResentOnUpdate(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	choices := types.InstallOptions{"language": "fr", "dlc": []any{"season"}, "packs": []any{"hd"}, "subtitles": true}
 	j, err := e.a.InstallGameWithOptions(e.game, choices)
@@ -114,6 +116,7 @@ func TestOptionsAreRememberedAndResentOnUpdate(t *testing.T) {
 }
 
 func TestUnownedDLCIsRefusedWhateverTheDialogSays(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	_, err := e.a.InstallGameWithOptions(e.game, types.InstallOptions{"dlc": []any{"deluxe"}})
 	if err == nil || !strings.Contains(err.Error(), "not owned") {
@@ -131,6 +134,7 @@ func TestUnownedDLCIsRefusedWhateverTheDialogSays(t *testing.T) {
 }
 
 func TestUnknownChoicesAreRefused(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	for _, bad := range []types.InstallOptions{
 		{"language": "klingon"},
@@ -147,6 +151,7 @@ func TestUnknownChoicesAreRefused(t *testing.T) {
 }
 
 func TestSizeWithOptionsCountsTheChosenAddOns(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	ctx := context.Background()
 	var plain, with struct {
@@ -174,6 +179,7 @@ func TestSizeWithOptionsCountsTheChosenAddOns(t *testing.T) {
 }
 
 func TestNoOptionCallsWithoutProtocol15OrWithTheCapabilityOff(t *testing.T) {
+	t.Parallel()
 	for name, env := range map[string]*versionsEnv{
 		"over 1.3":          versionsApp(t, allVersions, `["library","install","auth","discard","versions","install-options"]`),
 		"capability not on": versionsApp(t, optionsProtocols, echoCaps),
@@ -203,6 +209,7 @@ func TestNoOptionCallsWithoutProtocol15OrWithTheCapabilityOff(t *testing.T) {
 }
 
 func TestOptionsCombineWithAVersionTarget(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	if err := e.a.PinGameVersion(e.game, types.VersionPin{Kind: types.PinBuild, ID: "b200"}); err != nil {
 		t.Fatal(err)

@@ -35,6 +35,7 @@ func gameOf(source, id, title string) types.Game {
 // A second GetLibrary right after the first lists nothing again: every
 // source is served from the cache.
 func TestLibraryCacheServesFreshSources(t *testing.T) {
+	t.Parallel()
 	a := cacheApp(t,
 		&countingSource{fakeSource: fakeSource{id: "a", games: []types.Game{gameOf("a", "1", "One")}}},
 		&countingSource{fakeSource: fakeSource{id: "b", games: []types.Game{gameOf("b", "1", "Uno")}}},
@@ -64,6 +65,7 @@ func TestLibraryCacheServesFreshSources(t *testing.T) {
 // Invalidating one source re-lists only that source: the other's new games
 // stay unseen until its own entry goes stale.
 func TestLibraryCacheRefreshesOnlyTheInvalidatedSource(t *testing.T) {
+	t.Parallel()
 	sa := &countingSource{fakeSource: fakeSource{id: "a", games: []types.Game{gameOf("a", "1", "One")}}}
 	sb := &countingSource{fakeSource: fakeSource{id: "b", games: []types.Game{gameOf("b", "1", "Uno")}}}
 	a := cacheApp(t, sa, sb)
@@ -91,6 +93,7 @@ func TestLibraryCacheRefreshesOnlyTheInvalidatedSource(t *testing.T) {
 
 // Entries older than the TTL are listed again, so a missed invalidation heals.
 func TestLibraryCacheExpiresAfterTTL(t *testing.T) {
+	t.Parallel()
 	sa := &countingSource{fakeSource: fakeSource{id: "a", games: []types.Game{gameOf("a", "1", "One")}}}
 	a := cacheApp(t, sa)
 	a.libraryEmit = func(types.Library) {}
@@ -109,6 +112,7 @@ func TestLibraryCacheExpiresAfterTTL(t *testing.T) {
 
 // A manual rescan lists every source again, whatever the cache holds.
 func TestRescanLibraryListsEverything(t *testing.T) {
+	t.Parallel()
 	sa := &countingSource{fakeSource: fakeSource{id: "a", games: []types.Game{gameOf("a", "1", "One")}}}
 	sb := &countingSource{fakeSource: fakeSource{id: "b", games: []types.Game{gameOf("b", "1", "Uno")}}}
 	a := cacheApp(t, sa, sb)
@@ -136,6 +140,7 @@ func TestRescanLibraryListsEverything(t *testing.T) {
 // A finished job drops its source from the cache: the next scan re-lists
 // that source and serves the rest cached.
 func TestJobFinishedInvalidatesItsSource(t *testing.T) {
+	t.Parallel()
 	sa := &countingSource{fakeSource: fakeSource{id: "a", games: []types.Game{gameOf("a", "1", "One")}}}
 	sb := &countingSource{fakeSource: fakeSource{id: "b", games: []types.Game{gameOf("b", "1", "Uno")}}}
 	a := cacheApp(t, sa, sb)
@@ -166,6 +171,7 @@ func TestJobFinishedInvalidatesItsSource(t *testing.T) {
 // list: the scan after each completion shows what the store reports now, and
 // a scan with nothing changed lists nothing again.
 func TestLibraryFreshAfterInstallAndUninstall(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	e.a.data = dataplug.NewRegistry()
 	e.a.libraryEmit = func(types.Library) {}

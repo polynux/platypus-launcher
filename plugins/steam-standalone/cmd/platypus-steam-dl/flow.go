@@ -65,10 +65,9 @@ func cellID() uint32 {
 			return uint32(n)
 		}
 	}
-	home, _ := os.UserHomeDir()
 	re := regexp.MustCompile(`"CellIDServerOverride"\s+"(\d+)"`)
-	for _, rel := range []string{".local/share/Steam/config/config.vdf", ".steam/steam/config/config.vdf"} {
-		raw, err := os.ReadFile(filepath.Join(home, rel))
+	for _, cfg := range steamClientConfigs() {
+		raw, err := os.ReadFile(cfg)
 		if err != nil {
 			continue
 		}
@@ -79,6 +78,20 @@ func cellID() uint32 {
 		}
 	}
 	return 0
+}
+
+// steamClientConfigs lists the Steam client's config.vdf candidates: the
+// explicit PLATYPUS_STEAM_ROOT first (issue #41: tests point it at a temp
+// dir instead of setting HOME), then the home-relative ones.
+func steamClientConfigs() []string {
+	if root := os.Getenv("PLATYPUS_STEAM_ROOT"); root != "" && filepath.IsAbs(root) {
+		return []string{filepath.Join(root, "config/config.vdf")}
+	}
+	home, _ := os.UserHomeDir()
+	return []string{
+		filepath.Join(home, ".local/share/Steam/config/config.vdf"),
+		filepath.Join(home, ".steam/steam/config/config.vdf"),
+	}
 }
 
 func dialCM(ctx context.Context, token string) (*steamcm.Session, error) {

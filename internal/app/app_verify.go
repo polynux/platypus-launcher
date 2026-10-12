@@ -76,7 +76,7 @@ func (a *App) verifyFolder(game types.Game) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := checkFolder(folder, a.settings.GamesFolder(), "check"); err != nil {
+	if err := checkFolderFor(folder, a.settings.GamesFolder(), "check", a.homeDir()); err != nil {
 		return "", err
 	}
 	return folder, nil

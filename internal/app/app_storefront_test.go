@@ -7,6 +7,7 @@ import (
 // The embedded store view (issue #17) lists the plugins that declare a
 // storefront: the manifest's URL and domains must reach the UI.
 func TestListStorePluginsExposesStorefront(t *testing.T) {
+	t.Parallel()
 	a, _ := socialEnv(t)
 	var found bool
 	for _, p := range a.ListStorePlugins() {
@@ -29,6 +30,7 @@ func TestListStorePluginsExposesStorefront(t *testing.T) {
 // Closing the store view drops the source's cached listing (issue #17), so
 // what was bought appears. InvalidateLibrary is the UI's call for that.
 func TestInvalidateLibraryDropsTheCache(t *testing.T) {
+	t.Parallel()
 	a, _ := socialEnv(t)
 	a.library.set("echo", nil, nil)
 	if _, _, ok := a.library.fresh("echo"); !ok {

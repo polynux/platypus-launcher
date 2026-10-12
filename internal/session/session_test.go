@@ -12,9 +12,9 @@ import (
 // CORE-1: a window that subscribes after launch must still see the running
 // game via a snapshot API. There was no Snapshot to call at all.
 func TestSnapshotReportsRunningDirectGame(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	events := make(chan types.SessionEvent, 16)
 	tr := NewTracker(func(e types.SessionEvent) { events <- e })
+	tr.SetLogDir(t.TempDir())
 
 	cmd := exec.Command("sleep", "30")
 	if _, err := tr.StartDirect("game-direct", cmd, "sleep 30", nil); err != nil {
@@ -54,9 +54,9 @@ func TestSnapshotReportsRunningDirectGame(t *testing.T) {
 }
 
 func TestSnapshotReportsStartingClientGame(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	events := make(chan types.SessionEvent, 16)
 	tr := NewTracker(func(e types.SessionEvent) { events <- e })
+	tr.SetLogDir(t.TempDir())
 
 	tr.WatchClient("game-client", "Steam", func() int { return 0 }, 300*time.Millisecond)
 

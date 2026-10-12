@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { createChatNotifier, validNotifyMessage } from './chatNotify.ts';
 import { Core } from './core.ts';
 import { resolvePaths } from './paths.ts';
+import { coreEnv, resolveUserData } from './userdata.ts';
 import { APP_ORIGIN, csp, isAppURL, isArtPath, safePath, staticFile, webURL } from './security.ts';
 import { isReloadOrInspect } from './shortcuts.ts';
 import { validPluginId, validStoreBounds, type StorePluginInfo } from './store.ts';
@@ -22,6 +23,11 @@ const runtime = resolvePaths({
 });
 const coreBinary = runtime.coreBinary;
 const distDir = runtime.frontendDist;
+// Window state + Chromium profile (issue #41): redirected config/data moves
+// userData with it, before app.ready; otherwise Electron's default (which
+// already follows XDG_CONFIG_HOME). PLATYPUS_* reaches the core through
+// coreEnv at spawn.
+app.setPath('userData', resolveUserData(process.env, app.getPath('userData')));
 // Set when the page comes from a Vite dev server (hot reload, looser CSP).
 const devURL = !app.isPackaged && process.env.PLATYPUS_DEV_URL ? new URL(process.env.PLATYPUS_DEV_URL) : undefined;
 const devPort = devURL ? Number(devURL.port) : undefined;
@@ -48,7 +54,7 @@ let storesRef: StoreViews | undefined;
 if (!app.requestSingleInstanceLock()) app.quit();
 
 async function startCore(): Promise<Core> {
-  const c = new Core(coreBinary);
+  const c = new Core(coreBinary, [], coreEnv(process.env));
   c.onEvent = (name, data) => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send('platypus:event', name, data);
   };

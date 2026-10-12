@@ -8,14 +8,15 @@ import (
 )
 
 func TestPersistsAcrossOpen(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
+	home := t.TempDir()
 	path := filepath.Join(t.TempDir(), "platypus", "settings.json")
 
-	s, err := Open(path)
+	s, err := OpenWithHome(path, home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.GamesFolder(); got != DefaultGamesFolder() {
+	if got := s.GamesFolder(); got != DefaultGamesFolderFor(home) {
 		t.Fatalf("default games folder = %q", got)
 	}
 	if _, err := s.SetGamesFolder("/mnt/fast/games/"); err != nil {
@@ -28,7 +29,7 @@ func TestPersistsAcrossOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = Open(path)
+	s, err = OpenWithHome(path, home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,9 +45,9 @@ func TestPersistsAcrossOpen(t *testing.T) {
 }
 
 func TestSetGamesFolder(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	s, _ := Open(filepath.Join(t.TempDir(), "settings.json"))
+	s, _ := OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 
 	if got, err := s.SetGamesFolder("~/Library"); err != nil || got != filepath.Join(home, "Library") {
 		t.Errorf("~ expansion: %q, %v", got, err)
@@ -65,6 +66,7 @@ func TestSetGamesFolder(t *testing.T) {
 }
 
 func TestCorruptFileIsMovedAside(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	os.WriteFile(path, []byte("{not json"), 0o644)
@@ -80,10 +82,10 @@ func TestCorruptFileIsMovedAside(t *testing.T) {
 }
 
 func TestCustomGames(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	path := filepath.Join(t.TempDir(), "settings.json")
-	s, _ := Open(path)
+	s, _ := OpenWithHome(path, home)
 
 	if _, err := s.AddCustomGame("My Game", "game.exe"); err == nil {
 		t.Error("relative path accepted")
@@ -115,7 +117,7 @@ func TestCustomGames(t *testing.T) {
 	if err := s.SetGameSettings(g.ID, map[string]any{"runner_id": "auto"}); err != nil {
 		t.Fatal(err)
 	}
-	s, err = Open(path)
+	s, err = OpenWithHome(path, home)
 	if err != nil {
 		t.Fatal(err)
 	}

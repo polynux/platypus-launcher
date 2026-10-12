@@ -12,18 +12,17 @@ import (
 // still creates the prefix lazily.
 func TestPreviewDoesNotCreatePrefix(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	game := types.Game{ID: "preview-game", Title: "Preview Game"}
 	r := types.ProtonVersion{}
 
-	if _, _, err := BuildCommand(game, r, Target{Exe: "/tmp/game.exe"}, true, ""); err != nil {
+	if _, _, err := BuildCommandFor(game, r, Target{Exe: "/tmp/game.exe"}, true, "", home); err != nil {
 		t.Fatalf("preview BuildCommand: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".local/share/platypus/prefixes")); !os.IsNotExist(err) {
 		t.Fatalf("preview created prefixes dir: %v", err)
 	}
 
-	if _, _, err := BuildCommand(game, r, Target{Exe: "/tmp/game.exe"}, false, ""); err != nil {
+	if _, _, err := BuildCommandFor(game, r, Target{Exe: "/tmp/game.exe"}, false, "", home); err != nil {
 		t.Fatalf("launch BuildCommand: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".local/share/platypus/prefixes", "preview-game")); err != nil {
@@ -53,19 +52,18 @@ func TestPrefixPathPrecedence(t *testing.T) {
 // folder inside it on demand, and a preview creates nothing.
 func TestGlobalPrefixesFolderCreatedOnDemand(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	global := filepath.Join(home, "my-prefixes")
 	game := types.Game{ID: "global-game", Title: "Global Game"}
 	r := types.ProtonVersion{}
 
-	if _, _, err := BuildCommand(game, r, Target{Exe: "/tmp/game.exe"}, true, global); err != nil {
+	if _, _, err := BuildCommandFor(game, r, Target{Exe: "/tmp/game.exe"}, true, global, home); err != nil {
 		t.Fatalf("preview BuildCommand: %v", err)
 	}
 	if _, err := os.Stat(global); !os.IsNotExist(err) {
 		t.Fatalf("preview created the global folder: %v", err)
 	}
 
-	args, env, err := BuildCommand(game, r, Target{Exe: "/tmp/game.exe"}, false, global)
+	args, env, err := BuildCommandFor(game, r, Target{Exe: "/tmp/game.exe"}, false, global, home)
 	if err != nil {
 		t.Fatalf("launch BuildCommand: %v", err)
 	}

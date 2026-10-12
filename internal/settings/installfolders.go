@@ -18,11 +18,19 @@ const MaxGameFolders = 32
 // CleanFolder expands "~/", requires an absolute path and cleans it. It does
 // not touch the disk beyond refusing a path that is a file.
 func CleanFolder(path string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	return CleanFolderFor(path, home)
+}
+
+// CleanFolderFor is CleanFolder with an explicit home (issue #41).
+func CleanFolderFor(path, home string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "~" || strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("cannot determine home directory: %w", err)
+		if home == "" {
+			return "", fmt.Errorf("cannot determine home directory")
 		}
 		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
 	}
@@ -41,7 +49,7 @@ func CleanFolder(path string) (string, error) {
 // changes anything the list is just ~/Games. Callers hold s.mu.
 func (s *Store) folderListLocked() []string {
 	if len(s.data.GameFolders) == 0 {
-		return []string{DefaultGamesFolder()}
+		return []string{DefaultGamesFolderFor(s.home)}
 	}
 	return s.data.GameFolders
 }
@@ -80,9 +88,9 @@ func (s *Store) GameFolders() []string {
 // on the first install. Returns the default folder.
 func (s *Store) SetGamesFolder(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
-		path = DefaultGamesFolder()
+		path = DefaultGamesFolderFor(s.home)
 	}
-	path, err := CleanFolder(path)
+	path, err := CleanFolderFor(path, s.home)
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +109,7 @@ func (s *Store) SetGamesFolder(path string) (string, error) {
 // AddGameFolder adds a library folder. A folder already in the list is not
 // added twice; the library folders are returned either way.
 func (s *Store) AddGameFolder(path string) ([]string, error) {
-	path, err := CleanFolder(path)
+	path, err := CleanFolderFor(path, s.home)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +160,7 @@ func (s *Store) migrate() {
 	}
 	def := s.data.GamesFolder
 	if def == "" {
-		def = DefaultGamesFolder()
+		def = DefaultGamesFolderFor(s.home)
 	}
 	list := []string{def}
 	for _, p := range s.data.GameFolders {

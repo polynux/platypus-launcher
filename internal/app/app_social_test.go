@@ -27,15 +27,15 @@ func socialEnv(t *testing.T) (*App, *settings.Store) {
 func socialEnvWith(t *testing.T, withB bool) (*App, *settings.Store) {
 	t.Helper()
 	root := t.TempDir()
-	st, err := settings.Open(filepath.Join(root, "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st, ctx: context.Background()}
+	a := &App{settings: st, ctx: context.Background(), optHome: root}
 	pluginsDir := filepath.Join(root, "plugins")
 	a.plugins = plugins.NewManager(plugins.Options{
 		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: st,
-		OnNotify: a.pluginNotify,
+		Home: root, OnNotify: a.pluginNotify,
 	})
 	t.Cleanup(a.plugins.Shutdown)
 	installEchoApp(t, pluginsDir)
@@ -108,6 +108,7 @@ func echoRecorded(t *testing.T, a *App) (statuses, playing []any) {
 }
 
 func TestSocialWithTheEchoPlugin(t *testing.T) {
+	t.Parallel()
 	a, _ := socialEnv(t)
 	a.syncSocial()
 
@@ -174,6 +175,7 @@ func TestSocialWithTheEchoPlugin(t *testing.T) {
 }
 
 func TestSocialStaysOffWhenTheUserSwitchesItOff(t *testing.T) {
+	t.Parallel()
 	a, st := socialEnv(t)
 	if err := st.SetSocialEnabled("echo", false); err != nil {
 		t.Fatal(err)
@@ -191,6 +193,7 @@ func TestSocialStaysOffWhenTheUserSwitchesItOff(t *testing.T) {
 // after initialize) and the friends list starts. Both reach the plugin, the
 // friends connect and the saved value is applied once, with no race.
 func TestPluginStartSettingsAndFriendsStartTogether(t *testing.T) {
+	t.Parallel()
 	a, st := socialEnv(t)
 	if err := st.SetPluginValues("echo", map[string]any{"eos-overlay": true}); err != nil {
 		t.Fatal(err)

@@ -60,7 +60,7 @@ export class Core {
   /** The core process ended without being asked to. */
   onCrash: (code: number | null) => void = () => {};
 
-  constructor(binary: string, args: string[] = []) {
+  constructor(binary: string, args: string[] = [], env: NodeJS.ProcessEnv = process.env) {
     // The core must not inherit anything the shell holds: Chromium opens
     // files and sockets without close-on-exec (verified: the core once held
     // the GPU cache, Local Storage, even the remote debugger's socket), and
@@ -69,8 +69,10 @@ export class Core {
     // the loop is POSIX (dash-safe) and /proc is a given on Linux. The core's
     // own children (plugins, games) get only 0/1/2 in turn: Go's os/exec
     // closes the rest, and nothing in internal/ passes ExtraFiles.
+    // Env is inherited explicitly (issue #41): PLATYPUS_* reaches the core.
     this.child = spawn('sh', ['-c', `${CLOSE_FDS}exec "$0" "$@"`, binary, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...env },
     });
     this.child.stderr.on('data', (b: Buffer) => process.stderr.write(b));
     this.child.stdin.on('error', () => {}); // a dying core is reported through exit

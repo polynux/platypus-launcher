@@ -133,6 +133,7 @@ func TestAuthStatusSecondCallServesCache(t *testing.T) {
 // Concurrent first reads share one plugin round trip (single-flight), and all
 // callers get its answer.
 func TestAuthStatusSingleFlight(t *testing.T) {
+	t.Parallel()
 	e, _ := authEnv(t)
 	e.a.invalidateAuth("echo")
 
@@ -168,6 +169,9 @@ func TestAuthStatusSingleFlight(t *testing.T) {
 }
 
 // Concurrent reads of a cached state trigger exactly one background refresh.
+// Serial by design (#41): the assertion needs all 8 readers to overlap one
+// flight, which load breaks (a straggler scheduled after the flight closed
+// correctly starts another refresh).
 func TestAuthStatusRefreshSingleFlight(t *testing.T) {
 	e, _ := authEnv(t)
 	if _, err := e.a.PluginAuthStatus("echo"); err != nil {
@@ -223,6 +227,7 @@ func waitAuthIdle(t *testing.T, e *versionsEnv) {
 // next read serves it without hitting the plugin. A refused login changes
 // nothing.
 func TestAuthLogoutAndLoginRefreshCache(t *testing.T) {
+	t.Parallel()
 	e, _ := authEnv(t)
 
 	st, err := e.a.PluginAuthComplete("echo", map[string]string{"code": "letmein"})
@@ -261,6 +266,7 @@ func TestAuthLogoutAndLoginRefreshCache(t *testing.T) {
 // Rescanning, retrying and a process restart drop the cached state: the next
 // read asks the plugin again, synchronously.
 func TestAuthInvalidatedByRescanRetryAndRestart(t *testing.T) {
+	t.Parallel()
 	e, _ := authEnv(t)
 	if _, err := e.a.PluginAuthStatus("echo"); err != nil {
 		t.Fatal(err)
@@ -299,6 +305,7 @@ func TestAuthInvalidatedByRescanRetryAndRestart(t *testing.T) {
 // A background refresh that finds a changed state reports it on the "auth"
 // event, carrying the fresh state.
 func TestAuthRefreshEmitsEventOnChange(t *testing.T) {
+	t.Parallel()
 	e, host := authEnv(t)
 
 	if _, err := e.a.PluginAuthStatus("echo"); err != nil {

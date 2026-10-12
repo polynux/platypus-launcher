@@ -9,6 +9,7 @@ import (
 )
 
 func TestRecentInstallFoldersAreNewestFirstWithoutRepeatsAndCapped(t *testing.T) {
+	t.Parallel()
 	s, err := Open(filepath.Join(t.TempDir(), "settings.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -42,9 +43,9 @@ func TestRecentInstallFoldersAreNewestFirstWithoutRepeatsAndCapped(t *testing.T)
 }
 
 func TestGameFolders(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	t.Setenv("HOME", root) // the default folder is ~/Games: keep it under root
-	s, err := Open(filepath.Join(root, "settings.json"))
+	s, err := OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestGameFolders(t *testing.T) {
 	if _, err := s.RemoveGameFolder(games); err == nil {
 		t.Error("the default Games folder was removed")
 	}
-	again, _ := Open(s.path)
+	again, _ := OpenWithHome(s.path, root)
 	if !slices.Equal(again.GameFolders(), []string{ssd}) {
 		t.Fatalf("reopened = %v", again.GameFolders())
 	}
@@ -88,6 +89,7 @@ func TestGameFolders(t *testing.T) {
 }
 
 func TestGameFoldersAreCapped(t *testing.T) {
+	t.Parallel()
 	s, _ := Open(filepath.Join(t.TempDir(), "settings.json"))
 	for i := 0; i < MaxGameFolders; i++ {
 		if _, err := s.AddGameFolder(filepath.Join("/g", string(rune('a'+i%26)), string(rune('a'+i/26)))); err != nil {
@@ -100,11 +102,11 @@ func TestGameFoldersAreCapped(t *testing.T) {
 }
 
 func TestMakeDefaultKeepsTheOldDefaultInTheList(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	t.Setenv("HOME", root)
 	path := filepath.Join(root, "settings.json")
-	s, _ := Open(path)
-	old := DefaultGamesFolder()
+	s, _ := OpenWithHome(path, root)
+	old := DefaultGamesFolderFor(root)
 	ssd := filepath.Join(root, "ssd")
 	if _, err := s.AddGameFolder(ssd); err != nil {
 		t.Fatal(err)
@@ -118,7 +120,7 @@ func TestMakeDefaultKeepsTheOldDefaultInTheList(t *testing.T) {
 	if got := s.GameFolders(); !slices.Equal(got, []string{old}) {
 		t.Fatalf("libraries = %v, want the old default %v", got, old)
 	}
-	again, _ := Open(path)
+	again, _ := OpenWithHome(path, root)
 	if again.GamesFolder() != ssd || !slices.Equal(again.GameFolders(), []string{old}) {
 		t.Fatalf("reopened: default %q, libraries %v", again.GamesFolder(), again.GameFolders())
 	}
@@ -131,7 +133,7 @@ func TestMakeDefaultKeepsTheOldDefaultInTheList(t *testing.T) {
 }
 
 func TestVersion1SettingsMigrateIntoTheList(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "settings.json")
 	legacy := filepath.Join(root, "Games")
@@ -140,7 +142,7 @@ func TestVersion1SettingsMigrateIntoTheList(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(path)
+	s, err := OpenWithHome(path, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,20 +160,20 @@ func TestVersion1SettingsMigrateIntoTheList(t *testing.T) {
 	if strings.Contains(string(data), `"games_folder"`) || !strings.Contains(string(data), `"version": 2`) {
 		t.Fatalf("saved file still has the old layout:\n%s", data)
 	}
-	again, _ := Open(path)
+	again, _ := OpenWithHome(path, root)
 	if again.GamesFolder() != legacy || len(again.GameFolders()) != 2 {
 		t.Fatalf("reopened: default %q, libraries %v", again.GamesFolder(), again.GameFolders())
 	}
 }
 
 func TestVersion1WithoutFoldersKeepsTheHomeDefault(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	path := filepath.Join(t.TempDir(), "settings.json")
 	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, _ := Open(path)
+	s, _ := OpenWithHome(path, home)
 	if s.GamesFolder() != filepath.Join(home, "Games") || len(s.GameFolders()) != 0 {
 		t.Fatalf("default %q, libraries %v", s.GamesFolder(), s.GameFolders())
 	}

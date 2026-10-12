@@ -63,11 +63,12 @@ func existingAncestor(dir string) (string, error) {
 // symlinks resolve, must pass checkFolder; and it must not be inside Platypus's
 // own data folder.
 func (a *App) checkInstallFolder(folder string) (string, error) {
-	clean, err := settings.CleanFolder(folder)
+	home := a.homeDir()
+	clean, err := settings.CleanFolderFor(folder, home)
 	if err != nil {
 		return "", err
 	}
-	if err := checkFolder(clean, "", "install into"); err != nil {
+	if err := checkFolderFor(clean, "", "install into", home); err != nil {
 		return "", err
 	}
 	anc, err := existingAncestor(clean)
@@ -81,10 +82,10 @@ func (a *App) checkInstallFolder(folder string) (string, error) {
 	// The same folder, as the disk names it: a symlink into /usr or the
 	// home folder itself is refused like the path would be.
 	resolved := filepath.Join(real, strings.TrimPrefix(clean, anc))
-	if err := checkFolder(resolved, "", "install into"); err != nil {
+	if err := checkFolderFor(resolved, "", "install into", home); err != nil {
 		return "", err
 	}
-	if data, err := settings.DataDir(); err == nil && (resolved == data || strings.HasPrefix(resolved, data+string(filepath.Separator))) {
+	if data := a.resolvedDataDir(); data != "" && (resolved == data || strings.HasPrefix(resolved, data+string(filepath.Separator))) {
 		return "", fmt.Errorf("refusing to install into Platypus's own data folder (%s)", data)
 	}
 	if err := syscall.Access(anc, 2); err != nil { // W_OK

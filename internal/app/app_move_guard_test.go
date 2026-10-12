@@ -16,6 +16,7 @@ import (
 // The folder a move, check or repair acts on is the one the library reports,
 // never the one the frontend sent along with the game.
 func TestMoveAndCheckUseTheLibrariesFolderNotTheCallersCopy(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	decoy := game
@@ -43,6 +44,7 @@ func TestMoveAndCheckUseTheLibrariesFolderNotTheCallersCopy(t *testing.T) {
 // A game that is running, or whose folder a move would put inside itself, is
 // refused before anything is queued.
 func TestMoveRefusesARunningGameAndAnAliasIntoIt(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	parent := filepath.Join(t.TempDir(), "Moved")
@@ -72,6 +74,7 @@ func TestMoveRefusesARunningGameAndAnAliasIntoIt(t *testing.T) {
 // A paused or queued check or move holds the game: it can't be launched from
 // the folder that is being checked or moved.
 func TestLaunchWaitsForAHeldMoveOrCheck(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	q, err := jobs.Open(filepath.Join(t.TempDir(), "jobs.json"), nil, nil)
@@ -92,6 +95,7 @@ func TestLaunchWaitsForAHeldMoveOrCheck(t *testing.T) {
 
 // Discard never reaches the plugin for a verify or move.
 func TestDiscardParamsRefuseVerifyAndMove(t *testing.T) {
+	t.Parallel()
 	games := t.TempDir()
 	for _, kind := range []string{jobs.KindVerify, jobs.KindMove} {
 		j := types.Job{ID: "j", Kind: kind, Source: "echo", InstallDir: filepath.Join(games, "echo")}
@@ -104,6 +108,7 @@ func TestDiscardParamsRefuseVerifyAndMove(t *testing.T) {
 // Two runs of one core move never overlap, and a cancel waits for the run to
 // unwind before it returns.
 func TestCoreMoveRunsAreSerialAndCancelWaits(t *testing.T) {
+	t.Parallel()
 	var m coreMoves
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -136,6 +141,7 @@ func TestCoreMoveRunsAreSerialAndCancelWaits(t *testing.T) {
 // A cancel that lands before a move starts stops the start, so the move
 // doesn't run for a job the user already canceled.
 func TestCancelBeforeTheStartStopsIt(t *testing.T) {
+	t.Parallel()
 	var m coreMoves
 	m.stop(context.Background(), "j")
 	if _, err := m.begin("j", func() {}); err == nil {
@@ -177,6 +183,7 @@ func TestUninstallClearsAMovedGamesRecord(t *testing.T) {
 // An update of an installed game goes to the folder the game is in now: after
 // a move, that is the new folder, not the plugin's default install folder.
 func TestAnUpdateOfAMovedGameStaysInItsNewFolder(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	parent := filepath.Join(t.TempDir(), "Moved")

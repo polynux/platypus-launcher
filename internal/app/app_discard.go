@@ -21,7 +21,7 @@ func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 	if !ok || !b.a.plugins.Has(j.Source, "discard") {
 		return jobs.ErrDiscardUnsupported
 	}
-	params, err := discardParams(j, b.a.settings.GamesFolder())
+	params, err := discardParamsFor(j, b.a.settings.GamesFolder(), b.a.homeDir())
 	if err != nil {
 		return err
 	}
@@ -37,6 +37,12 @@ func (b jobBackend) Discard(ctx context.Context, j types.Job) error {
 // plugin install folder it ran in. The plugin finds the game's own subfolder
 // itself. Verify and move jobs have no downloaded data, so they have none.
 func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
+	home, _ := os.UserHomeDir()
+	return discardParamsFor(j, gamesRoot, home)
+}
+
+// discardParamsFor is discardParams with an explicit home (issue #41).
+func discardParamsFor(j types.Job, gamesRoot, home string) (map[string]any, error) {
 	if j.Kind == jobs.KindUninstall {
 		return nil, fmt.Errorf("an uninstall has no downloaded data")
 	}
@@ -44,7 +50,7 @@ func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
 		// These work on the installed game: discarding would delete it.
 		return nil, jobs.ErrNoData
 	}
-	if err := checkDiscardDir(j.InstallDir, gamesRoot); err != nil {
+	if err := checkDiscardDirFor(j.InstallDir, gamesRoot, home); err != nil {
 		return nil, err
 	}
 	return map[string]any{"jobId": j.ID, "id": j.StoreGameID, "kind": j.Kind, "installDir": j.InstallDir}, nil
@@ -55,13 +61,26 @@ func discardParams(j types.Job, gamesRoot string) (map[string]any, error) {
 // folder or a parent of it, and the Games folder itself (a plugin's folder is
 // always a subfolder of it, or a folder the user picked on purpose).
 func checkDiscardDir(dir, gamesRoot string) error {
-	return checkFolder(dir, gamesRoot, "clean")
+	home, _ := os.UserHomeDir()
+	return checkDiscardDirFor(dir, gamesRoot, home)
+}
+
+// checkDiscardDirFor is checkDiscardDir with an explicit home (issue #41).
+func checkDiscardDirFor(dir, gamesRoot, home string) error {
+	return checkFolderFor(dir, gamesRoot, "clean", home)
 }
 
 // checkFolder is the guard for every folder Platypus lets a plugin or a move
 // write into: action ("clean", "move into") names what would be done to it in
 // the messages.
 func checkFolder(dir, gamesRoot, action string) error {
+	home, _ := os.UserHomeDir()
+	return checkFolderFor(dir, gamesRoot, action, home)
+}
+
+// checkFolderFor is checkFolder with an explicit home (issue #41: App
+// methods pass a.homeDir so tests need no process environment).
+func checkFolderFor(dir, gamesRoot, action, home string) error {
 	if dir == "" || !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
 		return fmt.Errorf("refusing to %s %q: not a clean absolute path", action, dir)
 	}
@@ -73,7 +92,7 @@ func checkFolder(dir, gamesRoot, action string) error {
 			return fmt.Errorf("refusing to %s system folder %s", action, dir)
 		}
 	}
-	if home, err := os.UserHomeDir(); err == nil {
+	if home != "" {
 		home = filepath.Clean(home)
 		if dir == home || strings.HasPrefix(home, dir+"/") {
 			return fmt.Errorf("refusing to %s your home folder or one above it (%s)", action, dir)

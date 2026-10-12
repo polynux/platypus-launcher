@@ -18,7 +18,7 @@ func (a *App) PickGameExecutable(start string) (string, error) {
 	if st, err := os.Stat(start); err == nil && !st.IsDir() {
 		def = filepath.Dir(start)
 	} else if st, err := os.Stat(def); err != nil || !st.IsDir() {
-		def, _ = os.UserHomeDir()
+		def = a.homeDir()
 	}
 	return a.host.OpenFile(FileDialog{
 		Title:   "Select the game's executable",

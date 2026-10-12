@@ -47,12 +47,12 @@ func familyApp(t *testing.T, protocols, caps string) *familyEnv {
 func familyAppNotStarted(t *testing.T, protocols, caps string) *familyEnv {
 	t.Helper()
 	root := t.TempDir()
-	st, err := settings.Open(filepath.Join(root, "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := &familyEnv{st: st}
-	a := &App{settings: st, ctx: context.Background()}
+	a := &App{settings: st, ctx: context.Background(), optHome: root}
 	a.familyEmit = func(w types.FamilyWarning) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
@@ -61,7 +61,7 @@ func familyAppNotStarted(t *testing.T, protocols, caps string) *familyEnv {
 	pluginsDir := filepath.Join(root, "plugins")
 	a.plugins = plugins.NewManager(plugins.Options{
 		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: st,
-		OnNotify: a.pluginNotify, OnReady: a.pluginReady,
+		Home: root, OnNotify: a.pluginNotify, OnReady: a.pluginReady,
 	})
 	t.Cleanup(a.plugins.Shutdown)
 	a.stores = stores.NewRegistry(a.pluginStores)
@@ -130,6 +130,7 @@ func (e *familyEnv) warnings() []types.FamilyWarning {
 }
 
 func TestFamilyMembersAreListedAndNormalized(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	members, err := e.a.GetFamilyMembers("echo")
 	if err != nil {
@@ -148,6 +149,7 @@ func TestFamilyMembersAreListedAndNormalized(t *testing.T) {
 }
 
 func TestBorrowedGamesCarryTheirLenderWhileFamilyIsOn(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	ana := e.libraryGame(t, "ana")
 	if ana.SharedBy == nil || ana.SharedBy.ID != "ana" || ana.SharedBy.Name != "Ana" {
@@ -176,6 +178,7 @@ func TestFamilyOffMeansNothingSentAndNoBorrowedMark(t *testing.T) {
 }
 
 func TestFamilyBelowProtocol18SendsNothing(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, `["1.0","1.1","1.7"]`, familyCaps)
 	if _, err := e.a.GetFamilyMembers("echo"); err == nil {
 		t.Fatal("members over 1.7: want an error, the capability is off for that protocol")
@@ -189,6 +192,7 @@ func TestFamilyBelowProtocol18SendsNothing(t *testing.T) {
 }
 
 func TestLaunchingABorrowedGameInUseFailsOnceWithTheOwnersName(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	e.config(t, map[string]any{"familyInUse": []string{"ana"}})
 	ana := e.libraryGame(t, "ana")
@@ -208,6 +212,7 @@ func TestLaunchingABorrowedGameInUseFailsOnceWithTheOwnersName(t *testing.T) {
 }
 
 func TestFamilyWarningIsRaisedForTheUIOnlyWhileFamilyIsOn(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	e.config(t, map[string]any{"familyWarn": 30})
 	if _, err := e.store().Launch(context.Background(), e.libraryGame(t, "ben"), false); err != nil {
@@ -240,6 +245,7 @@ func TestFamilyWarningFromAPluginWithFamilyOffIsIgnored(t *testing.T) {
 }
 
 func TestPluginSettingsShowOnlyThePluginScopeAndDropUnknownKinds(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	view, err := e.a.GetPluginSettings("echo")
 	if err != nil {
@@ -260,6 +266,7 @@ func TestPluginSettingsShowOnlyThePluginScopeAndDropUnknownKinds(t *testing.T) {
 }
 
 func TestSavedPluginSettingsReachThePluginAndSurviveARestart(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	_, err := e.a.SavePluginSettings("echo", map[string]any{"eos-overlay": true, "region": "us", "volume": 7.0, "game-overlay": false})
 	if err != nil {
@@ -301,6 +308,7 @@ func TestSavedPluginSettingsReachThePluginAndSurviveARestart(t *testing.T) {
 }
 
 func TestPluginSettingsRefuseWrongValuesAndKeepNothing(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 11.0}); err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("out of range: err = %v", err)
@@ -311,6 +319,7 @@ func TestPluginSettingsRefuseWrongValuesAndKeepNothing(t *testing.T) {
 }
 
 func TestGameSettingsOnlyForAGameWhoseFeaturesIncludeThem(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	tiny := e.libraryGame(t, "tiny")
 	view, err := e.a.GetGameSettingsFields(tiny)
@@ -349,6 +358,7 @@ func TestGameSettingsOffWhenTheGameDoesNotOfferThem(t *testing.T) {
 }
 
 func TestSettingsBelowProtocol18AreNeverSent(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, `["1.0","1.1","1.7"]`, familyCaps)
 	if _, err := e.a.GetPluginSettings("echo"); err == nil {
 		t.Fatal("settings over 1.7: want an error")
@@ -376,6 +386,7 @@ func waitFor(t *testing.T, cond func() bool) {
 }
 
 func TestASaveKeepsTheKeysItDoesNotSend(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if _, err := e.a.SavePluginSettings("echo", map[string]any{"eos-overlay": true}); err != nil {
 		t.Fatal(err)
@@ -393,6 +404,7 @@ func TestASaveKeepsTheKeysItDoesNotSend(t *testing.T) {
 }
 
 func TestAPluginThatRefusesSettingsKeepsThemSavedAndSaysSo(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	e.config(t, map[string]any{"settingsRefuse": true})
 	res, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0})
@@ -413,6 +425,7 @@ func TestAPluginThatRefusesSettingsKeepsThemSavedAndSaysSo(t *testing.T) {
 }
 
 func TestSavesAndStartsOfAPluginAreOrdered(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	e.config(t, map[string]any{"settingsDelayMs": 30})
 	var wg sync.WaitGroup
@@ -434,6 +447,7 @@ func TestSavesAndStartsOfAPluginAreOrdered(t *testing.T) {
 }
 
 func TestPluginStartReadsTheValuesInsideItsTurn(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err != nil {
 		t.Fatal(err)
@@ -459,6 +473,7 @@ func TestPluginStartReadsTheValuesInsideItsTurn(t *testing.T) {
 }
 
 func TestPluginStartSendsOnlyValuesTheSchemaStillTakes(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if err := e.a.settings.SetPluginValues("echo", map[string]any{"region": "mars", "volume": 3.0, "gone": true}); err != nil {
 		t.Fatal(err)
@@ -471,6 +486,7 @@ func TestPluginStartSendsOnlyValuesTheSchemaStillTakes(t *testing.T) {
 }
 
 func TestSettingsOfGamesTheLibraryLostAreForgotten(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	tiny := e.libraryGame(t, "tiny")
 	if err := e.a.settings.SetPluginGameSettings(tiny.ID, settings.PluginGameValues{Source: "echo", StoreID: "tiny", Values: map[string]any{"game-overlay": false}}); err != nil {
@@ -496,6 +512,7 @@ func TestSettingsOfGamesTheLibraryLostAreForgotten(t *testing.T) {
 }
 
 func TestSettingsOfAPluginThatIsGoneAreForgotten(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if _, err := e.a.SavePluginSettings("echo", map[string]any{"volume": 3.0}); err != nil {
 		t.Fatal(err)
@@ -514,6 +531,7 @@ func TestSettingsOfAPluginThatIsGoneAreForgotten(t *testing.T) {
 }
 
 func TestFamilyWarningBeforeTheRuntimeInitializedIsIgnored(t *testing.T) {
+	t.Parallel()
 	e := familyAppNotStarted(t, familyProtocols, familyCaps)
 	if rt := e.m.Runtime("echo"); rt.Initialized {
 		t.Fatalf("echo is initialized before anything started it: %+v", rt)
@@ -530,6 +548,7 @@ func TestFamilyWarningBeforeTheRuntimeInitializedIsIgnored(t *testing.T) {
 // the expansion and the soundtrack, Ben's the track pack, an art book and the
 // soundtrack. Ben's copy leaves the expansion out (its exclusion text).
 func TestSharedGameListsEveryCopyWithItsDLC(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	shared := e.libraryGame(t, "shared")
 	if shared.SharedBy == nil || shared.SharedBy.ID != "ana" {
@@ -554,6 +573,7 @@ func TestSharedGameListsEveryCopyWithItsDLC(t *testing.T) {
 }
 
 func TestSettingAPreferredCopyIsSentStoredAndReadBackAfterARestart(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if err := e.a.SetPreferredCopy(e.libraryGame(t, "shared"), "ben"); err != nil {
 		t.Fatal(err)
@@ -622,6 +642,7 @@ func TestSetPreferredCopyIsRefusedWithoutSendingWhenItDoesNotApply(t *testing.T)
 }
 
 func TestOwnCopyHasNoPickerAndNoPreferredCopy(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	tiny := e.libraryGame(t, "tiny")
 	if tiny.SharedBy != nil || len(tiny.Copies) != 0 || tiny.PreferredCopy != "" {
@@ -633,6 +654,7 @@ func TestOwnCopyHasNoPickerAndNoPreferredCopy(t *testing.T) {
 }
 
 func TestAnInUseCopyRefusesLaunchOnlyWhileItIsPicked(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	e.config(t, map[string]any{"copyInUse": []string{"ben"}})
 	if err := e.a.SetPreferredCopy(e.libraryGame(t, "shared"), "ben"); err != nil {

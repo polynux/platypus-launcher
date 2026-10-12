@@ -735,10 +735,10 @@ func TestSteamLibraryArtWithoutStore(t *testing.T) {
 // Downloads use the Steam client's download region (or PLATYPUS_STEAM_CELLID)
 // as the server-list cell id platypus-steam-dl requests.
 func TestSteamDownloadCellID(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	os.MkdirAll(filepath.Join(home, ".local/share/Steam/config"), 0o755)
-	os.WriteFile(filepath.Join(home, ".local/share/Steam/config/config.vdf"),
+	steamRoot := t.TempDir()
+	t.Setenv("PLATYPUS_STEAM_ROOT", steamRoot)
+	os.MkdirAll(filepath.Join(steamRoot, "config"), 0o755)
+	os.WriteFile(filepath.Join(steamRoot, "config/config.vdf"),
 		[]byte("\"InstallConfigStore\"\n{\n\t\"Steam\"\n\t{\n\t\t\"CellIDServerOverride\"\t\t\"14\"\n\t}\n}\n"), 0o644)
 	e := setup(t)
 	e.login()
@@ -753,7 +753,7 @@ func TestSteamDownloadCellID(t *testing.T) {
 }
 
 func TestSteamDownloadCellIDEnv(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // no Steam client config
+	t.Setenv("PLATYPUS_STEAM_ROOT", t.TempDir()) // no Steam client config
 	t.Setenv("PLATYPUS_STEAM_CELLID", "96")
 	e := setup(t)
 	e.login()

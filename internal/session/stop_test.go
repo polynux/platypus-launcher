@@ -94,6 +94,7 @@ func readPid(t *testing.T, file string) int {
 
 func TestStopNotRunning(t *testing.T) {
 	tr := NewTracker(func(types.SessionEvent) {})
+	tr.SetLogDir(t.TempDir())
 	err := tr.Stop("nope", false)
 	if !errors.Is(err, ErrNotRunning) {
 		t.Fatalf("want ErrNotRunning, got %v", err)
@@ -103,9 +104,9 @@ func TestStopNotRunning(t *testing.T) {
 // A well-behaved game exits on SIGTERM. Even though it dies within quickExit
 // with a signal error, that is a stop by the user, not a failed launch.
 func TestStopGracefulReportsStopped(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	pid, err := tr.StartDirect("g1", exec.Command("sleep", "30"), "sleep 30", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -129,9 +130,9 @@ func TestStopGracefulReportsStopped(t *testing.T) {
 // The launcher and its child both ignore SIGTERM: after the grace period the
 // whole process group gets SIGKILL.
 func TestStopEscalatesToSIGKILLAndKillsTheGroup(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	tr.grace = 300 * time.Millisecond
 	script, pidFile := stubbornScript(t)
 
@@ -164,9 +165,9 @@ func TestStopEscalatesToSIGKILLAndKillsTheGroup(t *testing.T) {
 }
 
 func TestForceStopKillsImmediately(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	tr.grace = time.Hour
 	script, pidFile := stubbornScript(t)
 
@@ -191,12 +192,12 @@ func TestForceStopKillsImmediately(t *testing.T) {
 // Wine's wineserver daemonizes into its own session, outside the game's
 // process group. The per-launch environment token still finds it on force.
 func TestForceStopKillsDaemonizedDescendant(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	if _, err := exec.LookPath("setsid"); err != nil {
 		t.Skip("setsid not available")
 	}
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "daemon.pid")
 	script := filepath.Join(dir, "game.sh")
@@ -222,9 +223,9 @@ func TestForceStopKillsDaemonizedDescendant(t *testing.T) {
 }
 
 func TestStopRunsTheStopHook(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	var graceful, forced atomic.Int32
 	hook := func(force bool) {
 		if force {
@@ -249,9 +250,9 @@ func TestStopRunsTheStopHook(t *testing.T) {
 // Client launches: the watched game process (and what it spawned) is stopped,
 // the process that started it (the client) is never touched.
 func TestStopClientGameLeavesTheClientAlone(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	tr.grace = 300 * time.Millisecond
 
 	client := exec.Command("sleep", "30")
@@ -300,9 +301,9 @@ func TestStopClientGameLeavesTheClientAlone(t *testing.T) {
 // A stop requested while the client is still starting the game is delivered as
 // soon as the game appears.
 func TestStopWhileClientStillStarting(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	rec := newRecorder()
 	tr := NewTracker(rec.emit)
+	tr.SetLogDir(t.TempDir())
 	tr.grace = 300 * time.Millisecond
 
 	var gamePid atomic.Int32

@@ -35,6 +35,7 @@ func installEchoB(t *testing.T, pluginsDir string) {
 // Two stores at once: each has its own friends, its own user and its own
 // switch, and switching one off leaves the other connected.
 func TestTwoStoresHaveTheirOwnFriends(t *testing.T) {
+	t.Parallel()
 	a, _ := socialEnvWith(t, true)
 	a.syncSocial()
 

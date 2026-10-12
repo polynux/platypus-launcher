@@ -89,8 +89,20 @@ func (a *App) sideloadSteamClient() *steam.StoreClient {
 	return steam.NewStoreClient()
 }
 
-// infoCachePath names the disk cache file.
+// infoCachePath names the disk cache file (issue #41: re-fetchable data
+// lives in the cache dir; a cache file from before the move is still read).
 func (a *App) infoCachePath() string {
+	if dir := a.resolvedCacheDir(); dir != "" {
+		return filepath.Join(dir, "game-info-cache.json")
+	}
+	if a.dataDir == "" {
+		return ""
+	}
+	return filepath.Join(a.dataDir, "game-info-cache.json")
+}
+
+// infoCacheLegacyPath is where the cache lived before issue #41.
+func (a *App) infoCacheLegacyPath() string {
 	if a.dataDir == "" {
 		return ""
 	}
@@ -114,7 +126,13 @@ func (a *App) loadInfoCache() {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return
+		// Before issue #41 the cache lived in the data dir: read it once.
+		if legacy := a.infoCacheLegacyPath(); legacy != "" && legacy != path {
+			data, err = os.ReadFile(legacy)
+		}
+		if err != nil {
+			return
+		}
 	}
 	var file map[string]gameInfoEntry
 	if err := json.Unmarshal(data, &file); err != nil {

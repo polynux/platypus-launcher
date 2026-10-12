@@ -18,7 +18,7 @@ const testIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"
 func iconApp(t *testing.T, manifest, iconName, iconBody string) (*App, *plugins.Manager) {
 	t.Helper()
 	root := t.TempDir()
-	trust, err := settings.Open(filepath.Join(root, "settings.json"))
+	trust, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,17 +43,19 @@ func iconApp(t *testing.T, manifest, iconName, iconBody string) (*App, *plugins.
 		LogDir:   filepath.Join(root, "logs"),
 		DataDir:  filepath.Join(root, "data"),
 		Settings: trust,
+		Home:     root,
 	})
 	t.Cleanup(m.Shutdown)
 	if _, err := m.Discover(); err != nil {
 		t.Fatal(err)
 	}
-	return &App{plugins: m, settings: trust}, m
+	return &App{plugins: m, settings: trust, optHome: root}, m
 }
 
 const iconManifest = `{"id":"echo","name":"Echo","version":"1.0.0","api":1,"store":"echo","exec":"bin/run","icon":"icon.svg"}`
 
 func TestPluginLogoIsServedWithLockedHeaders(t *testing.T) {
+	t.Parallel()
 	a, _ := iconApp(t, iconManifest, "icon.svg", testIconSVG)
 	list := a.ListStorePlugins()
 	if len(list) != 1 || list[0].IconURL == "" {
@@ -85,6 +87,7 @@ func TestPluginLogoIsServedWithLockedHeaders(t *testing.T) {
 }
 
 func TestPluginLogoFallthroughAndRefusals(t *testing.T) {
+	t.Parallel()
 	a, _ := iconApp(t, iconManifest, "icon.svg", testIconSVG)
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Header().Set("X-Next", "1") })
 	h := PluginArt(a, next)
@@ -113,6 +116,7 @@ func TestPluginLogoFallthroughAndRefusals(t *testing.T) {
 }
 
 func TestPluginLogoMissingMeansNoURL(t *testing.T) {
+	t.Parallel()
 	// No icon in the manifest: no URL, and the plugin is otherwise fine.
 	a, _ := iconApp(t, `{"id":"echo","name":"Echo","version":"1.0.0","api":1,"store":"echo","exec":"bin/run"}`, "", "")
 	list := a.ListStorePlugins()

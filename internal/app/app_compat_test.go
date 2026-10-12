@@ -80,6 +80,7 @@ func kinds(bs []types.CompatBadge) map[string]bool {
 }
 
 func TestCompatBelow110ReadsNoPluginFacts(t *testing.T) {
+	t.Parallel()
 	env, src := compatEnv(t, `["1.0","1.1","1.9"]`)
 	if got := env.m.Runtime("echo").Protocol; got != "1.9" {
 		t.Fatalf("negotiated %q, want 1.9", got)
@@ -94,6 +95,7 @@ func TestCompatBelow110ReadsNoPluginFacts(t *testing.T) {
 }
 
 func TestCompatAt110ReadsHintPlatformsAndDRM(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	if got := env.m.Runtime("echo").Protocol; got != "1.10" {
 		t.Fatalf("negotiated %q, want 1.10", got)
@@ -128,6 +130,7 @@ func TestCompatAt110ReadsHintPlatformsAndDRM(t *testing.T) {
 }
 
 func TestUserAppIDBeatsPluginHint(t *testing.T) {
+	t.Parallel()
 	env, src := compatEnv(t, `["1.0","1.1","1.10"]`)
 	c, err := env.a.SetGameSteamAppID(env.game, "730")
 	if err != nil {
@@ -176,6 +179,7 @@ func (f *fakeDeckSource) asks() int {
 }
 
 func TestCompatDeckVerdictShownAndCached(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	deck := &fakeDeckSource{reps: map[string]compat.DeckReport{
 		"620": {Rating: "verified"},
@@ -210,6 +214,7 @@ func TestCompatDeckVerdictShownAndCached(t *testing.T) {
 }
 
 func TestCompatDeckSwitchOffMakesNoRequests(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	deck := &fakeDeckSource{reps: map[string]compat.DeckReport{"620": {Rating: "verified"}}}
 	env.a.compat.Deck = deck
@@ -226,6 +231,7 @@ func TestCompatDeckSwitchOffMakesNoRequests(t *testing.T) {
 }
 
 func TestNoTitleMatchWithoutAnAppID(t *testing.T) {
+	t.Parallel()
 	env, src := compatEnv(t, `["1.0","1.1","1.9"]`)
 	// Same title, an Epic store, no hint, no user choice: nothing to look up.
 	game := env.game
@@ -243,6 +249,7 @@ func TestNoTitleMatchWithoutAnAppID(t *testing.T) {
 }
 
 func TestGameFixShowsOnlyEnoughReports(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	fix := env.a.GetGameFix(env.game)
 	if fix == nil || fix.Source != "protondb" || fix.Tier != "platinum" {
@@ -257,6 +264,7 @@ func TestGameFixShowsOnlyEnoughReports(t *testing.T) {
 }
 
 func TestRatingsSwitchOffMakesNoRequests(t *testing.T) {
+	t.Parallel()
 	env, src := compatEnv(t, `["1.0","1.1","1.10"]`)
 	ls, err := env.a.SetRatingsOnline(false)
 	if err != nil {
@@ -291,6 +299,7 @@ func (f *fakeWikiSource) Lookup(_ context.Context, appID string) (compat.WikiRec
 }
 
 func TestWikiFactsMergeWithThePluginAndCreditTheWiki(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	env.a.compat.Wiki = &fakeWikiSource{recs: map[string]compat.WikiRecord{
 		"620": {
@@ -320,6 +329,7 @@ func TestWikiFactsMergeWithThePluginAndCreditTheWiki(t *testing.T) {
 }
 
 func TestNoWikiPageMeansNoWikiFacts(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	env.a.compat.Wiki = &fakeWikiSource{recs: map[string]compat.WikiRecord{}}
 	c := env.a.GetGameCompat(env.game)

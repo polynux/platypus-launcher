@@ -16,13 +16,14 @@ import (
 func echoApp(t *testing.T, manifest string) (*App, *plugins.Manager) {
 	t.Helper()
 	root := t.TempDir()
-	trust, err := settings.Open(filepath.Join(root, "settings.json"))
+	trust, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	pluginsDir := filepath.Join(root, "plugins")
 	m := plugins.NewManager(plugins.Options{
 		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: trust,
+		Home: root,
 	})
 	t.Cleanup(m.Shutdown)
 	installEchoApp(t, pluginsDir)
@@ -34,7 +35,7 @@ func echoApp(t *testing.T, manifest string) (*App, *plugins.Manager) {
 	if _, err := m.Discover(); err != nil {
 		t.Fatal(err)
 	}
-	return &App{plugins: m, settings: trust}, m
+	return &App{plugins: m, settings: trust, optHome: root}, m
 }
 
 func offer(p types.StorePlugin, name string) (types.PluginCapability, bool) {
@@ -94,6 +95,7 @@ func TestStorePluginListsCapabilitiesWithRuntimeAndFeatures(t *testing.T) {
 }
 
 func TestStorePluginReportsAnIncompatibleProtocol(t *testing.T) {
+	t.Parallel()
 	a, _ := echoApp(t, `{"id":"echo","name":"Echo","version":"1.0.0","manifestVersion":1,
 		"protocol":{"versions":["2.0"]},"store":"echo","exec":"bin/platypus-echo-app"}`)
 	p := a.ListStorePlugins()[0]
@@ -103,6 +105,7 @@ func TestStorePluginReportsAnIncompatibleProtocol(t *testing.T) {
 }
 
 func TestLibraryWarningMarksUnavailableApartFromLogin(t *testing.T) {
+	t.Parallel()
 	auth := &jsonrpc.Error{Code: plugins.CodeAuthRequired, Message: "log in"}
 	busy := &jsonrpc.Error{Code: plugins.CodeUnavailable, Message: "Family member Sam is playing this game"}
 	w := sourceWarning("echo", auth)

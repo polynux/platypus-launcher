@@ -21,7 +21,6 @@ import (
 // the home and data-folder guards act on folders the test owns.
 func installEnv(t *testing.T, protocols, caps string) *versionsEnv {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
 	return versionsApp(t, protocols, caps)
 }
 
@@ -29,17 +28,18 @@ func installEnv(t *testing.T, protocols, caps string) *versionsEnv {
 // need no plugin. Its home is a temporary folder.
 func bareInstallApp(t *testing.T) *App {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
-	st, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"))
+	home := t.TempDir()
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st}
+	return &App{settings: st, optHome: home}
 }
 
 func TestCheckInstallFolderGuards(t *testing.T) {
+	t.Parallel()
 	e := struct{ a *App }{bareInstallApp(t)}
-	home, _ := os.UserHomeDir()
+	home := e.a.homeDir()
 	ok := filepath.Join(t.TempDir(), "ssd", "Games") // doesn't exist yet: created on the first install
 	got, err := e.a.CheckInstallFolder(ok)
 	if err != nil {
@@ -80,6 +80,7 @@ func TestCheckInstallFolderGuards(t *testing.T) {
 }
 
 func TestCheckInstallFolderRefusesAFolderTheUserCantWriteTo(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root can write anywhere")
 	}
@@ -96,6 +97,7 @@ func TestCheckInstallFolderRefusesAFolderTheUserCantWriteTo(t *testing.T) {
 }
 
 func TestInstallGameToUsesTheChosenFolderAndRemembersIt(t *testing.T) {
+	t.Parallel()
 	e := installEnv(t, allVersions, echoCaps)
 	chosen := filepath.Join(t.TempDir(), "ssd")
 	j, err := e.a.InstallGameTo(e.game, chosen)
@@ -128,6 +130,7 @@ func TestInstallGameToUsesTheChosenFolderAndRemembersIt(t *testing.T) {
 }
 
 func TestInstallGameToWithoutAFolderIsTheNormalInstall(t *testing.T) {
+	t.Parallel()
 	e := installEnv(t, allVersions, echoCaps)
 	j, err := e.a.InstallGameTo(e.game, "")
 	if err != nil {
@@ -144,6 +147,7 @@ func TestInstallGameToWithoutAFolderIsTheNormalInstall(t *testing.T) {
 }
 
 func TestInstallGameToRefusesWithoutQueueingAnything(t *testing.T) {
+	t.Parallel()
 	e := installEnv(t, allVersions, echoCaps)
 	for _, folder := range []string{"relative/dir", "/usr/games", "/"} {
 		if _, err := e.a.InstallGameTo(e.game, folder); err == nil {
@@ -169,8 +173,8 @@ func TestInstallGameToRefusesWithoutQueueingAnything(t *testing.T) {
 }
 
 func TestInstallGameWithOptionsToUsesTheChosenFolder(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
-	t.Setenv("HOME", t.TempDir())
 	chosen := filepath.Join(t.TempDir(), "big-disk", "Games")
 	j, err := e.a.InstallGameWithOptionsTo(e.game, map[string]any{"language": "fr"}, chosen)
 	if err != nil {
@@ -198,6 +202,7 @@ func TestInstallGameWithOptionsToUsesTheChosenFolder(t *testing.T) {
 }
 
 func TestInstallLocationsListDefaultLibrariesAndRecents(t *testing.T) {
+	t.Parallel()
 	e := installEnv(t, allVersions, echoCaps)
 	def, _ := e.a.plugins.InstallFolder("echo", e.a.settings.GamesFolder())
 	ssd := filepath.Join(t.TempDir(), "ssd")
@@ -221,14 +226,18 @@ func TestInstallLocationsListDefaultLibrariesAndRecents(t *testing.T) {
 			t.Errorf("%s: free = %d", l.Folder, l.FreeBytes)
 		}
 	}
-	// The old default is a library now, after the default and before the added folder.
+	// The added folder is a library, after the default; places that repeat
+	// a listed folder (the store folder, the library folder) come back once.
 	libs := e.a.settings.GameFolders()
-	want := []string{"default " + def, "library " + filepath.Join(libs[0], "echo"), "library " + filepath.Join(ssd, "echo"), "recent " + picked}
+	if !slices.Equal(libs, []string{ssd}) {
+		t.Fatalf("libraries = %v, want [%s]", libs, ssd)
+	}
+	want := []string{"default " + def, "library " + filepath.Join(ssd, "echo"), "recent " + picked}
 	if !slices.Equal(got, want) {
 		t.Fatalf("locations =\n%v\nwant\n%v", got, want)
 	}
-	if locs[2].Root != ssd {
-		t.Errorf("library root = %q", locs[2].Root)
+	if locs[1].Root != ssd {
+		t.Errorf("library root = %q", locs[1].Root)
 	}
 	if _, err := e.a.GetInstallLocations(types.Game{Source: "steam", Title: "x"}); err == nil {
 		t.Error("a game that is not from a plugin got install locations")
@@ -236,6 +245,7 @@ func TestInstallLocationsListDefaultLibrariesAndRecents(t *testing.T) {
 }
 
 func TestGameFoldersAreChecked(t *testing.T) {
+	t.Parallel()
 	e := struct{ a *App }{bareInstallApp(t)}
 	list := e.a.GetGameFolders()
 	if len(list) != 1 || !list[0].IsDefault || list[0].Path != e.a.settings.GamesFolder() {
@@ -278,6 +288,7 @@ func TestInstallSizeIsCachedAndUnknownWhenTheStoreCantSay(t *testing.T) {
 }
 
 func TestSizeCacheExpiresAndAnswersConcurrentAsksWithOneCall(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1_000_000, 0)
 	var c sizeCache
 	c.now = func() time.Time { return now }

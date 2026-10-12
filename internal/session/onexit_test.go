@@ -22,8 +22,8 @@ func waitExit(t *testing.T, ch <-chan ExitInfo) ExitInfo {
 // The callback runs once the game is no longer tracked, so a sync started
 // from it never races the tracker's own bookkeeping.
 func TestOnExitRunsAfterTheGameIsUntracked(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	tr := NewTracker(func(types.SessionEvent) {})
+	tr.SetLogDir(t.TempDir())
 	got := make(chan ExitInfo, 1)
 	tracked := make(chan bool, 1)
 	_, err := tr.StartDirect("g-exit", exec.Command("true"), "true", nil, WithOnExit(func(i ExitInfo) {
@@ -43,8 +43,8 @@ func TestOnExitRunsAfterTheGameIsUntracked(t *testing.T) {
 }
 
 func TestOnExitReportsAStopAndAFailedStart(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	tr := NewTracker(func(types.SessionEvent) {})
+	tr.SetLogDir(t.TempDir())
 
 	stopped := make(chan ExitInfo, 1)
 	if _, err := tr.StartDirect("g-stop", exec.Command("sleep", "30"), "sleep", nil, WithOnExit(func(i ExitInfo) { stopped <- i })); err != nil {
@@ -67,8 +67,8 @@ func TestOnExitReportsAStopAndAFailedStart(t *testing.T) {
 }
 
 func TestOnExitNeverRunsWhenTheProcessNeverStarts(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
 	tr := NewTracker(func(types.SessionEvent) {})
+	tr.SetLogDir(t.TempDir())
 	ran := make(chan struct{}, 1)
 	_, err := tr.StartDirect("g-nostart", exec.Command("/no/such/binary"), "x", nil, WithOnExit(func(ExitInfo) { ran <- struct{}{} }))
 	if err == nil {

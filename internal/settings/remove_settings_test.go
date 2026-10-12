@@ -9,9 +9,9 @@ import (
 // CORE-11: removing a hand-added game must also drop its per-game settings,
 // or orphaned entries accumulate in settings.json.
 func TestRemoveCustomGameDropsSettings(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	s, err := Open(filepath.Join(t.TempDir(), "settings.json"))
+	s, err := OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}

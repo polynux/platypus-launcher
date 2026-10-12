@@ -11,6 +11,7 @@ import (
 // CORE-9: sideloaded games must keep settings keys the backend struct
 // doesn't model (e.g. sync_mode), which settings.json preserves on disk.
 func TestCustomGamesPreserveUnknownSettings(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	st, err := settings.Open(filepath.Join(root, "settings.json"))
 	if err != nil {

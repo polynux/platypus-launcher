@@ -125,8 +125,9 @@ type process struct {
 	hash      string       // pinned at approval
 	verify    func() error // re-checks the pinned hash before every start
 	logPath   string
-	dataDir   string     // PLATYPUS_PLUGIN_DATA
-	declared  []string   // the manifest's capabilities
+	dataDir   string            // PLATYPUS_PLUGIN_DATA
+	env       map[string]string // extra variables for the plugin process (issue #41)
+	declared  []string          // the manifest's capabilities
 	protocols []Version  // what Platypus speaks
 	offered   VersionSet // what the manifest says the plugin speaks
 	transport Transport
@@ -332,6 +333,9 @@ func (p *process) start() (Conn, error) {
 	cmd := exec.Command(p.exec)
 	cmd.Dir = p.dir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("PLATYPUS_PLUGIN_API=%d", APIVersion), "PLATYPUS_PLUGIN_DATA="+p.dataDir, "PYTHONDONTWRITEBYTECODE=1")
+	for k, v := range p.env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 	cmd.Stdin = inR
 	cmd.Stdout = outW
 	var logFile *os.File
