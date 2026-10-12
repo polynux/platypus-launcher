@@ -49,4 +49,22 @@ describe('Library sort', () => {
     fireEvent.click(getByLabelText(/Descending/));
     expect(titles()).toEqual(['b', 'c', 'a']);
   });
+  it('sorts by year, unknown years last in both directions', () => {
+    const ys = [mk('y2011', { release_year: 2011 }), mk('unknown'), mk('y1998', { release_year: 1998 })];
+    const ids = (d: 'asc' | 'desc') => sortGames(ys, { key: 'year', dir: d }).map((g) => g.id);
+    expect(ids('desc')).toEqual(['y2011', 'y1998', 'unknown']);
+    expect(ids('asc')).toEqual(['y1998', 'y2011', 'unknown']);
+  });
+  it('table year header sorts, unknown years last', () => {
+    const ys = [mk('unknown'), mk('y2011', { release_year: 2011 }), mk('y1998', { release_year: 1998 })];
+    const { getAllByRole, getByRole } = lib(ys, 'table');
+    fireEvent.click(getByRole('button', { name: 'year' }));
+    const order = () => getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[1].textContent);
+    // Year defaults to newest first; the unknown year stays last.
+    expect(order()).toEqual(['y2011', 'y1998', 'unknown']);
+  });
+  it('card meta shows the year when set', () => {
+    const { container } = lib([mk('y2011', { release_year: 2011, title: 'Old Game' })], 'cards');
+    expect(container.textContent).toMatch(/2011/);
+  });
 });

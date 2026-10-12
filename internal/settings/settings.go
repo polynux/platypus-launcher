@@ -105,6 +105,21 @@ type CustomGame struct {
 	Title      string `json:"title"`
 	Executable string `json:"executable"` // absolute path
 	AddedAt    int64  `json:"added_at"`   // unix ms
+	// ReleaseYear is the year the game came out, 0 when unknown.
+	ReleaseYear int `json:"release_year,omitempty"`
+}
+
+// ValidateReleaseYear says whether year is a usable release year: 0 clears
+// it, otherwise 1970 through next year.
+func ValidateReleaseYear(year int) error {
+	if year == 0 {
+		return nil
+	}
+	max := time.Now().Year() + 1
+	if year < 1970 || year > max {
+		return fmt.Errorf("release year must be between 1970 and %d, got %d", max, year)
+	}
+	return nil
 }
 
 // Store is the settings file, loaded once and written through on every change.
@@ -292,6 +307,28 @@ func (s *Store) RemoveCustomGame(id string) error {
 					}
 					s.data.Games[id] = prevSettings
 				}
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown game %q", id)
+}
+
+// SetCustomGameYear saves a hand-added game's release year (0 clears it:
+// unknown). It validates the year like ValidateReleaseYear.
+func (s *Store) SetCustomGameYear(id string, year int) error {
+	if err := ValidateReleaseYear(year); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, g := range s.data.CustomGames {
+		if g.ID == id {
+			prev := s.data.CustomGames[i].ReleaseYear
+			s.data.CustomGames[i].ReleaseYear = year
+			if err := s.save(); err != nil {
+				s.data.CustomGames[i].ReleaseYear = prev
 				return err
 			}
 			return nil

@@ -503,6 +503,7 @@ export function App() {
         addCustomGame: (t, e) => Effect.runPromise(LauncherApi.addCustomGame(t, e)),
         saveGameSettings: (id, s) => Effect.runPromise(LauncherApi.saveGameSettings(id, s)),
         removeCustomGame: (id) => Effect.runPromise(LauncherApi.removeCustomGame(id)),
+        setCustomGameYear: (id, y) => Effect.runPromise(LauncherApi.setCustomGameYear(id, y)),
       },
       title,
       executable,

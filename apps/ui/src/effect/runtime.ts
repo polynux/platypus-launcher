@@ -167,6 +167,9 @@ export const LauncherApi = {
   addCustomGame: (title: string, executable: string) =>
     call<Game>('AddCustomGame', () => App.AddCustomGame(title, executable)),
   removeCustomGame: (id: string) => call<void>('RemoveCustomGame', () => App.RemoveCustomGame(id)),
+  // A sideloaded game's release year (0 clears it: unknown).
+  setCustomGameYear: (id: string, year: number) =>
+    call<Game>('SetCustomGameYear', () => App.SetCustomGameYear(id, year)),
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 

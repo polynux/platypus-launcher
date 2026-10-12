@@ -103,6 +103,7 @@ export interface CoreApi {
   SetCloudGameMode(gameID: string, mode: string): Promise<void>;
   SetCloudPluginMode(pluginID: string, mode: string): Promise<void>;
   SetCustomArt(gameID: string, kind: string, path: string): Promise<types.Customization>;
+  SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
@@ -222,6 +223,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCloudGameMode',
   'SetCloudPluginMode',
   'SetCustomArt',
+  'SetCustomGameYear',
   'SetCustomTitle',
   'SetGameSteamAppID',
   'SetPluginEnabled',

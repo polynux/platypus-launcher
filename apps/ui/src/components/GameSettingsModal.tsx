@@ -3,6 +3,11 @@ import { X } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, StorePlugin, Tweak } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
+import { Input } from '@/components/ds/input';
+import { Effect } from 'effect';
+import { LauncherApi } from '../effect/runtime';
+import { ErrorNotice } from './ErrorNotice';
+import { parseReleaseYear } from './AddGameModal';
 import { GeneralSettings } from './SettingsModal';
 import { CloudSavesPanel } from './CloudSavesPanel';
 import { GameSettingsPanel } from './PluginSettings';
@@ -108,6 +113,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
           <div className="min-w-0">
             {/* General keeps its unsaved edits while another tab shows: it stays mounted. */}
             <section role="tabpanel" id="gs-panel-general" aria-labelledby="gs-tab-general" hidden={shown !== 'general'}>
+              {game.store === 'custom' && <CustomGameYear game={game} onChanged={p.onCustomized} />}
               <GeneralSettings
                 embedded
                 game={game}
@@ -130,6 +136,68 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** A sideloaded game's release year, editable in the General tab (issue #35).
+ *  Empty clears it back to unknown. Saving reloads the library entry quietly,
+ *  like a customization change. */
+function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void }) {
+  const [raw, setRaw] = useState(game.release_year ? String(game.release_year) : '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setRaw(game.release_year ? String(game.release_year) : ''); }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parsed = parseReleaseYear(raw);
+  const saved = game.release_year ?? 0;
+  const dirty = !parsed.error && (parsed.year ?? 0) !== saved;
+  const save = () => {
+    if (parsed.error || !dirty || saving) return;
+    setSaving(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.setCustomGameYear(game.id, parsed.year ?? 0)).then(
+      () => { setSaving(false); onChanged(); },
+      (e) => { setSaving(false); setError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+  return (
+    <div className="mb-6">
+      <span className="mb-1.5 block font-mono text-[12px] uppercase tracking-[0.14em] text-white/55">release year</span>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => { e.preventDefault(); save(); }}
+      >
+        <Input
+          aria-label="Release year"
+          value={raw}
+          onChange={(e) => { setRaw(e.target.value); setError(null); }}
+          placeholder="Unknown"
+          inputMode="numeric"
+          className="w-32"
+        />
+        <Button type="submit" variant="primary" size="sm" disabled={!dirty || saving}>Save year</Button>
+        {saved > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              setSaving(true);
+              setError(null);
+              Effect.runPromise(LauncherApi.setCustomGameYear(game.id, 0)).then(
+                () => { setRaw(''); setSaving(false); onChanged(); },
+                (e) => { setSaving(false); setError(e instanceof Error ? e.message : String(e)); },
+              );
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </form>
+      {parsed.error
+        ? <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{parsed.error}</p>
+        : error && <ErrorNotice message={error} fallback="Platypus couldn't save the release year." />}
+    </div>
   );
 }
 

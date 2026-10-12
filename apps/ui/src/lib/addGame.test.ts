@@ -15,8 +15,9 @@ function deps(over: Partial<Record<keyof AddGameDeps, ReturnType<typeof vi.fn>>>
     addCustomGame: vi.fn(async () => game()),
     saveGameSettings: vi.fn(async () => {}),
     removeCustomGame: vi.fn(async () => {}),
+    setCustomGameYear: vi.fn(async (id: string, year: number) => game({ id, release_year: year })),
     ...over,
-  } as unknown as AddGameDeps & { addCustomGame: ReturnType<typeof vi.fn>; saveGameSettings: ReturnType<typeof vi.fn>; removeCustomGame: ReturnType<typeof vi.fn> };
+  } as unknown as AddGameDeps & { addCustomGame: ReturnType<typeof vi.fn>; saveGameSettings: ReturnType<typeof vi.fn>; removeCustomGame: ReturnType<typeof vi.fn>; setCustomGameYear: ReturnType<typeof vi.fn> };
 }
 
 describe('addGameFlow (all-or-nothing add)', () => {
@@ -61,5 +62,20 @@ describe('addGameFlow (all-or-nothing add)', () => {
     await expect(addGameFlow(d, 'Bad', 'relative/path', { workingDir: '', winePrefix: '' })).rejects.toBe(err);
     expect(d.saveGameSettings).not.toHaveBeenCalled();
     expect(d.removeCustomGame).not.toHaveBeenCalled();
+  });
+
+  it('saves the release year with the new game', async () => {
+    const d = deps();
+    const { game: got } = await addGameFlow(d, 'Doom', '/g/doom/doom.exe', { workingDir: '', winePrefix: '', releaseYear: 1993 });
+    expect(d.setCustomGameYear).toHaveBeenCalledWith('custom-1', 1993);
+    expect(d.removeCustomGame).not.toHaveBeenCalled();
+    expect(got.release_year).toBe(1993);
+  });
+
+  it('removes the new game when saving the year fails', async () => {
+    const err = new Error('release year must be between 1970 and 2027, got 1800');
+    const d = deps({ setCustomGameYear: vi.fn(async () => { throw err; }) });
+    await expect(addGameFlow(d, 'Doom', '/g/doom/doom.exe', { workingDir: '', winePrefix: '', releaseYear: 1800 })).rejects.toBe(err);
+    expect(d.removeCustomGame).toHaveBeenCalledWith('custom-1');
   });
 });

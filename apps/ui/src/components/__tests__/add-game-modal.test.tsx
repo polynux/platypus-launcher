@@ -193,3 +193,45 @@ describe('AddGameModal all-or-nothing add (review fix 3)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('AddGameModal release year (issue #35)', () => {
+  it('saves the year with the game', async () => {
+    const onAdd = vi.fn();
+    open(onAdd);
+    fireEvent.change(screen.getByPlaceholderText('My Game'), { target: { value: 'Doom' } });
+    fireEvent.change(screen.getByLabelText('executable'), { target: { value: '/home/you/Games/doom/doom.exe' } });
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText('release year'), { target: { value: '1993' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(onAdd).toHaveBeenCalledWith('Doom', '/home/you/Games/doom/doom.exe', { workingDir: '', winePrefix: '', releaseYear: 1993 });
+  });
+
+  it('leaves the year out when empty', async () => {
+    const onAdd = vi.fn();
+    open(onAdd);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(onAdd).toHaveBeenCalledWith('Doom', '/home/you/Games/doom/doom.exe', { workingDir: '', winePrefix: '' });
+  });
+
+  it('refuses a bad year before submitting', async () => {
+    const onAdd = vi.fn();
+    open(onAdd);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText('release year'), { target: { value: '1899' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/between 1970/);
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dialog open with a backend year refusal under the year field', async () => {
+    const onAdd = vi.fn(async () => { throw new Error('release year must be between 1970 and 2027, got 1800'); });
+    const { onClose } = open(onAdd);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/release year/);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

@@ -46,12 +46,12 @@ interface LibraryProps {
 
 const CORE_SOURCES: StoreType[] = ['steam', 'gog', 'epic'];
 
-type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier';
+type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier' | 'year';
 type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 /** ProtonDB quality order, best first. Unknown or missing tiers have no rank and sort last. */
 export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver: 3, bronze: 2, borked: 1 };
 const sortValue = (g: Game, k: SortKey): string | number =>
-  k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? sortKey(g) : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
+  k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? sortKey(g) : k === 'year' ? g.release_year ?? -1 : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
 
 /** Source chips come from what the library really holds: no chip for a store with zero games. Sideloaded games get their chip last. */
 export function sourceChips(games: Game[]): (StoreType | 'all')[] {
@@ -69,7 +69,7 @@ export function sortGames(games: Game[], sort: Sort | null): Game[] {
     return (sort.dir === 'asc' ? c : -c) || a.title.localeCompare(b.title);
   });
 }
-const SORT_OPTIONS: [SortKey | '', string][] = [['', 'default'], ['title', 'title'], ['last', 'recently played'], ['hours', 'hours played'], ['size', 'size'], ['tier', 'tier']];
+const SORT_OPTIONS: [SortKey | '', string][] = [['', 'default'], ['title', 'title'], ['year', 'year'], ['last', 'recently played'], ['hours', 'hours played'], ['size', 'size'], ['tier', 'tier']];
 const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
 
 const DEFAULT_SORT = 'default'; // Radix forbids '' as an item value
@@ -140,7 +140,7 @@ function jobLabel(j: Job): string {
   if (j.state === 'queued') return `${j.kind} queued`;
   return j.percent >= 0 ? `${j.kind === 'uninstall' ? 'removing' : 'installing'} ${Math.round(j.percent)}%` : j.phase ?? j.kind;
 }
-const TABLE_COLS = 'grid-cols-[16px_minmax(180px,2fr)_5rem_7.5rem_4.5rem_6rem_7rem]';
+const TABLE_COLS = 'grid-cols-[16px_minmax(180px,2fr)_5rem_7.5rem_4.5rem_6rem_4rem_7rem]';
 
 function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string; sort: Sort | null; onSort: (k: SortKey) => void; right?: boolean }) {
   const active = sort?.key === k;
@@ -189,7 +189,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
       <div className="h-[82px] flex-none overflow-hidden px-2.5 py-2">
         <div className="truncate text-hint font-bold">{g.title}</div>
         <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
-          {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.update_available && 'update'].filter(Boolean).join(' · ')}
+          {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.release_year ? String(g.release_year) : null, g.update_available && 'update'].filter(Boolean).join(' · ')}
         </div>
         {cardCompat(g) && <CompatChip game={g} className="mt-1.5" />}
       </div>
@@ -212,6 +212,7 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { g
       <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-white/55')}>{tier ?? '—'}</span>
       <span role="cell" className="truncate font-mono text-hint text-white/55">{runnerShort(g.settings.runner_id, runners)}</span>
       <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{g.release_year ?? '—'}</span>
       <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
       <span role="cell" className="text-right font-mono text-hint text-white/55">{lastPlayedLabel(g) ?? '—'}</span>
     </div>
@@ -453,12 +454,13 @@ export function LibraryView(p: LibraryProps) {
         </>
       ) : (
         <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
-          <div role="table" aria-label="Library" aria-rowcount={tableRows.length + 1} className="min-w-[760px]">
+          <div role="table" aria-label="Library" aria-rowcount={tableRows.length + 1} className="min-w-[800px]">
             <div role="row" aria-rowindex={1} className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-white/55', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">status</span></span>
               <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
               <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>
               <SortHead k="hours" label="hrs" sort={sort} onSort={toggleSort} right />
+              <SortHead k="year" label="year" sort={sort} onSort={toggleSort} right />
               <SortHead k="size" label="size" sort={sort} onSort={toggleSort} right />
               <SortHead k="last" label="last played" sort={sort} onSort={toggleSort} right />
             </div>

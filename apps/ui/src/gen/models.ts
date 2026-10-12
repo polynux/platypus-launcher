@@ -233,6 +233,7 @@ export namespace types {
     executable: string;
     is_installed: boolean;
     settings: types.GameSettings;
+    release_year?: number;
     settings_extra?: Record<string, unknown>;
     fix_info?: types.GameFixInfo | null;
     last_played_at?: number;

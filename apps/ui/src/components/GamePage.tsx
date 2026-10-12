@@ -618,7 +618,11 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }
   const rows: [string, string][] = [
     ...(details?.developers?.length ? [['Developer', details.developers.join(', ')] as [string, string]] : []),
     ...(details?.publishers?.length ? [['Publisher', details.publishers.join(', ')] as [string, string]] : []),
-    ...(details?.release_date ? [['Release', details.release_date] as [string, string]] : []),
+    ...(details?.release_date
+      ? [['Release', details.release_date] as [string, string]]
+      : game.store === 'custom' && game.release_year
+        ? [['Release', String(game.release_year)] as [string, string]]
+        : []),
     ...(genres.length ? [['Genres', genres.join(' · ')] as [string, string]] : []),
     ...((d?.languages?.length ?? 0) ? [['Languages', (d?.languages ?? []).join(', ')] as [string, string]] : []),
     ...(controller ? [['Controller', controller] as [string, string]] : []),

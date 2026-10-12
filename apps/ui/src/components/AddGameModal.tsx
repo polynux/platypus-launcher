@@ -15,10 +15,23 @@ export function suggestTitle(exe: string): string {
   return noExt.replace(/[_]+/g, ' ').trim();
 }
 
-/** Advanced sideload options, stored in the new game's GameSettings. */
+/** Advanced sideload options, stored in the new game's GameSettings (and its release year). */
 export interface AddGameOptions {
   workingDir: string;
   winePrefix: string;
+  /** Release year, when the user set one (validated by core). */
+  releaseYear?: number;
+}
+
+/** Whether a release-year input holds a usable year: empty clears it (unknown). */
+export function parseReleaseYear(raw: string): { year?: number; error?: string } {
+  const s = raw.trim();
+  if (!s) return {};
+  if (!/^\d{4}$/.test(s)) return { error: 'The release year is four digits, e.g. 2011.' };
+  const year = Number(s);
+  const max = new Date().getFullYear() + 1;
+  if (year < 1970 || year > max) return { error: `The release year is between 1970 and ${max}.` };
+  return { year };
 }
 
 export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, exe: string, opts: AddGameOptions) => Promise<void> | void }) {
@@ -26,15 +39,18 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const [exe, setExe] = useState('');
   const [workingDir, setWorkingDir] = useState('');
   const [winePrefix, setWinePrefix] = useState('');
+  const [releaseYear, setReleaseYear] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
   const [prefixError, setPrefixError] = useState<string | null>(null);
+  const [yearError, setYearError] = useState<string | null>(null);
   // Adding is all-or-nothing: the dialog stays open until onAdd resolves, and
   // a rejection shows where it belongs instead of stranding a half-added game.
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const valid = title.trim() && exe.trim();
-  const advancedSet = (workingDir.trim() ? 1 : 0) + (winePrefix.trim() ? 1 : 0);
+  const yearParsed = parseReleaseYear(releaseYear);
+  const advancedSet = (workingDir.trim() ? 1 : 0) + (winePrefix.trim() ? 1 : 0) + (yearParsed.year ? 1 : 0);
 
   const browseExe = () => {
     Effect.runPromise(LauncherApi.pickGameExecutable(exe.trim()))
@@ -80,10 +96,16 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
       setPrefixError('The Wine prefix must be an absolute path.');
       return;
     }
+    const parsed = parseReleaseYear(releaseYear);
+    if (parsed.error) {
+      setYearError(parsed.error);
+      setAdvancedOpen(true); // a field error must be visible, not folded shut
+      return;
+    }
     if (!valid || saving) return;
     let result: Promise<void> | void;
     try {
-      result = onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: prefix });
+      result = onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: prefix, ...(parsed.year ? { releaseYear: parsed.year } : {}) });
     } catch (e) {
       fail(e);
       return;
@@ -100,6 +122,9 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
       setAdvancedOpen(true); // a field error must be visible, not folded shut
     } else if (/wine prefix/i.test(msg)) {
       setPrefixError(msg);
+      setAdvancedOpen(true);
+    } else if (/release year/i.test(msg)) {
+      setYearError(msg);
       setAdvancedOpen(true);
     } else {
       setSaveError(msg);
@@ -181,6 +206,19 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
               </div>
               <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">The Wine prefix the game runs in. Empty falls back to the default prefix folder; the folder is created on demand.</p>
               {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{prefixError}</p>}
+            </div>
+            <div>
+              <MonoLabel className="mb-1.5">release year <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+              <Input
+                value={releaseYear}
+                onChange={(e) => { setReleaseYear(e.target.value); setYearError(null); }}
+                placeholder="e.g. 2011"
+                aria-label="release year"
+                inputMode="numeric"
+                className="w-32"
+              />
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">The year the game came out. Empty means unknown; it shows on the card and the game page, and sorts with the store games.</p>
+              {yearError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{yearError}</p>}
             </div>
           </div>
         </div>

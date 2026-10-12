@@ -341,6 +341,7 @@ func (a *App) customGames() []types.Game {
 			Store:       types.StoreCustom,
 			StoreAppID:  types.SourceCustom,
 			Title:       g.Title,
+			ReleaseYear: g.ReleaseYear,
 			InstallDir:  filepath.Dir(g.Executable),
 			Executable:  g.Executable,
 			IsInstalled: true,
@@ -380,11 +381,26 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 		Store:       types.StoreCustom,
 		StoreAppID:  types.SourceCustom,
 		Title:       g.Title,
+		ReleaseYear: g.ReleaseYear,
 		InstallDir:  filepath.Dir(g.Executable),
 		Executable:  g.Executable,
 		IsInstalled: true,
 		Settings:    types.GameSettings{UseGameMode: true},
 	}, nil
+}
+
+// SetCustomGameYear saves a sideloaded game's release year (0 clears it)
+// and returns the game as the library shows it.
+func (a *App) SetCustomGameYear(id string, year int) (types.Game, error) {
+	if err := a.settings.SetCustomGameYear(id, year); err != nil {
+		return types.Game{}, err
+	}
+	for _, g := range a.customGames() {
+		if g.ID == id {
+			return g, nil
+		}
+	}
+	return types.Game{}, fmt.Errorf("unknown game %q", id)
 }
 
 // RemoveCustomGame forgets a hand-added game; its files stay on disk.

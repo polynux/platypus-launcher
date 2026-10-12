@@ -67,6 +67,10 @@ type Game struct {
 	Executable  string       `json:"executable"`
 	IsInstalled bool         `json:"is_installed"`
 	Settings    GameSettings `json:"settings"`
+	// ReleaseYear is the year the game came out, 0 when unknown. Sideloaded
+	// games carry what the user set; store games only what the library
+	// already knows without extra lookups.
+	ReleaseYear int `json:"release_year,omitempty"`
 	// SettingsExtra carries saved per-game settings keys the backend
 	// doesn't model (UI-only controls like sync_mode), so
 	// sideloaded games don't lose them in the emitted library (CORE-9).
