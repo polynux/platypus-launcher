@@ -66,17 +66,17 @@ const (
 // GOG catalog's facts for the info lookup (issue #38); empty for other
 // sources.
 type Candidate struct {
-	Source           string `json:"source"`
-	ID               string `json:"id"`
-	AppID            int    `json:"app_id"`
-	Name             string `json:"name"`
-	Year             int    `json:"year,omitempty"`
-	ThumbURL         string `json:"thumb_url"`
-	CoverURL         string `json:"cover_url,omitempty"`
-	BannerURL        string `json:"banner_url,omitempty"`
-	LogoURL          string `json:"logo_url,omitempty"`
-	CoverFallbackURL string `json:"cover_fallback_url,omitempty"`
-	SteamAppID       int    `json:"steam_app_id,omitempty"`
+	Source           string   `json:"source"`
+	ID               string   `json:"id"`
+	AppID            int      `json:"app_id"`
+	Name             string   `json:"name"`
+	Year             int      `json:"year,omitempty"`
+	ThumbURL         string   `json:"thumb_url"`
+	CoverURL         string   `json:"cover_url,omitempty"`
+	BannerURL        string   `json:"banner_url,omitempty"`
+	LogoURL          string   `json:"logo_url,omitempty"`
+	CoverFallbackURL string   `json:"cover_fallback_url,omitempty"`
+	SteamAppID       int      `json:"steam_app_id,omitempty"`
 	Developers       []string `json:"developers,omitempty"`
 	Publishers       []string `json:"publishers,omitempty"`
 	Genres           []string `json:"genres,omitempty"`
@@ -91,15 +91,15 @@ type Candidate struct {
 // User-Agent (default "1.0"); HTTP does the requests (default an http.Client
 // with Timeout).
 type Client struct {
-	HTTP       *http.Client
-	SearchBase string
-	CDNBase    string
-	APIBase    string
-	GOGBase    string
+	HTTP        *http.Client
+	SearchBase  string
+	CDNBase     string
+	APIBase     string
+	GOGBase     string
 	GOGInfoBase string
-	LutrisBase string
-	IGDBBase   string
-	Version    string
+	LutrisBase  string
+	IGDBBase    string
+	Version     string
 }
 
 func (c *Client) http() *http.Client {
@@ -552,12 +552,12 @@ func (g *gogID) UnmarshalJSON(b []byte) error {
 }
 
 type gogProduct struct {
-	ID              gogID  `json:"id"`
-	Title           string `json:"title"`
-	ReleaseDate     string `json:"releaseDate"`
-	CoverVertical   string `json:"coverVertical"`
-	CoverHorizontal string `json:"coverHorizontal"`
-	Logo            string `json:"logo"`
+	ID              gogID    `json:"id"`
+	Title           string   `json:"title"`
+	ReleaseDate     string   `json:"releaseDate"`
+	CoverVertical   string   `json:"coverVertical"`
+	CoverHorizontal string   `json:"coverHorizontal"`
+	Logo            string   `json:"logo"`
 	Developers      []string `json:"developers"`
 	Publishers      []string `json:"publishers"`
 	Genres          []struct {
@@ -907,9 +907,9 @@ func (c *Client) GOGGame(id string) (GOGDetails, error) {
 		return GOGDetails{}, fmt.Errorf("gog product returned status %d", resp.StatusCode)
 	}
 	var body struct {
-		Title       string `json:"title"`
-		Slug        string `json:"slug"`
-		ReleaseDate string `json:"release_date"`
+		Title       string            `json:"title"`
+		Slug        string            `json:"slug"`
+		ReleaseDate string            `json:"release_date"`
 		Languages   map[string]string `json:"languages"`
 		Links       struct {
 			ProductCard string `json:"product_card"`
@@ -927,7 +927,7 @@ func (c *Client) GOGGame(id string) (GOGDetails, error) {
 		Title: strings.TrimSpace(body.Title), Slug: strings.TrimSpace(body.Slug),
 		ReleaseDate: strings.TrimSpace(body.ReleaseDate),
 		StoreURL:    strings.TrimSpace(body.Links.ProductCard),
-		Lead: body.Description.Lead, Full: body.Description.Full,
+		Lead:        body.Description.Lead, Full: body.Description.Full,
 	}
 	for _, lang := range body.Languages {
 		if s := strings.TrimSpace(lang); s != "" {

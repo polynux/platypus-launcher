@@ -52,17 +52,17 @@ func (c *StoreClient) httpClient() *http.Client {
 }
 
 type storeApp struct {
-	ShortDescription  string `json:"short_description"`
+	ShortDescription    string `json:"short_description"`
 	DetailedDescription string `json:"detailed_description"`
-	AboutTheGame      string `json:"about_the_game"`
-	SupportedLanguages string `json:"supported_languages"`
-	ControllerSupport string `json:"controller_support"`
-	RequiredAge       any    `json:"required_age"`
-	Website           string `json:"website"`
-	HeaderImage       string `json:"header_image"`
-	Developers        []string
-	Publishers        []string
-	Genres            []struct {
+	AboutTheGame        string `json:"about_the_game"`
+	SupportedLanguages  string `json:"supported_languages"`
+	ControllerSupport   string `json:"controller_support"`
+	RequiredAge         any    `json:"required_age"`
+	Website             string `json:"website"`
+	HeaderImage         string `json:"header_image"`
+	Developers          []string
+	Publishers          []string
+	Genres              []struct {
 		Description string `json:"description"`
 	} `json:"genres"`
 	Categories []struct {
@@ -76,14 +76,14 @@ type storeApp struct {
 		Full  string `json:"path_full"`
 	} `json:"screenshots"`
 	Movies []struct {
-		Name      string `json:"name"`
-		Thumbnail string `json:"thumbnail"`
+		Name      string            `json:"name"`
+		Thumbnail string            `json:"thumbnail"`
 		MP4       map[string]string `json:"mp4"`
 		WebM      map[string]string `json:"webm"`
 	} `json:"movies"`
 	PcRequirements    any `json:"pc_requirements"`
 	LinuxRequirements any `json:"linux_requirements"`
-	Achievements struct {
+	Achievements      struct {
 		Total       int `json:"total"`
 		Highlighted []struct {
 			Name string `json:"name"`
@@ -330,8 +330,8 @@ func categoryNames(in []struct {
 // videosOf picks playable files from the Store's movies: mp4 480/max or
 // webm first; HLS-only entries are skipped.
 func videosOf(movies []struct {
-	Name      string `json:"name"`
-	Thumbnail string `json:"thumbnail"`
+	Name      string            `json:"name"`
+	Thumbnail string            `json:"thumbnail"`
 	MP4       map[string]string `json:"mp4"`
 	WebM      map[string]string `json:"webm"`
 }) []types.GameVideo {

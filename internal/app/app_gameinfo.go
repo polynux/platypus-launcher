@@ -30,8 +30,8 @@ const gameInfoTTL = 7 * 24 * time.Hour
 
 // gameInfoEntry is one cached GameDetails with the link it was fetched for.
 type gameInfoEntry struct {
-	Link      string           `json:"link"`
-	FetchedAt int64            `json:"fetched_at"` // unix seconds
+	Link      string            `json:"link"`
+	FetchedAt int64             `json:"fetched_at"` // unix seconds
 	Details   types.GameDetails `json:"details"`
 }
 
@@ -354,9 +354,8 @@ func (a *App) fetchLutrisDetails(slug string) (*types.GameDetails, error) {
 	if l.Year > 0 {
 		d.ReleaseDate = strconv.Itoa(l.Year)
 	}
-	slug = l.Slug
-	if strings.TrimSpace(slug) == "" {
-		slug = strings.TrimSpace(slug)
+	if s := strings.TrimSpace(l.Slug); s != "" {
+		slug = s
 	}
 	if u := sanitize.HTTPSURL("https://lutris.net/games/" + slug); u != "" {
 		d.StoreURL = u

@@ -179,7 +179,6 @@ func DefaultGamesFolder() string {
 	return filepath.Join(home, "Games")
 }
 
-
 // Canceled downloads keep their partial data this many days by default.
 const (
 	DefaultCancelCleanupDays = 7
