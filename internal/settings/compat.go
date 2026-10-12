@@ -51,6 +51,79 @@ func (s *Store) SetArtworkOnline(on bool) error {
 	return nil
 }
 
+// GameInfoOnline says whether Platypus may look a sideloaded game's
+// description and details up online (issue #38). On until the user switches
+// it off. When off, nothing goes out: neither GetGameDetails for sideloaded
+// games nor an explicit link.
+func (s *Store) GameInfoOnline() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.FindGameInfo == nil || *s.data.FindGameInfo
+}
+
+// SetGameInfoOnline saves the "Find game info online" switch.
+func (s *Store) SetGameInfoOnline(on bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.data.FindGameInfo
+	s.data.FindGameInfo = &on
+	if err := s.save(); err != nil {
+		s.data.FindGameInfo = prev
+		return err
+	}
+	return nil
+}
+
+// InfoSource is the online info link of a sideloaded game (issue #38):
+// "gog:<product id>" or "lutris:<slug>", "" when none is set.
+func (s *Store) InfoSource(gameID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.InfoSources[gameID]
+}
+
+// SetInfoSource saves the online info link of a sideloaded game. An empty
+// source clears it. Otherwise source is "gog" or "lutris" and id the GOG
+// product id or the Lutris slug.
+func (s *Store) SetInfoSource(gameID, source, id string) error {
+	source = strings.TrimSpace(strings.ToLower(source))
+	id = strings.TrimSpace(id)
+	var link string
+	switch {
+	case source == "" && id == "":
+		link = ""
+	case source == "gog" && id != "":
+		link = "gog:" + id
+	case source == "lutris" && id != "":
+		link = "lutris:" + id
+	default:
+		return errors.New("an info source is gog or lutris")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev, had := s.data.InfoSources[gameID]
+	if link == "" {
+		delete(s.data.InfoSources, gameID)
+	} else {
+		if s.data.InfoSources == nil {
+			s.data.InfoSources = map[string]string{}
+		}
+		s.data.InfoSources[gameID] = link
+	}
+	if err := s.save(); err != nil {
+		if had {
+			if s.data.InfoSources == nil {
+				s.data.InfoSources = map[string]string{}
+			}
+			s.data.InfoSources[gameID] = prev
+		} else {
+			delete(s.data.InfoSources, gameID)
+		}
+		return err
+	}
+	return nil
+}
+
 // CompatAppID is the Steam AppID the user set for a game's ratings, "" when
 // none was set.
 func (s *Store) CompatAppID(gameID string) string {

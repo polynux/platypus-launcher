@@ -769,6 +769,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		CancelCleanupDays:     a.settings.CancelCleanupDays(),
 		RatingsOnline:         a.settings.RatingsOnline(),
 		ArtworkOnline:         a.settings.ArtworkOnline(),
+		GameInfoOnline:        a.settings.GameInfoOnline(),
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
 	}
