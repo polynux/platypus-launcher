@@ -40,3 +40,11 @@ func Use(dir string) {
 	override = dir
 	mu.Unlock()
 }
+
+// Override reports the Use override, if any (issue #41: paths.Resolve lets
+// the migration override win over the environment).
+func Override() (string, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	return override, override != ""
+}
