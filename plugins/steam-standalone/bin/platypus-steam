@@ -1014,6 +1014,7 @@ def art_urls(app):
 # base + "/store_item_assets/" + asset_url_format with ${FILENAME} replaced.
 ART_TTL = 7 * 86400  # resolved asset URLs are refreshed weekly
 ART_BATCH = 200  # app ids per GetItems request (the API accepts this many)
+ART_BUDGET = 15  # seconds of GetItems calls per library.list, separate from STORE_BUDGET
 ART_CDN_BASE = "https://shared.steamstatic.com"
 art_lock = threading.Lock()
 art_cache = None  # app id -> {"cover","hero","banner","at"}, mirrors art-assets.json
@@ -1237,10 +1238,11 @@ def library_list(_params):
             out.append(missing)
     # Newer apps only have hashed asset paths: resolve the real cover/hero/
     # banner URLs for every listed app (owned and installed-missing alike)
-    # within the listing's remaining time budget. Failures and timeouts
+    # within a budget of its own (Store lookups may have spent theirs on a
+    # big first listing; one GetItems call covers 200 apps). Failures and timeouts
     # keep the fixed CDN fallback above, never fail the listing.
     try:
-        overrides = resolve_art_assets([e["id"] for e in out], deadline)
+        overrides = resolve_art_assets([e["id"] for e in out], time.time() + ART_BUDGET)
     except Exception:
         overrides = {}
     for entry in out:
