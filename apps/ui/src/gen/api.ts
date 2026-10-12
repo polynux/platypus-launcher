@@ -62,6 +62,7 @@ export interface CoreApi {
   LaunchGame(game: types.Game): Promise<string>;
   LaunchGameAnyway(game: types.Game, prompt: string): Promise<string>;
   LaunchGameViaClient(game: types.Game): Promise<string>;
+  LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
   ListJobs(): Promise<types.Job[]>;
   ListSessions(): Promise<types.SessionEvent[]>;
   ListStorePlugins(): Promise<types.StorePlugin[]>;
@@ -108,6 +109,7 @@ export interface CoreApi {
   SetCustomArt(gameID: string, kind: string, path: string): Promise<types.Customization>;
   SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
+  SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
   SetPluginInstallFolder(id: string, path: string): Promise<void>;
@@ -185,6 +187,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGame',
   'LaunchGameAnyway',
   'LaunchGameViaClient',
+  'LinkGameInfo',
   'ListJobs',
   'ListSessions',
   'ListStorePlugins',
@@ -231,6 +234,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCustomArt',
   'SetCustomGameYear',
   'SetCustomTitle',
+  'SetGameInfoOnline',
   'SetGameSteamAppID',
   'SetPluginEnabled',
   'SetPluginInstallFolder',
