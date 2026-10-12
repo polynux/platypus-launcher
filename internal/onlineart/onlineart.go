@@ -1,9 +1,12 @@
 // Package onlineart finds cover and banner art for sideloaded games on the
-// web (issue #36). The only source is Steam's public store search, which
-// needs no key and no login, plus the Steam CDN images for one app id. No
-// other source, no API keys, no scraping beyond these JSON and image
-// endpoints. The endpoint bases are injectable so tests use httptest; tests
-// must never hit the network.
+// web (issues #36, art fallbacks). Steam's public store search is the first
+// source, which needs no key and no login, plus the Steam CDN images for one
+// app id. GOG's catalog and Lutris (mirroring IGDB covers) are keyless
+// fallbacks, used only when Steam is thin and on demand. No other source, no
+// API keys, no scraping beyond these JSON and image endpoints (igdb.com
+// itself is never scraped: it sits behind a Cloudflare challenge). The
+// endpoint bases are injectable so tests use httptest; tests must never hit
+// the network.
 package onlineart
 
 import (
@@ -13,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -28,6 +32,17 @@ const (
 	// DefaultAPIBase serves the keyless store-browse API (IStoreBrowseService),
 	// which names the real hashed asset paths newer apps keep.
 	DefaultAPIBase = "https://api.steampowered.com"
+	// DefaultGOGBase serves the keyless GOG catalog search.
+	DefaultGOGBase = "https://catalog.gog.com"
+	// DefaultLutrisBase serves the keyless Lutris games API (which mirrors
+	// IGDB covers).
+	DefaultLutrisBase = "https://lutris.net"
+	// DefaultIGDBImageBase serves the larger IGDB cover copies behind the
+	// Lutris coverart ids.
+	DefaultIGDBImageBase = "https://images.igdb.com"
+	// ArtContact is where the art sources can reach Platypus's maintainers;
+	// every request to GOG, Lutris or IGDB names it in the User-Agent.
+	ArtContact = "https://github.com/polynux/platypus-launcher"
 	// Timeout bounds one lookup or download.
 	Timeout = 15 * time.Second
 	// MaxImageBytes caps one downloaded image.
@@ -36,22 +51,47 @@ const (
 	MaxCandidates = 8
 )
 
-// Candidate is one search hit: a Steam app the user can apply the art of.
+// Candidate is one search hit: art the user can apply. Source names where
+// the art comes from: "steam", "gog" or "lutris" (Lutris mirrors IGDB
+// covers). ID is the source's id: the Steam app id as a string, the GOG
+// product id, or the Lutris slug. AppID keeps the Steam app id for backward
+// compatibility (0 for non-Steam hits). Year is the release year when known.
+// CoverURL, BannerURL and LogoURL carry the source's image addresses (GOG:
+// coverVertical, coverHorizontal, logo; Lutris: the upgraded IGDB cover with
+// CoverFallbackURL the lutris.net coverart URL); Steam hits resolve theirs
+// on apply. SteamAppID is a mapped Steam app id from Lutris provider_games,
+// 0 when the hit maps to none.
 type Candidate struct {
-	AppID    int    `json:"app_id"`
-	Name     string `json:"name"`
-	ThumbURL string `json:"thumb_url"`
+	Source           string `json:"source"`
+	ID               string `json:"id"`
+	AppID            int    `json:"app_id"`
+	Name             string `json:"name"`
+	Year             int    `json:"year,omitempty"`
+	ThumbURL         string `json:"thumb_url"`
+	CoverURL         string `json:"cover_url,omitempty"`
+	BannerURL        string `json:"banner_url,omitempty"`
+	LogoURL          string `json:"logo_url,omitempty"`
+	CoverFallbackURL string `json:"cover_fallback_url,omitempty"`
+	SteamAppID       int    `json:"steam_app_id,omitempty"`
 }
 
 // Client looks art up online. The zero value is not usable; use New or set
 // the fields directly in tests. SearchBase, CDNBase and APIBase name the
-// endpoints (defaults DefaultSearchBase, DefaultCDNBase, DefaultAPIBase);
-// HTTP does the requests (default an http.Client with Timeout).
+// Steam endpoints (defaults DefaultSearchBase, DefaultCDNBase,
+// DefaultAPIBase); GOGBase, LutrisBase and IGDBBase name the fallback
+// endpoints (defaults DefaultGOGBase, DefaultLutrisBase,
+// DefaultIGDBImageBase); Version is the Platypus version named in the
+// User-Agent (default "1.0"); HTTP does the requests (default an http.Client
+// with Timeout).
 type Client struct {
 	HTTP       *http.Client
 	SearchBase string
 	CDNBase    string
 	APIBase    string
+	GOGBase    string
+	LutrisBase string
+	IGDBBase   string
+	Version    string
 }
 
 func (c *Client) http() *http.Client {
@@ -82,6 +122,37 @@ func (c *Client) apiBase() string {
 	return DefaultAPIBase
 }
 
+func (c *Client) gogBase() string {
+	if c.GOGBase != "" {
+		return c.GOGBase
+	}
+	return DefaultGOGBase
+}
+
+func (c *Client) lutrisBase() string {
+	if c.LutrisBase != "" {
+		return c.LutrisBase
+	}
+	return DefaultLutrisBase
+}
+
+func (c *Client) igdbBase() string {
+	if c.IGDBBase != "" {
+		return c.IGDBBase
+	}
+	return DefaultIGDBImageBase
+}
+
+// userAgent names Platypus and its contact on every request to GOG, Lutris
+// or IGDB: "Platypus/<version> (+<contact>)".
+func (c *Client) userAgent() string {
+	v := strings.TrimSpace(c.Version)
+	if v == "" {
+		v = "1.0"
+	}
+	return "Platypus/" + v + " (+" + ArtContact + ")"
+}
+
 // New returns a Client for the live Steam endpoints.
 func New() *Client {
 	return &Client{HTTP: &http.Client{Timeout: Timeout}}
@@ -107,6 +178,7 @@ func (c *Client) Search(title string) ([]Candidate, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", c.userAgent())
 	resp, err := c.http().Do(req)
 	if err != nil {
 		return nil, err
@@ -127,7 +199,7 @@ func (c *Client) Search(title string) ([]Candidate, error) {
 		if it.ID <= 0 || strings.TrimSpace(it.Name) == "" {
 			continue
 		}
-		out = append(out, Candidate{AppID: it.ID, Name: strings.TrimSpace(it.Name), ThumbURL: it.TinyImage})
+		out = append(out, Candidate{Source: "steam", ID: strconv.Itoa(it.ID), AppID: it.ID, Name: strings.TrimSpace(it.Name), ThumbURL: it.TinyImage})
 		if len(out) >= MaxCandidates {
 			break
 		}
@@ -241,6 +313,7 @@ func (c *Client) GetItemAssets(appID int) (StoreAssets, error) {
 	if err != nil {
 		return StoreAssets{}, err
 	}
+	req.Header.Set("User-Agent", c.userAgent())
 	resp, err := c.http().Do(req)
 	if err != nil {
 		return StoreAssets{}, err
@@ -334,6 +407,7 @@ func (c *Client) Download(rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", c.userAgent())
 	resp, err := c.http().Do(req)
 	if err != nil {
 		return nil, err
@@ -377,6 +451,7 @@ func (c *Client) AppInfo(appID int) (string, int, error) {
 	if err != nil {
 		return "", 0, err
 	}
+	req.Header.Set("User-Agent", c.userAgent())
 	resp, err := c.http().Do(req)
 	if err != nil {
 		return "", 0, err
@@ -435,4 +510,326 @@ func parseYear(date string) int {
 	}
 	flush()
 	return year
+}
+
+// gogID is a GOG product id: the catalog serves it as a string.
+type gogID string
+
+// UnmarshalJSON accepts the string form the catalog serves (and a number,
+// defensively, so a numeric id can never break the decode).
+func (g *gogID) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		*g = gogID(s)
+		return nil
+	}
+	var n int64
+	if err := json.Unmarshal(b, &n); err == nil {
+		*g = gogID(strconv.FormatInt(n, 10))
+		return nil
+	}
+	var f float64
+	if err := json.Unmarshal(b, &f); err == nil {
+		*g = gogID(strconv.FormatInt(int64(f), 10))
+		return nil
+	}
+	return fmt.Errorf("gog product id is not a string: %s", strings.TrimSpace(string(b)))
+}
+
+type gogProduct struct {
+	ID              gogID  `json:"id"`
+	Title           string `json:"title"`
+	ReleaseDate     string `json:"releaseDate"`
+	CoverVertical   string `json:"coverVertical"`
+	CoverHorizontal string `json:"coverHorizontal"`
+	Logo            string `json:"logo"`
+}
+
+// SearchGOG asks the keyless GOG catalog for title and returns up to
+// MaxCandidates hits, in the catalog's order. Cover art is coverVertical,
+// banner art coverHorizontal, logo art logo.
+func (c *Client) SearchGOG(title string) ([]Candidate, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil, fmt.Errorf("title is empty")
+	}
+	u := strings.TrimSuffix(c.gogBase(), "/") + "/v1/catalog?" + url.Values{
+		"limit": {"8"}, "query": {"like:" + title}, "locale": {"en-US"},
+	}.Encode()
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", c.userAgent())
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gog search returned status %d", resp.StatusCode)
+	}
+	var body struct {
+		Products []gogProduct `json:"products"`
+	}
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := dec.Decode(&body); err != nil {
+		return nil, fmt.Errorf("gog search: %w", err)
+	}
+	out := []Candidate{}
+	for _, p := range body.Products {
+		id := strings.TrimSpace(string(p.ID))
+		name := strings.TrimSpace(p.Title)
+		if id == "" || name == "" {
+			continue
+		}
+		cover := strings.TrimSpace(p.CoverVertical)
+		banner := strings.TrimSpace(p.CoverHorizontal)
+		logo := strings.TrimSpace(p.Logo)
+		if cover == "" && banner == "" {
+			continue // nothing to apply a cover or banner from
+		}
+		thumb := banner
+		if thumb == "" {
+			thumb = cover
+		}
+		out = append(out, Candidate{
+			Source: "gog", ID: id,
+			Name: name, Year: parseYear(p.ReleaseDate), ThumbURL: thumb,
+			CoverURL: cover, BannerURL: banner, LogoURL: logo,
+		})
+		if len(out) >= MaxCandidates {
+			break
+		}
+	}
+	return out, nil
+}
+
+// lutrisProvider names one store behind a Lutris hit.
+type lutrisProvider struct {
+	Service string `json:"service"`
+	Slug    string `json:"slug"`
+}
+
+type lutrisResult struct {
+	Name          string           `json:"name"`
+	Slug          string           `json:"slug"`
+	Year          int              `json:"year"`
+	Coverart      string           `json:"coverart"`
+	ProviderGames []lutrisProvider `json:"provider_games"`
+	// The single-game endpoint names the Steam app directly.
+	SteamID int `json:"steamid"`
+}
+
+// steamAppIDOf returns the hit's Steam app id from provider_games (or the
+// single-game endpoint's steamid), 0 when it maps to no Steam app.
+func steamAppIDOf(r lutrisResult) int {
+	if r.SteamID > 0 {
+		return r.SteamID
+	}
+	for _, p := range r.ProviderGames {
+		if !strings.EqualFold(strings.TrimSpace(p.Service), "steam") {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(p.Slug))
+		if err == nil && n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+// lutrisImageID takes the IGDB image id out of a Lutris coverart URL of the
+// form …/media/igdb/cover_big/<imageId>.jpg. "" means the coverart carries
+// no image id (e.g. the generic /media/igdb/library_capsule.jpg): those are
+// unreliable and skipped.
+func lutrisImageID(raw string) string {
+	const marker = "/media/igdb/cover_big/"
+	i := strings.Index(raw, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := raw[i+len(marker):]
+	if q := strings.IndexAny(rest, "?#"); q >= 0 {
+		rest = rest[:q]
+	}
+	if !strings.HasSuffix(rest, ".jpg") {
+		return ""
+	}
+	id := strings.TrimSuffix(rest, ".jpg")
+	if id == "" || strings.Contains(id, "/") {
+		return ""
+	}
+	for _, r := range id {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' {
+			continue
+		}
+		return ""
+	}
+	return id
+}
+
+// igdbCoverURL names the larger copy of an IGDB image id on IGDB's open CDN.
+func (c *Client) igdbCoverURL(imageID string) string {
+	return strings.TrimSuffix(c.igdbBase(), "/") + "/igdb/image/upload/t_cover_big_2x/" + imageID + ".jpg"
+}
+
+// lutrisCandidate builds the candidate for one Lutris hit. A hit whose
+// coverart carries no image id is unreliable: it is skipped, unless it maps
+// to a Steam app, in which case it is offered as a Steam candidate (no
+// thumb: the generic art is never used).
+func (c *Client) lutrisCandidate(r lutrisResult) (Candidate, bool) {
+	name := strings.TrimSpace(r.Name)
+	slug := strings.TrimSpace(r.Slug)
+	if name == "" || slug == "" {
+		return Candidate{}, false
+	}
+	steam := steamAppIDOf(r)
+	if id := lutrisImageID(strings.TrimSpace(r.Coverart)); id != "" {
+		cover := c.igdbCoverURL(id)
+		return Candidate{
+			Source: "lutris", ID: slug,
+			Name: name, Year: r.Year, ThumbURL: cover,
+			CoverURL: cover, CoverFallbackURL: strings.TrimSpace(r.Coverart),
+			SteamAppID: steam,
+		}, true
+	}
+	if steam > 0 {
+		return Candidate{
+			Source: "steam", ID: strconv.Itoa(steam), AppID: steam,
+			Name: name, Year: r.Year, SteamAppID: steam,
+		}, true
+	}
+	return Candidate{}, false
+}
+
+// SearchLutris asks the keyless Lutris games API (which mirrors IGDB covers)
+// for title and returns up to MaxCandidates hits, in Lutris's order. Lutris
+// gives covers only: banner_url is a 184x69 thumbnail and is never used.
+func (c *Client) SearchLutris(title string) ([]Candidate, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return nil, fmt.Errorf("title is empty")
+	}
+	u := strings.TrimSuffix(c.lutrisBase(), "/") + "/api/games?" + url.Values{
+		"search": {title},
+	}.Encode()
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", c.userAgent())
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("lutris search returned status %d", resp.StatusCode)
+	}
+	var body struct {
+		Results []lutrisResult `json:"results"`
+	}
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := dec.Decode(&body); err != nil {
+		return nil, fmt.Errorf("lutris search: %w", err)
+	}
+	out := []Candidate{}
+	for _, r := range body.Results {
+		if cand, ok := c.lutrisCandidate(r); ok {
+			out = append(out, cand)
+			if len(out) >= MaxCandidates {
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+// LutrisGame fetches one Lutris game by slug for an apply: the cover (the
+// upgraded IGDB copy, falling back to the coverart URL) plus the mapped
+// Steam app id, if any.
+func (c *Client) LutrisGame(slug string) (Candidate, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return Candidate{}, fmt.Errorf("lutris slug is empty")
+	}
+	u := strings.TrimSuffix(c.lutrisBase(), "/") + "/api/games/" + url.PathEscape(slug)
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return Candidate{}, err
+	}
+	req.Header.Set("User-Agent", c.userAgent())
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return Candidate{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return Candidate{}, fmt.Errorf("lutris has no game %q", slug)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return Candidate{}, fmt.Errorf("lutris game returned status %d", resp.StatusCode)
+	}
+	var r lutrisResult
+	dec := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := dec.Decode(&r); err != nil {
+		return Candidate{}, fmt.Errorf("lutris game: %w", err)
+	}
+	if strings.TrimSpace(r.Slug) == "" {
+		r.Slug = slug
+	}
+	cand, ok := c.lutrisCandidate(r)
+	if !ok {
+		return Candidate{}, fmt.Errorf("lutris has no cover art for %q", slug)
+	}
+	if cand.Source == "steam" {
+		// A slug whose only value is its Steam mapping still applies: the
+		// caller takes the Steam path.
+		return cand, nil
+	}
+	return cand, nil
+}
+
+// SteamNeedsFallback says whether the fallbacks should be queried: Steam is
+// thin (fewer than 3 hits) or names nothing like the title.
+func SteamNeedsFallback(title string, steam []Candidate) bool {
+	if len(steam) < 3 {
+		return true
+	}
+	want := NormalizeTitle(title)
+	for _, s := range steam {
+		if s.Source != "" && s.Source != "steam" {
+			continue
+		}
+		if NormalizeTitle(s.Name) == want {
+			return false
+		}
+	}
+	return true
+}
+
+// MergeCandidates merges Steam hits first, then GOG, then Lutris, dropping
+// duplicates by normalised name + year (preferring Steam, then GOG, then
+// Lutris) and capping the total at MaxCandidates.
+func MergeCandidates(steam, gog, lutris []Candidate) []Candidate {
+	out := []Candidate{}
+	seen := map[string]bool{}
+	for _, list := range [][]Candidate{steam, gog, lutris} {
+		for _, cand := range list {
+			if strings.TrimSpace(cand.Name) == "" {
+				continue
+			}
+			key := NormalizeTitle(cand.Name) + "\x00" + strconv.Itoa(cand.Year)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, cand)
+			if len(out) >= MaxCandidates {
+				return out
+			}
+		}
+	}
+	return out
 }
