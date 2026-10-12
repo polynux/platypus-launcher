@@ -173,10 +173,18 @@ func ExactMatch(title string, all []Candidate) *Candidate {
 }
 
 // CoverURL, HeroURL, HeaderURL and LogoURL name one app's images on the CDN.
-func (c *Client) CoverURL(appID int) string  { return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/library_600x900.jpg", c.cdnBase(), appID) }
-func (c *Client) HeroURL(appID int) string   { return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/library_hero.jpg", c.cdnBase(), appID) }
-func (c *Client) HeaderURL(appID int) string { return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/header.jpg", c.cdnBase(), appID) }
-func (c *Client) LogoURL(appID int) string   { return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/logo.png", c.cdnBase(), appID) }
+func (c *Client) CoverURL(appID int) string {
+	return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/library_600x900.jpg", c.cdnBase(), appID)
+}
+func (c *Client) HeroURL(appID int) string {
+	return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/library_hero.jpg", c.cdnBase(), appID)
+}
+func (c *Client) HeaderURL(appID int) string {
+	return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/header.jpg", c.cdnBase(), appID)
+}
+func (c *Client) LogoURL(appID int) string {
+	return fmt.Sprintf("%s/store_item_assets/steam/apps/%d/logo.png", c.cdnBase(), appID)
+}
 
 // imageKind sniffs the first bytes of a download: PNG, JPEG or WebP. The
 // type comes from the content, never from the headers or URL.

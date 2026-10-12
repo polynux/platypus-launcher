@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -77,7 +78,7 @@ func (a *App) ApplyOnlineArt(gameID string, appID int) (types.Customization, err
 	if name == "" {
 		name = strconv.Itoa(appID)
 	}
-	applied, err := a.fetchAndStoreArt(gameID, appID, name, false)
+	applied, logoErr, err := a.fetchAndStoreArt(gameID, appID, name, false)
 	if err != nil {
 		c, _ := a.customization(gameID)
 		return c, err
@@ -85,6 +86,9 @@ func (a *App) ApplyOnlineArt(gameID string, appID int) (types.Customization, err
 	if len(applied) == 0 {
 		c, _ := a.customization(gameID)
 		return c, fmt.Errorf("Steam has no cover or banner art for %s", name)
+	}
+	if logoErr != nil {
+		a.host.Warnf("artwork logo for %s: %v", name, logoErr)
 	}
 	a.noteOnlineExtras(gameID, appID, year)
 	return a.customization(gameID)
@@ -96,29 +100,40 @@ type artDownload struct {
 	data []byte
 }
 
+// errGameGone aborts an online art apply whose game was removed mid-flight:
+// the art, compat AppID and year must land nowhere.
+var errGameGone = errors.New("the game was removed")
+
 // fetchAndStoreArt downloads the app's cover, banner and logo and stores
 // each into the game's custom art. skipHas leaves kinds the user already set
 // alone (the auto path); otherwise the apply replaces (the manual path: the
-// user's explicit choice). It returns the kinds stored. A download error
-// aborts the apply; a 404 on one kind only skips it. When art was stored the
-// lookup's source is remembered for the attribution line.
-func (a *App) fetchAndStoreArt(gameID string, appID int, name string, skipHas bool) ([]customize.Kind, error) {
+// user's explicit choice). It returns the kinds stored and, separately, a
+// logo download error: the logo is best-effort, so its failure only skips it
+// (the caller warns once) while cover and banner still apply. A cover or
+// banner download error aborts the apply; a 404 on one kind only skips it.
+// When art was stored the lookup's source is remembered for the attribution
+// line. Right before storing, a game that no longer exists aborts with
+// errGameGone: nothing is stored for it.
+func (a *App) fetchAndStoreArt(gameID string, appID int, name string, skipHas bool) (applied []customize.Kind, logoErr, err error) {
 	s := a.custom.get()
 	if s == nil {
-		return nil, fmt.Errorf("customization is not available")
+		return nil, nil, fmt.Errorf("customization is not available")
 	}
 	cl := a.artClient()
 	cover, err := cl.Download(cl.CoverURL(appID))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	banner, err := cl.Banner(appID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	logo, err := cl.Download(cl.LogoURL(appID))
-	if err != nil {
-		return nil, err
+	logo, logoErr := cl.Download(cl.LogoURL(appID))
+	if logoErr != nil {
+		logo = nil
+	}
+	if !a.isCustomGameID(gameID) {
+		return nil, nil, errGameGone
 	}
 	have := s.Get(gameID).Art
 	want := []artDownload{}
@@ -133,19 +148,19 @@ func (a *App) fetchAndStoreArt(gameID string, appID int, name string, skipHas bo
 		}
 		want = append(want, d)
 	}
-	applied := []customize.Kind{}
+	applied = []customize.Kind{}
 	for _, d := range want {
 		if err := a.storeArtBytes(gameID, d.kind, d.data); err != nil {
-			return applied, err
+			return applied, nil, err
 		}
 		applied = append(applied, d.kind)
 	}
 	if len(applied) > 0 {
 		if err := s.SetArtSource(gameID, "steam:"+strconv.Itoa(appID), name); err != nil {
-			return applied, err
+			return applied, nil, err
 		}
 	}
-	return applied, nil
+	return applied, logoErr, nil
 }
 
 // storeArtBytes stores downloaded bytes as kind of gameID through the
@@ -209,10 +224,16 @@ func (a *App) autoArtwork(gameID, title string) {
 	if m == nil {
 		return
 	}
-	applied, err := a.fetchAndStoreArt(gameID, m.AppID, m.Name, true)
+	applied, logoErr, err := a.fetchAndStoreArt(gameID, m.AppID, m.Name, true)
 	if err != nil {
+		if errors.Is(err, errGameGone) {
+			return // removed mid-flight: drop silently
+		}
 		a.host.Warnf("artwork lookup for %q: %v", title, err)
 		return
+	}
+	if logoErr != nil {
+		a.host.Warnf("artwork logo for %q: %v", title, logoErr)
 	}
 	if len(applied) == 0 {
 		return

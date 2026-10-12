@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"platypus/internal/customize"
 	"platypus/internal/onlineart"
@@ -24,8 +25,10 @@ type artHost struct {
 	emits []string
 }
 
-func (h *artHost) Warnf(format string, args ...any) { h.warns = append(h.warns, fmt.Sprintf(format, args...)) }
-func (h *artHost) Emit(event string, _ ...any)      { h.emits = append(h.emits, event) }
+func (h *artHost) Warnf(format string, args ...any) {
+	h.warns = append(h.warns, fmt.Sprintf(format, args...))
+}
+func (h *artHost) Emit(event string, _ ...any) { h.emits = append(h.emits, event) }
 
 func testPNG(t *testing.T) []byte {
 	t.Helper()
@@ -45,7 +48,11 @@ type artFixture struct {
 	hits   atomic.Int64
 	search string
 	images map[string][]byte // path suffix -> body; absent means 404
+	fail   map[string]int    // path suffix -> status code (e.g. a logo 500)
 	detail string
+	// searchGate, when non-nil, holds the search handler until closed: the
+	// test can remove the game mid-flight.
+	searchGate chan struct{}
 }
 
 func newArtFixture(t *testing.T) *artFixture {
@@ -55,12 +62,21 @@ func newArtFixture(t *testing.T) *artFixture {
 		f.hits.Add(1)
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/api/storesearch/"):
+			if f.searchGate != nil {
+				<-f.searchGate
+			}
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"total":9,"items":[%s]}`, f.search)
 		case strings.HasPrefix(r.URL.Path, "/api/appdetails"):
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, f.detail)
 		case strings.HasPrefix(r.URL.Path, "/store_item_assets/"):
+			for suffix, code := range f.fail {
+				if strings.HasSuffix(r.URL.Path, suffix) {
+					w.WriteHeader(code)
+					return
+				}
+			}
 			for suffix, body := range f.images {
 				if strings.HasSuffix(r.URL.Path, suffix) {
 					w.Write(body)
@@ -304,5 +320,75 @@ func TestSearchArtOnlineParses(t *testing.T) {
 	}
 	if len(got) != 2 || got[0].AppID != 123 || got[0].Name != "Hollow Knight" {
 		t.Fatalf("candidates = %+v", got)
+	}
+}
+
+// A failing logo must not sink the apply: cover and banner still land, with
+// one warn about the logo.
+func TestLogoErrorStillAppliesCoverAndBanner(t *testing.T) {
+	f := newArtFixture(t)
+	png := testPNG(t)
+	f.detail = knightDetail
+	f.images["library_600x900.jpg"] = png
+	f.images["library_hero.jpg"] = png
+	f.fail = map[string]int{"logo.png": http.StatusInternalServerError}
+	a, h, id := newArtApp(t, f, "Hollow Knight")
+
+	if _, err := a.ApplyOnlineArt(id, 123); err != nil {
+		t.Fatalf("logo 500 aborted the apply: %v", err)
+	}
+	if got := a.artBytes(t, id, "cover"); !bytes.Equal(got, png) {
+		t.Fatal("cover wasn't stored")
+	}
+	if got := a.artBytes(t, id, "banner"); !bytes.Equal(got, png) {
+		t.Fatal("banner wasn't stored")
+	}
+	if p := a.custom.get().Path(id, customize.Logo); p != "" {
+		t.Fatalf("logo path = %q, want none stored", p)
+	}
+	if len(h.warns) != 1 || !strings.Contains(strings.ToLower(h.warns[0]), "logo") {
+		t.Fatalf("warns = %v, want one logo warn", h.warns)
+	}
+}
+
+// Removing the game mid-lookup stores nothing for it: no art, no source, no
+// compat AppID, and silence (no warn, no event).
+func TestAutoArtworkDropsWhenGameRemoved(t *testing.T) {
+	f := newArtFixture(t)
+	png := testPNG(t)
+	f.search = knightSearch
+	f.detail = knightDetail
+	f.images["library_600x900.jpg"] = png
+	f.images["library_hero.jpg"] = png
+	f.searchGate = make(chan struct{})
+	a, h, id := newArtApp(t, f, "Hollow Knight")
+
+	done := make(chan struct{})
+	go func() {
+		a.autoArtwork(id, "Hollow Knight")
+		close(done)
+	}()
+	// Wait until the lookup is inside the blocked search, then remove.
+	deadline := time.Now().Add(5 * time.Second)
+	for f.hits.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the lookup never reached the server")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := a.settings.RemoveCustomGame(id); err != nil {
+		t.Fatal(err)
+	}
+	close(f.searchGate)
+	<-done
+
+	if got := a.custom.get().Get(id); len(got.Art) != 0 || got.ArtSource != "" {
+		t.Fatalf("art for the removed game = %+v, want none", got)
+	}
+	if got := a.settings.CompatAppID(id); got != "" {
+		t.Fatalf("compat app id for the removed game = %q, want none", got)
+	}
+	if len(h.warns) != 0 || len(h.emits) != 0 {
+		t.Fatalf("warns = %v emits = %v, want silence", h.warns, h.emits)
 	}
 }
