@@ -47,6 +47,7 @@ func newCompatService(dataDir string, st *settings.Store) (*compat.Service, erro
 	svc := &compat.Service{
 		Cache:   cache,
 		Ratings: &compat.ProtonDB{Fetch: fetch},
+		Deck:    &compat.SteamDeck{Fetch: fetch},
 		AntiCheat: &compat.AntiCheatStore{
 			Path:  filepath.Join(dataDir, "compat-awacy.json"),
 			URL:   compat.AWACYURL,
@@ -137,22 +138,26 @@ func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source
 
 // GetGameFix returns the curated fix from data plugins, or the game's ProtonDB
 // tier when it has one worth showing (a Steam AppID and enough reports).
+// Steam's Deck verdict rides along either way, when Steam has one.
 // Plugin games get their ProtonDB tier only through a Steam AppID hint or one
 // the user set; nothing is matched by title.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
 	return a.gameFix(game, a.pluginHints(game), func(appID string) (compat.Rating, bool) {
 		return a.compat.ProtonDB(a.baseCtx(), appID)
+	}, func(appID string) (compat.DeckResult, bool) {
+		return a.compat.DeckRating(a.baseCtx(), appID)
 	})
 }
 
-// gameFix is GetGameFix with the ProtonDB lookup chosen by the caller: the
-// library asks without waiting for ProtonDB.
-func (a *App) gameFix(game types.Game, hints *types.GameDetails, protonDB func(appID string) (compat.Rating, bool)) *types.GameFixInfo {
+// gameFix is GetGameFix with the rating lookups chosen by the caller: the
+// library asks without waiting.
+func (a *App) gameFix(game types.Game, hints *types.GameDetails, protonDB func(appID string) (compat.Rating, bool), deckDB func(appID string) (compat.DeckResult, bool)) *types.GameFixInfo {
 	storeAppID := ""
 	if game.Source == types.SourceSteam {
 		storeAppID = game.StoreAppID
 	}
 	if fix := a.data.Fix(game.Title, storeAppID); fix != nil {
+		a.attachDeck(fix, game, hints, deckDB)
 		return fix
 	}
 	if a.compat == nil {
@@ -162,18 +167,44 @@ func (a *App) gameFix(game types.Game, hints *types.GameDetails, protonDB func(a
 	if appID == "" {
 		return nil
 	}
-	r, ok := protonDB(appID)
-	if !ok {
-		return nil
+	var fix *types.GameFixInfo
+	if r, ok := protonDB(appID); ok {
+		if tier := compat.ShownTier(r.Summary); tier != "" {
+			fix = &types.GameFixInfo{
+				Source:      "protondb",
+				Tier:        tier,
+				Description: fmt.Sprintf("ProtonDB Tier: %s (Confidence: %s, %d reports, as of %s)", tier, r.Summary.Confidence, r.Summary.Total, r.FetchedAt.UTC().Format("2006-01-02")),
+			}
+		}
 	}
-	tier := compat.ShownTier(r.Summary)
-	if tier == "" {
-		return nil // too few reports to show a tier
+	if fix == nil {
+		// No tier worth showing, but a Deck verdict alone still earns a note:
+		// the library cards read it.
+		fix = &types.GameFixInfo{}
 	}
-	return &types.GameFixInfo{
-		Source:      "protondb",
-		Tier:        tier,
-		Description: fmt.Sprintf("ProtonDB Tier: %s (Confidence: %s, %d reports, as of %s)", tier, r.Summary.Confidence, r.Summary.Total, r.FetchedAt.UTC().Format("2006-01-02")),
+	a.attachDeck(fix, game, hints, deckDB)
+	if fix.Source == "" && fix.Tier == "" && fix.Deck == "" {
+		return nil // too few reports for a tier, and no Deck verdict either
+	}
+	if fix.Source == "" {
+		fix.Source = "steamdeck"
+	}
+	return fix
+}
+
+// attachDeck puts Steam's Deck verdict on a fix, when Steam has one for the
+// game's Steam AppID. deckDB is the blocking or the cached lookup, like gameFix.
+func (a *App) attachDeck(fix *types.GameFixInfo, game types.Game, hints *types.GameDetails, deckDB func(appID string) (compat.DeckResult, bool)) {
+	if fix == nil || a.compat == nil || deckDB == nil {
+		return
+	}
+	appID, _ := a.ratingAppID(game, hints)
+	if appID == "" {
+		return
+	}
+	if d, ok := deckDB(appID); ok && d.Found {
+		fix.Deck = d.Report.Rating
+		fix.DeckNotes = d.Report.Notes
 	}
 }
 
@@ -194,6 +225,9 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 	if c.SteamAppID != "" {
 		if r, ok := a.compat.ProtonDB(a.baseCtx(), c.SteamAppID); ok {
 			c.ProtonDB = protonRating(r, c.SteamAppID)
+		}
+		if d, ok := a.compat.DeckRating(a.baseCtx(), c.SteamAppID); ok && d.Found {
+			c.Deck = deckRating(d, c.SteamAppID)
 		}
 	}
 	if hints != nil && hints.DRM != nil {
@@ -282,6 +316,17 @@ func (a *App) SetGameInfoOnline(on bool) (types.LauncherSettings, error) {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil
+}
+
+// deckRating is the UI's view of a Steam Deck answer.
+func deckRating(d compat.DeckResult, appID string) *types.DeckRating {
+	return &types.DeckRating{
+		Rating:    d.Report.Rating,
+		Notes:     d.Report.Notes,
+		FetchedAt: d.FetchedAt.Unix(),
+		Stale:     d.Stale,
+		URL:       compat.DeckPage(appID),
+	}
 }
 
 // pluginName is the name a plugin's game is credited to in the UI.

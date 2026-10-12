@@ -177,6 +177,7 @@ export namespace types {
     steam_app_id_source?: string;
     native: boolean;
     protondb?: types.ProtonRating | null;
+    deck?: types.DeckRating | null;
     ratings_online: boolean;
     drm: types.CompatBadge[];
     drm_notes?: string;
@@ -221,6 +222,14 @@ export namespace types {
     launcher?: string;
     denuvo_likely?: boolean | null;
     notes?: string;
+  }
+
+  export interface DeckRating {
+    rating: string;
+    notes?: string[];
+    fetched_at: number;
+    stale?: boolean;
+    url: string;
   }
 
   export interface FamilyMember {
@@ -320,6 +329,8 @@ export namespace types {
     winetricks: string[];
     dll_overrides: Record<string, string>;
     launch_args: string;
+    deck?: string;
+    deck_notes?: string[];
   }
 
   export interface GameFolder {

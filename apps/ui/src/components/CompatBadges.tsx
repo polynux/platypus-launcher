@@ -1,28 +1,58 @@
 import { Badge } from '@/components/ds/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ds/tooltip';
 import type { Compat, CompatBadge, Game, WikiCredit } from '../types';
-import { appIdSourceLabel, asOfDate, badgeTitle, cardCompat, PCGW_ATTRIBUTION, ratingLine, TIER_LABEL } from '../lib/compat';
+import { appIdSourceLabel, asOfDate, badgeTitle, cardCompat, deckTitle, DECK_LABEL, PCGW_ATTRIBUTION, ratingLine, TIER_LABEL } from '../lib/compat';
 import { ExternalLink } from './ExternalLink';
 import { cx } from './ui';
 
-/** The badge on a library card: Native for a Linux build, else the game's tier.
- *  Nothing when there's no answer worth showing. */
+/** The badge on a library card: Native for a Linux build, else the game's tier,
+ *  with the Steam Deck verdict beside it when Steam has one. Nothing when
+ *  there's no answer worth showing. */
 export function CompatChip({ game, className }: { game: Game; className?: string }) {
   const c = cardCompat(game);
-  if (!c) return null;
-  if (c.kind === 'native') {
+  const deck = game.fix_info?.deck;
+  if (!c && !deck) return null;
+  const deckBadge = deck ? <DeckBadge rating={deck} notes={game.fix_info?.deck_notes} /> : null;
+  if (c?.kind === 'native') {
     return (
-      <Badge variant="info" title="Native Linux build from the store: runs without Proton" className={cx('max-w-full truncate', className)}>
-        Native
-      </Badge>
+      <span className={cx('inline-flex max-w-full flex-wrap items-center gap-1.5', className)}>
+        <Badge variant="info" title="Native Linux build from the store: runs without Proton" className="max-w-full truncate">
+          Native
+        </Badge>
+        {deckBadge}
+      </span>
     );
   }
-  const prefix = c.source === 'protondb' ? 'ProtonDB' : 'Fix';
-  const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((t) => t === c.tier) ?? 'silver';
+  const tier = c?.kind === 'tier' ? c.tier : '';
+  const source = c?.kind === 'tier' ? c.source : '';
+  const prefix = source === 'protondb' ? 'ProtonDB' : 'Fix';
+  const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((t) => t === tier) ?? 'silver';
   return (
-    <Badge variant={variant} title={`${prefix}: ${TIER_LABEL[c.tier] ?? c.tier}`} className={cx('max-w-full truncate', className)}>
-      <span className="truncate">{prefix} · {TIER_LABEL[c.tier] ?? c.tier}</span>
-    </Badge>
+    <span className={cx('inline-flex max-w-full flex-wrap items-center gap-1.5', className)}>
+      {c && (
+        <Badge variant={variant} title={`${prefix}: ${TIER_LABEL[tier] ?? tier}`} className="max-w-full truncate">
+          <span className="truncate">{prefix} · {TIER_LABEL[tier] ?? tier}</span>
+        </Badge>
+      )}
+      {deckBadge}
+    </span>
+  );
+}
+
+/** One Steam Deck verdict badge, with its caveats in a tooltip. Nothing when
+ *  Steam has no verdict. Verified reads green, Playable amber, Unsupported red. */
+export function DeckBadge({ rating, notes, className }: { rating: string; notes?: string[] | null; className?: string }) {
+  if (!rating) return null;
+  const variant = rating === 'verified' ? 'ok' : rating === 'playable' ? 'accent' : 'borked';
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant={variant} className={cx('cursor-help', className)}>
+          Deck · {DECK_LABEL[rating] ?? rating}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{deckTitle(rating, notes)}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -75,6 +105,16 @@ export function CompatFacts({ compat }: { compat: Compat }) {
           {' · '}
           <ExternalLink href={pdb.url} className="text-amber-200/80 hover:text-amber-200">
             protondb ↗
+          </ExternalLink>
+        </p>
+      )}
+      {compat.deck?.rating && compat.steam_app_id && (
+        <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-hint text-white/55">
+          <DeckBadge rating={compat.deck.rating} notes={compat.deck.notes} />
+          {compat.deck.fetched_at > 0 && <span>as of {asOfDate(compat.deck.fetched_at)}</span>}
+          {compat.deck.stale && <span>refreshing</span>}
+          <ExternalLink href={compat.deck.url} className="text-amber-200/80 hover:text-amber-200">
+            steam ↗
           </ExternalLink>
         </p>
       )}

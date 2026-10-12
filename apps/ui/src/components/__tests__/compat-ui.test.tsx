@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render as rtlRender, fireEvent, within } from '@testing-library/react';
 import { LibraryView } from '../LibraryView';
-import { CompatChip, CompatFacts, WikiCreditLine } from '../CompatBadges';
+import { CompatChip, CompatFacts, DeckBadge, WikiCreditLine } from '../CompatBadges';
 import { TooltipProvider } from '../ds/tooltip';
 import type { Compat, Game } from '../../types';
 
@@ -31,6 +31,26 @@ describe('CompatChip', () => {
   });
 });
 
+describe('DeckBadge', () => {
+  it('shows a badge per verdict and nothing when Steam has no verdict', () => {
+    const { getByText, rerender, container } = render(<DeckBadge rating="verified" />);
+    expect(getByText('Deck · Verified')).toBeTruthy();
+    rerender(<DeckBadge rating="playable" notes={['Some text is too small to read on the Deck.']} />);
+    expect(getByText('Deck · Playable')).toBeTruthy();
+    rerender(<DeckBadge rating="unsupported" />);
+    expect(getByText('Deck · Unsupported')).toBeTruthy();
+    rerender(<DeckBadge rating="" />);
+    expect(container.textContent).toBe('');
+  });
+
+  it('shows the Deck verdict beside the tier on a card, even with no tier', () => {
+    const deckOnly = mk('d', { fix_info: { source: 'steamdeck', tier: '', description: '', winetricks: [], dll_overrides: {}, launch_args: '', deck: 'playable', deck_notes: [] } });
+    const { getByText, queryByText } = render(<CompatChip game={deckOnly} />);
+    expect(getByText('Deck · Playable')).toBeTruthy();
+    expect(queryByText(/ProtonDB/)).toBeNull();
+  });
+});
+
 describe('CompatFacts', () => {
   const full: Compat = {
     steam_app_id: '620',
@@ -52,6 +72,17 @@ describe('CompatFacts', () => {
     expect(within(getByLabelText('Anti-cheat')).getByText('Easy Anti-Cheat')).toBeTruthy();
     expect(getByText('Echo fixture notes')).toBeTruthy();
     expect(getByText(/Steam AppID 620 \(from the store\)/)).toBeTruthy();
+  });
+
+  it('shows the Deck verdict with its link and date beside the ProtonDB rating', () => {
+    const decked: Compat = {
+      ...full,
+      deck: { rating: 'playable', notes: ['Some text is too small to read on the Deck.'], fetched_at: 1791589136, url: 'https://store.steampowered.com/app/620' },
+    };
+    const { getByText, getAllByText, getByRole } = render(<CompatFacts compat={decked} />);
+    expect(getByText('Deck · Playable')).toBeTruthy();
+    expect(getAllByText(/as of 2026-10-09/)).toHaveLength(2);
+    expect(getByRole('link', { name: /steam/i }).getAttribute('href')).toBe('https://store.steampowered.com/app/620');
   });
 
   it('credits PCGamingWiki under the facts it gave: the page, the licence and the day read', () => {

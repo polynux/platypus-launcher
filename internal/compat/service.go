@@ -35,6 +35,7 @@ const (
 type Service struct {
 	Cache     *Cache
 	Ratings   RatingSource
+	Deck      DeckSource
 	AntiCheat *AntiCheatStore
 	// Wiki is the PCGamingWiki source (see pcgw_service.go).
 	Wiki WikiSource
@@ -275,4 +276,112 @@ func protonTTL(e ProtonEntry) time.Duration {
 // rating is the Rating of a saved entry.
 func (e ProtonEntry) rating(stale bool) Rating {
 	return Rating{Found: e.Found, Summary: Summary{Tier: e.Tier, Confidence: e.Confidence, Total: e.Total, Score: e.Score}, FetchedAt: e.FetchedAt, Stale: stale}
+}
+
+// DeckResult is a Steam Deck answer as the service holds it.
+type DeckResult struct {
+	// Found is false when Steam confirmed it has no verdict for the app.
+	Found     bool
+	Report    DeckReport
+	FetchedAt time.Time
+	// Stale is set when the answer is past its TTL: a refresh is running or
+	// the network is off.
+	Stale bool
+}
+
+// DeckRating returns the Deck verdict for a Steam AppID, with the same rules
+// as ProtonDB: a saved answer is served at once (refreshed in the background
+// when stale), otherwise it waits up to firstWait. ok is false when there is
+// no answer at all.
+func (s *Service) DeckRating(ctx context.Context, appID string) (DeckResult, bool) {
+	if !validAppID(appID) || s.Deck == nil {
+		return DeckResult{}, false
+	}
+	if r, ok := s.cachedDeck(appID); ok {
+		return r, true
+	}
+	key := deckKey(appID)
+	if !s.online() || s.cooling(key) {
+		return DeckResult{}, false
+	}
+	done := s.start(key, func(ctx context.Context) error { return s.refreshDeck(ctx, appID) })
+	select {
+	case <-done:
+	case <-time.After(s.firstWait()):
+	case <-ctx.Done():
+	}
+	if r, ok := s.cachedDeck(appID); ok {
+		return r, true
+	}
+	return DeckResult{}, false
+}
+
+// DeckRatingCached is DeckRating without the wait: the cached verdict when
+// there is one (a stale one is refreshed in the background), otherwise
+// nothing, with a background fetch started for the next look.
+func (s *Service) DeckRatingCached(appID string) (DeckResult, bool) {
+	if !validAppID(appID) || s.Deck == nil {
+		return DeckResult{}, false
+	}
+	if r, ok := s.cachedDeck(appID); ok {
+		return r, true
+	}
+	key := deckKey(appID)
+	if s.online() && !s.cooling(key) {
+		s.start(key, func(ctx context.Context) error { return s.refreshDeck(ctx, appID) })
+	}
+	return DeckResult{}, false
+}
+
+func deckKey(appID string) string { return "deck:" + appID }
+
+// cachedDeck is the saved Deck verdict of an AppID. A stale one is served at
+// once and refreshed in the background when the network is on.
+func (s *Service) cachedDeck(appID string) (DeckResult, bool) {
+	if s.Cache == nil {
+		return DeckResult{}, false
+	}
+	e, have := s.Cache.Deck(appID)
+	if !have {
+		return DeckResult{}, false
+	}
+	key := deckKey(appID)
+	stale := s.now().Sub(e.FetchedAt) >= deckTTL(e)
+	if stale && s.online() && !s.cooling(key) {
+		s.start(key, func(ctx context.Context) error { return s.refreshDeck(ctx, appID) })
+	}
+	return e.result(stale || !s.online()), true
+}
+
+// refreshDeck asks Steam and saves the answer. "No verdict" is an answer;
+// any other failure is remembered for failBackoff.
+func (s *Service) refreshDeck(ctx context.Context, appID string) error {
+	rep, err := s.Deck.Report(ctx, appID)
+	now := s.now()
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return s.Cache.SetDeck(appID, DeckEntry{FetchedAt: now})
+	case err != nil:
+		// A wait that ran out is our own deadline, not the source failing.
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			s.setFailed(deckKey(appID))
+			s.warn("Steam Deck for %s: %v", appID, err)
+		}
+		return err
+	}
+	return s.Cache.SetDeck(appID, DeckEntry{
+		Found: true, FetchedAt: now, Rating: rep.Rating, Notes: rep.Notes,
+	})
+}
+
+func deckTTL(e DeckEntry) time.Duration {
+	if e.Found {
+		return ProtonHitTTL
+	}
+	return ProtonMissTTL
+}
+
+// result is the DeckResult of a saved entry.
+func (e DeckEntry) result(stale bool) DeckResult {
+	return DeckResult{Found: e.Found, Report: DeckReport{Rating: e.Rating, Notes: e.Notes}, FetchedAt: e.FetchedAt, Stale: stale}
 }

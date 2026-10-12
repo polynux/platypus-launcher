@@ -152,6 +152,79 @@ func TestUserAppIDBeatsPluginHint(t *testing.T) {
 	}
 }
 
+// fakeDeckSource answers Steam Deck verdicts from a table and counts the asks.
+type fakeDeckSource struct {
+	mu    sync.Mutex
+	reps  map[string]compat.DeckReport
+	calls int
+}
+
+func (f *fakeDeckSource) Report(_ context.Context, appID string) (compat.DeckReport, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if r, ok := f.reps[appID]; ok {
+		return r, nil
+	}
+	return compat.DeckReport{}, compat.ErrNotFound
+}
+
+func (f *fakeDeckSource) asks() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+func TestCompatDeckVerdictShownAndCached(t *testing.T) {
+	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
+	deck := &fakeDeckSource{reps: map[string]compat.DeckReport{
+		"620": {Rating: "verified"},
+		"730": {Rating: "playable", Notes: []string{"Some text is too small to read on the Deck."}},
+	}}
+	env.a.compat.Deck = deck
+	c := env.a.GetGameCompat(env.game)
+	if c.Deck == nil || c.Deck.Rating != "verified" || c.Deck.URL != "https://store.steampowered.com/app/620" {
+		t.Fatalf("Deck %+v, want the verified verdict of 620", c.Deck)
+	}
+	if deck.asks() != 1 {
+		t.Fatalf("%d Deck asks, want 1", deck.asks())
+	}
+	// The verdict rides on the library fix too, beside the ProtonDB tier.
+	fix := env.a.GetGameFix(env.game)
+	if fix == nil || fix.Tier != "platinum" || fix.Deck != "verified" {
+		t.Fatalf("fix %+v, want the platinum tier with the verified Deck verdict", fix)
+	}
+	// A second look is served from the cache: no new ask.
+	env.a.GetGameCompat(env.game)
+	if deck.asks() != 1 {
+		t.Fatalf("%d Deck asks after a cached look, want 1", deck.asks())
+	}
+	// A game whose tier is too thin for ProtonDB still carries its Deck verdict.
+	if _, err := env.a.SetGameSteamAppID(env.game, "730"); err != nil {
+		t.Fatal(err)
+	}
+	fix = env.a.GetGameFix(env.game)
+	if fix == nil || fix.Tier != "" || fix.Deck != "playable" || len(fix.DeckNotes) != 1 {
+		t.Fatalf("fix %+v, want a Deck-only note for 730", fix)
+	}
+}
+
+func TestCompatDeckSwitchOffMakesNoRequests(t *testing.T) {
+	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
+	deck := &fakeDeckSource{reps: map[string]compat.DeckReport{"620": {Rating: "verified"}}}
+	env.a.compat.Deck = deck
+	if _, err := env.a.SetRatingsOnline(false); err != nil {
+		t.Fatal(err)
+	}
+	c := env.a.GetGameCompat(env.game)
+	if c.Deck != nil {
+		t.Fatalf("offline with an empty cache got %+v", c.Deck)
+	}
+	if deck.asks() != 0 {
+		t.Fatalf("asked Steam with the switch off (%d asks)", deck.asks())
+	}
+}
+
 func TestNoTitleMatchWithoutAnAppID(t *testing.T) {
 	env, src := compatEnv(t, `["1.0","1.1","1.9"]`)
 	// Same title, an Epic store, no hint, no user choice: nothing to look up.

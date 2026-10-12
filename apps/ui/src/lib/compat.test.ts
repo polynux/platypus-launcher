@@ -13,6 +13,7 @@ import {
   badgeTitle,
   cardCompat,
   clearCompatCache,
+  deckTitle,
   gameCompat,
   ratingLine,
   setGameCompat,
@@ -58,6 +59,14 @@ describe('wording', () => {
     expect(appIdSourceLabel('user')).toBe('set by you');
     expect(appIdSourceLabel('plugin')).toBe('from the store');
     expect(appIdSourceLabel('')).toBe('none');
+  });
+
+  it('words a Deck verdict with its caveats and the source', () => {
+    expect(deckTitle('verified')).toBe('Steam Deck: Verified. Steam Deck compatibility, from Steam.');
+    expect(deckTitle('playable', ["Some text is too small to read on the Deck."])).toBe(
+      "Steam Deck: Playable. Some text is too small to read on the Deck. Steam Deck compatibility, from Steam.",
+    );
+    expect(deckTitle('unsupported', [])).toBe('Steam Deck: Unsupported. Steam Deck compatibility, from Steam.');
   });
 });
 
