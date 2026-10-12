@@ -29,6 +29,7 @@ import (
 	"platypus/internal/session"
 	"platypus/internal/settings"
 	"platypus/internal/social"
+	"platypus/internal/steam"
 	"platypus/internal/stores"
 	"platypus/internal/types"
 )
@@ -91,6 +92,20 @@ type App struct {
 	tweaks       []types.Tweak
 	// stats caches the store playtime and the achievement progress (protocol 1.7).
 	stats statsCache
+	// dataDir is Platypus's data folder (settings.json lives inside it);
+	// the sideloaded game-info disk cache lives there too (issue #38).
+	dataDir string
+	// sideloadSteam fetches Steam details for sideloaded games with a compat
+	// AppID (issue #38). Nil means the live store endpoint; tests inject an
+	// httptest client.
+	sideloadSteam *steam.StoreClient
+	// infoCacheMu guards infoCache.
+	infoCacheMu sync.Mutex
+	// infoCache is the disk-backed GameDetails of sideloaded games by game
+	// id (issue #38); infoCacheLoaded says the file was read. Never leaves
+	// the data dir.
+	infoCache       map[string]gameInfoEntry
+	infoCacheLoaded bool
 	// playlog is Platypus's own session log (issue #15): the local side of
 	// the playtime and last-played numbers applyPlaytime merges.
 	playlog *playlog.Log
@@ -148,6 +163,7 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		a.host.Errorf("settings: %v", err)
 	}
+	a.dataDir = dataDir
 	a.settings, err = settings.Open(filepath.Join(dataDir, "settings.json"))
 	if err != nil {
 		// Open still returns usable defaults.
@@ -475,8 +491,12 @@ func sourceWarning(source string, err error) types.SourceWarning {
 }
 
 // GetGameDetails returns summary, screenshots and achievements for the game
-// page. Sideloaded games have no metadata source.
+// page. Sideloaded games have no store source: theirs come from the linked
+// online info source (issue #38), cached on disk.
 func (a *App) GetGameDetails(game types.Game) (*types.GameDetails, error) {
+	if game.Source == types.SourceCustom || (game.Source == "" && game.Store == types.StoreCustom) || a.isCustomGameID(game.ID) {
+		return a.sideloadedDetails(game)
+	}
 	s, ok := a.stores.Get(sourceOf(game))
 	if !ok {
 		return &types.GameDetails{}, nil

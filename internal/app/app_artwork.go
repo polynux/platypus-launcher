@@ -250,6 +250,7 @@ func (a *App) applyGOGCandidate(gameID string, hit onlineart.Candidate) (types.C
 		a.host.Warnf("artwork logo for %s: %v", hit.Name, logoErr)
 	}
 	a.noteOnlineYear(gameID, hit.Year)
+	a.maybeAutoLinkInfo(gameID, "gog", hit.ID)
 	return a.customization(gameID)
 }
 
@@ -286,6 +287,7 @@ func (a *App) applyLutrisArt(gameID, slug string) (types.Customization, error) {
 		return c, fmt.Errorf("Lutris has no cover art for %s", name)
 	}
 	a.noteOnlineYear(gameID, cand.Year)
+	a.maybeAutoLinkInfo(gameID, "lutris", cand.ID)
 	return a.customization(gameID)
 }
 
@@ -666,6 +668,7 @@ func (a *App) autoApplyCandidate(gameID string, cand onlineart.Candidate, label 
 		return
 	}
 	a.noteOnlineYear(gameID, cand.Year)
+	a.maybeAutoLinkInfo(gameID, cand.Source, cand.ID)
 	a.host.Emit("library", gameID)
 }
 

@@ -94,6 +94,9 @@ type storeApp struct {
 
 func (c *StoreClient) app(appID string) (*storeApp, error) {
 	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = map[string]*storeApp{}
+	}
 	if a, ok := c.cache[appID]; ok {
 		c.mu.Unlock()
 		return a, nil
@@ -124,6 +127,9 @@ func (c *StoreClient) app(appID string) (*storeApp, error) {
 		a = &storeApp{} // delisted or private: cache the miss too
 	}
 	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = map[string]*storeApp{}
+	}
 	c.cache[appID] = a
 	c.mu.Unlock()
 	return a, nil
