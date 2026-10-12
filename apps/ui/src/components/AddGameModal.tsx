@@ -21,7 +21,7 @@ export interface AddGameOptions {
   winePrefix: string;
 }
 
-export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, exe: string, opts: AddGameOptions) => void }) {
+export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, exe: string, opts: AddGameOptions) => Promise<void> | void }) {
   const [title, setTitle] = useState('');
   const [exe, setExe] = useState('');
   const [workingDir, setWorkingDir] = useState('');
@@ -29,6 +29,10 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
   const [prefixError, setPrefixError] = useState<string | null>(null);
+  // Adding is all-or-nothing: the dialog stays open until onAdd resolves, and
+  // a rejection shows where it belongs instead of stranding a half-added game.
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const valid = title.trim() && exe.trim();
   const advancedSet = (workingDir.trim() ? 1 : 0) + (winePrefix.trim() ? 1 : 0);
 
@@ -76,7 +80,31 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
       setPrefixError('The Wine prefix must be an absolute path.');
       return;
     }
-    if (valid) onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: prefix });
+    if (!valid || saving) return;
+    let result: Promise<void> | void;
+    try {
+      result = onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: prefix });
+    } catch (e) {
+      fail(e);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    Promise.resolve(result).then(() => onClose(), fail);
+  };
+
+  const fail = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/working dir/i.test(msg)) {
+      setWorkError(msg);
+      setAdvancedOpen(true); // a field error must be visible, not folded shut
+    } else if (/wine prefix/i.test(msg)) {
+      setPrefixError(msg);
+      setAdvancedOpen(true);
+    } else {
+      setSaveError(msg);
+    }
+    setSaving(false);
   };
 
   return (
@@ -158,8 +186,9 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
         </div>
         <div className="mt-6 flex justify-end gap-2.5">
           <Button variant="neutral" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!valid}>Add game</Button>
+          <Button type="submit" variant="primary" disabled={!valid || saving}>Add game</Button>
         </div>
+        {saveError && <p role="alert" className="mt-3 font-mono text-hint text-orange-300">{saveError}</p>}
       </form>
     </Modal>
   );

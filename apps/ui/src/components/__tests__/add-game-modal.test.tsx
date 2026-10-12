@@ -20,10 +20,15 @@ import { AddGameModal, suggestTitle, type AddGameOptions } from '../AddGameModal
 
 const ok = <T,>(v: T) => Effect.succeed(v);
 
-function open(onAdd: (title: string, exe: string, opts: AddGameOptions) => void = vi.fn()) {
+function open(onAdd: (title: string, exe: string, opts: AddGameOptions) => Promise<void> | void = vi.fn()) {
   const onClose = vi.fn();
   render(<AddGameModal onClose={onClose} onAdd={onAdd} />);
   return { onClose, onAdd };
+}
+
+function fillValid() {
+  fireEvent.change(screen.getByPlaceholderText('My Game'), { target: { value: 'Doom' } });
+  fireEvent.change(screen.getByLabelText('executable'), { target: { value: '/home/you/Games/doom/doom.exe' } });
 }
 
 beforeEach(() => {
@@ -151,5 +156,40 @@ describe('AddGameModal advanced Wine prefix (issue #34)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/absolute path/);
     expect(onAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddGameModal all-or-nothing add (review fix 3)', () => {
+  it('closes the dialog once the add resolves', async () => {
+    const onAdd = vi.fn(async () => {});
+    const { onClose } = open(onAdd);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  });
+
+  it('keeps the dialog open with the error under the working directory field', async () => {
+    const onAdd = vi.fn(async () => { throw new Error('working directory: no such file or directory'); });
+    const { onClose } = open(onAdd);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    // The dialog stays open and the error shows where it belongs.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/no such file/);
+    expect(screen.getByLabelText('working directory').closest('div')!.parentElement!).toContainElement(alert);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Add game' })).toBeInTheDocument();
+    // Fixing the field clears it and retrying works.
+    fireEvent.change(screen.getByLabelText('working directory'), { target: { value: '/home/you/Games/doom' } });
+    expect(screen.queryByText(/no such file/)).toBeNull();
+  });
+
+  it('shows a backend refusal of the executable as a dialog-level alert', async () => {
+    const onAdd = vi.fn(async () => { throw new Error('/x is not a file'); });
+    const { onClose } = open(onAdd);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not a file/);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
