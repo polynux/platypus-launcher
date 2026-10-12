@@ -14,6 +14,7 @@ import (
 // be omitted, and building branch/password UI is explicitly out of scope.
 
 func TestStartParamsCarryTitle(t *testing.T) {
+	t.Parallel()
 	t.Run("install carries title and no branch", func(t *testing.T) {
 		j := types.Job{ID: "j1", Kind: jobs.KindInstall, Source: "echo", GameID: "g1", StoreGameID: "tiny", Title: "Tiny", InstallDir: "/g/tiny"}
 		params := installParams(j, nil)

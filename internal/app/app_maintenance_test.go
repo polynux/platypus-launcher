@@ -27,6 +27,7 @@ func maintenanceEnv(t *testing.T, protocols, caps string) *versionsEnv {
 	t.Helper()
 	e := versionsApp(t, protocols, caps)
 	e.a.sessions = session.NewTracker(func(types.SessionEvent) {})
+	e.a.sessions.SetLogDir(filepath.Join(e.root, "logs"))
 	return e
 }
 
@@ -76,6 +77,7 @@ func (e *versionsEnv) queueVerify(t *testing.T, game types.Game) types.Job {
 }
 
 func TestVerifyReportsDamageThenRepairRestoresIt(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	e.setDamage(t, 3)
@@ -108,6 +110,7 @@ func TestVerifyReportsDamageThenRepairRestoresIt(t *testing.T) {
 }
 
 func TestVerifyCanBeCanceledAndLeavesNoReport(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	e.setDamage(t, 2)
@@ -123,6 +126,7 @@ func TestVerifyCanBeCanceledAndLeavesNoReport(t *testing.T) {
 }
 
 func TestVerifyNeedsTheCapabilityAndProtocol14(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, `["1.0","1.1","1.3"]`, maintenanceCaps)
 	game := e.installedTiny(t)
 	if _, err := e.a.VerifyGame(game); err == nil {
@@ -139,6 +143,7 @@ func TestVerifyNeedsTheCapabilityAndProtocol14(t *testing.T) {
 }
 
 func TestMoveByThePluginWhenItOffersMove(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	parent := filepath.Join(t.TempDir(), "Moved")
@@ -240,6 +245,7 @@ func TestMoveByCoreKeepsItsRecordForAPluginThatDoesNotRebase(t *testing.T) {
 }
 
 func TestMoveByCoreWorksOverProtocol13WithoutAnyNewCalls(t *testing.T) {
+	t.Parallel()
 	// An older plugin: no verify, no move, no relocated, but core can still
 	// move the game it installed.
 	e := maintenanceEnv(t, `["1.0","1.1","1.3"]`, maintenanceCaps)
@@ -260,6 +266,7 @@ func TestMoveByCoreWorksOverProtocol13WithoutAnyNewCalls(t *testing.T) {
 }
 
 func TestMoveRefusals(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	game := e.installedTiny(t)
 	root := t.TempDir()
@@ -289,6 +296,7 @@ func TestMoveRefusals(t *testing.T) {
 }
 
 func TestMoveNeedsAnInstalledGameFromAPlugin(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	notInstalled := types.Game{ID: "p.echo.tiny", Source: "echo", StoreAppID: "tiny", Title: "Echo Tiny"}
 	if _, err := e.a.MoveGame(notInstalled, t.TempDir()); err == nil {

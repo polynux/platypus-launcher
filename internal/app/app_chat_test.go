@@ -126,6 +126,7 @@ func messageTexts(v chat.View) []string {
 // a send is confirmed with the store's id, and the echo bot's answer counts as
 // unread and alerts until the conversation is opened.
 func TestChatWithTheEchoPlugin(t *testing.T) {
+	t.Parallel()
 	a, sink := chatEnv(t)
 	ctx := context.Background()
 	echoConfig(t, a, map[string]any{"botDelayMs": 10})
@@ -193,6 +194,7 @@ func TestChatWithTheEchoPlugin(t *testing.T) {
 
 // The store's message alerts, when the user switches them off, don't alert.
 func TestChatAlertsSwitch(t *testing.T) {
+	t.Parallel()
 	a, sink := chatEnv(t)
 	echoConfig(t, a, map[string]any{"botDelayMs": 10})
 	if !a.ChatAlerts()["echo"] {
@@ -280,6 +282,7 @@ func TestChatStaysOffForAProtocol18Plugin(t *testing.T) {
 // A send the store refuses shows as failed; resending it sends the same
 // clientId again and the store keeps one message.
 func TestChatSendFailureAndResend(t *testing.T) {
+	t.Parallel()
 	a, _ := chatEnv(t)
 	if _, err := a.ChatOpen("echo", chatAna); err != nil {
 		t.Fatal(err)
@@ -309,6 +312,7 @@ func TestChatSendFailureAndResend(t *testing.T) {
 // The plugin exits on a send: core retries once with the same clientId, and the
 // message goes through once.
 func TestChatSendRetriesAfterACrash(t *testing.T) {
+	t.Parallel()
 	a, _ := chatEnv(t)
 	if _, err := a.ChatOpen("echo", chatAna); err != nil {
 		t.Fatal(err)
@@ -328,6 +332,7 @@ func TestChatSendRetriesAfterACrash(t *testing.T) {
 
 // Platypus refuses a send that is empty or too long before the plugin sees it.
 func TestChatRefusesBadTextLocally(t *testing.T) {
+	t.Parallel()
 	a, _ := chatEnv(t)
 	if err := a.ChatSend("echo", chatAna, "   "); err == nil {
 		t.Fatal("an empty message was sent")
@@ -340,6 +345,7 @@ func TestChatRefusesBadTextLocally(t *testing.T) {
 // Echo's periodic messages reach the conversations through the plugin's
 // notifications: unread counts, and a message in a closed conversation alerts.
 func TestChatIncomingNotifications(t *testing.T) {
+	t.Parallel()
 	a, sink := chatEnv(t)
 	echoConfig(t, a, map[string]any{"tick": 20})
 	waitSocial(t, "an incoming message alerted", func() bool {
@@ -364,6 +370,7 @@ func countText(sent []map[string]string, text string) int {
 // Chat with two stores: each store keeps its own conversations, the unread
 // total counts both, and an incoming message's event carries its store.
 func TestChatWithTwoStores(t *testing.T) {
+	t.Parallel()
 	a, st := socialEnvWith(t, true)
 	sink := &chatSink{}
 	a.chat = chat.NewManager(chat.Options{
@@ -469,6 +476,7 @@ func TestChatNotificationsAreGated(t *testing.T) {
 // conversations from memory and refreshing brings the store's counts back,
 // without messages and without alerts. Echo answers the method.
 func TestChatUnreadSnapshotSeedsBadges(t *testing.T) {
+	t.Parallel()
 	a, sink := chatEnv(t)
 	echoConfig(t, a, map[string]any{"botDelayMs": 10})
 	if _, err := a.ChatOpen("echo", chatBot); err != nil {
@@ -504,6 +512,7 @@ func TestChatUnreadSnapshotSeedsBadges(t *testing.T) {
 // Without the snapshot method, or when it answers an error, refreshing keeps
 // today's behaviour: nothing changes, silently.
 func TestChatUnreadSnapshotMissingOrErrorIsANoop(t *testing.T) {
+	t.Parallel()
 	a, sink := chatEnv(t)
 	ctx := context.Background()
 	setKnob := func(key string, methods []string) {
@@ -555,6 +564,7 @@ func TestChatUnreadSnapshotNeedsProtocol113(t *testing.T) {
 // Logging in seeds the badges again: the unread messages from before reach
 // the snapshot the login triggers.
 func TestChatUnreadSnapshotAfterLogin(t *testing.T) {
+	t.Parallel()
 	a, _ := chatEnv(t)
 	echoConfig(t, a, map[string]any{"botDelayMs": 10})
 	if _, err := a.ChatOpen("echo", chatBot); err != nil {
@@ -583,6 +593,7 @@ func TestChatUnreadSnapshotAfterLogin(t *testing.T) {
 
 // Desktop notifications for chat are on by default and saved through the App.
 func TestChatDesktopNotifySetting(t *testing.T) {
+	t.Parallel()
 	a, _ := chatEnv(t)
 	if !a.GetLauncherSettings().ChatDesktopNotify {
 		t.Fatal("desktop notifications should be on by default")

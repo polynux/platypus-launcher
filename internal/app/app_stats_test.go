@@ -36,6 +36,7 @@ func statsApp(t *testing.T, manifest string) (a *App, changes *int) {
 }
 
 func TestPlaytimeMergesTheStoreValueForDisplayOnly(t *testing.T) {
+	t.Parallel()
 	a, changes := statsApp(t, statsManifest)
 	a.refreshPlaytime("echo")
 	if *changes != 1 {
@@ -76,6 +77,7 @@ func sameInt(got *int, want int) bool {
 }
 
 func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	g := types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny", InstallDir: t.TempDir(), IsInstalled: true, Native: true}
 
@@ -116,6 +118,7 @@ func TestAchievementsAreFetchedOnceAndHiddenUntilUnlocked(t *testing.T) {
 }
 
 func TestAchievementsAreAbsentWhenTheGameOrPluginDoesNotOfferThem(t *testing.T) {
+	t.Parallel()
 	// Protocol 1.5 is the last this plugin agrees to: achievements (1.7) stay off.
 	a, _ := statsApp(t, strings.Replace(statsManifest, `,"1.6","1.7"`, "", 1))
 	if got, err := a.GetGameAchievements(types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny", InstallDir: t.TempDir(), IsInstalled: true, Native: true}); got != nil || err != nil {
@@ -137,6 +140,7 @@ func TestAchievementsAreAbsentWhenTheGameOrPluginDoesNotOfferThem(t *testing.T) 
 }
 
 func TestRedeemGrantsTheTitleForTheEchoCode(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	res, err := a.RedeemCode("echo", "  ECHO-OK \n")
 	if err != nil {
@@ -160,6 +164,7 @@ func TestRedeemGrantsTheTitleForTheEchoCode(t *testing.T) {
 }
 
 func TestRedeemRefusesASecondSubmissionWhileOneRuns(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	a.stats.redeemMu.Lock()
 	defer a.stats.redeemMu.Unlock()
@@ -169,6 +174,7 @@ func TestRedeemRefusesASecondSubmissionWhileOneRuns(t *testing.T) {
 }
 
 func TestRedeemIsNotSentToAPluginWithoutTheCapability(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, strings.Replace(statsManifest, `,"1.6","1.7"`, "", 1))
 	if _, err := a.RedeemCode("echo", "ECHO-OK"); err == nil || !strings.Contains(err.Error(), "doesn't redeem codes") {
 		t.Fatalf("over 1.5: %v", err)
@@ -179,6 +185,7 @@ func TestRedeemIsNotSentToAPluginWithoutTheCapability(t *testing.T) {
 }
 
 func TestSessionEndRefreshesOnlyTheEndedGamesPlugin(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	a.stats.delay = 10 * time.Millisecond
 	a.stats.noteSource("p.echo.tiny", "echo")
@@ -225,6 +232,7 @@ func waitPlaytime(t *testing.T, a *App, plugin string, want int) {
 }
 
 func TestPlaytimeReadIsNotStartedTwiceAtOnce(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	a.startPlaytimeOnce("echo")
 	a.startPlaytimeOnce("echo")
@@ -265,6 +273,7 @@ func waitStatsIdle(t *testing.T, a *App) {
 }
 
 func TestPlaytimeClaimIsExclusiveAndAFailureBacksOff(t *testing.T) {
+	t.Parallel()
 	var c statsCache
 	if !c.claim("echo") {
 		t.Fatal("first claim refused")
@@ -283,6 +292,7 @@ func TestPlaytimeClaimIsExclusiveAndAFailureBacksOff(t *testing.T) {
 }
 
 func TestFailedPlaytimeReadIsNotRetriedOnEveryListing(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	a.stats.release("echo", true)
 	a.startPlaytimeOnce("echo")
@@ -293,6 +303,7 @@ func TestFailedPlaytimeReadIsNotRetriedOnEveryListing(t *testing.T) {
 }
 
 func TestPlaytimeTooltipFieldsKeepAStoreZeroAndOmitAnUnknownLocal(t *testing.T) {
+	t.Parallel()
 	a, _ := statsApp(t, statsManifest)
 	a.stats.setPlaytime("echo", map[string]int{"zero": 0, "tiny": 30})
 	games := []types.Game{

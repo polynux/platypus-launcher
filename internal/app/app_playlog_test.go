@@ -33,6 +33,7 @@ func logSession(t *testing.T, a *App, game string, d time.Duration) {
 }
 
 func TestLocalPlaytimeIsMaxWithTheStoreReport(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	a.stats.setPlaytime("echo", map[string]int{"tiny": 150})
 	logSession(t, a, "p.echo.tiny", 125*time.Second) // 2 min local, 150 store
@@ -54,6 +55,7 @@ func TestLocalPlaytimeIsMaxWithTheStoreReport(t *testing.T) {
 }
 
 func TestLocalPlaytimeWinsWhenItIsLarger(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	a.stats.setPlaytime("echo", map[string]int{"tiny": 150})
 	logSession(t, a, "p.echo.tiny", 200*time.Minute)
@@ -72,6 +74,7 @@ func TestLocalPlaytimeWinsWhenItIsLarger(t *testing.T) {
 }
 
 func TestLocalPlaytimeReachesGamesWithoutAStoreReport(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	logSession(t, a, "p.echo.client", 70*time.Second) // 1 min, no store report
 	logSession(t, a, "custom-1", 70*time.Second)
@@ -94,6 +97,7 @@ func TestLocalPlaytimeReachesGamesWithoutAStoreReport(t *testing.T) {
 }
 
 func TestLocalPlaytimeMergesWithSteamsOwnRecord(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	// Steam's record rides with the listing: 30 min, played at 1000.
 	logSession(t, a, "steam_10", 70*time.Second) // 1 min local
@@ -127,6 +131,7 @@ func TestLocalPlaytimeMergesWithSteamsOwnRecord(t *testing.T) {
 }
 
 func TestLastPlayedIsMaxOfLocalAndStore(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	a.playlog.StartAt("g", time.Unix(5000, 0))
 	a.playlog.FinishAt("g", time.Unix(5005, 0)) // short: no minutes, but played at 5005
@@ -157,6 +162,7 @@ func TestLastPlayedIsMaxOfLocalAndStore(t *testing.T) {
 }
 
 func TestSessionEventsOpenAndCloseLocalSessions(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	a.playSession(types.SessionEvent{GameID: "g", State: "starting"})
 	if _, ok := a.playlog.Finish("g"); ok {
@@ -185,6 +191,7 @@ func TestSessionEventsOpenAndCloseLocalSessions(t *testing.T) {
 }
 
 func TestHeartbeatKeepsTheSessionOpen(t *testing.T) {
+	t.Parallel()
 	a := playlogApp(t)
 	a.playSession(types.SessionEvent{GameID: "g", State: "running"})
 	a.playHeartbeat() // no tracker: nothing happens, nothing breaks
@@ -194,6 +201,7 @@ func TestHeartbeatKeepsTheSessionOpen(t *testing.T) {
 }
 
 func TestHeartbeatRefreshesRunningTrackerSessions(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	l, err := playlog.Open(filepath.Join(dir, "play-sessions.json"))
 	if err != nil {

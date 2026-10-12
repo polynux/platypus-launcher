@@ -13,6 +13,7 @@ import (
 // Nothing migrated: fresh installs, second starts and both-folders cases show
 // no notice.
 func TestMigrationNoticeNilWhenNothingHappened(t *testing.T) {
+	t.Parallel()
 	for name, rep := range map[string]migrate.Report{
 		"fresh install": {},
 		"second start":  {Root: "/home/u/.local/share/platypus"},
@@ -32,6 +33,7 @@ func TestMigrationNoticeNilWhenNothingHappened(t *testing.T) {
 // A move maps to a notice: what happened, the set-aside plugins by name, and
 // the report's failures in plain words.
 func TestMigrationNoticeMapsReport(t *testing.T) {
+	t.Parallel()
 	st, err := settings.Open(filepath.Join(t.TempDir(), "settings.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -69,6 +71,7 @@ func TestMigrationNoticeMapsReport(t *testing.T) {
 // Dismissing persists in settings.json: the notice never returns after
 // dismissal, and a reopened store still says dismissed.
 func TestDismissMigrationNoticePersists(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
 	st, err := settings.Open(path)

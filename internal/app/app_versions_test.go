@@ -35,22 +35,22 @@ const versionsManifest = `{"id":"echo","name":"Echo","version":"1.0.0","manifest
 
 func versionsApp(t *testing.T, protocols, caps string) *versionsEnv {
 	t.Helper()
-	t.Setenv("ECHO_STEP_MS", "2")
 	root := t.TempDir()
-	st, err := settings.Open(filepath.Join(root, "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.SetGamesFolder(filepath.Join(root, "Games")); err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: st, ctx: context.Background()}
+	a := &App{settings: st, ctx: context.Background(), optHome: root}
 	if a.ledger, err = ledger.Open(filepath.Join(root, "install-history.json")); err != nil {
 		t.Fatal(err)
 	}
 	pluginsDir := filepath.Join(root, "plugins")
 	a.plugins = plugins.NewManager(plugins.Options{
 		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: st,
+		Home: root, Env: map[string]string{"ECHO_STEP_MS": "2"},
 		OnNotify: a.pluginNotify,
 	})
 	t.Cleanup(a.plugins.Shutdown)
@@ -165,6 +165,7 @@ func (e *versionsEnv) echoLibrary(t *testing.T) types.Game {
 }
 
 func TestInstallingATargetFillsTheLedgerAndTheVersionList(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	job := e.install(t, &types.VersionTarget{Build: "b200"})
 	if job.Target == nil || job.Target.Build != "b200" {
@@ -213,6 +214,7 @@ func TestInstallingATargetFillsTheLedgerAndTheVersionList(t *testing.T) {
 }
 
 func TestPinBecomesTheTargetOfAnUpdate(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	e.install(t, nil) // the store's default: b300
 	if err := e.a.PinGameVersion(e.game, types.VersionPin{Kind: types.PinBuild, ID: "b200"}); err != nil {
@@ -261,6 +263,7 @@ func TestPinBecomesTheTargetOfAnUpdate(t *testing.T) {
 }
 
 func TestReinstallingAPinnedGameInstallsThePin(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	if err := e.a.PinGameVersion(e.game, types.VersionPin{Kind: types.PinBuild, ID: "b290"}); err != nil {
 		t.Fatal(err)
@@ -272,6 +275,7 @@ func TestReinstallingAPinnedGameInstallsThePin(t *testing.T) {
 }
 
 func TestUpdatePromptIsSuppressedWhilePinned(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	e.install(t, &types.VersionTarget{Build: "b200"})
 	g := e.echoLibrary(t)
@@ -311,6 +315,7 @@ func TestUpdatePromptIsSuppressedWhilePinned(t *testing.T) {
 }
 
 func TestPinSurvivesARestart(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	if err := e.a.PinGameVersion(e.game, types.VersionPin{Kind: types.PinChannel, ID: "legacy"}); err != nil {
 		t.Fatal(err)
@@ -325,6 +330,7 @@ func TestPinSurvivesARestart(t *testing.T) {
 }
 
 func TestPasswordsNeverReachCoreFiles(t *testing.T) {
+	t.Parallel()
 	const wrong, right = "not-the-password-hunter2", "platypus-beta" // echo's fixed test password
 	e := versionsApp(t, allVersions, echoCaps)
 
@@ -409,6 +415,7 @@ func (e *versionsEnv) waitJobEnd(t *testing.T, id string) types.Job {
 }
 
 func TestNoVersionsCallsWithoutTheCapability(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, `["library","install","auth","discard"]`)
 	if _, err := e.a.GetGameVersions(e.game); err == nil {
 		t.Fatal("versions listed for a plugin that doesn't declare them")
@@ -438,6 +445,7 @@ func TestNoVersionsCallsWithoutTheCapability(t *testing.T) {
 }
 
 func TestNoVersionsCallsOnAnOldProtocol(t *testing.T) {
+	t.Parallel()
 	// The manifest declares versions, but the plugin only agreed to 1.1: the
 	// capability is newer than that, so it is off and nothing is sent.
 	e := versionsApp(t, `["1.0","1.1"]`, echoCaps)
@@ -484,6 +492,7 @@ func TestVersionsHiddenWhenTheGameTurnsThemOff(t *testing.T) {
 }
 
 func TestBadTargetsAreRefusedBeforeTheQueue(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	long := strings.Repeat("x", maxTargetField+1)
 	bad := map[string]types.VersionTarget{
@@ -513,6 +522,7 @@ func TestBadTargetsAreRefusedBeforeTheQueue(t *testing.T) {
 }
 
 func TestNormalizeVersionsCleansWhatThePluginSent(t *testing.T) {
+	t.Parallel()
 	no := false
 	in := types.VersionInfo{
 		Channels: []types.VersionChannel{{ID: "a", Requires: "carrier pigeon"}, {ID: ""}},
@@ -546,6 +556,7 @@ func TestNormalizeVersionsCleansWhatThePluginSent(t *testing.T) {
 }
 
 func TestInstallParamsCarryTheTarget(t *testing.T) {
+	t.Parallel()
 	j := types.Job{ID: "j", Kind: jobs.KindUpdate, StoreGameID: "tiny", InstallDir: "/g", Target: &types.VersionTarget{Build: "b2"}}
 	params := installParams(j, nil)
 	got, ok := params["target"].(*types.VersionTarget)
@@ -564,6 +575,7 @@ func TestInstallParamsCarryTheTarget(t *testing.T) {
 }
 
 func TestTypedManifestIdsMayRunOverLines(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	j, err := e.a.InstallGameVersion(e.game, types.VersionTarget{Manual: map[string]string{"input": "  481: 7845\n482: 9921\r\n"}})
 	if err != nil {
@@ -579,6 +591,7 @@ func TestTypedManifestIdsMayRunOverLines(t *testing.T) {
 }
 
 func TestAnArchiveBuildSendsTheLedgerReference(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	ref := json.RawMessage(`{"echo":true,"build":"b1"}`)
 	if err := e.a.ledger.Append(types.LedgerEntry{Store: "echo", Game: e.game.ID, Build: "b1", ArchiveRef: ref}); err != nil {
@@ -598,6 +611,7 @@ func TestAnArchiveBuildSendsTheLedgerReference(t *testing.T) {
 }
 
 func TestAJobWithAVersionNeedsTheVersionsGateWhenItRuns(t *testing.T) {
+	t.Parallel()
 	// The store no longer offers versions for this plugin (the capability is gone).
 	e := versionsApp(t, allVersions, `["library","install","auth","discard"]`)
 	j := types.Job{ID: "j", Kind: jobs.KindUpdate, Source: "echo", GameID: e.game.ID, StoreGameID: "tiny",

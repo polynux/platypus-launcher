@@ -67,6 +67,7 @@ func (e *versionsEnv) queueRaw(t *testing.T, kind string, storeAppID string, opt
 }
 
 func TestStartDropsWhatTheStoreNoLongerOffers(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	// Queued while the user owned the DLC (or a value existed); both are gone
 	// by the time the job starts. A group the store never had is stale too.
@@ -84,6 +85,7 @@ func TestStartDropsWhatTheStoreNoLongerOffers(t *testing.T) {
 }
 
 func TestStartFailsRetryablyWhenTheStoreCannotBeAsked(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	j := e.queueRaw(t, jobs.KindInstall, "gone", types.InstallOptions{"language": "fr"})
 	failed := e.waitFailed(t, j.ID)
@@ -93,6 +95,7 @@ func TestStartFailsRetryablyWhenTheStoreCannotBeAsked(t *testing.T) {
 }
 
 func TestVersionSwitchKeepsTheSavedChoices(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	first, err := e.a.InstallGameWithOptions(e.game, types.InstallOptions{"language": "de"})
 	if err != nil {
@@ -111,6 +114,7 @@ func TestVersionSwitchKeepsTheSavedChoices(t *testing.T) {
 }
 
 func TestPlainUpdateQueuesSavedChoicesWhenTheStoreIsDown(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	if err := e.a.settings.SetOptions(e.game.ID, types.InstallOptions{"language": "fr"}); err != nil {
 		t.Fatal(err)
@@ -130,6 +134,7 @@ func TestPlainUpdateQueuesSavedChoicesWhenTheStoreIsDown(t *testing.T) {
 }
 
 func TestOptionsAreNotSentWhereTheStoreDoesNotOfferThem(t *testing.T) {
+	t.Parallel()
 	// Protocol 1.3: the install-options capability is off at runtime, so a job
 	// queued with choices (from before a downgrade, say) sends none. Its size
 	// shows it: installSize would count the add-ons if they were sent.
@@ -152,6 +157,7 @@ func TestOptionsAreNotSentWhereTheStoreDoesNotOfferThem(t *testing.T) {
 }
 
 func TestSizeUsesTheChosenAddOns(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	ctx := context.Background()
 	plain := types.Job{Kind: jobs.KindInstall, Source: "echo", StoreGameID: "tiny", InstallDir: e.root}
@@ -171,6 +177,7 @@ func TestSizeUsesTheChosenAddOns(t *testing.T) {
 }
 
 func TestInstallSizeIsTheBaseSize(t *testing.T) {
+	t.Parallel()
 	e := optionsEnv(t)
 	var base struct {
 		DiskBytes int64 `json:"diskBytes"`

@@ -31,8 +31,8 @@ func (f *fakePickerHost) OpenDirectory(d DirectoryDialog) (string, error) {
 }
 
 func TestPickGameExecutableUsesPicker(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	exe := filepath.Join(home, "Games", "game", "game.exe")
 	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
 		t.Fatal(err)
@@ -60,9 +60,8 @@ func TestPickGameExecutableUsesPicker(t *testing.T) {
 }
 
 func TestPickGameExecutableCancelAndNoPicker(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	a := &App{host: &fakePickerHost{fileRet: ""}}
+	t.Parallel()
+	a := &App{host: &fakePickerHost{fileRet: ""}, optHome: t.TempDir()}
 	if got, err := a.PickGameExecutable(""); err != nil || got != "" {
 		t.Fatalf("cancel = %q, %v; want empty", got, err)
 	}
@@ -73,6 +72,7 @@ func TestPickGameExecutableCancelAndNoPicker(t *testing.T) {
 }
 
 func TestPickFolderUsesPicker(t *testing.T) {
+	t.Parallel()
 	h := &fakePickerHost{dirRet: "/games/work"}
 	a := &App{host: h}
 	got, err := a.PickFolder("Choose the working directory", "/games")
@@ -90,6 +90,7 @@ func TestPickFolderUsesPicker(t *testing.T) {
 }
 
 func TestSaveGameSettingsValidatesWorkingDir(t *testing.T) {
+	t.Parallel()
 	a := sideloadApp(t)
 	id := "g1"
 	work := t.TempDir()
@@ -115,6 +116,7 @@ func TestSaveGameSettingsValidatesWorkingDir(t *testing.T) {
 }
 
 func TestSaveGameSettingsValidatesWinePrefix(t *testing.T) {
+	t.Parallel()
 	a := sideloadApp(t)
 	id := "g1"
 	file := filepath.Join(t.TempDir(), "f.exe")
@@ -141,13 +143,14 @@ func TestSaveGameSettingsValidatesWinePrefix(t *testing.T) {
 // A "~" path is stored expanded and Cleaned, so it never reaches the runner
 // as a literal "~/x".
 func TestSaveGameSettingsCleansPaths(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	work := filepath.Join(home, "work")
 	if err := os.MkdirAll(work, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	a := sideloadApp(t)
+	a.optHome = home
 	id := "g1"
 
 	if err := a.SaveGameSettings(id, map[string]any{"working_dir": "~/work"}); err != nil {
@@ -185,11 +188,11 @@ func TestSaveGameSettingsCleansPaths(t *testing.T) {
 func sideloadApp(t *testing.T) *App {
 	t.Helper()
 	root := t.TempDir()
-	st, err := settings.Open(filepath.Join(root, "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st}
+	return &App{settings: st, optHome: root}
 }
 
 // The custom-game launch path honours the working directory and the Wine
@@ -197,8 +200,8 @@ func sideloadApp(t *testing.T) *App {
 // runs in the working dir (empty = the executable's folder) with the
 // per-game prefix in the environment.
 func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
 	// A runner the scan finds, so prepareLaunch can resolve "auto".
 	fakeProton := filepath.Join(home, ".local/share/Steam/compatibilitytools.d", "FakeTest")
 	if err := os.MkdirAll(fakeProton, 0o755); err != nil {
@@ -209,7 +212,7 @@ func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	st, err := settings.Open(filepath.Join(root, "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +239,7 @@ func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := &App{settings: st, stores: stores.NewRegistry(nil, stores.NewSteam())}
+	a := &App{settings: st, stores: stores.NewRegistry(nil, stores.NewSteam()), optHome: home}
 	games := a.customGames()
 	if len(games) != 1 {
 		t.Fatalf("customGames = %d games, want 1", len(games))

@@ -175,7 +175,7 @@ func newArtFixture(t *testing.T) *artFixture {
 func newArtApp(t *testing.T, f *artFixture, title string) (*App, *artHost, string) {
 	t.Helper()
 	root := t.TempDir()
-	st, err := settings.Open(filepath.Join(root, "settings.json"))
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func newArtApp(t *testing.T, f *artFixture, title string) (*App, *artHost, strin
 		t.Fatal(err)
 	}
 	h := &artHost{}
-	a := &App{host: h, settings: st, dataDir: root, artwork: &onlineart.Client{SearchBase: f.srv.URL, CDNBase: f.srv.URL, APIBase: f.srv.URL, GOGBase: f.srv.URL, GOGInfoBase: f.srv.URL, LutrisBase: f.srv.URL, IGDBBase: f.srv.URL}, sideloadSteam: &steam.StoreClient{Base: f.srv.URL, HTTPClient: f.srv.Client()}}
+	a := &App{host: h, settings: st, dataDir: root, optHome: root, optCacheDir: root, artwork: &onlineart.Client{SearchBase: f.srv.URL, CDNBase: f.srv.URL, APIBase: f.srv.URL, GOGBase: f.srv.URL, GOGInfoBase: f.srv.URL, LutrisBase: f.srv.URL, IGDBBase: f.srv.URL}, sideloadSteam: &steam.StoreClient{Base: f.srv.URL, HTTPClient: f.srv.Client()}}
 	a.custom.p.Store(cs)
 	return a, h, g.ID
 }
@@ -211,6 +211,7 @@ const knightSearch = `{"id":123,"name":"Hollow Knight","tiny_image":"http://x/12
 const knightDetail = `{"123":{"success":true,"data":{"name":"Hollow Knight","release_date":{"date":"24 Feb, 2017"}}}}`
 
 func TestAutoArtworkAppliesOnExactMatch(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = knightSearch
@@ -250,6 +251,7 @@ func TestAutoArtworkAppliesOnExactMatch(t *testing.T) {
 }
 
 func TestAutoArtworkAmbiguousOrEmptyDoesNothing(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		title  string
@@ -280,6 +282,7 @@ func TestAutoArtworkAmbiguousOrEmptyDoesNothing(t *testing.T) {
 }
 
 func TestAutoArtworkNeverOverwritesUserArt(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	other := append(append([]byte{}, png...), 0x00)
@@ -309,6 +312,7 @@ func TestAutoArtworkNeverOverwritesUserArt(t *testing.T) {
 }
 
 func TestAutoArtworkHero404FallsBackToHeader(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = knightSearch
@@ -325,6 +329,7 @@ func TestAutoArtworkHero404FallsBackToHeader(t *testing.T) {
 }
 
 func TestApplyOnlineArtManualReplaces(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -353,6 +358,7 @@ func TestApplyOnlineArtManualReplaces(t *testing.T) {
 }
 
 func TestApplyOnlineArtWithNoArtErrors(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.detail = knightDetail // art endpoints all 404
 	a, _, id := newArtApp(t, f, "Hollow Knight")
@@ -362,6 +368,7 @@ func TestApplyOnlineArtWithNoArtErrors(t *testing.T) {
 }
 
 func TestArtworkOffMakesNoRequests(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.search = knightSearch
 	f.detail = knightDetail
@@ -397,6 +404,7 @@ func TestArtworkOffMakesNoRequests(t *testing.T) {
 }
 
 func TestSearchArtOnlineParses(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.search = knightSearch
 	a, _, _ := newArtApp(t, f, "Hollow Knight")
@@ -412,6 +420,7 @@ func TestSearchArtOnlineParses(t *testing.T) {
 // A failing logo must not sink the apply: cover and banner still land, with
 // one warn about the logo.
 func TestLogoErrorStillAppliesCoverAndBanner(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -440,6 +449,7 @@ func TestLogoErrorStillAppliesCoverAndBanner(t *testing.T) {
 // Removing the game mid-lookup stores nothing for it: no art, no source, no
 // compat AppID, and silence (no warn, no event).
 func TestAutoArtworkDropsWhenGameRemoved(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = knightSearch
@@ -482,6 +492,7 @@ func TestAutoArtworkDropsWhenGameRemoved(t *testing.T) {
 // Rivage (app 4094660): the fixed CDN names 404, but GetItems names hashed
 // assets that download fine, so the manual apply still succeeds.
 func TestApplyOnlineArtRivageHashedAssets(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = `{"4094660":{"success":true,"data":{"name":"Rivage","release_date":{"date":"2025"}}}}`
@@ -522,6 +533,7 @@ func TestApplyOnlineArtRivageHashedAssets(t *testing.T) {
 
 // When GetItems fails, the fixed CDN names still apply (older apps).
 func TestApplyOnlineArtFallsBackWhenGetItemsFails(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -565,6 +577,7 @@ func waitForEmit(t *testing.T, h *artHost) {
 
 // A changed AppID auto-applies in the background and emits library.
 func TestSetAppIDAutoApplies(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -592,6 +605,7 @@ func TestSetAppIDAutoApplies(t *testing.T) {
 
 // Setting the same AppID again does nothing new.
 func TestSetSameAppIDDoesNothing(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -628,6 +642,7 @@ func TestSetSameAppIDDoesNothing(t *testing.T) {
 
 // Hand-picked art is kept while online art is replaced by the AppID auto path.
 func TestSetAppIDKeepsHandPickedReplacesOnline(t *testing.T) {
+	t.Parallel()
 	newPNG := func(t *testing.T, seed byte) []byte {
 		t.Helper()
 		// testPNG makes a blank image; append a seed byte so two downloads differ.
@@ -697,6 +712,7 @@ func TestSetAppIDKeepsHandPickedReplacesOnline(t *testing.T) {
 
 // With the switch off, setting an AppID makes no requests.
 func TestSetAppIDWithSwitchOffMakesNoRequests(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -725,6 +741,7 @@ func TestSetAppIDWithSwitchOffMakesNoRequests(t *testing.T) {
 
 // A store game is a no-op for the art lookup (the save itself still works).
 func TestSetAppIDForStoreGameIsNoOp(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -759,6 +776,7 @@ func gogProductJSON(base, id, title, date string) string {
 // The fallbacks stay quiet while Steam answers well: three hits with a name
 // match means one request, the Steam search.
 func TestSearchArtOnlineSkipsFallbacksWhenSteamEnough(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.search = knightSearch + `,{"id":125,"name":"Hollow Knight: Voidheart","tiny_image":"http://x/125.jpg"}`
 	f.gog = gogProductJSON(f.srv.URL, "1308320804", "Hollow Knight", "2017.02.24")
@@ -785,6 +803,7 @@ func TestSearchArtOnlineSkipsFallbacksWhenSteamEnough(t *testing.T) {
 // Steam names nothing like the title: the fallbacks are queried even with
 // three hits, and merge in order with duplicates dropped.
 func TestSearchArtOnlineMergesFallbacksWhenThin(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.search = `{"id":1,"name":"Unrelated A","tiny_image":"http://x/1.jpg"},{"id":2,"name":"Unrelated B","tiny_image":"http://x/2.jpg"},{"id":3,"name":"Unrelated C","tiny_image":"http://x/3.jpg"}`
 	f.gog = gogProductJSON(f.srv.URL, "1308320804", "Hollow Knight", "2017.02.24")
@@ -829,6 +848,7 @@ func TestSearchArtOnlineMergesFallbacksWhenThin(t *testing.T) {
 // A GOG manual apply stores cover, banner and logo with a gog: source, the
 // year, and no compat AppID (Steam-only).
 func TestApplyOnlineArtGOG(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.gog = gogProductJSON(f.srv.URL, "1308320804", "Hollow Knight", "2017.02.24")
@@ -864,6 +884,7 @@ func TestApplyOnlineArtGOG(t *testing.T) {
 }
 
 func TestApplyOnlineArtGOGUnknownID(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.gog = gogProductJSON(f.srv.URL, "1308320804", "Hollow Knight", "2017.02.24")
 	a, _, id := newArtApp(t, f, "Hollow Knight")
@@ -876,6 +897,7 @@ func TestApplyOnlineArtGOGUnknownID(t *testing.T) {
 // applying it works even though the saved title would never find it (the
 // reviewer's case: GOG has no lookup by product id).
 func TestApplyOnlineArtGOGUsesSearchCache(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = "" // Steam knows nothing like it, so the fallbacks fire.
@@ -907,6 +929,7 @@ func TestApplyOnlineArtGOGUsesSearchCache(t *testing.T) {
 // Without a prior search, a GOG apply falls back to the game's own title;
 // when that cannot reproduce the hit the error says to search again.
 func TestApplyOnlineArtGOGCacheMissSaysSearchAgain(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.gog = gogProductJSON(f.srv.URL, "999", "Some Game", "2020.01.01")
 	a, _, id := newArtApp(t, f, "test")
@@ -923,6 +946,7 @@ func TestApplyOnlineArtGOGCacheMissSaysSearchAgain(t *testing.T) {
 // A Lutris manual apply stores the upgraded IGDB cover with a lutris:
 // source. Here only the IGDB copy exists: the lutris.net file 404s.
 func TestApplyOnlineArtLutrisUsesIGDBUpgrade(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.lutrisGame = `{"name":"Rivage","slug":"rivage","year":2026,` +
@@ -944,6 +968,7 @@ func TestApplyOnlineArtLutrisUsesIGDBUpgrade(t *testing.T) {
 
 // When the IGDB copy is absent the lutris.net coverart itself applies.
 func TestApplyOnlineArtLutrisFallsBackToCoverart(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.lutrisGame = `{"name":"Rivage","slug":"rivage","year":2026,` +
@@ -962,6 +987,7 @@ func TestApplyOnlineArtLutrisFallsBackToCoverart(t *testing.T) {
 // A Lutris hit that maps to a Steam app takes the Steam path when Steam has
 // the art: the generic coverart is skipped and attribution is Steam's.
 func TestApplyOnlineArtLutrisUsesSteamWhenMapped(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -988,6 +1014,7 @@ func TestApplyOnlineArtLutrisUsesSteamWhenMapped(t *testing.T) {
 
 // When Steam has nothing for the mapped app, the Lutris cover still lands.
 func TestApplyOnlineArtLutrisCoverWhenSteamBare(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail // Steam art endpoints all 404
@@ -1009,6 +1036,7 @@ func TestApplyOnlineArtLutrisCoverWhenSteamBare(t *testing.T) {
 }
 
 func TestApplyOnlineArtUnknownSource(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	a, _, id := newArtApp(t, f, "Hollow Knight")
 	if _, err := a.ApplyOnlineArt(id, "itch", "123"); err == nil {
@@ -1018,6 +1046,7 @@ func TestApplyOnlineArtUnknownSource(t *testing.T) {
 
 // The auto path tries GOG when Steam has no exact single match.
 func TestAutoArtworkFallsBackToGOG(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = "" // Steam knows nothing like it
@@ -1049,6 +1078,7 @@ func TestAutoArtworkFallsBackToGOG(t *testing.T) {
 // match. Steam's two near-misses and GOG's two exact hits are ambiguous;
 // Lutris names it once.
 func TestAutoArtworkFallsBackToLutris(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = `{"id":1,"name":"Rivage"},{"id":2,"name":"Rivage™"}`
@@ -1074,6 +1104,7 @@ func TestAutoArtworkFallsBackToLutris(t *testing.T) {
 
 // Ambiguous everywhere means nothing and silence.
 func TestAutoArtworkAmbiguousFallbacksDoNothing(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.search = `{"id":1,"name":"Rivage"},{"id":2,"name":"Rivage™"}`

@@ -39,6 +39,7 @@ func writePNG(t *testing.T) string {
 }
 
 func TestCustomizationReachesTheLibraryAndResets(t *testing.T) {
+	t.Parallel()
 	a := customApp(t)
 	src := writePNG(t)
 	if _, err := a.SetCustomTitle("g1", "My Title", "title, my"); err != nil {
@@ -92,6 +93,7 @@ func TestCustomizationReachesTheLibraryAndResets(t *testing.T) {
 }
 
 func TestCustomizationRefusesBadInput(t *testing.T) {
+	t.Parallel()
 	a := customApp(t)
 	text := filepath.Join(t.TempDir(), "notes.png")
 	if err := os.WriteFile(text, []byte("not an image"), 0o644); err != nil {
@@ -115,6 +117,7 @@ func TestCustomizationRefusesBadInput(t *testing.T) {
 }
 
 func TestCustomArtIsServedAndOthersPassThrough(t *testing.T) {
+	t.Parallel()
 	a := customApp(t)
 	c, err := a.SetCustomArt("g1", "cover", writePNG(t))
 	if err != nil {
@@ -144,6 +147,7 @@ func TestCustomArtIsServedAndOthersPassThrough(t *testing.T) {
 // A plugin only ever hears the store's title: a custom one must not reach the
 // job (the plugin keys records on it) or the cloud context.
 func TestPluginsAreSentTheStoreTitle(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, allVersions, echoCaps)
 	e.game.StoreTitle, e.game.Title = "Echo Tiny", "My Tiny"
 	j, err := e.a.InstallGame(e.game)

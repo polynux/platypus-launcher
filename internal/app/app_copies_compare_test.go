@@ -8,6 +8,7 @@ import (
 // "shared" game: Ana's and Ben's copies differ. Ben has the most add-ons, so
 // he is the baseline until the user prefers a copy.
 func TestSharedGameCopiesAreComparedWithTheBaseline(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	shared := e.libraryGame(t, "shared")
 	cmp := shared.CopyCompare
@@ -21,6 +22,7 @@ func TestSharedGameCopiesAreComparedWithTheBaseline(t *testing.T) {
 }
 
 func TestPreferringACopyMakesItTheBaseline(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if err := e.a.SetPreferredCopy(e.libraryGame(t, "shared"), "ana"); err != nil {
 		t.Fatal(err)
@@ -36,6 +38,7 @@ func TestPreferringACopyMakesItTheBaseline(t *testing.T) {
 
 // A game the user owns has no copies, so nothing is compared.
 func TestOwnGamesHaveNoCopyComparison(t *testing.T) {
+	t.Parallel()
 	e := familyApp(t, familyProtocols, familyCaps)
 	if own := e.libraryGame(t, "tiny"); own.CopyCompare != nil || own.Copies != nil {
 		t.Fatalf("an own game compared: %+v", own.CopyCompare)

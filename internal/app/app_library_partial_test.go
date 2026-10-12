@@ -51,6 +51,7 @@ func libraryApp(t *testing.T, srcs ...stores.Store) *App {
 // finished sources goes out as soon as one answers, and the scan still returns
 // everything once the slow one does.
 func TestLibraryScanSendsWhatIsReadyBeforeTheSlowStore(t *testing.T) {
+	t.Parallel()
 	gate := make(chan struct{})
 	steam := &fakeSource{id: types.SourceSteam, games: []types.Game{{ID: "steam_1", Source: types.SourceSteam, Title: "One"}}}
 	slow := &fakeSource{id: "slow", games: []types.Game{{ID: "slow_a", Source: "slow", Title: "A"}}, gate: gate}
@@ -96,6 +97,7 @@ func TestLibraryScanSendsWhatIsReadyBeforeTheSlowStore(t *testing.T) {
 
 // A failing plugin is a warning in the final library and the scan still ends.
 func TestLibraryScanStillWarnsAboutAFailingStore(t *testing.T) {
+	t.Parallel()
 	steam := &fakeSource{id: types.SourceSteam, games: []types.Game{{ID: "steam_1", Source: types.SourceSteam, Title: "One"}}}
 	bad := &fakeSource{id: "bad", err: context.DeadlineExceeded}
 	a := libraryApp(t, steam, bad)

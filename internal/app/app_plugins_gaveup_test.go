@@ -56,8 +56,9 @@ func repoPath(rel string) string {
 }
 
 func TestStorePluginGaveUp(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
-	trust, err := settings.Open(filepath.Join(root, "settings.json"))
+	trust, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,6 +68,7 @@ func TestStorePluginGaveUp(t *testing.T) {
 		LogDir:   filepath.Join(root, "logs"),
 		DataDir:  filepath.Join(root, "data"),
 		Settings: trust,
+		Home:     root,
 		Timings:  &plugins.Timings{BackoffBase: 20 * time.Millisecond, BackoffMax: 100 * time.Millisecond, MaxCrashes: 3},
 	})
 	t.Cleanup(m.Shutdown)
@@ -78,7 +80,7 @@ func TestStorePluginGaveUp(t *testing.T) {
 	if err := m.Approve("echo"); err != nil {
 		t.Fatal(err)
 	}
-	a := &App{plugins: m, settings: trust}
+	a := &App{plugins: m, settings: trust, optHome: root}
 
 	// A healthy plugin is not in give-up.
 	if got := a.ListStorePlugins(); len(got) != 1 || got[0].GaveUp {

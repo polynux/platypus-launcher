@@ -46,6 +46,7 @@ func termRefs(terms []types.GameTerm) []types.TermRef {
 }
 
 func TestInstallWaitsForTheUsersAcceptance(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	terms, err := e.a.GetGameTerms(game)
@@ -93,6 +94,7 @@ func TestInstallWaitsForTheUsersAcceptance(t *testing.T) {
 }
 
 func TestAVersionBumpAsksAgainAndAStaleDialogCannotAccept(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	terms, _ := e.a.GetGameTerms(game)
@@ -125,6 +127,7 @@ func TestAVersionBumpAsksAgainAndAStaleDialogCannotAccept(t *testing.T) {
 }
 
 func TestNothingIsAcceptedOnTheUsersBehalf(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	if _, err := e.a.InstallGame(game); err == nil {
@@ -139,6 +142,7 @@ func TestNothingIsAcceptedOnTheUsersBehalf(t *testing.T) {
 }
 
 func TestAResumedJobIsNotAskedAgain(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	terms, _ := e.a.GetGameTerms(game)
@@ -160,6 +164,7 @@ func TestAResumedJobIsNotAskedAgain(t *testing.T) {
 }
 
 func TestTermsStayOffBelowProtocol111(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, `["1.0","1.1","1.3","1.9"]`, termsCaps)
 	game := licensedGame()
 	if terms, err := e.a.GetGameTerms(game); err != nil || len(terms) != 0 {
@@ -190,6 +195,7 @@ func TestAStoreWithoutServerAcceptanceKeepsTheRecordInPlatypus(t *testing.T) {
 }
 
 func TestAcceptingAnUnlistedTermIsRefused(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	err := e.a.AcceptGameTerms(game, []types.TermRef{{ID: "invented", Version: "1"}})
@@ -205,6 +211,7 @@ func TestAcceptingAnUnlistedTermIsRefused(t *testing.T) {
 // reinstall and a fresh approval (new files, new hash) and a Platypus restart
 // don't touch it: only a new version asks again.
 func TestAcceptanceSurvivesAReinstallAndARestart(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	terms, err := e.a.GetGameTerms(game)
@@ -259,6 +266,7 @@ func TestAcceptanceSurvivesAReinstallAndARestart(t *testing.T) {
 // The ones that reach the gate name the terms; the others stop earlier (the
 // game has no options, or no version is picked) and queue nothing either way.
 func TestEveryQueueEntryPointWaitsForTheAcceptance(t *testing.T) {
+	t.Parallel()
 	e := versionsApp(t, termsProtocols, termsCaps)
 	game := licensedGame()
 	installed := game

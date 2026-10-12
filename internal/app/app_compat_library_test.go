@@ -10,6 +10,7 @@ import (
 // library that is hundreds of slow game.details calls, and the scan never ends.
 // The game page asks; the library only reads what that left in the cache.
 func TestLibraryScanAsksNoPluginForGameDetails(t *testing.T) {
+	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
 	before := env.calls(t)["game.details"]
 	games := []types.Game{env.game, env.game, env.game}

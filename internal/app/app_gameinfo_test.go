@@ -42,6 +42,7 @@ func infoGame(t *testing.T, a *App, id string) types.Game {
 
 // Steam details serve a sideloaded game with a compat AppID, sanitized.
 func TestGameInfoSteamDetails(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.steamDetail = infoSteamDetail
 	a, _, id := newArtApp(t, f, "Hollow Knight")
@@ -74,6 +75,7 @@ func TestGameInfoSteamDetails(t *testing.T) {
 
 // The compat AppID beats info_source.
 func TestGameInfoSourceOrder(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.steamDetail = infoSteamDetail
 	f.gog = infoGOGCatalog
@@ -103,6 +105,7 @@ func TestGameInfoSourceOrder(t *testing.T) {
 
 // GOG parsing: description sanitized, catalog facts carried, store URL kept.
 func TestGameInfoGOGDetails(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.search = ""
 	f.gog = infoGOGCatalog
@@ -146,6 +149,7 @@ func TestGameInfoGOGDetails(t *testing.T) {
 
 // Lutris parsing: plain text in Summary, genres and year, store URL.
 func TestGameInfoLutrisDetails(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.lutrisGame = infoLutrisGame
 	a, _, id := newArtApp(t, f, "Rivage")
@@ -178,6 +182,7 @@ func TestGameInfoLutrisDetails(t *testing.T) {
 
 // Applying GOG/Lutris art auto-links the info source when the game has none.
 func TestGameInfoAutoLinkFromArt(t *testing.T) {
+	t.Parallel()
 	t.Run("gog", func(t *testing.T) {
 		f := newArtFixture(t)
 		png := testPNG(t)
@@ -235,6 +240,7 @@ func TestGameInfoAutoLinkFromArt(t *testing.T) {
 // LinkGameInfo: gog/lutris store the link, steam sets the compat AppID with
 // the art auto-apply, "" unlinks both.
 func TestLinkGameInfo(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	png := testPNG(t)
 	f.detail = knightDetail
@@ -272,6 +278,7 @@ func TestLinkGameInfo(t *testing.T) {
 }
 
 func TestLinkGameInfoBadSource(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	a, _, id := newArtApp(t, f, "My Game")
 	if _, err := a.LinkGameInfo(id, "itch", "123"); err == nil {
@@ -284,6 +291,7 @@ func TestLinkGameInfoBadSource(t *testing.T) {
 
 // With the switch off nothing goes out and linking is refused.
 func TestGameInfoOffMakesNoRequests(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.steamDetail = infoSteamDetail
 	a, _, id := newArtApp(t, f, "Hollow Knight")
@@ -312,6 +320,7 @@ func TestGameInfoOffMakesNoRequests(t *testing.T) {
 // The disk cache: a second call makes no request, the TTL refreshes, a
 // changed link refetches, and offline serves the stale cache.
 func TestGameInfoDiskCache(t *testing.T) {
+	t.Parallel()
 	f := newArtFixture(t)
 	f.search = ""
 	f.gog = infoGOGCatalog

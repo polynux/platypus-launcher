@@ -15,6 +15,7 @@ import (
 // CORE-5: installing then removing a data plugin followed by rescan must
 // activate then drop its fixes/tweaks without a restart.
 func TestRescanSyncsDataPlugins(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	st, err := settings.Open(filepath.Join(root, "settings.json"))
 	if err != nil {

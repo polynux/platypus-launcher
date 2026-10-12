@@ -7,6 +7,7 @@ import (
 )
 
 func TestNewAntiCheatKeepsTheCatalogueBadgeAndAddsOnlyNewNames(t *testing.T) {
+	t.Parallel()
 	have := []types.CompatBadge{{Kind: "anticheat", Label: "Easy Anti-Cheat", Detail: "Linux: supported."}}
 	add := []types.CompatBadge{{Kind: "anticheat", Label: "easy anti-cheat"}, {Kind: "anticheat", Label: "BattlEye"}}
 	got := newAntiCheat(have, add)

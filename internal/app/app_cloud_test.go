@@ -50,12 +50,9 @@ func (c *cloudEvents) find(kind string) *types.CloudEvent {
 // cloudApp is an App wired to the real echo plugin and a real cloud orchestrator.
 func cloudApp(t *testing.T, protocols []plugins.Version, env map[string]string) (*App, *cloudEvents) {
 	t.Helper()
-	for k, v := range env {
-		t.Setenv(k, v)
-	}
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
 	root := t.TempDir()
-	trust, err := settings.Open(filepath.Join(root, "settings.json"))
+	trust, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,10 +70,10 @@ func cloudApp(t *testing.T, protocols []plugins.Version, env map[string]string) 
 	if err := os.WriteFile(filepath.Join(root, "data", "echo", "state.json"), []byte(state), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	a := &App{settings: trust, ctx: context.Background()}
+	a := &App{settings: trust, ctx: context.Background(), optHome: home}
 	a.plugins = plugins.NewManager(plugins.Options{
 		Dir: pluginsDir, LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"), Settings: trust,
-		Protocols: protocols, OnNotify: a.pluginNotify,
+		Home: home, Env: env, Protocols: protocols, OnNotify: a.pluginNotify,
 	})
 	t.Cleanup(a.plugins.Shutdown)
 	if _, err := a.plugins.Discover(); err != nil {
@@ -92,6 +89,7 @@ func cloudApp(t *testing.T, protocols []plugins.Version, env map[string]string) 
 	})
 	t.Cleanup(func() { a.cloud.Shutdown(5 * time.Second) })
 	a.sessions = session.NewTracker(func(types.SessionEvent) {})
+	a.sessions.SetLogDir(filepath.Join(root, "logs"))
 	a.stores = stores.NewRegistry(a.pluginStores)
 	return a, ev
 }
@@ -123,6 +121,7 @@ func echoCalls(t *testing.T, a *App) map[string]int {
 }
 
 func TestCloudGameNeedsThePluginTheCapabilityAndTheGameFeature(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
 	g := echoGame(t, a)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
@@ -148,6 +147,7 @@ func TestCloudGameNeedsThePluginTheCapabilityAndTheGameFeature(t *testing.T) {
 }
 
 func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, []plugins.Version{{Major: 1, Minor: 0}, {Major: 1, Minor: 1}}, nil) // an older Platypus: speaks up to 1.1
 	g := echoGame(t, a)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
@@ -172,6 +172,7 @@ func TestAProtocol11PluginGetsNoCloudCalls(t *testing.T) {
 }
 
 func TestPreLaunchPullsThenTheExitPushes(t *testing.T) {
+	t.Parallel()
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending"})
 	g := echoGame(t, a)
 	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
@@ -208,6 +209,7 @@ func TestPreLaunchPullsThenTheExitPushes(t *testing.T) {
 }
 
 func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
+	t.Parallel()
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "conflict2"})
 	g := echoGame(t, a)
 	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
@@ -245,6 +247,7 @@ func TestPreLaunchConflictBlocksUntilResolved(t *testing.T) {
 }
 
 func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
+	t.Parallel()
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "offline"})
 	g := echoGame(t, a)
 	if _, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); !blocked || msg == "" {
@@ -260,6 +263,7 @@ func TestOfflineAsksAndLaunchAnywayLaunches(t *testing.T) {
 }
 
 func TestLaunchWithoutAKnownFolderSkipsTheSyncAndSaysSo(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending"})
 	g := echoGame(t, a)
 	// A game the library doesn't list has no folder for Platypus to read saves from.
@@ -281,6 +285,7 @@ func TestLaunchWithoutAKnownFolderSkipsTheSyncAndSaysSo(t *testing.T) {
 }
 
 func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
+	t.Parallel()
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_CLIENT": "1"})
 	g := echoGame(t, a)
 	_, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
@@ -308,6 +313,7 @@ func TestTheStoreClientRunningMeansNoSync(t *testing.T) {
 }
 
 func TestCancelStopsAPullInEcho(t *testing.T) {
+	t.Parallel()
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_DELAY_MS": "300"})
 	g := echoGame(t, a)
 	done := make(chan bool, 1)
@@ -341,6 +347,7 @@ func TestCancelStopsAPullInEcho(t *testing.T) {
 }
 
 func TestProgressReachesTheEventsWhileEchoWorks(t *testing.T) {
+	t.Parallel()
 	a, ev := cloudApp(t, nil, map[string]string{"ECHO_CLOUD": "pending", "ECHO_CLOUD_DELAY_MS": "130"})
 	g := echoGame(t, a)
 	if _, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false); blocked {
@@ -362,6 +369,7 @@ func TestProgressReachesTheEventsWhileEchoWorks(t *testing.T) {
 }
 
 func TestCloudModesPerPluginAndPerGame(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
 	g := echoGame(t, a)
 	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
@@ -398,6 +406,7 @@ func TestCloudModesPerPluginAndPerGame(t *testing.T) {
 }
 
 func TestResolveRefusesWhileTheGameRuns(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
 	g := echoGame(t, a)
 	if _, err := a.sessions.StartDirect(g.ID, exec.Command("sleep", "30"), "sleep 30", nil); err != nil {
@@ -416,6 +425,7 @@ func TestResolveRefusesWhileTheGameRuns(t *testing.T) {
 }
 
 func TestTheCloudContextFallbackFollowsTheLaunchRule(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
 	// A runner this machine doesn't have: no launch can use Wine, whatever is installed.
 	g := echoGame(t, a)
@@ -437,6 +447,7 @@ func TestTheCloudContextFallbackFollowsTheLaunchRule(t *testing.T) {
 }
 
 func TestGameLaunchesTakeTurns(t *testing.T) {
+	t.Parallel()
 	a := &App{}
 	g := types.Game{ID: "p.echo.tiny", Source: "echo", Store: "echo", StoreAppID: "tiny", Title: "Echo Tiny",
 		InstallDir: t.TempDir(), IsInstalled: true, Native: true}
@@ -472,6 +483,7 @@ func TestGameLaunchesTakeTurns(t *testing.T) {
 // A borrowed game in use is refused by the store before the cloud step: the
 // -32002 reaches the caller as it is, and no save is pulled or pushed for it.
 func TestALaunchOfABorrowedGameInUseSkipsTheCloudStep(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, map[string]string{"ECHO_FAMILY_IN_USE": "ana"})
 	q, err := jobs.Open(filepath.Join(t.TempDir(), "jobs.json"), nil, nil)
 	if err != nil {

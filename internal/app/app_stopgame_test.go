@@ -10,6 +10,7 @@ import (
 )
 
 func TestStopGameNotRunningIsAClearError(t *testing.T) {
+	t.Parallel()
 	a := &App{sessions: session.NewTracker(func(types.SessionEvent) {})}
 	err := a.StopGame("ghost")
 	if err == nil || err.Error() != "that game is not running" {
@@ -18,9 +19,11 @@ func TestStopGameNotRunningIsAClearError(t *testing.T) {
 }
 
 func TestStopGameEndsTheSession(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	t.Parallel()
 	events := make(chan types.SessionEvent, 16)
-	a := &App{sessions: session.NewTracker(func(e types.SessionEvent) { events <- e })}
+	tr := session.NewTracker(func(e types.SessionEvent) { events <- e })
+	tr.SetLogDir(t.TempDir())
+	a := &App{sessions: tr}
 	// A native game: the stop hook has no wineserver to ask.
 	p := &prepared{}
 	if _, err := a.sessions.StartDirect("g", exec.Command("sleep", "30"), "sleep 30", nil, session.WithStopHook(p.stopHook())); err != nil {

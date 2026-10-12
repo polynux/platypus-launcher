@@ -48,6 +48,7 @@ func (e *versionsEnv) noFolderGame(t *testing.T) types.Game {
 }
 
 func TestVerifyMoveAndUninstallOfAGameWithNoKnownFolderSayItIsInstalled(t *testing.T) {
+	t.Parallel()
 	e := maintenanceEnv(t, protocol14, maintenanceCaps)
 	g := e.noFolderGame(t)
 
@@ -69,6 +70,7 @@ func TestVerifyMoveAndUninstallOfAGameWithNoKnownFolderSayItIsInstalled(t *testi
 }
 
 func TestCloudSavesOfAGameWithNoKnownFolderAreRefusedWithoutAPluginCall(t *testing.T) {
+	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
 	if err := a.plugins.Call(context.Background(), "echo", "auth.complete", map[string]any{"fields": map[string]string{"code": "letmein"}}, nil); err != nil {
 		t.Fatal(err)
