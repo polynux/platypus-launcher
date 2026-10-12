@@ -244,6 +244,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startSocial(ctx)
 	a.startChat(ctx)
 	a.syncSocial()
+	a.syncChatUnread()
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop

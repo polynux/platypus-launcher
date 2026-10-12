@@ -130,6 +130,34 @@ func (a *App) SetChatAlerts(pluginID string, on bool) error {
 	return a.settings.SetChatAlerts(pluginID, on)
 }
 
+// refreshChatUnread seeds a store's unread counts from its snapshot
+// (chat.unreadCounts, protocol 1.13): badges are right after a restart,
+// without waiting for the next message. A store that speaks an older
+// protocol, or answers an error, keeps today's behaviour, silently.
+func (a *App) refreshChatUnread(pluginID string) {
+	if a.chat == nil || a.plugins == nil {
+		return
+	}
+	if _, err := a.plugins.Initialize(a.ctx, pluginID); err != nil {
+		return
+	}
+	if !a.plugins.Has(pluginID, "chat") || !a.plugins.Has(pluginID, "social") {
+		return
+	}
+	if !a.plugins.Runtime(pluginID).Speaks(plugins.UnreadCountsVersion) {
+		return
+	}
+	a.chat.RefreshUnread(a.ctx, pluginID)
+}
+
+// syncChatUnread seeds the unread counts of every ready store that offers
+// chat, each in the background, so badges are right after a restart.
+func (a *App) syncChatUnread() {
+	for _, id := range a.chatPlugins() {
+		go a.refreshChatUnread(id)
+	}
+}
+
 // chatNotify routes a chat notification from a plugin to the manager. Only a
 // store that is running at protocol 1.9 and offers chat with social may send
 // them, and only about a friend on its own list. Anything else is dropped here.

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -237,6 +239,27 @@ func chatMarkRead(raw json.RawMessage) (any, error) {
 	chatUnread[p.FriendID] = 0
 	chatRecord.Marks = append(chatRecord.Marks, map[string]string{"friendId": p.FriendID, "upTo": p.UpTo})
 	return map[string]any{}, nil
+}
+
+// chatUnreadCounts answers chat.unreadCounts (protocol 1.13): the snapshot of
+// unread messages per friend, in friend id order, so badges are right after a
+// restart without waiting for the next message.
+func chatUnreadCounts() (any, error) {
+	chatMu.Lock()
+	defer chatMu.Unlock()
+	type row struct {
+		FriendID string `json:"friendId"`
+		Unread   int    `json:"unread"`
+	}
+	counts := []row{}
+	for id, n := range chatUnread {
+		if !chatFriends[id] {
+			continue
+		}
+		counts = append(counts, row{FriendID: id, Unread: n})
+	}
+	slices.SortFunc(counts, func(a, b row) int { return strings.Compare(a.FriendID, b.FriendID) })
+	return map[string]any{"counts": counts}, nil
 }
 
 // chatRecorded is what `recorded` reports for chat: the sends and marks, in order.

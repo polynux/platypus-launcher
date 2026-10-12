@@ -265,6 +265,8 @@ func (a *App) PluginAuthComplete(id string, fields map[string]string) (types.Aut
 		// A login changes what the store lists: list it again.
 		a.invalidateLibrary(id)
 		a.socialLoggedIn(id)
+		// ... and what it has unread: seed the badges again.
+		go a.refreshChatUnread(id)
 	}
 	if err == nil {
 		// The plugin just said what the login state is: cache it fresh.

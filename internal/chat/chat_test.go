@@ -26,6 +26,10 @@ type fakeStore struct {
 	calls    []string
 	marks    []string
 	more     bool
+	// counts is what chat.unreadCounts answers, per friend. unreadErr, when
+	// set, is what it answers instead.
+	counts    map[string]int
+	unreadErr error
 	// overLimit makes history ignore the page limit and answer everything before
 	// the cursor, oldest first.
 	overLimit bool
@@ -95,6 +99,17 @@ func (f *fakeStore) Call(ctx context.Context, pluginID, method string, params, r
 	case MethodMarkRead:
 		f.marks = append(f.marks, p.UpTo)
 		return nil
+	case MethodUnreadCounts:
+		if f.unreadErr != nil {
+			return f.unreadErr
+		}
+		rows := []UnreadCount{}
+		for friend, n := range f.counts {
+			rows = append(rows, UnreadCount{FriendID: friend, Unread: n})
+		}
+		slices.SortFunc(rows, func(a, b UnreadCount) int { return strings.Compare(a.FriendID, b.FriendID) })
+		b, _ := json.Marshal(map[string]any{"counts": rows})
+		return json.Unmarshal(b, result)
 	}
 	return &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found: " + method}
 }
@@ -441,6 +456,85 @@ func TestUnreadNotificationAndAlertSetting(t *testing.T) {
 	h.notify(NoteUnread, map[string]any{"friendId": "ana", "count": -3})
 	if v := h.m.Snapshot("echo", "ana"); v.Unread != 0 {
 		t.Fatalf("a negative count left %d", v.Unread)
+	}
+}
+
+// The unread snapshot seeds the counts, without messages and without alerts;
+// a second snapshot replaces them, and opening still clears them.
+func TestRefreshUnreadSeedsCounts(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.store.counts = map[string]int{"ana": 3, "bo": 1}
+	h.m.RefreshUnread(ctx, "echo")
+	if v := h.m.Snapshot("echo", "ana"); v.Unread != 3 || len(v.Messages) != 0 {
+		t.Fatalf("ana: unread %d messages %d, want 3 and none", v.Unread, len(v.Messages))
+	}
+	if v := h.m.Snapshot("echo", "bo"); v.Unread != 1 {
+		t.Fatalf("bo: unread %d, want 1", v.Unread)
+	}
+	for _, e := range h.events() {
+		if e.Alert {
+			t.Fatalf("the snapshot alerted: %+v", e)
+		}
+	}
+	if got := h.m.Unread("echo"); len(got) != 2 {
+		t.Fatalf("Unread() = %+v, want the two seeded conversations", got)
+	}
+	if n := countOf(h.store.calls, MethodUnreadCounts); n != 1 {
+		t.Fatalf("chat.unreadCounts called %d times, want 1", n)
+	}
+
+	h.store.counts = map[string]int{"ana": 0, "bo": 5}
+	h.m.RefreshUnread(ctx, "echo")
+	if v := h.m.Snapshot("echo", "ana"); v.Unread != 0 {
+		t.Fatalf("ana: unread %d after a zero snapshot, want 0", v.Unread)
+	}
+	if v := h.m.Snapshot("echo", "bo"); v.Unread != 5 {
+		t.Fatalf("bo: unread %d, want 5", v.Unread)
+	}
+
+	if _, err := h.m.Open(ctx, "echo", "bo"); err != nil {
+		t.Fatal(err)
+	}
+	h.store.counts = map[string]int{"bo": 9}
+	h.m.RefreshUnread(ctx, "echo")
+	if v := h.m.Snapshot("echo", "bo"); v.Unread != 0 {
+		t.Fatalf("bo: unread %d in an open conversation, want 0", v.Unread)
+	}
+}
+
+// A store without the snapshot method, or one that answers an error, keeps
+// today's behaviour: nothing changes, silently.
+func TestRefreshUnreadWithoutTheMethodIsANoop(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.m.RefreshUnread(ctx, "echo")
+	if got := h.m.Unread("echo"); len(got) != 0 {
+		t.Fatalf("Unread() = %+v, want none", got)
+	}
+	if len(h.events()) != 0 {
+		t.Fatalf("events for a missing snapshot method: %d", len(h.events()))
+	}
+
+	h.store.unreadErr = &jsonrpc.Error{Code: jsonrpc.CodeMethodNotFound, Message: "method not found"}
+	h.m.RefreshUnread(ctx, "echo")
+	h.store.unreadErr = errors.New("the plugin didn't answer")
+	h.m.RefreshUnread(ctx, "echo")
+	if got := h.m.Unread("echo"); len(got) != 0 {
+		t.Fatalf("Unread() = %+v after snapshot errors, want none", got)
+	}
+	if len(h.events()) != 0 {
+		t.Fatalf("events for snapshot errors: %d", len(h.events()))
+	}
+	if h.logText() != "" {
+		t.Fatalf("the silent snapshot logged: %q", h.logText())
+	}
+
+	h.store.offers = false
+	h.store.counts = map[string]int{"ana": 2}
+	h.m.RefreshUnread(ctx, "echo")
+	if got := h.m.Unread("echo"); len(got) != 0 {
+		t.Fatalf("Unread() = %+v when chat is off, want none", got)
 	}
 }
 
