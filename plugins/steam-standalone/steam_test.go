@@ -25,6 +25,7 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/settings"
 	"platypus/internal/stores"
+	"platypus/internal/testenv"
 	"platypus/internal/types"
 	"platypus/plugins/steam-standalone/fakesteam"
 )
@@ -355,6 +356,7 @@ func TestSteamPasswordTwoStepEmail(t *testing.T) {
 
 // Same shape for TOTP codes: the kind is named, one Begin, one Update.
 func TestSteamPasswordTwoStepTOTP(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	e.setCMState("auth_guard", "totp")
 	var st types.AuthStatus
@@ -402,6 +404,7 @@ func (e *env) authLog() string {
 }
 
 func TestSteamAuth(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	// Password logins need an email code from the fake CM.
 	e.setCMState("auth_guard", "email")
@@ -964,6 +967,7 @@ func TestSteamQRAuth(t *testing.T) {
 // killed the first helper, whose watcher failed the shared state with
 // "the login helper ended without logging in".
 func TestSteamQRConcurrentBegin(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	const n = 2
 	prs := make([]types.AuthPrompt, n)
@@ -1135,6 +1139,7 @@ func checkQRArt(t *testing.T, art string) {
 // helper emits a fresh qr event and the plugin serves the latest art
 // through auth.status so the dialog can redraw it.
 func TestSteamQRRefresh(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	e.setCMState("auth_qr_refresh", true)
 	var pr types.AuthPrompt
@@ -1192,6 +1197,7 @@ func (s *syncBuf) String() string {
 // the old bare-name folder keeps working from its recorded path: launch,
 // update (in place, no second folder) and uninstall.
 func TestSteamLegacyInstallFolderKeepsWorking(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	e.login()
 	lib := e.library()

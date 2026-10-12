@@ -14,6 +14,7 @@ import (
 
 	"platypus/internal/jobs"
 	"platypus/internal/plugtest"
+	"platypus/internal/testenv"
 	"platypus/internal/types"
 )
 
@@ -57,6 +58,7 @@ func scaffold(t *testing.T) plugtest.Suite {
 }
 
 func TestConformanceScaffold(t *testing.T) {
+	testenv.RequireSlow(t)
 	scaffold(t).Conformance(t)
 }
 
