@@ -23,6 +23,7 @@ import (
 	"platypus/internal/ledger"
 	"platypus/internal/migrate"
 	"platypus/internal/onlineart"
+	"platypus/internal/paths"
 	"platypus/internal/playlog"
 	"platypus/internal/plugins"
 	"platypus/internal/runner"
@@ -95,6 +96,14 @@ type App struct {
 	// dataDir is Platypus's data folder (settings.json lives inside it);
 	// the sideloaded game-info disk cache lives there too (issue #38).
 	dataDir string
+	// optHome/optDataDir/optCacheDir/optPluginsDir are the explicit folders
+	// from Options (issue #41); empty means "resolve at startup".
+	optHome       string
+	optDataDir    string
+	optCacheDir   string
+	optPluginsDir string
+	// cacheDir is the resolved cache folder (only re-fetchable data).
+	cacheDir string
 	// sideloadSteam fetches Steam details for sideloaded games with a compat
 	// AppID (issue #38). Nil means the live store endpoint; tests inject an
 	// httptest client.
@@ -129,11 +138,82 @@ type App struct {
 	migration migrate.Report
 }
 
+// Options carries the folders one App run uses (issue #41). Empty fields
+// resolve from the environment once, in startup, via internal/paths; tests
+// pass temp dirs directly instead of setting HOME.
+type Options struct {
+	DataDir    string
+	CacheDir   string
+	PluginsDir string
+	Home       string
+}
+
 // NewApp creates a new App application struct
 func NewApp() *App {
+	return NewAppWithOptions(Options{})
+}
+
+// NewAppWithOptions is NewApp with explicit folders (issue #41).
+func NewAppWithOptions(o Options) *App {
 	a := &App{data: dataplug.NewRegistry(), host: stderrHost{}}
+	a.optHome = o.Home
+	a.optDataDir = o.DataDir
+	a.optCacheDir = o.CacheDir
+	a.optPluginsDir = o.PluginsDir
 	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
 	return a
+}
+
+// homeDir is the configured Home, defaulting to os.UserHomeDir.
+func (a *App) homeDir() string {
+	if a == nil {
+		return ""
+	}
+	if a.optHome != "" {
+		return a.optHome
+	}
+	home, _ := os.UserHomeDir()
+	return home
+}
+
+// resolvedDataDir is the data folder in use: the explicit field, the
+// startup-resolved one, or the default for the configured home.
+func (a *App) resolvedDataDir() string {
+	if a == nil {
+		return ""
+	}
+	if a.dataDir != "" {
+		return a.dataDir
+	}
+	if a.optDataDir != "" {
+		return a.optDataDir
+	}
+	return settings.DataDirFor(a.homeDir())
+}
+
+// resolvedCacheDir is the cache folder in use.
+func (a *App) resolvedCacheDir() string {
+	if a == nil {
+		return ""
+	}
+	if a.cacheDir != "" {
+		return a.cacheDir
+	}
+	if a.optCacheDir != "" {
+		return a.optCacheDir
+	}
+	return paths.CacheDirFor(a.homeDir())
+}
+
+// resolvedPluginsDir is the plugins folder in use.
+func (a *App) resolvedPluginsDir() string {
+	if a == nil {
+		return ""
+	}
+	if a.optPluginsDir != "" {
+		return a.optPluginsDir
+	}
+	return paths.PluginsDirFor(a.resolvedDataDir())
 }
 
 // startup is called when the app starts.
@@ -153,18 +233,49 @@ func (a *App) startup(ctx context.Context) {
 
 	// Before anything opens a data file: the previous data folder moves to
 	// its new name, and the paths stored in it follow (internal/migrate).
-	if home, err := os.UserHomeDir(); err == nil {
+	// Folders come from internal/paths once (issue #41); explicit Options
+	// win over the environment.
+	resolved := paths.Resolve()
+	if a.optHome != "" {
+		resolved.Home = a.optHome
+		// Home was forced: re-resolve the env-derived folders against it,
+		// unless an explicit option already pins them.
+		fresh := paths.ResolveFor(resolved.Home)
+		if a.optDataDir == "" {
+			resolved.DataDir = fresh.DataDir
+		}
+		if a.optCacheDir == "" {
+			resolved.CacheDir = fresh.CacheDir
+		}
+		resolved.ConfigDir = fresh.ConfigDir
+	}
+	if a.optDataDir != "" {
+		resolved.DataDir = a.optDataDir
+	}
+	if a.optCacheDir != "" {
+		resolved.CacheDir = a.optCacheDir
+	}
+	if a.optPluginsDir != "" {
+		resolved.PluginsDir = a.optPluginsDir
+	} else {
+		resolved.PluginsDir = paths.PluginsDirFor(resolved.DataDir)
+	}
+	a.optHome = resolved.Home
+	a.optDataDir = resolved.DataDir
+	a.optCacheDir = resolved.CacheDir
+	a.optPluginsDir = resolved.PluginsDir
+	if home := resolved.Home; home != "" {
 		a.migration = migrate.Run(home, migrate.Options{
 			Info: func(format string, args ...any) { a.host.Infof(format, args...) },
 			Warn: func(format string, args ...any) { a.host.Warnf(format, args...) },
 		})
 	}
-	dataDir, err := settings.DataDir()
-	if err != nil {
-		a.host.Errorf("settings: %v", err)
-	}
+	dataDir := resolved.DataDir
 	a.dataDir = dataDir
-	a.settings, err = settings.Open(filepath.Join(dataDir, "settings.json"))
+	a.cacheDir = resolved.CacheDir
+	a.sessions.SetLogDir(filepath.Join(dataDir, "logs"))
+	var err error
+	a.settings, err = settings.OpenWithHome(filepath.Join(dataDir, "settings.json"), resolved.Home)
 	if err != nil {
 		// Open still returns usable defaults.
 		a.host.Errorf("settings: %v", err)
@@ -205,10 +316,11 @@ func (a *App) startup(ctx context.Context) {
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
 	a.plugins = plugins.NewManager(plugins.Options{
-		Dir:      filepath.Join(dataDir, "plugins"),
+		Dir:      resolved.PluginsDir,
 		LogDir:   filepath.Join(dataDir, "logs"),
 		DataDir:  filepath.Join(dataDir, "plugin-data"),
 		Settings: a.settings,
+		Home:     resolved.Home,
 		OnNotify: a.pluginNotify,
 		OnExit: func(id string, err error) {
 			a.host.Warnf("plugin %s exited: %v", id, err)
@@ -342,7 +454,7 @@ func (a *App) isRunning(gameID string) bool {
 
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
 func (a *App) GetProtonVersions() []types.ProtonVersion {
-	return runner.ScanProtonVersions()
+	return runner.ScanProtonVersionsFor(a.homeDir())
 }
 
 // gameSettingsFields are the settings keys types.GameSettings models.
@@ -562,8 +674,8 @@ func (a *App) ListSessions() []types.SessionEvent {
 
 // selectRunner resolves the game's runner; "auto" or empty picks the best
 // installed one (see runner.PickAuto).
-func selectRunner(game types.Game) (types.ProtonVersion, error) {
-	runners := runner.ScanProtonVersions()
+func (a *App) selectRunner(game types.Game) (types.ProtonVersion, error) {
+	runners := runner.ScanProtonVersionsFor(a.homeDir())
 	if r, ok := runner.Resolve(game.Settings.RunnerID, runners); ok {
 		return r, nil
 	}
@@ -607,11 +719,11 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		var r types.ProtonVersion
 		if d.NeedsWine {
 			var err error
-			if r, err = selectRunner(game); err != nil {
+			if r, err = a.selectRunner(game); err != nil {
 				return nil, err
 			}
 		}
-		args, env, err := runner.BuildCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview, a.prefixesFolder())
+		args, env, err := runner.BuildCommandFor(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview, a.prefixesFolder(), a.homeDir())
 		if err != nil {
 			return nil, err
 		}
@@ -622,11 +734,11 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		return &prepared{args: args, env: env, dir: dir, redact: d.Redact, runner: r}, nil
 	}
 
-	r, err := selectRunner(game)
+	r, err := a.selectRunner(game)
 	if err != nil {
 		return nil, err
 	}
-	args, env, err := runner.BuildLaunchCommand(game, r, preview, a.prefixesFolder())
+	args, env, err := runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
 	if err != nil {
 		return nil, err
 	}
@@ -791,14 +903,14 @@ func (a *App) stopGame(gameID string, force bool) error {
 func (a *App) launcherSettings() types.LauncherSettings {
 	return types.LauncherSettings{
 		GamesFolder:           a.settings.GamesFolder(),
-		DefaultGamesFolder:    settings.DefaultGamesFolder(),
+		DefaultGamesFolder:    settings.DefaultGamesFolderFor(a.homeDir()),
 		CancelCleanupDays:     a.settings.CancelCleanupDays(),
 		RatingsOnline:         a.settings.RatingsOnline(),
 		ArtworkOnline:         a.settings.ArtworkOnline(),
 		GameInfoOnline:        a.settings.GameInfoOnline(),
 		ChatDesktopNotify:     a.settings.ChatDesktopNotify(),
 		PrefixesFolder:        a.settings.PrefixesFolder(),
-		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
+		DefaultPrefixesFolder: settings.DefaultPrefixesFolderFor(a.resolvedDataDir()),
 	}
 }
 
@@ -809,7 +921,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 func (a *App) SetPrefixesFolder(path string) (types.LauncherSettings, error) {
 	old := a.settings.PrefixesFolder()
 	if old == "" {
-		old = settings.DefaultPrefixesFolder()
+		old = settings.DefaultPrefixesFolderFor(a.resolvedDataDir())
 	}
 	if err := a.pinExistingPrefixes(old); err != nil {
 		return a.launcherSettings(), err
@@ -871,7 +983,7 @@ func (a *App) GetLauncherSettings() types.LauncherSettings {
 
 func (a *App) chooseFolder(title, start string) (string, error) {
 	if _, err := os.Stat(start); err != nil {
-		start, _ = os.UserHomeDir()
+		start = a.homeDir()
 	}
 	return a.host.OpenDirectory(DirectoryDialog{Title: title, Default: start, CanCreate: true})
 }
@@ -887,10 +999,11 @@ func (a *App) GetGameSettings() map[string]map[string]any {
 // so it need not exist yet, but it must not be a file). "~" is expanded and
 // the result Cleaned, so "~/x" is stored as the full path. Empty means the
 // fallback. It mutates gameSettings in place.
-func cleanGameSettingsPaths(gameSettings map[string]any) error {
+func (a *App) cleanGameSettingsPaths(gameSettings map[string]any) error {
+	home := a.homeDir()
 	if v, ok := gameSettings["working_dir"]; ok {
 		if s, _ := v.(string); strings.TrimSpace(s) != "" {
-			clean, err := settings.CleanFolder(s)
+			clean, err := settings.CleanFolderFor(s, home)
 			if err != nil {
 				return fmt.Errorf("working directory: %w", err)
 			}
@@ -906,7 +1019,7 @@ func cleanGameSettingsPaths(gameSettings map[string]any) error {
 	}
 	if v, ok := gameSettings["wine_prefix"]; ok {
 		if s, _ := v.(string); strings.TrimSpace(s) != "" {
-			clean, err := settings.CleanFolder(s)
+			clean, err := settings.CleanFolderFor(s, home)
 			if err != nil {
 				return fmt.Errorf("wine prefix: %w", err)
 			}
@@ -918,7 +1031,7 @@ func cleanGameSettingsPaths(gameSettings map[string]any) error {
 
 // SaveGameSettings persists one game's settings as the UI holds them.
 func (a *App) SaveGameSettings(gameID string, gameSettings map[string]any) error {
-	if err := cleanGameSettingsPaths(gameSettings); err != nil {
+	if err := a.cleanGameSettingsPaths(gameSettings); err != nil {
 		return err
 	}
 	return a.settings.SetGameSettings(gameID, gameSettings)

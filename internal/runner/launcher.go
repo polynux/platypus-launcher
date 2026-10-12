@@ -26,6 +26,11 @@ func BuildLaunchCommand(game types.Game, runner types.ProtonVersion, preview boo
 	return BuildCommand(game, runner, Target{Exe: game.Executable}, preview, prefixesFolder)
 }
 
+// BuildLaunchCommandFor is BuildLaunchCommand with an explicit home (issue #41).
+func BuildLaunchCommandFor(game types.Game, runner types.ProtonVersion, preview bool, prefixesFolder, home string) ([]string, map[string]string, error) {
+	return BuildCommandFor(game, runner, Target{Exe: game.Executable}, preview, prefixesFolder, home)
+}
+
 // PrefixPath is the game's Wine prefix (Proton's compat data folder): the one
 // the user set for it, else a folder of its own under the prefixes folder
 // (the user's choice, or Platypus's data when unset).
@@ -44,6 +49,16 @@ func PrefixPath(game types.Game, home, prefixesFolder string) string {
 // When preview is true, no on-disk state is created: the Proton prefix is
 // resolved (so the preview is honest) but not created (CORE-8).
 func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, preview bool, prefixesFolder string) ([]string, map[string]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	return BuildCommandFor(game, runner, target, preview, prefixesFolder, home)
+}
+
+// BuildCommandFor is BuildCommand with an explicit home (issue #41: the App
+// passes its configured Home so tests need no process environment).
+func BuildCommandFor(game types.Game, runner types.ProtonVersion, target Target, preview bool, prefixesFolder, home string) ([]string, map[string]string, error) {
 	var cmdArgs []string
 	env := make(map[string]string)
 	for k, v := range target.Env {
@@ -51,9 +66,8 @@ func BuildCommand(game types.Game, runner types.ProtonVersion, target Target, pr
 	}
 
 	// 1. Inherit or set environment variables
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot determine home directory: %w", err)
+	if home == "" {
+		return nil, nil, fmt.Errorf("cannot determine home directory")
 	}
 	prefixPath := PrefixPath(game, home, prefixesFolder)
 

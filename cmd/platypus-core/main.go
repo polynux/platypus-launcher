@@ -19,6 +19,7 @@ import (
 
 	"platypus/internal/app"
 	"platypus/internal/corerpc"
+	"platypus/internal/paths"
 )
 
 func main() {
@@ -38,7 +39,12 @@ func main() {
 	}
 	proto := os.NewFile(uintptr(protoFd), "protocol")
 
-	a := app.NewApp()
+	// Folders resolve once, from the environment (issue #41). The shell
+	// passes PLATYPUS_* through when it spawns the core.
+	cfg := paths.Resolve()
+	a := app.NewAppWithOptions(app.Options{
+		DataDir: cfg.DataDir, CacheDir: cfg.CacheDir, PluginsDir: cfg.PluginsDir, Home: cfg.Home,
+	})
 	srv := corerpc.New(a)
 	app.SetHost(a, coreHost{srv: srv})
 

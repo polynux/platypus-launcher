@@ -140,6 +140,9 @@ type Store struct {
 	path string
 	mu   sync.Mutex
 	data file
+	// home expands "~" in folder settings (issue #41). Open fills it from
+	// the process; tests use OpenWithHome with a temp dir.
+	home string
 }
 
 // DataDir is Platypus's data folder, ~/.local/share/platypus.
@@ -148,14 +151,27 @@ func DataDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return datadir.Path(home), nil
+	return DataDirFor(home), nil
+}
+
+// DataDirFor is the data folder for the user whose home is home (issue #41:
+// tests pass temp dirs instead of setting HOME).
+func DataDirFor(home string) string {
+	return datadir.Path(home)
 }
 
 // Open loads the settings file at path. A missing file gives defaults. A file
 // that can't be parsed is moved aside (settings.json.bad-<time>) rather than
 // overwritten, and Open returns usable defaults along with the error.
 func Open(path string) (*Store, error) {
-	s := &Store{path: path}
+	home, _ := os.UserHomeDir()
+	return OpenWithHome(path, home)
+}
+
+// OpenWithHome is Open with an explicit home for "~" expansion (issue #41:
+// tests pass temp dirs instead of setting HOME).
+func OpenWithHome(path, home string) (*Store, error) {
+	s := &Store{path: path, home: home}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -177,6 +193,15 @@ func Open(path string) (*Store, error) {
 func DefaultGamesFolder() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
+		return ""
+	}
+	return DefaultGamesFolderFor(home)
+}
+
+// DefaultGamesFolderFor is ~/Games for the user whose home is home (issue
+// #41: tests pass temp dirs instead of setting HOME).
+func DefaultGamesFolderFor(home string) string {
+	if home == "" {
 		return ""
 	}
 	return filepath.Join(home, "Games")

@@ -12,7 +12,16 @@ func DefaultPrefixesFolder() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(data, "prefixes")
+	return DefaultPrefixesFolderFor(data)
+}
+
+// DefaultPrefixesFolderFor is the default prefixes folder under dataDir
+// (issue #41: the App passes its configured data dir).
+func DefaultPrefixesFolderFor(dataDir string) string {
+	if dataDir == "" {
+		return ""
+	}
+	return filepath.Join(dataDir, "prefixes")
 }
 
 // PrefixesFolder is where Wine prefixes are created: the user's choice, or
@@ -40,7 +49,7 @@ func (s *Store) SetPrefixesFolder(path string) (string, error) {
 		}
 		return "", nil
 	}
-	clean, err := CleanFolder(path)
+	clean, err := CleanFolderFor(path, s.home)
 	if err != nil {
 		return "", err
 	}

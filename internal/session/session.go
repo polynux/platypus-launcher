@@ -41,6 +41,9 @@ type Tracker struct {
 	grace  time.Duration // how long a game gets to exit after SIGTERM before SIGKILL
 	mu     sync.Mutex
 	active map[string]*entry // gameID → launch entry (direct process or store-client watch)
+	// logDir overrides the session-log folder (issue #41: the App passes
+	// <data>/logs so tests need no HOME). Empty means the default.
+	logDir string
 }
 
 // entry is one tracked launch. cmd is the direct-launch process (nil for
@@ -63,6 +66,14 @@ type entry struct {
 
 func NewTracker(emit Emit) *Tracker {
 	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}}
+}
+
+// SetLogDir overrides the folder session logs are written to (issue #41).
+// Empty restores the default (<data>/logs under the user's home).
+func (t *Tracker) SetLogDir(dir string) {
+	t.mu.Lock()
+	t.logDir = dir
+	t.mu.Unlock()
 }
 
 // Running reports whether a game launched by Platypus is still tracked.
@@ -228,7 +239,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 	t.mu.Unlock()
 	prepareForStop(cmd, e)
 	tail := &tailBuffer{}
-	log, logPath, logErr := openLog(gameID)
+	log, logPath, logErr := t.openLog(gameID)
 	var out io.Writer
 	var flush func()
 	if len(redact) == 0 {
@@ -466,7 +477,22 @@ func openLog(gameID string) (*os.File, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	dir := filepath.Join(datadir.Path(home), "logs")
+	return openLogIn(filepath.Join(datadir.Path(home), "logs"), gameID)
+}
+
+// openLog is the tracker's session log: openLogIn(t.logDir) when set (issue
+// #41), else the default folder.
+func (t *Tracker) openLog(gameID string) (*os.File, string, error) {
+	t.mu.Lock()
+	dir := t.logDir
+	t.mu.Unlock()
+	if dir == "" {
+		return openLog(gameID)
+	}
+	return openLogIn(dir, gameID)
+}
+
+func openLogIn(dir, gameID string) (*os.File, string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, "", err
 	}

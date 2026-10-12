@@ -10,13 +10,17 @@ import (
 
 // ScanProtonVersions scans Steam, compatibilitytools.d, and Lutris for Proton/Wine runners.
 func ScanProtonVersions() []types.ProtonVersion {
-	var versions []types.ProtonVersion
-	seen := make(map[string]bool)
-
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return versions
+		return nil
 	}
+	return ScanProtonVersionsFor(home)
+}
+
+// ScanProtonVersionsFor is ScanProtonVersions with an explicit home (issue #41).
+func ScanProtonVersionsFor(home string) []types.ProtonVersion {
+	var versions []types.ProtonVersion
+	seen := make(map[string]bool)
 
 	// 1. Steam Common Proton installations
 	steamCommonPaths := []string{

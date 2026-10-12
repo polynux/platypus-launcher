@@ -21,16 +21,34 @@ func Root() string {
 	if err != nil {
 		return ""
 	}
-	for _, p := range []string{
-		filepath.Join(home, ".local/share/Steam"),
-		filepath.Join(home, ".steam/steam"),
-		filepath.Join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam"),
-	} {
+	return RootFor(home)
+}
+
+// RootFor is Root with an explicit home (issue #41). $XDG_DATA_HOME/Steam
+// is an additional candidate, not a replacement.
+func RootFor(home string) string {
+	for _, p := range SteamRoots(home) {
 		if _, err := os.Stat(filepath.Join(p, "steamapps")); err == nil {
 			return p
 		}
 	}
 	return ""
+}
+
+// SteamRoots lists where a Steam install may live. The legacy
+// ~/.local/share/Steam is always first; $XDG_DATA_HOME/Steam joins it when
+// set to an absolute path.
+func SteamRoots(home string) []string {
+	roots := []string{filepath.Join(home, ".local/share/Steam")}
+	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" && filepath.IsAbs(xdg) {
+		if cand := filepath.Join(xdg, "Steam"); cand != roots[0] {
+			roots = append(roots, cand)
+		}
+	}
+	return append(roots,
+		filepath.Join(home, ".steam/steam"),
+		filepath.Join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam"),
+	)
 }
 
 // ActiveUserDir returns userdata/<accountid> for the most recently logged-in

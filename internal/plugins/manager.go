@@ -64,6 +64,9 @@ type Options struct {
 	LogDir   string          // stderr and `log` notifications: LogDir/plugin-<id>.log
 	DataDir  string          // private data: DataDir/<id>, passed as PLATYPUS_PLUGIN_DATA
 	Settings *settings.Store // approvals and per-plugin folders
+	// Home is the user's home for the "not the home folder itself" guard
+	// (issue #41); empty reads the process home.
+	Home string
 	OnNotify NotifyFunc
 	// OnExit is called when a plugin exits without being asked to (crash),
 	// so work in flight can be restarted.
@@ -85,6 +88,7 @@ type Manager struct {
 	logDir    string
 	dataDir   string
 	trust     *settings.Store
+	home      string
 	onNotify  NotifyFunc
 	onExit    func(string, error)
 	onReady   func(string)
@@ -100,11 +104,16 @@ type Manager struct {
 
 // NewManager manages the plugins in o.Dir. Call Discover before use.
 func NewManager(o Options) *Manager {
+	home := o.Home
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
 	m := &Manager{
 		dir:       o.Dir,
 		logDir:    o.LogDir,
 		dataDir:   o.DataDir,
 		trust:     o.Settings,
+		home:      home,
 		onNotify:  o.OnNotify,
 		onExit:    o.OnExit,
 		onReady:   o.OnReady,
@@ -545,7 +554,7 @@ func (m *Manager) SetInstallFolder(id, path string) error {
 		path = filepath.Clean(path)
 		// The install folder is always a valid launch location, so it
 		// gets the same system-folder guard as AllowFolder (CORE-6).
-		if err := checkAllowable(path); err != nil {
+		if err := m.checkAllowable(path); err != nil {
 			return err
 		}
 	}
@@ -564,7 +573,7 @@ func (m *Manager) AllowFolder(id, path string) error {
 		return fmt.Errorf("plugin %s was never approved", id)
 	}
 	path = filepath.Clean(path)
-	if err := checkAllowable(path); err != nil {
+	if err := m.checkAllowable(path); err != nil {
 		return err
 	}
 	for _, f := range st.Folders {
@@ -581,10 +590,16 @@ func (m *Manager) AllowFolder(id, path string) error {
 var systemDirs = []string{"/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"}
 
 func checkAllowable(path string) error {
+	home, _ := os.UserHomeDir()
+	return checkAllowableFor(path, home)
+}
+
+// checkAllowableFor is checkAllowable with an explicit home (issue #41).
+func checkAllowableFor(path, home string) error {
 	if path == "/" {
 		return errors.New("refusing to allow the whole filesystem")
 	}
-	if home, err := os.UserHomeDir(); err == nil && path == filepath.Clean(home) {
+	if home != "" && path == filepath.Clean(home) {
 		return errors.New("refusing to allow your whole home folder; pick the game's folder")
 	}
 	for _, d := range systemDirs {
@@ -593,6 +608,11 @@ func checkAllowable(path string) error {
 		}
 	}
 	return nil
+}
+
+// checkAllowable is the manager's guard with its configured home.
+func (m *Manager) checkAllowable(path string) error {
+	return checkAllowableFor(path, m.home)
 }
 
 // Folders are the folders the plugin's games may be launched from: its
