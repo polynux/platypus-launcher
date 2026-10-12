@@ -27,3 +27,11 @@ Default triage roles, label string = role name (`needs-triage`, `needs-info`, `r
 ### Domain docs
 
 Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root (created when first needed). See `docs/agents/domain.md`.
+
+### Tests (issue #40)
+
+- While iterating: `go test <pkg>` for what you touch, `bun run test:ui` for the UI. Both default to the fast set: no network, no slow runtimes.
+- Before committing: `bun run test:fast` (default Go + UI + desktop, no network, no slow).
+- Full suites: `bun run test:slow`, `bun run test:network`, `bun run test:all`.
+- `bun run test` keeps meaning what it always did (UI + desktop only, fast set).
+- Labels: slow integration tests (real plugin processes, Python plugins, full protocol conformance, download pacing) call `testenv.RequireSlow(t)` / use `*.slow.test.tsx`, and run only with `PLATYPUS_TEST_SLOW=1`. Network tests call `testenv.RequireNetwork(t)` and run only with `PLATYPUS_TEST_NETWORK=1`; the default run refuses non-loopback HTTP/fetch outright. Details: `docs/testing.md`.

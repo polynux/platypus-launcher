@@ -10,6 +10,7 @@ vi.mock('../../effect/runtime', () => ({
     getGameVersions: (g: unknown) => Effect.promise(() => getGameVersions(g)),
     getInstallSize: () => Effect.succeed(0),
     getLauncherSettings: () => Effect.succeed({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' } as never),
+    previewCommand: () => Effect.succeed('wine game.exe'),
   },
   onJobs: () => () => {},
   onSession: () => () => {},

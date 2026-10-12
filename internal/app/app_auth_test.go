@@ -140,13 +140,16 @@ func TestAuthStatusSingleFlight(t *testing.T) {
 	results := make([]types.AuthStatus, callers)
 	errs := make([]error, callers)
 	var wg sync.WaitGroup
+	start := make(chan struct{})
 	for i := 0; i < callers; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
+			<-start
 			results[i], errs[i] = e.a.PluginAuthStatus("echo")
 		}(i)
 	}
+	close(start)
 	wg.Wait()
 	for i := 0; i < callers; i++ {
 		if errs[i] != nil {
@@ -156,8 +159,11 @@ func TestAuthStatusSingleFlight(t *testing.T) {
 			t.Fatalf("caller %d got %+v, want %+v", i, results[i], results[0])
 		}
 	}
-	if n := authCalls(t, e); n != 1 {
-		t.Fatalf("%d callers hit the plugin %d times, want 1", callers, n)
+	// One shared round trip. A caller the scheduler starts only after it
+	// finished reads the cached answer, which rightly starts one background
+	// refresh: so 2 is fine, more means callers didn't share.
+	if n := authCalls(t, e); n < 1 || n > 2 {
+		t.Fatalf("%d callers hit the plugin %d times, want 1 (2 with a late caller's refresh)", callers, n)
 	}
 }
 

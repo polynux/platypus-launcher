@@ -18,12 +18,17 @@ import (
 
 	"platypus/internal/plugins"
 	"platypus/internal/plugtest"
+	"platypus/internal/testenv"
 	"platypus/internal/types"
 	"platypus/plugins/steam-standalone/fakesteam"
 )
 
+// The full protocol suites drive real plugin processes (Python plugins,
+// fake CLIs, chunk-paced downloads): slow, opt-in (issue #40).
+
 // echo builds from source and answers everything itself, no external CLI.
 func TestConformanceEcho(t *testing.T) {
+	testenv.RequireSlow(t)
 	plugtest.Suite{
 		ID:      "echo",
 		CopyDir: "../../plugins/echo",
@@ -158,6 +163,7 @@ func pick(t *testing.T, games []types.Game, storeID string) types.Game {
 // epic-legendary wraps the real legendary CLI, replaced here by a fake that
 // keeps its state in FAKE_LEGENDARY_STATE.
 func TestConformanceEpic(t *testing.T) {
+	testenv.RequireSlow(t)
 	state := filepath.Join(t.TempDir(), "legendary-state.json")
 	plugtest.Suite{
 		ID:      "epic-legendary",
@@ -181,6 +187,7 @@ func TestConformanceEpic(t *testing.T) {
 // gog-gogdl keeps its own install index in the plugin's data dir; the fake
 // gogdl drives it without the network.
 func TestConformanceGog(t *testing.T) {
+	testenv.RequireSlow(t)
 	state := filepath.Join(t.TempDir(), "gogdl-state.json")
 	// The plugin's GOG API calls (library, details) answer from this file.
 	api := filepath.Join(t.TempDir(), "gog-api.json")
@@ -212,6 +219,7 @@ func TestConformanceGog(t *testing.T) {
 // amazon-nile wraps nile; the fake keeps its state in FAKE_NILE_STATE and the
 // login is a redirect address carrying the authorization code.
 func TestConformanceAmazon(t *testing.T) {
+	testenv.RequireSlow(t)
 	state := filepath.Join(t.TempDir(), "nile-state.json")
 	plugtest.Suite{
 		ID:      "amazon-nile",
@@ -264,6 +272,7 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 // from source) against a fake CM and a fake CDN (see fakesteam); the
 // plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
+	testenv.RequireSlow(t)
 	state := filepath.Join(t.TempDir(), "dd-state.json")
 	// Several chunks served one at a time: the download has progress steps
 	// and a window in which job.cancel can land.

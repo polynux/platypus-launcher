@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -17,20 +16,16 @@ import (
 // that gave up after repeated crashes, so give-up must show up in the plugin
 // payload the view lists (ListStorePlugins → StorePlugin.GaveUp).
 
-// installEchoApp installs a minimal echo-like plugin: an executable plus a
-// manifest, mirroring internal/plugins' test helper but at app level.
+// installEchoApp installs a minimal echo-like plugin: the shared binary
+// (built once per run, see sharedEchoBinary) plus a manifest, mirroring
+// internal/plugins' test helper but at app level.
 func installEchoApp(t *testing.T, pluginsDir string) {
 	t.Helper()
 	dir := filepath.Join(pluginsDir, "echo")
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	echoBin := filepath.Join(t.TempDir(), "platypus-echo-app")
-	out, err := exec.Command("go", "build", "-o", echoBin, "platypus/plugins/echo").CombinedOutput()
-	if err != nil {
-		t.Fatalf("building echo plugin: %v: %s", err, out)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "bin/platypus-echo-app"), mustRead(t, echoBin), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "bin/platypus-echo-app"), mustRead(t, sharedEchoBinary(t)), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","api":1,"store":"echo","exec":"bin/platypus-echo-app"}`

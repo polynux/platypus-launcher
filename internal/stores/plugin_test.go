@@ -67,9 +67,14 @@ func newEchoEnv(t *testing.T) *echoEnv {
 	if err := os.MkdirAll(filepath.Join(pluginDir, "bin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("go", "build", "-o", filepath.Join(pluginDir, "bin/platypus-echo"), "platypus/plugins/echo").CombinedOutput()
+	// The binary is built once per run: per-test builds cost ~0.5 s each
+	// even warm (issue #40).
+	bin, err := os.ReadFile(sharedEchoBinary(t))
 	if err != nil {
-		t.Fatalf("build echo: %s", out)
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "bin/platypus-echo"), bin, 0o755); err != nil {
+		t.Fatal(err)
 	}
 	man, _ := os.ReadFile("../../plugins/echo/plugin.json")
 	os.WriteFile(filepath.Join(pluginDir, "plugin.json"), man, 0o644)

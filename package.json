@@ -18,6 +18,10 @@
     "test:ui": "bun --filter platypus-ui test",
     "test:desktop": "bun --filter platypus-desktop test",
     "test": "bun run test:ui && bun run test:desktop",
+    "test:fast": "go test ./... && bun run test",
+    "test:slow": "PLATYPUS_TEST_SLOW=1 go test ./... && PLATYPUS_TEST_SLOW=1 bun run test",
+    "test:network": "PLATYPUS_TEST_NETWORK=1 go test ./... && PLATYPUS_TEST_NETWORK=1 bun run test:ui",
+    "test:all": "PLATYPUS_TEST_SLOW=1 PLATYPUS_TEST_NETWORK=1 go test ./... && PLATYPUS_TEST_SLOW=1 PLATYPUS_TEST_NETWORK=1 bun run test",
     "gen-ts": "go run ./cmd/gen-ts",
     "package": "node apps/desktop/scripts/package.mjs"
   },

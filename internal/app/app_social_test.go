@@ -120,7 +120,22 @@ func TestSocialWithTheEchoPlugin(t *testing.T) {
 		t.Fatalf("SocialViews: %+v", views)
 	}
 
-	if err := a.SetSocialStatus("echo", "busy"); err != nil {
+	// The friends reconnect on their own when the plugin process hiccups
+	// (under load the session can flap between the wait above and this
+	// call), so a transient "not connected" waits for the reconnect instead
+	// of failing. Anything else — a rejected status, a missing method —
+	// still fails at once.
+	setStatus := func(state string) error {
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			err := a.SetSocialStatus("echo", state)
+			if err == nil || err.Error() != "not connected to the store" || time.Now().After(deadline) {
+				return err
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if err := setStatus("busy"); err != nil {
 		t.Fatalf("SetSocialStatus: %v", err)
 	}
 	if err := a.SetSocialStatus("echo", "lurking"); err == nil {

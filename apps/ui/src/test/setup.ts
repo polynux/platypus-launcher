@@ -27,6 +27,35 @@ if (!('ResizeObserver' in globalThis)) {
   };
 }
 
+// Network guard (issue #40): the UI under test must never dial the real
+// network — covers and artwork come through the Go core (window.platypus),
+// so fetch has no business leaving localhost. Refuse non-local fetches
+// with a clear message instead of hanging on a real connection. Tests that
+// genuinely need the network opt in with PLATYPUS_TEST_NETWORK=1 (see
+// testenv.ts); there are currently none.
+const origFetch = globalThis.fetch.bind(globalThis);
+function isLocalURL(url: string): boolean {
+  try {
+    const u = new URL(url, 'http://localhost/');
+    const h = u.hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '::1';
+  } catch {
+    return true;
+  }
+}
+globalThis.fetch = ((input: unknown, init?: unknown) => {
+  if (process.env.PLATYPUS_TEST_NETWORK !== '1') {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    if (!isLocalURL(url)) {
+      return Promise.reject(
+        new Error(
+          `test fetch refused non-localhost URL ${url} (gate the test behind PLATYPUS_TEST_NETWORK=1 or point it at a localhost fake)`,
+        ),
+      );
+    }
+  }
+  return origFetch(input as RequestInfo, init as RequestInit);
+}) as typeof fetch;
 // Every test runs as if inside the desktop shell: the UI only talks to the Go
 // core through window.platypus (see effect/bridge.ts). Tests that assert on
 // bridge calls override openExternal (or the whole stub) themselves.

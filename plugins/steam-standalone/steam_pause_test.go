@@ -12,6 +12,7 @@ import (
 
 	"platypus/internal/jobs"
 	"platypus/internal/jsonrpc"
+	"platypus/internal/testenv"
 	"platypus/internal/types"
 )
 
@@ -125,6 +126,7 @@ func (e *env) gameDirs() []string {
 // away, while the downloader is still winding down) finishes the install with
 // every file intact.
 func TestSteamPauseResumeFinishesTheInstall(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	e.login()
 	e.slowDownload()
@@ -156,6 +158,7 @@ func TestSteamPauseResumeFinishesTheInstall(t *testing.T) {
 
 // A paused install, left for later, still has everything on disk.
 func TestSteamPauseKeepsStagingAndFolder(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	e.login()
 	e.slowDownload()
@@ -206,6 +209,7 @@ func TestSteamPauseKeepsStagingAndFolder(t *testing.T) {
 // Cancel keeps the data; discard deletes the staging and the partial folder
 // and the plugin can install the game afresh afterwards.
 func TestSteamDiscardRemovesStagingAndPartialFolder(t *testing.T) {
+	testenv.RequireSlow(t)
 	e := setup(t)
 	e.login()
 	e.slowDownload()
