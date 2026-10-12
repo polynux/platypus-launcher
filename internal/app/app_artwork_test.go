@@ -704,9 +704,9 @@ func TestSetAppIDKeepsHandPickedReplacesOnline(t *testing.T) {
 		if got := a.artBytes(t, id, "cover"); !bytes.Equal(got, second) {
 			t.Fatal("online art wasn't replaced by the changed AppID")
 		}
-		if got := len(h.emitted()); got == 0 {
-			t.Fatal("no library event after the online replacement")
-		}
+		// The event follows the whole apply (banner, logo, extras), not the
+		// cover file alone.
+		waitForEmit(t, h)
 	})
 }
 
