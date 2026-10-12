@@ -18,15 +18,19 @@ export function suggestTitle(exe: string): string {
 /** Advanced sideload options, stored in the new game's GameSettings. */
 export interface AddGameOptions {
   workingDir: string;
+  winePrefix: string;
 }
 
 export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, exe: string, opts: AddGameOptions) => void }) {
   const [title, setTitle] = useState('');
   const [exe, setExe] = useState('');
   const [workingDir, setWorkingDir] = useState('');
+  const [winePrefix, setWinePrefix] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
+  const [prefixError, setPrefixError] = useState<string | null>(null);
   const valid = title.trim() && exe.trim();
+  const advancedSet = (workingDir.trim() ? 1 : 0) + (winePrefix.trim() ? 1 : 0);
 
   const browseExe = () => {
     Effect.runPromise(LauncherApi.pickGameExecutable(exe.trim()))
@@ -51,13 +55,28 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
       .catch(() => {});
   };
 
+  const browsePrefix = () => {
+    Effect.runPromise(LauncherApi.pickFolder('Choose the Wine prefix folder', winePrefix.trim() || workingDir.trim() || exe.trim()))
+      .then((picked) => {
+        if (!picked) return;
+        setWinePrefix(picked);
+        setPrefixError(null);
+      })
+      .catch(() => {});
+  };
+
   const submit = () => {
     const work = workingDir.trim();
     if (work && !work.startsWith('/')) {
       setWorkError('The working directory must be an absolute path.');
       return;
     }
-    if (valid) onAdd(title.trim(), exe.trim(), { workingDir: work });
+    const prefix = winePrefix.trim();
+    if (prefix && !prefix.startsWith('/') && !prefix.startsWith('~/')) {
+      setPrefixError('The Wine prefix must be an absolute path.');
+      return;
+    }
+    if (valid) onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: prefix });
   };
 
   return (
@@ -98,7 +117,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
           >
             <ChevronDown className={cx('size-3.5 transition-transform', advancedOpen ? '' : '-rotate-90')} aria-hidden />
             Advanced
-            {workingDir.trim() && <span className="tabular-nums text-amber-200/90">· 1 set</span>}
+            {advancedSet > 0 && <span className="tabular-nums text-amber-200/90">· {advancedSet} set</span>}
           </button>
           <div hidden={!advancedOpen} className="mt-4 space-y-5">
             <div>
@@ -117,6 +136,23 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
               </div>
               <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">Where the game runs. Empty means the executable's folder.</p>
               {workError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{workError}</p>}
+            </div>
+            <div>
+              <MonoLabel className="mb-1.5">wine prefix <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={winePrefix}
+                  onChange={(e) => { setWinePrefix(e.target.value); setPrefixError(null); }}
+                  placeholder="The default prefix folder"
+                  aria-label="wine prefix"
+                  className="min-w-0 flex-1"
+                />
+                <Button type="button" variant="neutral" onClick={browsePrefix} className="flex-none">
+                  Browse…
+                </Button>
+              </div>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">The Wine prefix the game runs in. Empty falls back to the default prefix folder; the folder is created on demand.</p>
+              {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{prefixError}</p>}
             </div>
           </div>
         </div>

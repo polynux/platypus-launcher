@@ -758,8 +758,9 @@ func (a *App) GetGameSettings() map[string]map[string]any {
 }
 
 // checkGameSettingsPaths validates the path fields of per-game settings:
-// working_dir must be an absolute path to an existing directory when set.
-// Empty means the previous behaviour (the executable's folder).
+// working_dir must be an absolute path to an existing directory when set,
+// wine_prefix an absolute path (it is created on demand, so it need not
+// exist yet, but it must not be a file). Empty means the fallback.
 func checkGameSettingsPaths(gameSettings map[string]any) error {
 	if v, ok := gameSettings["working_dir"]; ok {
 		s, _ := v.(string)
@@ -774,6 +775,16 @@ func checkGameSettingsPaths(gameSettings map[string]any) error {
 			if !st.IsDir() {
 				return fmt.Errorf("%s is a file, not a folder", s)
 			}
+		}
+	}
+	if v, ok := gameSettings["wine_prefix"]; ok {
+		s, _ := v.(string)
+		if strings.TrimSpace(s) != "" {
+			clean, err := settings.CleanFolder(s)
+			if err != nil {
+				return fmt.Errorf("wine prefix: %w", err)
+			}
+			_ = clean
 		}
 	}
 	return nil

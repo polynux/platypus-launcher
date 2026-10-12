@@ -114,6 +114,30 @@ func TestSaveGameSettingsValidatesWorkingDir(t *testing.T) {
 	}
 }
 
+func TestSaveGameSettingsValidatesWinePrefix(t *testing.T) {
+	a := sideloadApp(t)
+	id := "g1"
+	file := filepath.Join(t.TempDir(), "f.exe")
+	if err := os.WriteFile(file, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		prefix string
+		ok     bool
+	}{
+		{"empty falls back to the default", "", true},
+		{"an absolute folder is kept", "/home/you/prefixes/mine", true},
+		{"a folder that doesn't exist yet is kept (created on demand)", filepath.Join(t.TempDir(), "new-prefix"), true},
+		{"relative is refused", "prefixes/mine", false},
+		{"a file is refused", file, false},
+	} {
+		if err := a.SaveGameSettings(id, map[string]any{"wine_prefix": tc.prefix}); (err == nil) != tc.ok {
+			t.Errorf("%s: err = %v, want ok=%v", tc.name, err, tc.ok)
+		}
+	}
+}
+
 func sideloadApp(t *testing.T) *App {
 	t.Helper()
 	root := t.TempDir()

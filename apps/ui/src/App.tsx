@@ -500,13 +500,14 @@ export function App() {
         setAddOpen(false);
         notify(`Added "${title}"`);
         log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
-        // Advanced options live in the new game's GameSettings (issue #33).
+        // Advanced options live in the new game's GameSettings (issues #33, #34).
         const work = opts?.workingDir?.trim();
-        if (work) {
-          const next = { ...game.settings, working_dir: work };
+        const prefix = opts?.winePrefix?.trim();
+        if (work || prefix) {
+          const next = { ...game.settings, ...(work ? { working_dir: work } : {}), ...(prefix ? { wine_prefix: prefix } : {}) };
           Effect.runPromise(LauncherApi.saveGameSettings(game.id, next))
             .then(() => setGames((prev) => prev.map((x) => (x.id === game.id ? { ...x, settings: next } : x))))
-            .catch((err) => notify(`Added "${title}" but the working directory wasn't saved: ${errMsg(err)}`, 'err'));
+            .catch((err) => notify(`Added "${title}" but the advanced options weren't saved: ${errMsg(err)}`, 'err'));
         }
       })
       .catch((err) => notify(errMsg(err), 'err'));

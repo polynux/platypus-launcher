@@ -67,7 +67,7 @@ describe('AddGameModal Browse (issue #32)', () => {
     fireEvent.change(screen.getByPlaceholderText('My Game'), { target: { value: 'Bad' } });
     fireEvent.change(screen.getByLabelText('executable'), { target: { value: 'relative/path' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
-    expect(onAdd).toHaveBeenCalledWith('Bad', 'relative/path', { workingDir: '' });
+    expect(onAdd).toHaveBeenCalledWith('Bad', 'relative/path', { workingDir: '', winePrefix: '' });
   });
 
   it('suggests titles from file names', () => {
@@ -85,7 +85,7 @@ describe('AddGameModal advanced working directory (issue #33)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
     fireEvent.change(screen.getByLabelText('working directory'), { target: { value: '/home/you/Games/doom' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
-    expect(onAdd).toHaveBeenCalledWith('Doom', '/home/you/Games/doom/doom.exe', { workingDir: '/home/you/Games/doom' });
+    expect(onAdd).toHaveBeenCalledWith('Doom', '/home/you/Games/doom/doom.exe', { workingDir: '/home/you/Games/doom', winePrefix: '' });
   });
 
   it('fills the working directory from the folder picker and leaves it on cancel', async () => {
@@ -109,6 +109,45 @@ describe('AddGameModal advanced working directory (issue #33)', () => {
     fireEvent.change(screen.getByLabelText('executable'), { target: { value: '/home/you/Games/doom/doom.exe' } });
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
     fireEvent.change(screen.getByLabelText('working directory'), { target: { value: 'relative/dir' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/absolute path/);
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddGameModal advanced Wine prefix (issue #34)', () => {
+  it('saves the prefix with the game', async () => {
+    const onAdd = vi.fn();
+    open(onAdd);
+    fireEvent.change(screen.getByPlaceholderText('My Game'), { target: { value: 'Doom' } });
+    fireEvent.change(screen.getByLabelText('executable'), { target: { value: '/home/you/Games/doom/doom.exe' } });
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText('wine prefix'), { target: { value: '/home/you/prefixes/doom' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    expect(onAdd).toHaveBeenCalledWith('Doom', '/home/you/Games/doom/doom.exe', { workingDir: '', winePrefix: '/home/you/prefixes/doom' });
+  });
+
+  it('fills the prefix from the folder picker and leaves it on cancel', async () => {
+    api.pickFolder.mockResolvedValue('/home/you/prefixes/doom');
+    open();
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Browse/ })[2]);
+    await waitFor(() => expect(api.pickFolder).toHaveBeenCalled());
+    expect((screen.getByLabelText('wine prefix') as HTMLInputElement).value).toBe('/home/you/prefixes/doom');
+
+    api.pickFolder.mockResolvedValue('');
+    fireEvent.click(screen.getAllByRole('button', { name: /Browse/ })[2]);
+    await waitFor(() => expect(api.pickFolder).toHaveBeenCalledTimes(2));
+    expect((screen.getByLabelText('wine prefix') as HTMLInputElement).value).toBe('/home/you/prefixes/doom');
+  });
+
+  it('refuses a relative prefix before submitting', async () => {
+    const onAdd = vi.fn();
+    open(onAdd);
+    fireEvent.change(screen.getByPlaceholderText('My Game'), { target: { value: 'Doom' } });
+    fireEvent.change(screen.getByLabelText('executable'), { target: { value: '/home/you/Games/doom/doom.exe' } });
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText('wine prefix'), { target: { value: 'prefixes/doom' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/absolute path/);
     expect(onAdd).not.toHaveBeenCalled();

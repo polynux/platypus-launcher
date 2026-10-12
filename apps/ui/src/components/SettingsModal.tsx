@@ -403,6 +403,39 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               </div>
             )}
 
+            {!isSteamClient && !native && (
+              <div>
+                <MonoLabel className="mb-1.5">wine prefix <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="wine prefix"
+                    value={draft.wine_prefix}
+                    onChange={(e) => set('wine_prefix', e.target.value)}
+                    placeholder="The default prefix folder"
+                    spellCheck={false}
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => {
+                      Effect.runPromise(LauncherApi.pickFolder('Choose the Wine prefix folder', draft.wine_prefix || draft.working_dir || game.executable))
+                        .then((picked) => { if (picked) set('wine_prefix', picked); })
+                        .catch(() => {});
+                    }}
+                    className="flex-none"
+                  >
+                    Browse…
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
+                  {draft.wine_prefix
+                    ? 'This prefix, for this game only. Empty falls back to the default prefix folder.'
+                    : 'Empty: this game uses a folder of its own in the default prefix folder. The folder is created on demand.'}
+                </p>
+              </div>
+            )}
+
             <AdvancedFold set={launchSet}>
               {draft.use_gamescope && (
                 <div className="space-y-4 border-l border-white/[0.08] pl-4">
@@ -469,7 +502,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
-            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/platypus/prefixes/${game.id}`}
+            saved for next launch · prefix: {draft.wine_prefix || `~/.local/share/platypus/prefixes/${game.id} (default)`}
           </div>
         </div>
       </div>

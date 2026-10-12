@@ -204,4 +204,22 @@ describe('the game settings dialog', () => {
     fireEvent.click(gear());
     expect(screen.queryByLabelText('working directory')).toBeNull();
   });
+
+  it('round-trips the Wine prefix and shows the effective path (issue #34)', async () => {
+    const props = page();
+    fireEvent.click(gear());
+    const prefix = await screen.findByLabelText('wine prefix');
+    fireEvent.change(prefix, { target: { value: '/home/you/prefixes/echo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save config' }));
+    expect(props.onSaveSettings).toHaveBeenCalledOnce();
+    expect(props.onSaveSettings.mock.calls[0][0].wine_prefix).toBe('/home/you/prefixes/echo');
+  });
+
+  it('hides the Wine prefix for a native Linux game', () => {
+    page({}, game({ native: true }));
+    fireEvent.click(gear());
+    expect(screen.queryByLabelText('wine prefix')).toBeNull();
+    // The working directory still applies.
+    expect(screen.getByLabelText('working directory')).toBeInTheDocument();
+  });
 });
