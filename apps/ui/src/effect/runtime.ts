@@ -323,6 +323,11 @@ export const LauncherApi = {
     call<Customization>('ResetCustomization', async () => normalizeCustomization(await App.ResetCustomization(gameId))),
   pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
 
+  // Sideload dialog (issue #32): the native file picker for the game's
+  // executable. "" means the user cancelled; a rejection means there is
+  // no picker (the text field still works).
+  pickGameExecutable: (start: string) => call<string>('PickGameExecutable', () => App.PickGameExecutable(start)),
+
   // Family (the `family` capability, protocol 1.8): the store's family group.
   // Shown only; Platypus enforces none of its rules.
   getFamilyMembers: (source: string) =>

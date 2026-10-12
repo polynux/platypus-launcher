@@ -57,8 +57,8 @@ async function startCore(): Promise<Core> {
     app.exit(1);
   };
   c.handlers.set('dialog.openFile', async (p) => {
-    const d = p as { title?: string; filters?: { name: string; extensions: string[] }[] };
-    const r = await dialog.showOpenDialog(parentWindow(), { title: d.title, properties: ['openFile'], filters: d.filters });
+    const d = p as { title?: string; default?: string; filters?: { name: string; extensions: string[] }[] };
+    const r = await dialog.showOpenDialog(parentWindow(), { title: d.title, defaultPath: d.default || undefined, properties: ['openFile'], filters: d.filters });
     return r.canceled ? '' : (r.filePaths[0] ?? '');
   });
   c.handlers.set('dialog.openDirectory', async (p) => {
