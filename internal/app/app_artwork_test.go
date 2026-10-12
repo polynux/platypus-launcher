@@ -18,6 +18,7 @@ import (
 	"platypus/internal/customize"
 	"platypus/internal/onlineart"
 	"platypus/internal/settings"
+	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -72,6 +73,13 @@ type artFixture struct {
 	// lutrisGameFail, when non-zero, is its status code instead.
 	lutrisGame     string
 	lutrisGameFail int
+	// gogInfo is the product object served for a GOG product lookup
+	// (/products/<id>); gogInfoFail, when non-zero, is its status code.
+	gogInfo     string
+	gogInfoFail int
+	// steamDetail is the store appdetails object served for sideloaded Steam
+	// info lookups. Empty means the art detail doubles for it.
+	steamDetail string
 	// searchGate, when non-nil, holds the search handler until closed: the
 	// test can remove the game mid-flight.
 	searchGate chan struct{}
@@ -98,7 +106,22 @@ func newArtFixture(t *testing.T) *artFixture {
 			fmt.Fprintf(w, `{"total":9,"items":[%s]}`, f.search)
 		case strings.HasPrefix(r.URL.Path, "/api/appdetails"):
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, f.detail)
+			if f.steamDetail != "" {
+				fmt.Fprint(w, f.steamDetail)
+			} else {
+				fmt.Fprint(w, f.detail)
+			}
+		case strings.HasPrefix(r.URL.Path, "/products/"):
+			if f.gogInfoFail != 0 {
+				w.WriteHeader(f.gogInfoFail)
+				return
+			}
+			if f.gogInfo == "" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, f.gogInfo)
 		case strings.HasPrefix(r.URL.Path, "/IStoreBrowseService/GetItems/"):
 			if f.browseFail != 0 {
 				w.WriteHeader(f.browseFail)
@@ -169,7 +192,7 @@ func newArtApp(t *testing.T, f *artFixture, title string) (*App, *artHost, strin
 		t.Fatal(err)
 	}
 	h := &artHost{}
-	a := &App{host: h, settings: st, artwork: &onlineart.Client{SearchBase: f.srv.URL, CDNBase: f.srv.URL, APIBase: f.srv.URL, GOGBase: f.srv.URL, LutrisBase: f.srv.URL, IGDBBase: f.srv.URL}}
+	a := &App{host: h, settings: st, dataDir: root, artwork: &onlineart.Client{SearchBase: f.srv.URL, CDNBase: f.srv.URL, APIBase: f.srv.URL, GOGBase: f.srv.URL, GOGInfoBase: f.srv.URL, LutrisBase: f.srv.URL, IGDBBase: f.srv.URL}, sideloadSteam: &steam.StoreClient{Base: f.srv.URL, HTTPClient: f.srv.Client()}}
 	a.custom.p.Store(cs)
 	return a, h, g.ID
 }

@@ -310,6 +310,9 @@ type LauncherSettings struct {
 	// ArtworkOnline is the "Find artwork online" switch for sideloaded games
 	// (issue #36): the background lookup after an add and on-demand search.
 	ArtworkOnline bool `json:"artwork_online"`
+	// GameInfoOnline is the "Find game info online" switch for sideloaded
+	// games (issue #38): the on-demand description and details lookup.
+	GameInfoOnline bool `json:"game_info_online"`
 	// PrefixesFolder is where Wine prefixes are created, one folder per
 	// game (see runner.PrefixPath). Empty means the default below.
 	PrefixesFolder string `json:"prefixes_folder"`
@@ -356,15 +359,21 @@ type GameDetails struct {
 	// age rating, tags and videos. The UI renders DescriptionHTML and
 	// Requirements as markup; core sanitizes them (internal/sanitize) so
 	// only the allowlist reaches the page.
-	DescriptionHTML string            `json:"description_html,omitempty"`
-	Website         string            `json:"website,omitempty"`
-	StoreURL        string            `json:"store_url,omitempty"`
-	Languages       []string          `json:"languages,omitempty"`
-	Controller      string            `json:"controller,omitempty"` // "full" | "partial" | ""
-	Requirements    *GameRequirements `json:"requirements,omitempty"`
-	AgeRating       string            `json:"age_rating,omitempty"`
-	Tags            []string          `json:"tags,omitempty"`
-	Videos          []GameVideo       `json:"videos,omitempty"`
+	DescriptionHTML string `json:"description_html,omitempty"`
+	Website         string `json:"website,omitempty"`
+	StoreURL        string `json:"store_url,omitempty"`
+	// InfoSource is the online source of a sideloaded game's details
+	// (issue #38): "steam", "gog" or "lutris". Empty for store games and
+	// for sideloaded games with no linked info. InfoSourceName is the
+	// store name for the attribution line ("Steam", "GOG", "Lutris / IGDB").
+	InfoSource     string            `json:"info_source,omitempty"`
+	InfoSourceName string            `json:"info_source_name,omitempty"`
+	Languages      []string          `json:"languages,omitempty"`
+	Controller     string            `json:"controller,omitempty"` // "full" | "partial" | ""
+	Requirements   *GameRequirements `json:"requirements,omitempty"`
+	AgeRating      string            `json:"age_rating,omitempty"`
+	Tags           []string          `json:"tags,omitempty"`
+	Videos         []GameVideo       `json:"videos,omitempty"`
 }
 
 // GameRequirements are the store's system requirements, sanitized HTML or

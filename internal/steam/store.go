@@ -17,28 +17,52 @@ import (
 
 // StoreClient fetches public app metadata from the Steam Store API and caches
 // it for the session (the endpoint is rate limited to ~200 requests / 5 min).
+// Base overrides the store endpoint (default DefaultStoreBase) and HTTPClient
+// overrides the transport; tests point both at httptest.
 type StoreClient struct {
-	http  *http.Client
-	mu    sync.Mutex
-	cache map[string]*storeApp
+	http       *http.Client
+	HTTPClient *http.Client
+	Base       string
+	mu         sync.Mutex
+	cache      map[string]*storeApp
 }
+
+// DefaultStoreBase serves the public appdetails JSON.
+const DefaultStoreBase = "https://store.steampowered.com"
 
 func NewStoreClient() *StoreClient {
 	return &StoreClient{http: &http.Client{Timeout: 8 * time.Second}, cache: map[string]*storeApp{}}
 }
 
+func (c *StoreClient) storeBase() string {
+	if c != nil && strings.TrimSpace(c.Base) != "" {
+		return strings.TrimSuffix(strings.TrimSpace(c.Base), "/")
+	}
+	return DefaultStoreBase
+}
+
+func (c *StoreClient) httpClient() *http.Client {
+	if c != nil && c.HTTPClient != nil {
+		return c.HTTPClient
+	}
+	if c != nil && c.http != nil {
+		return c.http
+	}
+	return &http.Client{Timeout: 8 * time.Second}
+}
+
 type storeApp struct {
-	ShortDescription  string `json:"short_description"`
+	ShortDescription    string `json:"short_description"`
 	DetailedDescription string `json:"detailed_description"`
-	AboutTheGame      string `json:"about_the_game"`
-	SupportedLanguages string `json:"supported_languages"`
-	ControllerSupport string `json:"controller_support"`
-	RequiredAge       any    `json:"required_age"`
-	Website           string `json:"website"`
-	HeaderImage       string `json:"header_image"`
-	Developers        []string
-	Publishers        []string
-	Genres            []struct {
+	AboutTheGame        string `json:"about_the_game"`
+	SupportedLanguages  string `json:"supported_languages"`
+	ControllerSupport   string `json:"controller_support"`
+	RequiredAge         any    `json:"required_age"`
+	Website             string `json:"website"`
+	HeaderImage         string `json:"header_image"`
+	Developers          []string
+	Publishers          []string
+	Genres              []struct {
 		Description string `json:"description"`
 	} `json:"genres"`
 	Categories []struct {
@@ -52,14 +76,14 @@ type storeApp struct {
 		Full  string `json:"path_full"`
 	} `json:"screenshots"`
 	Movies []struct {
-		Name      string `json:"name"`
-		Thumbnail string `json:"thumbnail"`
+		Name      string            `json:"name"`
+		Thumbnail string            `json:"thumbnail"`
 		MP4       map[string]string `json:"mp4"`
 		WebM      map[string]string `json:"webm"`
 	} `json:"movies"`
 	PcRequirements    any `json:"pc_requirements"`
 	LinuxRequirements any `json:"linux_requirements"`
-	Achievements struct {
+	Achievements      struct {
 		Total       int `json:"total"`
 		Highlighted []struct {
 			Name string `json:"name"`
@@ -70,14 +94,17 @@ type storeApp struct {
 
 func (c *StoreClient) app(appID string) (*storeApp, error) {
 	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = map[string]*storeApp{}
+	}
 	if a, ok := c.cache[appID]; ok {
 		c.mu.Unlock()
 		return a, nil
 	}
 	c.mu.Unlock()
 
-	url := fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%s&l=english", appID)
-	resp, err := c.http.Get(url)
+	url := fmt.Sprintf("%s/api/appdetails?appids=%s&l=english", c.storeBase(), appID)
+	resp, err := c.httpClient().Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +127,9 @@ func (c *StoreClient) app(appID string) (*storeApp, error) {
 		a = &storeApp{} // delisted or private: cache the miss too
 	}
 	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = map[string]*storeApp{}
+	}
 	c.cache[appID] = a
 	c.mu.Unlock()
 	return a, nil
@@ -300,8 +330,8 @@ func categoryNames(in []struct {
 // videosOf picks playable files from the Store's movies: mp4 480/max or
 // webm first; HLS-only entries are skipped.
 func videosOf(movies []struct {
-	Name      string `json:"name"`
-	Thumbnail string `json:"thumbnail"`
+	Name      string            `json:"name"`
+	Thumbnail string            `json:"thumbnail"`
 	MP4       map[string]string `json:"mp4"`
 	WebM      map[string]string `json:"webm"`
 }) []types.GameVideo {

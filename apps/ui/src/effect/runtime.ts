@@ -142,7 +142,8 @@ export const LauncherApi = {
   // The "Fetch ratings online" switch.
   setRatingsOnline: (on: boolean) => call<LauncherSettings>('SetRatingsOnline', () => App.SetRatingsOnline(on)),
 
-  // Summary, screenshots and achievements for the game page (Steam only).
+  // Summary, screenshots and achievements for the game page (every source;
+  // sideloaded games resolve theirs from the linked online info, issue #38).
   // Go marshals nil slices as null; normalize null lists to [] at the edge
   // so consumers never crash on list.map (FE-10).
   getGameDetails: (game: Game) =>
@@ -339,6 +340,14 @@ export const LauncherApi = {
 
   // The "Find artwork online" switch.
   setArtworkOnline: (on: boolean) => call<LauncherSettings>('SetArtworkOnline', () => App.SetArtworkOnline(on)),
+
+  // Online info for sideloaded games (issue #38): link a candidate's source
+  // ("steam"/app id, "gog"/product id, "lutris"/slug) or unlink with ("","").
+  linkGameInfo: (gameId: string, source: string, id: string) =>
+    call<string>('LinkGameInfo', () => App.LinkGameInfo(gameId, source, id)),
+
+  // The "Find game info online" switch.
+  setGameInfoOnline: (on: boolean) => call<LauncherSettings>('SetGameInfoOnline', () => App.SetGameInfoOnline(on)),
 
   // Sideload dialog (issue #32): the native file picker for the game's
   // executable. "" means the user cancelled; a rejection means there is

@@ -90,6 +90,9 @@ type file struct {
 	// FindArtwork is the "Find artwork online" switch (issue #36). A
 	// pointer: unset means on, like FetchRatings.
 	FindArtwork *bool `json:"find_artwork,omitempty"`
+	// FindGameInfo is the "Find game info online" switch (issue #38). A
+	// pointer: unset means on, like FindArtwork.
+	FindGameInfo *bool `json:"find_game_info,omitempty"`
 	// PrefixesFolder is where Wine prefixes are created (issue #37). Empty
 	// means the default (<data>/prefixes).
 	PrefixesFolder string `json:"prefixes_folder,omitempty"`
@@ -99,6 +102,10 @@ type file struct {
 	// CompatAppIDs are the Steam AppIDs the user set for ratings, by Platypus's
 	// game id (see compat.go).
 	CompatAppIDs map[string]string `json:"compat_app_ids,omitempty"`
+	// InfoSources are the online info links of sideloaded games, by
+	// Platypus's game id (issue #38): "gog:<product id>" or
+	// "lutris:<slug>". Steam info uses the compat AppID instead.
+	InfoSources map[string]string `json:"info_sources,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Platypus
@@ -171,7 +178,6 @@ func DefaultGamesFolder() string {
 	}
 	return filepath.Join(home, "Games")
 }
-
 
 // Canceled downloads keep their partial data this many days by default.
 const (
@@ -300,8 +306,12 @@ func (s *Store) RemoveCustomGame(id string) error {
 		if g.ID == id {
 			prev := s.data.CustomGames
 			prevSettings, hadSettings := s.data.Games[id]
+			prevCompat, hadCompat := s.data.CompatAppIDs[id]
+			prevInfo, hadInfo := s.data.InfoSources[id]
 			s.data.CustomGames = append(s.data.CustomGames[:i], s.data.CustomGames[i+1:]...)
 			delete(s.data.Games, id)
+			delete(s.data.CompatAppIDs, id)
+			delete(s.data.InfoSources, id)
 			if err := s.save(); err != nil {
 				s.data.CustomGames = prev
 				if hadSettings {
@@ -309,6 +319,18 @@ func (s *Store) RemoveCustomGame(id string) error {
 						s.data.Games = map[string]map[string]any{}
 					}
 					s.data.Games[id] = prevSettings
+				}
+				if hadCompat {
+					if s.data.CompatAppIDs == nil {
+						s.data.CompatAppIDs = map[string]string{}
+					}
+					s.data.CompatAppIDs[id] = prevCompat
+				}
+				if hadInfo {
+					if s.data.InfoSources == nil {
+						s.data.InfoSources = map[string]string{}
+					}
+					s.data.InfoSources[id] = prevInfo
 				}
 				return err
 			}

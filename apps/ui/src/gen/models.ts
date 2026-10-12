@@ -303,6 +303,8 @@ export namespace types {
     description_html?: string;
     website?: string;
     store_url?: string;
+    info_source?: string;
+    info_source_name?: string;
     languages?: string[];
     controller?: string;
     requirements?: types.GameRequirements | null;
@@ -419,6 +421,7 @@ export namespace types {
     cancel_cleanup_days: number;
     ratings_online: boolean;
     artwork_online: boolean;
+    game_info_online: boolean;
     prefixes_folder: string;
     default_prefixes_folder: string;
   }
