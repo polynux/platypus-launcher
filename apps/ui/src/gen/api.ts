@@ -11,7 +11,7 @@ export interface CoreApi {
   AddCustomGame(title: string, executable: string): Promise<types.Game>;
   AddGameFolder(path: string): Promise<types.GameFolder[]>;
   AllowGameFolder(pluginID: string, path: string): Promise<void>;
-  ApplyOnlineArt(gameID: string, appID: number): Promise<types.Customization>;
+  ApplyOnlineArt(gameID: string, source: string, id: string): Promise<types.Customization>;
   ApprovePlugin(id: string): Promise<void>;
   CancelCloudSync(gameID: string): Promise<boolean>;
   CancelJob(id: string): Promise<void>;

@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -37,6 +38,13 @@ func jpegBytes(t *testing.T) []byte {
 func searchServer(t *testing.T, body string, hits *atomic.Int64) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			// Not an art request: the sandbox's remote-desktop agent
+			// probes each new localhost listener with GET / (User-Agent
+			// "node"). Ignore it so hit counts stay deterministic.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		hits.Add(1)
 		if !strings.HasPrefix(r.URL.Path, "/api/storesearch/") {
 			t.Errorf("search path = %s, want /api/storesearch/", r.URL.Path)
@@ -63,7 +71,7 @@ func TestSearchParsesItems(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("candidates = %+v, want the 2 valid items", got)
 	}
-	if got[0] != (Candidate{AppID: 123, Name: "Hollow Knight", ThumbURL: "https://cdn/x/123.jpg"}) {
+	if got[0] != (Candidate{Source: "steam", ID: "123", AppID: 123, Name: "Hollow Knight", ThumbURL: "https://cdn/x/123.jpg"}) {
 		t.Fatalf("first candidate = %+v", got[0])
 	}
 	if hits.Load() != 1 {
@@ -91,11 +99,11 @@ func TestSearchCapsAtEight(t *testing.T) {
 
 func TestNormalizeTitle(t *testing.T) {
 	for in, want := range map[string]string{
-		"Hollow Knight™":      "hollow knight",
-		"hollow-knight":       "hollow knight",
-		"Half-Life 2®":        "half life 2",
-		"  DOOM © (1993)  ":   "doom 1993",
-		"Civilization VI":     "civilization vi",
+		"Hollow Knight™":        "hollow knight",
+		"hollow-knight":         "hollow knight",
+		"Half-Life 2®":          "half life 2",
+		"  DOOM © (1993)  ":     "doom 1993",
+		"Civilization VI":       "civilization vi",
 		"Tom Clancy's XDefiant": "tom clancy s xdefiant",
 	} {
 		if got := NormalizeTitle(in); got != want {
@@ -106,9 +114,9 @@ func TestNormalizeTitle(t *testing.T) {
 
 func TestExactMatchNeedsExactlyOne(t *testing.T) {
 	all := []Candidate{
-		{AppID: 1, Name: "Hollow Knight"},
-		{AppID: 2, Name: "Hollow Knight™"},
-		{AppID: 3, Name: "Hollow Knight: Silksong"},
+		{Source: "steam", ID: "1", AppID: 1, Name: "Hollow Knight"},
+		{Source: "steam", ID: "2", AppID: 2, Name: "Hollow Knight™"},
+		{Source: "steam", ID: "3", AppID: 3, Name: "Hollow Knight: Silksong"},
 	}
 	if m := ExactMatch("Hollow Knight", all); m != nil {
 		t.Fatalf("two matches gave %+v, want nil", m)
@@ -351,10 +359,316 @@ func TestGetItemAssetsIgnoresNonStringFields(t *testing.T) {
 	}
 }
 
-func TestGetItemAssetsErrorWhenAPIFails(t *testing.T) {	srv := browseServer(t, "", http.StatusInternalServerError)
+func TestGetItemAssetsErrorWhenAPIFails(t *testing.T) {
+	srv := browseServer(t, "", http.StatusInternalServerError)
 	defer srv.Close()
 	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL, APIBase: srv.URL}
 	if _, err := c.GetItemAssets(123); err == nil {
 		t.Fatal("500 gave nil, want an error so the caller falls back to fixed names")
+	}
+}
+
+// gogServer serves a fixed catalog answer and counts its hits, checking the
+// query shape and the User-Agent.
+func gogServer(t *testing.T, body string, hits *atomic.Int64) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			// Not an art request: the sandbox's remote-desktop agent
+			// probes each new localhost listener with GET / (User-Agent
+			// "node"). Ignore it so hit counts stay deterministic.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		hits.Add(1)
+		if !strings.HasPrefix(r.URL.Path, "/v1/catalog") {
+			t.Errorf("gog path = %s, want /v1/catalog", r.URL.Path)
+		}
+		if got := r.Header.Get("User-Agent"); !strings.HasPrefix(got, "Platypus/") || !strings.Contains(got, "github.com/polynux/platypus-launcher") {
+			t.Errorf("gog User-Agent = %q, want Platypus/<version> + contact", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, body)
+	}))
+}
+
+const hollowKnightGOG = `{"products":[
+	{"id":"1308320804","title":"Hollow Knight","releaseDate":"2017.02.24",
+	 "coverVertical":"https://images.gog-statics.com/cover_v.jpg",
+	 "coverHorizontal":"https://images.gog-statics.com/banner_h.png",
+	 "logo":"https://images.gog-statics.com/logo.png"},
+	{"id":"999","title":"","releaseDate":"2020.01.01","coverVertical":"https://x/v.jpg","coverHorizontal":"https://x/h.jpg","logo":""},
+	{"id":"1000","title":"No Art","releaseDate":"2020.01.01","coverVertical":"","coverHorizontal":"","logo":""}
+]}`
+
+func TestSearchGOGParsesProducts(t *testing.T) {
+	var hits atomic.Int64
+	srv := gogServer(t, hollowKnightGOG, &hits)
+	defer srv.Close()
+	c := &Client{GOGBase: srv.URL}
+	got, err := c.SearchGOG("Hollow Knight")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("candidates = %+v, want the 1 valid product", got)
+	}
+	g := got[0]
+	if g.Source != "gog" || g.ID != "1308320804" || g.Name != "Hollow Knight" || g.Year != 2017 {
+		t.Fatalf("candidate = %+v, want gog/1308320804/Hollow Knight/2017", g)
+	}
+	if g.CoverURL != "https://images.gog-statics.com/cover_v.jpg" || g.BannerURL != "https://images.gog-statics.com/banner_h.png" || g.LogoURL != "https://images.gog-statics.com/logo.png" {
+		t.Fatalf("art urls = %+v", g)
+	}
+	if g.ThumbURL != "https://images.gog-statics.com/banner_h.png" {
+		t.Fatalf("thumb = %q, want the horizontal cover", g.ThumbURL)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("hits = %d, want 1", hits.Load())
+	}
+}
+
+func TestSearchGOGSendsQueryShape(t *testing.T) {
+	var query url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"products":[]}`)
+	}))
+	defer srv.Close()
+	c := &Client{GOGBase: srv.URL}
+	if _, err := c.SearchGOG("Hollow Knight"); err != nil {
+		t.Fatal(err)
+	}
+	if query.Get("limit") != "8" || query.Get("locale") != "en-US" || query.Get("query") != "like:Hollow Knight" {
+		t.Fatalf("query = %v, want limit=8 locale=en-US query=like:<title>", query)
+	}
+}
+
+// lutrisServer serves a fixed games search answer and counts its hits,
+// checking the User-Agent.
+func lutrisServer(t *testing.T, body string, hits *atomic.Int64) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			// Not an art request: the sandbox's remote-desktop agent
+			// probes each new localhost listener with GET / (User-Agent
+			// "node"). Ignore it so hit counts stay deterministic.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		hits.Add(1)
+		if got := r.Header.Get("User-Agent"); !strings.HasPrefix(got, "Platypus/") || !strings.Contains(got, "github.com/polynux/platypus-launcher") {
+			t.Errorf("lutris User-Agent = %q, want Platypus/<version> + contact", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, body)
+	}))
+}
+
+const rivageLutris = `{"count":1,"results":[
+	{"name":"Rivage","slug":"rivage","year":2026,"coverart":"https://lutris.net/media/igdb/cover_big/coay6k.jpg",
+	 "provider_games":[{"name":"Rivage","slug":"rivage","service":"igdb"}]}
+]}`
+
+func TestSearchLutrisParsesResults(t *testing.T) {
+	var hits atomic.Int64
+	srv := lutrisServer(t, rivageLutris, &hits)
+	defer srv.Close()
+	c := &Client{LutrisBase: srv.URL, IGDBBase: srv.URL + "/igdb-test"}
+	got, err := c.SearchLutris("Rivage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("candidates = %+v, want 1", got)
+	}
+	l := got[0]
+	if l.Source != "lutris" || l.ID != "rivage" || l.Name != "Rivage" || l.Year != 2026 {
+		t.Fatalf("candidate = %+v, want lutris/rivage/Rivage/2026", l)
+	}
+	// The thumb and cover use the IGDB upgrade, not the lutris.net file.
+	want := srv.URL + "/igdb-test/igdb/image/upload/t_cover_big_2x/coay6k.jpg"
+	if l.ThumbURL != want || l.CoverURL != want {
+		t.Fatalf("cover = %q thumb = %q, want %q", l.CoverURL, l.ThumbURL, want)
+	}
+	if l.CoverFallbackURL != "https://lutris.net/media/igdb/cover_big/coay6k.jpg" {
+		t.Fatalf("fallback = %q", l.CoverFallbackURL)
+	}
+	if l.BannerURL != "" || l.LogoURL != "" {
+		t.Fatalf("lutris gives covers only, got %+v", l)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("hits = %d, want 1", hits.Load())
+	}
+}
+
+// The generic library_capsule coverart carries no image id and is skipped;
+// a hit that maps to a Steam app is still offered as a Steam candidate.
+func TestSearchLutrisSkipsGenericCoverart(t *testing.T) {
+	body := `{"count":2,"results":[
+		{"name":"Hollow Knight","slug":"hollow-knight","year":2017,
+		 "coverart":"https://lutris.net/media/igdb/library_capsule.jpg",
+		 "provider_games":[{"name":"Hollow Knight","slug":"367520","service":"steam"}]},
+		{"name":"No Art No Steam","slug":"no-art","year":2020,
+		 "coverart":"https://lutris.net/media/igdb/library_capsule.jpg",
+		 "provider_games":[]}
+	]}`
+	var hits atomic.Int64
+	srv := lutrisServer(t, body, &hits)
+	defer srv.Close()
+	c := &Client{LutrisBase: srv.URL, IGDBBase: srv.URL}
+	got, err := c.SearchLutris("Hollow Knight")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("candidates = %+v, want only the Steam-mapped hit", got)
+	}
+	s := got[0]
+	if s.Source != "steam" || s.ID != "367520" || s.AppID != 367520 || s.Name != "Hollow Knight" || s.Year != 2017 {
+		t.Fatalf("candidate = %+v, want steam/367520/Hollow Knight/2017", s)
+	}
+	if s.ThumbURL != "" {
+		t.Fatalf("thumb = %q, want empty: the generic art is never used", s.ThumbURL)
+	}
+}
+
+func TestLutrisImageID(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://lutris.net/media/igdb/cover_big/coay6k.jpg": "coay6k",
+		"http://x/media/igdb/cover_big/co3dk6.jpg?foo=1":     "co3dk6",
+		"https://lutris.net/media/igdb/library_capsule.jpg":  "",
+		"https://lutris.net/media/igdb/cover_big/.jpg":       "",
+		"https://lutris.net/media/igdb/cover_big/a/b.jpg":    "",
+		"https://lutris.net/media/igdb/cover_big/a b.jpg":    "",
+		"https://lutris.net/games/banner/hollow-knight.jpg":  "",
+		"": "",
+	} {
+		if got := lutrisImageID(in); got != want {
+			t.Errorf("lutrisImageID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestDownloadSendsUserAgent(t *testing.T) {
+	var ua string
+	png := pngBytes(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua = r.Header.Get("User-Agent")
+		w.Write(png)
+	}))
+	defer srv.Close()
+	c := &Client{SearchBase: srv.URL, CDNBase: srv.URL}
+	if _, err := c.Download(srv.URL + "/cover.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(ua, "Platypus/") || !strings.Contains(ua, "github.com/polynux/platypus-launcher") {
+		t.Fatalf("User-Agent = %q, want Platypus/<version> + contact", ua)
+	}
+}
+
+func TestSteamNeedsFallback(t *testing.T) {
+	mk := func(names ...string) []Candidate {
+		out := []Candidate{}
+		for i, n := range names {
+			out = append(out, Candidate{Source: "steam", ID: string(rune('1' + i)), AppID: i + 1, Name: n})
+		}
+		return out
+	}
+	if !SteamNeedsFallback("Hollow Knight", nil) {
+		t.Error("no hits: want fallback")
+	}
+	if !SteamNeedsFallback("Hollow Knight", mk("Hollow Knight")) {
+		t.Error("1 hit: want fallback (fewer than 3)")
+	}
+	if !SteamNeedsFallback("Hollow Knight", mk("A", "B", "C")) {
+		t.Error("3 hits but none matching: want fallback")
+	}
+	if SteamNeedsFallback("Hollow Knight", mk("Hollow Knight", "B", "C")) {
+		t.Error("3 hits with a name match: want no fallback")
+	}
+	if SteamNeedsFallback("Hollow Knight", mk("Hollow Knight™", "B", "C", "D")) {
+		t.Error("4 hits with a normalized match: want no fallback")
+	}
+}
+
+func TestMergeCandidatesDedupesAndOrders(t *testing.T) {
+	steam := []Candidate{{Source: "steam", ID: "1", AppID: 1, Name: "Hollow Knight", Year: 2017}}
+	gog := []Candidate{
+		{Source: "gog", ID: "g1", Name: "Hollow Knight", Year: 2017},
+		{Source: "gog", ID: "g2", Name: "Hollow Knight", Year: 2025},
+		{Source: "gog", ID: "g3", Name: "GOG Only", Year: 2020},
+	}
+	lutris := []Candidate{
+		{Source: "lutris", ID: "l1", Name: "Hollow Knight", Year: 2017},
+		{Source: "lutris", ID: "l2", Name: "Lutris Only", Year: 2021},
+	}
+	got := MergeCandidates(steam, gog, lutris)
+	want := []string{"steam:1", "gog:g2", "gog:g3", "lutris:l2"}
+	if len(got) != len(want) {
+		t.Fatalf("merged = %+v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i].Source+":"+got[i].ID != w {
+			t.Fatalf("merged[%d] = %s:%s, want %s (full %+v)", i, got[i].Source, got[i].ID, w, got)
+		}
+	}
+}
+
+func TestMergeCandidatesCapsAtEight(t *testing.T) {
+	mk := func(src string, n int) []Candidate {
+		out := []Candidate{}
+		for i := 0; i < n; i++ {
+			out = append(out, Candidate{Source: src, ID: fmt.Sprintf("%s-%d", src, i), Name: fmt.Sprintf("Game %s %d", src, i)})
+		}
+		return out
+	}
+	got := MergeCandidates(mk("steam", 3), mk("gog", 3), mk("lutris", 3))
+	if len(got) != MaxCandidates {
+		t.Fatalf("merged = %d, want %d", len(got), MaxCandidates)
+	}
+	if got[0].Source != "steam" || got[3].Source != "gog" || got[6].Source != "lutris" {
+		t.Fatalf("order = %v, want steam, then gog, then lutris", got)
+	}
+}
+
+func TestLutrisGameFetchesBySlug(t *testing.T) {
+	var ua, path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua, path = r.Header.Get("User-Agent"), r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"name":"Rivage","slug":"rivage","year":2026,
+			"coverart":"https://lutris.net/media/igdb/cover_big/coay6k.jpg",
+			"provider_games":[{"name":"Rivage","slug":"rivage","service":"igdb"}]}`)
+	}))
+	defer srv.Close()
+	c := &Client{LutrisBase: srv.URL, IGDBBase: srv.URL}
+	got, err := c.LutrisGame("rivage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/api/games/rivage" {
+		t.Fatalf("path = %s, want /api/games/rivage", path)
+	}
+	if !strings.HasPrefix(ua, "Platypus/") {
+		t.Fatalf("User-Agent = %q", ua)
+	}
+	if got.Source != "lutris" || got.ID != "rivage" || got.Name != "Rivage" {
+		t.Fatalf("game = %+v", got)
+	}
+	if !strings.HasPrefix(got.CoverURL, srv.URL) || !strings.Contains(got.CoverURL, "coay6k.jpg") {
+		t.Fatalf("cover = %q, want the injected IGDB base + image id", got.CoverURL)
+	}
+}
+
+func TestLutrisGameNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := &Client{LutrisBase: srv.URL, IGDBBase: srv.URL}
+	if _, err := c.LutrisGame("missing"); err == nil {
+		t.Fatal("404 gave nil, want an error")
 	}
 }

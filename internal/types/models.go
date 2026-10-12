@@ -144,18 +144,26 @@ type Customization struct {
 	SortTitle string            `json:"sort_title"`
 	Art       map[string]string `json:"art"`
 	// ArtSource remembers where the art came from when Platypus found it
-	// online (issue #36), e.g. "steam:12345", with ArtSourceName the store
-	// name for the attribution line. Empty when the art is the store's own
-	// or picked by hand.
+	// online (issues #36, art fallbacks), e.g. "steam:12345", "gog:1308320804"
+	// or "lutris:rivage", with ArtSourceName the store name for the
+	// attribution line. Empty when the art is the store's own or picked by
+	// hand.
 	ArtSource     string `json:"art_source,omitempty"`
 	ArtSourceName string `json:"art_source_name,omitempty"`
 }
 
-// ArtCandidate is one online art search hit (issue #36): a Steam app whose
-// art the user can apply to a sideloaded game.
+// ArtCandidate is one online art search hit (issues #36, art fallbacks):
+// art the user can apply to a sideloaded game. Source names where the art
+// comes from: "steam", "gog" or "lutris" (Lutris mirrors IGDB covers). ID is
+// the source's id: the Steam app id as a string, the GOG product id, or the
+// Lutris slug. AppID keeps the Steam app id for backward compatibility (0
+// for non-Steam hits). Year is the release year when known.
 type ArtCandidate struct {
+	Source   string `json:"source"`
+	ID       string `json:"id"`
 	AppID    int    `json:"app_id"`
 	Name     string `json:"name"`
+	Year     int    `json:"year,omitempty"`
 	ThumbURL string `json:"thumb_url"`
 }
 

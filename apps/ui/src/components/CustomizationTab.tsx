@@ -123,7 +123,7 @@ export function CustomizationTab({ game, onChanged }: {
         <MonoLabel className="mb-1.5">art</MonoLabel>
         {custom?.art_source && (
           <p className="mb-2 font-mono text-hint text-white/55" data-testid="art-attribution">
-            Art from Steam{custom.art_source_name ? ` · ${custom.art_source_name}` : ''}
+            {artSourceLabel(custom.art_source)}{custom.art_source_name ? ` · ${custom.art_source_name}` : ''}
           </p>
         )}
         <ul className="space-y-2">
@@ -171,10 +171,38 @@ export function CustomizationTab({ game, onChanged }: {
   );
 }
 
-/** Find cover and banner art online for a sideloaded game (issue #36):
- *  Steam's public store search, prefilled with the game's title. Picking a
- *  candidate applies its art like a manual pick (it replaces what is there);
- *  failures show here, never silently. */
+/** The attribution line for art the lookup stored: "Art from Steam",
+ *  "Art from GOG" or "Art via Lutris / IGDB". */
+function artSourceLabel(artSource: string): string {
+  if (artSource.startsWith('gog:')) return 'Art from GOG';
+  if (artSource.startsWith('lutris:')) return 'Art via Lutris / IGDB';
+  return 'Art from Steam';
+}
+
+/** One candidate's identity across sources (Steam app ids are numbers, GOG
+ *  product ids and Lutris slugs are strings). */
+function applyKey(c: ArtCandidate): string {
+  return `${c.source || 'steam'}:${c.id || c.app_id}`;
+}
+
+/** The small source label of one candidate row. */
+function candidateSource(c: ArtCandidate): string {
+  if (c.source === 'gog') return 'GOG';
+  if (c.source === 'lutris') return 'Lutris';
+  return 'Steam';
+}
+
+/** The small id detail of one candidate row. */
+function candidateDetail(c: ArtCandidate): string {
+  if (c.source === 'steam') return `Steam app ${c.app_id}`;
+  return c.id;
+}
+
+/** Find cover and banner art online for a sideloaded game (issues #36, art
+ *  fallbacks): Steam's public store search first, GOG and Lutris (IGDB) as
+ *  keyless fallbacks when Steam is thin, prefilled with the game's title.
+ *  Picking a candidate applies its art like a manual pick (it replaces what
+ *  is there); failures show here, never silently. */
 function OnlineArtFinder({ game, onApplied, onChanged }: {
   game: Game;
   /** The apply answered: keep the form in step with what core stored. */
@@ -186,7 +214,7 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
   const [query, setQuery] = useState(game.title);
   const [candidates, setCandidates] = useState<ArtCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [applying, setApplying] = useState<number | null>(null);
+  const [applying, setApplying] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const search = () => {
@@ -202,9 +230,9 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
 
   const apply = (c: ArtCandidate) => {
     if (searching || applying != null) return;
-    setApplying(c.app_id);
+    setApplying(applyKey(c));
     setError(null);
-    Effect.runPromise(LauncherApi.applyOnlineArt(game.id, c.app_id)).then(
+    Effect.runPromise(LauncherApi.applyOnlineArt(game.id, c.source, c.id)).then(
       (custom) => { setApplying(null); onApplied(custom); onChanged(); },
       (e) => { setApplying(null); setError(e instanceof Error ? e.message : String(e)); },
     );
@@ -214,7 +242,8 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
     <section>
       <MonoLabel className="mb-1.5">find art online</MonoLabel>
       <p className="mb-2 text-[12px] leading-relaxed text-white/55">
-        Search Steam's public store for {storeTitle}'s cover, banner and logo. Applying replaces the art above;
+        Search for {storeTitle}'s cover, banner and logo: Steam first, with GOG and Lutris (IGDB) as
+        fallbacks when Steam is thin. Applying replaces the art above;
         art you picked by hand is only replaced when you choose it here.
       </p>
       <form
@@ -238,7 +267,7 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
       {candidates != null && candidates.length > 0 && (
         <ul className="mt-2 space-y-2">
           {candidates.map((c) => (
-            <li key={c.app_id} className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/[0.06]">
+            <li key={applyKey(c)} className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/[0.06]">
               {c.thumb_url ? (
                 <img src={c.thumb_url} alt="" loading="lazy" className="h-10 w-24 flex-none rounded-lg object-cover ring-1 ring-white/10" />
               ) : (
@@ -246,10 +275,13 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
               )}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12.5px] font-semibold text-white/90">{c.name}</div>
-                <div className="font-mono text-hint text-white/55">Steam app {c.app_id}</div>
+                <div className="font-mono text-hint text-white/55">
+                  <span data-testid="candidate-source">{candidateSource(c)}</span>
+                  {c.year ? ` · ${c.year}` : ''} · {candidateDetail(c)}
+                </div>
               </div>
               <Button variant="primary" size="sm" disabled={searching || applying != null} onClick={() => apply(c)}>
-                {applying === c.app_id ? 'Applying…' : 'Apply'}
+                {applying === applyKey(c) ? 'Applying…' : 'Apply'}
               </Button>
             </li>
           ))}

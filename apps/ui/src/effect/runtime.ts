@@ -327,13 +327,15 @@ export const LauncherApi = {
     call<Customization>('ResetCustomization', async () => normalizeCustomization(await App.ResetCustomization(gameId))),
   pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
 
-  // Online artwork for sideloaded games (issue #36): Steam's public store
-  // search, then the chosen app's cover, banner and logo into the game's
-  // custom art. The search refuses while the artwork switch is off.
+  // Online artwork for sideloaded games (issues #36, art fallbacks): Steam's
+  // public store search first, GOG and Lutris (IGDB) as keyless fallbacks
+  // when Steam is thin, then the chosen candidate's cover, banner and logo
+  // (Lutris: cover only) into the game's custom art. The search refuses
+  // while the artwork switch is off.
   searchArtOnline: (title: string) =>
     call<ArtCandidate[]>('SearchArtOnline', async () => (await App.SearchArtOnline(title)) ?? []),
-  applyOnlineArt: (gameId: string, appId: number) =>
-    call<Customization>('ApplyOnlineArt', async () => normalizeCustomization(await App.ApplyOnlineArt(gameId, appId))),
+  applyOnlineArt: (gameId: string, source: string, id: string) =>
+    call<Customization>('ApplyOnlineArt', async () => normalizeCustomization(await App.ApplyOnlineArt(gameId, source, id))),
 
   // The "Find artwork online" switch.
   setArtworkOnline: (on: boolean) => call<LauncherSettings>('SetArtworkOnline', () => App.SetArtworkOnline(on)),

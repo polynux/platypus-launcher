@@ -37,8 +37,10 @@ const game = (o: Partial<Game> = {}): Game => ({
 
 const emptyCustom = { title: '', sort_title: '', art: {}, art_source: '', art_source_name: '' };
 const cands: ArtCandidate[] = [
-  { app_id: 123, name: 'Hollow Knight', thumb_url: 'https://cdn/123.jpg' },
-  { app_id: 124, name: 'Hollow Knight: Silksong', thumb_url: 'https://cdn/124.jpg' },
+  { source: 'steam', id: '123', app_id: 123, name: 'Hollow Knight', thumb_url: 'https://cdn/123.jpg' },
+  { source: 'steam', id: '124', app_id: 124, name: 'Hollow Knight: Silksong', thumb_url: 'https://cdn/124.jpg' },
+  { source: 'gog', id: '1308320804', app_id: 0, name: 'Hollow Knight', year: 2017, thumb_url: 'https://images.gog-statics.com/h.jpg' },
+  { source: 'lutris', id: 'rivage', app_id: 0, name: 'Rivage', year: 2026, thumb_url: 'https://images.igdb.com/igdb/image/upload/t_cover_big_2x/coay6k.jpg' },
 ];
 
 function tab(g: Game = game()) {
@@ -77,8 +79,26 @@ describe('OnlineArtFinder (issue #36)', () => {
     const thumbs = document.querySelectorAll('img[src="https://cdn/124.jpg"]');
     expect(thumbs.length).toBe(1);
     fireEvent.click(screen.getAllByRole('button', { name: 'Apply' })[0]);
-    await waitFor(() => expect(api.applyOnlineArt).toHaveBeenCalledWith('custom-1', 123));
+    await waitFor(() => expect(api.applyOnlineArt).toHaveBeenCalledWith('custom-1', 'steam', '123'));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('shows each candidate source label with the year and applies with source and id', async () => {
+    api.searchArtOnline.mockResolvedValue(cands);
+    api.applyOnlineArt.mockResolvedValue({ ...emptyCustom, art: { cover: '/platypus-art/x/cover.png' }, art_source: 'gog:1308320804', art_source_name: 'Hollow Knight' });
+    tab();
+    await waitFor(() => expect(api.getCustomization).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Rivage');
+    const sources = screen.getAllByTestId('candidate-source').map((el) => el.textContent);
+    expect(sources).toEqual(['Steam', 'Steam', 'GOG', 'Lutris']);
+    const rows = screen.getAllByTestId('candidate-source').map((el) => el.closest('li')?.textContent ?? '');
+    expect(rows[2]).toMatch(/GOG/);
+    expect(rows[2]).toMatch(/2017/);
+    expect(rows[3]).toMatch(/Lutris/);
+    expect(rows[3]).toMatch(/2026/);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Apply' })[2]);
+    await waitFor(() => expect(api.applyOnlineArt).toHaveBeenCalledWith('custom-1', 'gog', '1308320804'));
   });
 
   it('says so when nothing is found, and shows search errors', async () => {
@@ -110,6 +130,18 @@ describe('OnlineArtFinder (issue #36)', () => {
     const line = await screen.findByTestId('art-attribution');
     expect(line.textContent).toMatch(/Art from Steam/);
     expect(line.textContent).toMatch(/Hollow Knight/);
+  });
+
+  it.each([
+    ['steam:123', 'Hollow Knight', /Art from Steam/],
+    ['gog:1308320804', 'Hollow Knight', /Art from GOG/],
+    ['lutris:rivage', 'Rivage', /Art via Lutris \/ IGDB/],
+  ])('attributes art from %s', async (source, name, re) => {
+    api.getCustomization.mockResolvedValue({ ...emptyCustom, art: { cover: '/platypus-art/x/cover.png' }, art_source: source, art_source_name: name });
+    tab();
+    const line = await screen.findByTestId('art-attribution');
+    expect(line.textContent).toMatch(re);
+    expect(line.textContent).toMatch(new RegExp(name));
   });
 
   it('shows no attribution line without a source', async () => {
