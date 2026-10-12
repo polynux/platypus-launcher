@@ -328,6 +328,10 @@ export const LauncherApi = {
   // no picker (the text field still works).
   pickGameExecutable: (start: string) => call<string>('PickGameExecutable', () => App.PickGameExecutable(start)),
 
+  // Folder picker for the sideload working directory, Wine prefix and
+  // global prefix folder (issues #33, #34, #37). "" means cancelled.
+  pickFolder: (title: string, start: string) => call<string>('PickFolder', () => App.PickFolder(title, start)),
+
   // Family (the `family` capability, protocol 1.8): the store's family group.
   // Shown only; Platypus enforces none of its rules.
   getFamilyMembers: (source: string) =>

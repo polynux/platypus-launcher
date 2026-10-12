@@ -757,7 +757,32 @@ func (a *App) GetGameSettings() map[string]map[string]any {
 	return a.settings.GameSettings()
 }
 
+// checkGameSettingsPaths validates the path fields of per-game settings:
+// working_dir must be an absolute path to an existing directory when set.
+// Empty means the previous behaviour (the executable's folder).
+func checkGameSettingsPaths(gameSettings map[string]any) error {
+	if v, ok := gameSettings["working_dir"]; ok {
+		s, _ := v.(string)
+		if strings.TrimSpace(s) != "" {
+			if !filepath.IsAbs(s) {
+				return fmt.Errorf("working directory must be an absolute path, got %q", s)
+			}
+			st, err := os.Stat(s)
+			if err != nil {
+				return fmt.Errorf("working directory: %w", err)
+			}
+			if !st.IsDir() {
+				return fmt.Errorf("%s is a file, not a folder", s)
+			}
+		}
+	}
+	return nil
+}
+
 // SaveGameSettings persists one game's settings as the UI holds them.
 func (a *App) SaveGameSettings(gameID string, gameSettings map[string]any) error {
+	if err := checkGameSettingsPaths(gameSettings); err != nil {
+		return err
+	}
 	return a.settings.SetGameSettings(gameID, gameSettings)
 }

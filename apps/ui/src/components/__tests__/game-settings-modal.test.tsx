@@ -188,4 +188,20 @@ describe('the game settings dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('round-trips the working directory for a game that runs itself (issue #33)', async () => {
+    const props = page();
+    fireEvent.click(gear());
+    const work = await screen.findByLabelText('working directory');
+    fireEvent.change(work, { target: { value: '/home/you/Games/doom' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save config' }));
+    expect(props.onSaveSettings).toHaveBeenCalledOnce();
+    expect(props.onSaveSettings.mock.calls[0][0].working_dir).toBe('/home/you/Games/doom');
+  });
+
+  it('hides the working directory for a game the Steam client starts', () => {
+    page({}, game({ source: 'steam', store: 'steam' as never, store_app_id: '10', executable: '', features: null }), undefined);
+    fireEvent.click(gear());
+    expect(screen.queryByLabelText('working directory')).toBeNull();
+  });
 });

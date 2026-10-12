@@ -374,6 +374,35 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" />
             </label>
 
+            {!isSteamClient && (
+              <div>
+                <MonoLabel className="mb-1.5">working directory <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label="working directory"
+                    value={draft.working_dir}
+                    onChange={(e) => set('working_dir', e.target.value)}
+                    placeholder={game.executable ? game.executable.split('/').slice(0, -1).join('/') || '/' : "The executable's folder"}
+                    spellCheck={false}
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => {
+                      Effect.runPromise(LauncherApi.pickFolder('Choose the working directory', draft.working_dir || game.executable))
+                        .then((picked) => { if (picked) set('working_dir', picked); })
+                        .catch(() => {});
+                    }}
+                    className="flex-none"
+                  >
+                    Browse…
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">Where the game runs. Empty means the executable's folder.</p>
+              </div>
+            )}
+
             <AdvancedFold set={launchSet}>
               {draft.use_gamescope && (
                 <div className="space-y-4 border-l border-white/[0.08] pl-4">

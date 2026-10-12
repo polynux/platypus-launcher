@@ -6,7 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
-import { AddGameModal } from './components/AddGameModal';
+import { AddGameModal, type AddGameOptions } from './components/AddGameModal';
 import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
@@ -492,7 +492,7 @@ export function App() {
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
-  const addGame = (title: string, executable: string) => {
+  const addGame = (title: string, executable: string, opts?: AddGameOptions) => {
     Effect.runPromise(LauncherApi.addCustomGame(title, executable))
       .then((game) => {
         // Sideloaded games lead the library, like before, with their saved settings.
@@ -500,6 +500,14 @@ export function App() {
         setAddOpen(false);
         notify(`Added "${title}"`);
         log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
+        // Advanced options live in the new game's GameSettings (issue #33).
+        const work = opts?.workingDir?.trim();
+        if (work) {
+          const next = { ...game.settings, working_dir: work };
+          Effect.runPromise(LauncherApi.saveGameSettings(game.id, next))
+            .then(() => setGames((prev) => prev.map((x) => (x.id === game.id ? { ...x, settings: next } : x))))
+            .catch((err) => notify(`Added "${title}" but the working directory wasn't saved: ${errMsg(err)}`, 'err'));
+        }
       })
       .catch((err) => notify(errMsg(err), 'err'));
   };

@@ -70,6 +70,7 @@ export interface CoreApi {
   OpenPluginsFolder(): Promise<void>;
   PauseAllJobs(): Promise<void>;
   PauseJob(id: string): Promise<void>;
+  PickFolder(title: string, start: string): Promise<string>;
   PickGameExecutable(start: string): Promise<string>;
   PickImage(title: string): Promise<string>;
   PickInstallFolder(start: string): Promise<string>;
@@ -187,6 +188,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'OpenPluginsFolder',
   'PauseAllJobs',
   'PauseJob',
+  'PickFolder',
   'PickGameExecutable',
   'PickImage',
   'PickInstallFolder',

@@ -30,3 +30,10 @@ func (a *App) PickGameExecutable(start string) (string, error) {
 	})
 }
 
+// PickFolder opens the native folder picker with the given title,
+// starting at start (or the home folder when start is not a folder).
+// Returns "" when the user cancels.
+func (a *App) PickFolder(title, start string) (string, error) {
+	return a.chooseFolder(title, start)
+}
+
