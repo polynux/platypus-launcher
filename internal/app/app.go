@@ -822,34 +822,36 @@ func (a *App) GetGameSettings() map[string]map[string]any {
 	return a.settings.GameSettings()
 }
 
-// checkGameSettingsPaths validates the path fields of per-game settings:
-// working_dir must be an absolute path to an existing directory when set,
-// wine_prefix an absolute path (it is created on demand, so it need not
-// exist yet, but it must not be a file). Empty means the fallback.
-func checkGameSettingsPaths(gameSettings map[string]any) error {
+// cleanGameSettingsPaths validates the path fields of per-game settings and
+// stores them cleaned: working_dir must be an absolute path to an existing
+// directory when set, wine_prefix an absolute path (it is created on demand,
+// so it need not exist yet, but it must not be a file). "~" is expanded and
+// the result Cleaned, so "~/x" is stored as the full path. Empty means the
+// fallback. It mutates gameSettings in place.
+func cleanGameSettingsPaths(gameSettings map[string]any) error {
 	if v, ok := gameSettings["working_dir"]; ok {
-		s, _ := v.(string)
-		if strings.TrimSpace(s) != "" {
-			if !filepath.IsAbs(s) {
-				return fmt.Errorf("working directory must be an absolute path, got %q", s)
+		if s, _ := v.(string); strings.TrimSpace(s) != "" {
+			clean, err := settings.CleanFolder(s)
+			if err != nil {
+				return fmt.Errorf("working directory: %w", err)
 			}
-			st, err := os.Stat(s)
+			st, err := os.Stat(clean)
 			if err != nil {
 				return fmt.Errorf("working directory: %w", err)
 			}
 			if !st.IsDir() {
-				return fmt.Errorf("%s is a file, not a folder", s)
+				return fmt.Errorf("%s is a file, not a folder", clean)
 			}
+			gameSettings["working_dir"] = clean
 		}
 	}
 	if v, ok := gameSettings["wine_prefix"]; ok {
-		s, _ := v.(string)
-		if strings.TrimSpace(s) != "" {
+		if s, _ := v.(string); strings.TrimSpace(s) != "" {
 			clean, err := settings.CleanFolder(s)
 			if err != nil {
 				return fmt.Errorf("wine prefix: %w", err)
 			}
-			_ = clean
+			gameSettings["wine_prefix"] = clean
 		}
 	}
 	return nil
@@ -857,7 +859,7 @@ func checkGameSettingsPaths(gameSettings map[string]any) error {
 
 // SaveGameSettings persists one game's settings as the UI holds them.
 func (a *App) SaveGameSettings(gameID string, gameSettings map[string]any) error {
-	if err := checkGameSettingsPaths(gameSettings); err != nil {
+	if err := cleanGameSettingsPaths(gameSettings); err != nil {
 		return err
 	}
 	return a.settings.SetGameSettings(gameID, gameSettings)

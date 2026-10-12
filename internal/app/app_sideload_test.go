@@ -138,6 +138,50 @@ func TestSaveGameSettingsValidatesWinePrefix(t *testing.T) {
 	}
 }
 
+// A "~" path is stored expanded and Cleaned, so it never reaches the runner
+// as a literal "~/x".
+func TestSaveGameSettingsCleansPaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	work := filepath.Join(home, "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := sideloadApp(t)
+	id := "g1"
+
+	if err := a.SaveGameSettings(id, map[string]any{"working_dir": "~/work"}); err != nil {
+		t.Fatalf("working_dir ~/work: %v", err)
+	}
+	if got := a.settings.GameSettings()[id]["working_dir"]; got != work {
+		t.Fatalf("working_dir stored as %v, want %q", got, work)
+	}
+
+	if err := a.SaveGameSettings(id, map[string]any{"wine_prefix": "~/prefixes/mine"}); err != nil {
+		t.Fatalf("wine_prefix ~/prefixes/mine: %v", err)
+	}
+	if got, want := a.settings.GameSettings()[id]["wine_prefix"], filepath.Join(home, "prefixes/mine"); got != want {
+		t.Fatalf("wine_prefix stored as %v, want %q", got, want)
+	}
+
+	// Unclean absolute paths are Cleaned too.
+	messy := work + string(filepath.Separator) + "." + string(filepath.Separator) + "sub" + string(filepath.Separator)
+	if err := os.MkdirAll(filepath.Join(work, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.SaveGameSettings(id, map[string]any{"working_dir": messy}); err != nil {
+		t.Fatalf("unclean working_dir: %v", err)
+	}
+	if got, want := a.settings.GameSettings()[id]["working_dir"], filepath.Join(work, "sub"); got != want {
+		t.Fatalf("working_dir stored as %v, want %q", got, want)
+	}
+
+	// A "~" working dir that doesn't exist is still refused.
+	if err := a.SaveGameSettings(id, map[string]any{"working_dir": "~/missing"}); err == nil {
+		t.Fatal("a missing ~/working dir was kept")
+	}
+}
+
 func sideloadApp(t *testing.T) *App {
 	t.Helper()
 	root := t.TempDir()
