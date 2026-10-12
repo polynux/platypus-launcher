@@ -791,6 +791,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		RatingsOnline:         a.settings.RatingsOnline(),
 		ArtworkOnline:         a.settings.ArtworkOnline(),
 		GameInfoOnline:        a.settings.GameInfoOnline(),
+		ChatDesktopNotify:     a.settings.ChatDesktopNotify(),
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
 	}

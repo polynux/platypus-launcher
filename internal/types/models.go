@@ -313,6 +313,10 @@ type LauncherSettings struct {
 	// GameInfoOnline is the "Find game info online" switch for sideloaded
 	// games (issue #38): the on-demand description and details lookup.
 	GameInfoOnline bool `json:"game_info_online"`
+	// ChatDesktopNotify is the "Desktop notifications for chat" switch (issue
+	// #12): a system notification for a new chat message when the window
+	// isn't focused. In-app toasts are unaffected.
+	ChatDesktopNotify bool `json:"chat_desktop_notify"`
 	// PrefixesFolder is where Wine prefixes are created, one folder per
 	// game (see runner.PrefixPath). Empty means the default below.
 	PrefixesFolder string `json:"prefixes_folder"`

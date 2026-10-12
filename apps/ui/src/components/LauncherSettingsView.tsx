@@ -101,6 +101,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
       <GameInfoSetting onNotify={onNotify} />
 
+      <ChatNotificationsSetting onNotify={onNotify} />
+
       <CloudSavesDefaults plugins={plugins} />
     </div>
   );
@@ -220,6 +222,42 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
       </div>
       <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
         <p>Game info: Steam store details, GOG product descriptions and Lutris (IGDB) summaries.</p>
+      </div>
+    </section>
+  );
+}
+/** "Desktop notifications for chat" (issue #12): a system notification for a
+ *  new chat message when the window isn't focused. Off, only the in-app toasts
+ *  stay. On by default, like the other switches. */
+export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.chat_desktop_notify ?? true))
+      .catch(() => setOn(true));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setChatDesktopNotify(next))
+      .then((s) => {
+        setOn(s.chat_desktop_notify ?? next);
+        onNotify(next ? 'Chat will notify on the desktop' : 'Chat stays in the app');
+      })
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <section className={SECTION}>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">Chat notifications</h2>
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+            Show a desktop notification for a new chat message when the Platypus window isn't focused. Clicking it
+            opens the conversation. Off, new messages only raise the in-app toasts.
+          </p>
+        </div>
+        <Switch aria-label="Desktop notifications for chat" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
     </section>
   );

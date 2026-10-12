@@ -8,12 +8,25 @@ const h = vi.hoisted(() => ({
   api: {} as Record<string, (...args: unknown[]) => unknown>,
 }));
 
+const b = vi.hoisted(() => ({
+  notifyChat: vi.fn((_msg: unknown) => Promise.resolve(false)),
+  chatOpenCb: null as null | ((t: { plugin: string; friendId: string }) => void),
+}));
+
 vi.mock('../effect/runtime', () => ({
   onChat: (cb: (e: unknown) => void) => {
     h.listener = cb;
     return () => {};
   },
   LauncherApi: new Proxy({}, { get: (_t, name: string) => (...args: unknown[]) => h.api[name]?.(...args) }),
+}));
+
+vi.mock('../effect/bridge', () => ({
+  notifyChat: (msg: unknown) => b.notifyChat(msg),
+  onChatOpen: (cb: (t: { plugin: string; friendId: string }) => void) => {
+    b.chatOpenCb = cb;
+    return () => { b.chatOpenCb = null; };
+  },
 }));
 
 import { useChat } from './useChat';
@@ -37,6 +50,8 @@ const social: SocialView[] = [
 
 beforeEach(() => {
   h.listener = null;
+  b.notifyChat.mockClear();
+  b.chatOpenCb = null;
   h.api = {
     chatUnread: () => Effect.succeed([]),
     chatAlerts: () => Effect.succeed({ echo: true }),
@@ -165,5 +180,39 @@ describe('useChat', () => {
     const { result } = renderHook(() => useChat(social, vi.fn()));
     act(() => result.current.open('echo', '1'));
     await waitFor(() => expect(result.current.error).toBe('chat is off for echo'));
+  });
+
+  it('asks the shell for a desktop notification with names and text, never ids', async () => {
+    const friends: SocialView[] = [
+      { seq: 1, plugin: 'echo', enabled: true, showPlaying: true, running: true, connection: { state: 'online' }, friends: [{ id: '7656119800000001', name: 'Ana Ruiz', state: 'online' }] },
+    ];
+    renderHook(() => useChat(friends, vi.fn(), { echo: 'Echo (test plugin)' }));
+    await act(async () => {});
+    act(() => {
+      h.listener?.({ ...conv({ friendId: '7656119800000001', unread: 1, seq: 3 }), alert: true, messages: [{ id: 'm1-xyz', from: '7656119800000001', text: 'hey, are you on the new build?', sentAt: 1 }] } as ChatEvent);
+    });
+    expect(b.notifyChat).toHaveBeenCalledTimes(1);
+    const payload = b.notifyChat.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      plugin: 'echo',
+      friendId: '7656119800000001',
+      title: 'Ana Ruiz · Echo (test plugin)',
+      name: 'Ana Ruiz',
+      body: 'hey, are you on the new build?',
+      open: null,
+    });
+    expect(`${payload.title} ${payload.body}`).not.toContain('7656119800000001');
+    expect(`${payload.title} ${payload.body}`).not.toContain('m1-xyz');
+  });
+
+  it('opens the conversation a clicked notification names', async () => {
+    const chatOpen = vi.fn(() => Effect.succeed(conv({ open: true })));
+    h.api.chatOpen = chatOpen;
+    const { result } = renderHook(() => useChat(social, vi.fn()));
+    await act(async () => {});
+    expect(b.chatOpenCb).not.toBeNull();
+    act(() => b.chatOpenCb?.({ plugin: 'echo', friendId: '1' }));
+    await waitFor(() => expect(chatOpen).toHaveBeenCalledWith('echo', '1'));
+    expect(result.current.target).toEqual({ plugin: 'echo', friendId: '1' });
   });
 });

@@ -349,6 +349,9 @@ export const LauncherApi = {
   // The "Find game info online" switch.
   setGameInfoOnline: (on: boolean) => call<LauncherSettings>('SetGameInfoOnline', () => App.SetGameInfoOnline(on)),
 
+  // The "Desktop notifications for chat" switch (issue #12).
+  setChatDesktopNotify: (on: boolean) => call<LauncherSettings>('SetChatDesktopNotify', () => App.SetChatDesktopNotify(on)),
+
   // Sideload dialog (issue #32): the native file picker for the game's
   // executable. "" means the user cancelled; a rejection means there is
   // no picker (the text field still works).

@@ -580,6 +580,9 @@ export function App() {
   );
   // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
+  // A clicked desktop notification opens its conversation here (issue #12):
+  // the chat only shows inside the modal, so the modal opens with it.
+  useEffect(() => { if (chat.target) setFriendsOpen(true); }, [chat.target]);
 
   // Dismissing the migration notice persists it in the core (it never
   // returns) and hides the banner at once, without waiting for a relaunch.

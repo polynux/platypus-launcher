@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { LauncherApi, onChat } from '../effect/runtime';
-import { alertText, chatKey, dropConversation, unreadFor, unreadTotal, upsertConversation } from './chat';
+import { notifyChat, onChatOpen } from '../effect/bridge';
+import { alertText, chatKey, chatNotifyTitle, clipNotifyText, dropConversation, notifyTextOf, unreadFor, unreadTotal, upsertConversation } from './chat';
 import { createAlertCoalescer } from './chatAlerts';
 import type { ChatView, SocialFriend, SocialView } from '../types';
 
@@ -74,7 +75,23 @@ export function useChat(
         return;
       }
       setConversations((list) => upsertConversation(list, e));
-      if (e.alert) alerts.add(e.plugin, friendNameOf(socialRef.current, e.plugin, e.friendId));
+      if (!e.alert) return;
+      alerts.add(e.plugin, friendNameOf(socialRef.current, e.plugin, e.friendId));
+      // A desktop notification when the window isn't focused (issue #12): the
+      // shell decides (focus, the launcher switch, coalescing). The payload
+      // carries display names and the message text only, never ids.
+      const text = notifyTextOf(e.messages);
+      if (text === null) return;
+      const name = friendNameOf(socialRef.current, e.plugin, e.friendId);
+      const store = storeNamesRef.current[e.plugin] ?? e.plugin;
+      void notifyChat({
+        plugin: e.plugin,
+        friendId: e.friendId,
+        title: chatNotifyTitle(name, store),
+        name,
+        body: clipNotifyText(text),
+        open: targetRef.current,
+      });
     });
     void Effect.runPromise(LauncherApi.chatUnread()).then(
       (vs) => setConversations((list) => vs.reduce(upsertConversation, list)),
@@ -158,6 +175,16 @@ export function useChat(
       (err) => notifyRef.current(messageOf(err), 'err'),
     );
   }, []);
+
+  // A clicked desktop notification opens its conversation (issue #12): the
+  // shell focuses the window and sends the target here.
+  useEffect(() => {
+    return onChatOpen((t) => {
+      if (typeof t.plugin === 'string' && t.plugin !== '' && typeof t.friendId === 'string' && t.friendId !== '') {
+        open(t.plugin, t.friendId);
+      }
+    });
+  }, [open ]);
 
   const conversation = target ? conversations.find((v) => chatKey(v.plugin, v.friendId) === chatKey(target.plugin, target.friendId)) : undefined;
 

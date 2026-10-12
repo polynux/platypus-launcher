@@ -23,6 +23,29 @@ export interface StoreEvent {
   loading: boolean;
 }
 
+/** A chat message asking the shell for a desktop notification (issue #12):
+ *  display names and the message text only, never tokens or ids. */
+export interface ChatNotifyPayload {
+  plugin: string;
+  friendId: string;
+  /** The friend's name with the store. */
+  title: string;
+  /** The friend's display name, for the coalesced count. */
+  name: string;
+  /** The message text. */
+  body: string;
+  /** The conversation on screen, if any. */
+  open: { plugin: string; friendId: string } | null;
+}
+
+/** The conversation a clicked notification opens. */
+export interface ChatOpenTarget {
+  plugin: string;
+  friendId: string;
+}
+
+type NotifyReply = { ok: true; shown: boolean } | { ok: false; error: string };
+
 const listeners = new Map<string, Set<(data: unknown) => void>>();
 const storeListeners = new Set<(ev: StoreEvent) => void>();
 
@@ -50,6 +73,23 @@ contextBridge.exposeInMainWorld('platypus', {
   },
   openExternal(url: string): void {
     ipcRenderer.send('platypus:openExternal', url);
+  },
+  // Desktop notifications for chat (issue #12): the page asks, main decides
+  // and shows (focus, the launcher switch, per-conversation coalescing). The
+  // reply says whether a notification went out.
+  async notifyChat(msg: ChatNotifyPayload): Promise<boolean> {
+    const reply = (await ipcRenderer.invoke('platypus:notify-chat', msg)) as NotifyReply;
+    if (!reply.ok) throw new Error(reply.error);
+    return reply.shown;
+  },
+  // A clicked notification opens its conversation: main focuses the window and
+  // sends its target here; the UI opens it through its own navigation.
+  onChatOpen(cb: (target: ChatOpenTarget) => void): () => void {
+    const fn = (_e: unknown, target: ChatOpenTarget) => cb(target);
+    ipcRenderer.on('platypus:chat-open', fn);
+    return () => {
+      ipcRenderer.removeListener('platypus:chat-open', fn);
+    };
   },
   // The embedded store view (issue #17): the native view over the Store
   // page's content area. Main validates every call (known enabled plugin,

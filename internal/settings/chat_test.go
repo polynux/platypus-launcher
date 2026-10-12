@@ -30,3 +30,35 @@ func TestChatAlertsDefaultOnAndPersist(t *testing.T) {
 		t.Fatal("the choice was lost on restart")
 	}
 }
+
+// Desktop notifications for chat are on until the user switches them off, and
+// the choice survives a restart.
+func TestChatDesktopNotifyDefaultOnAndPersist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.ChatDesktopNotify() {
+		t.Fatal("desktop notifications should be on by default")
+	}
+	if err := s.SetChatDesktopNotify(false); err != nil {
+		t.Fatal(err)
+	}
+	if s.ChatDesktopNotify() {
+		t.Fatal("desktop notifications still on after switching off")
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.ChatDesktopNotify() {
+		t.Fatal("the choice was lost on restart")
+	}
+	if err := reopened.SetChatDesktopNotify(true); err != nil {
+		t.Fatal(err)
+	}
+	if !reopened.ChatDesktopNotify() {
+		t.Fatal("switching back on didn't take")
+	}
+}

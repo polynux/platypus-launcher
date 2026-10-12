@@ -422,6 +422,7 @@ export namespace types {
     ratings_online: boolean;
     artwork_online: boolean;
     game_info_online: boolean;
+    chat_desktop_notify: boolean;
     prefixes_folder: string;
     default_prefixes_folder: string;
   }

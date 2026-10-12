@@ -8,8 +8,34 @@ export interface PlatypusBridge {
   on(event: string, cb: (data: unknown) => void): () => void;
   /** Opens an http(s) address in the user's browser. The shell refuses anything else. */
   openExternal(url: string): void;
+  /** Asks the shell for a desktop notification for a chat message; main
+   *  decides (focus, the launcher switch, coalescing). Absent outside the shell. */
+  notifyChat?: (msg: ChatNotifyPayload) => Promise<boolean>;
+  /** Subscribes to clicked-notification opens. Absent outside the shell. */
+  onChatOpen?: (cb: (target: ChatOpenTarget) => void) => () => void;
   /** The embedded store view (issue #17): the native view over the Store page. Absent outside the shell. */
   store?: StoreBridge;
+}
+
+/** A chat message asking the shell for a desktop notification (issue #12):
+ *  display names and the message text only, never tokens or ids. */
+export interface ChatNotifyPayload {
+  plugin: string;
+  friendId: string;
+  /** The friend's name with the store. */
+  title: string;
+  /** The friend's display name, for the coalesced count. */
+  name: string;
+  /** The message text. */
+  body: string;
+  /** The conversation on screen, if any. */
+  open: { plugin: string; friendId: string } | null;
+}
+
+/** The conversation a clicked notification opens. */
+export interface ChatOpenTarget {
+  plugin: string;
+  friendId: string;
 }
 
 /** The embedded store view's bridge: open / bounds / history / close, plus its navigation events. */
@@ -84,6 +110,18 @@ export function browserOpen(url: string): void {
   const bridge = window.platypus;
   if (!bridge) throw backendUnavailable('openExternal');
   bridge.openExternal(url);
+}
+
+/** Asks the shell for a desktop notification for a chat message (issue #12).
+ *  Resolves false outside the shell, or when main kept it (focused, switched
+ *  off, the open conversation). Never rejects. */
+export function notifyChat(msg: ChatNotifyPayload): Promise<boolean> {
+  return window.platypus?.notifyChat?.(msg).catch(() => false) ?? Promise.resolve(false);
+}
+
+/** Subscribes to clicked-notification opens (issue #12). Outside the shell it returns a no-op unsubscribe. */
+export function onChatOpen(cb: (target: ChatOpenTarget) => void): () => void {
+  return window.platypus?.onChatOpen?.(cb) ?? (() => {});
 }
 
 /** The embedded store view's bridge, or null outside the shell. */

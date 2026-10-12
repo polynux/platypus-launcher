@@ -580,3 +580,21 @@ func TestChatUnreadSnapshotAfterLogin(t *testing.T) {
 		t.Fatalf("ChatUnread() = %+v after the login, want the bot with 1 unread", got)
 	}
 }
+
+// Desktop notifications for chat are on by default and saved through the App.
+func TestChatDesktopNotifySetting(t *testing.T) {
+	a, _ := chatEnv(t)
+	if !a.GetLauncherSettings().ChatDesktopNotify {
+		t.Fatal("desktop notifications should be on by default")
+	}
+	s, err := a.SetChatDesktopNotify(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ChatDesktopNotify {
+		t.Fatal("still on after switching off")
+	}
+	if s, err = a.SetChatDesktopNotify(true); err != nil || !s.ChatDesktopNotify {
+		t.Fatalf("switching back on: %+v, %v", s, err)
+	}
+}
