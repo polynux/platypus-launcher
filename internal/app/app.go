@@ -244,6 +244,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startSocial(ctx)
 	a.startChat(ctx)
 	a.syncSocial()
+	a.syncChatUnread()
 
 	runCtx, stop := context.WithCancel(ctx)
 	a.stop = stop
@@ -795,6 +796,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		RatingsOnline:         a.settings.RatingsOnline(),
 		ArtworkOnline:         a.settings.ArtworkOnline(),
 		GameInfoOnline:        a.settings.GameInfoOnline(),
+		ChatDesktopNotify:     a.settings.ChatDesktopNotify(),
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolder(),
 	}

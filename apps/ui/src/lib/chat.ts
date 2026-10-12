@@ -80,6 +80,31 @@ export function alertText(count: number, names: string[], store: string): string
   return `${count} new messages from ${who} on ${store}`;
 }
 
+/** The most message text a desktop notification carries, in characters (issue #12). */
+export const NOTIFY_BODY_CHARS = 140;
+
+/** Clips message text to what a desktop notification carries, with an ellipsis when cut. Counts code points. */
+export function clipNotifyText(text: string): string {
+  const points = [...text];
+  if (points.length <= NOTIFY_BODY_CHARS) return text;
+  return `${points.slice(0, NOTIFY_BODY_CHARS).join('')}…`;
+}
+
+/** The title of a chat notification: the friend's name with the store. Display names only, never ids. */
+export function chatNotifyTitle(friendName: string, storeName: string): string {
+  return `${friendName} · ${storeName}`;
+}
+
+/** The text a desktop notification shows for an alert event: the newest message from a friend, or null
+ *  when the event carries none (then no notification goes out). Never ids, only the text. */
+export function notifyTextOf(messages: ChatMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.from !== 'self' && m.text.trim() !== '') return m.text;
+  }
+  return null;
+}
+
 /** Local time of day, HH:MM, for a message's sentAt (Unix milliseconds). */
 export function clockLabel(sentAt: number): string {
   const d = new Date(sentAt);

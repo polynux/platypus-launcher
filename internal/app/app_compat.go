@@ -329,6 +329,16 @@ func deckRating(d compat.DeckResult, appID string) *types.DeckRating {
 	}
 }
 
+// SetChatDesktopNotify saves the "Desktop notifications for chat" switch
+// (issue #12): a system notification for a new chat message when the window
+// isn't focused.
+func (a *App) SetChatDesktopNotify(on bool) (types.LauncherSettings, error) {
+	if err := a.settings.SetChatDesktopNotify(on); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
 // pluginName is the name a plugin's game is credited to in the UI.
 func (a *App) pluginName(game types.Game) string {
 	if p, ok := a.plugins.Plugin(game.Source); ok && p.Manifest.Name != "" {

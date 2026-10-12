@@ -174,10 +174,12 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // adds family and plugin settings; 1.9 adds chat with friends (needs social);
 // 1.10 adds the compat fields of game.details (Steam AppID hint, platforms,
 // DRM facts); 1.11 adds terms to accept before an install, and the DLC kinds
+// 1.11 adds terms to accept before an install, and the DLC kinds
 // and copy exclusions of family copies; 1.12 adds the media and richer facts
 // of game.details (sanitized description HTML, website/store URLs, languages,
-// controller support, requirements, age rating, tags, videos).
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}}
+// controller support, requirements, age rating, tags, videos); 1.13 adds the
+// unread snapshot of chat (chat.unreadCounts).
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

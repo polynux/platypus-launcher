@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, Notification, protocol, screen, session, shell, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createChatNotifier, validNotifyMessage } from './chatNotify.ts';
 import { Core } from './core.ts';
 import { resolvePaths } from './paths.ts';
 import { APP_ORIGIN, csp, isAppURL, isArtPath, safePath, staticFile, webURL } from './security.ts';
@@ -76,6 +77,51 @@ async function startCore(): Promise<Core> {
 
 function parentWindow(): BrowserWindow {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]!;
+}
+
+/**
+ * Desktop notifications for chat (issue #12): the page asks, main decides and
+ * shows. The page itself has no notification power (permissions are refused
+ * below); main validates the payload, checks focus and the launcher switch,
+ * and coalesces bursts per conversation. Clicking focuses the window and opens
+ * the conversation through the page's own navigation (a `platypus:chat-open`
+ * event the UI handles like any other open).
+ */
+const chatNotifier = createChatNotifier({
+  show: (title, body, onClick) => {
+    const n = new Notification({ title, body });
+    n.on('click', onClick);
+    n.show();
+    return { close: () => n.close() };
+  },
+});
+
+function openChatConversation(plugin: string, friendId: string): void {
+  const w = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  if (!w) return;
+  if (w.isMinimized()) w.restore();
+  w.focus();
+  w.webContents.send('platypus:chat-open', { plugin, friendId });
+}
+
+function registerChatIPC(): void {
+  ipcMain.handle('platypus:notify-chat', async (e, raw: unknown) => {
+    if (!fromApp(e)) return { ok: false, error: 'refused: not the app page' };
+    if (!validNotifyMessage(raw)) return { ok: false, error: 'refused: not a chat notification' };
+    const focused = BrowserWindow.getAllWindows().some((w) => w.isFocused());
+    // The switch is on by default; an unreadable setting keeps it.
+    let settingOn = true;
+    try {
+      const s = (await core?.call('GetLauncherSettings', [])) as { chat_desktop_notify?: unknown } | undefined;
+      settingOn = s?.chat_desktop_notify !== false;
+    } catch {
+      settingOn = true;
+    }
+    const outcome = chatNotifier.notify(raw, { focused, settingOn }, () =>
+      openChatConversation(raw.plugin, raw.friendId),
+    );
+    return { ok: true, shown: outcome !== 'dropped' };
+  });
 }
 
 /** Only the app's own page may talk to the core. */
@@ -285,6 +331,7 @@ void app.whenReady().then(async () => {
     return;
   }
   registerIPC();
+  registerChatIPC();
   registerAppProtocol();
   const stores = createWindow();
   registerStoreIPC(stores);

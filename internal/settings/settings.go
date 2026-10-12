@@ -74,6 +74,9 @@ type file struct {
 	// ChatAlerts: whether the user hears about new messages from friends, per
 	// plugin. On until the user switches it off (chat.go).
 	ChatAlerts map[string]bool `json:"chat_alerts,omitempty"`
+	// ChatDesktopNotify is the "Desktop notifications for chat" switch (issue
+	// #12). A pointer: unset means on (chat.go).
+	ChatDesktopNotify *bool `json:"chat_desktop_notify,omitempty"`
 	// PluginSettings are each plugin's plugin-wide settings values, and
 	// PluginGameSettings each game's per-game values (the `settings`
 	// capability, see plugin_settings.go). Values never hold secrets.

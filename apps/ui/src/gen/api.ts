@@ -104,6 +104,7 @@ export interface CoreApi {
   SetArtworkOnline(on: boolean): Promise<types.LauncherSettings>;
   SetCancelCleanupDays(days: number): Promise<types.LauncherSettings>;
   SetChatAlerts(pluginID: string, on: boolean): Promise<void>;
+  SetChatDesktopNotify(on: boolean): Promise<types.LauncherSettings>;
   SetCloudGameMode(gameID: string, mode: string): Promise<void>;
   SetCloudPluginMode(pluginID: string, mode: string): Promise<void>;
   SetCustomArt(gameID: string, kind: string, path: string): Promise<types.Customization>;
@@ -229,6 +230,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetArtworkOnline',
   'SetCancelCleanupDays',
   'SetChatAlerts',
+  'SetChatDesktopNotify',
   'SetCloudGameMode',
   'SetCloudPluginMode',
   'SetCustomArt',

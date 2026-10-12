@@ -464,3 +464,137 @@ func TestChatNotificationsAreGated(t *testing.T) {
 		}
 	})
 }
+
+// The unread snapshot seeds the badges after a restart: dropping the
+// conversations from memory and refreshing brings the store's counts back,
+// without messages and without alerts. Echo answers the method.
+func TestChatUnreadSnapshotSeedsBadges(t *testing.T) {
+	a, sink := chatEnv(t)
+	echoConfig(t, a, map[string]any{"botDelayMs": 10})
+	if _, err := a.ChatOpen("echo", chatBot); err != nil {
+		t.Fatal(err)
+	}
+	a.ChatClose("echo", chatBot)
+	if err := a.ChatSend("echo", chatBot, "hi there"); err != nil {
+		t.Fatal(err)
+	}
+	waitSocial(t, "the bot's reply, unread", func() bool {
+		return a.chat.Snapshot("echo", chatBot).Unread == 1
+	})
+	alerts := sink.alerts(chatBot)
+
+	// A restart drops the conversations from memory; the snapshot seeds them again.
+	a.chat.Forget("echo")
+	if got := a.ChatUnread(); len(got) != 0 {
+		t.Fatalf("ChatUnread after forgetting holds %d conversations", len(got))
+	}
+	a.refreshChatUnread("echo")
+	if n := echoCallCount(t, a, "chat.unreadCounts"); n != 1 {
+		t.Fatalf("chat.unreadCounts reached echo %d times, want 1", n)
+	}
+	got := a.ChatUnread()
+	if len(got) != 1 || got[0].FriendID != chatBot || got[0].Unread != 1 || len(got[0].Messages) != 0 {
+		t.Fatalf("ChatUnread() = %+v, want the bot with 1 unread and no messages", got)
+	}
+	if n := sink.alerts(chatBot); n != alerts {
+		t.Fatalf("the snapshot alerted %d times, want the %d from the reply", n, alerts)
+	}
+}
+
+// Without the snapshot method, or when it answers an error, refreshing keeps
+// today's behaviour: nothing changes, silently.
+func TestChatUnreadSnapshotMissingOrErrorIsANoop(t *testing.T) {
+	a, sink := chatEnv(t)
+	ctx := context.Background()
+	setKnob := func(key string, methods []string) {
+		t.Helper()
+		body, _ := json.Marshal(map[string]any{key: methods})
+		var out map[string]any
+		if err := a.plugins.Call(ctx, "echo", "config", json.RawMessage(body), &out); err != nil {
+			t.Fatalf("config: %v", err)
+		}
+	}
+	// The error answer first: only -32601 is remembered for the run, so the
+	// missing method afterwards still reaches the plugin.
+	setKnob("unavailable", []string{"chat.unreadCounts"})
+	a.refreshChatUnread("echo")
+	setKnob("unavailable", nil)
+
+	setKnob("missing", []string{"chat.unreadCounts"})
+	a.refreshChatUnread("echo")
+	setKnob("missing", nil)
+
+	if got := a.ChatUnread(); len(got) != 0 {
+		t.Fatalf("ChatUnread() = %+v after a missing or failing snapshot", got)
+	}
+	if n := len(sink.evs); n != 0 {
+		t.Fatalf("the missing or failing snapshot emitted %d events", n)
+	}
+}
+
+// The snapshot is only sent to a store that speaks 1.13: a store settled on
+// 1.12 never receives it.
+func TestChatUnreadSnapshotNeedsProtocol113(t *testing.T) {
+	t.Setenv("ECHO_PROTOCOLS", "1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,1.10,1.11,1.12")
+	a, _ := chatEnv(t)
+	if _, err := a.plugins.Initialize(context.Background(), "echo"); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.plugins.Runtime("echo").Protocol; got != "1.12" {
+		t.Fatalf("negotiated %q, want 1.12", got)
+	}
+	a.refreshChatUnread("echo")
+	if n := echoCallCount(t, a, "chat.unreadCounts"); n != 0 {
+		t.Fatalf("chat.unreadCounts reached a 1.12 store %d times", n)
+	}
+	if got := a.ChatUnread(); len(got) != 0 {
+		t.Fatalf("ChatUnread() = %+v from a 1.12 store's snapshot", got)
+	}
+}
+
+// Logging in seeds the badges again: the unread messages from before reach
+// the snapshot the login triggers.
+func TestChatUnreadSnapshotAfterLogin(t *testing.T) {
+	a, _ := chatEnv(t)
+	echoConfig(t, a, map[string]any{"botDelayMs": 10})
+	if _, err := a.ChatOpen("echo", chatBot); err != nil {
+		t.Fatal(err)
+	}
+	a.ChatClose("echo", chatBot)
+	if err := a.ChatSend("echo", chatBot, "hi there"); err != nil {
+		t.Fatal(err)
+	}
+	waitSocial(t, "the bot's reply, unread", func() bool {
+		return a.chat.Snapshot("echo", chatBot).Unread == 1
+	})
+	a.chat.Forget("echo")
+
+	st, err := a.PluginAuthComplete("echo", map[string]string{"code": "letmein"})
+	if err != nil || !st.LoggedIn {
+		t.Fatalf("login: %+v, %v", st, err)
+	}
+	waitSocial(t, "the login's snapshot", func() bool {
+		return echoCallCount(t, a, "chat.unreadCounts") > 0 && unreadOn(a, "echo") == 1
+	})
+	if got := a.ChatUnread(); len(got) != 1 || got[0].FriendID != chatBot || got[0].Unread != 1 {
+		t.Fatalf("ChatUnread() = %+v after the login, want the bot with 1 unread", got)
+	}
+}
+
+// Desktop notifications for chat are on by default and saved through the App.
+func TestChatDesktopNotifySetting(t *testing.T) {
+	a, _ := chatEnv(t)
+	if !a.GetLauncherSettings().ChatDesktopNotify {
+		t.Fatal("desktop notifications should be on by default")
+	}
+	s, err := a.SetChatDesktopNotify(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ChatDesktopNotify {
+		t.Fatal("still on after switching off")
+	}
+	if s, err = a.SetChatDesktopNotify(true); err != nil || !s.ChatDesktopNotify {
+		t.Fatalf("switching back on: %+v, %v", s, err)
+	}
+}

@@ -30,9 +30,10 @@ import (
 
 // Methods core calls. The notifications the plugin sends are the constants below.
 const (
-	MethodHistory  = "chat.history"
-	MethodSend     = "chat.send"
-	MethodMarkRead = "chat.markRead"
+	MethodHistory     = "chat.history"
+	MethodSend        = "chat.send"
+	MethodMarkRead    = "chat.markRead"
+	MethodUnreadCounts = "chat.unreadCounts"
 
 	NoteMessage = "chat.message"
 	NoteTyping  = "chat.typing"
@@ -300,6 +301,34 @@ func (m *Manager) Unread(pluginID string) []View {
 		}
 	}
 	return out
+}
+
+// UnreadCount is one row of the unread snapshot (MethodUnreadCounts): the
+// unread messages from a friend. It mirrors the chat.unread notification,
+// whose payload is one such row.
+type UnreadCount struct {
+	FriendID string `json:"friendId"`
+	Unread   int    `json:"unread"`
+}
+
+// RefreshUnread seeds the unread counts from the store's snapshot: it calls
+// chat.unreadCounts (protocol 1.13, an optional method) and applies each row
+// like a chat.unread notification. A plugin that doesn't implement it, or
+// answers an error, keeps today's behaviour: nothing changes, silently. It
+// does nothing when the plugin doesn't offer chat right now.
+func (m *Manager) RefreshUnread(ctx context.Context, pluginID string) {
+	if m.opt.Backend == nil || !m.opt.Backend.Offers(ctx, pluginID) {
+		return
+	}
+	var res struct {
+		Counts []UnreadCount `json:"counts"`
+	}
+	if err := m.call(ctx, pluginID, MethodUnreadCounts, struct{}{}, &res); err != nil {
+		return
+	}
+	for _, c := range res.Counts {
+		m.setUnread(pluginID, c.FriendID, c.Unread)
+	}
 }
 
 // Snapshot returns a conversation as it is now, or an empty one when the

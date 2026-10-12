@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alertText, canSendChat, chatKey, clockLabel, dropConversation, messageKey, splitLinks, unreadFor, unreadTotal, upsertConversation } from './chat';
+import { alertText, canSendChat, chatKey, chatNotifyTitle, clipNotifyText, clockLabel, dropConversation, messageKey, notifyTextOf, splitLinks, unreadFor, unreadTotal, upsertConversation } from './chat';
 import type { ChatView } from '../types';
 
 const conv = (over: Partial<ChatView> = {}): ChatView => ({
@@ -99,5 +99,29 @@ describe('clockLabel', () => {
   it('formats the local time of day as HH:MM', () => {
     const d = new Date(2026, 9, 9, 7, 5);
     expect(clockLabel(d.getTime())).toBe('07:05');
+  });
+});
+
+describe('desktop notifications (issue #12)', () => {
+  it('titles a notification with the friend and the store, never ids', () => {
+    expect(chatNotifyTitle('Ana Ruiz', 'Echo')).toBe('Ana Ruiz · Echo');
+  });
+
+  it('clips the body to ~140 chars, counting code points', () => {
+    expect(clipNotifyText('hi')).toBe('hi');
+    expect(clipNotifyText('a'.repeat(140))).toBe('a'.repeat(140));
+    const clipped = clipNotifyText('a'.repeat(141));
+    expect(clipped).toBe(`${'a'.repeat(140)}…`);
+    expect(clipNotifyText('😀'.repeat(140))).toBe('😀'.repeat(140));
+    expect([...clipNotifyText('😀'.repeat(141))]).toHaveLength(141);
+  });
+
+  it('takes the newest message from a friend, and nothing when there is none', () => {
+    const at = (over: object) => ({ id: 'x', from: 'ana', text: 'hi', sentAt: 1, ...over });
+    expect(notifyTextOf([at({ text: 'first', sentAt: 1 }), at({ text: 'second', sentAt: 2 })])).toBe('second');
+    expect(notifyTextOf([at({ from: 'self', text: 'mine', sentAt: 3 }), at({ text: 'theirs', sentAt: 2 })])).toBe('theirs');
+    expect(notifyTextOf([at({ from: 'self', text: 'mine' })])).toBeNull();
+    expect(notifyTextOf([at({ text: '   ' })])).toBeNull();
+    expect(notifyTextOf([])).toBeNull();
   });
 });

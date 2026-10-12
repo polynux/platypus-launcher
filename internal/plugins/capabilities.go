@@ -89,6 +89,7 @@ var registry = []Capability{
 		Methods: []string{"settings.schema", "settings.apply"}, Surfaces: []string{"plugin-settings", "game-settings"}},
 	{Name: "chat", Since: rev19, Orchestrated: true,
 		Methods:  []string{"chat.history", "chat.send", "chat.markRead"},
+		OptionalMethods: []string{"chat.unreadCounts"}, // the unread snapshot, protocol 1.13
 		Surfaces: []string{"chat-panel", "chat-unread"}},
 	{Name: "terms", Since: rev111, Orchestrated: true,
 		OptionalMethods: []string{"game.acceptTerms"},

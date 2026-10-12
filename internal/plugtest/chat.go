@@ -2,6 +2,7 @@ package plugtest
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -13,10 +14,14 @@ import (
 
 // The chat capability (protocol 1.9, docs/plugins/protocol.md, "Chat"): the
 // keys the history and the send answer carry, and the refusals core relies on.
+// The unread snapshot (chat.unreadCounts, protocol 1.13) is optional: a store
+// without it answers -32601, and core keeps the notification-only behaviour.
 var (
 	ChatHistoryKeys = []string{"messages", "more"}
 	ChatMessageKeys = []string{"id", "from", "text", "sentAt"}
 	ChatSendKeys    = []string{"id", "sentAt"}
+	ChatUnreadCountsKeys = []string{"counts"}
+	ChatUnreadCountKeys  = []string{"friendId", "unread"}
 )
 
 // checkChat holds a plugin offering `chat` (with `social`) to the request and
@@ -103,6 +108,43 @@ func (s *Session) checkChat(t *testing.T) {
 	}
 	if !slices.Contains(ids, first.ID) {
 		t.Errorf("the sent message %q is not in the history %v", first.ID, ids)
+	}
+
+	s.checkUnreadCounts(t)
+}
+
+// checkUnreadCounts holds the unread snapshot (chat.unreadCounts, protocol
+// 1.13) to its shape: {counts: [{friendId, unread}]}. It is optional: a store
+// that doesn't implement it answers -32601, which is fine.
+func (s *Session) checkUnreadCounts(t *testing.T) {
+	t.Helper()
+	var snap json.RawMessage
+	if err := s.call("chat.unreadCounts", map[string]any{}, &snap); err != nil {
+		var re *jsonrpc.Error
+		if errors.As(err, &re) && re.Code == jsonrpc.CodeMethodNotFound {
+			return
+		}
+		t.Fatalf("chat.unreadCounts: %v", err)
+	}
+	checkKeys(t, "chat.unreadCounts", snap, ChatUnreadCountsKeys)
+	var res struct {
+		Counts []json.RawMessage `json:"counts"`
+	}
+	if err := json.Unmarshal(snap, &res); err != nil {
+		t.Fatalf("chat.unreadCounts: %v", err)
+	}
+	for _, raw := range res.Counts {
+		checkKeys(t, "chat unread count", raw, ChatUnreadCountKeys)
+		var c struct {
+			FriendID string `json:"friendId"`
+			Unread   int    `json:"unread"`
+		}
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.Fatalf("chat unread count: %v", err)
+		}
+		if c.FriendID == "" || c.Unread < 0 {
+			t.Errorf("chat unread count without a friend, or negative: %s", raw)
+		}
 	}
 }
 

@@ -1,4 +1,4 @@
-# Store plugin protocol (1.12, draft)
+# Store plugin protocol (1.13, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -449,7 +449,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -480,10 +480,11 @@ that doesn't know it.
   `game.acceptTerms`, see [Terms](#terms-111)), and the DLC `kind` and copy `exclude` of `copies` (see [Family](#family-18)).
   1.12: the media and richer facts of `game.details` (`descriptionHtml`, `website`, `storeUrl`, `languages`,
   `controller`, `requirements` (`minimum`, `recommended`), `ageRating`, `tags`, `videos` (`url`, `thumbnail`,
-  `title`, `mime`); see [Media](#media-112)).
+  `title`, `mime`); see [Media](#media-112)). 1.13: the unread snapshot of chat (`chat.unreadCounts`, see
+  [Chat](#chat-19)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11 or 1.12 method.
+  1.10, 1.11, 1.12 or 1.13 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -514,7 +515,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `redeem` | 1.7 | `redeem.submit` | | yes |
 | `family` | 1.8 | `family.members` | `family.setPreferredCopy` | yes |
 | `settings` | 1.8 | `settings.schema`, `settings.apply` | | yes |
-| `chat` | 1.9 | `chat.history`, `chat.send`, `chat.markRead` | | yes |
+| `chat` | 1.9 | `chat.history`, `chat.send`, `chat.markRead` | `chat.unreadCounts` (1.13) | yes |
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
@@ -967,6 +968,7 @@ attachments, and searching the history are not part of it.
 chat.history { friendId, before?, limit } -> { messages: [Message], more }
 chat.send { friendId, text, clientId } -> { id, sentAt }   idempotent per clientId
 chat.markRead { friendId, upTo } -> {}                      upTo is a message id
+chat.unreadCounts {} -> { counts: [{ friendId, unread }] }  optional, 1.13: the unread snapshot
 
 chat.message { friendId, message: Message }   plugin -> Platypus: a new message from a friend (or sent by the user elsewhere)
 chat.typing { friendId }                       plugin -> Platypus: the friend is typing (optional, may be left out)
@@ -989,6 +991,12 @@ Message = { id, from: "self" | friendId, text, sentAt }
   JSON-RPC error answer is not retried: the message stays on screen as failed, and the user can send it again.
 - **Read state.** Platypus clears a conversation's unread count when the user opens it and calls `chat.markRead` with the
   newest message it shows. `chat.unread` is the store's own count and replaces Platypus's.
+- **Unread snapshot.** `chat.unreadCounts` answers the unread counts of every conversation at once, so the badges are
+  right after a restart instead of waiting for the next message. Platypus calls it with `{}` once a chat-capable plugin
+  is ready and logged in (at startup, and after a login), and applies each row like a `chat.unread` notification. It is
+  optional and 1.13: Platypus sends it only to a plugin that negotiated 1.13 or later, and a plugin without it answers
+  `-32601` (Platypus then asks no more for that run). A store that answers an error keeps today's behaviour: the badges
+  still come from the `chat.unread` notifications alone.
 - **Storage.** The store keeps the history. Platypus keeps the conversations the user opened in memory only, a bounded
   number of messages each, and nothing is written to disk. Message text never goes to the launcher's logs.
 - **Gating.** Platypus sends no chat method when `chat` is off for the plugin, when the negotiated protocol is older than

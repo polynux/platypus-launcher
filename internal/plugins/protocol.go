@@ -186,6 +186,12 @@ var CompatVersion = Version{Major: 1, Minor: 10}
 // Controller, Requirements, AgeRating, Tags, Videos).
 var MediaVersion = Version{Major: 1, Minor: 12}
 
+// UnreadCountsVersion is the first protocol revision with the unread snapshot
+// of chat (chat.unreadCounts, the optional method of the `chat` capability).
+// Platypus calls it only on a plugin that speaks it; an older plugin keeps
+// today's behaviour, with badges set by the chat.unread notifications alone.
+var UnreadCountsVersion = Version{Major: 1, Minor: 13}
+
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus
 // shows no badge for it. Plugins map their own store fields to these:
