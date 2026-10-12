@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
-import type { ActivityEvent, Achievement, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
+import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
+import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CopyPicker } from './CopyPicker';
@@ -32,6 +32,7 @@ import { isCustomized } from '../lib/customize';
 import { useInstallSize, type InstallSize } from '../lib/installSize';
 import type { GameSettingsTab } from '../lib/gameSettingsTabs';
 import { ErrorNotice } from './ErrorNotice';
+import { Input } from '@/components/ds/input';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -106,13 +107,15 @@ export function invalidateGameDetailsCache(id?: string) {
 
 function useDetails(game: Game) {
   const version = game.version ?? '';
+  const [nonce, setNonce] = useState(0);
   const [details, setDetails] = useState<GameDetails | null>(() => {
     const cached = detailsCache.get(game.id);
     return cached && cached.version === version ? cached.details : null;
   });
   const [error, setError] = useState<string | null>(null);
-  // Steam and store plugins both have metadata; sideloaded games have none.
-  const hasSource = game.source === 'steam' || isPluginGame(game);
+  // Steam, store plugins and sideloaded games (linked info, issue #38) all
+  // have metadata; an unlinked sideloaded game resolves to empty details.
+  const hasSource = game.source === 'steam' || game.source === 'custom' || isPluginGame(game);
   useEffect(() => {
     const v = game.version ?? '';
     const cached = detailsCache.get(game.id);
@@ -150,8 +153,12 @@ function useDetails(game: Game) {
     return () => { live = false; };
     // Refetch when the game (or its version) changes, not on settings edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id, game.version]);
-  return { details, error, loading: !details && !error && hasSource };
+  }, [game.id, game.version, nonce]);
+  const reload = () => {
+    invalidateGameDetailsCache(game.id);
+    setNonce((n) => n + 1);
+  };
+  return { details, error, loading: !details && !error && hasSource, reload };
 }
 
 export function GamePage(p: GamePageProps) {
@@ -165,7 +172,7 @@ export function GamePage(p: GamePageProps) {
   // The install-options dialog before the first install; an installed game's add-ons are a settings tab.
   const [optionsOpen, setOptionsOpen] = useState(false);
   const strip = useRef<HTMLDivElement>(null);
-  const { details, error, loading } = useDetails(game);
+  const { details, error, loading, reload } = useDetails(game);
   // ProtonDB, native, DRM and anti-cheat facts (internal/compat); null while loading.
   const { compat: info } = useCompat(game);
   const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
@@ -384,6 +391,7 @@ export function GamePage(p: GamePageProps) {
             error={error}
             compatUrls={{ protondb: info?.protondb?.url, wiki: info?.wiki?.url }}
             onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
+            onReload={reload}
           />
         </div>
 
@@ -592,8 +600,10 @@ function controllerLabel(c?: string): string | null {
 
 /** The About section: formatted description (collapsed + Show more), details
  *  grid, requirements tabs and links. Calm by default: secondary details live
- *  here, not in the hero. */
-function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }: {
+ *  here, not in the hero. Sideloaded games (issue #38) get a "Find info
+ *  online" action when nothing is linked, and an attribution + Unlink control
+ *  once linked. */
+function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, onReload }: {
   game: Game;
   details: GameDetails | null;
   loading: boolean;
@@ -601,27 +611,34 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }
   compatUrls: { protondb?: string; wiki?: string };
   /** Opens the store page in the embedded store view, when the plugin has one. */
   onOpenStore?: () => void;
+  /** The info link changed: details were evicted and refetched. */
+  onReload?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [reqTab, setReqTab] = useState<'minimum' | 'recommended'>('minimum');
   useEffect(() => { setExpanded(false); setReqTab('minimum'); }, [game.id]);
   const d = details as unknown as (GameDetails & {
     description_html?: string; website?: string; store_url?: string;
+    info_source?: string; info_source_name?: string;
     languages?: string[]; controller?: string;
     requirements?: { minimum?: string; recommended?: string } | null;
     age_rating?: string; tags?: string[]; videos?: unknown[];
   }) | null;
   const html = d?.description_html || '';
   const summary = details?.summary || '';
+  const isCustom = game.store === 'custom' || game.source === 'custom';
+  const linked = !!((d?.info_source || d?.info_source_name) && isCustom);
   const genres = [...(details?.genres ?? []), ...((d?.tags ?? []).filter((t) => !(details?.genres ?? []).includes(t)) ?? [])];
   const controller = controllerLabel(d?.controller);
   const rows: [string, string][] = [
     ...(details?.developers?.length ? [['Developer', details.developers.join(', ')] as [string, string]] : []),
     ...(details?.publishers?.length ? [['Publisher', details.publishers.join(', ')] as [string, string]] : []),
-    ...(details?.release_date
-      ? [['Release', details.release_date] as [string, string]]
-      : game.store === 'custom' && game.release_year
-        ? [['Release', String(game.release_year)] as [string, string]]
+    // The user's own year wins over the source's release date (issue #38):
+    // the source's title is never written anywhere.
+    ...(isCustom && game.release_year
+      ? [['Release', String(game.release_year)] as [string, string]]
+      : details?.release_date
+        ? [['Release', details.release_date] as [string, string]]
         : []),
     ...(genres.length ? [['Genres', genres.join(' · ')] as [string, string]] : []),
     ...((d?.languages?.length ?? 0) ? [['Languages', (d?.languages ?? []).join(', ')] as [string, string]] : []),
@@ -635,6 +652,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }
     ...(compatUrls.protondb ? [['ProtonDB', compatUrls.protondb] as [string, string]] : []),
     ...(compatUrls.wiki ? [['PCGamingWiki', compatUrls.wiki] as [string, string]] : []),
   ];
+  const infoName = d?.info_source_name || infoSourceLabel(d?.info_source);
   return (
     <Panel className="bg-white/[0.05]">
       <h2 className="mb-2 text-[15px] font-bold">About</h2>
@@ -656,6 +674,9 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }
         <p className="text-[13px] leading-relaxed text-white/70">{summary}</p>
       ) : (
         <p className="text-[13px] text-white/70">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
+      )}
+      {isCustom && !linked && !loading && (
+        <InfoFinder game={game} onLinked={() => onReload?.()} />
       )}
       {rows.length > 0 && (
         <dl data-testid="details-grid" className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-white/[0.06] pt-3">
@@ -705,7 +726,153 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore }
           )}
         </div>
       )}
+      {linked && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-3 font-mono text-[12px] text-white/55" data-testid="info-attribution">
+          <span>
+            Info from {d?.store_url ? (
+              <ExternalLink href={d.store_url} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
+                {infoName} ↗
+              </ExternalLink>
+            ) : infoName}
+          </span>
+          <InfoUnlink game={game} onUnlinked={() => onReload?.()} />
+        </div>
+      )}
     </Panel>
+  );
+}
+
+/** The small source label of one info candidate row. */
+function infoSourceLabel(source?: string): string {
+  if (source === 'gog') return 'GOG';
+  if (source === 'lutris') return 'Lutris';
+  if (source === 'steam') return 'Steam';
+  return '';
+}
+
+/** One candidate's identity across sources. */
+function infoCandidateKey(c: ArtCandidate): string {
+  return `${c.source || 'steam'}:${c.id || c.app_id}`;
+}
+
+/** The small id detail of one candidate row. */
+function infoCandidateDetail(c: ArtCandidate): string {
+  if ((c.source || 'steam') === 'steam') return `Steam app ${c.app_id || c.id}`;
+  return c.id;
+}
+
+/** The Unlink control next to a linked game's attribution. */
+function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const unlink = () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.linkGameInfo(game.id, '', '')).then(
+      () => { setBusy(false); onUnlinked(); },
+      (e) => { setBusy(false); setError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Button variant="ghost" size="none" onClick={unlink} disabled={busy} data-testid="info-unlink" className="rounded px-0 underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/85">
+        {busy ? 'Unlinking…' : 'Unlink'}
+      </Button>
+      {error && <span className="text-red-300/80">{error}</span>}
+    </span>
+  );
+}
+
+/** Find a sideloaded game's info online (issue #38): the same candidate
+ *  search as Find art online (SearchArtOnline), the same list (source label,
+ *  year), and a pick links via LinkGameInfo. */
+function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(game.title);
+  const [candidates, setCandidates] = useState<ArtCandidate[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const search = () => {
+    const q = query.trim();
+    if (!q || searching || linking != null) return;
+    setSearching(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.searchArtOnline(q)).then(
+      (cs) => { setSearching(false); setCandidates(cs); },
+      (e) => { setSearching(false); setError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+
+  const link = (c: ArtCandidate) => {
+    if (searching || linking != null) return;
+    const source = c.source || 'steam';
+    const id = source === 'steam' ? (c.id || String(c.app_id)) : c.id;
+    setLinking(infoCandidateKey(c));
+    setError(null);
+    Effect.runPromise(LauncherApi.linkGameInfo(game.id, source, id)).then(
+      () => { setLinking(null); onLinked(); },
+      (e) => { setLinking(null); setError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <Button variant="neutral" size="sm" onClick={() => setOpen(true)} data-testid="find-info-online">
+          <Search className="h-3.5 w-3.5" /> Find info online
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border-t border-white/[0.06] pt-3">
+      <MonoLabel className="mb-1.5">find info online</MonoLabel>
+      <p className="mb-2 text-[12px] leading-relaxed text-white/55">
+        Search Steam, GOG and Lutris (IGDB) for {game.title}'s description and details.
+        Linking never changes your title or year.
+      </p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => { e.preventDefault(); search(); }}
+      >
+        <Input
+          aria-label="Search for info online"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={game.title}
+          className="min-w-0 max-w-xs flex-1"
+        />
+        <Button type="submit" variant="neutral" size="sm" disabled={!query.trim() || searching || linking != null}>
+          <Search className="h-3.5 w-3.5" /> {searching ? 'Searching…' : 'Search'}
+        </Button>
+      </form>
+      {candidates != null && candidates.length === 0 && (
+        <p className="mt-2 text-[12px] text-white/55">No info found for that title.</p>
+      )}
+      {candidates != null && candidates.length > 0 && (
+        <ul className="mt-2 space-y-2">
+          {candidates.map((c) => (
+            <li key={infoCandidateKey(c)} className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/[0.06]">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12.5px] font-semibold text-white/90">{c.name}</div>
+                <div className="font-mono text-hint text-white/55">
+                  <span data-testid="candidate-source">{c.source === 'gog' ? 'GOG' : c.source === 'lutris' ? 'Lutris' : 'Steam'}</span>
+                  {c.year ? ` · ${c.year}` : ''} · {infoCandidateDetail(c)}
+                </div>
+              </div>
+              <Button variant="primary" size="sm" disabled={searching || linking != null} onClick={() => link(c)}>
+                {linking === infoCandidateKey(c) ? 'Linking…' : 'Link'}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <ErrorNotice message={error} fallback="Platypus couldn't link that info." />}
+    </div>
   );
 }
 

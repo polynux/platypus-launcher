@@ -99,6 +99,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
       <ArtworkSetting onNotify={onNotify} />
 
+      <GameInfoSetting onNotify={onNotify} />
+
       <CloudSavesDefaults plugins={plugins} />
     </div>
   );
@@ -179,6 +181,45 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       </div>
       <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
         <p>Artwork: Steam store search and CDN images (store.steampowered.com).</p>
+      </div>
+    </section>
+  );
+}
+/** "Find game info online" for sideloaded games (issue #38): the on-demand
+ *  description and details lookup. Off, nothing goes out: the game page keeps
+ *  what it cached before and no new fetch runs. */
+export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.game_info_online ?? true))
+      .catch(() => setOn(true));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setGameInfoOnline(next))
+      .then((s) => {
+        setOn(s.game_info_online ?? next);
+        onNotify(next ? 'Sideloaded games will look up their info online' : 'Game info stays offline');
+      })
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <section className={SECTION}>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">Sideloaded game info lookup</h2>
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+            Find descriptions and details online for games you added by hand, from Steam, GOG and Lutris (IGDB).
+            Off, Platypus keeps what it fetched before and asks nothing new.
+          </p>
+        </div>
+        <Switch aria-label="Find game info online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+      </div>
+      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
+        <p>Game info: Steam store details, GOG product descriptions and Lutris (IGDB) summaries.</p>
       </div>
     </section>
   );
