@@ -1,10 +1,13 @@
+// i18n: converted
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CopyComparison, Game, GameCopy } from '../types';
 import { Modal } from './Modal';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Switch } from '@/components/ds/switch';
-import { compareRows, copyStatus } from '../lib/family';
+import { compareRows } from '../lib/family';
+import { copyStatusLabel } from '../lib/copyLabels';
 import { cx } from './ui';
 
 export interface CopyCompareDialogProps {
@@ -18,6 +21,7 @@ export interface CopyCompareDialogProps {
  *  column per copy, the baseline first. "Differences only" is on and soundtracks
  *  are hidden by default, so the table stays short at 1024×640. */
 export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompareDialogProps) {
+  const { t } = useTranslation(['gameOps', 'common']);
   const [differencesOnly, setDifferencesOnly] = useState(true);
   const [soundtracks, setSoundtracks] = useState(false);
 
@@ -28,31 +32,31 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
   }, [copies, compare.baseline]);
   const rows = useMemo(() => compareRows(ordered, { differencesOnly, soundtracks }), [ordered, differencesOnly, soundtracks]);
   const baseline = ordered[0];
-  const why = game.preferred_copy === compare.baseline ? 'preferred' : 'most add-ons';
+  const why = game.preferred_copy === compare.baseline ? t('gameOps:compare.whyPreferred') : t('gameOps:compare.whyMost');
 
   return (
-    <Modal label={`Compare copies of ${game.title}`} onClose={onClose} size="lg">
-      <h2 className="text-[20px] font-extrabold tracking-tight">Compare copies</h2>
+    <Modal label={t('gameOps:compare.dialogLabel', { title: game.title })} onClose={onClose} size="lg">
+      <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:compare.title')}</h2>
       <p className="mt-1 text-[12.5px] text-white/70">
-        {game.title} · compared with {baseline.owner_name}'s copy ({why})
+        {t('gameOps:compare.subtitle', { title: game.title, name: baseline.owner_name, why })}
       </p>
 
       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-hint text-white/80">
         <label className="flex items-center gap-2">
-          <Switch aria-label="Differences only" checked={differencesOnly} onCheckedChange={setDifferencesOnly} />
-          Differences only
+          <Switch aria-label={t('gameOps:compare.diffsOnly')} checked={differencesOnly} onCheckedChange={setDifferencesOnly} />
+          {t('gameOps:compare.diffsOnly')}
         </label>
         <label className="flex items-center gap-2">
-          <Switch aria-label="Show soundtracks" checked={soundtracks} onCheckedChange={setSoundtracks} />
-          Show soundtracks
+          <Switch aria-label={t('gameOps:compare.soundtracks')} checked={soundtracks} onCheckedChange={setSoundtracks} />
+          {t('gameOps:compare.soundtracks')}
         </label>
       </div>
 
       <div className="mt-4 max-h-[340px] overflow-auto rounded-2xl bg-white/[0.04]">
-        <table className="w-full border-collapse font-mono text-hint" aria-label="Add-ons by copy">
+        <table className="w-full border-collapse font-mono text-hint" aria-label={t('gameOps:compare.table')}>
           <thead className="sticky top-0 bg-[#191410]">
             <tr className="text-left text-white/55">
-              <th scope="col" className="px-3 py-2 font-normal">Add-on</th>
+              <th scope="col" className="px-3 py-2 font-normal">{t('gameOps:compare.addon')}</th>
               {ordered.map((c) => (
                 <th key={c.owner_id} scope="col" className="px-3 py-2 align-top font-normal">
                   <span className={cx('block', c.owner_id === baseline.owner_id ? 'text-amber-200' : 'text-white/85')}>{c.owner_name}</span>
@@ -72,7 +76,7 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
                   const has = row.owners.includes(c.owner_id);
                   return (
                     <td key={c.owner_id} className="px-3 py-2 text-center">
-                      <span aria-label={has ? `${c.owner_name} has it` : `${c.owner_name} doesn't have it`} className={has ? 'text-emerald-300' : 'text-white/55'}>
+                      <span aria-label={has ? t('gameOps:compare.hasIt', { name: c.owner_name }) : t('gameOps:compare.lacksIt', { name: c.owner_name })} className={has ? 'text-emerald-300' : 'text-white/55'}>
                         {has ? '✓' : '—'}
                       </span>
                     </td>
@@ -84,7 +88,7 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
         </table>
         {rows.length === 0 && (
           <p className="px-4 py-6 text-center text-[12.5px] text-white/70">
-            {!differencesOnly ? 'No add-ons to show.' : soundtracks ? 'The copies have the same add-ons.' : 'No differences in the add-ons. Show soundtracks to see theirs.'}
+            {!differencesOnly ? t('gameOps:compare.emptyBare') : soundtracks ? t('gameOps:compare.emptySame') : t('gameOps:compare.emptySoundtracks')}
           </p>
         )}
       </div>
@@ -96,7 +100,7 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
       )}
 
       <div className="mt-6 flex justify-end">
-        <Button variant="neutral" size="sm" onClick={onClose}>Close</Button>
+        <Button variant="neutral" size="sm" onClick={onClose}>{t('common:close')}</Button>
       </div>
     </Modal>
   );
@@ -104,7 +108,8 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
 
 /** A copy's state as the table's header shows it: in use or unavailable. */
 function CopyFlags({ copy }: { copy: GameCopy }) {
-  const status = copyStatus(copy);
+  const { t } = useTranslation('gameOps');
+  const status = copyStatusLabel(t, copy);
   if (!status) return null;
   return <Badge variant="neutral" className="mt-1">{status}</Badge>;
 }

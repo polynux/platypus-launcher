@@ -59,6 +59,9 @@ describe('gamescope resolution and rate choice', () => {
 });
 
 import { envKeyError, envToRows, rowsToEnv } from './settings';
+import i18n from './i18n';
+
+const t = i18n.t.bind(i18n);
 
 describe('env rows', () => {
   const rows = (...kv: [string, string][]) => kv.map(([key, value], id) => ({ id, key, value }));
@@ -68,17 +71,17 @@ describe('env rows', () => {
   });
   it('flags invalid keys and excludes them from the env', () => {
     const r = rows(['OK', '1'], ['1BAD', '2'], ['has space', '3'], ['A-B', '4'], ['', 'ignored']);
-    expect(envKeyError(r, 0)).toBeNull();
-    expect(envKeyError(r, 1)).toBeTruthy();
-    expect(envKeyError(r, 2)).toBeTruthy();
-    expect(envKeyError(r, 3)).toBeTruthy();
-    expect(envKeyError(r, 4)).toBeNull();
+    expect(envKeyError(r, 0, t)).toBeNull();
+    expect(envKeyError(r, 1, t)).toBeTruthy();
+    expect(envKeyError(r, 2, t)).toBeTruthy();
+    expect(envKeyError(r, 3, t)).toBeTruthy();
+    expect(envKeyError(r, 4, t)).toBeNull();
     expect(rowsToEnv(r)).toEqual({ OK: '1' });
   });
   it('flags a duplicate on the later row and the last value wins', () => {
     const r = rows(['A', '1'], ['A', '2']);
-    expect(envKeyError(r, 0)).toBeNull();
-    expect(envKeyError(r, 1)).toMatch(/Duplicate/);
+    expect(envKeyError(r, 0, t)).toBeNull();
+    expect(envKeyError(r, 1, t)).toMatch(/Duplicate/);
     expect(rowsToEnv(r)).toEqual({ A: '2' });
   });
 });

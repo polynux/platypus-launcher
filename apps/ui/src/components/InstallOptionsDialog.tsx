@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { ExternalLink, TriangleAlert } from 'lucide-react';
 import type { Game, InstallChoices, OptionGroup, StorePlugin } from '../types';
 import { ModalOrInline } from './Modal';
@@ -11,6 +13,7 @@ import { Switch } from '@/components/ds/switch';
 import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { openExternal } from '../lib/external';
+import { formatList } from '../lib/format';
 import { formatBytes } from '../lib/games';
 import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
@@ -35,6 +38,7 @@ export interface InstallOptionsDialogProps {
  *  change it on an installed game. The store lists the options; Platypus remembers
  *  the choices and checks them again when the install is queued. */
 export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify, embedded }: InstallOptionsDialogProps) {
+  const { t } = useTranslation(['gameOps', 'common']);
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [choices, setChoices] = useState<InstallChoices>({});
   // What the choices were when the dialog opened: an update compares with it.
@@ -99,7 +103,8 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
         await Effect.runPromise(folder ? LauncherApi.installGameWithOptionsTo(game, choices, folder) : LauncherApi.installGameWithOptions(game, choices));
       }
       else await Effect.runPromise(LauncherApi.updateGameWithOptions(game, choices));
-      onNotify(`${installing ? 'Install' : 'Update'} of ${game.title} queued`, 'busy');
+      if (installing) onNotify(t('gameOps:options.queuedInstall', { title: game.title }), 'busy');
+      else onNotify(t('gameOps:options.queuedUpdate', { title: game.title }), 'busy');
       onChanged();
       onClose();
     } catch (e) {
@@ -110,24 +115,24 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   };
 
   return (
-    <ModalOrInline embedded={embedded} label={`Install options for ${game.title}`} onClose={onClose} size="md" dismissable={!busy}>
+    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy}>
       {!embedded && (
         <>
-          <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? 'Install options' : 'Add-ons & options'}</h2>
+          <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? t('gameOps:options.installTitle') : t('gameOps:options.updateTitle')}</h2>
           <p className="mt-1 text-[12.5px] text-white/70">
             {game.title} · {plugin.name}
           </p>
         </>
       )}
 
-      {!groups && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">loading options…</p>}
+      {!groups && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:options.loading')}</p>}
       {error && (
-        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback="Platypus couldn't read this game's install options." />
+        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback={t('gameOps:options.loadError')} />
       )}
 
       {groups && groups.length === 0 && (
         <p className="mt-5 rounded-xl bg-white/[0.04] px-4 py-3 text-[12.5px] text-white/60">
-          {plugin.name} has nothing to choose for {game.title}.
+          {t('gameOps:options.empty', { plugin: plugin.name, title: game.title })}
         </p>
       )}
 
@@ -141,22 +146,22 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       {groups && groups.length > 0 && (
         <div className="mt-6 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-hint">
           <div className="flex justify-between gap-4">
-            <span className="text-white/55">Add-ons & packs</span>
-            <span className="text-white/85" data-testid="added-size">{added > 0 ? `+${formatBytes(added)}` : '—'}</span>
+            <span className="text-white/55">{t('gameOps:options.addonsLabel')}</span>
+            <span className="text-white/85" data-testid="added-size">{added > 0 ? t('gameOps:options.addedSome', { size: formatBytes(added) }) : t('gameOps:options.addedNone')}</span>
           </div>
           <div className="mt-1.5 flex justify-between gap-4">
-            <span className="text-white/55">Total size</span>
-            <span className="text-white/85" data-testid="total-size">{total != null ? formatBytes(total) : 'unknown'}</span>
+            <span className="text-white/55">{t('gameOps:options.totalLabel')}</span>
+            <span className="text-white/85" data-testid="total-size">{total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}</span>
           </div>
           {room != null && room >= 0 && (
             <div className="mt-1.5 flex justify-between gap-4">
-              <span className="text-white/55">Free space</span>
+              <span className="text-white/55">{t('gameOps:options.freeLabel')}</span>
               <span className={cx(short ? 'text-red-300' : 'text-white/85')} data-testid="free-space">{formatBytes(room)}</span>
             </div>
           )}
           {short && (
             <p role="alert" className="mt-2 flex items-center gap-1.5 text-red-300">
-              <TriangleAlert className="h-3.5 w-3.5" /> Not enough space for these options.
+              <TriangleAlert className="h-3.5 w-3.5" /> {t('gameOps:options.short')}
             </p>
           )}
         </div>
@@ -177,14 +182,14 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       {removed.length > 0 && (
         <p role="alert" className="mt-5 flex items-start gap-1.5 text-[12.5px] text-amber-200">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>Applying removes {removed.join(', ')} from {game.title}. Apply again to confirm.</span>
+          <span>{t('gameOps:options.removal', { list: formatList(removed), title: game.title })}</span>
         </p>
       )}
 
       <div className="mt-6 flex justify-end gap-2.5">
-        <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button>
         <Button variant="primary" size="sm" disabled={busy || !groups || short || unchanged} onClick={apply}>
-          {installing ? 'Install' : 'Apply'}
+          {installing ? t('gameOps:options.install') : t('gameOps:options.apply')}
         </Button>
       </div>
     </ModalOrInline>
@@ -197,6 +202,7 @@ function OptionGroupBody({ group, choices, onChange }: {
   choices: InstallChoices;
   onChange: (next: InstallChoices) => void;
 }) {
+  const { t } = useTranslation('gameOps');
   const values = group.values ?? [];
   if (group.kind === 'bool') {
     const on = choices[group.id] === true;
@@ -237,12 +243,12 @@ function OptionGroupBody({ group, choices, onChange }: {
               className="h-3.5 w-3.5 accent-amber-300"
             />
             <span className="min-w-0 flex-1 truncate">{v.label ?? v.id}</span>
-            {v.installed && <Badge variant="ok">installed</Badge>}
-            {!v.owned && group.dlc && <Badge variant="neutral">not owned</Badge>}
+            {v.installed && <Badge variant="ok">{t('gameOps:options.installedBadge')}</Badge>}
+            {!v.owned && group.dlc && <Badge variant="neutral">{t('gameOps:options.notOwned')}</Badge>}
             {v.sizeBytes != null && v.sizeBytes > 0 && <span className="font-mono text-hint text-white/55">{formatBytes(v.sizeBytes)}</span>}
             {!v.owned && group.dlc && v.storeUrl && (
               <Button variant="link" size="sm" onClick={() => openExternal(v.storeUrl)} className="gap-1">
-                Store <ExternalLink className="h-3 w-3" />
+                {t('gameOps:options.store')} <ExternalLink className="h-3 w-3" />
               </Button>
             )}
           </li>

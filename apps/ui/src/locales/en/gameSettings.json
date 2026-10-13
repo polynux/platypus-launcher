@@ -1,0 +1,251 @@
+{
+  "modal": {
+    "title": "Launcher settings for {{title}}",
+    "heading": "Launcher settings"
+  },
+  "advanced": {
+    "label": "Advanced",
+    "set_one": "{{count}} set",
+    "set_other": "{{count}} set"
+  },
+  "steamNotice": "Steam games start through the Steam client, which picks the Proton version and ignores Platypus's env vars. To apply these settings, paste this into Steam → Properties → Launch options:",
+  "steamCopy": "Copy",
+  "groups": {
+    "runner": "runner",
+    "graphics": "graphics",
+    "launch": "launch"
+  },
+  "runner": {
+    "aria": "Runner",
+    "nativeNote": "This game ships a native Linux build from the store. It runs directly, without Proton — runner, DX layer and Proton flags don't apply.",
+    "description": "The Proton or Wine build that runs this Windows game.",
+    "autoNamed": "Automatic (uses {{name}})",
+    "autoNone": "Automatic (no runner installed)",
+    "missing": "{{id}} (missing)",
+    "savedMissing": "Saved runner is not installed. Pick another or the launch falls back to an error.",
+    "detail": "{{kind}} · {{path}}",
+    "autoDetail": "newest GE-Proton, then Experimental",
+    "none": "no runner installed",
+    "noneInstalled": "No Proton or Wine runners detected."
+  },
+  "sync": {
+    "kicker": "sync",
+    "label": "Sync",
+    "description": "How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.",
+    "titles": {
+      "fsync": "Proton default (fsync when the kernel supports it)",
+      "esync": "PROTON_NO_FSYNC=1",
+      "ntsync": "PROTON_USE_NTSYNC=1 (needs the ntsync kernel module)",
+      "off": "PROTON_NO_ESYNC=1 PROTON_NO_FSYNC=1"
+    }
+  },
+  "protonFlags": {
+    "kicker": "proton flags",
+    "description": "Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.",
+    "descs": {
+      "PROTON_ENABLE_NVAPI": "Expose NVAPI to the game (DLSS, Reflex on NVIDIA)",
+      "PROTON_HIDE_NVIDIA_GPU": "Report NVIDIA GPUs as AMD to work around vendor checks",
+      "PROTON_ENABLE_WAYLAND": "Use the native Wayland driver (Proton 10+/GE)",
+      "PROTON_NO_D3D11": "Disable D3D11 so the game falls back to another API",
+      "PROTON_NO_D3D12": "Disable D3D12 so the game falls back to D3D11",
+      "PROTON_FORCE_LARGE_ADDRESS_AWARE": "Let 32-bit games use more than 2 GB of RAM",
+      "PROTON_OLD_GL_STRING": "Shorten the GL extension string for old games",
+      "PROTON_LOG": "Write a debug log to $HOME/steam-<appid>.log"
+    }
+  },
+  "winetricks": {
+    "kicker": "winetricks",
+    "note": "· saved, not applied yet"
+  },
+  "graphics": {
+    "dxKicker": "dx layer",
+    "dxLabel": "DX layer",
+    "dxDescription": "DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.",
+    "dxLayers": {
+      "dxvk": "DXVK (bundled)",
+      "wined3d": "WineD3D"
+    },
+    "dxTitles": {
+      "dxvk": "The DXVK build shipped with the selected runner",
+      "wined3d": "PROTON_USE_WINED3D=1"
+    },
+    "upscalerKicker": "upscaler",
+    "upscalerLabel": "Upscaler",
+    "upscalers": {
+      "native": "native",
+      "fsr1": "FSR 1"
+    },
+    "upscalerTitles": {
+      "native": "No upscaling",
+      "fsr1": "WINE_FULLSCREEN_FSR=1 (GE-Proton only)"
+    },
+    "hudKicker": "mangohud",
+    "hudLabel": "MangoHud",
+    "huds": {
+      "off": "off",
+      "fps only": "fps only",
+      "minimal": "minimal",
+      "full": "full"
+    },
+    "hudTitles": {
+      "off": "MangoHud disabled",
+      "fps only": "MANGOHUD_CONFIG=preset=1",
+      "minimal": "MANGOHUD_CONFIG=preset=2",
+      "full": "MANGOHUD_CONFIG=preset=4"
+    },
+    "shaderKicker": "dxvk shader cache",
+    "shaderLabel": "Shader cache",
+    "shaderOn": "on",
+    "shaderOff": "off",
+    "shaderOffTitle": "DXVK_STATE_CACHE=0",
+    "shaderDescription": "DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0."
+  },
+  "launch": {
+    "pipelineKicker": "pipeline",
+    "pipelineDescription": "Each switch wraps the launch command in one more program.",
+    "gamemode": "gamemode",
+    "gamemodeHint": "Wrap the launch in gamemoderun",
+    "gamescope": "gamescope",
+    "gamescopeHint": "Run the game inside a gamescope session",
+    "eac": "eac runtime",
+    "eacHint": "For games that use EasyAntiCheat",
+    "battlEye": "battleye runtime",
+    "battlEyeHint": "For games that use BattlEye",
+    "resolutionKicker": "resolution",
+    "resolutionAria": "Gamescope resolution",
+    "gameDefault": "Game default",
+    "thisDisplay": "{{w}}×{{h}} (this display)",
+    "custom": "Custom…",
+    "customNamed": "Custom… ({{w}}×{{h}})",
+    "widthAria": "gamescope width",
+    "widthPlaceholder": "width",
+    "heightAria": "gamescope height",
+    "heightPlaceholder": "height",
+    "rateKicker": "frame rate",
+    "rateAria": "Gamescope frame rate",
+    "rateHz": "{{r}} Hz",
+    "customRateNamed": "Custom… ({{r}} Hz)",
+    "refreshAria": "gamescope refresh",
+    "refreshPlaceholder": "Hz",
+    "filterKicker": "upscale filter",
+    "filterLabel": "Gamescope upscale filter",
+    "extraGsKicker": "extra gamescope args",
+    "extraGsAria": "gamescope args",
+    "extraGsPlaceholder": "--mangoapp",
+    "argsKicker": "launch arguments",
+    "argsPlaceholder": "-novid -fullscreen",
+    "workdirKicker": "working directory",
+    "optionalNote": "· optional",
+    "workdirAria": "working directory",
+    "workdirPlaceholder": "The executable's folder",
+    "browse": "Browse…",
+    "browseWorkdirTitle": "Choose the working directory",
+    "workdirHint": "Where the game runs. Empty means the executable's folder.",
+    "prefixKicker": "wine prefix",
+    "prefixAria": "wine prefix",
+    "prefixPlaceholder": "The default prefix folder",
+    "browsePrefixTitle": "Choose the Wine prefix folder",
+    "prefixCustom": "This prefix, for this game only. Empty falls back to the default prefix folder.",
+    "prefixDefault": "Empty: this game uses a folder of its own in the default prefix folder. The folder is created on demand.",
+    "envKicker": "extra env vars",
+    "varNameAria": "Variable name",
+    "varNamePlaceholder": "KEY",
+    "varValueAria": "Value of {{key}}",
+    "varFallback": "variable",
+    "varValuePlaceholder": "value",
+    "removeVar": "Remove {{key}}",
+    "badKey": "Letters, digits and _ only; cannot start with a digit",
+    "duplicateKey": "Duplicate key, this value wins",
+    "notSaved": "(not saved)",
+    "addVar": "+ Add variable"
+  },
+  "gsToggles": {
+    "fullscreen": "fullscreen",
+    "borderless": "borderless",
+    "grabCursor": "force grab cursor",
+    "hdr": "hdr",
+    "vrr": "adaptive sync (vrr)",
+    "wayland": "expose wayland"
+  },
+  "gsToggleTitles": {
+    "fullscreen": "-f: make the window fullscreen",
+    "borderless": "-b: make the window borderless",
+    "grabCursor": "--force-grab-cursor: always use relative mouse mode",
+    "hdr": "--hdr-enabled: enable HDR output (needs the Gamescope WSI layer)",
+    "vrr": "--adaptive-sync: variable refresh rate if available",
+    "wayland": "--expose-wayland: support Wayland clients via xdg-shell"
+  },
+  "gsFilters": {
+    "default": "default",
+    "linear": "linear",
+    "nearest": "nearest",
+    "fsr": "fsr",
+    "nis": "nis",
+    "pixel": "pixel"
+  },
+  "preview": {
+    "label": "$ preview",
+    "copyLabel": "Copy command"
+  },
+  "general": {
+    "save": "Save config",
+    "unsaved": "Unsaved changes. Save or Cancel.",
+    "savedNote": "saved for next launch · prefix: {{prefix}}",
+    "defaultSuffix": " (default)"
+  },
+  "settingsModal": {
+    "title": "Settings for {{title}}",
+    "heading": "Game settings",
+    "sections": "Game settings sections"
+  },
+  "tabs": {
+    "general": "General",
+    "cloud": "Cloud saves",
+    "versions": "Versions",
+    "options": "Add-ons & options",
+    "plugin": "Plugin settings",
+    "tweaks": "Suggested tweaks",
+    "customization": "Customization",
+    "maintenance": "Maintenance"
+  },
+  "year": {
+    "kicker": "release year",
+    "aria": "Release year",
+    "placeholder": "Unknown",
+    "save": "Save year",
+    "clear": "Clear",
+    "saveError": "Platypus couldn't save the release year."
+  },
+  "tweaks": {
+    "title": "Suggested tweaks",
+    "intro": "Based on this machine, not the game's rating: a platinum game can still need them on your GPU.",
+    "steamNote": "Steam applies these only through the game's <lo>launch options</lo>.",
+    "recommended": "recommended",
+    "troubleshoot": "if something breaks",
+    "applied": "Applied \"{{title}}\"",
+    "removed": "Removed \"{{title}}\""
+  },
+  "maintenance": {
+    "busy": "{{title}} is busy; its files can't be changed until this finishes.",
+    "removeTitle": "Remove from library",
+    "removeRunning": "Stop {{title}} before removing it from the library.",
+    "removeText": "Removes {{title}} from Platypus. {{stay}}",
+    "removeConfirm": "Remove {{title}} from Platypus? {{stay}}",
+    "stayWithDir": "Its files stay in {{dir}}.",
+    "stayBare": "Its files stay on disk.",
+    "verifyTitle": "Verify files",
+    "verifyText": "Checks {{title}}'s files against {{plugin}}. A check only reports; repairing asks first.",
+    "moveTitle": "Move",
+    "moveText": "Moves the game's folder to another folder or disk. Platypus checks the room first and keeps the old copy until the new one is checked.",
+    "moveAction": "Move…",
+    "uninstallTitle": "Uninstall",
+    "uninstallText": "Removes the game's files from this computer. Your saves in the cloud stay where they are.",
+    "uninstallConfirmFull": "Delete {{title}} — {{size}} in {{dir}}? Your cloud saves stay in the cloud.",
+    "uninstallConfirmSize": "Delete {{title}} — {{size}}? Your cloud saves stay in the cloud.",
+    "uninstallConfirmDir": "Delete {{title}} in {{dir}}? Your cloud saves stay in the cloud.",
+    "uninstallConfirmBare": "Delete {{title}}? Your cloud saves stay in the cloud.",
+    "deleteFiles": "Delete game files",
+    "jobFailed": "The {{kind}} didn't finish.",
+    "moving": "Moving {{title}} — see Downloads"
+  }
+}

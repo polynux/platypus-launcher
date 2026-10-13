@@ -1,5 +1,8 @@
+// i18n: converted
 import React, { useCallback, useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Check, ExternalLink, KeyRound, Lock, Pin, TriangleAlert } from 'lucide-react';
 import type { Game, StorePlugin, VersionBuild, VersionChannel, VersionInfo } from '../types';
 import { ModalOrInline } from './Modal';
@@ -11,12 +14,36 @@ import { LauncherApi } from '../effect/runtime';
 import { ensureTerms } from '../lib/termsRequest';
 import { openExternal } from '../lib/external';
 import {
-  VERSION_WARNING, buildTitle, channelLocked, choiceIsEmpty, isCurrent, lastInstall, pinLabel, pinOf, samePin, shortDate, sourceLabel, targetOf,
+  buildTitle, channelLocked, choiceIsEmpty, isCurrent, lastInstall, pinOf, samePin, shortDate, targetOf,
   type VersionChoice,
 } from '../lib/versions';
+import type { VersionPin } from '../types';
 import { ErrorNotice } from './ErrorNotice';
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Reloading the channel list after an unlock: sync or async. */
+type ReloadChannels = Promise<void> | void;
+
+/** The pinned version as the dialog names it ("channel Beta", "build 2.0.0").
+ *  The names themselves come from the plugin; only the kind word translates.
+ *  (lib/versions' pinLabel stays as the game page's English source until the
+ *  game-area conversion owns it.) */
+function pinText(t: TFunction, pin: VersionPin, info?: Pick<VersionInfo, 'channels' | 'builds'>): string {
+  if (pin.kind === 'channel') {
+    const c = info?.channels.find((x) => x.id === pin.id);
+    return t('gameOps:versions.pinChannel', { name: c?.name ?? pin.id });
+  }
+  const b = info?.builds.find((x) => x.id === pin.id);
+  return t('gameOps:versions.pinBuild', { name: b?.name ?? pin.id });
+}
+
+/** Where a build comes from, as the builds list names it. */
+function sourceText(t: TFunction, s: string | undefined): string {
+  return s === 'archive'
+    ? t('gameOps:versions.sourceArchive')
+    : s === 'manual' ? t('gameOps:versions.sourceManual') : t('gameOps:versions.sourceStore');
+}
 
 export interface VersionsDialogProps {
   game: Game;
@@ -33,6 +60,7 @@ export interface VersionsDialogProps {
  *  or return to the latest. The plugin supplies channels, builds and the typed
  *  input; Platypus adds the install history and the pin. */
 export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, embedded }: VersionsDialogProps) {
+  const { t } = useTranslation(['gameOps', 'common']);
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [choice, setChoice] = useState<VersionChoice | null>(null);
@@ -84,7 +112,8 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           if (pinMoves) await putPinBack(before);
           throw e;
         }
-        onNotify(`${installed ? 'Switch of' : 'Install of'} ${game.title} queued`, 'busy');
+        if (installed) onNotify(t('gameOps:versions.switchQueued', { title: game.title }), 'busy');
+        else onNotify(t('gameOps:versions.installQueued', { title: game.title }), 'busy');
       }
       onChanged();
       onClose();
@@ -102,7 +131,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       if (previous) await Effect.runPromise(LauncherApi.pinGameVersion(game, previous));
       else await Effect.runPromise(LauncherApi.unpinGameVersion(game.id));
     } catch (e) {
-      onNotify(`The pin couldn't be put back: ${errMsg(e)}`, 'err');
+      onNotify(t('gameOps:versions.pinRestoreError', { error: errMsg(e) }), 'err');
     }
   };
 
@@ -110,7 +139,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
     setBusy(true);
     try {
       await Effect.runPromise(LauncherApi.unpinGameVersion(game.id));
-      onNotify(`${game.title} follows the latest version again`);
+      onNotify(t('gameOps:versions.followsLatest', { title: game.title }));
       onChanged();
       await load();
     } catch (e) {
@@ -125,7 +154,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
     try {
       if (!(await ensureTerms(game))) return;
       await Effect.runPromise(LauncherApi.updateGame(game));
-      onNotify(`Update of ${game.title} queued`, 'busy');
+      onNotify(t('gameOps:versions.updateQueued', { title: game.title }), 'busy');
       onChanged();
       onClose();
     } catch (e) {
@@ -138,19 +167,19 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
   const last = info ? lastInstall(info.ledger) : undefined;
 
   return (
-    <ModalOrInline embedded={embedded} label={`Version of ${game.title}`} onClose={onClose} size="lg" dismissable={!busy}>
+    <ModalOrInline embedded={embedded} label={t('gameOps:versions.dialogLabel', { title: game.title })} onClose={onClose} size="lg" dismissable={!busy}>
       {!embedded && (
         <>
-          <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? 'Version' : 'Choose a version'}</h2>
+          <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? t('gameOps:versions.heading') : t('gameOps:versions.installHeading')}</h2>
           <p className="mt-1 text-[12.5px] text-white/70">
             {game.title} · {plugin.name}
           </p>
         </>
       )}
 
-      {!info && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">loading versions…</p>}
+      {!info && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:versions.loading')}</p>}
       {error && (
-        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback="Platypus couldn't list this game's versions." />
+        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback={t('gameOps:versions.loadError')} />
       )}
 
       {info && (
@@ -158,13 +187,13 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           <dl className="mt-4 space-y-2 font-mono text-hint">
             {installed && (
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <dt className="text-white/55">Installed</dt>
+                <dt className="text-white/55">{t('gameOps:versions.installed')}</dt>
                 <dd className="truncate text-right text-white/85" title={game.version}>{game.version || '—'}</dd>
               </div>
             )}
             {last && (
               <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <dt className="text-white/55">Last install</dt>
+                <dt className="text-white/55">{t('gameOps:versions.lastInstall')}</dt>
                 <dd className="truncate text-right text-white/85">
                   {[last.versionName || last.build, last.channel, shortDate(last.date)].filter(Boolean).join(' · ')}
                 </dd>
@@ -175,23 +204,23 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           {info.pinned && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-300/[0.07] px-4 py-3 ring-1 ring-amber-300/25">
               <p className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
-                <span className="inline-flex items-center gap-1.5 font-bold text-amber-200"><Pin className="h-3.5 w-3.5" /> Pinned to {pinLabel(info.pinned, info)}</span>
+                <span className="inline-flex items-center gap-1.5 font-bold text-amber-200"><Pin className="h-3.5 w-3.5" /> {t('gameOps:versions.pinnedTo', { pin: pinText(t, info.pinned, info) })}</span>
                 <br />
-                Updates install this version and the update prompt stays off.
+                {t('gameOps:versions.pinNote')}
               </p>
               <div className="flex flex-none gap-2">
                 {installed && info.updateAvailable && (
-                  <Button variant="primary" size="sm" disabled={busy} onClick={updateToPin}>Update to pinned version</Button>
+                  <Button variant="primary" size="sm" disabled={busy} onClick={updateToPin}>{t('gameOps:versions.updateToPin')}</Button>
                 )}
-                <Button variant="neutral" size="sm" disabled={busy} onClick={returnToLatest}>Return to latest</Button>
+                <Button variant="neutral" size="sm" disabled={busy} onClick={returnToLatest}>{t('gameOps:versions.returnLatest')}</Button>
               </div>
             </div>
           )}
 
           {info.channels.length > 0 && (
             <section className="mt-5">
-              <MonoLabel className="mb-1.5">channels</MonoLabel>
-              <div role="radiogroup" aria-label="Channels" className="space-y-1.5">
+              <MonoLabel className="mb-1.5">{t('gameOps:versions.channelsKicker')}</MonoLabel>
+              <div role="radiogroup" aria-label={t('gameOps:versions.channelsAria')} className="space-y-1.5">
                 {info.channels.map((c) => (
                   <ChannelRow
                     key={c.id}
@@ -209,8 +238,8 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
 
           {info.builds.length > 0 && (
             <section className="mt-5">
-              <MonoLabel className="mb-1.5">builds</MonoLabel>
-              <div role="radiogroup" aria-label="Builds" className="space-y-1.5">
+              <MonoLabel className="mb-1.5">{t('gameOps:versions.buildsKicker')}</MonoLabel>
+              <div role="radiogroup" aria-label={t('gameOps:versions.buildsAria')} className="space-y-1.5">
                 {info.builds.map((b) => (
                   <BuildRow
                     key={b.id}
@@ -251,17 +280,17 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
 
           {info.channels.length === 0 && info.builds.length === 0 && !info.manual && (
             <p className="mt-5 rounded-xl bg-white/[0.04] px-4 py-3 text-[12.5px] text-white/60">
-              {plugin.name} lists only one version of this game.
+              {t('gameOps:versions.onlyOne', { plugin: plugin.name })}
             </p>
           )}
 
           {step === 'confirm' ? (
             <div role="alert" className="mt-6 rounded-2xl bg-amber-300/[0.07] px-4 py-3.5 ring-1 ring-amber-300/25">
-              <p className="flex items-center gap-1.5 text-[12.5px] font-bold text-amber-200"><TriangleAlert className="h-4 w-4" /> Before you {installed ? 'switch' : 'install'}</p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">{VERSION_WARNING}</p>
+              <p className="flex items-center gap-1.5 text-[12.5px] font-bold text-amber-200"><TriangleAlert className="h-4 w-4" /> {installed ? t('gameOps:versions.confirmTitleSwitch') : t('gameOps:versions.confirmTitleInstall')}</p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">{t('gameOps:versions.warning')}</p>
               <div className="mt-3 flex justify-end gap-2.5">
-                <Button variant="neutral" size="sm" disabled={busy} onClick={() => setStep('pick')}>Back</Button>
-                <Button variant="primary" size="sm" disabled={busy} onClick={apply}>{installed ? 'Switch anyway' : 'Install anyway'}</Button>
+                <Button variant="neutral" size="sm" disabled={busy} onClick={() => setStep('pick')}>{t('common:back')}</Button>
+                <Button variant="primary" size="sm" disabled={busy} onClick={apply}>{installed ? t('gameOps:versions.switchAnyway') : t('gameOps:versions.installAnyway')}</Button>
               </div>
             </div>
           ) : (
@@ -275,24 +304,24 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                   className="mt-0.5 h-3.5 w-3.5 accent-amber-300"
                 />
                 <span>
-                  Keep this version (pin)
+                  {t('gameOps:versions.keepPin')}
                   <span className="block text-[12px] text-white/55">
                     {pin != null
-                      ? 'Updates install it, and the update prompt stays off.'
+                      ? t('gameOps:versions.pinHintPinned')
                       : choice == null
-                        ? 'Pick a build or channel to pin it.'
-                        : `Typed values can’t be pinned.${info.pinned ? ' Installing this removes the current pin.' : ''}`}
+                        ? t('gameOps:versions.pinHintPick')
+                        : `${t('gameOps:versions.pinHintTyped')}${info.pinned ? t('gameOps:versions.pinHintRemoves') : ''}`}
                   </span>
                 </span>
               </label>
               <div className="mt-4 flex justify-end gap-2.5">
-                <Button variant="neutral" onClick={onClose} disabled={busy}>Close</Button>
+                <Button variant="neutral" onClick={onClose} disabled={busy}>{t('common:close')}</Button>
                 <Button
                   variant="primary"
                   disabled={!ready || busy}
                   onClick={() => (current ? void apply() : setStep('confirm'))}
                 >
-                  {current && pinChanged ? (wantPin ? 'Pin this version' : 'Remove the pin') : current ? 'This is the installed version' : installed ? 'Switch to this version' : 'Install this version'}
+                  {current && pinChanged ? (wantPin ? t('gameOps:versions.pinThis') : t('gameOps:versions.removePin')) : current ? t('gameOps:versions.currentVersion') : installed ? t('gameOps:versions.switchTo') : t('gameOps:versions.installThis')}
                 </Button>
               </div>
             </div>
@@ -301,7 +330,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       )}
       {error && (
         <div className="mt-5 flex justify-end">
-          <Button variant="neutral" onClick={onClose}>Close</Button>
+          <Button variant="neutral" onClick={onClose}>{t('common:close')}</Button>
         </div>
       )}
     </ModalOrInline>
@@ -340,26 +369,27 @@ function ChannelRow({
   selected: boolean;
   onSelect: () => void;
   game: Game;
-  onUnlocked: () => Promise<void> | void;
+  onUnlocked: () => ReloadChannels;
   onNotify: VersionsDialogProps['onNotify'];
 }) {
   const locked = channelLocked(channel);
+  const { t } = useTranslation('gameOps');
   return (
     <div>
       <RowShell selected={selected} disabled={locked} onSelect={onSelect} label={channel.name}>
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-[12.5px] font-semibold text-white/90">{channel.name}</span>
-          {channel.current && <Badge variant="ok">installed</Badge>}
+          {channel.current && <Badge variant="ok">{t('gameOps:versions.installedBadge')}</Badge>}
           {channel.requires === 'password' && (
             <Badge variant={locked ? 'bronze' : 'neutral'} className="gap-1">
-              {locked ? <Lock className="h-3 w-3" /> : <KeyRound className="h-3 w-3" />} {locked ? 'password' : 'unlocked'}
+              {locked ? <Lock className="h-3 w-3" /> : <KeyRound className="h-3 w-3" />} {locked ? t('gameOps:versions.lockedBadge') : t('gameOps:versions.unlockedBadge')}
             </Badge>
           )}
         </span>
         {channel.description && <span className="block text-[12px] leading-snug text-white/55">{channel.description}</span>}
         {(channel.updatedAt || channel.buildId) && (
           <span className="mt-0.5 block font-mono text-hint text-white/55">
-            {[channel.buildId && `build ${channel.buildId}`, channel.updatedAt && `updated ${channel.updatedAt}`].filter(Boolean).join(' · ')}
+            {[channel.buildId && t('gameOps:versions.buildMeta', { id: channel.buildId }), channel.updatedAt && t('gameOps:versions.updatedMeta', { date: channel.updatedAt })].filter(Boolean).join(' · ')}
           </span>
         )}
       </RowShell>
@@ -372,7 +402,8 @@ function ChannelRow({
  *  sent: Platypus keeps it nowhere. */
 function UnlockForm({
   channel, game, onUnlocked, onNotify,
-}: { channel: VersionChannel; game: Game; onUnlocked: () => Promise<void> | void; onNotify: VersionsDialogProps['onNotify'] }) {
+}: { channel: VersionChannel; game: Game; onUnlocked: () => ReloadChannels; onNotify: VersionsDialogProps['onNotify'] }) {
+  const { t } = useTranslation('gameOps');
   const [password, setPassword] = useState('');
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -386,10 +417,10 @@ function UnlockForm({
     try {
       const ok = await Effect.runPromise(LauncherApi.unlockVersionChannel(game, channel.id, sent));
       if (ok) {
-        onNotify(`${channel.name} unlocked`);
+        onNotify(t('gameOps:versions.unlocked', { name: channel.name }));
         await onUnlocked();
       } else {
-        setProblem('That password wasn’t accepted.');
+        setProblem(t('gameOps:versions.unlockRejected'));
       }
     } catch (err) {
       setProblem(errMsg(err));
@@ -405,29 +436,30 @@ function UnlockForm({
           autoComplete="off"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder={`Password for ${channel.name}`}
-          aria-label={`Password for ${channel.name}`}
+          placeholder={t('gameOps:versions.passwordFor', { name: channel.name })}
+          aria-label={t('gameOps:versions.passwordFor', { name: channel.name })}
           aria-invalid={problem ? true : undefined}
         />
-        {problem && <ErrorNotice className="mt-1 text-[12px]" message={problem} fallback="Platypus couldn't check that password." />}
+        {problem && <ErrorNotice className="mt-1 text-[12px]" message={problem} fallback={t('gameOps:versions.unlockError')} />}
       </div>
-      <Button type="submit" size="md" disabled={!password || busy}>Unlock</Button>
+      <Button type="submit" size="md" disabled={!password || busy}>{t('gameOps:versions.unlock')}</Button>
     </form>
   );
 }
 
 function BuildRow({ build, selected, onSelect }: { build: VersionBuild; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation('gameOps');
   const title = buildTitle(build);
   return (
     <RowShell selected={selected} disabled={!build.available} onSelect={onSelect} label={title}>
       <span className="flex flex-wrap items-center gap-2">
         <span className="text-[12.5px] font-semibold text-white/90">{title}</span>
-        {build.current && <Badge variant="ok">installed</Badge>}
-        <Badge variant={build.source === 'store' ? 'neutral' : build.source === 'archive' ? 'info' : 'accent'}>{sourceLabel(build.source)}</Badge>
+        {build.current && <Badge variant="ok">{t('gameOps:versions.installedBadge')}</Badge>}
+        <Badge variant={build.source === 'store' ? 'neutral' : build.source === 'archive' ? 'info' : 'accent'}>{sourceText(t, build.source)}</Badge>
         {build.channel && <Badge variant="neutral">{build.channel}</Badge>}
       </span>
       <span className="mt-0.5 block font-mono text-hint text-white/55">
-        {[build.name && build.name !== build.id ? build.id : '', build.publishedAt, !build.available && 'can’t be fetched right now'].filter(Boolean).join(' · ')}
+        {[build.name && build.name !== build.id ? build.id : '', build.publishedAt, !build.available && t('gameOps:versions.unavailableNote')].filter(Boolean).join(' · ')}
       </span>
     </RowShell>
   );
