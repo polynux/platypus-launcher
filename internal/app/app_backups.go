@@ -135,7 +135,8 @@ func (a *App) saveService() *savebackup.Service {
 }
 
 // startSavebackups sets the backup service up at startup and refreshes the
-// manifest in the background when it is older than 7 days.
+// manifest in the background when it is older than 7 days. While a game runs
+// the refresh waits for the last session to end (issue #49).
 func (a *App) startSavebackups(ctx context.Context) {
 	svc := a.saveService()
 	go func() {
@@ -144,6 +145,9 @@ func (a *App) startSavebackups(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(5 * time.Second):
+		}
+		if a.deferWhileGameRuns(func() { svc.MaybeRefresh(ctx) }) {
+			return
 		}
 		svc.MaybeRefresh(ctx)
 	}()
