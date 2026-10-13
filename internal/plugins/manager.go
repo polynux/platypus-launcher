@@ -106,6 +106,9 @@ type Manager struct {
 	plugins map[string]*Plugin
 	procs   map[string]*process
 	closed  bool
+	// locale is the BCP 47 tag sent to plugins as initialize {locale} and
+	// locale.changed {locale} (protocol 1.14, issue #39). Empty means English.
+	locale string
 }
 
 // NewManager manages the plugins in o.Dir. Call Discover before use.
@@ -159,6 +162,57 @@ func NewManager(o Options) *Manager {
 
 // Dir is the plugins folder.
 func (m *Manager) Dir() string { return m.dir }
+
+// Locale reports the BCP 47 tag sent to plugins (protocol 1.14). Empty means
+// the default; callers send "en" on the wire for it.
+func (m *Manager) Locale() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.locale == "" {
+		return "en"
+	}
+	return m.locale
+}
+
+// SetLocale records the effective locale and notifies every running plugin
+// that negotiated protocol 1.14 or later with locale.changed {locale}.
+// Plugins on older protocols get the new locale on their next start; the core
+// never restarts them for this.
+func (m *Manager) SetLocale(locale string) {
+	type target struct {
+		conn Conn
+		prot string
+	}
+	m.mu.Lock()
+	if locale == "" {
+		locale = "en"
+	}
+	m.locale = locale
+	var targets []target
+	for _, proc := range m.procs {
+		proc.mu.Lock()
+		conn, rt := proc.conn, proc.runtime
+		ready := proc.ready
+		proc.mu.Unlock()
+		if conn == nil || rt == nil {
+			continue
+		}
+		select {
+		case <-ready:
+		default:
+			continue // not initialized yet: initialize carries the locale
+		}
+		targets = append(targets, target{conn: conn, prot: rt.Protocol})
+	}
+	m.mu.Unlock()
+	for _, t := range targets {
+		v, err := ParseVersion(t.prot)
+		if err != nil || v.Less(Version{1, 14}) {
+			continue
+		}
+		_ = t.conn.Notify("locale.changed", map[string]any{"locale": locale})
+	}
+}
 
 // Discover rescans the plugins folder and returns every plugin found, sorted
 // by id. Running plugins that may no longer run (removed, changed, disabled)
@@ -492,6 +546,7 @@ func (m *Manager) process(id string) (*process, error) {
 		env:       maps.Clone(m.env),
 		onExit:    onExit,
 		onReady:   onReady,
+		locale:    m.Locale,
 		id:        id,
 		dir:       p.Dir,
 		exec:      execPath,

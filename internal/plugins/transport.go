@@ -18,6 +18,8 @@ type Conn interface {
 	// Call sends a request and decodes its result. An error answered by the
 	// plugin is a *jsonrpc.Error whatever the wire format.
 	Call(ctx context.Context, method string, params, result any) error
+	// Notify sends a notification, which gets no response.
+	Notify(method string, params any) error
 	// Done is closed when the link is gone.
 	Done() <-chan struct{}
 	Close()
