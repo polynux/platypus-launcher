@@ -134,7 +134,7 @@ func serveArt(a *app.App) (artServer, error) {
 	if err != nil {
 		return artServer{}, err
 	}
-	handler := app.SteamArt(app.PluginArt(a, app.CustomArt(a, http.NotFoundHandler())))
+	handler := app.SteamArt(app.PluginArt(a, app.PluginGameArt(a, app.CustomArt(a, http.NotFoundHandler()))))
 	go http.Serve(l, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Platypus-Token")), []byte(token)) != 1 {
 			http.Error(w, "forbidden", http.StatusForbidden)

@@ -9,8 +9,8 @@ import (
 )
 
 func TestMediaVersionKnown(t *testing.T) {
-	if last := plugins.SupportedProtocols[len(plugins.SupportedProtocols)-1]; last != plugins.LocaleVersion {
-		t.Fatalf("SupportedProtocols %v does not end at %v", plugins.SupportedProtocols, plugins.LocaleVersion)
+	if last := plugins.SupportedProtocols[len(plugins.SupportedProtocols)-1]; last != plugins.OfflineVersion {
+		t.Fatalf("SupportedProtocols %v does not end at %v", plugins.SupportedProtocols, plugins.OfflineVersion)
 	}
 	if (plugins.Runtime{Protocol: "1.12"}).Speaks(plugins.MediaVersion) != true {
 		t.Error("1.12 should speak MediaVersion")

@@ -111,6 +111,13 @@ type Game struct {
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
+	// Offline says whether the game launches without a network (protocol
+	// 1.15, issue #44): "ok", "network" or "unknown" ("" means unknown,
+	// the pre-1.15 default). The core never disables Play because of it.
+	Offline string `json:"offline,omitempty"`
+	// CloudSync says the store itself syncs this game's saves (protocol
+	// 1.15, issue #44). gameHasCloudSync uses it for plugin games.
+	CloudSync bool `json:"cloud_sync,omitempty"`
 	// Features are the plugin capabilities on offer for this game (names from
 	// the plugin capability registry): the plugin's per-game list, or every
 	// capability the plugin offers when it gave none. Never omitted for plugin
@@ -197,6 +204,10 @@ type SourceWarning struct {
 	// Unavailable marks a source that answered "unavailable right now"
 	// (plugin error -32002): not a login problem, worth trying again later.
 	Unavailable bool `json:"unavailable,omitempty"`
+	// Stale marks games served from the last good listing or the on-disk
+	// snapshot while the source failed (issue #44): the library survives
+	// an offline restart.
+	Stale bool `json:"stale,omitempty"`
 }
 
 // StorePlugin is a discovered plugin as the Plugins view shows it. Kind is
@@ -395,6 +406,9 @@ type GameDetails struct {
 	// store name for the attribution line ("Steam", "GOG", "Lutris / IGDB").
 	InfoSource     string            `json:"info_source,omitempty"`
 	InfoSourceName string            `json:"info_source_name,omitempty"`
+	// InfoStale marks details served from the cache while offline
+	// (issue #44): the fetch was skipped, so the info may be out of date.
+	InfoStale      bool              `json:"info_stale,omitempty"`
 	Languages      []string          `json:"languages,omitempty"`
 	Controller     string            `json:"controller,omitempty"` // "full" | "partial" | ""
 	Requirements   *GameRequirements `json:"requirements,omitempty"`
@@ -445,6 +459,15 @@ type SessionEvent struct {
 	State   string `json:"state"` // "starting" | "running" | "stopped" | "failed"
 	PID     int    `json:"pid,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+// NetState is what GetNetState returns (issue #44): whether the machine
+// looks online, and when the current state began (unix seconds, 0 when the
+// state never changed). The UI shows a small "Offline" indicator in the
+// library toolbar while offline.
+type NetState struct {
+	Online bool  `json:"online"`
+	Since  int64 `json:"since"`
 }
 
 // Job is an install, update or uninstall run by a store plugin.

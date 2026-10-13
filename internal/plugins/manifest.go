@@ -40,6 +40,14 @@ const (
 // Game sources that aren't plugins.
 var reservedIDs = map[string]bool{"steam": true, "custom": true}
 
+// BundledPluginIDs are the first-party plugin ids allowed to declare a
+// manifest gameIdPrefix (protocol 1.15, issue #54 groundwork): a
+// third-party plugin can't take over other ids.
+var BundledPluginIDs = map[string]bool{"steam": true}
+
+// gameIDPrefixRe is the shape of a manifest gameIdPrefix: 1-32 word chars.
+var gameIDPrefixRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
+
 var (
 	idRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	storeRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
@@ -76,6 +84,11 @@ type Manifest struct {
 	// entry must also be in Capabilities.
 	Needs    []string      `json:"needs"`
 	Requires []Requirement `json:"requires"`
+	// GameIDPrefix is the prefix of this plugin's game ids (protocol 1.15,
+	// issue #54 groundwork): optional, default "p.<plugin id>.". Only
+	// bundled/first-party plugins (see BundledPluginIDs) may set it, so a
+	// third-party plugin can't take over other ids.
+	GameIDPrefix string `json:"gameIdPrefix,omitempty"`
 	// InstallDir is the plugin's subfolder of the Games folder; empty means
 	// the plugin id.
 	InstallDir  string      `json:"install_dir"`
@@ -159,10 +172,14 @@ func (m Manifest) Compatible(supported []Version) *IncompatibleError {
 }
 
 // Requirement is a command-line tool the plugin wraps. Platypus never installs
-// it; Hint tells the user how.
+// it; Hint tells the user how. Optional (protocol 1.15, issue #44) marks a
+// launch helper (steam, flatpak, xdg-open) that isn't reported as missing:
+// the plugin still starts without it. validateDelegate still requires the
+// helper a spec actually uses to be declared and on PATH.
 type Requirement struct {
-	Bin  string `json:"bin"`
-	Hint string `json:"hint"`
+	Bin      string `json:"bin"`
+	Hint     string `json:"hint"`
+	Optional bool   `json:"optional,omitempty"`
 }
 
 // Permissions are declared now and enforced by the bubblewrap sandbox later
@@ -233,6 +250,10 @@ func (m Manifest) UnmetNeeds() []string {
 
 // IsData reports whether the manifest describes a data plugin.
 func (m Manifest) IsData() bool { return m.Kind == KindData }
+
+// ValidateForTest exposes manifest validation to other packages' tests
+// (protocol 1.15 gameIdPrefix rules).
+func (m Manifest) ValidateForTest() error { return m.validate() }
 
 func (m Manifest) validate() error {
 	var errs []error
@@ -328,6 +349,16 @@ func (m Manifest) validate() error {
 	for _, r := range m.Requires {
 		if r.Bin == "" || strings.ContainsRune(r.Bin, '/') {
 			bad("requires: bin %q must be a command name", r.Bin)
+		}
+	}
+	if m.GameIDPrefix != "" {
+		switch {
+		case !gameIDPrefixRe.MatchString(m.GameIDPrefix):
+			bad("gameIdPrefix %q must match ^[A-Za-z0-9._-]{1,32}$", m.GameIDPrefix)
+		case strings.HasPrefix(m.GameIDPrefix, "p."):
+			bad("gameIdPrefix %q must not start with %q", m.GameIDPrefix, "p.")
+		case !BundledPluginIDs[m.ID]:
+			bad("gameIdPrefix is only for bundled plugins")
 		}
 	}
 	if m.InstallDir != "" && !filepath.IsLocal(m.InstallDir) {
@@ -488,9 +519,14 @@ func (m Manifest) InstallPath(gamesFolder string) string {
 }
 
 // MissingRequirements returns the required tools not found on PATH.
+// Optional requirements (protocol 1.15) are never reported as missing:
+// the plugin still starts without them.
 func (m Manifest) MissingRequirements(lookPath func(string) (string, error)) []Requirement {
 	var missing []Requirement
 	for _, r := range m.Requires {
+		if r.Optional {
+			continue
+		}
 		if _, err := lookPath(r.Bin); err != nil {
 			missing = append(missing, r)
 		}

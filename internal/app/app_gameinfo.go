@@ -86,6 +86,7 @@ func infoNames(source string) (infoSource, infoSourceName string) {
 // sideloadSteamClient is the Steam details client for sideloaded games: the
 // injected one in tests, the live store endpoint otherwise. The client's
 // locale follows the effective locale so descriptions come back translated.
+// The live client's requests feed the offline tracker (issue #44).
 func (a *App) sideloadSteamClient() *steam.StoreClient {
 	if a.sideloadSteam != nil {
 		a.sideloadSteam.Locale = a.Locale()
@@ -93,6 +94,7 @@ func (a *App) sideloadSteamClient() *steam.StoreClient {
 	}
 	c := steam.NewStoreClient()
 	c.Locale = a.Locale()
+	c.HTTPClient = a.netClient(c.HTTPClient, 8*time.Second)
 	return c
 }
 
@@ -229,12 +231,22 @@ func (a *App) dropInfoEntry(gameID string) {
 // getSideloadedDetails returns the online details of a sideloaded game: the
 // fresh cache when new, a fetch when stale or missing, the stale cache when
 // the fetch fails or the switch is off, else empty details with no error.
+// While offline the fetch is skipped: the cache is served with InfoStale set
+// ("info may be out of date", issue #44), else empty details.
 func (a *App) getSideloadedDetails(gameID string) (*types.GameDetails, error) {
 	_, _, link := a.infoLinkFor(gameID)
 	if link == "" {
 		return &types.GameDetails{}, nil
 	}
 	cached, hasCached := a.cachedInfoEntry(gameID)
+	if !a.netOnline() {
+		if hasCached {
+			d := cached.Details
+			d.InfoStale = true
+			return &d, nil
+		}
+		return &types.GameDetails{}, nil
+	}
 	if a.settings != nil && !a.settings.GameInfoOnline() {
 		if hasCached {
 			d := cached.Details

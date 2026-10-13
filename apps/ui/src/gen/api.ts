@@ -57,6 +57,7 @@ export interface CoreApi {
   GetInstallSize(game: types.Game): Promise<number>;
   GetLauncherSettings(): Promise<types.LauncherSettings>;
   GetLibrary(): Promise<types.Library>;
+  GetNetState(): Promise<types.NetState>;
   GetPluginSettings(source: string): Promise<types.SettingsView>;
   GetProtonVersions(): Promise<types.ProtonVersion[]>;
   GetSavePaths(game: types.Game): Promise<types.SavePath[]>;
@@ -208,6 +209,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetInstallSize',
   'GetLauncherSettings',
   'GetLibrary',
+  'GetNetState',
   'GetPluginSettings',
   'GetProtonVersions',
   'GetSavePaths',

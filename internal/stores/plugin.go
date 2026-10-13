@@ -3,10 +3,12 @@ package stores
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -97,14 +99,14 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		title = lg.ID
 	}
 	g := types.Game{
-		ID:              GameID(s.ID(), lg.ID),
+		ID:              s.gameID(lg.ID),
 		Source:          s.ID(),
 		Store:           types.StoreType(s.p.Manifest.Store),
 		StoreAppID:      lg.ID,
 		Title:           title,
-		CoverURL:        webURL(lg.CoverURL),
-		HeroURL:         webURL(lg.HeroURL),
-		BannerURL:       webURL(lg.BannerURL),
+		CoverURL:        s.artURL(lg.CoverURL),
+		HeroURL:         s.artURL(lg.HeroURL),
+		BannerURL:       s.artURL(lg.BannerURL),
 		IsInstalled:     lg.Installed,
 		SizeBytes:       lg.SizeBytes,
 		Version:         lg.Version,
@@ -112,6 +114,8 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Installable:     lg.Installable && s.has("install"),
 		Note:            lg.Note,
 		Native:          lg.Native,
+		Offline:         normalizeOffline(lg.Offline, s.speaksOffline()),
+		CloudSync:       lg.CloudSync && s.speaksOffline(),
 		Features:        s.gameFeatures(lg.Features),
 		Settings:        types.GameSettings{UseGameMode: true},
 	}
@@ -172,14 +176,14 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		}
 	}
 	for _, u := range d.Screenshots {
-		if u = webURL(u); u != "" {
+		if u = s.artURL(u); u != "" {
 			out.Screenshots = append(out.Screenshots, u)
 		}
 		if len(out.Screenshots) >= maxScreenshots {
 			break
 		}
 	}
-	if d.HeroURL = webURL(d.HeroURL); d.HeroURL != "" {
+	if d.HeroURL = s.artURL(d.HeroURL); d.HeroURL != "" {
 		out.HeroURL = d.HeroURL
 	}
 	// The media and richer facts are protocol 1.12: an older plugin's answer
@@ -229,7 +233,7 @@ func (s *Plugin) Details(ctx context.Context, game types.Game) (*types.GameDetai
 		for _, a := range d.Achievements.List {
 			list = append(list, types.Achievement{
 				ID: a.ID, Name: a.Name, Description: a.Description,
-				Icon: webURL(a.Icon), GlobalPercent: a.GlobalPercent,
+				Icon: s.artURL(a.Icon), GlobalPercent: a.GlobalPercent,
 			})
 		}
 		// Progress is store-level data: unlocked stays false and UnlockedAt 0,
@@ -279,6 +283,12 @@ func (s *Plugin) FamilyMembers(ctx context.Context) ([]types.FamilyMember, error
 func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*Launch, error) {
 	var spec plugins.LaunchSpec
 	params := map[string]any{"id": game.StoreAppID, "preview": preview}
+	// The user's per-game executable override (protocol 1.15, issue #44):
+	// the plugin answers with a direct spec for that file, instead of the
+	// core bypassing the plugin.
+	if game.Executable != "" && s.speaksOffline() {
+		params["executable"] = game.Executable
+	}
 	if err := s.m.Call(ctx, s.ID(), "game.launchSpec", params, &spec); err != nil {
 		return nil, err
 	}
@@ -324,13 +334,64 @@ var unsafeIDChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 // prefix, launch log), so the plugin's id is reduced to safe characters, with
 // a hash suffix when that changed it so ids stay unique.
 func GameID(source, id string) string {
+	return GameIDWithPrefix("", source, id)
+}
+
+// GameIDWithPrefix is GameID with a manifest gameIdPrefix (protocol 1.15,
+// issue #54 groundwork): empty means the default "p.<source>.". A custom
+// prefix (e.g. "steam_") replaces it, so a bundled plugin's ids stay
+// byte-identical across the move out of the core.
+func GameIDWithPrefix(prefix, source, id string) string {
 	safe := unsafeIDChars.ReplaceAllString(id, "_")
-	out := "p." + source + "." + safe
+	base := "p." + source + "."
+	if prefix != "" {
+		base = prefix
+	}
+	out := base + safe
 	if safe != id || safe == "" {
 		sum := sha256.Sum256([]byte(id))
 		out += "-" + hex.EncodeToString(sum[:4])
 	}
 	return out
+}
+
+// gameID is Platypus's id for one of this plugin's games, honouring its
+// manifest gameIdPrefix when the plugin speaks protocol 1.15.
+func (s *Plugin) gameID(storeID string) string {
+	if s.speaksOffline() && s.p.Manifest.GameIDPrefix != "" {
+		return GameIDWithPrefix(s.p.Manifest.GameIDPrefix, s.ID(), storeID)
+	}
+	return GameID(s.ID(), storeID)
+}
+
+// WireID is the expected Platypus id for a store id, honouring the plugin's
+// manifest gameIdPrefix (protocol 1.15). The conformance suite uses it: a
+// bundled plugin's ids stay byte-identical across the move out of the core.
+func (s *Plugin) WireID(storeID string) string { return s.gameID(storeID) }
+
+// speaksOffline reports whether the plugin negotiated protocol 1.15 or later,
+// so the offline fields (offline, cloudSync, local-art, gameIdPrefix, the
+// executable param) are read. Older plugins keep today's behaviour.
+func (s *Plugin) speaksOffline() bool {
+	return s.m.Runtime(s.ID()).Speaks(plugins.OfflineVersion)
+}
+
+// normalizeOffline validates a plugin's offline value (protocol 1.15):
+// "ok", "network" or "unknown", absent meaning "unknown". Anything else is
+// "unknown": the conformance suite rejects it, but the library never breaks
+// on it. Older plugins (pre-1.15) always read "unknown".
+func normalizeOffline(raw string, offline bool) string {
+	if !offline {
+		return "unknown"
+	}
+	switch raw {
+	case "ok", "network":
+		return raw
+	case "", "unknown":
+		return "unknown"
+	default:
+		return "unknown"
+	}
 }
 
 // Bounds for the media and richer facts (protocol 1.12) of game.details.
@@ -370,6 +431,87 @@ func webURL(raw string) string {
 		return ""
 	}
 	return u.String()
+}
+
+// GameArtURLPrefix is where the core serves a plugin's local art files (the
+// local-art capability, protocol 1.15, issue #44): the core rewrites each
+// file:// art URL to GameArtURLPrefix + <plugin-id> + "/" +
+// base64url(absolute path), and serves it with http.ServeFile.
+const GameArtURLPrefix = "/platypus-art/"
+
+// localArtExts are the art file extensions the local-art capability serves.
+var localArtExts = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+
+// artURL keeps an art URL: http(s) passes, file:// is rewritten to the local
+// art server when the plugin offers local-art (protocol 1.15) and the file
+// qualifies, else dropped (as today without the capability).
+func (s *Plugin) artURL(raw string) string {
+	if u := webURL(raw); u != "" {
+		return u
+	}
+	return s.localArtURL(raw)
+}
+
+// localArtURL rewrites a file:// art URL to the local art server, or "" when
+// it doesn't qualify. It refuses non-absolute paths, extensions other than
+// jpg/jpeg/png/webp, and paths outside the plugin's data folder and declared
+// permissions.read folders (checked after EvalSymlinks). Without the local-art capability,
+// file:// is dropped, as today.
+func (s *Plugin) localArtURL(raw string) string {
+	if !s.has("local-art") || !s.speaksOffline() {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "file" || u.Host != "" {
+		return ""
+	}
+	path := u.Path
+	if path == "" || !filepath.IsAbs(path) {
+		return ""
+	}
+	if !localArtExts[strings.ToLower(filepath.Ext(path))] {
+		return ""
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		real = path
+	}
+	if !insideAny(real, s.readFolders()) {
+		return ""
+	}
+	return GameArtURLPrefix + s.ID() + "/" + base64.RawURLEncoding.EncodeToString([]byte(path))
+}
+
+// readFolders is where local art may live: the plugin's own data folder
+// (PLATYPUS_PLUGIN_DATA) and its permissions.read folders (~ and ~/… expanded
+// to the user's home), for the local-art containment check.
+func (s *Plugin) readFolders() []string {
+	home, _ := os.UserHomeDir()
+	var out []string
+	if d := s.m.DataDirOf(s.ID()); d != "" {
+		out = append(out, d)
+	}
+	for _, p := range s.p.Manifest.Permissions.Read {
+		if p == "~" {
+			p = home
+		} else if strings.HasPrefix(p, "~/") && home != "" {
+			p = filepath.Join(home, strings.TrimPrefix(p, "~/"))
+		}
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// DecodeGameArt decodes a local art server path (/platypus-art/<plugin-id>/<b64>)
+// back to the absolute file path, or "" when it isn't one.
+func DecodeGameArt(pluginID, encoded string) string {
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(raw) == 0 || !filepath.IsAbs(string(raw)) {
+		return ""
+	}
+	return string(raw)
 }
 
 // isLoopback reports whether host is a loopback address for store-URL

@@ -1,4 +1,4 @@
-# Store plugin protocol (1.14, draft)
+# Store plugin protocol (1.15, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -51,8 +51,16 @@ layout with `"kind": "data"` and need no approval; see
   Platypus must know for the plugin to be worth running; it must be a subset of
   `capabilities`. Other unknown names are ignored with a warning.
 - `exec` is relative and must stay inside the folder (symlinks included).
+- `gameIdPrefix` (1.15, optional) is the prefix of this plugin's game ids.
+  The default is `p.<plugin id>.`. It must match `^[A-Za-z0-9._-]{1,32}$` and
+  must not start with `p.`, and only bundled/first-party plugins (an allowlist
+  in the core: `steam`) may set it, so a third-party plugin can't take over
+  other ids. See [Offline launches](#offline-launches-115).
 - `requires` lists command-line tools looked up on `PATH`. A missing one keeps the
-  plugin from starting; the Plugins view shows the hint.
+  plugin from starting; the Plugins view shows the hint. A requirement with
+  `"optional": true` (1.15) is a launch helper (`steam`, `flatpak`, `xdg-open`)
+  that isn't reported as missing: the plugin starts without it. A launch spec
+  that uses a helper still needs it declared and on `PATH` (see [Launching](#launching)).
 - `permissions` are shown to the user before approval. They aren't enforced yet
   (bubblewrap sandbox, plan milestone 8).
 - `storefront` declares the store's official website for the embedded store
@@ -126,7 +134,7 @@ other errors can contain.
 | `game.relocated` | `{ id, from, to }` | `{}` (optional, 1.4, [Verify and move](#verify-and-move-14)) |
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
-| `game.launchSpec` | `{ id, preview, via? }` | `LaunchSpec` |
+| `game.launchSpec` | `{ id, preview, via?, executable? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
 | `cloud.pull` | `{ id, ctx, jobId }` | `CloudStatus` |
 | `cloud.push` | `{ id, ctx, jobId }` | `CloudStatus` |
@@ -175,6 +183,9 @@ Art: the Library's portrait cards show `coverUrl`, falling back to
 `bannerUrl` then `heroUrl` (cropped) when the portrait 404s, and Platypus
 remembers misses for a while instead of requesting them on every render —
 so always send the landscape images even for games with no portrait art.
+With the `local-art` capability (1.15) the art URLs may be `file:///abs/path`
+(see [Offline launches](#offline-launches-115)); otherwise only http(s) URLs
+are kept.
 
 Send only the keys listed here. Platypus ignores unknown keys, but new plugins copy
 what the bundled ones send, so the conformance suite (`internal/plugtest`)
@@ -186,7 +197,8 @@ registry, see [Capabilities](#capabilities)). Leave it out and every capability
 the plugin offers applies to the game; `[]` means none. Platypus drops names the
 plugin doesn't offer at runtime.
 
-Platypus keys plugin games as `p.<plugin id>.<game id>`. List every owned game; the
+Platypus keys plugin games as `p.<plugin id>.<game id>` (or the manifest's
+`gameIdPrefix`, 1.15). List every owned game; the
 Library shows the uninstalled ones under "owned".
 
 `GameDetails` is the game page's metadata, fetched on demand. Stores without a
@@ -349,6 +361,10 @@ only when the plugin's `CloudStatus.client.canLaunch` said it can: the user chos
 "Launch through <client>" because the store's client is running. Answer with a
 store-client spec for the game; a plugin that has none answers `-32000` with a message.
 
+`executable` (optional, 1.15) is the user's per-game executable override. Platypus
+sends it when the user set one, instead of bypassing the plugin: answer with a
+direct spec for that file.
+
 ## Cloud saves (1.2)
 
 Capability `cloud-saves`, protocol 1.2 and later. A plugin that speaks only 1.0 or 1.1
@@ -449,7 +465,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -482,10 +498,12 @@ that doesn't know it.
   `controller`, `requirements` (`minimum`, `recommended`), `ageRating`, `tags`, `videos` (`url`, `thumbnail`,
   `title`, `mime`); see [Media](#media-112)). 1.13: the unread snapshot of chat (`chat.unreadCounts`, see
   [Chat](#chat-19)). 1.14: the user's locale (`initialize` `{locale}`, the `locale.changed` notification;
-  see [Locale](#locale-114)).
+  see [Locale](#locale-114)). 1.15: offline launches (`offline`, `cloudSync`, the `local-art` capability,
+  `gameIdPrefix`, the `executable` param of `game.launchSpec`, optional `requires`; see
+  [Offline launches](#offline-launches-115)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13 or 1.14 method.
+  1.10, 1.11, 1.12, 1.13, 1.14 or 1.15 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -518,6 +536,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `settings` | 1.8 | `settings.schema`, `settings.apply` | | yes |
 | `chat` | 1.9 | `chat.history`, `chat.send`, `chat.markRead` | `chat.unreadCounts` (1.13) | yes |
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
+| `local-art` | 1.15 | | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -1149,6 +1168,46 @@ locale.changed { locale }                         notification, core -> plugin, 
   through.
 - **Gating.** `locale` is sent to every plugin (old ones ignore it);
   `locale.changed` goes only to plugins that negotiated 1.14 or later.
+
+## Offline launches (1.15)
+
+Only the store plugin can guarantee that a game launches offline: some stores
+need their own runtime, client or a cached licence/token. The core's job is to
+never stand in the way (issue #44).
+
+- **`LibraryGame.offline`:** `"ok"`, `"network"` or `"unknown"`. Absent means
+  `unknown`. It says whether the game launches without a network. The core
+  never disables Play because of it: an `"ok"` or `"unknown"` game shows
+  nothing, while a `"network"` game shows a small "Needs a connection to
+  <store>" chip while offline — and the plugin's own error is shown verbatim
+  if the launch fails. The conformance suite rejects other values.
+- **`LibraryGame.cloudSync`** (bool): the store itself syncs this game's
+  saves. `gameHasCloudSync` uses it for plugin games, alongside the
+  `cloud-saves` capability rule, so automatic backups skip such games.
+- **The `local-art` capability.** A plugin offering it may return
+  `file:///abs/path` in its art fields (cover, hero, banner, logo,
+  screenshots and details art). The core rewrites each to
+  `/platypus-art/<plugin-id>/<base64url(abs path)>` and serves it with
+  `http.ServeFile`, `Cache-Control: max-age=86400` and `nosniff`. It refuses
+  non-absolute paths, extensions other than jpg/jpeg/png/webp, and paths
+  outside the plugin's own data folder (`PLATYPUS_PLUGIN_DATA`) and its
+  declared `permissions.read` folders (checked after `EvalSymlinks`). Without the capability, `file://` is dropped, as before.
+- **The manifest `gameIdPrefix`** (see above): optional, default
+  `p.<plugin id>.`, only for bundled/first-party plugins. It lets the built-in
+  Steam source move into its own plugin with byte-identical ids (issue #54).
+- **`game.launchSpec`'s `executable` param** (see [Launching](#launching)).
+- **`requires[].optional`** (see the manifest above): optional launch helpers
+  are not reported as missing.
+- **The core, offline.** Nothing the core does blocks a launch without a
+  network: only `cloudBeforeLaunch` sits on the launch path, and while offline
+  `cloud.status` is skipped with the note "cloud saves not checked: offline"
+  (while online it is bounded by 5 s, and a network-class failure proceeds
+  with the same note — never blocked). Background work skips its fetches
+  while offline (compat ratings, online art lookups, game info, the save
+  manifest refresh, chat/social/playtime refreshes). Each source's last good
+  listing is kept in memory and in `<data>/library-snapshots/<source>.json`,
+  so a failed source serves its games with a stale warning instead of hiding
+  the library.
 
 ## Out of scope
 

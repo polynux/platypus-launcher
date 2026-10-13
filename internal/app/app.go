@@ -23,6 +23,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/ledger"
 	"platypus/internal/migrate"
+	"platypus/internal/netstate"
 	"platypus/internal/onlineart"
 	"platypus/internal/paths"
 	"platypus/internal/playlog"
@@ -159,6 +160,11 @@ type App struct {
 	// auto artwork lookups and the save-list manifest refresh. Drained
 	// when the last session ends (drainDeferred).
 	deferred []func()
+	// net tracks whether the machine looks online (issue #44). Every core
+	// outbound request reports its outcome to it; the UI reads it through
+	// GetNetState and the "netstate" event. Nil in tests that don't need
+	// it (every helper tolerates nil).
+	net *netstate.State
 }
 
 // Options carries the folders one App run uses (issue #41). Empty fields
@@ -184,6 +190,11 @@ func NewAppWithOptions(o Options) *App {
 	a.optCacheDir = o.CacheDir
 	a.optPluginsDir = o.PluginsDir
 	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
+	a.net = netstate.New()
+	a.net.OnTransition(func(online bool) {
+		snap := a.net.Snapshot()
+		a.host.Emit("netstate", types.NetState{Online: snap.Online, Since: snap.Since})
+	})
 	return a
 }
 
@@ -242,6 +253,16 @@ func (a *App) resolvedPluginsDir() string {
 // startup is called when the app starts.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// A UI client is connected from here until shutdown: probes only run
+	// while one is (issue #44).
+	if a.net == nil {
+		a.net = netstate.New()
+		a.net.OnTransition(func(online bool) {
+			snap := a.net.Snapshot()
+			a.host.Emit("netstate", types.NetState{Online: snap.Online, Since: snap.Since})
+		})
+	}
+	a.net.SetClientConnected(true)
 	a.stats.changed = func() { a.host.Emit("playtime") }
 	a.stats.info = func(format string, args ...any) { a.host.Infof(format, args...) }
 	a.stats.warn = func(format string, args ...any) { a.host.Warnf(format, args...) }
@@ -299,6 +320,7 @@ func (a *App) startup(ctx context.Context) {
 	dataDir := resolved.DataDir
 	a.dataDir = dataDir
 	a.cacheDir = resolved.CacheDir
+	a.library.snapDir = librarySnapshotDir(dataDir)
 	a.sessions.SetLogDir(filepath.Join(dataDir, "logs"))
 	var err error
 	a.settings, err = settings.OpenWithHome(filepath.Join(dataDir, "settings.json"), resolved.Home)
@@ -313,6 +335,10 @@ func (a *App) startup(ctx context.Context) {
 	}
 	if a.compat != nil {
 		a.compat.Warn = func(format string, args ...any) { a.host.Warnf("compat: "+format, args...) }
+		// Every compat fetcher's requests feed the offline tracker (issue #44).
+		for _, f := range a.compat.Fetchers() {
+			f.Client = a.netClient(f.Client, 15*time.Second)
+		}
 	}
 
 	if err := a.openCustomization(dataDir); err != nil {
@@ -402,6 +428,9 @@ func (a *App) startup(ctx context.Context) {
 // Steam-launched games belong to the Steam client and keep running. Running
 // installs stay "running" in jobs.json and resume on the next start.
 func (a *App) shutdown(ctx context.Context) {
+	if a.net != nil {
+		a.net.SetClientConnected(false)
+	}
 	if a.stop != nil {
 		a.stop()
 	}
@@ -673,7 +702,11 @@ func (a *App) RemoveCustomGame(id string) error {
 }
 
 // assembleLibrary merges what the finished sources returned with the sideloaded
-// games and puts the per-game facts on them.
+// games and puts the per-game facts on them. A source that failed (logged
+// out, crashed, offline) adds a warning instead of failing the scan — Steam
+// included, like every other source (issue #54 groundwork): a Steam failure
+// is a normal warning, with the snapshot rule. When the failed source's last
+// good listing (or snapshot) stands in, the warning is marked stale.
 func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs []error, done []bool) (types.Library, error) {
 	lib := types.Library{Games: []types.Game{}, Warnings: []types.SourceWarning{}}
 	for i, s := range all {
@@ -681,10 +714,12 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 			continue
 		}
 		if errs[i] != nil {
-			if s.ID() == types.SourceSteam {
-				return types.Library{}, fmt.Errorf("%s library scan failed: %w", s.ID(), errs[i])
+			w := sourceWarning(s.ID(), errs[i])
+			if len(results[i]) > 0 {
+				lib.Games = append(lib.Games, results[i]...)
+				w.Stale = true
 			}
-			lib.Warnings = append(lib.Warnings, sourceWarning(s.ID(), errs[i]))
+			lib.Warnings = append(lib.Warnings, w)
 			continue
 		}
 		lib.Games = append(lib.Games, results[i]...)

@@ -23,6 +23,7 @@ import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
 import { PluginLogo } from './PluginLogo';
 import { formatBytes, heroImages, hoursPlayed, isPluginGame, needsAttention, storeLabel } from '../lib/games';
+import { useNetState } from './useNetState';
 import { formatCount, formatDate, formatHours, formatPercentValue } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { normalizeSettings } from '../lib/settings';
@@ -178,6 +179,10 @@ export function GamePage(p: GamePageProps) {
   const { details, error, loading, reload } = useDetails(game);
   // ProtonDB, native, DRM and anti-cheat facts (internal/compat); null while loading.
   const { compat: info } = useCompat(game);
+  // Offline (issue #44): a "network" game shows a needs-connection chip while
+  // offline. Play stays enabled — only the store plugin can refuse the launch.
+  const { online } = useNetState();
+  const needsConnection = !online && (game as Game & { offline?: string }).offline === 'network';
   const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
   const hero = useHero(game, details);
   useEffect(() => { setShot(0); setLightbox(false); setSettingsTab(null); setInstallTo(false); setOptionsOpen(false); }, [game.id]);
@@ -312,6 +317,11 @@ export function GamePage(p: GamePageProps) {
               {!game.is_installed && <Badge className="bg-black/50 text-white/55">{t('game:hero.notInstalled')}</Badge>}
               {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">{t('game:hero.updateAvailable')}</Badge>}
               {game.pinned && <Badge variant="accent" className="bg-amber-300/15 ring-1 ring-amber-300/30">{t('game:hero.pinned')}</Badge>}
+              {needsConnection && (
+                <Badge className="bg-amber-300/15 text-amber-100 ring-1 ring-amber-300/30" data-testid="needs-connection">
+                  {t('game:hero.needsConnection', { store: storeName })}
+                </Badge>
+              )}
             </div>
             <GameHeading game={game} />
           </div>
@@ -669,7 +679,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
   useEffect(() => { setExpanded(false); setReqTab('minimum'); }, [game.id]);
   const d = details as unknown as (GameDetails & {
     description_html?: string; website?: string; store_url?: string;
-    info_source?: string; info_source_name?: string;
+    info_source?: string; info_source_name?: string; info_stale?: boolean;
     languages?: string[]; controller?: string;
     requirements?: { minimum?: string; recommended?: string } | null;
     age_rating?: string; tags?: string[]; videos?: unknown[];
@@ -788,6 +798,11 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
           </span>
           <InfoUnlink game={game} onUnlinked={() => onReload?.()} />
         </div>
+      )}
+      {d?.info_stale && (
+        <p className="mt-2 font-mono text-[12px] text-amber-200/70" data-testid="info-stale">
+          {t('game:about.infoStale')}
+        </p>
       )}
     </Panel>
   );

@@ -157,11 +157,23 @@ func (c *cloudLaunch) abandon() {
 	}
 }
 
+// cloudLaunchTimeout bounds the pre-launch cloud check (issue #44): the
+// launch path waits at most this long for cloud.status. Longer, and an
+// offline store would stall every Play.
+const cloudLaunchTimeout = 5 * time.Second
+
 // cloudBeforeLaunch syncs a game's cloud saves before Platypus starts it. anyway
 // is the user's "launch anyway" for this launch only. blocked means the launch
 // waits for the user (msg says on what); otherwise sync, when not nil, registers
 // the post-exit push. When the launch goes on without a sync, msg says why, if
 // the game has cloud saves at all (a note, not a question).
+//
+// Offline is never in the way: while offline cloud.status is skipped and the
+// launch proceeds with the note "cloud saves not checked: offline". While
+// online the check is bounded by cloudLaunchTimeout; a network-class failure
+// (the bound ran out, or the machine went offline during the check) proceeds
+// with the same note. Anything else (a conflict, the store client running)
+// still waits for the user: only the network never blocks.
 func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync *cloudLaunch, msg string, blocked bool) {
 	g, ok := a.cloudGame(game)
 	if !ok {
@@ -173,9 +185,17 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 		return nil, cloudSkipNote(err), false
 	}
 	game.InstallDir = folder
+	if !a.netOnline() {
+		return nil, "cloud saves not checked: offline", false
+	}
 	cc := a.cloudContextOf(game, p.runner, a.prefixesFolder())
-	d := a.cloud.BeforeLaunch(a.ctx, g, cc, anyway)
+	ctx, cancel := context.WithTimeout(a.ctx, cloudLaunchTimeout)
+	defer cancel()
+	d := a.cloud.BeforeLaunch(ctx, g, cc, anyway)
 	if !d.Proceed {
+		if d.Prompt == types.CloudPromptOffline && (ctx.Err() != nil || !a.netOnline()) {
+			return nil, "cloud saves not checked: offline", false
+		}
 		if d.Message != "" {
 			return nil, d.Message, true
 		}

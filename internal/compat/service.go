@@ -381,6 +381,29 @@ func deckTTL(e DeckEntry) time.Duration {
 	return ProtonMissTTL
 }
 
+// Fetchers returns the HTTP fetchers behind the service's sources, so the
+// launcher can wrap their clients (offline tracking, issue #44). Sources a
+// test replaced with fakes contribute nothing.
+func (s *Service) Fetchers() []*Fetcher {
+	if s == nil {
+		return nil
+	}
+	var out []*Fetcher
+	if p, ok := s.Ratings.(*ProtonDB); ok && p != nil && p.Fetch != nil {
+		out = append(out, p.Fetch)
+	}
+	if d, ok := s.Deck.(*SteamDeck); ok && d != nil && d.Fetch != nil {
+		out = append(out, d.Fetch)
+	}
+	if s.AntiCheat != nil && s.AntiCheat.Fetch != nil {
+		out = append(out, s.AntiCheat.Fetch)
+	}
+	if w, ok := s.Wiki.(*PCGW); ok && w != nil && w.Fetch != nil {
+		out = append(out, w.Fetch)
+	}
+	return out
+}
+
 // result is the DeckResult of a saved entry.
 func (e DeckEntry) result(stale bool) DeckResult {
 	return DeckResult{Found: e.Found, Report: DeckReport{Rating: e.Rating, Notes: e.Notes}, FetchedAt: e.FetchedAt, Stale: stale}
