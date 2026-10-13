@@ -90,15 +90,6 @@ func (r *Registry) Get(source string) (Store, bool) {
 	return nil, false
 }
 
-// SetLocale forwards the BCP 47 tag to the built-in stores that fetch
-// localized metadata.
-func (r *Registry) SetLocale(locale string) {
-	if r == nil {
-		return
-	}
-	for _, s := range r.builtin {
-		if st, ok := s.(*Steam); ok {
-			st.SetLocale(locale)
-		}
-	}
-}
+// SetLocale is kept for callers: store locales now travel with the plugins
+// (initialize {locale}, locale.changed). No built-in store remains.
+func (r *Registry) SetLocale(locale string) {}

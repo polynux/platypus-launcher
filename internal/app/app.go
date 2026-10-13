@@ -189,7 +189,7 @@ func NewAppWithOptions(o Options) *App {
 	a.optDataDir = o.DataDir
 	a.optCacheDir = o.CacheDir
 	a.optPluginsDir = o.PluginsDir
-	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
+	a.stores = stores.NewRegistry(a.pluginStores)
 	a.net = netstate.New()
 	a.net.OnTransition(func(online bool) {
 		snap := a.net.Snapshot()

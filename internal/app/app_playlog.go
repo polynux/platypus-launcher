@@ -106,19 +106,6 @@ func (a *App) applyPlaytime(games []types.Game) {
 			g.PlaytimeMin = stats.MergePlaytime(local, store)
 			continue
 		}
-		if g.Source == types.SourceSteam {
-			// Steam's own record came with the listing: it is the
-			// store side, this log the local one.
-			store := g.PlaytimeMin
-			v := local
-			g.PlaytimeLocalMin = &v
-			if store > 0 {
-				s := store
-				g.PlaytimeStoreMin = &s
-			}
-			g.PlaytimeMin = stats.MergePlaytime(local, store)
-			continue
-		}
 		// No store report (an unreported plugin game, sideloaded): what
 		// the listing carried, if anything, is local too.
 		if g.PlaytimeMin > local {
