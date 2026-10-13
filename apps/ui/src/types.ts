@@ -140,7 +140,7 @@ export type AuthStatus = gen.AuthStatus;
 export type AuthField = gen.AuthField;
 export type AuthPrompt = gen.AuthPrompt;
 
-export type JobKind = 'install' | 'update' | 'uninstall' | 'verify' | 'move' | 'backup' | 'restore';
+export type JobKind = 'install' | 'update' | 'uninstall' | 'verify' | 'move' | 'backup' | 'restore' | 'remove';
 /** The jobs a game page starts from its install panel (the rest have their own actions). */
 export type GameJobKind = 'install' | 'update' | 'uninstall';
 export type JobState = 'queued' | 'running' | 'paused' | 'done' | 'failed' | 'canceled';
@@ -151,6 +151,12 @@ export type SaveBackup = gen.SaveBackup;
 export type SavePath = gen.SavePath;
 export type BackupSettings = gen.BackupSettings;
 export type RestorePreview = gen.RestorePreview;
+/** Removing a sideloaded game: what to delete, what it would do, one target. */
+export type RemoveOptions = gen.RemoveOptions;
+export type RemoveCheck = gen.RemoveCheck;
+export type RemoveTarget = gen.RemoveTarget;
+/** What a backup-before-delete step did (issue #42). */
+export type SaveGate = gen.SaveGate;
 
 export type VersionTarget = gen.VersionTarget;
 export type VersionChannel = gen.VersionChannel;

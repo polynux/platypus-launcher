@@ -468,9 +468,13 @@ type Job struct {
 	Repair bool `json:"repair,omitempty"`
 	// Destination is where a move takes the game (InstallDir is where it is).
 	Destination string `json:"destination,omitempty"`
-	// AllowNoSaves says an uninstall may proceed without a save backup
-	// (issue #42): the user checked "delete without a save backup" after
-	// the gate found no known save paths.
+	// DeletePrefix and DeleteFiles say what a remove job deletes: the
+	// sideloaded game's Wine prefix and/or its game files (issue #43). At
+	// least one is set. AllowNoSaves lets the save gate pass when no known
+	// save paths apply (a remove, or an uninstall after the user checked
+	// "delete without a save backup", issue #42).
+	DeletePrefix bool `json:"delete_prefix,omitempty"`
+	DeleteFiles  bool `json:"delete_files,omitempty"`
 	AllowNoSaves bool `json:"allow_no_saves,omitempty"`
 	// Verify is what a verify job found, once it is done.
 	Verify *VerifyReport `json:"verify,omitempty"`
@@ -498,6 +502,39 @@ type MoveCheck struct {
 	NeedBytes   int64  `json:"need_bytes"`
 	FreeBytes   int64  `json:"free_bytes"`
 	PluginMoves bool   `json:"plugin_moves"`
+}
+
+// RemoveOptions are what a sideloaded game's removal deletes (issue #43):
+// its Wine prefix and/or its game files. Neither means library only (no
+// job). AllowNoSaves answers the save gate when no known save paths apply;
+// CheckRemove ignores it.
+type RemoveOptions struct {
+	DeletePrefix bool `json:"delete_prefix"`
+	DeleteFiles  bool `json:"delete_files"`
+	AllowNoSaves bool `json:"allow_no_saves"`
+}
+
+// RemoveTarget is one folder a removal would delete: its kind ("prefix" or
+// "files"), path and size, whether it is there, and whether it may go (with
+// the reason when it may not). ReasonCode is the apperr code behind Reason,
+// so the UI renders errors:<code>; ReasonParams carries its values.
+type RemoveTarget struct {
+	Kind         string            `json:"kind"`
+	Path         string            `json:"path"`
+	Bytes        int64             `json:"bytes"`
+	Exists       bool              `json:"exists"`
+	Allowed      bool              `json:"allowed"`
+	Reason       string            `json:"reason,omitempty"`
+	ReasonCode   string            `json:"reason_code,omitempty"`
+	ReasonParams map[string]string `json:"reason_params,omitempty"`
+}
+
+// RemoveCheck is what removing a sideloaded game would do, before it is
+// queued. Saves previews the save gate (issue #42): with no known save
+// paths the UI asks for an explicit confirmation.
+type RemoveCheck struct {
+	Targets []RemoveTarget `json:"targets"`
+	Saves   SaveGate       `json:"saves"`
 }
 
 // Relocation says core moved a game's folder: the folder the plugin reports

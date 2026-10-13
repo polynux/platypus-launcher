@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -181,12 +180,11 @@ func (a *App) backupCtx(game types.Game, steamID, gogID string) savebackup.Conte
 	return ctx
 }
 
-// backupGate backs up exactly the save paths in scope ("": everything the
-// game resolves; "uninstall": those inside the install dir or prefix). A
-// failed backup returns an error and the caller deletes nothing. With no
+// backupGate backs up every save path the game resolves, a superset of what
+// a destructive action deletes. A failed backup returns an error and the caller deletes nothing. With no
 // known save paths it returns NoPaths with a savebackup.noPaths error,
 // unless allowNoSaves is set.
-func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, allowNoSaves bool, scope string) (types.SaveGate, error) {
+func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, allowNoSaves bool) (types.SaveGate, error) {
 	if a.settings != nil && !savebackup.BackupsApplies(a.settings, game.ID) {
 		return types.SaveGate{}, nil
 	}
@@ -208,7 +206,7 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	if ferr == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, rctx, unresolved := svc.ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
 	if len(patterns) == 0 {
 		g := types.SaveGate{NoPaths: true}
 		if allowNoSaves {
@@ -218,14 +216,8 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 			fmt.Sprintf("Platypus knows no save paths for %s; add some or delete without a save backup", game.Title),
 			map[string]string{"title": game.Title})
 	}
-	files, skipped, _, _, _ := savebackup.Enumerate(patterns, rctx)
-	if scope == "uninstall" {
-		files = filterScope(files, game, a.homeDir(), a.prefixesFolder(), a.resolvedDataDir())
-	}
-	if len(files) == 0 && unresolved == 0 && skipped == 0 {
-		// Paths are known but nothing is on disk: still write the (empty)
-		// version below, so the gate has something to point at.
-	}
+	// The backup takes every known save of the game, a superset of what the
+	// action deletes: simpler, and never less safe.
 	b, warned, skippedOut, unresolvedOut, err := svc.Backup(game, trigger, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
@@ -244,25 +236,30 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	return types.SaveGate{BackupID: b.ID, Files: b.Files, Bytes: b.Bytes, Unchanged: b.Unchanged}, nil
 }
 
-// filterScope keeps the files inside the install dir or the game's prefix:
-// exactly what an uninstall would delete.
-func filterScope(files []savebackup.Enumerated, game types.Game, home, prefixesFolder, dataDir string) []savebackup.Enumerated {
-	var scopes []string
-	if game.InstallDir != "" {
-		scopes = append(scopes, filepath.Clean(game.InstallDir))
+// savesPreview is what the gate would do, without backing anything up: off,
+// no known save paths, or how many save files exist now (CheckRemove).
+func (a *App) savesPreview(game types.Game) types.SaveGate {
+	if a.settings != nil && !savebackup.BackupsApplies(a.settings, game.ID) {
+		return types.SaveGate{Off: true}
 	}
-	scopes = append(scopes, filepath.Clean(savebackup.PrefixPathFor(game, home, prefixesFolder, dataDir)))
-	var out []savebackup.Enumerated
+	steamID, gogID := a.backupIDs(game)
+	var userPaths []string
+	if a.settings != nil {
+		userPaths = a.settings.GameSavePaths(game.ID)
+	}
+	if folder, err := a.currentFolder(game); err == nil {
+		game.InstallDir = folder
+	}
+	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	if len(patterns) == 0 {
+		return types.SaveGate{NoPaths: true}
+	}
+	files, _, _, _, _ := savebackup.Enumerate(patterns, rctx)
+	g := types.SaveGate{Files: len(files)}
 	for _, f := range files {
-		clean := filepath.Clean(f.Abs)
-		for _, s := range scopes {
-			if clean == s || strings.HasPrefix(clean, s+string(filepath.Separator)) {
-				out = append(out, f)
-				break
-			}
-		}
+		g.Bytes += f.Size
 	}
-	return out
+	return g
 }
 
 // backupCloudGate refuses a destructive backup while a cloud job holds the

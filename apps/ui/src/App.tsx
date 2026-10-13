@@ -32,7 +32,7 @@ import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import { useTranslation } from 'react-i18next';
 import { RawDetails } from './components/ErrorNotice';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
@@ -554,22 +554,31 @@ export function App() {
     });
   };
 
-  // Forgetting a sideloaded game: the backend drops it (files stay on disk).
+  // Forgetting a sideloaded game: library only drops it at once (files stay
+  // on disk); with a delete flag the backend queues a removal job instead.
   // A running game can't leave the library until it stops, or it could no
   // longer be stopped from the launcher. Leaving the page only happens when
   // the user is still on this game's page: a navigation meanwhile wins.
-  const removeGame = (game: Game) => {
+  const removeGame = (game: Game, opts: RemoveOptions) => {
     if (sessions[game.id] || launchingId === game.id) {
       notify(t('game:stopBeforeRemove', { title: game.title }), 'err');
       return;
     }
-    Effect.runPromise(LauncherApi.removeCustomGame(game.id))
+    if (!opts.delete_prefix && !opts.delete_files) {
+      Effect.runPromise(LauncherApi.removeCustomGame(game.id))
+        .then(() => {
+          setGames((prev) => prev.filter((x) => x.id !== game.id));
+          invalidateGameDetailsCache(game.id);
+          setView((v) => (v.name === 'game' && v.id === game.id ? { name: v.from } : v));
+          notify(t('game:removed', { title: game.title }));
+          log({ type: 'remove', game: game.title, detail: t('activity:log.removed', { title: game.title }), meta: game.install_dir || undefined });
+        })
+        .catch((err) => notify(coreErrMsg(err), 'err'));
+      return;
+    }
+    Effect.runPromise(LauncherApi.removeGame(game.id, opts))
       .then(() => {
-        setGames((prev) => prev.filter((x) => x.id !== game.id));
-        invalidateGameDetailsCache(game.id);
-        setView((v) => (v.name === 'game' && v.id === game.id ? { name: v.from } : v));
-        notify(t('game:removed', { title: game.title }));
-        log({ type: 'remove', game: game.title, detail: t('activity:log.removed', { title: game.title }), meta: game.install_dir || undefined });
+        notify(t('downloads:queued', { action: t('downloads:action.remove'), title: game.title }), 'busy');
       })
       .catch((err) => notify(coreErrMsg(err), 'err'));
   };
@@ -708,7 +717,7 @@ export function App() {
             onNotify={notify}
             onVersionsChanged={() => loadData('update')}
             onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
-            onRemove={() => removeGame(currentGame)}
+            onRemove={(opts) => removeGame(currentGame, opts)}
           />
         ) : (
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>

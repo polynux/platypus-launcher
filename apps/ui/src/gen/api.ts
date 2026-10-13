@@ -25,6 +25,7 @@ export interface CoreApi {
   CheckCloudSaves(game: types.Game): Promise<types.CloudInfo>;
   CheckInstallFolder(folder: string): Promise<types.InstallFolderCheck>;
   CheckMove(game: types.Game, parent: string): Promise<types.MoveCheck>;
+  CheckRemove(gameID: string, opts: types.RemoveOptions): Promise<types.RemoveCheck>;
   ChooseGameFolder(): Promise<string>;
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
@@ -95,6 +96,7 @@ export interface CoreApi {
   RefreshSaveManifest(): Promise<void>;
   RefreshSavePaths(game: types.Game): Promise<types.SavePath[]>;
   RemoveCustomGame(id: string): Promise<void>;
+  RemoveGame(gameID: string, opts: types.RemoveOptions): Promise<types.Job>;
   RemoveGameFolder(path: string): Promise<types.GameFolder[]>;
   RepairGame(game: types.Game): Promise<types.Job>;
   RescanLibrary(): Promise<types.Library>;
@@ -168,6 +170,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'CheckCloudSaves',
   'CheckInstallFolder',
   'CheckMove',
+  'CheckRemove',
   'ChooseGameFolder',
   'ChoosePluginInstallFolder',
   'ClearFinishedJobs',
@@ -238,6 +241,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'RefreshSaveManifest',
   'RefreshSavePaths',
   'RemoveCustomGame',
+  'RemoveGame',
   'RemoveGameFolder',
   'RepairGame',
   'RescanLibrary',

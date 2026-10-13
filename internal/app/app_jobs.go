@@ -57,6 +57,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 			return err
 		}
 		return b.a.plugins.Call(ctx, j.Source, "game.uninstall", installParams(j, nil), nil)
+	case jobs.KindRemove:
+		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -121,24 +123,28 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 		b.a.backups.stop(ctx, j.ID)
 		return nil
 	}
+	if j.Kind == jobs.KindRemove {
+		b.a.removes.stop(ctx, j.ID)
+		return nil
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
-// RunsInCore says whether core is running the job's move itself, in a
-// goroutine of its own (see CoreRunner in the queue). Core's own moves and
-// its backup/restore jobs all run there.
+// RunsInCore says whether core is running the job itself, in a goroutine of
+// its own (see CoreRunner in the queue): core's own moves and removals, and
+// its backup/restore jobs.
 func (b jobBackend) RunsInCore(j types.Job) bool {
 	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
 		return true
 	}
-	return b.a.moves.active(j.ID)
+	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID)
 }
 
-// heldByJob refuses a launch while a move, a check, a backup or a restore
-// holds the game: the game would start from files that are being moved,
-// checked or rewritten.
+// heldByJob refuses a launch while a move, a check, a backup, a restore or a
+// removal holds the game: the game would start from files that are being
+// moved, checked, rewritten or deleted.
 func (a *App) heldByJob(game types.Game) error {
-	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore)
+	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore, jobs.KindRemove)
 	if !ok {
 		return nil
 	}
@@ -150,6 +156,8 @@ func (a *App) heldByJob(game types.Game) error {
 		what = "backed up"
 	case jobs.KindRestore:
 		what = "restored"
+	case jobs.KindRemove:
+		what = "removed"
 	}
 	return apperr.New("game.launchBusy", fmt.Sprintf("%s is being %s; launch it once that finishes", game.Title, what), map[string]string{"title": game.Title, "what": what})
 }

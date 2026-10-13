@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
-import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
+import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CopyPicker } from './CopyPicker';
@@ -86,7 +86,7 @@ interface GamePageProps {
   /** The family copy a borrowed game is played from changed: the library should reload. */
   onCopyChanged?: () => void;
   /** Removes a sideloaded game from the library (custom games only). */
-  onRemove?: () => void;
+  onRemove?: (opts: RemoveOptions) => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.

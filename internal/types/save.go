@@ -13,6 +13,9 @@ type SaveGate struct {
 	// Unchanged is true when the saves equal the newest backup, so the gate
 	// wrote nothing and reused it.
 	Unchanged bool `json:"unchanged,omitempty"`
+	// Off is true in a preview when backups don't apply to the game (turned
+	// off globally or for it): nothing will be backed up first.
+	Off bool `json:"off,omitempty"`
 }
 
 // SavePath is one resolved save location of a game: where it is on disk,
@@ -25,9 +28,9 @@ type SavePath struct {
 
 // SaveFile is one file inside a backup archive.
 type SaveFile struct {
-	Root string `json:"root"` // root label from the metadata
-	Path string `json:"path"` // relative path inside that root
-	Size int64  `json:"size"`
+	Root   string `json:"root"` // root label from the metadata
+	Path   string `json:"path"` // relative path inside that root
+	Size   int64  `json:"size"`
 	Sha256 string `json:"sha256,omitempty"`
 	Mtime  int64  `json:"mtime,omitempty"`
 }
@@ -62,19 +65,19 @@ type BackupMeta struct {
 
 // BackupSettings are the global save-backup switches (issue #42).
 type BackupSettings struct {
-	Folder       string `json:"folder"`         // backups folder, "" = <data>/backups
+	Folder        string `json:"folder"`         // backups folder, "" = <data>/backups
 	DefaultFolder string `json:"default_folder"` // <data>/backups
-	Keep         int    `json:"keep"`           // versions kept per game
-	Mode         string `json:"mode"`           // "destructive" | "all" | "off"
-	AfterSession bool   `json:"after_session"`
-	Manifest     string `json:"manifest"` // "ready" | "fetching" | "stale" | "none"
+	Keep          int    `json:"keep"`           // versions kept per game
+	Mode          string `json:"mode"`           // "destructive" | "all" | "off"
+	AfterSession  bool   `json:"after_session"`
+	Manifest      string `json:"manifest"` // "ready" | "fetching" | "stale" | "none"
 }
 
 // RestorePreview says what a restore would do, before it does it.
 type RestorePreview struct {
-	Overwritten int `json:"overwritten"`
-	Added       int `json:"added"`
-	Kept        int `json:"kept"`
-	Files       int `json:"files"`
+	Overwritten int   `json:"overwritten"`
+	Added       int   `json:"added"`
+	Kept        int   `json:"kept"`
+	Files       int   `json:"files"`
 	Bytes       int64 `json:"bytes"`
 }

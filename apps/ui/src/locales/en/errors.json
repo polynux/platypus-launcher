@@ -115,6 +115,25 @@
     "notStore": "{{source}} isn't a store plugin.",
     "unsupported": "{{name}} doesn't redeem codes."
   },
+  "remove": {
+    "busy": "{{title}} already has a {{kind}} queued.",
+    "escaped": "Refusing to delete {{path}}: it resolves outside itself.",
+    "gamesFolder": "Refusing to delete {{path}}: it holds Platypus's {{folder}}.",
+    "home": "Refusing to delete your home folder or one above it ({{path}}).",
+    "noExecutable": "{{title}} has no executable, so Platypus doesn't know which folder holds its files.",
+    "noMarker": "Refusing to delete {{path}}: it has no Wine prefix in it (no system.reg).",
+    "notAbsolute": "Refusing to delete {{path}}: not a clean absolute path.",
+    "notFound": "{{path}} is not on disk.",
+    "nothingToDelete": "Choose what to delete: the Wine prefix, the game files, or both.",
+    "ownData": "Refusing to delete {{path}}: it holds Platypus's {{folder}}.",
+    "prefixesRoot": "Refusing to delete {{path}}: it holds Platypus's {{folder}}.",
+    "root": "Refusing to delete the filesystem root.",
+    "shared": "Refusing to delete {{path}}: {{title}} still uses it.",
+    "symlink": "Refusing to delete {{path}}: it is a symlink.",
+    "system": "Refusing to delete system folder {{path}}.",
+    "unreadable": "Refusing to delete {{path}}: it can't be read.",
+    "userDir": "Refusing to delete {{path}}: it overlaps your {{folder}} folder."
+  },
   "settings": {
     "cleanupDays": {
       "invalid": "Keep canceled downloads between 0 and {{max}} days, got {{days}}."

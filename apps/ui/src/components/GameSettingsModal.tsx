@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
-import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, StorePlugin, Tweak } from '../types';
+import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, RemoveOptions, StorePlugin, Tweak } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
@@ -47,7 +47,7 @@ export interface GameSettingsModalProps {
   onCustomized: () => void;
   onCopied: () => void;
   /** Removes a sideloaded game from the library (custom games only). */
-  onRemove?: () => void;
+  onRemove?: (opts: RemoveOptions) => void;
   /** The game is starting or running: destructive actions wait. */
   running?: boolean;
 }
