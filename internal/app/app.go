@@ -142,6 +142,9 @@ type App struct {
 	// migration is what the Hydra→Platypus data move did at startup
 	// (internal/migrate); MigrationNotice shows it once (issue #14).
 	migration migrate.Report
+	// backupGateForTests overrides backupBeforeDelete in tests (issue #43);
+	// nil in production, where the stub (issue #42: the real gate) runs.
+	backupGateForTests func(ctx context.Context, game types.Game, trigger string, allowNoSaves bool) (types.SaveGate, error)
 }
 
 // Options carries the folders one App run uses (issue #41). Empty fields
