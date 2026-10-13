@@ -246,6 +246,11 @@ export namespace types {
     url: string;
   }
 
+  export interface DetectResult {
+    native: boolean;
+    kind: string;
+  }
+
   export interface FamilyMember {
     id: string;
     name: string;
@@ -379,6 +384,7 @@ export namespace types {
     eac_runtime: boolean;
     battleye_runtime: boolean;
     working_dir: string;
+    run_mode?: string;
   }
 
   export interface GameTerm {

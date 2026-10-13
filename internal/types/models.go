@@ -34,6 +34,10 @@ type GameSettings struct {
 	EACRuntime      bool              `json:"eac_runtime"`      // EasyAntiCheat runtime binding
 	BattlEyeRuntime bool              `json:"battleye_runtime"` // BattlEye runtime binding
 	WorkingDir      string            `json:"working_dir"`
+	// RunMode is how a sideloaded game runs (issue #47): "" or "auto" means
+	// the detected value (ELF/shebang/AppImage = native, MZ/.msi/.bat/.lnk =
+	// Wine), "native" forces a Linux run, "wine" forces Wine/Proton.
+	RunMode string `json:"run_mode,omitempty"`
 }
 
 type GameFixInfo struct {
@@ -55,6 +59,13 @@ const (
 	SourceSteam  = "steam"
 	SourceCustom = "custom"
 )
+
+// DetectResult is how a sideloaded executable would run by default
+// (issue #47): content detection, before the per-game run_mode override.
+type DetectResult struct {
+	Native bool   `json:"native"`
+	Kind   string `json:"kind"`
+}
 
 type Game struct {
 	ID string `json:"id"`

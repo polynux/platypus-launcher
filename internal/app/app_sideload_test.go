@@ -198,7 +198,8 @@ func sideloadApp(t *testing.T) *App {
 // The custom-game launch path honours the working directory and the Wine
 // prefix stored in the game's GameSettings (issues #33, #34): the runner
 // runs in the working dir (empty = the executable's folder) with the
-// per-game prefix in the environment.
+// per-game prefix in the environment. The executable holds Windows content
+// (MZ), so this stays a Wine game (native games have no prefix, #47).
 func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
@@ -221,7 +222,7 @@ func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 	exe := filepath.Join(gameDir, "game.exe")
-	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := os.WriteFile(exe, []byte("MZ\x90\x00"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	work := filepath.Join(root, "work")

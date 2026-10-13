@@ -64,10 +64,11 @@ func (a *App) allGameFolders() []string {
 
 // removeTargets recomputes what a removal deletes: the prefix comes from
 // runner.PrefixPath (the game's own pin wins), the files are the folder of
-// its executable.
+// its executable. A native game has no prefix (issue #47): the prefix target
+// is never offered for one, even when asked for.
 func (a *App) removeTargets(game types.Game, opts types.RemoveOptions) ([]removeTarget, error) {
 	var out []removeTarget
-	if opts.DeletePrefix {
+	if opts.DeletePrefix && !game.Native {
 		out = append(out, removeTarget{kind: removeKindPrefix, path: runner.PrefixPath(game, a.homeDir(), a.effectivePrefixesFolder())})
 	}
 	if opts.DeleteFiles {

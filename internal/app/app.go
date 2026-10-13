@@ -498,6 +498,10 @@ var gameSettingsFields = func() map[string]struct{} {
 // customGames returns the games the user added by hand, saved in settings.json.
 func (a *App) customGames() []types.Game {
 	out := []types.Game{}
+	savedAll := map[string]map[string]any{}
+	if a.settings != nil {
+		savedAll = a.settings.GameSettings()
+	}
 	for _, g := range a.settings.CustomGames() {
 		g := types.Game{
 			ID:          g.ID,
@@ -514,7 +518,7 @@ func (a *App) customGames() []types.Game {
 		// Saved per-game settings win over the defaults. Keys the backend
 		// doesn't model (UI-only controls like sync_mode) are kept
 		// opaquely so sideloaded games don't lose them (CORE-9).
-		if saved, ok := a.settings.GameSettings()[g.ID]; ok {
+		if saved, ok := savedAll[g.ID]; ok {
 			if data, err := json.Marshal(saved); err == nil {
 				_ = json.Unmarshal(data, &g.Settings)
 			}
@@ -527,9 +531,24 @@ func (a *App) customGames() []types.Game {
 				}
 			}
 		}
+		g.Native = a.customNative(g.Executable, g.Settings.RunMode)
 		out = append(out, g)
 	}
 	return out
+}
+
+// customNative resolves whether a sideloaded executable runs natively
+// (issue #47): content detection, with the per-game run_mode override
+// ("native"/"wine") winning over it. An unreadable file defaults to Wine,
+// preserving the old behaviour until the launch surfaces the error.
+func (a *App) customNative(executable, runMode string) bool {
+	detected := false
+	if executable != "" {
+		if d, err := runner.DetectExecutable(executable); err == nil {
+			detected = d.Native
+		}
+	}
+	return runner.ResolveNative(detected, runMode)
 }
 
 // AddCustomGame saves a game the user added by hand: title plus the path of
@@ -553,7 +572,75 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 		Executable:  g.Executable,
 		IsInstalled: true,
 		Settings:    types.GameSettings{UseGameMode: true},
+		Native:      a.customNative(g.Executable, ""),
 	}, nil
+}
+
+// DetectGameExecutable reports how a sideloaded executable would run by
+// default (issue #47): content detection, before the per-game override. The
+// UI shows it as the default of the "Run with" choice.
+func (a *App) DetectGameExecutable(path string) (types.DetectResult, error) {
+	d, err := runner.DetectExecutable(path)
+	if err != nil {
+		return types.DetectResult{}, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": path})
+	}
+	return types.DetectResult{Native: d.Native, Kind: string(d.Kind)}, nil
+}
+
+// UpdateCustomGameExecutable points a sideloaded game at a new executable
+// and returns it as the library shows it (re-detected, issue #47).
+func (a *App) UpdateCustomGameExecutable(id, executable string) (types.Game, error) {
+	g, err := a.settings.UpdateCustomGameExecutable(id, executable)
+	if err != nil {
+		return types.Game{}, err
+	}
+	for _, full := range a.customGames() {
+		if full.ID == id {
+			return full, nil
+		}
+	}
+	return types.Game{
+		ID: g.ID, Source: types.SourceCustom, Store: types.StoreCustom, StoreAppID: types.SourceCustom,
+		Title: g.Title, ReleaseYear: g.ReleaseYear, InstallDir: filepath.Dir(g.Executable),
+		Executable: g.Executable, IsInstalled: true,
+		Settings: types.GameSettings{UseGameMode: true}, Native: a.customNative(g.Executable, ""),
+	}, nil
+}
+
+// IsGameExecutable says whether the sideloaded game's file has the execute
+// bit. The UI offers "Make it executable" when it doesn't.
+func (a *App) IsGameExecutable(gameID string) (bool, error) {
+	game, err := a.customGameByID(gameID)
+	if err != nil {
+		return false, err
+	}
+	ok, err := runner.IsExecutable(game.Executable)
+	if err != nil {
+		return false, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": game.Executable})
+	}
+	return ok, nil
+}
+
+// MakeGameExecutable sets the execute bit on the sideloaded game's own file
+// (chmod u+x on that one file, issue #47). The UI asks for confirmation
+// first; without the bit a native launch fails with a clear error.
+func (a *App) MakeGameExecutable(gameID string) (types.Game, error) {
+	game, err := a.customGameByID(gameID)
+	if err != nil {
+		return types.Game{}, err
+	}
+	if err := runner.MakeExecutable(game.Executable); err != nil {
+		return types.Game{}, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": game.Executable})
+	}
+	for _, full := range a.customGames() {
+		if full.ID == gameID {
+			return full, nil
+		}
+	}
+	return game, nil
 }
 
 // SetCustomGameYear saves a sideloaded game's release year (0 clears it)
@@ -758,6 +845,9 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		return &prepared{args: args, env: env, dir: dir, redact: d.Redact, runner: r}, nil
 	}
 
+	if a.isCustomLaunch(game) {
+		return a.prepareSideload(game, preview)
+	}
 	r, err := a.selectRunner(game)
 	if err != nil {
 		return nil, err
@@ -771,6 +861,73 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		dir = filepath.Dir(game.Executable)
 	}
 	return &prepared{args: args, env: env, dir: dir, runner: r}, nil
+}
+
+func (a *App) prepareSideload(game types.Game, preview bool) (*prepared, error) {
+	// The library sets Native, but previews from the settings draft (or any
+	// hand-built game) may carry a stale flag with a fresh run_mode: resolve
+	// again so the preview is honest.
+	game.Native = a.customNative(game.Executable, game.Settings.RunMode)
+	return a.prepareCustomLaunch(game, preview)
+}
+
+// isCustomLaunch says whether the game launches as a sideloaded executable
+// (no store launch spec): source custom, or a custom id the caller passed by
+// hand.
+func (a *App) isCustomLaunch(game types.Game) bool {
+	if game.Source == "" || game.Source == types.SourceCustom {
+		return true
+	}
+	return a.isCustomGameID(game.ID)
+}
+
+// prepareCustomLaunch builds the launch for a sideloaded game (issue #47):
+// native games run directly with no runner and no Wine prefix (GameMode,
+// MangoHud and Gamescope still wrap them), Windows games go through the
+// runner as before. The working directory defaults to the binary's folder.
+// A .sh script without the execute bit runs through /bin/sh; any other
+// native binary without it fails with a clear error instead of a raw exec
+// failure (the UI offers to set the bit first).
+func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, error) {
+	if !game.Native {
+		r, err := a.selectRunner(game)
+		if err != nil {
+			return nil, err
+		}
+		args, env, err := runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
+		if err != nil {
+			return nil, err
+		}
+		dir := game.Settings.WorkingDir
+		if dir == "" && game.Executable != "" {
+			dir = filepath.Dir(game.Executable)
+		}
+		return &prepared{args: args, env: env, dir: dir, runner: r}, nil
+	}
+	kind := runner.ExecUnknown
+	if d, err := runner.DetectExecutable(game.Executable); err == nil {
+		kind = d.Kind
+	}
+	exec, err := runner.IsExecutable(game.Executable)
+	if err != nil {
+		return nil, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": game.Executable})
+	}
+	target := runner.NativeTarget(game.Executable, kind, exec)
+	if !exec && target.Exe == game.Executable {
+		return nil, apperr.New("sideload.notExecutable",
+			fmt.Sprintf("%s is not executable; make it executable or it can't start", game.Executable),
+			map[string]string{"executable": game.Executable})
+	}
+	args, env, err := runner.BuildCommandFor(game, types.ProtonVersion{}, target, preview, a.prefixesFolder(), a.homeDir())
+	if err != nil {
+		return nil, err
+	}
+	dir := game.Settings.WorkingDir
+	if dir == "" && game.Executable != "" {
+		dir = filepath.Dir(game.Executable)
+	}
+	return &prepared{args: args, env: env, dir: dir}, nil
 }
 
 // shown is the command line with env, redacted for previews and logs.
@@ -1069,6 +1226,20 @@ func (a *App) cleanGameSettingsPaths(gameSettings map[string]any) error {
 				return fmt.Errorf("wine prefix: %w", err)
 			}
 			gameSettings["wine_prefix"] = clean
+		}
+	}
+	if v, ok := gameSettings["run_mode"]; ok {
+		if s, _ := v.(string); strings.TrimSpace(s) != "" && !runner.ValidRunMode(s) {
+			return apperr.New("settings.runMode.invalid",
+				fmt.Sprintf("run mode must be auto, native or wine, got %q", s),
+				map[string]string{"value": s})
+		}
+		if s, _ := v.(string); strings.TrimSpace(s) == "" {
+			delete(gameSettings, "run_mode")
+		} else if s, _ := v.(string); strings.EqualFold(strings.TrimSpace(s), "auto") {
+			gameSettings["run_mode"] = "auto"
+		} else {
+			gameSettings["run_mode"] = strings.ToLower(strings.TrimSpace(s))
 		}
 	}
 	return nil

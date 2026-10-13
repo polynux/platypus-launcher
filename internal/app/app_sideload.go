@@ -11,8 +11,8 @@ import (
 
 // PickGameExecutable opens the native file picker for the sideloaded
 // game's executable. Returns "" when the user cancels. Linux binaries
-// have no extension, so no filter is forced: every file is shown, with
-// Windows programs as a second choice.
+// have no extension, so every file is shown first, with native Linux
+// programs and Windows programs as further choices (issue #47).
 func (a *App) PickGameExecutable(start string) (string, error) {
 	def := start
 	if st, err := os.Stat(start); err == nil && !st.IsDir() {
@@ -25,7 +25,8 @@ func (a *App) PickGameExecutable(start string) (string, error) {
 		Default: def,
 		Filters: []FileFilter{
 			{Name: "All files", Extensions: []string{"*"}},
-			{Name: "Windows programs", Extensions: []string{"exe"}},
+			{Name: "Linux programs", Extensions: []string{"sh", "AppImage", "x86_64", "x86", "bin"}},
+			{Name: "Windows programs", Extensions: []string{"exe", "msi", "bat", "cmd", "lnk"}},
 		},
 	})
 }

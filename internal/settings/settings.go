@@ -361,6 +361,56 @@ func (s *Store) AddCustomGame(title, executable string) (CustomGame, error) {
 	return g, nil
 }
 
+// UpdateCustomGameExecutable points a hand-added game at a new executable:
+// the same absolute, regular-file checks as AddCustomGame, re-detected on
+// next read (issue #47). The duplicate check skips the game itself.
+func (s *Store) UpdateCustomGameExecutable(id, executable string) (CustomGame, error) {
+	executable = strings.TrimSpace(executable)
+	if !filepath.IsAbs(executable) {
+		return CustomGame{}, apperr.New("sideload.executable.notAbsolute",
+			fmt.Sprintf("executable must be an absolute path, got %q", executable),
+			map[string]string{"executable": executable})
+	}
+	real, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return CustomGame{}, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": executable})
+	}
+	st, err := os.Stat(real)
+	if err != nil {
+		return CustomGame{}, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": executable})
+	}
+	if !st.Mode().IsRegular() {
+		return CustomGame{}, apperr.New("sideload.executable.notFile",
+			fmt.Sprintf("%s is not a file", executable),
+			map[string]string{"executable": executable})
+	}
+	executable = real
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, g := range s.data.CustomGames {
+		if g.ID != id && g.Executable == executable {
+			return CustomGame{}, apperr.New("sideload.duplicate",
+				fmt.Sprintf("%s is already in your library as %q", executable, g.Title),
+				map[string]string{"executable": executable, "title": g.Title})
+		}
+	}
+	for i, g := range s.data.CustomGames {
+		if g.ID == id {
+			prev := s.data.CustomGames[i].Executable
+			s.data.CustomGames[i].Executable = executable
+			if err := s.save(); err != nil {
+				s.data.CustomGames[i].Executable = prev
+				return CustomGame{}, err
+			}
+			return s.data.CustomGames[i], nil
+		}
+	}
+	return CustomGame{}, apperr.New("sideload.unknown", fmt.Sprintf("unknown game %q", id), map[string]string{"id": id})
+}
+
 // RemoveCustomGame forgets a hand-added game; its files stay on disk. Its
 // per-game rows go with it (settings, compat AppID, info source, version
 // pin, install options, cloud mode and accepted terms), so no orphaned
