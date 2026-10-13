@@ -719,3 +719,33 @@ func TestBackupWithNothingFoundWritesNothing(t *testing.T) {
 		t.Fatalf("an empty backup was written: %+v", got)
 	}
 }
+
+// An index from an older format is rebuilt from the cached manifest, with no
+// download (issue #60: version 2 carries when: store constraints).
+func TestOldIndexIsRebuiltFromTheCachedManifest(t *testing.T) {
+	t.Parallel()
+	cache := filepath.Join(t.TempDir(), "cache")
+	if err := os.MkdirAll(filepath.Dir(manifestPath(cache)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath(cache), []byte(fixtureYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(indexPath(cache))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz := gzip.NewWriter(f)
+	if err := json.NewEncoder(gz).Encode(Index{Version: IndexVersion - 1}); err != nil {
+		t.Fatal(err)
+	}
+	gz.Close()
+	f.Close()
+	idx := LoadIndex(cache)
+	if idx == nil || idx.Version != IndexVersion || len(idx.Games) == 0 {
+		t.Fatalf("old index not rebuilt: %+v", idx)
+	}
+	if again := LoadIndex(cache); again == nil || again.Version != IndexVersion {
+		t.Fatalf("rebuilt index not written: %+v", again)
+	}
+}

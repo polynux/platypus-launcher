@@ -169,7 +169,25 @@ func LoadIndex(cacheDir string) *Index {
 	if err := json.NewDecoder(gz).Decode(&idx); err != nil {
 		return nil
 	}
+	if idx.Version != IndexVersion {
+		// An index from an older format: rebuild it from the manifest already
+		// on disk (no download). Without a manifest there is no index yet.
+		return rebuildIndex(cacheDir)
+	}
 	return &idx
+}
+
+// rebuildIndex derives a fresh index from the cached manifest, or nil.
+func rebuildIndex(cacheDir string) *Index {
+	data, err := os.ReadFile(manifestPath(cacheDir))
+	if err != nil {
+		return nil
+	}
+	idx, err := BuildIndex(data, StoredEtag(cacheDir), cacheDir)
+	if err != nil {
+		return nil
+	}
+	return idx
 }
 
 // BuildIndex parses the manifest YAML into the compact derived index and
