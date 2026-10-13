@@ -32,6 +32,11 @@ const (
 	// another folder (game.move, or core's own move when the plugin has none).
 	KindVerify = "verify"
 	KindMove   = "move"
+	// KindRemove deletes a sideloaded game's Wine prefix and/or game files
+	// before forgetting it (issue #43). Like a core move it runs in core:
+	// its own AddRemove constructor, no size check, RunsInCore, and no
+	// downloaded data to discard.
+	KindRemove = "remove"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -267,7 +272,7 @@ func (q *Queue) next(ctx context.Context) {
 
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove {
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindRemove {
 		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -388,6 +393,19 @@ func (q *Queue) AddMove(source, gameID, storeGameID, title, installDir, destinat
 	return q.enqueue(&types.Job{
 		Kind: KindMove, Source: source, GameID: gameID, StoreGameID: storeGameID,
 		Title: title, InstallDir: installDir, Destination: destination,
+	})
+}
+
+// AddRemove queues deleting a sideloaded game's Wine prefix and/or game
+// files (issue #43). At least one of deletePrefix and deleteFiles is set;
+// the job recomputes the paths itself, so the queue keeps only the flags.
+func (q *Queue) AddRemove(source, gameID, storeGameID, title string, deletePrefix, deleteFiles, allowNoSaves bool) (types.Job, error) {
+	if !deletePrefix && !deleteFiles {
+		return types.Job{}, errors.New("a removal deletes the prefix, the files, or both")
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindRemove, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, DeletePrefix: deletePrefix, DeleteFiles: deleteFiles, AllowNoSaves: allowNoSaves,
 	})
 }
 
@@ -615,7 +633,7 @@ func (q *Queue) Notify(source, method string, u plugins.JobUpdate) {
 		if u.Installed != nil && job.Kind != KindUninstall && installed != nil {
 			installed(job, *u.Installed)
 		}
-		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindMove) && finished != nil {
+		if (job.Kind == KindInstall || job.Kind == KindUpdate || job.Kind == KindUninstall || job.Kind == KindMove || job.Kind == KindRemove) && finished != nil {
 			finished(job)
 		}
 		q.finish(job.ID, StateDone, "")
@@ -913,7 +931,7 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
 	}
-	if j.Kind == KindVerify || j.Kind == KindMove {
+	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindRemove {
 		q.mu.Unlock()
 		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
 	}
