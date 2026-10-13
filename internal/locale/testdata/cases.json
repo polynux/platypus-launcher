@@ -1,0 +1,14 @@
+[
+  {"setting": "fr", "system": ["en"], "ui": "fr", "locale": "fr"},
+  {"setting": "fr-CA", "system": ["en"], "ui": "fr", "locale": "fr-CA"},
+  {"setting": "en", "system": ["fr"], "ui": "en", "locale": "en"},
+  {"setting": " fr ", "system": ["en"], "ui": "fr", "locale": "fr"},
+  {"setting": "", "system": ["fr-CA", "en"], "ui": "fr", "locale": "fr-CA"},
+  {"setting": "", "system": ["en-US"], "ui": "en", "locale": "en-US"},
+  {"setting": "", "system": ["de", "fr"], "ui": "fr", "locale": "de"},
+  {"setting": "", "system": ["de", "it"], "ui": "en", "locale": "de"},
+  {"setting": "", "system": [], "ui": "en", "locale": "en"},
+  {"setting": "de", "system": ["fr"], "ui": "fr", "locale": "de"},
+  {"setting": "de", "system": ["ja"], "ui": "en", "locale": "de"},
+  {"setting": "", "system": ["pt-BR", "en"], "ui": "en", "locale": "pt-BR"}
+]
