@@ -1,0 +1,62 @@
+{
+  "view": {
+    "subtitle": "This session's scans, launches and setting changes. The log isn't saved between sessions yet."
+  },
+  "feed": {
+    "empty": "Nothing yet this session. Launches, scans and setting changes show up here."
+  },
+  "type": {
+    "session": "session",
+    "unlock": "unlock",
+    "fix": "fix",
+    "update": "update",
+    "add": "add",
+    "remove": "remove",
+    "download": "download",
+    "tweak": "tweak",
+    "cloud": "cloud"
+  },
+  "panel": {
+    "title": "Activity",
+    "fullLog": "full log →"
+  },
+  "migration": {
+    "label": "Data moved from Hydra to Platypus",
+    "welcome": "Welcome to Platypus.",
+    "moved": "Your data was moved from the old Hydra folder to Platypus.",
+    "copied": "Your data was copied from the old Hydra folder to Platypus. The old folder was kept where it was.",
+    "setAside": "These plugins were built for Hydra and were set aside — reinstall each one and approve it again in Plugins: <mono>{{names}}</mono>. Their logins and settings were kept."
+  },
+  "log": {
+    "scan_one": "Library scan · {{count}} installed",
+    "scan_other": "Library scan · {{count}} installed",
+    "scanOwned_one": "Library scan · {{count}} installed, {{owned}} owned",
+    "scanOwned_other": "Library scan · {{count}} installed, {{owned}} owned",
+    "sources_one": "{{count}} source",
+    "sources_other": "{{count}} sources",
+    "warnLoggedOut": "{{source}}: logged out",
+    "warnUnavailable": "{{source}}: unavailable right now",
+    "warnLibrary": "{{source}}: library unavailable",
+    "scanErrors": "Library scan had errors",
+    "fixData_one": "Compatibility data for {{count}} title",
+    "fixData_other": "Compatibility data for {{count}} titles",
+    "fixMetaCurated_one": "{{count}} curated fix",
+    "fixMetaCurated_other": "{{count}} curated fixes",
+    "fixMetaProtondb": "protondb",
+    "sessionStarted": "Started {{title}}",
+    "sessionStopped": "Stopped {{title}}",
+    "sessionFailed": "{{title}} failed to start",
+    "sessionPid": "pid {{pid}}",
+    "sessionMinutes": "{{count}} min session",
+    "tweakDetail": "{{what}} · {{title}}",
+    "tweakSessionOnly": "session only",
+    "tweakDefault": "Launcher settings changed",
+    "jobVerbInstalled": "installed",
+    "jobVerbUpdated": "updated",
+    "jobVerbUninstalled": "uninstalled",
+    "jobDone": "{{action}} {{title}}",
+    "jobFailed": "{{kind}} of {{title}} failed",
+    "sideloaded": "Sideloaded {{title}}",
+    "removed": "Removed {{title}} from library"
+  }
+}

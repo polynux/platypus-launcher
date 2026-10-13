@@ -1,4 +1,5 @@
-import { useTranslation } from 'react-i18next';
+// i18n: converted
+import { useTranslation, Trans } from 'react-i18next';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
@@ -29,20 +30,20 @@ interface PluginsViewProps {
 }
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>['variant']>;
-const STATUS: Record<PluginStatus, { label: string; variant: BadgeVariant }> = {
-  ready: { label: 'approved', variant: 'ok' },
-  unapproved: { label: 'needs approval', variant: 'gold' },
-  changed: { label: 'changed · re-approve', variant: 'bronze' },
-  disabled: { label: 'disabled', variant: 'neutral' },
-  'missing-requirements': { label: 'missing a tool', variant: 'bronze' },
-  invalid: { label: 'invalid', variant: 'borked' },
-  'needs-newer-platypus': { label: 'needs a newer Platypus', variant: 'bronze' },
-  'too-old': { label: 'too old for this Platypus', variant: 'bronze' },
+const STATUS: Record<PluginStatus, { key: string; variant: BadgeVariant }> = {
+  ready: { key: 'plugins:status.approved', variant: 'ok' },
+  unapproved: { key: 'plugins:status.needsApproval', variant: 'gold' },
+  changed: { key: 'plugins:status.changed', variant: 'bronze' },
+  disabled: { key: 'plugins:status.disabled', variant: 'neutral' },
+  'missing-requirements': { key: 'plugins:status.missingRequirements', variant: 'bronze' },
+  invalid: { key: 'plugins:status.invalid', variant: 'borked' },
+  'needs-newer-platypus': { key: 'plugins:status.needsNewer', variant: 'bronze' },
+  'too-old': { key: 'plugins:status.tooOld', variant: 'bronze' },
 };
 
 const BUILT_IN = [
-  { name: 'Steam', what: 'Reads your local Steam libraries and launches games through the Steam client.' },
-  { name: 'ProtonDB', what: 'Compatibility ratings and community notes for Steam games.' },
+  { key: 'steam', name: 'Steam' },
+  { key: 'protondb', name: 'ProtonDB' },
 ];
 
 const hasAuth = (p: StorePlugin) => offers(p, 'auth');
@@ -60,7 +61,7 @@ export function resetPluginsAuthCache(): void {
 }
 
 export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
-  const { t } = useTranslation('nav');
+  const { t } = useTranslation(['plugins', 'nav', 'common']);
   const [auth, setAuth] = useState<Record<string, AuthState>>(() => Object.fromEntries(authCache));
   const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
   const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
@@ -115,12 +116,12 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       p.id,
       'logout',
       LauncherApi.logout(p.id).pipe(Effect.tap((s: AuthStatus) => Effect.sync(() => storeAuth(p.id, s)))),
-      `Logged out of ${p.name}`
+      t('plugins:notify.loggedOutOf', { name: p.name })
     );
 
   const chooseFolder = (p: StorePlugin) =>
     Effect.runPromise(LauncherApi.choosePluginInstallFolder(p.id))
-      .then((path) => path && act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, path), `${p.name} installs into ${path}`))
+      .then((path) => path && act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, path), t('plugins:notify.installsInto', { name: p.name, path })))
       .catch((e) => onNotify(errMsg(e), 'err'));
 
   return (
@@ -129,23 +130,23 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
           <p className="mt-0.5 max-w-xl text-[12.5px] text-white/70">
-            Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.
+            {t('plugins:header.subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="neutral" onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(errMsg(e), 'err'))}>
-            <FolderOpen className="h-3.5 w-3.5" /> Plugins folder
+            <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
           </Button>
           <Button variant="neutral" onClick={() => refresh(true).then(onLibraryChanged)}>
-            <RefreshCw className="h-3.5 w-3.5" /> Rescan
+            <RefreshCw className="h-3.5 w-3.5" /> {t('plugins:header.rescan')}
           </Button>
         </div>
       </header>
 
-      <MonoLabel as="h2" className="mb-3">store plugins</MonoLabel>
+      <MonoLabel as="h2" className="mb-3">{t('plugins:section.store')}</MonoLabel>
       {plugins.filter((p) => p.kind === 'store').length === 0 ? (
-        <EmptyState label="no store plugins">
-          Put a plugin folder in ~/.local/share/platypus/plugins and rescan. From Platypus's source: plugins/install.sh epic-legendary.
+        <EmptyState label={t('plugins:empty.label')}>
+          {t('plugins:empty.detail')}
         </EmptyState>
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
@@ -162,11 +163,11 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       <div className="min-w-0">
                         <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
                         <p className="font-mono text-hint text-white/55">
-                          v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ' · running' : ''}
+                          v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ` · ${t('plugins:card.running')}` : ''}
                         </p>
                       </div>
                     </div>
-                    <Badge variant={st.variant} className="flex-none">{st.label}</Badge>
+                    <Badge variant={st.variant} className="flex-none">{t(st.key)}</Badge>
                   </div>
                   {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                   {p.problem && p.status !== 'missing-requirements' && (
@@ -180,14 +181,14 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
                 {p.missing.length > 0 && (
                   <div className="rounded-xl bg-orange-400/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
-                    <MonoLabel className="mb-1.5 text-orange-200/80">install first</MonoLabel>
+                    <MonoLabel className="mb-1.5 text-orange-200/80">{t('plugins:card.installFirst')}</MonoLabel>
                     {p.missing.map((r) => (
                       <div key={r.bin} className="font-mono text-[12px] text-white/80">
                         <span className="text-orange-200">{r.bin}</span>
                         {r.hint && <> · <span className="select-text">{r.hint}</span></>}
                       </div>
                     ))}
-                    <p className="mt-1.5 text-[12px] text-white/70">Then rescan.</p>
+                    <p className="mt-1.5 text-[12px] text-white/70">{t('plugins:card.rescanHint')}</p>
                   </div>
                 )}
 
@@ -195,22 +196,24 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                   <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3.5 py-2.5">
                     <span className="min-w-0 truncate text-[12px] text-white/70">
                       {!a ? (
-                        <span className="flex items-center gap-2 text-white/55"><Loader2 className="h-3 w-3 animate-spin" /> checking login…</span>
+                        <span className="flex items-center gap-2 text-white/55"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
                       ) : 'error' in a ? (
                         <span className="font-mono text-hint text-red-300">{a.error}</span>
                       ) : a.loggedIn ? (
-                        <>Logged in{a.user ? <> as <span className="font-bold text-white/90">{a.user}</span></> : ''}</>
+                        <>{a.user ? (
+                          <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-white/90" /> }} />
+                        ) : t('plugins:auth.loggedIn')}</>
                       ) : (
-                        <span className="text-amber-200">Logged out{warning?.needs_auth ? ': its games are hidden' : ''}</span>
+                        <span className="text-amber-200">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
                       )}
                     </span>
                     {a && !('error' in a) && a.loggedIn ? (
                       <Button variant="neutral" size="sm" className="flex-none" onClick={() => logout(p)} disabled={busy === p.id + 'logout'}>
-                        <LogOut className="h-3 w-3" /> Log out
+                        <LogOut className="h-3 w-3" /> {t('plugins:auth.logOut')}
                       </Button>
                     ) : (
                       <Button variant="primary" size="sm" className="flex-none" onClick={() => setLoggingIn(p)}>
-                        <LogIn className="h-3 w-3" /> Log in
+                        <LogIn className="h-3 w-3" /> {t('plugins:auth.logIn')}
                       </Button>
                     )}
                   </div>
@@ -219,20 +222,20 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
                   <div className="space-y-1 font-mono text-hint">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-white/55">installs into</span>
+                      <span className="text-white/55">{t('plugins:card.installsInto')}</span>
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
-                        <Button variant="link" className="flex-none" onClick={() => chooseFolder(p)}>change</Button>
+                        <Button variant="link" className="flex-none" onClick={() => chooseFolder(p)}>{t('plugins:card.change')}</Button>
                         {p.install_folder !== p.default_install_folder && (
-                          <Button variant="link" className="flex-none" onClick={() => act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), `${p.name} installs into the Games folder again`)}>
-                            reset
+                          <Button variant="link" className="flex-none" onClick={() => act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), t('plugins:notify.installsIntoGames', { name: p.name }))}>
+                            {t('plugins:card.reset')}
                           </Button>
                         )}
                       </span>
                     </div>
                     {p.extra_folders.map((f) => (
                       <div key={f} className="flex justify-between gap-3">
-                        <span className="text-white/55">also allowed</span>
+                        <span className="text-white/55">{t('plugins:card.alsoAllowed')}</span>
                         <span className="truncate text-white/60 select-text" title={f}>{f}</span>
                       </div>
                     ))}
@@ -242,27 +245,27 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 <div className="mt-auto flex gap-2">
                   {(p.status === 'unapproved' || p.status === 'changed') && (
                     <Button variant="primary" className="flex-1" onClick={() => setReviewing(p)}>
-                      <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? 'Review and re-approve' : 'Review and approve'}
+                      <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? t('plugins:card.reapprove') : t('plugins:card.approve')}
                     </Button>
                   )}
                   {(p.status === 'ready' || p.status === 'missing-requirements') && (
                     <Button
                       variant="neutral"
                       className="flex-1"
-                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), `${p.name} disabled`)}
+                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), t('plugins:notify.disabled', { name: p.name }))}
                       disabled={busy === p.id + 'toggle'}
                     >
-                      Disable
+                      {t('plugins:card.disable')}
                     </Button>
                   )}
                   {p.status === 'disabled' && (
                     <Button
                       variant="primary"
                       className="flex-1"
-                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), `${p.name} enabled`)}
+                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), t('plugins:notify.enabled', { name: p.name }))}
                       disabled={busy === p.id + 'toggle'}
                     >
-                      Enable
+                      {t('plugins:card.enable')}
                     </Button>
                   )}
                   {/* CORE-10: a plugin that gave up after repeated crashes
@@ -271,10 +274,10 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     <Button
                       variant="neutral"
                       className="flex-1"
-                      onClick={() => act(p.id, 'retry', LauncherApi.retryPlugin(p.id), `${p.name} will start again on the next call`)}
+                      onClick={() => act(p.id, 'retry', LauncherApi.retryPlugin(p.id), t('plugins:notify.willRetry', { name: p.name }))}
                       disabled={busy === p.id + 'retry'}
                     >
-                      <RotateCcw className="h-3.5 w-3.5" /> Retry
+                      <RotateCcw className="h-3.5 w-3.5" /> {t('common:retry')}
                     </Button>
                   )}
                 </div>
@@ -286,7 +289,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
       {plugins.some((p) => p.kind === 'data') && (
         <>
-          <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">data plugins · no code, always on</MonoLabel>
+          <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">{t('plugins:section.data')}</MonoLabel>
           <div className="grid gap-4 xl:grid-cols-2">
             {plugins
               .filter((p) => p.kind === 'data')
@@ -303,14 +306,14 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         </div>
                       </div>
                       <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
-                        {p.status === 'ready' ? 'data' : st.label}
+                        {p.status === 'ready' ? t('plugins:status.data') : t(st.key)}
                       </Badge>
                     </div>
                     {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
                     {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
                       <p className="mt-auto text-[12px] text-white/70">
-                        JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.
+                        {t('plugins:card.dataNote')}
                       </p>
                     )}
                   </Panel>
@@ -320,15 +323,15 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
         </>
       )}
 
-      <MonoLabel as="h2" className="mb-3 mt-8">built in</MonoLabel>
+      <MonoLabel as="h2" className="mb-3 mt-8">{t('plugins:section.builtIn')}</MonoLabel>
       <div className="grid gap-2 xl:grid-cols-2">
         {BUILT_IN.map((b) => (
           <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
             <div className="min-w-0">
               <div className="text-[13px] font-bold">{b.name}</div>
-              <div className="text-[12px] text-white/55">{b.what}</div>
+              <div className="text-[12px] text-white/55">{b.key === 'steam' ? t('plugins:builtIn.steam') : t('plugins:builtIn.protondb')}</div>
             </div>
-            <Badge variant="neutral" className="flex-none">built in</Badge>
+            <Badge variant="neutral" className="flex-none">{t('plugins:status.builtIn')}</Badge>
           </div>
         ))}
       </div>
@@ -340,7 +343,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           onApprove={() => {
             const p = reviewing;
             setReviewing(null);
-            act(p.id, 'approve', LauncherApi.approvePlugin(p.id), `${p.name} approved`);
+            act(p.id, 'approve', LauncherApi.approvePlugin(p.id), t('plugins:notify.approved', { name: p.name }));
           }}
         />
       )}
@@ -352,7 +355,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
             const p = loggingIn;
             setLoggingIn(null);
             storeAuth(p.id, s);
-            onNotify(`Logged in to ${p.name}${s.user ? ` as ${s.user}` : ''}`);
+            onNotify(s.user ? t('plugins:notify.loggedInAs', { name: p.name, user: s.user }) : t('plugins:notify.loggedIn', { name: p.name }));
             onLibraryChanged();
           }}
         />
@@ -372,45 +375,45 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
 
 /** Shows what the plugin runs and declares before the user trusts it. */
 function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; onClose: () => void; onApprove: () => void }) {
+  const { t } = useTranslation(['plugins', 'common']);
   return (
-    <Modal label={`Approve ${p.name}`} onClose={onClose} size="md">
+    <Modal label={t('plugins:approve.title', { name: p.name })} onClose={onClose} size="md">
       <div>
-        <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? `Re-approve ${p.name}` : `Approve ${p.name}`}</h2>
+        <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? t('plugins:approve.titleChanged', { name: p.name }) : t('plugins:approve.title', { name: p.name })}</h2>
         <p className="mt-1 font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
         {p.status === 'changed' && (
           <p className="mt-3 rounded-xl bg-orange-400/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
-            Its program changed since you approved it. If you didn't update it yourself, don't approve it.
+            {t('plugins:approve.changedWarning')}
           </p>
         )}
 
         <div className="mt-4 space-y-2 font-mono text-hint">
-          <ManifestRow label="runs" items={[`${p.dir}/${p.exec}`]} empty="" />
-          <ManifestRow label="sha-256" items={[p.hash]} empty="" />
-          <ManifestRow label="can" items={p.declared} empty="nothing declared" />
-          <ManifestRow label="needs platypus" items={p.needs} empty="nothing in particular" />
-          {p.protocol_versions && <ManifestRow label="speaks" items={[`protocol ${p.protocol_versions} over ${p.transport ?? 'jsonrpc-stdio'}`]} empty="" />}
-          <ManifestRow label="network" items={p.network} empty="no hosts declared" />
-          <ManifestRow label="reads" items={p.read} empty="no paths declared" />
-          <ManifestRow label="writes" items={p.write} empty="no paths declared" />
+          <ManifestRow label={t('plugins:approve.row.runs')} items={[`${p.dir}/${p.exec}`]} empty="" />
+          <ManifestRow label={t('plugins:approve.row.sha')} items={[p.hash]} empty="" />
+          <ManifestRow label={t('plugins:approve.row.can')} items={p.declared} empty={t('plugins:approve.empty.nothingDeclared')} />
+          <ManifestRow label={t('plugins:approve.row.needsPlatypus')} items={p.needs} empty={t('plugins:approve.empty.nothingSpecial')} />
+          {p.protocol_versions && <ManifestRow label={t('plugins:approve.row.speaks')} items={[`protocol ${p.protocol_versions} over ${p.transport ?? 'jsonrpc-stdio'}`]} empty="" />}
+          <ManifestRow label={t('plugins:approve.row.network')} items={p.network} empty={t('plugins:approve.empty.noHosts')} />
+          <ManifestRow label={t('plugins:approve.row.reads')} items={p.read} empty={t('plugins:approve.empty.noPaths')} />
+          <ManifestRow label={t('plugins:approve.row.writes')} items={p.write} empty={t('plugins:approve.empty.noPaths')} />
           <ManifestRow
-            label="needs"
-            items={p.requires.map((r) => `${r.bin}${p.missing.some((m) => m.bin === r.bin) ? ' (missing)' : ''}`)}
-            empty="no other tools"
+            label={t('plugins:approve.row.needs')}
+            items={p.requires.map((r) => `${r.bin}${p.missing.some((m) => m.bin === r.bin) ? ` ${t('plugins:approve.missingMark')}` : ''}`)}
+            empty={t('plugins:approve.empty.noTools')}
           />
-          <ManifestRow label="installs into" items={[p.install_folder]} empty="" />
+          <ManifestRow label={t('plugins:approve.row.installsInto')} items={[p.install_folder]} empty="" />
         </div>
 
         <div className="mt-4 flex gap-3 rounded-xl bg-white/[0.04] px-3.5 py-3 text-hint leading-relaxed text-white/60">
           <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300/80" />
           <p>
-            A store plugin runs with your user's permissions. The hosts and paths above are what it declares; Platypus doesn't enforce them yet. Platypus does check
-            every game it launches is inside the plugin's install folder. Approve plugins you trust.
+            {t('plugins:approve.warning')}
           </p>
         </div>
 
         <div className="mt-5 flex gap-2.5">
-          <Button variant="neutral" className="flex-1" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" className="flex-1" onClick={onApprove}>Approve and enable</Button>
+          <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="primary" className="flex-1" onClick={onApprove}>{t('plugins:approve.approveAndEnable')}</Button>
         </div>
       </div>
     </Modal>
@@ -423,6 +426,7 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
  * Drawn as exact square modules so the phone can scan it off the screen.
  */
 function QrArt({ art }: { art: string }) {
+  const { t } = useTranslation('plugins');
   const rows = art.split('\n').filter((r) => r.includes('\u2588'));
   const lead = Math.min(...rows.map((r) => r.length - r.trimStart().length));
   let width = Math.max(...rows.map((r) => r.trimEnd().length)) - lead;
@@ -438,7 +442,7 @@ function QrArt({ art }: { art: string }) {
   const quiet = 4;
   const size = Math.max(w, h) + quiet * 2;
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="h-48 w-48" role="img" aria-label="Login QR code" shapeRendering="crispEdges">
+    <svg viewBox={`0 0 ${size} ${size}`} className="h-48 w-48" role="img" aria-label={t('plugins:auth.qrLabel')} shapeRendering="crispEdges">
       <rect width={size} height={size} fill="#fff" />
       {modules.map((row, y) =>
         row.map((dark, x) =>
@@ -461,6 +465,7 @@ export const QR_MAX_ATTEMPTS = 40;
 
 /** auth.begin → open the store's page and/or fill in fields → auth.complete. */
 function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: () => void; onDone: (s: AuthStatus) => void }) {
+  const { t } = useTranslation(['plugins', 'common']);
   const [prompt, setPrompt] = useState<AuthPrompt | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -491,6 +496,10 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
     const timers: ReturnType<typeof setTimeout>[] = [];
     let failures = 0;
     let attempts = 0;
+    // Whether the error on screen is ours (a QR poll failure): only ours is
+    // cleared on the next success, so a submit error is never wiped. Matched
+    // by flag, not by text, so it works in every language.
+    let qrError = false;
     // A background refresh may notice the login first: finish the moment it
     // does, and redraw the QR code when it reports a new one.
     const offAuth = onAuth((e) => {
@@ -523,17 +532,21 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             setPrompt((p) => (p && p.qr !== s.qr ? { ...p, qr: s.qr } : p));
           }
           failures = 0;
-          setError((prev) => (prev && prev.startsWith('Login check') ? null : prev));
+          if (qrError) {
+            qrError = false;
+            setError(null);
+          }
           schedule(1500);
         })
         .catch(() => {
           if (stop) return;
           failures += 1;
           if (failures >= QR_ERROR_AFTER) {
+            qrError = true;
             setError(
               attempts >= QR_MAX_ATTEMPTS
-                ? 'Login check keeps failing. Close and try again.'
-                : `Login check is failing (${failures} attempts). Retrying…`,
+                ? t('plugins:auth.checkDead')
+                : t('plugins:auth.checkFailing', { count: failures }),
             );
           }
           if (attempts >= QR_MAX_ATTEMPTS) return;
@@ -546,13 +559,13 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
       offAuth();
       timers.forEach(clearTimeout);
     };
-  }, [qrPending, plugin.id]);
+  }, [qrPending, plugin.id, t]);
 
   const submit = () => {
     setSubmitting(true);
     setError(null);
     Effect.runPromise(LauncherApi.authComplete(plugin.id, values))
-      .then((s) => (s.loggedIn ? onDone(s) : setError('The store says you are still logged out.')))
+      .then((s) => (s.loggedIn ? onDone(s) : setError(t('plugins:auth.stillLoggedOut'))))
       .catch((e) => setError(errMsg(e)))
       .finally(() => setSubmitting(false));
   };
@@ -563,32 +576,32 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
   const canSubmit = (prompt?.qr && !filled) || filled;
 
   return (
-    <Modal label={`Log in to ${plugin.name}`} onClose={onClose} size="md">
+    <Modal label={t('plugins:auth.loginTo', { name: plugin.name })} onClose={onClose} size="md">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit && !submitting) submit();
         }}
       >
-        <h2 className="text-[20px] font-extrabold tracking-tight">Log in to {plugin.name}</h2>
-        <p className="mt-1 text-[12px] text-white/70">Your login stays with {plugin.name}'s own tool; Platypus doesn't store it.</p>
+        <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:auth.loginTo', { name: plugin.name })}</h2>
+        <p className="mt-1 text-[12px] text-white/70">{t('plugins:auth.loginStays', { name: plugin.name })}</p>
         {!prompt && !error && (
-          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/55"><Loader2 className="h-3.5 w-3.5 animate-spin" /> starting login…</div>
+          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/55"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('plugins:auth.startingLogin')}</div>
         )}
         {prompt && (
           <div className="mt-4 space-y-4">
             {prompt.url && (
               <div>
-                <MonoLabel className="mb-1.5 normal-case tracking-normal">1 · log in on the store's page</MonoLabel>
+                <MonoLabel className="mb-1.5 normal-case tracking-normal">{t('plugins:auth.stepStorePage')}</MonoLabel>
                 <Button variant="neutral" className="w-full" onClick={() => openExternal(prompt.url)}>
-                  <ExternalLink className="h-3.5 w-3.5" /> Open login page
+                  <ExternalLink className="h-3.5 w-3.5" /> {t('plugins:auth.openLoginPage')}
                 </Button>
                 <p className="mt-1.5 break-all font-mono text-[12px] text-white/55 select-text">{prompt.url}</p>
               </div>
             )}
             {prompt.qr && (
               <div>
-                <MonoLabel className="mb-1.5 normal-case tracking-normal">1 · scan with the {plugin.name.replace(/ \(.*\)$/, '')} mobile app</MonoLabel>
+                <MonoLabel className="mb-1.5 normal-case tracking-normal">{t('plugins:auth.stepScan', { app: plugin.name.replace(/ \(.*\)$/, '') })}</MonoLabel>
                 <div className="flex justify-center rounded-xl bg-white p-3">
                   <QrArt art={prompt.qr} />
                 </div>
@@ -596,7 +609,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             )}
             {prompt.instructions && <p className="text-[12px] leading-relaxed text-white/65">{prompt.instructions}</p>}
             <div className="space-y-3">
-              {prompt.url && <MonoLabel className="normal-case tracking-normal">2 · paste what the page shows</MonoLabel>}
+              {prompt.url && <MonoLabel className="normal-case tracking-normal">{t('plugins:auth.stepPaste')}</MonoLabel>}
               {prompt.fields.map((f, i) => (
                 <label key={f.id} className="block">
                   <span className="mb-1 block text-[12px] font-semibold text-white/75">{f.label}</span>
@@ -614,11 +627,11 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
             </div>
           </div>
         )}
-        {error && <ErrorNotice className="mt-3" message={error} fallback="Platypus couldn't finish that plugin action." />}
+        {error && <ErrorNotice className="mt-3" message={error} fallback={t('plugins:auth.actionFailed')} />}
         <div className="mt-5 flex gap-2.5">
-          <Button type="button" variant="neutral" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
           <Button type="submit" variant="primary" className="flex-1" disabled={!canSubmit || submitting}>
-            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {prompt?.qr && !filled ? 'I scanned it' : 'Log in'}
+            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {prompt?.qr && !filled ? t('plugins:auth.scannedIt') : t('plugins:auth.logIn')}
           </Button>
         </div>
       </form>

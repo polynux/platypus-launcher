@@ -1,20 +1,27 @@
+// i18n: converted
 import React, { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { ChevronDown } from 'lucide-react';
 import type { PluginCapability, StorePlugin } from '../types';
 import { MonoLabel, cx } from './ui';
 
 /** Why a capability isn't doing anything, in words. */
-function stateOf(c: PluginCapability, initialized: boolean): { text: string; tone: string } {
-  if (!c.known) return { text: 'unknown to this Platypus · ignored', tone: 'text-white/55' };
-  if (!c.on) return { text: 'off right now', tone: 'text-orange-200' };
-  if (!c.orchestrated) return { text: `${initialized ? 'on' : 'declared'} · not used by Platypus yet`, tone: 'text-white/55' };
-  return { text: initialized ? 'on' : 'declared', tone: 'text-emerald-300' };
+function stateOf(c: PluginCapability, initialized: boolean, t: TFunction): { text: string; tone: string } {
+  if (!c.known) return { text: t('plugins:capabilities.stateUnknown'), tone: 'text-white/55' };
+  if (!c.on) return { text: t('plugins:capabilities.stateOff'), tone: 'text-orange-200' };
+  if (!c.orchestrated) {
+    const state = t(initialized ? 'plugins:capabilities.stateOn' : 'plugins:capabilities.stateDeclared');
+    return { text: t('plugins:capabilities.stateNotUsed', { state }), tone: 'text-white/55' };
+  }
+  return { text: t(initialized ? 'plugins:capabilities.stateOn' : 'plugins:capabilities.stateDeclared'), tone: 'text-emerald-300' };
 }
 
 /** What a plugin offers: every declared capability, whether it is on right
  *  now, and its depth flags. Before the plugin has run, this is only the
  *  manifest's promise. The list folds away: the header keeps the count. */
 export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
+  const { t } = useTranslation('plugins');
   const [open, setOpen] = useState(false);
   const listId = useId();
   if (p.offers.length === 0 && p.warnings.length === 0) return null;
@@ -30,21 +37,21 @@ export function PluginCapabilities({ plugin: p }: { plugin: StorePlugin }) {
         >
           <ChevronDown className={cx('h-3 w-3 flex-none transition-transform', open ? '' : '-rotate-90')} aria-hidden />
           <span className="min-w-0 flex-1 truncate">
-            capabilities · {p.offers.length}
-            {!p.initialized ? ' · declared · not started yet' : ''}
-            {p.protocol ? ` · protocol ${p.protocol}` : ''}
+            {t('plugins:capabilities.header', { count: p.offers.length })}
+            {!p.initialized ? t('plugins:capabilities.declaredSuffix') : ''}
+            {p.protocol ? t('plugins:capabilities.protocolSuffix', { version: p.protocol }) : ''}
           </span>
         </button>
       )}
       {p.offers.length === 0 && (
         <MonoLabel className="normal-case tracking-normal">
-          capabilities{p.protocol ? ` · protocol ${p.protocol}` : ''}
+          {t('plugins:capabilities.listLabel')}{p.protocol ? t('plugins:capabilities.protocolSuffix', { version: p.protocol }) : ''}
         </MonoLabel>
       )}
       {p.offers.length > 0 && open && (
-        <ul id={listId} aria-label="Capabilities" className="space-y-1 font-mono text-hint">
+        <ul id={listId} aria-label={t('plugins:capabilities.listLabel')} className="space-y-1 font-mono text-hint">
           {p.offers.map((c) => {
-            const s = stateOf(c, p.initialized);
+            const s = stateOf(c, p.initialized, t);
             const flags = Object.entries(c.features).sort(([a], [b]) => a.localeCompare(b));
             return (
               <li key={c.name} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">

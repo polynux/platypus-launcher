@@ -1,1 +1,124 @@
-{}
+{
+  "header": {
+    "subtitle": "Les plugins de boutique importent les bibliothèques d'autres boutiques et installent les jeux que vous possédez. Chacun est un programme à part ; Platypus n'exécute que ceux que vous approuvez.",
+    "pluginsFolder": "Dossier des plugins",
+    "rescan": "Réanalyser"
+  },
+  "section": {
+    "store": "plugins de boutique",
+    "data": "plugins de données · pas de code, toujours actifs",
+    "builtIn": "intégrés"
+  },
+  "empty": {
+    "label": "aucun plugin de boutique",
+    "detail": "Mettez un dossier de plugin dans ~/.local/share/platypus/plugins puis réanalysez. Depuis les sources de Platypus : plugins/install.sh epic-legendary."
+  },
+  "status": {
+    "approved": "approuvé",
+    "needsApproval": "à approuver",
+    "changed": "modifié · à réapprouver",
+    "disabled": "désactivé",
+    "missingRequirements": "il manque un outil",
+    "invalid": "invalide",
+    "needsNewer": "exige un Platypus plus récent",
+    "tooOld": "trop ancien pour ce Platypus",
+    "data": "données",
+    "builtIn": "intégré"
+  },
+  "card": {
+    "running": "en cours",
+    "installFirst": "à installer d'abord",
+    "rescanHint": "Puis réanalysez.",
+    "installsInto": "s'installe dans",
+    "change": "modifier",
+    "reset": "réinitialiser",
+    "alsoAllowed": "aussi autorisé",
+    "dataNote": "Que du JSON — recettes de correctifs et réglages. Il ne peut rien exécuter, Platypus l'applique donc sans demander.",
+    "approve": "Examiner et approuver",
+    "reapprove": "Examiner et réapprouver",
+    "disable": "Désactiver",
+    "enable": "Activer"
+  },
+  "auth": {
+    "checking": "vérification de la connexion…",
+    "loggedIn": "Connecté",
+    "loggedInAs": "Connecté en tant que <b>{{user}}</b>",
+    "loggedOut": "Déconnecté",
+    "loggedOutHidden": "Déconnecté : ses jeux sont masqués",
+    "logIn": "Se connecter",
+    "logOut": "Se déconnecter",
+    "loginTo": "Se connecter à {{name}}",
+    "loginStays": "Votre connexion reste dans l'outil de {{name}} ; Platypus ne la conserve pas.",
+    "startingLogin": "démarrage de la connexion…",
+    "stepStorePage": "1 · connectez-vous sur la page de la boutique",
+    "openLoginPage": "Ouvrir la page de connexion",
+    "stepScan": "1 · scannez avec l'appli mobile {{app}}",
+    "stepPaste": "2 · collez ce que la page affiche",
+    "stillLoggedOut": "La boutique indique que vous êtes toujours déconnecté.",
+    "checkFailing": "La vérification de la connexion échoue ({{count}} tentatives). Nouvel essai…",
+    "checkDead": "La vérification de la connexion échoue sans arrêt. Fermez et réessayez.",
+    "scannedIt": "Je l'ai scanné",
+    "qrLabel": "QR code de connexion",
+    "actionFailed": "Platypus n'a pas pu terminer cette action du plugin."
+  },
+  "notify": {
+    "loggedOutOf": "Déconnexion de {{name}}",
+    "installsInto": "{{name}} s'installe dans {{path}}",
+    "installsIntoGames": "{{name}} s'installe à nouveau dans le dossier Jeux",
+    "approved": "{{name}} approuvé",
+    "disabled": "{{name}} désactivé",
+    "enabled": "{{name}} activé",
+    "willRetry": "{{name}} redémarrera au prochain appel",
+    "loggedIn": "Connexion à {{name}}",
+    "loggedInAs": "Connecté à {{name}} en tant que {{user}}"
+  },
+  "approve": {
+    "title": "Approuver {{name}}",
+    "titleChanged": "Réapprouver {{name}}",
+    "changedWarning": "Son programme a changé depuis votre approbation. Si vous ne l'avez pas mis à jour vous-même, ne l'approuvez pas.",
+    "row": {
+      "runs": "exécute",
+      "sha": "sha-256",
+      "can": "peut",
+      "needsPlatypus": "exige platypus",
+      "speaks": "parle",
+      "network": "réseau",
+      "reads": "lit",
+      "writes": "écrit",
+      "needs": "requiert",
+      "installsInto": "s'installe dans"
+    },
+    "empty": {
+      "nothingDeclared": "rien de déclaré",
+      "nothingSpecial": "rien de particulier",
+      "noHosts": "aucun hôte déclaré",
+      "noPaths": "aucun chemin déclaré",
+      "noTools": "aucun autre outil"
+    },
+    "missingMark": "(manquant)",
+    "warning": "Un plugin de boutique s'exécute avec vos droits d'utilisateur. Les hôtes et chemins ci-dessus sont ce qu'il déclare ; Platypus ne les impose pas encore. Platypus vérifie en revanche que chaque jeu lancé est bien dans le dossier d'installation du plugin. N'approuvez que les plugins de confiance.",
+    "approveAndEnable": "Approuver et activer"
+  },
+  "capabilities": {
+    "header": "capacités · {{count}}",
+    "declaredSuffix": " · déclarées · pas encore démarré",
+    "protocolSuffix": " · protocole {{version}}",
+    "listLabel": "Capacités",
+    "stateUnknown": "inconnu de ce Platypus · ignoré",
+    "stateOff": "éteint pour l'instant",
+    "stateNotUsed": "{{state}} · pas encore utilisé par Platypus",
+    "stateOn": "allumé",
+    "stateDeclared": "déclaré"
+  },
+  "settings": {
+    "saved": "Réglage enregistré",
+    "notApplied": "Enregistré, mais le plugin ne l'a pas encore pris en compte",
+    "sectionTitle": "réglages",
+    "noGameSettings": "{{plugin}} n'a aucun réglage pour {{title}}.",
+    "saveFailed": "Le plugin n'a pas pu enregistrer ce réglage."
+  },
+  "builtIn": {
+    "steam": "Lit vos bibliothèques Steam locales et lance les jeux via le client Steam.",
+    "protondb": "Notes de compatibilité et avis de la communauté pour les jeux Steam."
+  }
+}

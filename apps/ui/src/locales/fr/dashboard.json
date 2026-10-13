@@ -1,0 +1,49 @@
+{
+  "greeting": {
+    "night": "Toujours debout",
+    "morning": "Bonjour",
+    "afternoon": "Bon après-midi",
+    "evening": "Bonsoir"
+  },
+  "welcome": {
+    "installed_one": "{{count}} jeu installé",
+    "installed_other": "{{count}} jeux installés",
+    "owned": "{{count}} en tout",
+    "fixes_one": "{{count}} correctif",
+    "fixes_other": "{{count}} correctifs"
+  },
+  "empty": {
+    "label": "aucun titre trouvé",
+    "detail": "Platypus n'a trouvé aucun jeu installé. Installez quelque chose dans Steam, ou ajoutez un jeu depuis la Bibliothèque."
+  },
+  "hero": {
+    "needsAttention": "à surveiller",
+    "fixAvailable": "correctif disponible",
+    "titleTweaks": "{{title}} a peut-être besoin de réglages",
+    "titleFix": "{{title}} a un correctif de la communauté",
+    "openGame": "Ouvrir le jeu",
+    "hideAll": "Tout masquer ({{count}})",
+    "statInstalled": "installés",
+    "statOwned": "possédés",
+    "statFixes": "correctifs"
+  },
+  "reason": {
+    "borked": "ProtonDB déclare ce titre cassé. Essayez un autre runner ou consultez les rapports.",
+    "bronze": "ProtonDB note ce titre bronze. Il lui faudra peut-être des réglages pour bien tourner."
+  },
+  "continuePlaying": "Continuer à jouer",
+  "yourGames": "Vos jeux",
+  "fullLibrary": "bibliothèque complète →",
+  "waiting": "En attente de vous",
+  "waitingEmpty": "Rien à signaler. Les correctifs suivis et les basses notes ProtonDB apparaissent ici.",
+  "moreInFixes_one": "+{{count}} autre dans les correctifs →",
+  "moreInFixes_other": "+{{count}} autres dans les correctifs →",
+  "recentlyAdded": "Ajoutés récemment",
+  "store": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "epic": "Epic",
+    "ubisoft": "Ubisoft",
+    "custom": "Ajout manuel"
+  }
+}

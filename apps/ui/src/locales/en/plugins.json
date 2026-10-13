@@ -1,1 +1,124 @@
-{}
+{
+  "header": {
+    "subtitle": "Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.",
+    "pluginsFolder": "Plugins folder",
+    "rescan": "Rescan"
+  },
+  "section": {
+    "store": "store plugins",
+    "data": "data plugins · no code, always on",
+    "builtIn": "built in"
+  },
+  "empty": {
+    "label": "no store plugins",
+    "detail": "Put a plugin folder in ~/.local/share/platypus/plugins and rescan. From Platypus's source: plugins/install.sh epic-legendary."
+  },
+  "status": {
+    "approved": "approved",
+    "needsApproval": "needs approval",
+    "changed": "changed · re-approve",
+    "disabled": "disabled",
+    "missingRequirements": "missing a tool",
+    "invalid": "invalid",
+    "needsNewer": "needs a newer Platypus",
+    "tooOld": "too old for this Platypus",
+    "data": "data",
+    "builtIn": "built in"
+  },
+  "card": {
+    "running": "running",
+    "installFirst": "install first",
+    "rescanHint": "Then rescan.",
+    "installsInto": "installs into",
+    "change": "change",
+    "reset": "reset",
+    "alsoAllowed": "also allowed",
+    "dataNote": "JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.",
+    "approve": "Review and approve",
+    "reapprove": "Review and re-approve",
+    "disable": "Disable",
+    "enable": "Enable"
+  },
+  "auth": {
+    "checking": "checking login…",
+    "loggedIn": "Logged in",
+    "loggedInAs": "Logged in as <b>{{user}}</b>",
+    "loggedOut": "Logged out",
+    "loggedOutHidden": "Logged out: its games are hidden",
+    "logIn": "Log in",
+    "logOut": "Log out",
+    "loginTo": "Log in to {{name}}",
+    "loginStays": "Your login stays with {{name}}'s own tool; Platypus doesn't store it.",
+    "startingLogin": "starting login…",
+    "stepStorePage": "1 · log in on the store's page",
+    "openLoginPage": "Open login page",
+    "stepScan": "1 · scan with the {{app}} mobile app",
+    "stepPaste": "2 · paste what the page shows",
+    "stillLoggedOut": "The store says you are still logged out.",
+    "checkFailing": "Login check is failing ({{count}} attempts). Retrying…",
+    "checkDead": "Login check keeps failing. Close and try again.",
+    "scannedIt": "I scanned it",
+    "qrLabel": "Login QR code",
+    "actionFailed": "Platypus couldn't finish that plugin action."
+  },
+  "notify": {
+    "loggedOutOf": "Logged out of {{name}}",
+    "installsInto": "{{name}} installs into {{path}}",
+    "installsIntoGames": "{{name}} installs into the Games folder again",
+    "approved": "{{name}} approved",
+    "disabled": "{{name}} disabled",
+    "enabled": "{{name}} enabled",
+    "willRetry": "{{name}} will start again on the next call",
+    "loggedIn": "Logged in to {{name}}",
+    "loggedInAs": "Logged in to {{name}} as {{user}}"
+  },
+  "approve": {
+    "title": "Approve {{name}}",
+    "titleChanged": "Re-approve {{name}}",
+    "changedWarning": "Its program changed since you approved it. If you didn't update it yourself, don't approve it.",
+    "row": {
+      "runs": "runs",
+      "sha": "sha-256",
+      "can": "can",
+      "needsPlatypus": "needs platypus",
+      "speaks": "speaks",
+      "network": "network",
+      "reads": "reads",
+      "writes": "writes",
+      "needs": "needs",
+      "installsInto": "installs into"
+    },
+    "empty": {
+      "nothingDeclared": "nothing declared",
+      "nothingSpecial": "nothing in particular",
+      "noHosts": "no hosts declared",
+      "noPaths": "no paths declared",
+      "noTools": "no other tools"
+    },
+    "missingMark": "(missing)",
+    "warning": "A store plugin runs with your user's permissions. The hosts and paths above are what it declares; Platypus doesn't enforce them yet. Platypus does check every game it launches is inside the plugin's install folder. Approve plugins you trust.",
+    "approveAndEnable": "Approve and enable"
+  },
+  "capabilities": {
+    "header": "capabilities · {{count}}",
+    "declaredSuffix": " · declared · not started yet",
+    "protocolSuffix": " · protocol {{version}}",
+    "listLabel": "Capabilities",
+    "stateUnknown": "unknown to this Platypus · ignored",
+    "stateOff": "off right now",
+    "stateNotUsed": "{{state}} · not used by Platypus yet",
+    "stateOn": "on",
+    "stateDeclared": "declared"
+  },
+  "settings": {
+    "saved": "Setting saved",
+    "notApplied": "Saved, but the plugin did not take it yet",
+    "sectionTitle": "settings",
+    "noGameSettings": "{{plugin}} has no settings for {{title}}.",
+    "saveFailed": "The plugin couldn't save that setting."
+  },
+  "builtIn": {
+    "steam": "Reads your local Steam libraries and launches games through the Steam client.",
+    "protondb": "Compatibility ratings and community notes for Steam games."
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "greeting": {
+    "night": "Up late",
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "welcome": {
+    "installed_one": "{{count}} installed",
+    "installed_other": "{{count}} installed",
+    "owned": "{{count}} owned",
+    "fixes_one": "{{count}} fix",
+    "fixes_other": "{{count}} fixes"
+  },
+  "empty": {
+    "label": "no titles found",
+    "detail": "Platypus didn't find any installed games. Install something in Steam, or add a game from the Library."
+  },
+  "hero": {
+    "needsAttention": "needs attention",
+    "fixAvailable": "fix available",
+    "titleTweaks": "{{title}} may need tweaks",
+    "titleFix": "{{title}} has a community fix",
+    "openGame": "Open game",
+    "hideAll": "Hide all {{count}}",
+    "statInstalled": "installed",
+    "statOwned": "owned",
+    "statFixes": "fixes"
+  },
+  "reason": {
+    "borked": "ProtonDB reports this title as borked. Try a different runner or check the reports.",
+    "bronze": "ProtonDB rates this title bronze. It may need tweaks to run well."
+  },
+  "continuePlaying": "Continue playing",
+  "yourGames": "Your games",
+  "fullLibrary": "full library →",
+  "waiting": "Waiting on you",
+  "waitingEmpty": "Nothing needs attention. Curated fixes and low ProtonDB ratings show up here.",
+  "moreInFixes_one": "+{{count}} more in fixes →",
+  "moreInFixes_other": "+{{count}} more in fixes →",
+  "recentlyAdded": "Recently added",
+  "store": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "epic": "Epic",
+    "ubisoft": "Ubisoft",
+    "custom": "Sideloaded"
+  }
+}

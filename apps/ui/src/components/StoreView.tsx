@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ArrowRight, ExternalLink, Home, Lock, RotateCw, TriangleAlert, X } from 'lucide-react';
 import { cx } from './ui';
 import { Button } from './ds/button';
@@ -45,6 +47,7 @@ interface StoreViewProps {
  * shows a non-modal notice offering to open the address in the browser.
  */
 export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewProps) {
+  const { t } = useTranslation(['store', 'common']);
   const store = storeBridge();
   const [state, setState] = useState<Pick<StoreEvent, 'url' | 'canGoBack' | 'canGoForward' | 'title' | 'loading'>>({
     url: initialUrl ?? plugin.storefront_url ?? '',
@@ -79,7 +82,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
   useEffect(() => {
     const bridge = storeBridge();
     if (!bridge) {
-      setFailed('The store view needs the app shell.');
+      setFailed(t('store:needsShell'));
       return;
     }
     setFailed(null);
@@ -91,7 +94,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
     });
     // Open once per plugin+link: navigating inside the store must not reopen it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plugin.id, initialUrl]);
+  }, [plugin.id, initialUrl, t]);
 
   // Leaving the store view hides the native view (kept alive for a fast
   // return). Runs on unmount only, never on a plugin switch.
@@ -166,16 +169,16 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
   return (
     <div className="flex h-full min-h-[480px] flex-col">
       <div className="flex flex-none items-center gap-1.5 px-5 pb-3 pt-5">
-        <ToolbarButton label="Back" disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
+        <ToolbarButton label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
           <ArrowLeft className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="Forward" disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
+        <ToolbarButton label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
           <ArrowRight className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label="Reload" onClick={() => store?.reload()} data-testid="store-reload">
+        <ToolbarButton label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
           <RotateCw className={cx('h-4 w-4', state.loading && 'animate-spin')} />
         </ToolbarButton>
-        <ToolbarButton label="Home" onClick={goHome} data-testid="store-home">
+        <ToolbarButton label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
           <Home className="h-4 w-4" />
         </ToolbarButton>
         <div
@@ -189,23 +192,23 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
           )}
         >
           {state.loading ? (
-            <span data-testid="store-loading" aria-label="loading" className="h-3 w-3 flex-none animate-spin rounded-full border border-white/30 border-t-transparent" />
+            <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-white/30 border-t-transparent" />
           ) : (
-            <Lock className="h-3 w-3 flex-none opacity-70" aria-label={outside ? 'outside the store' : 'store page'} />
+            <Lock className="h-3 w-3 flex-none opacity-70" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
           )}
           <span className="truncate">{host || '…'}</span>
           {outside && (
             <span className="flex flex-none items-center gap-1 text-amber-200/90">
               <TriangleAlert className="h-3 w-3" />
-              <span className="hidden sm:inline">outside {plugin.name}</span>
+              <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
             </span>
           )}
           {state.title && <span className="hidden min-w-0 flex-1 truncate text-right text-white/40 lg:inline">{state.title}</span>}
         </div>
-        <ToolbarButton label="Open in browser" onClick={openInBrowser} data-testid="store-external">
+        <ToolbarButton label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={`Close ${plugin.name}`} onClick={onClose} data-testid="store-close">
+        <ToolbarButton label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
           <X className="h-4 w-4" />
         </ToolbarButton>
       </div>
@@ -217,7 +220,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
         >
           <TriangleAlert className="h-3.5 w-3.5 flex-none" />
           <span className="min-w-0 flex-1 truncate">
-            {blockedHost} isn&apos;t part of {plugin.name}. Open in your browser?
+            {t('store:blocked', { host: blockedHost, name: plugin.name })}
           </span>
           <button
             type="button"
@@ -225,12 +228,12 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
             data-testid="store-blocked-open"
             className="flex-none rounded-lg bg-amber-300/20 px-2.5 py-1 font-medium hover:bg-amber-300/30"
           >
-            Open
+            {t('common:open')}
           </button>
           <button
             type="button"
             onClick={() => setBlocked(null)}
-            aria-label="Dismiss"
+            aria-label={t('common:dismiss')}
             className="grid h-6 w-6 flex-none place-items-center rounded-lg hover:bg-white/10"
           >
             <X className="h-3.5 w-3.5" />
@@ -239,7 +242,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
       )}
       {failed ? (
         <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-white/[0.03] px-6 text-center text-[13px] text-white/60 ring-1 ring-white/[0.07]">
-          <p>Couldn't open {plugin.name}: {failed}</p>
+          <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
         </div>
       ) : (
         <div ref={area} data-testid="store-area" className="mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-black/30 ring-1 ring-white/[0.07]" />
