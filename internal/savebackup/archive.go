@@ -20,7 +20,9 @@ import (
 
 // backupFileName is <utc>-<trigger>-<shortid>.zip.
 func backupFileName(trigger string, now time.Time) string {
-	stamp := now.UTC().Format("20060102T150405")
+	// Nanoseconds keep backups made within one second in order: the list
+	// sorts by created_at (seconds), then by this name (issue #42 retention).
+	stamp := now.UTC().Format("20060102T150405.000000000")
 	return fmt.Sprintf("%s-%s-%s.zip", stamp, trigger, shortID())
 }
 
