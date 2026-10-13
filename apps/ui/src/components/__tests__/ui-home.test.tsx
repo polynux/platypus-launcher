@@ -40,7 +40,7 @@ describe('Dashboard truth', () => {
   });
   it('D4: without play data, falls back to title order', () => {
     const { container } = dash([mk('zeta'), mk('alpha'), mk('mid')]);
-    const titles = [...container.querySelectorAll('.cover-grid .truncate')].map((e) => e.textContent);
+    const titles = [...container.querySelectorAll('.cover-grid .text-hint.truncate')].map((e) => e.textContent);
     expect(titles).toEqual(['alpha', 'mid', 'zeta']);
   });
 });
