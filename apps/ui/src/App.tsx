@@ -1,3 +1,4 @@
+// i18n: converted
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
 import { Sidebar } from './components/Sidebar';

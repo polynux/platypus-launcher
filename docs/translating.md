@@ -33,9 +33,9 @@ catalog on purpose, no i18next in main (see `apps/desktop/src/locale.ts`).
 1. Copy the `en` folder: `cp -r apps/ui/src/locales/en apps/ui/src/locales/<lang>`
    (use the BCP 47 tag, e.g. `de`, `pt-BR`).
 2. Translate the values. Leave `{{placeholders}}` and tags byte-identical.
-3. Register the language in `apps/ui/src/lib/i18n.ts`: import the three (or
-   more) converted namespaces, add the tag to `SUPPORTED_LANGUAGES`, and add
-   a `frResources`-style entry.
+3. Add the tag to `SUPPORTED_LANGUAGES` in `apps/ui/src/lib/i18n.ts` and a
+   `catalogsOf('<lang>')` resources entry next to `fr`. Catalog files are
+   picked up by `import.meta.glob`: a new namespace file needs no import.
 4. Add the shell strings: copy `apps/desktop/src/locales/en.json` to
    `<lang>.json`, translate, register in `SHELL_LANGUAGES`
    (`apps/desktop/src/locale.ts`).
@@ -101,9 +101,9 @@ dev session (`PLATYPUS_DEVTOOLS=1`, see `registerSessionIPC` in
   `test` script runs it, so missing keys fail CI the same way tests do.
   Fixture tests live in `apps/ui/scripts/i18n-check.test.mjs`.
 - `i18n-lint.mjs` — fails on hardcoded JSX text or literal `aria-label` /
-  `placeholder` / `title` / `label` props in converted files. Converted files
-  are allowlisted in the script (`CONVERTED`); extend the list as you convert
-  your area. Escape hatch for the rare legitimate literal:
+  `placeholder` / `title` / `label` props in converted files. A file opts in
+  with a `// i18n: converted` comment in its first 15 lines; there is no
+  shared list to edit. Escape hatch for the rare legitimate literal:
   `{/* i18n:allow: <reason> */}` on the same or the previous line. Brand
   names (`Platypus`) and language endonyms (`English`, `Français`) stay
   literal. The text matcher is heuristic (it skips TypeScript generics);
@@ -130,7 +130,10 @@ dev session (`PLATYPUS_DEVTOOLS=1`, see `registerSessionIPC` in
    pinned by tests — keep it byte-identical and add the new locale's case.
 5. Add French for every key you add (you are responsible for your area's
    French; the lead reviews it as a native speaker).
-6. Add your converted files to `CONVERTED` in `apps/ui/scripts/i18n-lint.mjs`.
+6. Put `// i18n: converted` at the top of every file you converted, so the
+   lint guards it. Sentences with inline markup (links, `<code>`, bold) use
+   react-i18next's `<Trans>` with one key, never a sentence split into
+   `before`/`after` keys: word order differs between languages.
 7. Test: render under the default `en` (the test setup initializes i18n with
    `en` and resets it between tests), assert the English strings as before,
    and add one live-switching test per area (change to `fr`, assert the

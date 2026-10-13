@@ -1,35 +1,23 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-import enCommon from '../locales/en/common.json';
-import enNav from '../locales/en/nav.json';
-import enSettings from '../locales/en/settings.json';
-import enLibrary from '../locales/en/library.json';
-import enGame from '../locales/en/game.json';
-import enStore from '../locales/en/store.json';
-import enPlugins from '../locales/en/plugins.json';
-import enChat from '../locales/en/chat.json';
-import enDownloads from '../locales/en/downloads.json';
-import enErrors from '../locales/en/errors.json';
+// Every catalog under locales/<lang>/<namespace>.json, bundled by Vite. A new
+// namespace or language is just a new file: nothing to register here, so
+// threads converting different areas never touch this module.
+const catalogFiles = import.meta.glob('../locales/*/*.json', { eager: true, import: 'default' }) as Record<string, Record<string, unknown>>;
 
-import frCommon from '../locales/fr/common.json';
-import frNav from '../locales/fr/nav.json';
-import frSettings from '../locales/fr/settings.json';
+function catalogsOf(lang: string): Record<string, Record<string, unknown>> {
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [file, catalog] of Object.entries(catalogFiles)) {
+    const m = /\/locales\/([^/]+)\/([^/]+)\.json$/.exec(file);
+    if (m && m[1] === lang) out[m[2]] = catalog;
+  }
+  return out;
+}
 
 /** Namespaces, one per UI area (docs/translating.md). Later threads add keys
  *  to their area's file without touching the others. */
-export const NAMESPACES = [
-  'common',
-  'nav',
-  'library',
-  'game',
-  'settings',
-  'store',
-  'plugins',
-  'chat',
-  'downloads',
-  'errors',
-] as const;
+export const NAMESPACES: readonly string[] = Object.keys(catalogsOf('en')).sort();
 
 /** Languages shipped in the UI bundle. English is the source and the fallback. */
 export const SUPPORTED_LANGUAGES = ['en', 'fr'] as const;
@@ -75,25 +63,11 @@ function pseudoCatalog(ns: Catalog): Catalog {
   return out;
 }
 
-const enResources: Record<string, Catalog> = {
-  common: enCommon as Catalog,
-  nav: enNav as Catalog,
-  settings: enSettings as Catalog,
-  library: enLibrary as Catalog,
-  game: enGame as Catalog,
-  store: enStore as Catalog,
-  plugins: enPlugins as Catalog,
-  chat: enChat as Catalog,
-  downloads: enDownloads as Catalog,
-  errors: enErrors as Catalog,
-};
+const enResources: Record<string, Catalog> = catalogsOf('en');
 
-const frResources: Record<string, Catalog> = {
-  common: frCommon as Catalog,
-  nav: frNav as Catalog,
-  settings: frSettings as Catalog,
-  // Unconverted areas fall back to English key by key (fallbackNS below).
-};
+// Languages without a file for a namespace fall back to English key by key
+// (fallbackLng below).
+const frResources: Record<string, Catalog> = catalogsOf('fr');
 
 const pseudoResources: Record<string, Catalog> = Object.fromEntries(
   Object.entries(enResources).map(([ns, catalog]) => [ns, pseudoCatalog(catalog)]),

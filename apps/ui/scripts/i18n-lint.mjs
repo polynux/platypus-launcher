@@ -2,23 +2,29 @@
 // Hardcoded-string lint for converted areas (issue #39): converted files must
 // get user-facing text from the catalogs, so this scans them for JSX text
 // nodes and literal string props (aria-label, placeholder, title, label) and
-// fails on any. Later threads extend CONVERTED as they convert their area
+// fails on any. A file opts in with an `// i18n: converted` comment near its
+// top, so threads converting different areas never edit a shared list
 // (see docs/translating.md). Escape hatch for the rare legitimate literal:
 // {/* i18n:allow: <reason> */} on the same or the previous line.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..', 'src');
 
-// Files fully converted to the catalogs (relative to apps/ui/src). Areas
-// converted title-only (their view's h1) join this list when the area's
-// phase-2 thread converts the rest; until then their bodies stay English.
-const CONVERTED = [
-  'App.tsx',
-  'components/Sidebar.tsx',
-  'components/LauncherSettingsView.tsx',
-  'components/GameFoldersSettings.tsx',
-];
+// Files fully converted to the catalogs: every non-test .ts/.tsx under src
+// carrying the marker in its first 15 lines (relative to apps/ui/src).
+const MARKER = /\/\/\s*i18n:\s*converted\b/;
+function walk(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) return e.name === '__tests__' || e.name === 'gen' ? [] : walk(full);
+    return /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [full] : [];
+  });
+}
+const CONVERTED = walk(root)
+  .filter((f) => MARKER.test(readFileSync(f, 'utf8').split('\n').slice(0, 15).join('\n')))
+  .map((f) => path.relative(root, f))
+  .sort();
 
 // Literal text that is not user-facing and may stay inline, per file.
 const EXEMPT = new Map([

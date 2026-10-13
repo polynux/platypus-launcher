@@ -1,3 +1,4 @@
+// i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
