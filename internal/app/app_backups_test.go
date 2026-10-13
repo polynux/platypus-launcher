@@ -269,3 +269,45 @@ func TestSavePathsReportOriginAndExistence(t *testing.T) {
 		t.Errorf("game id = %q", installed.ID)
 	}
 }
+
+// A manifest ** entry lists its static folder through GetSavePaths as found
+// automatically and existing (issue #60): here a sideloaded native game with
+// a compat Steam AppID matches a when-store-steam entry.
+func TestGetSavePathsListsManifestGlobFolder(t *testing.T) {
+	t.Parallel()
+	e := backupsEnv(t)
+	game := types.Game{ID: "rivage-test", Source: "custom", Title: "Rivage", Native: true}
+	saves := filepath.Join(e.root, "Games", "Rivage", "SaveGames")
+	if err := os.MkdirAll(saves, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(saves, "savefile.sav"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.a.settings.SetCompatAppID(game.ID, "4094660"); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "Rivage:\n  files:\n    <home>/Games/Rivage/SaveGames/**/*.sav:\n      tags: [save]\n      when:\n        - store: steam\n"
+	if _, err := savebackup.BuildIndex([]byte(yaml), `"t"`, filepath.Join(e.root, "cache")); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := e.a.GetSavePaths(game)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range paths {
+		if p.Path == saves {
+			found = true
+			if p.Origin != "manifest" {
+				t.Errorf("origin = %q, want manifest", p.Origin)
+			}
+			if !p.Exists {
+				t.Error("SaveGames listed as missing, want existing")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("paths = %+v, missing the SaveGames folder", paths)
+	}
+}

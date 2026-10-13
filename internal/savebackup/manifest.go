@@ -169,7 +169,25 @@ func LoadIndex(cacheDir string) *Index {
 	if err := json.NewDecoder(gz).Decode(&idx); err != nil {
 		return nil
 	}
+	if idx.Version != IndexVersion {
+		// An index from an older format: rebuild it from the manifest already
+		// on disk (no download). Without a manifest there is no index yet.
+		return rebuildIndex(cacheDir)
+	}
 	return &idx
+}
+
+// rebuildIndex derives a fresh index from the cached manifest, or nil.
+func rebuildIndex(cacheDir string) *Index {
+	data, err := os.ReadFile(manifestPath(cacheDir))
+	if err != nil {
+		return nil
+	}
+	idx, err := BuildIndex(data, StoredEtag(cacheDir), cacheDir)
+	if err != nil {
+		return nil
+	}
+	return idx
 }
 
 // BuildIndex parses the manifest YAML into the compact derived index and
@@ -309,12 +327,12 @@ func parseGameEntry(title string, raw any) (GameEntry, bool) {
 		fe.Tags = tags
 		if w, ok := fm["when"].(map[string]any); ok {
 			fe.WhenOS = strList(w["os"])
-			fe.WhenStore = strList(appendOne(w["steam"], w["gog"]))
+			fe.WhenStore = whenStores(w)
 		} else if wl, ok := fm["when"].([]any); ok {
 			for _, item := range wl {
 				if wm, ok := item.(map[string]any); ok {
 					fe.WhenOS = append(fe.WhenOS, strList(wm["os"])...)
-					fe.WhenStore = append(fe.WhenStore, strList(appendOne(wm["steam"], wm["gog"]))...)
+					fe.WhenStore = append(fe.WhenStore, whenStores(wm)...)
 				}
 			}
 		}
@@ -378,6 +396,16 @@ func containsFold(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// whenStores collects a when: entry's store constraints. The manifest schema
+// names the key "store" (e.g. "- store: steam", issue #60); entries pinning a
+// store id directly ("steam"/"gog") are kept too.
+func whenStores(w map[string]any) []string {
+	var out []string
+	out = append(out, strList(w["store"])...)
+	out = append(out, strList(appendOne(w["steam"], w["gog"]))...)
+	return out
 }
 
 // IndexHash is a short content hash for tests and logs (never paths).

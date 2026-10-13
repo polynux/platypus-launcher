@@ -21,7 +21,7 @@ const DefaultManifestURL = "https://raw.githubusercontent.com/mtkennerly/ludusav
 const ManifestRefreshInterval = 7 * 24 * time.Hour
 
 // IndexVersion is the derived index format version.
-const IndexVersion = 1
+const IndexVersion = 2 // 2: when: store constraints (issue #60)
 
 // BackupMetaVersion is the platypus-backup.json format version.
 const BackupMetaVersion = 1
