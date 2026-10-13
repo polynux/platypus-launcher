@@ -308,20 +308,33 @@ func TestRemoveRefusals(t *testing.T) {
 			e.setPrefix(t, game, link, false)
 			return "prefix", "remove.symlink"
 		}},
+		"symlinked parent into an XDG dir": {func(t *testing.T, e *removeEnv, game types.Game) (string, string) {
+			docs := filepath.Join(e.home, "Documents")
+			mustDir(t, filepath.Join(docs, "pfx"))
+			if err := os.WriteFile(filepath.Join(docs, "pfx", "system.reg"), []byte("REGEDIT4\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(docs, filepath.Join(e.home, "via")); err != nil {
+				t.Fatal(err)
+			}
+			e.setPrefix(t, game, filepath.Join(e.home, "via", "pfx"), false)
+			return "prefix", "remove.userDir"
+		}},
 		"prefix without a Wine marker": {func(t *testing.T, e *removeEnv, game types.Game) (string, string) {
 			e.setPrefix(t, game, filepath.Join(e.home, "prefixes", game.ID), false)
 			return "prefix", "remove.noMarker"
 		}},
 	}
 	exeFor := map[string]string{
-		"home":               filepath.Join("run.sh"),
-		"games folder root":  filepath.Join("Games", "run.sh"),
-		"exe in Downloads":   filepath.Join("Downloads", "run.sh"),
-		"filesystem root":    filepath.Join("Games", "Gem", "gem.sh"),
-		"prefixes folder root": filepath.Join("Games", "Gem", "gem.sh"),
-		"prefix in an XDG dir": filepath.Join("Games", "Gem", "gem.sh"),
-		"symlink target":       filepath.Join("Games", "Gem", "gem.sh"),
-		"prefix without a Wine marker": filepath.Join("Games", "Gem", "gem.sh"),
+		"home":                             filepath.Join("run.sh"),
+		"games folder root":                filepath.Join("Games", "run.sh"),
+		"exe in Downloads":                 filepath.Join("Downloads", "run.sh"),
+		"filesystem root":                  filepath.Join("Games", "Gem", "gem.sh"),
+		"prefixes folder root":             filepath.Join("Games", "Gem", "gem.sh"),
+		"prefix in an XDG dir":             filepath.Join("Games", "Gem", "gem.sh"),
+		"symlink target":                   filepath.Join("Games", "Gem", "gem.sh"),
+		"prefix without a Wine marker":     filepath.Join("Games", "Gem", "gem.sh"),
+		"symlinked parent into an XDG dir": filepath.Join("Games", "Gem", "gem.sh"),
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -618,5 +631,40 @@ func TestXdgUserDirs(t *testing.T) {
 		if !want[d] {
 			t.Fatalf("dirs = %v, want %v", dirs, want)
 		}
+	}
+}
+
+// A game folder reached through a symlinked parent (a games folder on another
+// drive) is deleted normally: the resolved folder passes every check.
+func TestRemoveThroughSymlinkedParent(t *testing.T) {
+	t.Parallel()
+	e := newRemoveEnv(t)
+	drive := t.TempDir()
+	mustDir(t, filepath.Join(drive, "Gem"))
+	if err := os.Symlink(drive, filepath.Join(e.home, "hdd")); err != nil {
+		t.Fatal(err)
+	}
+	game := e.addGame(t, "Gem", filepath.Join("hdd", "Gem", "gem.sh"))
+	check, err := e.a.CheckRemove(game.ID, types.RemoveOptions{DeleteFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tg := range check.Targets {
+		if tg.Kind == "files" && !tg.Allowed {
+			t.Fatalf("files target refused: %+v", tg)
+		}
+	}
+	job, err := e.a.RemoveGame(game.ID, types.RemoveOptions{DeleteFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j := e.runQueue(t, job.ID); j.State != jobs.StateDone {
+		t.Fatalf("job = %+v", j)
+	}
+	if _, err := os.Stat(filepath.Join(drive, "Gem")); !os.IsNotExist(err) {
+		t.Fatalf("game folder still there: %v", err)
+	}
+	if _, err := os.Stat(drive); err != nil {
+		t.Fatalf("the drive folder went too: %v", err)
 	}
 }

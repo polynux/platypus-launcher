@@ -311,8 +311,9 @@ func (a *App) checkDeleteDirFor(gameID, dir, kind string) (bool, error) {
 				fmt.Sprintf("refusing to delete %s: it is a symlink", dir),
 				map[string]string{"path": dir})
 		}
-		// The target must resolve to itself: after EvalSymlinks it must not
-		// leave the trees the checks above assumed.
+		// A parent may be a symlink (a games folder on another drive, say):
+		// what gets deleted is the resolved folder, so it must pass every
+		// check too. The resolved path resolves to itself, so this recurses once.
 		resolved, err := filepath.EvalSymlinks(dir)
 		if err != nil {
 			return refuse("remove.escaped",
@@ -320,9 +321,9 @@ func (a *App) checkDeleteDirFor(gameID, dir, kind string) (bool, error) {
 				map[string]string{"path": dir})
 		}
 		if resolved != dir {
-			return refuse("remove.escaped",
-				fmt.Sprintf("refusing to delete %s: it resolves outside itself (%s)", dir, resolved),
-				map[string]string{"path": dir, "resolved": resolved})
+			if _, err := a.checkDeleteDirFor(gameID, resolved, kind); err != nil {
+				return false, err
+			}
 		}
 	}
 	for _, p := range protected {
@@ -330,7 +331,7 @@ func (a *App) checkDeleteDirFor(gameID, dir, kind string) (bool, error) {
 			if root == "" {
 				continue
 			}
-			if dirContains(dir, filepath.Clean(root)) {
+			if dirContains(dir, filepath.Clean(root)) || dirContains(dir, evalOrSelf(root)) {
 				return refuse(p.code,
 					fmt.Sprintf("refusing to delete %s: it holds Platypus's %s", dir, root),
 					map[string]string{"path": dir, "folder": root})
@@ -338,7 +339,7 @@ func (a *App) checkDeleteDirFor(gameID, dir, kind string) (bool, error) {
 		}
 	}
 	for _, u := range xdgUserDirs(home) {
-		if pathOverlaps(dir, u) {
+		if pathOverlaps(dir, u) || pathOverlaps(dir, evalOrSelf(u)) {
 			return refuse("remove.userDir",
 				fmt.Sprintf("refusing to delete %s: it overlaps your %s folder", dir, u),
 				map[string]string{"path": dir, "folder": u})
@@ -357,13 +358,22 @@ func (a *App) checkDeleteDirFor(gameID, dir, kind string) (bool, error) {
 		if o.path == "" || !filepath.IsAbs(o.path) {
 			continue
 		}
-		if pathOverlaps(dir, filepath.Clean(o.path)) {
+		if pathOverlaps(dir, filepath.Clean(o.path)) || pathOverlaps(dir, evalOrSelf(o.path)) {
 			return refuse("remove.shared",
 				fmt.Sprintf("refusing to delete %s: %s still uses it", dir, o.title),
 				map[string]string{"path": dir, "title": o.title})
 		}
 	}
 	return exists, nil
+}
+
+// evalOrSelf is p with its symlinks resolved, or p cleaned when it can't be
+// resolved (it may not exist).
+func evalOrSelf(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
 }
 
 // checkedTarget is a removal target with its size, for the check and the job.
