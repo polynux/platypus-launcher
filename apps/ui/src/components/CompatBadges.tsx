@@ -122,8 +122,8 @@ export function CompatChip({ game, className, hideNative }: { game: Game; classN
     <span className={cx('inline-flex min-w-0 max-w-full flex-wrap content-start items-start gap-1.5', className)}>
       {c && (
         <Badge variant={variant} title={t('game:compat.tierTitle', { prefix, tier: label })} className="min-w-0 max-w-full shrink-0 truncate">
-          <span className="badge-full truncate">{prefix} · {label}</span>
-          <span className="badge-short truncate">{label}</span>
+          <span className="badge-full truncate leading-normal">{prefix} · {label}</span>
+          <span className="badge-short truncate leading-normal">{label}</span>
         </Badge>
       )}
       {deckBadge}
@@ -167,8 +167,8 @@ export function DeckBadge({ rating, notes, className }: { rating: string; notes?
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge variant={variant} className={cx('min-w-0 max-w-full shrink-0 cursor-help truncate', className)}>
-          <span className="badge-full truncate">{t('game:deck.badge', { verdict })}</span>
-          <span className="badge-short truncate">{verdict}</span>
+          <span className="badge-full truncate leading-normal">{t('game:deck.badge', { verdict })}</span>
+          <span className="badge-short truncate leading-normal">{verdict}</span>
         </Badge>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">{deckTooltip(t, rating, notes)}</TooltipContent>
