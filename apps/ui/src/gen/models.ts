@@ -286,6 +286,8 @@ export namespace types {
     note?: string;
     outside_folder?: boolean;
     native?: boolean;
+    offline?: string;
+    cloud_sync?: boolean;
     features: string[];
     pinned?: types.VersionPin | null;
     shared_by?: types.SharedBy | null;
@@ -333,6 +335,7 @@ export namespace types {
     store_url?: string;
     info_source?: string;
     info_source_name?: string;
+    info_stale?: boolean;
     languages?: string[];
     controller?: string;
     requirements?: types.GameRequirements | null;
@@ -490,6 +493,11 @@ export namespace types {
     need_bytes: number;
     free_bytes: number;
     plugin_moves: boolean;
+  }
+
+  export interface NetState {
+    online: boolean;
+    since: number;
   }
 
   export interface OptionGroup {
@@ -668,6 +676,7 @@ export namespace types {
     message: string;
     needs_auth?: boolean;
     unavailable?: boolean;
+    stale?: boolean;
   }
 
   export interface StorePlugin {

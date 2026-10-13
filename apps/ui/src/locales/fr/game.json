@@ -28,7 +28,8 @@
     "hoursLogged": "{{hours}} h de jeu",
     "lastPlayed": "joué {{when}}",
     "playtimeBoth": "en local {{local}} · boutique {{store}}",
-    "playtimeStore": "boutique {{store}}"
+    "playtimeStore": "boutique {{store}}",
+    "needsConnection": "Nécessite une connexion à {{store}}"
   },
   "store": {
     "sideloaded": "Jeux ajoutés"
@@ -160,7 +161,8 @@
     "linkPcgw": "PCGamingWiki",
     "infoFrom": "Infos venues de",
     "unlink": "Dissocier",
-    "unlinking": "Dissociation…"
+    "unlinking": "Dissociation…",
+    "infoStale": "Informations possiblement datées (cache hors ligne)."
   },
   "info": {
     "find": "Trouver des infos en ligne",

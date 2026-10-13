@@ -119,6 +119,10 @@ export const LauncherApi = {
 
   getProtonVersions: () => call<ProtonVersion[]>('GetProtonVersions', async () => (await App.GetProtonVersions()) ?? []),
 
+  // Whether the machine looks online (issue #44): background work skips its
+  // fetches while offline, and the library shows its last known listing.
+  getNetState: () => call<gen.NetState>('GetNetState', async () => (await App.GetNetState()) ?? { online: true, since: 0 }),
+
   launchGame: (game: Game) => call<string>('LaunchGame', () => App.LaunchGame(backend(game))),
 
   // Graceful stop (SIGTERM, then SIGKILL after a few seconds); progress arrives
@@ -504,6 +508,11 @@ export function onLibraryPartial(cb: (lib: Library) => void): () => void {
  *  lookup applied art to a game, so the library should reload its entry. */
 export function onLibrary(cb: (gameId: string) => void): () => void {
   return onEvent('library', cb);
+}
+
+/** Whether the machine looks online, and when the state began (issue #44). */
+export function onNetState(cb: (s: gen.NetState) => void): () => void {
+  return onEvent('netstate', cb);
 }
 
 /** Subscribe to playtime changes: a plugin's report changed a library value. */

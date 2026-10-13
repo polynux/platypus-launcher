@@ -129,5 +129,6 @@
     "runNative": "Native Linux",
     "runWine": "Wine / Proton",
     "submit": "Add game"
-  }
+  },
+  "offline": "Offline — showing the last known library"
 }

@@ -1,7 +1,7 @@
 // i18n: converted
 import { useTranslation, Trans } from 'react-i18next';
 import React, { memo, useDeferredValue, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, WifiOff, X } from 'lucide-react';
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
@@ -18,6 +18,7 @@ import { formatCount } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
+import { useNetState } from './useNetState';
 import { WindowedGrid, WindowedRows } from './WindowedList';
 import { PluginLogo } from './PluginLogo';
 
@@ -328,6 +329,9 @@ export function LibraryView(p: LibraryProps) {
   const rest = useMemo(() => (sort ? tableRows : filtered).filter((g) => !played.includes(g)), [sort, tableRows, filtered, played]);
   const maxHours = useMemo(() => Math.max(1, ...p.games.map((g) => hoursPlayed(g) ?? 0)), [p.games]);
   const recentlyAdded = useMemo(() => p.games.filter((g) => g.store === 'custom').slice(0, 6), [p.games]);
+  // Offline (issue #44): a small indicator in the toolbar while the machine
+  // looks offline — the library shows the last known listing.
+  const { online } = useNetState();
 
   return (
     <div className="p-7">
@@ -340,6 +344,12 @@ export function LibraryView(p: LibraryProps) {
               {owned > installedCount ? t('library:ownedSuffix', { owned: formatCount(owned) }) : ''}
               {p.lastScan ? t('library:scannedSuffix', { time: clock(p.lastScan) }) : ''}
             </p>
+            {!online && (
+              <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-white/80 ring-1 ring-white/[0.1]">
+                <WifiOff className="h-3.5 w-3.5" aria-hidden />
+                {t('library:offline', 'Offline — showing the last known library')}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <FilterGroup label={t('library:view')}>

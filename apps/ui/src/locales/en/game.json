@@ -28,7 +28,8 @@
     "hoursLogged": "{{hours}}h logged",
     "lastPlayed": "last played {{when}}",
     "playtimeBoth": "local {{local}} · store {{store}}",
-    "playtimeStore": "store {{store}}"
+    "playtimeStore": "store {{store}}",
+    "needsConnection": "Needs a connection to {{store}}"
   },
   "store": {
     "sideloaded": "Sideloaded"
@@ -160,7 +161,8 @@
     "linkPcgw": "PCGamingWiki",
     "infoFrom": "Info from",
     "unlink": "Unlink",
-    "unlinking": "Unlinking…"
+    "unlinking": "Unlinking…",
+    "infoStale": "Info may be out of date (offline cache)."
   },
   "info": {
     "find": "Find info online",
