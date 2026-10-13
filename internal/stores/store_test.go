@@ -21,30 +21,15 @@ func (fakeStore) Details(context.Context, types.Game) (*types.GameDetails, error
 }
 
 func TestRegistryGetBySource(t *testing.T) {
-	r := NewRegistry(func() []Store { return []Store{fakeStore("epic-legendary")} }, NewSteam())
-	if s, ok := r.Get(types.SourceSteam); !ok || s.ID() != "steam" {
-		t.Fatalf("Get(steam) = %v, %v", s, ok)
+	r := NewRegistry(func() []Store { return []Store{fakeStore("epic-legendary")} })
+	if _, ok := r.Get(types.SourceSteam); ok {
+		t.Fatal("Get(steam) found a built-in store: the Steam source is the bundled steam plugin now")
 	}
 	if _, ok := r.Get("epic-legendary"); !ok {
 		t.Fatal("plugin store not found")
 	}
 	if _, ok := r.Get(types.SourceCustom); ok {
 		t.Fatal("custom games must have no store")
-	}
-}
-
-func TestSteamLaunch(t *testing.T) {
-	s := NewSteam()
-	game := types.Game{Source: "steam", Store: types.StoreSteam, StoreAppID: "620"}
-	l, err := s.Launch(context.Background(), game, false)
-	if err != nil || l == nil || l.Client == nil || l.Client.Client != "Steam" || len(l.Client.Command) == 0 {
-		t.Fatalf("installed Steam app should launch through the client, got %+v, %v", l, err)
-	}
-
-	// An executable override means Platypus runs the game itself.
-	game.Executable = "/games/portal2/portal2.exe"
-	if l, _ := s.Launch(context.Background(), game, false); l != nil {
-		t.Fatalf("override should bypass the client, got %+v", l)
 	}
 }
 
@@ -57,7 +42,10 @@ func TestGameID(t *testing.T) {
 		t.Errorf("unsafe ids must stay unique and path-safe: %s %s", a, b)
 	}
 	if GameID("steam", "620") == "steam_620" {
-		t.Error("plugin ids must not collide with built-in Steam ids")
+		t.Error("default plugin ids must keep the p.<source>. form (the steam plugin's gameIdPrefix is what makes steam_620)")
+	}
+	if got := GameIDWithPrefix("steam_", "steam", "620"); got != "steam_620" {
+		t.Errorf("bundled steam prefix: %q, want steam_620", got)
 	}
 }
 

@@ -7,37 +7,13 @@ import (
 	"strings"
 
 	"platypus/internal/plugins"
-	"platypus/internal/steam"
 	"platypus/internal/stores"
 )
 
 var pluginIconID = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
-// SteamArt serves images from Steam's local library cache under
-// steam.ArtURLPrefix. Newer titles only have hashed CDN URLs, but the Steam
-// client has already downloaded their art.
-func SteamArt(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rel, ok := strings.CutPrefix(r.URL.Path, steam.ArtURLPrefix)
-		if !ok {
-			next.ServeHTTP(w, r)
-			return
-		}
-		root := steam.Root()
-		clean := filepath.Clean("/" + rel) // blocks ../ escapes
-		ext := strings.ToLower(filepath.Ext(clean))
-		if root == "" || (ext != ".jpg" && ext != ".png") {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Cache-Control", "max-age=86400")
-		http.ServeFile(w, r, filepath.Join(root, "appcache/librarycache", clean))
-	})
-}
-
 // CustomArt serves the user's images to the shell under customize.URLPrefix,
-// falling through to next for anything else. The shells chain it after
-// SteamArt (see app_customize.go).
+// falling through to next for anything else.
 func CustomArt(a *App, next http.Handler) http.Handler { return a.customArt(next) }
 
 // PluginArt serves store plugin logos to the shell under
@@ -119,9 +95,10 @@ func (a *App) pluginGameArtAllowed(id, path string) bool {
 // protocol 1.15, issue #44). The core rewrites each file:// art URL to one of
 // these addresses (see stores.Plugin.artURL); this handler serves the file
 // with http.ServeFile. Chain it before CustomArt: the customize store answers
-// 404 for names it doesn't know and never falls through. Steam's own prefix
-// (/platypus-art/steam/...) and the logo prefix (/platypus-art/plugin/...)
-// fall through to their handlers.
+// 404 for names it doesn't know and never falls through. The bundled steam
+// plugin's art rides this path too (its gameIdPrefix keeps the ids, its
+// local-art capability the files); only the logo prefix
+// (/platypus-art/plugin/...) falls through to its handler.
 func PluginGameArt(a *App, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rest, ok := strings.CutPrefix(r.URL.Path, stores.GameArtURLPrefix)
@@ -134,7 +111,7 @@ func PluginGameArt(a *App, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if id == "plugin" || id == "steam" || !pluginIconID.MatchString(id) {
+		if id == "plugin" || !pluginIconID.MatchString(id) {
 			next.ServeHTTP(w, r)
 			return
 		}

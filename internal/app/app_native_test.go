@@ -21,7 +21,7 @@ func nativeTestApp(t *testing.T, home string) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st, stores: stores.NewRegistry(nil, stores.NewSteam()), optHome: home}
+	return &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
 }
 
 func writeExe(t *testing.T, path string, data []byte, exec bool) string {

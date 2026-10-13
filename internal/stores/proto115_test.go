@@ -2,6 +2,8 @@ package stores
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -139,6 +141,31 @@ func TestLaunchSpecExecutableParam(t *testing.T) {
 	l, err := e.store.Launch(e.ctx(t), g, true)
 	if err != nil || l == nil || l.Direct == nil {
 		t.Fatalf("launch with executable override: %+v, %v", l, err)
+	}
+}
+
+// The user's override may live outside the plugin's install folders: the
+// user chose that file, so the core launches it when the plugin answers
+// with exactly that file.
+func TestLaunchSpecExecutableOverrideOutsideTheInstallFolder(t *testing.T) {
+	e := newEchoEnv(t)
+	e.login(t)
+	j := e.install(t, "install", "tiny")
+	if got := waitJob(t, e.q, j.ID, jobs.StateDone, jobs.StateFailed); got.State != jobs.StateDone {
+		t.Fatalf("install: %+v", got)
+	}
+	g := e.game(t, "tiny")
+	elsewhere := filepath.Join(t.TempDir(), "other", "run.sh")
+	if err := os.MkdirAll(filepath.Dir(elsewhere), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(elsewhere, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g.Executable = elsewhere
+	l, err := e.store.Launch(e.ctx(t), g, true)
+	if err != nil || l == nil || l.Direct == nil {
+		t.Fatalf("launch with an override outside the install folder: %+v, %v", l, err)
 	}
 }
 

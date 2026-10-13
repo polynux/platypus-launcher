@@ -240,7 +240,7 @@ func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	a := &App{settings: st, stores: stores.NewRegistry(nil, stores.NewSteam()), optHome: home}
+	a := &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
 	games := a.customGames()
 	if len(games) != 1 {
 		t.Fatalf("customGames = %d games, want 1", len(games))

@@ -189,7 +189,7 @@ func NewAppWithOptions(o Options) *App {
 	a.optDataDir = o.DataDir
 	a.optCacheDir = o.CacheDir
 	a.optPluginsDir = o.PluginsDir
-	a.stores = stores.NewRegistry(a.pluginStores, stores.NewSteam())
+	a.stores = stores.NewRegistry(a.pluginStores)
 	a.net = netstate.New()
 	a.net.OnTransition(func(online bool) {
 		snap := a.net.Snapshot()
@@ -392,6 +392,9 @@ func (a *App) startup(ctx context.Context) {
 		a.host.Errorf("plugins: %v", err)
 	}
 	if err == nil {
+		// The bundled steam plugin installs itself when missing (issue
+		// #54), before anything lists what was found.
+		found = a.ensureBundledSteam(found)
 		a.forgetSettingsOfRemoved(found)
 	}
 	for _, p := range found {

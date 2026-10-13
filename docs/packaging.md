@@ -39,6 +39,33 @@ Steam installs are still found at `~/.local/share/Steam` first;
 `$XDG_DATA_HOME/Steam` joins as an extra candidate. `PLATYPUS_STEAM_ROOT`
 pins the Steam lookup to one folder (packagers, test fixtures).
 
+## Bundled plugins (issue #54)
+
+The distributable ships the Steam client source as a ready plugin folder,
+and the core auto-installs it on startup when no `steam` plugin is
+installed — existing users lose nothing. The dev run builds it too, so
+`bun run dev` behaves like the packaged app.
+
+- Source: `$PLATYPUS_BUNDLED_PLUGINS` (a folder of ready plugin folders),
+  else `<dir of the core executable>/plugins`. The dev script
+  (`apps/desktop/scripts/run.mjs`) builds into `apps/desktop/.build/bundled-plugins`
+  and points the core at it; the packaged build
+  (`apps/desktop/scripts/package.mjs` + `packaging/electron-builder.yml`)
+  stages `packaging/stage/bundled-plugins` next to the core binary.
+  Both go through `apps/desktop/scripts/bundled-plugins.mjs`.
+- Install: atomic (temp dir + rename) into `<plugins>/steam`, then approved
+  with trust pre-seeded for that manifest hash. It never deletes or
+  overwrites a different plugin folder: an existing `steam` folder whose
+  manifest isn't the steam plugin is left alone with a warning.
+- Updates: when the bundled copy's manifest version is newer than the
+  installed one, it replaces it and re-pins the hash, keeping the user's
+  choices (stays disabled when disabled, keeps its install folder and
+  allowed folders). A user install from `plugins/install.sh` with the same
+  version (even a modified one, different hash) or a newer version is left
+  alone in dev: bump the bundled version to roll it out.
+- Game ids stay `steam_<appid>` (the manifest `gameIdPrefix`) and snapshots
+  from before the move have their art URLs mapped, so no data migration.
+
 ## umu-launcher (issue #48)
 
 Windows games can run through umu-launcher (see `docs/umu.md`); Platypus

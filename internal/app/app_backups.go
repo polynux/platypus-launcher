@@ -301,11 +301,9 @@ func (a *App) savesPreview(game types.Game) types.SaveGate {
 // cloud, so automatic backups skip it by default. It is true when the game's
 // plugin offers cloud-saves for this game (the capability, and the game's
 // features where the protocol says so) and the effective cloud mode isn't
-// off; or, for built-in Steam games, when the cached store details say the
-// game has Steam Cloud (category 23, no new request per game). A plugin game
-// whose library entry says cloudSync (protocol 1.15, issue #44: "the store
-// itself syncs this game's saves") also counts, alongside the capability
-// rule. Unknown means false.
+// off; or when the game's library entry says cloudSync (protocol 1.15,
+// issue #44: "the store itself syncs this game's saves", reported by the
+// bundled steam plugin from cached Steam Cloud details). Unknown means false.
 func (a *App) gameHasCloudSync(game types.Game) bool {
 	if game.CloudSync {
 		return true
@@ -327,26 +325,6 @@ func (a *App) gameHasCloudSync(game types.Game) bool {
 		}
 		if mode != types.CloudOff {
 			return true
-		}
-	}
-	// Only the built-in Steam source launches through the Steam client, which
-	// syncs Steam Cloud; a plugin game with store "steam" (steam-standalone)
-	// is covered by the plugin's own cloud-saves capability above.
-	if game.Source == types.SourceSteam {
-		if game.StoreAppID == "" {
-			return false
-		}
-		if a.stores != nil {
-			if s, ok := a.stores.Get(types.SourceSteam); ok {
-				type cloudCacher interface {
-					HasSteamCloudCached(string) (bool, bool)
-				}
-				if st, ok := s.(cloudCacher); ok {
-					if has, cached := st.HasSteamCloudCached(game.StoreAppID); cached {
-						return has
-					}
-				}
-			}
 		}
 	}
 	return false

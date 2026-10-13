@@ -91,7 +91,9 @@ func TestPluginGameArtRefusesOutsideReadFolders(t *testing.T) {
 		}
 	}
 	// Unknown plugins get a 404 (the path decodes but no plugin owns it);
-	// the logo/steam prefixes fall through to their handlers.
+	// the logo prefix falls through to its handler. The bundled steam
+	// plugin's art rides this handler too (issue #54), so a bad steam
+	// address 404s here instead of falling through.
 	unknown := "/platypus-art/nope/" + base64.RawURLEncoding.EncodeToString([]byte("/tmp/x.png"))
 	req := httptest.NewRequest("GET", unknown, nil)
 	rec := httptest.NewRecorder()
@@ -99,7 +101,15 @@ func TestPluginGameArtRefusesOutsideReadFolders(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("%s: status = %d, want 404", unknown, rec.Code)
 	}
-	for _, target := range []string{"/platypus-art/plugin/echo", "/platypus-art/steam/x", "/platypus-art/noslash"} {
+	for _, target := range []string{"/platypus-art/steam/x", "/platypus-art/steam/" + base64.RawURLEncoding.EncodeToString([]byte("/tmp/x.png"))} {
+		req := httptest.NewRequest("GET", target, nil)
+		rec := httptest.NewRecorder()
+		PluginGameArt(a, http.NotFoundHandler()).ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s: status = %d, want 404", target, rec.Code)
+		}
+	}
+	for _, target := range []string{"/platypus-art/plugin/echo", "/platypus-art/noslash"} {
 		req := httptest.NewRequest("GET", target, nil)
 		rec := httptest.NewRecorder()
 		PluginGameArt(a, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -10,31 +10,8 @@ import (
 
 	"platypus/internal/savebackup"
 	"platypus/internal/session"
-	"platypus/internal/stores"
 	"platypus/internal/types"
 )
-
-// fakeSteamStore is a built-in Steam stand-in with a canned Steam Cloud
-// answer, without any network.
-type fakeSteamStore struct {
-	has, cached bool
-}
-
-func (f fakeSteamStore) ID() string { return types.SourceSteam }
-func (f fakeSteamStore) Library(context.Context) ([]types.Game, error) {
-	return nil, nil
-}
-func (f fakeSteamStore) Details(context.Context, types.Game) (*types.GameDetails, error) {
-	return &types.GameDetails{}, nil
-}
-func (f fakeSteamStore) Launch(context.Context, types.Game, bool) (*stores.Launch, error) {
-	return nil, nil
-}
-func (f fakeSteamStore) HasSteamCloudCached(string) (bool, bool) { return f.has, f.cached }
-
-func withFakeSteam(a *App, has, cached bool) {
-	a.stores = stores.NewRegistry(a.pluginStores, fakeSteamStore{has: has, cached: cached})
-}
 
 func TestGameHasCloudSyncPluginCases(t *testing.T) {
 	t.Parallel()
@@ -79,29 +56,21 @@ func TestGameHasCloudSyncNeedsCapability(t *testing.T) {
 func TestGameHasCloudSyncSteam(t *testing.T) {
 	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
+	// The bundled steam plugin reports Steam Cloud as the library's
+	// cloudSync field (issue #54): no core-side cache lookup remains.
 	steamGame := types.Game{ID: "steam_10", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "10", Title: "Steam Game"}
-	// Unknown (nothing cached, no Steam store with an answer): false, no request.
 	if a.gameHasCloudSync(steamGame) {
-		t.Fatal("uncached Steam game should be unknown=false")
+		t.Fatal("Steam game without cloudSync should be false")
 	}
-	withFakeSteam(a, true, true)
+	steamGame.CloudSync = true
 	if !a.gameHasCloudSync(steamGame) {
-		t.Fatal("cached Steam Cloud should be true")
-	}
-	withFakeSteam(a, false, true)
-	if a.gameHasCloudSync(steamGame) {
-		t.Fatal("cached no-cloud Steam game should be false")
-	}
-	withFakeSteam(a, true, false)
-	if a.gameHasCloudSync(steamGame) {
-		t.Fatal("uncached Steam game should be false")
+		t.Fatal("Steam game with cloudSync should be true")
 	}
 	// A plugin game with store "steam" (steam-standalone) isn't synced by
-	// the Steam client: Steam Cloud in the store data doesn't count for it.
-	withFakeSteam(a, true, true)
+	// the Steam client: only its own cloud-saves capability counts.
 	standalone := types.Game{ID: "ss_10", Source: "steam-standalone", Store: types.StoreSteam, StoreAppID: "10", Title: "Steam Game"}
 	if a.gameHasCloudSync(standalone) {
-		t.Fatal("a steam-standalone game counted as synced by the Steam client")
+		t.Fatal("a steam-standalone game without cloud-saves counted as synced")
 	}
 }
 

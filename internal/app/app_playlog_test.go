@@ -99,12 +99,13 @@ func TestLocalPlaytimeReachesGamesWithoutAStoreReport(t *testing.T) {
 func TestLocalPlaytimeMergesWithSteamsOwnRecord(t *testing.T) {
 	t.Parallel()
 	a := playlogApp(t)
-	// Steam's record rides with the listing: 30 min, played at 1000.
+	// The steam plugin's record arrives through the stats cache now (issue
+	// #54): 30 min store, while the listing itself carries no playtime.
+	a.stats.setPlaytime("steam", map[string]int{"10": 30, "11": 30})
 	logSession(t, a, "steam_10", 70*time.Second) // 1 min local
 
 	games := []types.Game{
-		{ID: "steam_10", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "10",
-			PlaytimeMin: 30, LastPlayed: 1000},
+		{ID: "steam_10", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "10"},
 	}
 	a.applyPlaytime(games)
 	g := games[0]
@@ -121,8 +122,7 @@ func TestLocalPlaytimeMergesWithSteamsOwnRecord(t *testing.T) {
 	// A Steam game played longer in Platypus shows the local total.
 	logSession(t, a, "steam_11", 65*time.Minute)
 	older := []types.Game{
-		{ID: "steam_11", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "11",
-			PlaytimeMin: 30, LastPlayed: 1000},
+		{ID: "steam_11", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "11"},
 	}
 	a.applyPlaytime(older)
 	if older[0].PlaytimeMin != 65 {

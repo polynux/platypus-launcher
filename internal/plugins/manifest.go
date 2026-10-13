@@ -37,8 +37,10 @@ const (
 	KindData  = "data"
 )
 
-// Game sources that aren't plugins.
-var reservedIDs = map[string]bool{"steam": true, "custom": true}
+// Game sources that aren't plugins. "custom" is sideloaded games; the Steam
+// client source is the bundled steam plugin now (issue #54), so "steam" is a
+// plugin id like any other.
+var reservedIDs = map[string]bool{"custom": true}
 
 // BundledPluginIDs are the first-party plugin ids allowed to declare a
 // manifest gameIdPrefix (protocol 1.15, issue #54 groundwork): a

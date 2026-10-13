@@ -1,0 +1,36 @@
+[
+  {
+    "bannerUrl": "file://$HOME/.local/share/Steam/appcache/librarycache/440/header.jpg",
+    "coverUrl": "file://$HOME/.local/share/Steam/appcache/librarycache/440/library_600x900.jpg",
+    "heroUrl": "file://$HOME/.local/share/Steam/appcache/librarycache/440/library_hero.jpg",
+    "id": "440",
+    "installPath": "$HOME/.local/share/Steam/steamapps/common/Team Fortress 2",
+    "installable": false,
+    "installed": true,
+    "lastPlayed": 1790282473,
+    "offline": "ok",
+    "title": "Team Fortress 2"
+  },
+  {
+    "bannerUrl": "https://steamcdn-a.akamaihd.net/steam/apps/570/header.jpg",
+    "coverUrl": "https://steamcdn-a.akamaihd.net/steam/apps/570/library_600x900.jpg",
+    "heroUrl": "https://steamcdn-a.akamaihd.net/steam/apps/570/library_hero.jpg",
+    "id": "570",
+    "installPath": "$HOME/.local/share/Steam/steamapps/common/dota 2 beta",
+    "installable": false,
+    "installed": true,
+    "offline": "ok",
+    "title": "Dota 2"
+  },
+  {
+    "bannerUrl": "https://steamcdn-a.akamaihd.net/steam/apps/730/header.jpg",
+    "coverUrl": "https://steamcdn-a.akamaihd.net/steam/apps/730/library_600x900.jpg",
+    "heroUrl": "https://steamcdn-a.akamaihd.net/steam/apps/730/library_hero.jpg",
+    "id": "730",
+    "installPath": "$HOME/extra-lib/steamapps/common/counter-strike 2",
+    "installable": false,
+    "installed": true,
+    "offline": "ok",
+    "title": "Counter-Strike 2"
+  }
+]

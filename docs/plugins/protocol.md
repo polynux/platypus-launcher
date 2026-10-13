@@ -1184,6 +1184,9 @@ never stand in the way (issue #44).
 - **`LibraryGame.cloudSync`** (bool): the store itself syncs this game's
   saves. `gameHasCloudSync` uses it for plugin games, alongside the
   `cloud-saves` capability rule, so automatic backups skip such games.
+- **`LibraryGame.lastPlayed`** (unix seconds, optional): when the store last
+  saw the game run, for stores whose client launches games outside Platypus.
+  The library shows the later of it and Platypus's own sessions.
 - **The `local-art` capability.** A plugin offering it may return
   `file:///abs/path` in its art fields (cover, hero, banner, logo,
   screenshots and details art). The core rewrites each to

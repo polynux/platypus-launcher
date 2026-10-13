@@ -35,7 +35,7 @@ func umuApp(t *testing.T, withUmu bool) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st, stores: stores.NewRegistry(nil, stores.NewSteam()), optHome: home}
+	return &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
 }
 
 // With umu installed, a game with no explicit runner prefers umu; an

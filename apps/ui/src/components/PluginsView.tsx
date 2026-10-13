@@ -41,7 +41,6 @@ const STATUS: Record<PluginStatus, { key: string; variant: BadgeVariant }> = {
 };
 
 const BUILT_IN = [
-  { key: 'steam', name: 'Steam' },
   { key: 'protondb', name: 'ProtonDB' },
 ];
 
@@ -328,7 +327,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
             <div className="min-w-0">
               <div className="text-[13px] font-bold">{b.name}</div>
-              <div className="text-[12px] text-white/55">{b.key === 'steam' ? t('plugins:builtIn.steam') : t('plugins:builtIn.protondb')}</div>
+              <div className="text-[12px] text-white/55">{t('plugins:builtIn.protondb')}</div>
             </div>
             <Badge variant="neutral" className="flex-none">{t('plugins:status.builtIn')}</Badge>
           </div>

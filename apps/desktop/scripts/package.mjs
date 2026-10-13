@@ -31,6 +31,9 @@ console.log('» building the Go core (linux-x64, trimmed, no CGO)');
 run('go', ['build', '-trimpath', '-o', coreOut, './cmd/platypus-core'], repo, { CGO_ENABLED: '0', GOOS: 'linux', GOARCH: 'amd64' });
 chmodSync(coreOut, 0o755);
 
+console.log('» building the bundled plugins (linux-x64, trimmed, no CGO)');
+run('node', ['scripts/bundled-plugins.mjs', path.join(stage, 'bundled-plugins'), '--release'], desktop);
+
 console.log('» packing the AppImage and tar.gz');
 // The builder pinned in apps/desktop (never a floating bunx latest).
 const builder = path.join(desktop, 'node_modules', '.bin', 'electron-builder');
