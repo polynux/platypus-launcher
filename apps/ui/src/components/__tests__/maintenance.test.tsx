@@ -10,6 +10,8 @@ const api = vi.hoisted(() => ({
   pickMoveFolder: vi.fn(),
   checkMove: vi.fn(),
   moveGame: vi.fn(),
+  checkRemove: vi.fn(),
+  removeGame: vi.fn(),
   getGameDetails: vi.fn(),
   getGameVersions: vi.fn(),
   getInstallSize: vi.fn(),
@@ -58,6 +60,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getGameDetails.mockResolvedValue({ summary: '', screenshots: [], genres: [], developers: [], publishers: [], release_date: '', achievements: null });
   api.getGameVersions.mockResolvedValue({ channels: [], builds: [], manual: null, links: [], updateAvailable: false, pinned: null, ledger: [] });
+  api.checkRemove.mockResolvedValue({
+    targets: [
+      { kind: 'prefix', path: '/pfx/gem', bytes: 1_000_000, exists: true, allowed: true },
+      { kind: 'files', path: '/games/sideload', bytes: 2_000_000, exists: true, allowed: true },
+    ],
+    saves: { backup_id: '', files: 0, bytes: 0, no_paths: false },
+  });
+  api.removeGame.mockResolvedValue(job({ id: 'remove-1', kind: 'remove' }));
 });
 
 /** Opens the game settings from the page's gear, then a tab by its name. */
@@ -162,13 +172,15 @@ describe('Remove from library for sideloaded games', () => {
     expect(onRemove).not.toHaveBeenCalled();
   });
 
-  it('confirming calls onRemove once and closes the settings', () => {
+  it('confirming calls onRemove once and closes the settings', async () => {
     const onRemove = vi.fn();
     render(<GamePage game={custom()} {...base} onRemove={onRemove} />);
     openTab('Maintenance');
     fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    await screen.findByText(/\/pfx\/gem/);
     fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
     expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith({ delete_prefix: false, delete_files: false, allow_no_saves: false });
     expect(screen.queryByRole('dialog', { name: 'Settings for Sideloaded Gem' })).toBeNull();
   });
 
@@ -212,6 +224,102 @@ describe('Remove from library for sideloaded games', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' }).disabled).toBe(true);
     expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it('offers both deletions unchecked, with their paths and sizes', async () => {
+    render(<GamePage game={custom()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(screen.getAllByText('Measuring…').length).toBeGreaterThan(0);
+    await screen.findByText(/\/pfx\/gem/);
+    const prefix = screen.getByRole<HTMLInputElement>('checkbox', { name: /Also delete the Wine prefix/ });
+    const files = screen.getByRole<HTMLInputElement>('checkbox', { name: /Also delete the game files/ });
+    expect(prefix.checked).toBe(false);
+    expect(files.checked).toBe(false);
+    expect(prefix.closest('label')?.textContent).toMatch(/\/pfx\/gem/);
+    expect(files.closest('label')?.textContent).toMatch(/\/games\/sideload/);
+    expect(api.checkRemove).toHaveBeenCalledWith('custom-1', { delete_prefix: true, delete_files: true, allow_no_saves: false });
+  });
+
+  it('checking a deletion updates the summary and passes the flags on', async () => {
+    const onRemove = vi.fn();
+    render(<GamePage game={custom()} {...base} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    await screen.findByText(/\/pfx\/gem/);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also delete the Wine prefix/ }));
+    expect(await screen.findByText(/and deletes the Wine prefix\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also delete the game files/ }));
+    expect(await screen.findByText(/and deletes the Wine prefix and the game files\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(onRemove).toHaveBeenCalledWith({ delete_prefix: true, delete_files: true, allow_no_saves: false });
+  });
+
+  it('disables a refused deletion with its reason', async () => {
+    api.checkRemove.mockResolvedValue({
+      targets: [
+        { kind: 'prefix', path: '/pfx/shared', bytes: 0, exists: true, allowed: false, reason: 'refusing to delete /pfx/shared: First still uses it', reason_code: 'remove.shared', reason_params: { path: '/pfx/shared', title: 'First' } },
+        { kind: 'files', path: '/games/sideload', bytes: 2_000_000, exists: true, allowed: true },
+      ],
+      saves: { backup_id: '', files: 0, bytes: 0, no_paths: false },
+    });
+    render(<GamePage game={custom()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    await screen.findByText(/\/games\/sideload/);
+    const prefix = screen.getByRole<HTMLInputElement>('checkbox', { name: /Also delete the Wine prefix/ });
+    expect(prefix.disabled).toBe(true);
+    expect(prefix.closest('label')?.textContent).toMatch(/First.*still uses it/);
+  });
+
+  it('requires the no-backup confirmation when no saves are known', async () => {
+    const onRemove = vi.fn();
+    api.checkRemove.mockResolvedValue({
+      targets: [
+        { kind: 'prefix', path: '/pfx/gem', bytes: 1_000_000, exists: true, allowed: true },
+        { kind: 'files', path: '/games/sideload', bytes: 2_000_000, exists: true, allowed: true },
+      ],
+      saves: { backup_id: '', files: 0, bytes: 0, no_paths: true },
+    });
+    render(<GamePage game={custom()} {...base} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    await screen.findByText(/No known saves/);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also delete the Wine prefix/ }));
+    const remove = screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' });
+    expect(remove.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Delete without a save backup/ }));
+    expect(remove.disabled).toBe(false);
+    fireEvent.click(remove);
+    expect(onRemove).toHaveBeenCalledWith({ delete_prefix: true, delete_files: false, allow_no_saves: true });
+  });
+
+  it('shows the backup line when saves apply', async () => {
+    render(<GamePage game={custom()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(await screen.findByText(/Saves will be backed up first/)).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: /Delete without a save backup/ })).toBeNull();
+  });
+
+  it('shows a check failure and keeps Remove off', async () => {
+    const onRemove = vi.fn();
+    api.checkRemove.mockRejectedValue(new Error('the core is busy'));
+    render(<GamePage game={custom()} {...base} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' }).disabled).toBe(true);
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it('offers a retry after a failed removal', () => {
+    const onJobAction = vi.fn();
+    const failed = job({ id: 'remove-1', kind: 'remove', state: 'failed', error: 'deleting /pfx/gem: permission denied' });
+    render(<GamePage game={custom()} {...base} job={failed} onJobAction={onJobAction} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onJobAction).toHaveBeenCalledWith('retry', 'remove-1');
   });
 });
 

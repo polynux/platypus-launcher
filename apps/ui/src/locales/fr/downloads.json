@@ -9,7 +9,8 @@
     "update": "Mise à jour",
     "uninstall": "Désinstallation",
     "verify": "Vérification",
-    "move": "Déplacement"
+    "move": "Déplacement",
+    "remove": "Suppression"
   },
   "actionFailed": {
     "install": "l'installation a échoué",
@@ -21,7 +22,8 @@
     "update": "mise à jour",
     "uninstall": "désinstallation",
     "verify": "vérification",
-    "move": "déplacement"
+    "move": "déplacement",
+    "remove": "suppression"
   },
   "state": {
     "queued": "en attente",

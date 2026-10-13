@@ -9,7 +9,8 @@
     "update": "Update",
     "uninstall": "Uninstall",
     "verify": "Verify",
-    "move": "Move"
+    "move": "Move",
+    "remove": "Remove"
   },
   "actionFailed": {
     "install": "install failed",
@@ -21,7 +22,8 @@
     "update": "update",
     "uninstall": "uninstall",
     "verify": "verify",
-    "move": "move"
+    "move": "move",
+    "remove": "remove"
   },
   "state": {
     "queued": "queued",

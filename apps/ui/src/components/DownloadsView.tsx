@@ -21,6 +21,7 @@ const VERB_KEY: Record<Job['kind'], string> = {
   uninstall: 'downloads:action.uninstall',
   verify: 'downloads:action.verify',
   move: 'downloads:action.move',
+  remove: 'downloads:action.remove',
 };
 
 const KIND_KEY: Record<Job['kind'], string> = {
@@ -29,6 +30,7 @@ const KIND_KEY: Record<Job['kind'], string> = {
   uninstall: 'downloads:kind.uninstall',
   verify: 'downloads:kind.verify',
   move: 'downloads:kind.move',
+  remove: 'downloads:kind.remove',
 };
 
 const STATE_STYLE: Record<Job['state'], string> = {
@@ -111,8 +113,8 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
               <Button variant="neutral" size="sm" onClick={() => onAction('resume', job.id)} aria-label={t('downloads:aria.resumeJob', { title: job.title })}>
                 <Play className="h-3 w-3" /> {t('downloads:job.resume')}
               </Button>
-              {/* A check or a move works on the installed game: there is no download to discard. */}
-              {job.kind !== 'verify' && job.kind !== 'move' && (
+              {/* A check, a move or a removal works on the installed game: there is no download to discard. */}
+              {job.kind !== 'verify' && job.kind !== 'move' && job.kind !== 'remove' && (
                 <Button variant="neutral" size="sm" onClick={() => onAction('discard', job.id)} aria-label={t('downloads:aria.discardJob', { title: job.title })}>
                   <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
                 </Button>
