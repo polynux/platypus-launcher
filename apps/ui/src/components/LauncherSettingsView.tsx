@@ -147,8 +147,11 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
   };
   // Language names stay in their own language (endonyms): translating them
   // would hide what the option means.
+  // Radix Select treats "" as no value (an empty trigger), so System is
+  // 'system' inside the picker and "" in the setting.
+  const SYSTEM = 'system';
   const options = [
-    { value: '', label: t('language.system') },
+    { value: SYSTEM, label: t('language.system') },
     { value: 'en', label: 'English' },
     { value: 'fr', label: 'Français' },
   ];
@@ -157,13 +160,13 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('language.heading')}</h2>
       <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('language.description')}</p>
-      <Select value={value ?? ''} onValueChange={change} disabled={value === null || busy}>
+      <Select value={value === null ? undefined : value || SYSTEM} onValueChange={(v) => change(v === SYSTEM ? '' : v)} disabled={value === null || busy}>
         <SelectTrigger aria-label={t('language.label')} className="w-64">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {options.map((o) => (
-            <SelectItem key={o.value || 'system'} value={o.value}>{o.label}</SelectItem>
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
           ))}
         </SelectContent>
       </Select>
