@@ -1,14 +1,97 @@
+// i18n: converted
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ds/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ds/tooltip';
-import type { Compat, CompatBadge, Game, WikiCredit } from '../types';
-import { appIdSourceLabel, asOfDate, badgeTitle, cardCompat, deckTitle, DECK_LABEL, PCGW_ATTRIBUTION, ratingLine, TIER_LABEL } from '../lib/compat';
+import type { Compat, CompatBadge, Game, ProtonRating, WikiCredit } from '../types';
+import { asOfDate, cardCompat } from '../lib/compat';
 import { ExternalLink } from './ExternalLink';
 import { cx } from './ui';
+
+type T = (key: string, vars?: Record<string, unknown>) => string;
+
+// The display strings of lib/compat.ts live in the game catalog now; the lib
+// keeps its logic (cardCompat, tierFilterValue) and its English unit-pinned
+// helpers. These map tiers and verdicts to the catalog, falling back to the
+// raw id for values the catalog never heard of.
+export function tierLabel(t: T, tier: string): string {
+  switch (tier) {
+    case 'platinum':
+      return t('game:tier.platinum');
+    case 'gold':
+      return t('game:tier.gold');
+    case 'silver':
+      return t('game:tier.silver');
+    case 'bronze':
+      return t('game:tier.bronze');
+    case 'borked':
+      return t('game:tier.borked');
+    default:
+      return tier;
+  }
+}
+
+export function deckLabel(t: T, rating: string): string {
+  switch (rating) {
+    case 'verified':
+      return t('game:deck.verified');
+    case 'playable':
+      return t('game:deck.playable');
+    case 'unsupported':
+      return t('game:deck.unsupported');
+    default:
+      return rating;
+  }
+}
+
+function sourceLabel(t: T, source?: string): string {
+  switch (source) {
+    case 'user':
+      return t('game:appIdSource.user');
+    case 'plugin':
+      return t('game:appIdSource.plugin');
+    case 'steam':
+      return t('game:appIdSource.steam');
+    default:
+      return t('game:appIdSource.none');
+  }
+}
+
+/** What a ProtonDB tier means for the player, through the catalog. */
+export function tierMeaning(t: T, tier: string): string | undefined {
+  switch (tier) {
+    case 'platinum':
+      return t('game:tierMeaning.platinum');
+    case 'gold':
+      return t('game:tierMeaning.gold');
+    case 'silver':
+      return t('game:tierMeaning.silver');
+    case 'bronze':
+      return t('game:tierMeaning.bronze');
+    case 'borked':
+      return t('game:tierMeaning.borked');
+    default:
+      return undefined;
+  }
+}
+
+/** One line for a ProtonDB rating: the medal and how many reports, or why there is none. */
+export function ratingText(t: T, r: ProtonRating): string {
+  if (r.no_reports) return t('game:compat.ratingNoReports');
+  if (!r.tier || r.few_reports) return t('game:compat.ratingFew', { count: r.total });
+  return t('game:compat.rating', { count: r.total, tier: tierLabel(t, r.tier) });
+}
+
+/** The tooltip of a Steam Deck badge: the verdict, its caveats, and the source. */
+function deckTooltip(t: T, rating: string, notes?: string[] | null): string {
+  const body = (notes ?? []).filter(Boolean).join(' ');
+  return t('game:deck.tooltip', { verdict: deckLabel(t, rating), notes: body ? ` ${body}` : '' });
+}
 
 /** The badge on a library card: Native for a Linux build, else the game's tier,
  *  with the Steam Deck verdict beside it when Steam has one. Nothing when
  *  there's no answer worth showing. */
 export function CompatChip({ game, className }: { game: Game; className?: string }) {
+  const { t } = useTranslation('game');
   const c = cardCompat(game);
   const deck = game.fix_info?.deck;
   if (!c && !deck) return null;
@@ -16,8 +99,8 @@ export function CompatChip({ game, className }: { game: Game; className?: string
   if (c?.kind === 'native') {
     return (
       <span className={cx('inline-flex max-w-full flex-wrap items-center gap-1.5', className)}>
-        <Badge variant="info" title="Native Linux build from the store: runs without Proton" className="max-w-full truncate">
-          Native
+        <Badge variant="info" title={t('game:compat.nativeTitle')} className="max-w-full truncate">
+          {t('game:compat.native')}
         </Badge>
         {deckBadge}
       </span>
@@ -25,13 +108,14 @@ export function CompatChip({ game, className }: { game: Game; className?: string
   }
   const tier = c?.kind === 'tier' ? c.tier : '';
   const source = c?.kind === 'tier' ? c.source : '';
-  const prefix = source === 'protondb' ? 'ProtonDB' : 'Fix';
-  const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((t) => t === tier) ?? 'silver';
+  const prefix = source === 'protondb' ? t('game:compat.protondbPrefix') : t('game:compat.fixPrefix');
+  const label = tierLabel(t, tier);
+  const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((x) => x === tier) ?? 'silver';
   return (
     <span className={cx('inline-flex max-w-full flex-wrap items-center gap-1.5', className)}>
       {c && (
-        <Badge variant={variant} title={`${prefix}: ${TIER_LABEL[tier] ?? tier}`} className="max-w-full truncate">
-          <span className="truncate">{prefix} · {TIER_LABEL[tier] ?? tier}</span>
+        <Badge variant={variant} title={t('game:compat.tierTitle', { prefix, tier: label })} className="max-w-full truncate">
+          <span className="truncate">{prefix} · {label}</span>
         </Badge>
       )}
       {deckBadge}
@@ -42,22 +126,24 @@ export function CompatChip({ game, className }: { game: Game; className?: string
 /** One Steam Deck verdict badge, with its caveats in a tooltip. Nothing when
  *  Steam has no verdict. Verified reads green, Playable amber, Unsupported red. */
 export function DeckBadge({ rating, notes, className }: { rating: string; notes?: string[] | null; className?: string }) {
+  const { t } = useTranslation('game');
   if (!rating) return null;
   const variant = rating === 'verified' ? 'ok' : rating === 'playable' ? 'accent' : 'borked';
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge variant={variant} className={cx('cursor-help', className)}>
-          Deck · {DECK_LABEL[rating] ?? rating}
+          {t('game:deck.badge', { verdict: deckLabel(t, rating) })}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{deckTitle(rating, notes)}</TooltipContent>
+      <TooltipContent className="max-w-xs">{deckTooltip(t, rating, notes)}</TooltipContent>
     </Tooltip>
   );
 }
 
 /** One DRM or anti-cheat badge, with its source and check date in a tooltip. */
 export function ProtectionBadge({ badge }: { badge: CompatBadge }) {
+  const { t } = useTranslation('game');
   const variant = badge.kind === 'drm-free' ? 'ok' : badge.kind === 'denuvo' || badge.kind === 'anticheat' ? 'bronze' : 'neutral';
   return (
     <Tooltip>
@@ -66,7 +152,7 @@ export function ProtectionBadge({ badge }: { badge: CompatBadge }) {
           {badge.label}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{badgeTitle(badge)}</TooltipContent>
+      <TooltipContent className="max-w-xs">{`${badge.detail} ${t('game:compat.badgeSource', { source: badge.source, date: asOfDate(badge.checked_at) })}`}</TooltipContent>
     </Tooltip>
   );
 }
@@ -75,6 +161,7 @@ export function ProtectionBadge({ badge }: { badge: CompatBadge }) {
  *  (with a link), the native build, and the DRM and anti-cheat badges. A fact
  *  nobody reported is left out, and then the block says so. */
 export function CompatFacts({ compat }: { compat: Compat }) {
+  const { t } = useTranslation('game');
   const drm = compat.drm ?? [];
   const anticheat = compat.anticheat ?? [];
   const pdb = compat.protondb;
@@ -83,45 +170,45 @@ export function CompatFacts({ compat }: { compat: Compat }) {
       {(drm.length > 0 || anticheat.length > 0) ? (
         <div className="space-y-2">
           {drm.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" aria-label="DRM">
+            <div className="flex flex-wrap gap-1.5" aria-label={t('game:compat.drmLabel')}>
               {drm.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
           {anticheat.length > 0 && (
-            <div className="flex flex-wrap gap-1.5" aria-label="Anti-cheat">
+            <div className="flex flex-wrap gap-1.5" aria-label={t('game:compat.anticheatLabel')}>
               {anticheat.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
           {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/70">{compat.drm_notes}</p>}
         </div>
       ) : (
-        <p className="font-mono text-hint text-white/55">No DRM or anti-cheat reported for this game.</p>
+        <p className="font-mono text-hint text-white/55">{t('game:compat.noneReported')}</p>
       )}
       {pdb && compat.steam_app_id && (
         <p className="font-mono text-hint text-white/55">
-          {ratingLine(pdb)}
-          {pdb.fetched_at > 0 && ` · as of ${asOfDate(pdb.fetched_at)}`}
-          {pdb.stale && ' · refreshing'}
+          {ratingText(t, pdb)}
+          {pdb.fetched_at > 0 && <>{' · '}{t('game:compat.asOf', { date: asOfDate(pdb.fetched_at) })}</>}
+          {pdb.stale && <>{' · '}{t('game:compat.refreshing')}</>}
           {' · '}
           <ExternalLink href={pdb.url} className="text-amber-200/80 hover:text-amber-200">
-            protondb ↗
+            {t('game:compat.protondbLink')}
           </ExternalLink>
         </p>
       )}
       {compat.deck?.rating && compat.steam_app_id && (
         <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-hint text-white/55">
           <DeckBadge rating={compat.deck.rating} notes={compat.deck.notes} />
-          {compat.deck.fetched_at > 0 && <span>as of {asOfDate(compat.deck.fetched_at)}</span>}
-          {compat.deck.stale && <span>refreshing</span>}
+          {compat.deck.fetched_at > 0 && <span>{t('game:compat.asOf', { date: asOfDate(compat.deck.fetched_at) })}</span>}
+          {compat.deck.stale && <span>{t('game:compat.refreshing')}</span>}
           <ExternalLink href={compat.deck.url} className="text-amber-200/80 hover:text-amber-200">
-            steam ↗
+            {t('game:compat.steamLink')}
           </ExternalLink>
         </p>
       )}
       {compat.wiki && <WikiCreditLine credit={compat.wiki} />}
       {compat.steam_app_id && (
         <p className="font-mono text-hint text-white/55">
-          Steam AppID {compat.steam_app_id} ({appIdSourceLabel(compat.steam_app_id_source)})
+          {t('game:compat.appIdLine', { id: compat.steam_app_id, source: sourceLabel(t, compat.steam_app_id_source) })}
         </p>
       )}
     </div>
@@ -131,18 +218,19 @@ export function CompatFacts({ compat }: { compat: Compat }) {
 /** The credit under the facts read from PCGamingWiki: the licence line, the page
  *  and the licence as links, and the day Platypus read the page. */
 export function WikiCreditLine({ credit }: { credit: WikiCredit }) {
+  const { t } = useTranslation('game');
   return (
-    <p className="font-mono text-hint leading-relaxed text-white/55" aria-label="PCGamingWiki credit">
-      {PCGW_ATTRIBUTION}
+    <p className="font-mono text-hint leading-relaxed text-white/55" aria-label={t('game:wiki.creditLabel')}>
+      {t('game:wiki.attribution')}
       {' · '}
       <ExternalLink href={credit.url} className="text-amber-200/80 hover:text-amber-200">
-        {credit.title} on PCGamingWiki ↗
+        {t('game:wiki.onWiki', { title: credit.title })}
       </ExternalLink>
       {' · '}
       <ExternalLink href={credit.licence_url} className="text-amber-200/80 hover:text-amber-200">
-        licence ↗
+        {t('game:wiki.licence')}
       </ExternalLink>
-      {credit.fetched_at > 0 && ` · read ${asOfDate(credit.fetched_at)}`}
+      {credit.fetched_at > 0 && t('game:wiki.readOn', { date: asOfDate(credit.fetched_at) })}
     </p>
   );
 }

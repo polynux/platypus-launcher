@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
 import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, SessionEvent, StorePlugin, Tweak, View } from '../types';
@@ -12,7 +14,7 @@ import { InstallOptionsDialog } from './InstallOptionsDialog';
 import { InstallDialog } from './InstallDialog';
 import { GameSettingsModal } from './GameSettingsModal';
 import { JobProgress } from './JobProgress';
-import { CompatFacts } from './CompatBadges';
+import { CompatFacts, deckLabel, ratingText, tierLabel, tierMeaning } from './CompatBadges';
 import { useCompat } from '../lib/useCompat';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
@@ -20,12 +22,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ScrollArea } from '@/components/ds/scroll-area';
 import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
 import { PluginLogo } from './PluginLogo';
-import { attentionReason, formatBytes, heroImages, hoursPlayed, isPluginGame, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
-import { DECK_LABEL, TIER_LABEL, ratingLine } from '../lib/compat';
+import { formatBytes, heroImages, hoursPlayed, isPluginGame, needsAttention, storeLabel } from '../lib/games';
+import { formatCount, formatDate, formatHours, formatPercentValue } from '../lib/format';
+import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { normalizeSettings } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
-import { playtimeTooltip } from '../lib/stats';
 import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
 import { pinLabel } from '../lib/versions';
 import { isCustomized } from '../lib/customize';
@@ -162,6 +164,7 @@ function useDetails(game: Game) {
 }
 
 export function GamePage(p: GamePageProps) {
+  const { t } = useTranslation('game');
   const { game, runners, activity, session, tweaks } = p;
   const [shot, setShot] = useState(0);
   const [lightbox, setLightbox] = useState(false);
@@ -214,54 +217,68 @@ export function GamePage(p: GamePageProps) {
   const installSize = useInstallSize(game, plugin, installing);
   const events = activity.filter((e) => e.game === game.title).slice(0, 6);
   const hours = hoursPlayed(game);
-  const last = lastPlayedLabel(game);
+  const recency = recencyOf(game.last_played_at);
+  const last = recency ? renderRecency(t, 'game:recency', recency) : undefined;
+  // The tooltip pairs the local record with the store's report, like before.
+  const playtimeTitle =
+    game.playtime_store_minutes === undefined
+      ? undefined
+      : game.playtime_local_minutes === undefined
+        ? t('game:hero.playtimeStore', { store: formatHours(game.playtime_store_minutes) })
+        : t('game:hero.playtimeBoth', { local: formatHours(game.playtime_local_minutes), store: formatHours(game.playtime_store_minutes) });
   // The store's logo: the game's own plugin first (game.source is its id),
   // then its store. A missing logo falls back to a monogram tile in PluginLogo.
   const storeLogo = p.sourceLogos?.[game.source] ?? p.sourceLogos?.[game.store];
-  const storeName = storeLabel(game.store);
+  const storeName = game.store === 'custom' ? t('game:store.sideloaded') : storeLabel(game.store);
 
   const facts: [string, string][] = [
     [
-      'Runner',
+      t('game:facts.runner'),
       game.native
-        ? 'none · native Linux build'
+        ? t('game:facts.nativeRunner')
         : viaSteam
-          ? 'chosen in Steam'
-          : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? `auto · ${autoRunner?.name ?? 'none installed'}` : `${s.runner_id} (missing)`),
+          ? t('game:facts.steamRunner')
+          : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? t('game:facts.autoRunner', { name: autoRunner?.name ?? t('game:facts.noRunner') }) : t('game:facts.missingRunner', { id: s.runner_id })),
     ],
-    ['DX layer', game.native ? 'not used' : s.dx_layer === 'wined3d' ? 'WineD3D' : 'DXVK (bundled)'],
-    ['Wrappers', [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || 'none'],
-    ['Launch via', viaSteam ? 'Steam client' : plugin ? `Platypus · ${plugin.name}` : 'Platypus'],
+    [t('game:facts.dx'), game.native ? t('game:facts.dxUnused') : s.dx_layer === 'wined3d' ? t('game:facts.dxWined3d') : t('game:facts.dxBundled')],
+    [t('game:facts.wrappers'), [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || t('game:facts.noWrappers')],
+    [t('game:facts.launchVia'), viaSteam ? t('game:facts.steamClient') : plugin ? t('game:facts.viaPlatypus', { name: plugin.name }) : 'Platypus'],
     [
-      'ProtonDB',
+      t('game:facts.protondb'),
       !info
-        ? '…'
+        ? t('game:facts.pending')
         : info.protondb
-          ? ratingLine(info.protondb)
+          ? ratingText(t, info.protondb)
           : info.native
-            ? 'not rated · native build'
+            ? t('game:facts.protondbNative')
             : info.steam_app_id
-              ? 'not fetched yet'
-              : 'no Steam AppID',
+              ? t('game:facts.protondbPending')
+              : t('game:facts.protondbNoAppId'),
     ],
     [
-      'Steam Deck',
+      t('game:facts.deck'),
       !info
-        ? '…'
+        ? t('game:facts.pending')
         : info.deck?.rating
-          ? DECK_LABEL[info.deck.rating] ?? info.deck.rating
+          ? deckLabel(t, info.deck.rating)
           : info.steam_app_id
-            ? 'not rated yet'
-            : 'no Steam AppID',
+            ? t('game:facts.deckPending')
+            : t('game:facts.deckNoAppId'),
     ],
   ];
   const compat = fix
-    ? needsAttention(game) ? attentionReason(game) : fix.description
+    ? needsAttention(game)
+      ? fix.source !== 'protondb'
+        ? fix.description
+        : fix.tier === 'borked'
+          ? t('game:compat.borkedNote')
+          : t('game:compat.bronzeNote')
+      : fix.description
     : info?.protondb?.tier
-      ? `ProtonDB rates this title ${TIER_LABEL[info.protondb.tier] ?? info.protondb.tier}, from community reports.`
+      ? t('game:compat.rated', { tier: tierLabel(t, info.protondb.tier) })
       : info?.protondb?.no_reports
-        ? 'ProtonDB has no reports for this title.'
-        : 'No compatibility reports loaded for this title yet.';
+        ? t('game:compat.noReports')
+        : t('game:compat.noneLoaded');
 
   return (
     <TooltipProvider>
@@ -284,7 +301,7 @@ export function GamePage(p: GamePageProps) {
         <div className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4 px-8 pb-6 pt-16">
           <div className="min-w-0 flex-1 basis-72">
             <div className="mb-2.5 flex flex-wrap gap-2">
-              {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? '· protondb' : '· curated'} />}
+              {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? t('game:tierBadge.protondb') : t('game:tierBadge.curated')} title={tierMeaning(t, fix.tier)} />}
               <Badge className="bg-black/50 text-white/75" data-testid="store-badge">
                 <span className="inline-flex items-center gap-1.5">
                   <PluginLogo src={storeLogo} name={storeName} size="xs" />
@@ -292,23 +309,23 @@ export function GamePage(p: GamePageProps) {
                 </span>
               </Badge>
               {formatBytes(game.size_bytes) && <Badge className="bg-black/50 text-white/75">{formatBytes(game.size_bytes)}</Badge>}
-              {!game.is_installed && <Badge className="bg-black/50 text-white/55">not installed</Badge>}
-              {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">update available</Badge>}
-              {game.pinned && <Badge variant="accent" className="bg-amber-300/15 ring-1 ring-amber-300/30">pinned</Badge>}
+              {!game.is_installed && <Badge className="bg-black/50 text-white/55">{t('game:hero.notInstalled')}</Badge>}
+              {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">{t('game:hero.updateAvailable')}</Badge>}
+              {game.pinned && <Badge variant="accent" className="bg-amber-300/15 ring-1 ring-amber-300/30">{t('game:hero.pinned')}</Badge>}
             </div>
             <GameHeading game={game} />
           </div>
           <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
             {(hours != null || last) && (
               <div className="text-right font-mono text-hint leading-relaxed text-white/55">
-                {hours != null && <div title={playtimeTooltip(game)}>{hours}h logged</div>}
-                {last && <div>last played {last}</div>}
+                {hours != null && <div title={playtimeTitle}>{t('game:hero.hoursLogged', { hours: formatDecimal1(hours) })}</div>}
+                {last && <div>{t('game:hero.lastPlayed', { when: last })}</div>}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-end gap-2.5">
               {game.is_installed && plugin && game.update_available && !active && (
                 <Button variant="neutral" size="none" onClick={() => p.onJob('update')} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-sky-100 hover:bg-black/70">
-                  <RefreshCw className="h-4 w-4" /> Update
+                  <RefreshCw className="h-4 w-4" /> {t('game:hero.update')}
                 </Button>
               )}
               {!game.is_installed ? (
@@ -324,11 +341,11 @@ export function GamePage(p: GamePageProps) {
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="neutral" size="none" onClick={() => setSettingsTab('general')} aria-label="Game settings" className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70">
+                  <Button variant="neutral" size="none" onClick={() => setSettingsTab('general')} aria-label={t('game:hero.gameSettings')} className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70">
                     <Settings2 className="h-[18px] w-[18px]" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Game settings</TooltipContent>
+                <TooltipContent>{t('game:hero.gameSettings')}</TooltipContent>
               </Tooltip>
               {plugin?.storefront_url && details?.store_url && (
                 <Tooltip>
@@ -337,13 +354,13 @@ export function GamePage(p: GamePageProps) {
                       variant="neutral"
                       size="none"
                       onClick={() => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url })}
-                      aria-label={`Open ${game.title} in ${plugin.name}`}
+                      aria-label={t('game:hero.openInStore', { title: game.title, store: plugin.name })}
                       className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70"
                     >
                       <StoreIcon className="h-[18px] w-[18px]" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Open in store</TooltipContent>
+                  <TooltipContent>{t('game:hero.openInStoreTip')}</TooltipContent>
                 </Tooltip>
               )}
             </div>
@@ -354,14 +371,20 @@ export function GamePage(p: GamePageProps) {
       {game.is_installed && game.outside_folder && plugin && (
         <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-5 py-4 ring-1 ring-amber-300/25">
           <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
-            <p className="font-bold text-amber-200">Installed outside {plugin.name}'s folder</p>
+            <p className="font-bold text-amber-200">{t('game:outside.title', { name: plugin.name })}</p>
             <p>
-              Platypus only launches {plugin.name} games from <span className="font-mono text-[12px]">{plugin.install_folder}</span> or folders you allow.
-              This one is in <span className="font-mono text-[12px] text-white/90">{game.install_dir}</span>, probably from before Platypus managed it.
+              <Trans
+                i18nKey="game:outside.body"
+                values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
+                components={{
+                  folder: <span className="font-mono text-[12px]" />,
+                  dir: <span className="font-mono text-[12px] text-white/90" />,
+                }}
+              />
             </p>
           </div>
           <Button onClick={() => p.onAllowFolder(game.install_dir)} className="flex-none">
-            <FolderCheck className="h-4 w-4" /> Allow this folder
+            <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
           </Button>
         </div>
       )}
@@ -373,18 +396,31 @@ export function GamePage(p: GamePageProps) {
             <>
               <InstallSizeLine size={installSize} />
               <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-white/55">
-                <span>installs into {plugin.install_folder}</span>
-                {canChooseVersion && <><span aria-hidden>·</span><NoteLink onClick={() => setSettingsTab('versions')}>Choose version</NoteLink></>}
-                <span aria-hidden>·</span><NoteLink onClick={() => p.onNavigate({ name: 'plugins' })}>change default</NoteLink>
+                {canChooseVersion ? (
+                  <Trans
+                    i18nKey="game:install.noteWithVersion"
+                    values={{ folder: plugin.install_folder }}
+                    components={{
+                      v: <NoteLink onClick={() => setSettingsTab('versions')} />,
+                      d: <NoteLink onClick={() => p.onNavigate({ name: 'plugins' })} />,
+                    }}
+                  />
+                ) : (
+                  <Trans
+                    i18nKey="game:install.notePlain"
+                    values={{ folder: plugin.install_folder }}
+                    components={{ d: <NoteLink onClick={() => p.onNavigate({ name: 'plugins' })} /> }}
+                  />
+                )}
               </p>
             </>
           )}
-          {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback="The last attempt didn't finish." />}
+          {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
         </div>
       )}
 
       {p.refreshing && (
-        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-white/55">refreshing library…</p>
+        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-white/55">{t('game:refreshing')}</p>
       )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -407,10 +443,10 @@ export function GamePage(p: GamePageProps) {
 
         <aside className="min-w-0 space-y-5">
           <Panel className="bg-white/[0.05]">
-            <h2 className="mb-2 text-[15px] font-bold">Compatibility</h2>
+            <h2 className="mb-2 text-[15px] font-bold">{t('game:compat.heading')}</h2>
             <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
             {fix?.winetricks && fix.winetricks.length > 0 && (
-              <p className="mt-2 font-mono text-hint text-sky-200/80">recipe: winetricks {fix.winetricks.join(' ')}</p>
+              <p className="mt-2 font-mono text-hint text-sky-200/80">{t('game:compat.recipe', { mods: fix.winetricks.join(' ') })}</p>
             )}
             <div className="mt-4 space-y-2 font-mono text-hint">
               {facts.map(([k, v]) => (
@@ -439,7 +475,7 @@ export function GamePage(p: GamePageProps) {
 
       {events.length > 0 && (
         <section className="pb-10">
-          <MonoLabel className="mb-2">this session</MonoLabel>
+          <MonoLabel className="mb-2">{t('game:session')}</MonoLabel>
           <ActivityFeed events={events} />
         </section>
       )}
@@ -460,7 +496,7 @@ export function GamePage(p: GamePageProps) {
           onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
           onChanged={() => p.onVersionsChanged?.()}
           onCustomized={() => p.onCustomized?.()}
-          onCopied={() => p.onNotify?.('Copied to clipboard')}
+          onCopied={() => p.onNotify?.(t('game:copied'))}
           onRemove={p.onRemove}
           running={!!session || p.launching}
         />
@@ -528,16 +564,19 @@ function MediaStrip({ game, media, index, onIndex, onOpen, stripRef }: {
   onOpen: () => void;
   stripRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const { t } = useTranslation('game');
   const cur = media[index] ?? media[0];
   const thumbLabel = (m: MediaItem, i: number) =>
-    m.kind === 'video' ? `Play trailer ${m.title ? `"${m.title}" ` : ''}(${i + 1} of ${media.length})` : `Show screenshot ${i + 1}`;
+    m.kind === 'video'
+      ? t('game:media.trailerLabel', { suffix: m.title ? `"${m.title}" ` : '', index: i + 1, total: media.length })
+      : t('game:media.screenshotLabel', { index: i + 1 });
   return (
     <div className="space-y-3">
       <Tooltip>
       <TooltipTrigger asChild>
       <button
         onClick={onOpen}
-        aria-label={cur?.kind === 'video' ? 'Open trailer in viewer' : 'Open screenshots in slideshow'}
+        aria-label={cur?.kind === 'video' ? t('game:media.openTrailer') : t('game:media.openShots')}
         className="group relative block w-full cursor-zoom-in overflow-hidden rounded-3xl bg-black/40 ring-1 ring-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
       >
         {cur?.kind === 'video' ? (
@@ -563,7 +602,7 @@ function MediaStrip({ game, media, index, onIndex, onOpen, stripRef }: {
         </span>
       </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">Open viewer</TooltipContent>
+      <TooltipContent side="bottom">{t('game:media.openViewer')}</TooltipContent>
       </Tooltip>
       <ScrollArea orientation="horizontal" type="always" viewportRef={stripRef} data-testid="shot-strip">
         {/* Padding keeps the active ring and rounded corners inside the viewport; pb leaves room for the overlay bar. */}
@@ -602,9 +641,9 @@ function MediaStrip({ game, media, index, onIndex, onOpen, stripRef }: {
   );
 }
 
-function controllerLabel(c?: string): string | null {
-  if (c === 'full') return 'Full controller support';
-  if (c === 'partial') return 'Partial controller support';
+function controllerLabel(t: (key: string) => string, c?: string): string | null {
+  if (c === 'full') return t('game:about.controllerFull');
+  if (c === 'partial') return t('game:about.controllerPartial');
   return null;
 }
 
@@ -624,6 +663,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
   /** The info link changed: details were evicted and refetched. */
   onReload?: () => void;
 }) {
+  const { t } = useTranslation('game');
   const [expanded, setExpanded] = useState(false);
   const [reqTab, setReqTab] = useState<'minimum' | 'recommended'>('minimum');
   useEffect(() => { setExpanded(false); setReqTab('minimum'); }, [game.id]);
@@ -639,33 +679,34 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
   const isCustom = game.store === 'custom' || game.source === 'custom';
   const linked = !!((d?.info_source || d?.info_source_name) && isCustom);
   const genres = [...(details?.genres ?? []), ...((d?.tags ?? []).filter((t) => !(details?.genres ?? []).includes(t)) ?? [])];
-  const controller = controllerLabel(d?.controller);
+  const controller = controllerLabel(t, d?.controller);
   const rows: [string, string][] = [
-    ...(details?.developers?.length ? [['Developer', details.developers.join(', ')] as [string, string]] : []),
-    ...(details?.publishers?.length ? [['Publisher', details.publishers.join(', ')] as [string, string]] : []),
+    ...(details?.developers?.length ? [[t('game:about.developer'), details.developers.join(', ')] as [string, string]] : []),
+    ...(details?.publishers?.length ? [[t('game:about.publisher'), details.publishers.join(', ')] as [string, string]] : []),
     // The user's own year wins over the source's release date (issue #38):
     // the source's title is never written anywhere.
     ...(isCustom && game.release_year
-      ? [['Release', String(game.release_year)] as [string, string]]
+      ? [[t('game:about.release'), String(game.release_year)] as [string, string]]
       : details?.release_date
-        ? [['Release', details.release_date] as [string, string]]
+        ? [[t('game:about.release'), details.release_date] as [string, string]]
         : []),
-    ...(genres.length ? [['Genres', genres.join(' · ')] as [string, string]] : []),
-    ...((d?.languages?.length ?? 0) ? [['Languages', (d?.languages ?? []).join(', ')] as [string, string]] : []),
-    ...(controller ? [['Controller', controller] as [string, string]] : []),
-    ...(d?.age_rating ? [['Age rating', d.age_rating] as [string, string]] : []),
+    ...(genres.length ? [[t('game:about.genres'), genres.join(' · ')] as [string, string]] : []),
+    ...((d?.languages?.length ?? 0) ? [[t('game:about.languages'), (d?.languages ?? []).join(', ')] as [string, string]] : []),
+    ...(controller ? [[t('game:about.controller'), controller] as [string, string]] : []),
+    ...(d?.age_rating ? [[t('game:about.ageRating'), d.age_rating] as [string, string]] : []),
   ];
   const req = d?.requirements;
   const links: [string, string][] = [
-    ...(d?.website ? [['Website', d.website] as [string, string]] : []),
-    ...(d?.store_url ? [['Store page', d.store_url] as [string, string]] : []),
-    ...(compatUrls.protondb ? [['ProtonDB', compatUrls.protondb] as [string, string]] : []),
-    ...(compatUrls.wiki ? [['PCGamingWiki', compatUrls.wiki] as [string, string]] : []),
+    ...(d?.website ? [[t('game:about.linkWebsite'), d.website] as [string, string]] : []),
+    ...(d?.store_url ? [[t('game:about.linkStore'), d.store_url] as [string, string]] : []),
+    ...(compatUrls.protondb ? [[t('game:about.linkProtondb'), compatUrls.protondb] as [string, string]] : []),
+    ...(compatUrls.wiki ? [[t('game:about.linkPcgw'), compatUrls.wiki] as [string, string]] : []),
   ];
-  const infoName = d?.info_source_name || infoSourceLabel(d?.info_source);
+  const infoName = d?.info_source_name || infoSourceText(t, d?.info_source);
+  const storeLinkLabel = t('game:about.linkStore');
   return (
     <Panel className="bg-white/[0.05]">
-      <h2 className="mb-2 text-[15px] font-bold">About</h2>
+      <h2 className="mb-2 text-[15px] font-bold">{t('game:about.heading')}</h2>
       {loading ? (
         <div className="space-y-2">
           <div className="h-3 w-full animate-pulse rounded bg-white/[0.06]" />
@@ -677,13 +718,13 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
             <SafeHtml html={html} testid="about-html" />
           </div>
           <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-1.5 rounded px-0 font-mono text-[12px] underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/85">
-            {expanded ? 'Show less' : 'Show more'}
+            {expanded ? t('game:about.showLess') : t('game:about.showMore')}
           </Button>
         </>
       ) : summary ? (
         <p className="text-[13px] leading-relaxed text-white/70">{summary}</p>
       ) : (
-        <p className="text-[13px] text-white/70">{error ? `Store data unavailable: ${error}` : 'No store description for this title.'}</p>
+        <p className="text-[13px] text-white/70">{error ? t('game:about.storeUnavailable', { error }) : t('game:about.noDescription')}</p>
       )}
       {isCustom && !linked && !loading && (
         <InfoFinder game={game} onLinked={() => onReload?.()} />
@@ -700,7 +741,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
       )}
       {req && (req.minimum || req.recommended) && (
         <div className="mt-4 border-t border-white/[0.06] pt-3" data-testid="requirements">
-          <div role="tablist" aria-label="System requirements" className="mb-2 flex gap-1.5">
+          <div role="tablist" aria-label={t('game:about.reqLabel')} className="mb-2 flex gap-1.5">
             {(['minimum', 'recommended'] as const).filter((k) => req[k]).map((k) => (
               <Button
                 key={k}
@@ -712,7 +753,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
                 onClick={() => setReqTab(k)}
                 className={reqTab === k ? 'rounded-lg bg-white/[0.08] px-2.5 py-1 font-mono text-[12px] text-white' : 'rounded-lg px-2.5 py-1 font-mono text-[12px] text-white/55 hover:bg-transparent hover:text-white/80'}
               >
-                {k === 'minimum' ? 'Minimum' : 'Recommended'}
+                {k === 'minimum' ? t('game:about.reqMinimum') : t('game:about.reqRecommended')}
               </Button>
             ))}
           </div>
@@ -724,7 +765,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
       {links.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[12px]" data-testid="about-links">
           {links.map(([label, href]) =>
-            label === 'Store page' && onOpenStore ? (
+            label === storeLinkLabel && onOpenStore ? (
               <button key={label} type="button" onClick={onOpenStore} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
                 {label}
               </button>
@@ -739,7 +780,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
       {linked && (
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-3 font-mono text-[12px] text-white/55" data-testid="info-attribution">
           <span>
-            Info from {d?.store_url ? (
+            {t('game:about.infoFrom')} {d?.store_url ? (
               <ExternalLink href={d.store_url} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
                 {infoName} ↗
               </ExternalLink>
@@ -753,10 +794,10 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
 }
 
 /** The small source label of one info candidate row. */
-function infoSourceLabel(source?: string): string {
-  if (source === 'gog') return 'GOG';
-  if (source === 'lutris') return 'Lutris';
-  if (source === 'steam') return 'Steam';
+function infoSourceText(t: (key: string) => string, source?: string): string {
+  if (source === 'gog') return t('game:source.gog');
+  if (source === 'lutris') return t('game:source.lutris');
+  if (source === 'steam') return t('game:source.steam');
   return '';
 }
 
@@ -766,13 +807,14 @@ function infoCandidateKey(c: ArtCandidate): string {
 }
 
 /** The small id detail of one candidate row. */
-function infoCandidateDetail(c: ArtCandidate): string {
-  if ((c.source || 'steam') === 'steam') return `Steam app ${c.app_id || c.id}`;
+function infoCandidateDetail(t: (key: string, vars?: Record<string, unknown>) => string, c: ArtCandidate): string {
+  if ((c.source || 'steam') === 'steam') return t('game:source.steamApp', { id: c.app_id || c.id });
   return c.id;
 }
 
 /** The Unlink control next to a linked game's attribution. */
 function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }) {
+  const { t } = useTranslation('game');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unlink = () => {
@@ -787,7 +829,7 @@ function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }
   return (
     <span className="inline-flex items-center gap-2">
       <Button variant="ghost" size="none" onClick={unlink} disabled={busy} data-testid="info-unlink" className="rounded px-0 underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/85">
-        {busy ? 'Unlinking…' : 'Unlink'}
+        {busy ? t('game:about.unlinking') : t('game:about.unlink')}
       </Button>
       {error && <span className="text-red-300/80">{error}</span>}
     </span>
@@ -798,6 +840,7 @@ function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }
  *  search as Find art online (SearchArtOnline), the same list (source label,
  *  year), and a pick links via LinkGameInfo. */
 function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
+  const { t } = useTranslation('game');
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(game.title);
   const [candidates, setCandidates] = useState<ArtCandidate[] | null>(null);
@@ -832,7 +875,7 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
     return (
       <div className="mt-3">
         <Button variant="neutral" size="sm" onClick={() => setOpen(true)} data-testid="find-info-online">
-          <Search className="h-3.5 w-3.5" /> Find info online
+          <Search className="h-3.5 w-3.5" /> {t('game:info.find')}
         </Button>
       </div>
     );
@@ -840,28 +883,27 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
 
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
-      <MonoLabel className="mb-1.5">find info online</MonoLabel>
+      <MonoLabel className="mb-1.5">{t('game:info.heading')}</MonoLabel>
       <p className="mb-2 text-[12px] leading-relaxed text-white/55">
-        Search Steam, GOG and Lutris (IGDB) for {game.title}'s description and details.
-        Linking never changes your title or year.
+        {t('game:info.help', { title: game.title })}
       </p>
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => { e.preventDefault(); search(); }}
       >
         <Input
-          aria-label="Search for info online"
+          aria-label={t('game:info.searchAria')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={game.title}
           className="min-w-0 max-w-xs flex-1"
         />
         <Button type="submit" variant="neutral" size="sm" disabled={!query.trim() || searching || linking != null}>
-          <Search className="h-3.5 w-3.5" /> {searching ? 'Searching…' : 'Search'}
+          <Search className="h-3.5 w-3.5" /> {searching ? t('game:info.searching') : t('game:info.search')}
         </Button>
       </form>
       {candidates != null && candidates.length === 0 && (
-        <p className="mt-2 text-[12px] text-white/55">No info found for that title.</p>
+        <p className="mt-2 text-[12px] text-white/55">{t('game:info.noneFound')}</p>
       )}
       {candidates != null && candidates.length > 0 && (
         <ul className="mt-2 space-y-2">
@@ -870,18 +912,18 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12.5px] font-semibold text-white/90">{c.name}</div>
                 <div className="font-mono text-hint text-white/55">
-                  <span data-testid="candidate-source">{c.source === 'gog' ? 'GOG' : c.source === 'lutris' ? 'Lutris' : 'Steam'}</span>
-                  {c.year ? ` · ${c.year}` : ''} · {infoCandidateDetail(c)}
+                  <span data-testid="candidate-source">{infoSourceText(t, c.source)}</span>
+                  {c.year ? ` · ${c.year}` : ''} · {infoCandidateDetail(t, c)}
                 </div>
               </div>
               <Button variant="primary" size="sm" disabled={searching || linking != null} onClick={() => link(c)}>
-                {linking === infoCandidateKey(c) ? 'Linking…' : 'Link'}
+                {linking === infoCandidateKey(c) ? t('game:info.linking') : t('game:info.link')}
               </Button>
             </li>
           ))}
         </ul>
       )}
-      {error && <ErrorNotice message={error} fallback="Platypus couldn't link that info." />}
+      {error && <ErrorNotice message={error} fallback={t('game:info.linkFailed')} />}
     </div>
   );
 }
@@ -889,11 +931,12 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
 function InstallButton({
   game, job, onInstall, onInstallTo, onCancel,
 }: { game: Game; job?: Job; onInstall: () => void; onInstallTo?: () => void; onCancel: (id: string) => void }) {
+  const { t } = useTranslation('game');
   if (job && (job.state === 'queued' || job.state === 'running')) return <JobProgress job={job} onCancel={onCancel} />;
   if (!game.installable) {
     return (
       <span className="rounded-2xl bg-white/[0.08] px-6 py-3.5 text-[13px] font-bold text-white/55" title={game.note}>
-        Can't install here
+        {t('game:install.cantInstall')}
       </span>
     );
   }
@@ -901,7 +944,7 @@ function InstallButton({
     <>
       {onInstallTo && (
         <Button variant="neutral" size="none" onClick={onInstallTo} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-white/80 hover:bg-black/70">
-          <FolderInput className="h-4 w-4" /> Install to…
+          <FolderInput className="h-4 w-4" /> {t('game:install.installTo')}
         </Button>
       )}
       <Button
@@ -911,7 +954,7 @@ function InstallButton({
         className="gap-2 rounded-2xl px-8 py-3.5 text-[15px] shadow-[0_12px_30px_rgba(252,211,77,.25)]"
       >
         <Download className="h-4 w-4" strokeWidth={3} />
-        {job?.state === 'failed' ? 'Retry install' : 'Install'}
+        {job?.state === 'failed' ? t('game:install.retryInstall') : t('game:install.install')}
       </Button>
     </>
   );
@@ -935,21 +978,22 @@ function GameHeading({ game }: { game: Game }) {
 
 /** The size of a fresh install, said before it is queued. */
 function InstallSizeLine({ size }: { size: InstallSize }) {
+  const { t } = useTranslation('game');
   return (
     <p className="mb-1 font-mono text-[12px] text-white/75" data-testid="install-size-line">
-      {size.state === 'loading' && <span className="text-white/55">checking the install size…</span>}
-      {size.state === 'unknown' && <span title="The store can't tell how big this is">Size unknown</span>}
+      {size.state === 'loading' && <span className="text-white/55">{t('game:installSize.checking')}</span>}
+      {size.state === 'unknown' && <span title={t('game:installSize.unknownTitle')}>{t('game:installSize.unknown')}</span>}
       {size.state === 'known' && (
         <>
-          Install size {formatBytes(size.total)}
-          {size.added > 0 && <span className="text-white/55"> · includes {formatBytes(size.added)} of add-ons</span>}
+          {t('game:installSize.known', { size: formatBytes(size.total) })}
+          {size.added > 0 && <span className="text-white/55">{t('game:installSize.addons', { size: formatBytes(size.added) })}</span>}
         </>
       )}
     </p>
   );
 }
 
-function NoteLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function NoteLink({ onClick, children }: { onClick: () => void; children?: React.ReactNode }) {
   return (
     <Button variant="ghost" size="none" onClick={onClick} className="inline-flex rounded-none px-0 font-mono text-[12px] font-normal underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/80">
       {children}
@@ -971,6 +1015,7 @@ function InstallationPanel({
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
   sourceLogos?: Record<string, string>;
 }) {
+  const { t } = useTranslation('game');
   const active = job && (job.state === 'queued' || job.state === 'running');
   const storeLogo = sourceLogos?.[game.source] ?? sourceLogos?.[game.store];
   const storeName = storeLabel(game.store);
@@ -982,16 +1027,16 @@ function InstallationPanel({
     </span>
   );
   const rows: [string, React.ReactNode, string][] = [
-    ['Store', storeValue, storeText],
+    [t('game:installation.store'), storeValue, storeText],
     // A game the store lists as installed may have no folder Platypus can name: say so.
-    ['Folder', game.install_dir || (game.is_installed ? 'not known to Platypus' : '—'), game.install_dir || ''],
-    ['Version', game.version || '—', game.version || ''],
-    ...(game.pinned ? [['Pinned to', pinLabel(game.pinned), pinLabel(game.pinned)] as [string, React.ReactNode, string]] : []),
-    ['Size', formatBytes(game.size_bytes) || '—', formatBytes(game.size_bytes) || ''],
+    [t('game:installation.folder'), game.install_dir || (game.is_installed ? t('game:installation.unknownFolder') : '—'), game.install_dir || ''],
+    [t('game:installation.version'), game.version || '—', game.version || ''],
+    ...(game.pinned ? [[t('game:installation.pinnedTo'), pinLabel(game.pinned), pinLabel(game.pinned)] as [string, React.ReactNode, string]] : []),
+    [t('game:installation.size'), formatBytes(game.size_bytes) || '—', formatBytes(game.size_bytes) || ''],
   ];
   return (
     <Panel className="bg-white/[0.05]">
-      <h2 className="mb-2 text-[15px] font-bold">Installation</h2>
+      <h2 className="mb-2 text-[15px] font-bold">{t('game:installation.heading')}</h2>
       <div className="space-y-2 font-mono text-hint">
         {rows.map(([k, v, title]) => (
           <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
@@ -1002,7 +1047,7 @@ function InstallationPanel({
       </div>
       {active && <div className="mt-4"><JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} /></div>}
       {job?.state === 'failed' && !active && (
-        <ErrorNotice className="mt-2" message={job.error ?? ''} fallback={`The ${job.kind} didn't finish.`} onRetry={() => onJobAction('retry', job.id)} />
+        <ErrorNotice className="mt-2" message={job.error ?? ''} fallback={t('game:installation.jobFailed', { kind: job.kind })} onRetry={() => onJobAction('retry', job.id)} />
       )}
     </Panel>
   );
@@ -1017,6 +1062,7 @@ function AchievementsSection({
   known: boolean;
   viaSteam: boolean;
 }) {
+  const { t } = useTranslation('game');
   const pct = known && ach.total > 0 ? Math.round((ach.unlocked / ach.total) * 100) : 0;
   // Backend may send list:null for uncached progress; normalized at the
   // edge in runtime.ts, guarded here too for safety (FE-10).
@@ -1024,9 +1070,9 @@ function AchievementsSection({
   return (
     <section className="pb-8">
       <div className="mb-3.5 flex items-baseline justify-between">
-        <h2 className="text-[16px] font-bold tracking-tight">Achievements</h2>
+        <h2 className="text-[16px] font-bold tracking-tight">{t('game:achievements.heading')}</h2>
         <span className="font-mono text-[12px] tabular-nums text-white/55">
-          {known ? `${ach.unlocked}/${ach.total} · ${pct}%` : `${ach.total} total`}
+          {known ? t('game:achievements.countKnown', { unlocked: formatCount(ach.unlocked), total: formatCount(ach.total), percent: formatCount(pct) }) : t('game:achievements.countTotal', { total: formatCount(ach.total) })}
         </span>
       </div>
       {known ? (
@@ -1036,8 +1082,8 @@ function AchievementsSection({
       ) : (
         <p className="mb-4 text-[12px] text-white/70">
           {viaSteam
-            ? "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here."
-            : 'The store lists these achievements; your progress there isn\'t available to Platypus.'}
+            ? t('game:achievements.steamHint')
+            : t('game:achievements.storeHint')}
         </p>
       )}
       <div className="ach-grid">
@@ -1047,7 +1093,7 @@ function AchievementsSection({
       </div>
       {list.length < ach.total && (
         <p className="mt-3 font-mono text-[12px] text-white/55">
-          showing {list.length} of {ach.total} · {known ? 'Steam only caches a sample locally' : 'highlighted by the store'}
+          {t('game:achievements.showing', { shown: formatCount(list.length), total: formatCount(ach.total), reason: known ? t('game:achievements.reasonSample') : t('game:achievements.reasonHighlight') })}
         </p>
       )}
     </section>
@@ -1055,11 +1101,12 @@ function AchievementsSection({
 }
 
 function AchievementCard({ a, known }: { a: Achievement; known: boolean }) {
+  const { t } = useTranslation('game');
   const dim = known && !a.unlocked;
   const meta = a.unlocked && a.unlocked_at
-    ? new Date(a.unlocked_at * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+    ? formatDate(a.unlocked_at)
     : a.global_percent
-      ? `${a.global_percent.toFixed(1)}% of players`
+      ? t('game:achievements.ofPlayers', { share: formatPercentValue(a.global_percent) })
       : '';
   return (
     <div title={a.description} className={cx('flex gap-3 rounded-2xl p-3 ring-1', a.unlocked ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06]')}>

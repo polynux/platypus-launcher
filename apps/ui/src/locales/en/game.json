@@ -4,5 +4,313 @@
   "stopBeforeRemove": "Stop \"{{title}}\" before removing it",
   "added": "Added \"{{title}}\"",
   "removed": "Removed \"{{title}}\"",
-  "folderAllowed": "Games in {{folder}} can be launched now"
+  "folderAllowed": "Games in {{folder}} can be launched now",
+  "copied": "Copied to clipboard",
+  "refreshing": "refreshing library…",
+  "session": "this session",
+  "play": {
+    "play": "Play",
+    "launching": "Launching",
+    "playing": "Playing",
+    "starting": "Starting",
+    "stop": "Stop",
+    "stopping": "Stopping…",
+    "forceStop": "Force stop"
+  },
+  "hero": {
+    "notInstalled": "not installed",
+    "updateAvailable": "update available",
+    "pinned": "pinned",
+    "update": "Update",
+    "gameSettings": "Game settings",
+    "openInStore": "Open {{title}} in {{store}}",
+    "openInStoreTip": "Open in store",
+    "hoursLogged": "{{hours}}h logged",
+    "lastPlayed": "last played {{when}}",
+    "playtimeBoth": "local {{local}} · store {{store}}",
+    "playtimeStore": "store {{store}}"
+  },
+  "store": {
+    "sideloaded": "Sideloaded"
+  },
+  "tier": {
+    "platinum": "Platinum",
+    "gold": "Gold",
+    "silver": "Silver",
+    "bronze": "Bronze",
+    "borked": "Borked"
+  },
+  "tierMeaning": {
+    "platinum": "Works perfectly out of the box",
+    "gold": "Works after small tweaks",
+    "silver": "Works, with notable issues",
+    "bronze": "Runs, with crashes or major issues",
+    "borked": "Doesn't run or isn't playable"
+  },
+  "tierBadge": {
+    "protondb": "· protondb",
+    "curated": "· curated"
+  },
+  "source": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "lutris": "Lutris",
+    "steamApp": "Steam app {{id}}"
+  },
+  "artSource": {
+    "steam": "Art from Steam",
+    "gog": "Art from GOG",
+    "lutris": "Art via Lutris / IGDB",
+    "withName": "{{label}} · {{name}}"
+  },
+  "compat": {
+    "heading": "Compatibility",
+    "native": "Native",
+    "nativeTitle": "Native Linux build from the store: runs without Proton",
+    "tierTitle": "{{prefix}}: {{tier}}",
+    "protondbPrefix": "ProtonDB",
+    "fixPrefix": "Fix",
+    "noneReported": "No DRM or anti-cheat reported for this game.",
+    "drmLabel": "DRM",
+    "anticheatLabel": "Anti-cheat",
+    "badgeSource": "Source: {{source}}, checked {{date}}.",
+    "ratingNoReports": "No ProtonDB reports",
+    "ratingFew_one": "Few ProtonDB reports ({{count}})",
+    "ratingFew_other": "Few ProtonDB reports ({{count}})",
+    "rating_one": "{{tier}} · {{count}} report",
+    "rating_other": "{{tier}} · {{count}} reports",
+    "asOf": "as of {{date}}",
+    "refreshing": "refreshing",
+    "protondbLink": "protondb ↗",
+    "steamLink": "steam ↗",
+    "appIdLine": "Steam AppID {{id}} ({{source}})",
+    "noReports": "ProtonDB has no reports for this title.",
+    "rated": "ProtonDB rates this title {{tier}}, from community reports.",
+    "noneLoaded": "No compatibility reports loaded for this title yet.",
+    "borkedNote": "ProtonDB reports this title as borked. Try a different runner or check the reports.",
+    "bronzeNote": "ProtonDB rates this title bronze. It may need tweaks to run well.",
+    "recipe": "recipe: winetricks {{mods}}"
+  },
+  "deck": {
+    "badge": "Deck · {{verdict}}",
+    "verified": "Verified",
+    "playable": "Playable",
+    "unsupported": "Unsupported",
+    "tooltip": "Steam Deck: {{verdict}}.{{notes}} Steam Deck compatibility, from Steam."
+  },
+  "appIdSource": {
+    "user": "set by you",
+    "plugin": "from the store",
+    "steam": "Steam game",
+    "none": "none"
+  },
+  "wiki": {
+    "creditLabel": "PCGamingWiki credit",
+    "attribution": "Source: PCGamingWiki contributors, CC BY-NC-SA 3.0",
+    "onWiki": "{{title}} on PCGamingWiki ↗",
+    "licence": "licence ↗",
+    "readOn": "read {{date}}"
+  },
+  "facts": {
+    "runner": "Runner",
+    "dx": "DX layer",
+    "wrappers": "Wrappers",
+    "launchVia": "Launch via",
+    "protondb": "ProtonDB",
+    "deck": "Steam Deck",
+    "nativeRunner": "none · native Linux build",
+    "steamRunner": "chosen in Steam",
+    "autoRunner": "auto · {{name}}",
+    "noRunner": "none installed",
+    "missingRunner": "{{id}} (missing)",
+    "dxUnused": "not used",
+    "dxWined3d": "WineD3D",
+    "dxBundled": "DXVK (bundled)",
+    "noWrappers": "none",
+    "steamClient": "Steam client",
+    "viaPlatypus": "Platypus · {{name}}",
+    "protondbNative": "not rated · native build",
+    "protondbPending": "not fetched yet",
+    "protondbNoAppId": "no Steam AppID",
+    "deckPending": "not rated yet",
+    "deckNoAppId": "no Steam AppID",
+    "pending": "…"
+  },
+  "about": {
+    "heading": "About",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "noDescription": "No store description for this title.",
+    "storeUnavailable": "Store data unavailable: {{error}}",
+    "developer": "Developer",
+    "publisher": "Publisher",
+    "release": "Release",
+    "genres": "Genres",
+    "languages": "Languages",
+    "controller": "Controller",
+    "controllerFull": "Full controller support",
+    "controllerPartial": "Partial controller support",
+    "ageRating": "Age rating",
+    "reqLabel": "System requirements",
+    "reqMinimum": "Minimum",
+    "reqRecommended": "Recommended",
+    "linkWebsite": "Website",
+    "linkStore": "Store page",
+    "linkProtondb": "ProtonDB",
+    "linkPcgw": "PCGamingWiki",
+    "infoFrom": "Info from",
+    "unlink": "Unlink",
+    "unlinking": "Unlinking…"
+  },
+  "info": {
+    "find": "Find info online",
+    "heading": "find info online",
+    "help": "Search Steam, GOG and Lutris (IGDB) for {{title}}'s description and details. Linking never changes your title or year.",
+    "searchAria": "Search for info online",
+    "search": "Search",
+    "searching": "Searching…",
+    "noneFound": "No info found for that title.",
+    "link": "Link",
+    "linking": "Linking…",
+    "linkFailed": "Platypus couldn't link that info."
+  },
+  "media": {
+    "trailerLabel": "Play trailer {{suffix}}({{index}} of {{total}})",
+    "screenshotLabel": "Show screenshot {{index}}",
+    "openTrailer": "Open trailer in viewer",
+    "openShots": "Open screenshots in slideshow",
+    "openViewer": "Open viewer"
+  },
+  "install": {
+    "installTo": "Install to…",
+    "install": "Install",
+    "retryInstall": "Retry install",
+    "cantInstall": "Can't install here",
+    "noteWithVersion": "installs into {{folder}} · <v>Choose version</v> · <d>change default</d>",
+    "notePlain": "installs into {{folder}} · <d>change default</d>",
+    "lastAttempt": "The last attempt didn't finish."
+  },
+  "installSize": {
+    "checking": "checking the install size…",
+    "unknown": "Size unknown",
+    "unknownTitle": "The store can't tell how big this is",
+    "known": "Install size {{size}}",
+    "addons": " · includes {{size}} of add-ons"
+  },
+  "outside": {
+    "title": "Installed outside {{name}}'s folder",
+    "body": "Platypus only launches {{name}} games from <folder>{{folder}}</folder> or folders you allow. This one is in <dir>{{dir}}</dir>, probably from before Platypus managed it.",
+    "allow": "Allow this folder"
+  },
+  "installation": {
+    "heading": "Installation",
+    "store": "Store",
+    "folder": "Folder",
+    "version": "Version",
+    "pinnedTo": "Pinned to",
+    "size": "Size",
+    "unknownFolder": "not known to Platypus",
+    "jobFailed": "The {{kind}} didn't finish."
+  },
+  "achievements": {
+    "heading": "Achievements",
+    "countKnown": "{{unlocked}}/{{total}} · {{percent}}%",
+    "countTotal": "{{total}} total",
+    "steamHint": "Your progress isn't cached yet. Open this game once in Steam's library and it shows up here.",
+    "storeHint": "The store lists these achievements; your progress there isn't available to Platypus.",
+    "showing": "showing {{shown}} of {{total}} · {{reason}}",
+    "reasonSample": "Steam only caches a sample locally",
+    "reasonHighlight": "highlighted by the store",
+    "ofPlayers": "{{share}} of players"
+  },
+  "progress": {
+    "label": "Your achievements",
+    "barLabel": "Achievements unlocked",
+    "count": "{{unlocked}}/{{total}} · {{percent}}%",
+    "showing": "showing {{shown}} of {{total}}",
+    "unlockedOn": "unlocked {{date}}",
+    "unlocked": "unlocked",
+    "shareOfPlayers": "{{share}} of players",
+    "hidden": "hidden",
+    "locked": "locked"
+  },
+  "steamAppId": {
+    "heading": "steam appid for ratings",
+    "aria": "Steam AppID for ratings",
+    "placeholder": "e.g. 620",
+    "numberError": "A Steam AppID is a number, like 620.",
+    "current": "Currently {{id}} ({{source}}). Check it on <a>its Steam page</a>.",
+    "none": "No Steam AppID for this game, so there is no ProtonDB rating. Check it on <a>Steam search</a>.",
+    "failed": "Platypus couldn't check that Steam app ID."
+  },
+  "custom": {
+    "intro": "Change how {{title}} looks in Platypus. Images are copied into Platypus's own folder, so the file you pick can move or go. This stays on this computer and never reaches the store.",
+    "titleSection": "title",
+    "titleLabel": "Title",
+    "sortLabel": "Sort as",
+    "customTitleAria": "Custom title",
+    "sortTitleAria": "Sort title",
+    "saveTitle": "Save title",
+    "useStoreTitle": "Use the store's title",
+    "artSection": "art",
+    "yours": "yours",
+    "choose": "Choose",
+    "replace": "Replace",
+    "reset": "Reset",
+    "resetAll": "Reset everything to the store's",
+    "saveFailed": "Platypus couldn't save the customization.",
+    "art": {
+      "cover": {
+        "label": "Cover",
+        "hint": "Library cards · portrait, about 2:3",
+        "chooseAria": "Choose cover image",
+        "resetAria": "Reset cover to the store's",
+        "pick": "Choose the cover of {{title}}"
+      },
+      "banner": {
+        "label": "Banner",
+        "hint": "Top of the game page and wide cards · wide, about 3:1",
+        "chooseAria": "Choose banner image",
+        "resetAria": "Reset banner to the store's",
+        "pick": "Choose the banner of {{title}}"
+      },
+      "logo": {
+        "label": "Logo",
+        "hint": "Over the banner in place of the title · transparent PNG",
+        "chooseAria": "Choose logo image",
+        "resetAria": "Reset logo to the store's",
+        "pick": "Choose the logo of {{title}}"
+      },
+      "icon": {
+        "label": "Icon",
+        "hint": "Small lists · square",
+        "chooseAria": "Choose icon image",
+        "resetAria": "Reset icon to the store's",
+        "pick": "Choose the icon of {{title}}"
+      },
+      "background": {
+        "label": "Background",
+        "hint": "Faint backdrop of the game page · wide",
+        "chooseAria": "Choose background image",
+        "resetAria": "Reset background to the store's",
+        "pick": "Choose the background of {{title}}"
+      }
+    },
+    "finder": {
+      "heading": "find art online",
+      "help": "Search for {{title}}'s cover, banner and logo: Steam first, with GOG and Lutris (IGDB) as fallbacks when Steam is thin. Applying replaces the art above; art you picked by hand is only replaced when you choose it here.",
+      "searchAria": "Search for art online",
+      "search": "Search",
+      "searching": "Searching…",
+      "noneFound": "No artwork found for that title. The placeholder stays.",
+      "apply": "Apply",
+      "applying": "Applying…",
+      "failed": "Platypus couldn't find art online."
+    }
+  },
+  "recency": {
+    "today": "today",
+    "yesterday": "yesterday",
+    "daysAgo": "{{count}}d ago"
+  }
 }

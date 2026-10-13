@@ -80,11 +80,11 @@ export function TogglePill({ on }: { on: boolean }) {
 
 const TIERS = ['platinum', 'gold', 'silver', 'bronze', 'borked'] as const;
 
-export function TierBadge({ tier, suffix }: { tier?: string | null; suffix?: string }) {
+export function TierBadge({ tier, suffix, title }: { tier?: string | null; suffix?: string; /** Translated tooltip; defaults to the English meaning. */ title?: string }) {
   if (!tier) return null;
   const variant = (TIERS as readonly string[]).includes(tier) ? (tier as (typeof TIERS)[number]) : 'silver';
   return (
-    <Badge variant={variant} title={TIER_MEANING[tier]}>
+    <Badge variant={variant} title={title ?? TIER_MEANING[tier]}>
       {tier}
       {suffix ? ` ${suffix}` : ''}
     </Badge>
