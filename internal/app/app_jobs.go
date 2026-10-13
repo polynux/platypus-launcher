@@ -45,6 +45,8 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 			return b.a.startCoreMove(j) // runs on its own; reports through the queue
 		}
 		return b.a.plugins.Call(ctx, j.Source, "game.move", moveParams(j), nil)
+	case jobs.KindRemove:
+		return b.a.startCoreRemove(j) // core deletes; reports through the queue
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -104,25 +106,33 @@ func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 		b.a.moves.stop(ctx, j.ID)
 		return nil
 	}
+	if j.Kind == jobs.KindRemove {
+		b.a.removes.stop(ctx, j.ID)
+		return nil
+	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
-// RunsInCore says whether core is running the job's move itself, in a
-// goroutine of its own (see CoreRunner in the queue).
+// RunsInCore says whether core is running the job's move or removal itself,
+// in a goroutine of its own (see CoreRunner in the queue).
 func (b jobBackend) RunsInCore(j types.Job) bool {
-	return b.a.moves.active(j.ID)
+	return b.a.moves.active(j.ID) || b.a.removes.active(j.ID)
 }
 
-// heldByJob refuses a launch while a move or a check holds the game's folder:
-// the game would start from files that are being moved or checked.
+// heldByJob refuses a launch while a move, a check or a removal holds the
+// game's folder: the game would start from files that are being moved,
+// checked or deleted.
 func (a *App) heldByJob(game types.Game) error {
-	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify)
+	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindRemove)
 	if !ok {
 		return nil
 	}
 	what := "checked"
-	if j.Kind == jobs.KindMove {
+	switch j.Kind {
+	case jobs.KindMove:
 		what = "moved"
+	case jobs.KindRemove:
+		what = "removed"
 	}
 	return apperr.New("game.launchBusy", fmt.Sprintf("%s is being %s; launch it once that finishes", game.Title, what), map[string]string{"title": game.Title, "what": what})
 }

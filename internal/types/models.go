@@ -515,14 +515,17 @@ type RemoveOptions struct {
 
 // RemoveTarget is one folder a removal would delete: its kind ("prefix" or
 // "files"), path and size, whether it is there, and whether it may go (with
-// the reason when it may not).
+// the reason when it may not). ReasonCode is the apperr code behind Reason,
+// so the UI renders errors:<code>; ReasonParams carries its values.
 type RemoveTarget struct {
-	Kind    string `json:"kind"`
-	Path    string `json:"path"`
-	Bytes   int64  `json:"bytes"`
-	Exists  bool   `json:"exists"`
-	Allowed bool   `json:"allowed"`
-	Reason  string `json:"reason,omitempty"`
+	Kind         string            `json:"kind"`
+	Path         string            `json:"path"`
+	Bytes        int64             `json:"bytes"`
+	Exists       bool              `json:"exists"`
+	Allowed      bool              `json:"allowed"`
+	Reason       string            `json:"reason,omitempty"`
+	ReasonCode   string            `json:"reason_code,omitempty"`
+	ReasonParams map[string]string `json:"reason_params,omitempty"`
 }
 
 // RemoveCheck is what removing a sideloaded game would do, before it is

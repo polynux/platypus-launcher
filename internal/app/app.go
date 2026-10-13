@@ -71,6 +71,7 @@ type App struct {
 	// settingsLocks orders the settings saves and starts of each plugin.
 	settingsLocks settingsLocks
 	moves         coreMoves
+	removes       coreMoves   // core-run removals (issue #43), like moves
 	custom        customStore // the user's titles and art (app_customize.go)
 	ledger        *ledger.Ledger
 	// artwork is the online art lookup for sideloaded games (issue #36).
