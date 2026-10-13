@@ -110,6 +110,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
       <ChatNotificationsSetting onNotify={onNotify} />
 
+      <TraySetting onNotify={onNotify} />
+
       <BackupsSetting onNotify={onNotify} />
 
       <CloudSavesDefaults plugins={plugins} />
@@ -329,6 +331,42 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
           </p>
         </div>
         <Switch aria-label={t('chat.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+      </div>
+    </section>
+  );
+}
+/** "Minimize to tray while a game runs" (issue #49): while a game runs the
+ *  window hides to a tray icon instead of staying open, and comes back when
+ *  the game exits. Off by default, unlike the online switches. */
+export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => setOn(s.minimize_to_tray ?? false))
+      .catch(() => setOn(false));
+  }, []);
+  const toggle = (next: boolean) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setMinimizeToTray(next))
+      .then((s) => {
+        setOn(s.minimize_to_tray ?? next);
+        onNotify(next ? t('tray.on') : t('tray.off'));
+      })
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <section className={SECTION}>
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <h2 className="text-[14px] font-bold">{t('tray.heading')}</h2>
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+{t('tray.description')}
+          </p>
+        </div>
+        <Switch aria-label={t('tray.label')} checked={on ?? false} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
     </section>
   );

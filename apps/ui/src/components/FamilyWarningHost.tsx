@@ -26,10 +26,21 @@ export function FamilyWarningHost({ games }: { games: Game[] }) {
   useEffect(() => onFamily((w) => setShown({ warning: w, left: w.seconds_left })), []);
 
   // Count down once a second; a counting toast leaves when its time is up.
+  // Paused while the page is hidden (issue #49): no 1s wakeups for a toast
+  // nobody sees; the countdown resumes when the page shows again.
   useEffect(() => {
     if (!shown || shown.left <= 0) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
     const t = setTimeout(() => setShown((s) => (s && s.left > 0 ? { ...s, left: s.left - 1 } : s)), 1000);
     return () => clearTimeout(t);
+  }, [shown]);
+  useEffect(() => {
+    if (!shown || shown.left <= 0) return;
+    const onShow = () => {
+      if (!document.hidden) setShown((s) => (s ? { ...s } : s));
+    };
+    document.addEventListener('visibilitychange', onShow);
+    return () => document.removeEventListener('visibilitychange', onShow);
   }, [shown]);
 
   // A warning without a countdown has no time of its own: it leaves by itself.

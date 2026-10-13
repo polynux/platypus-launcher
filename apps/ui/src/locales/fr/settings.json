@@ -77,6 +77,13 @@
   "on": "La discussion notifiera sur le bureau",
   "off": "La discussion reste dans l'application"
  },
+ "tray": {
+  "heading": "Réduire dans la zone de notification",
+  "description": "Pendant qu'un jeu tourne, cacher la fenêtre Platypus dans une icône de la zone de notification au lieu de la laisser ouverte. Elle revient quand le jeu se termine, ou depuis le menu de l'icône (afficher, arrêter le jeu, quitter). Là où le bureau n'a pas de zone de notification, la fenêtre se réduit simplement, pour ne jamais rester hors d'atteinte.",
+  "label": "Réduire dans la zone de notification pendant un jeu",
+  "on": "Platypus se cachera dans la zone de notification pendant un jeu",
+  "off": "Platypus reste ouvert pendant un jeu"
+ },
  "loadError": "Platypus n'a pas pu charger les paramètres.",
  "prefixError": "Platypus n'a pas pu changer le dossier des préfixes Wine.",
  "cleanupError": "Platypus n'a pas pu nettoyer ces dossiers.",
