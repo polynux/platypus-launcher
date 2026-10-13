@@ -422,6 +422,9 @@ export namespace types {
     target?: types.VersionTarget | null;
     repair?: boolean;
     destination?: string;
+    delete_prefix?: boolean;
+    delete_files?: boolean;
+    allow_no_saves?: boolean;
     verify?: types.VerifyReport | null;
     options?: types.InstallOptions;
   }
@@ -533,6 +536,35 @@ export namespace types {
   export interface RedeemResult {
     message: string;
     titles: string[];
+  }
+
+  export interface RemoveCheck {
+    targets: types.RemoveTarget[];
+    saves: types.SaveGate;
+  }
+
+  export interface RemoveOptions {
+    delete_prefix: boolean;
+    delete_files: boolean;
+    allow_no_saves: boolean;
+  }
+
+  export interface RemoveTarget {
+    kind: string;
+    path: string;
+    bytes: number;
+    exists: boolean;
+    allowed: boolean;
+    reason?: string;
+    reason_code?: string;
+    reason_params?: Record<string, string>;
+  }
+
+  export interface SaveGate {
+    backup_id?: string;
+    files: number;
+    bytes: number;
+    no_paths: boolean;
   }
 
   export interface SessionEvent {
