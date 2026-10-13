@@ -1,9 +1,12 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { Game, GameCopy, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
-import { copyDiffSummary, copyStatus, diffFor, dlcLabel, pickableCopies, playedCopy } from '../lib/family';
+import { diffFor, pickableCopies, playedCopy } from '../lib/family';
+import { copyDiffSummaryText, copyDlcLabel, copyStatusLabel } from '../lib/copyLabels';
 import { Button } from '@/components/ds/button';
 import { CopyCompareDialog } from './CopyCompareDialog';
 import { Panel, cx } from './ui';
@@ -14,6 +17,7 @@ import { ErrorNotice } from './ErrorNotice';
  *  sends the pick; the store decides what a copy allows. Renders nothing for
  *  the user's own games. */
 export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: StorePlugin | undefined; onChanged: () => void }) {
+  const { t } = useTranslation('gameOps');
   const copies = pickableCopies(game);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -30,19 +34,19 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
     setError('');
     Effect.runPromise(LauncherApi.setPreferredCopy(game, copy.owner_id)).then(
       () => { setPending(null); onChanged(); },
-      (e: Error) => { setPending(null); setError(e.message || 'Could not change the copy.'); },
+      (e: Error) => { setPending(null); setError(e.message || t('gameOps:copies.switchError')); },
     );
   };
 
   return (
     <CapabilitySurface plugin={plugin} capability="family" game={game}>
       <Panel className="bg-white/[0.05]">
-        <h2 className="mb-2 text-[15px] font-bold">Copy</h2>
-        <p className="font-mono text-hint text-white/85 select-text">Copy: from {from}</p>
+        <h2 className="mb-2 text-[15px] font-bold">{t('gameOps:copies.title')}</h2>
+        <p className="font-mono text-hint text-white/85 select-text">{t('gameOps:copies.from', { name: from })}</p>
         {copies.length > 1 && (
-          <div role="radiogroup" aria-label="Family copies" className="mt-3 space-y-2">
+          <div role="radiogroup" aria-label={t('gameOps:copies.group')} className="mt-3 space-y-2">
             {copies.map((copy) => {
-              const status = copyStatus(copy);
+              const status = copyStatusLabel(t, copy);
               const chosen = copy.owner_id === played;
               return (
                 <button
@@ -62,10 +66,10 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
                     <span>{copy.owner_name}</span>
                     {status && <span className={copy.available ? 'text-amber-200/80' : 'text-white/55'}>{status}</span>}
                   </span>
-                  <span className="mt-1 block text-white/55">{dlcLabel(copy)}</span>
+                  <span className="mt-1 block text-white/55">{copyDlcLabel(t, copy)}</span>
                   {compare && copy.owner_id !== compare.baseline && diffFor(compare, copy.owner_id) && (
                     <span className="mt-1 block text-white/65">
-                      {copyDiffSummary(copy.owner_name, baselineName, diffFor(compare, copy.owner_id)!)}
+                      {copyDiffSummaryText(t, copy.owner_name, baselineName, diffFor(compare, copy.owner_id)!)}
                     </span>
                   )}
                   {copy.note && <span className="mt-1 block text-white/55">{copy.note}</span>}
@@ -77,11 +81,11 @@ export function CopyPicker({ game, plugin, onChanged }: { game: Game; plugin: St
         )}
         {compare && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <span className="font-mono text-hint text-white/55">vs {baselineName}'s copy</span>
-            <Button variant="neutral" size="sm" onClick={() => setComparing(true)}>Compare copies</Button>
+            <span className="font-mono text-hint text-white/55">{t('gameOps:copies.vsBaseline', { name: baselineName })}</span>
+            <Button variant="neutral" size="sm" onClick={() => setComparing(true)}>{t('gameOps:copies.compare')}</Button>
           </div>
         )}
-        {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't switch copies." />}
+        {error && <ErrorNotice className="mt-2" message={error} fallback={t('gameOps:copies.switchError')} />}
       </Panel>
       {comparing && compare && (
         <CopyCompareDialog game={game} copies={copies} compare={compare} onClose={() => setComparing(false)} />

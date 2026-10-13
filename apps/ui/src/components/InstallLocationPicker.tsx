@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { FolderOpen } from 'lucide-react';
 import type { Game, InstallLocation } from '../types';
 import { Button } from '@/components/ds/button';
@@ -27,6 +29,7 @@ export interface InstallLocationPickerProps {
  *  they installed into before, and "Choose folder…". A folder picked by hand is
  *  checked by core before it can be chosen; a refusal is shown and nothing changes. */
 export function InstallLocationPicker({ game, needBytes, value, onChange, disabled }: InstallLocationPickerProps) {
+  const { t } = useTranslation('gameOps');
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,10 +79,10 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
 
   return (
     <section>
-      <MonoLabel className="mb-1.5">install to</MonoLabel>
-      {!rows && !error && <p className="font-mono text-micro uppercase tracking-widest text-white/55">looking for folders…</p>}
+      <MonoLabel className="mb-1.5">{t('gameOps:location.heading')}</MonoLabel>
+      {!rows && !error && <p className="font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:location.loading')}</p>}
       {rows && (
-        <div role="radiogroup" aria-label="Install location" className="space-y-1.5">
+        <div role="radiogroup" aria-label={t('gameOps:location.group')} className="space-y-1.5">
           {rows.map((r) => {
             const chosen = (r.kind === 'default' ? '' : r.folder) === value;
             const short = isShort(needBytes, r.free_bytes);
@@ -97,7 +100,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block font-mono text-micro uppercase tracking-wider text-white/55">{kindLabel(r.kind)}</span>
+                  <span className="block font-mono text-micro uppercase tracking-wider text-white/55">{kindLabel(r.kind, t)}</span>
                   <span className="block truncate font-mono text-[12px] text-white/85" title={r.folder}>{r.folder}</span>
                 </span>
                 <span className={cx('flex-none font-mono text-hint', short ? 'text-red-300' : 'text-white/55')}>
@@ -109,9 +112,9 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
         </div>
       )}
       <Button variant="neutral" size="sm" onClick={() => void choose()} disabled={disabled || busy || !rows} className="mt-2">
-        <FolderOpen className="h-3.5 w-3.5" /> Choose folder…
+        <FolderOpen className="h-3.5 w-3.5" /> {t('gameOps:location.choose')}
       </Button>
-      {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't open the folder picker." />}
+      {error && <ErrorNotice className="mt-2" message={error} fallback={t('gameOps:location.error')} />}
     </section>
   );
 }

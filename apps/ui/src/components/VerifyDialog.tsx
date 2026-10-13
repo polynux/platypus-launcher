@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { Game, Job } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
@@ -19,6 +21,7 @@ export interface VerifyDialogProps {
 /** Checks a game's files with its plugin. The check only reports; when it
  *  finds damage the dialog asks before a repair, which is a second run. */
 export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
+  const { t } = useTranslation(['gameOps', 'common']);
   const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,60 +45,61 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
   const report = job?.verify;
   const wrong = report ? report.damaged + report.missing : 0;
   const running = job?.state === 'queued' || job?.state === 'running';
-  const title = `Verify ${game.title}`;
+  const title = t('gameOps:verify.title', { title: game.title });
 
   let body: React.ReactNode;
   let actions: React.ReactNode;
   if (error) {
-    body = <ErrorNotice message={error} fallback="Platypus couldn't start the check." />;
+    body = <ErrorNotice message={error} fallback={t('gameOps:verify.startError')} />;
   } else if (!job) {
-    body = <p className="text-white/60">Starting the check…</p>;
+    body = <p className="text-white/60">{t('gameOps:verify.starting')}</p>;
   } else if (running) {
+    const progress = job.percent >= 0 ? t('gameOps:verify.progress', { percent: Math.round(job.percent) }) : '';
     body = (
       <p className="text-white/70">
-        {job.repair ? 'Repairing' : 'Checking'} the files{job.percent >= 0 ? ` · ${Math.round(job.percent)}%` : ''}
+        {job.repair ? t('gameOps:verify.repairing', { progress }) : t('gameOps:verify.checking', { progress })}
       </p>
     );
   } else if (job.state === 'failed') {
-    body = <ErrorNotice message={job.error ?? ''} fallback="The check didn't finish." onRetry={() => start(job.repair)} />;
+    body = <ErrorNotice message={job.error ?? ''} fallback={t('gameOps:verify.failed')} onRetry={() => start(job.repair)} />;
   } else if (job.state === 'canceled') {
-    body = <p className="text-white/60">The check was canceled. Nothing was changed.</p>;
+    body = <p className="text-white/60">{t('gameOps:verify.canceled')}</p>;
   } else if (job.state === 'done' && report) {
     if (job.repair) {
       body = (
         <p className="text-white/80">
-          Repaired {report.repaired} {report.repaired === 1 ? 'file' : 'files'}.
-          {wrong > 0 ? ` ${wrong} still ${wrong === 1 ? 'is' : 'are'} wrong; the store may need the game reinstalled.` : ''}
+          {t('gameOps:verify.repaired', { count: report.repaired })}
+          {wrong > 0 ? ` ${t('gameOps:verify.stillWrong', { count: wrong })}` : ''}
         </p>
       );
     } else if (wrong > 0) {
       body = (
         <>
           <p className="text-[15px] font-bold text-amber-200">
-            {wrong} {wrong === 1 ? 'file' : 'files'} damaged — Repair?
+            {t('gameOps:verify.damagedTitle', { count: wrong })}
           </p>
           <p className="mt-1 font-mono text-hint text-white/55">
-            {report.damaged} damaged, {report.missing} missing, of {report.checked} files checked. A repair restores them from the store.
+            {t('gameOps:verify.damageDetail', { damaged: report.damaged, missing: report.missing, checked: report.checked })}
           </p>
         </>
       );
       actions = (
-        <Button onClick={() => start(true)} disabled={busy} className="flex-1 text-sky-100">Repair</Button>
+        <Button onClick={() => start(true)} disabled={busy} className="flex-1 text-sky-100">{t('gameOps:verify.repair')}</Button>
       );
     } else {
-      body = <p className="text-white/80">All {report.checked} files check out.</p>;
+      body = <p className="text-white/80">{t('gameOps:verify.allClean', { checked: report.checked })}</p>;
     }
   }
 
   return (
     <Modal label={title} onClose={onClose} size="md">
       <div className="p-6">
-        <MonoLabel className="mb-2">verify files</MonoLabel>
+        <MonoLabel className="mb-2">{t('gameOps:verify.kicker')}</MonoLabel>
         <h2 className="mb-4 text-[18px] font-bold">{title}</h2>
         <div className="space-y-2 text-[14px]">{body}</div>
         <div className="mt-6 flex gap-2">
           {actions}
-          <Button onClick={onClose} className="flex-1 text-white/70">{job?.state === 'done' && wrong > 0 && !job.repair ? 'Not now' : 'Close'}</Button>
+          <Button onClick={onClose} className="flex-1 text-white/70">{job?.state === 'done' && wrong > 0 && !job.repair ? t('gameOps:verify.notNow') : t('common:close')}</Button>
         </div>
       </div>
     </Modal>

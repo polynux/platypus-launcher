@@ -1,3 +1,5 @@
+// i18n: converted
+import type { TFunction } from 'i18next';
 import type { Game, StorePlugin, Tweak } from '../types';
 import { offers } from './capabilities';
 import { isPluginGame } from './games';
@@ -6,16 +8,19 @@ import { isPluginGame } from './games';
 export type GameSettingsTab =
   | 'general' | 'cloud' | 'versions' | 'options' | 'plugin' | 'tweaks' | 'customization' | 'maintenance';
 
-export const TAB_LABELS: Record<GameSettingsTab, string> = {
-  general: 'General',
-  cloud: 'Cloud saves',
-  versions: 'Versions',
-  options: 'Add-ons & options',
-  plugin: 'Plugin settings',
-  tweaks: 'Suggested tweaks',
-  customization: 'Customization',
-  maintenance: 'Maintenance',
-};
+/** The label of a game settings tab, for the tab list and its heading. */
+export function tabLabel(t: TFunction, tab: GameSettingsTab): string {
+  switch (tab) {
+    case 'general': return t('gameSettings:tabs.general');
+    case 'cloud': return t('gameSettings:tabs.cloud');
+    case 'versions': return t('gameSettings:tabs.versions');
+    case 'options': return t('gameSettings:tabs.options');
+    case 'plugin': return t('gameSettings:tabs.plugin');
+    case 'tweaks': return t('gameSettings:tabs.tweaks');
+    case 'customization': return t('gameSettings:tabs.customization');
+    default: return t('gameSettings:tabs.maintenance');
+  }
+}
 
 export interface TabContext {
   game: Game;

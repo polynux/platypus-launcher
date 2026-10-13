@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import i18n from './i18n';
 import { freeLabel, isShort, kindLabel, locationFor } from './installLocation';
 import type { InstallLocation } from '../types';
+
+const t = i18n.t.bind(i18n);
 
 describe('install location helpers', () => {
   it('says the room as the dialog shows it, and nothing for an unreadable disk', () => {
@@ -19,8 +22,8 @@ describe('install location helpers', () => {
   });
 
   it('names each kind of place', () => {
-    expect(kindLabel('default')).toBe('Default');
-    expect(kindLabel('picked')).toBe('Chosen');
+    expect(kindLabel('default', t)).toBe('Default');
+    expect(kindLabel('picked', t)).toBe('Chosen');
   });
 
   it('finds the place a value stands for', () => {

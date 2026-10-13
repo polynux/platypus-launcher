@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, Copy, X } from 'lucide-react';
 import type { Game, GameSettings, ProtonVersion } from '../types';
 import { Modal } from './Modal';
@@ -13,7 +15,9 @@ import { SteamAppIdField } from './SteamAppIdField';
 import { LauncherApi } from '../effect/runtime';
 import {
   DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
-  composeGamescopeArgs, envKeyError, envToRows, rowsToEnv, type EnvRow, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
+  composeGamescopeArgs, dxLayerLabel, dxLayerTitle, envKeyError, envToRows, gsFilterLabel, gsToggleLabel, gsToggleTitle,
+  hudLabel, hudTitle, protonFlagDesc, rowsToEnv, syncModeTitle, upscalerLabel, upscalerTitle,
+  type EnvRow, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
 } from '../lib/settings';
 
 interface Props {
@@ -80,6 +84,7 @@ function SettingGroup({ label, children }: { label: string; children: React.Reac
 
 /** The rarely needed settings of a group, folded. Closed, it says how many are set, so nothing hidden goes unseen. */
 function AdvancedFold({ set, children }: { set: number; children: React.ReactNode }) {
+  const { t } = useTranslation('gameSettings');
   const [open, setOpen] = useState(false);
   const id = React.useId();
   return (
@@ -92,8 +97,8 @@ function AdvancedFold({ set, children }: { set: number; children: React.ReactNod
         className="flex items-center gap-1.5 font-mono text-[12px] text-white/60 transition hover:text-white/85"
       >
         <ChevronDown className={cx('size-3.5 transition-transform', open ? '' : '-rotate-90')} aria-hidden />
-        Advanced
-        {set > 0 && <span className="tabular-nums text-amber-200/90">· {set} set</span>}
+        {t('gameSettings:advanced.label')}
+        {set > 0 && <span className="tabular-nums text-amber-200/90">· {t('gameSettings:advanced.set', { count: set })}</span>}
       </button>
       <div id={id} hidden={!open} className="mt-4 space-y-5">{children}</div>
     </div>
@@ -103,6 +108,7 @@ function AdvancedFold({ set, children }: { set: number; children: React.ReactNod
 /** The launcher's own settings for one game (runner, wrappers, env…): the form
  *  of the "General" tab, and of the standalone settings dialog. */
 export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded }: GeneralProps) {
+  const { t } = useTranslation(['gameSettings', 'common']);
   const [draft, setDraft] = useState<GameSettings>(() => normalizeSettings(game.settings));
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => envToRows(normalizeSettings(game.settings).env_vars));
   const nextRowId = useRef(envRows.length);
@@ -187,10 +193,10 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
       {!embedded && (
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[20px] font-extrabold tracking-tight">Launcher settings</h2>
+            <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:modal.heading')}</h2>
             <div className="font-mono text-hint text-white/55">{game.title}</div>
           </div>
-          <Button variant="neutral" size="icon" onClick={onClose} aria-label="Close" className="size-8">
+          <Button variant="neutral" size="icon" onClick={onClose} aria-label={t('common:close')} className="size-8">
             <X className="size-4" />
           </Button>
         </div>
@@ -199,13 +205,12 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
       {isSteamClient && (
         <div className="mb-6 rounded-2xl bg-sky-300/[0.07] p-4 ring-1 ring-sky-300/25">
           <p className="text-[12.5px] leading-relaxed text-sky-100/85">
-            Steam games start through the Steam client, which picks the Proton version and ignores Platypus's env vars.
-            To apply these settings, paste this into Steam → Properties → Launch options:
+            {t('gameSettings:steamNotice')}
           </p>
           <div className="mt-2.5 flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-3 py-2 font-mono text-hint text-sky-100/90 select-text">{steamLaunchOptions(backend)}</code>
             <Button variant="neutral" size="sm" onClick={() => copy(steamLaunchOptions(backend))}>
-              <Copy className="size-3.5" /> Copy
+              <Copy className="size-3.5" /> {t('gameSettings:steamCopy')}
             </Button>
           </div>
         </div>
@@ -215,20 +220,19 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         <div className="min-w-0 space-y-7">
           <SteamAppIdField game={game} />
 
-          <SettingGroup label="runner">
+          <SettingGroup label={t('gameSettings:groups.runner')}>
             {native ? (
               <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
                 <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
-                  This game ships a native Linux build from the store. It runs directly, without Proton —
-                  runner, DX layer and Proton flags don't apply.
+                  {t('gameSettings:runner.nativeNote')}
                 </p>
               </div>
             ) : (
               <div>
-                <p className="mb-2 text-[12px] leading-relaxed text-white/70">The Proton or Wine build that runs this Windows game.</p>
-                <SelectField label="Runner" value={runnerValue} onChange={(v) => set('runner_id', v)}>
-                  <SelectItem value="auto">{autoPick ? `Automatic (uses ${autoPick.name})` : 'Automatic (no runner installed)'}</SelectItem>
-                  {runnerMissing && <SelectItem value={selectedRunner}>{selectedRunner} (missing)</SelectItem>}
+                <p className="mb-2 text-[12px] leading-relaxed text-white/70">{t('gameSettings:runner.description')}</p>
+                <SelectField label={t('gameSettings:runner.aria')} value={runnerValue} onChange={(v) => set('runner_id', v)}>
+                  <SelectItem value="auto">{autoPick ? t('gameSettings:runner.autoNamed', { name: autoPick.name }) : t('gameSettings:runner.autoNone')}</SelectItem>
+                  {runnerMissing && <SelectItem value={selectedRunner}>{t('gameSettings:runner.missing', { id: selectedRunner })}</SelectItem>}
                   {runnerGroups.map(([kind, list]) => (
                     <SelectGroup key={kind}>
                       <SelectLabel>{kind}</SelectLabel>
@@ -238,26 +242,26 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 </SelectField>
                 <div className={cx('mt-1.5 truncate font-mono text-hint', runnerMissing ? 'text-orange-300' : 'text-white/55')}>
                   {runnerMissing
-                    ? 'Saved runner is not installed. Pick another or the launch falls back to an error.'
+                    ? t('gameSettings:runner.savedMissing')
                     : chosenRunner
-                      ? `${runnerKind(chosenRunner)} · ${chosenRunner.path}`
-                      : autoPick ? 'newest GE-Proton, then Experimental' : 'no runner installed'}
+                      ? t('gameSettings:runner.detail', { kind: runnerKind(chosenRunner), path: chosenRunner.path })
+                      : autoPick ? t('gameSettings:runner.autoDetail') : t('gameSettings:runner.none')}
                 </div>
-                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/70">No Proton or Wine runners detected.</p>}
+                {runners.length === 0 && <p className="mt-1 text-[12px] text-white/70">{t('gameSettings:runner.noneInstalled')}</p>}
               </div>
             )}
             <AdvancedFold set={runnerSet}>
               {!native && (
                 <div>
-                  <MonoLabel className="mb-1.5">sync</MonoLabel>
-                  <SegRow label="Sync" options={SYNC_MODES} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.</p>
+                  <MonoLabel className="mb-1.5">{t('gameSettings:sync.kicker')}</MonoLabel>
+                  <SegRow label={t('gameSettings:sync.label')} options={SYNC_MODES.map((m) => ({ value: m.value, label: m.label, title: syncModeTitle(t, m.value) }))} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:sync.description')}</p>
                 </div>
               )}
               {!native && (
                 <div>
-                  <MonoLabel className="mb-2">proton flags</MonoLabel>
-                  <p className="mb-2 text-[12px] leading-relaxed text-white/70">Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.</p>
+                  <MonoLabel className="mb-2">{t('gameSettings:protonFlags.kicker')}</MonoLabel>
+                  <p className="mb-2 text-[12px] leading-relaxed text-white/70">{t('gameSettings:protonFlags.description')}</p>
                   <div className="divide-y divide-white/[0.07]">
                     {PROTON_FLAGS.map((f) => {
                       const on = flags.includes(f.key);
@@ -266,7 +270,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                           key={f.key}
                           label={f.key.replace('PROTON_', '').replace(/_/g, ' ').toLowerCase()}
                           hint={f.key}
-                          title={`${f.key}=1 — ${f.desc}`}
+                          title={`${f.key}=1 — ${protonFlagDesc(t, f.key)}`}
                           checked={on}
                           onChange={(v) => set('proton_flags', v ? [...flags, f.key] : flags.filter((x) => x !== f.key))}
                         />
@@ -276,7 +280,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 </div>
               )}
               <div>
-                <MonoLabel className="mb-2">winetricks <span className="normal-case tracking-normal text-white/55">· saved, not applied yet</span></MonoLabel>
+                <MonoLabel className="mb-2">{t('gameSettings:winetricks.kicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:winetricks.note')}</span></MonoLabel>
                 <div className="flex flex-wrap gap-1.5">
                   {[...new Set([...WINETRICKS_VERBS, ...(game.fix_info?.winetricks ?? [])])].map((t) => {
                     const on = tricks.includes(t);
@@ -292,36 +296,36 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </SettingGroup>
 
           {!native && (
-            <SettingGroup label="graphics">
+            <SettingGroup label={t('gameSettings:groups.graphics')}>
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 <div>
-                  <MonoLabel className="mb-1.5">dx layer</MonoLabel>
-                  <SegRow label="DX layer" options={DX_LAYERS} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} />
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.</p>
+                  <MonoLabel className="mb-1.5">{t('gameSettings:graphics.dxKicker')}</MonoLabel>
+                  <SegRow label={t('gameSettings:graphics.dxLabel')} options={DX_LAYERS.map((m) => ({ value: m.value, label: dxLayerLabel(t, m.value), title: dxLayerTitle(t, m.value) }))} value={draft.dx_layer!} onChange={(v) => set('dx_layer', v)} />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:graphics.dxDescription')}</p>
                 </div>
-                <div><MonoLabel className="mb-1.5">upscaler</MonoLabel><SegRow label="Upscaler" options={UPSCALERS} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
-                <div><MonoLabel className="mb-1.5">mangohud</MonoLabel><SegRow label="MangoHud" options={HUD_PRESETS} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
+                <div><MonoLabel className="mb-1.5">{t('gameSettings:graphics.upscalerKicker')}</MonoLabel><SegRow label={t('gameSettings:graphics.upscalerLabel')} options={UPSCALERS.map((m) => ({ value: m.value, label: upscalerLabel(t, m.value), title: upscalerTitle(t, m.value) }))} value={draft.upscaler!} onChange={(v) => set('upscaler', v)} /></div>
+                <div><MonoLabel className="mb-1.5">{t('gameSettings:graphics.hudKicker')}</MonoLabel><SegRow label={t('gameSettings:graphics.hudLabel')} options={HUD_PRESETS.map((m) => ({ value: m.value, label: hudLabel(t, m.value), title: hudTitle(t, m.value) }))} value={draft.mangohud_preset!} onChange={(v) => set('mangohud_preset', v)} /></div>
                 <div>
-                  <MonoLabel className="mb-1.5">dxvk shader cache</MonoLabel>
-                  <SegRow label="Shader cache" options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off', title: 'DXVK_STATE_CACHE=0' }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} />
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0.</p>
+                  <MonoLabel className="mb-1.5">{t('gameSettings:graphics.shaderKicker')}</MonoLabel>
+                  <SegRow label={t('gameSettings:graphics.shaderLabel')} options={[{ value: 'on', label: t('gameSettings:graphics.shaderOn') }, { value: 'off', label: t('gameSettings:graphics.shaderOff'), title: t('gameSettings:graphics.shaderOffTitle') }]} value={draft.shader_cache!} onChange={(v) => set('shader_cache', v)} />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:graphics.shaderDescription')}</p>
                 </div>
               </div>
             </SettingGroup>
           )}
 
-          <SettingGroup label="launch">
+          <SettingGroup label={t('gameSettings:groups.launch')}>
             <div>
-              <MonoLabel className="mb-2">pipeline</MonoLabel>
-              <p className="mb-2 text-[12px] leading-relaxed text-white/70">Each switch wraps the launch command in one more program.</p>
+              <MonoLabel className="mb-2">{t('gameSettings:launch.pipelineKicker')}</MonoLabel>
+              <p className="mb-2 text-[12px] leading-relaxed text-white/70">{t('gameSettings:launch.pipelineDescription')}</p>
               <div className="divide-y divide-white/[0.07]">
                 {([
-                  ['use_gamemode', 'gamemode', 'Wrap the launch in gamemoderun'],
-                  ['use_gamescope', 'gamescope', 'Run the game inside a gamescope session'],
+                  ['use_gamemode', t('gameSettings:launch.gamemode'), t('gameSettings:launch.gamemodeHint')],
+                  ['use_gamescope', t('gameSettings:launch.gamescope'), t('gameSettings:launch.gamescopeHint')],
                   ...(!native
                     ? ([
-                        ['eac_runtime', 'eac runtime', 'For games that use EasyAntiCheat'],
-                        ['battleye_runtime', 'battleye runtime', 'For games that use BattlEye'],
+                        ['eac_runtime', t('gameSettings:launch.eac'), t('gameSettings:launch.eacHint')],
+                        ['battleye_runtime', t('gameSettings:launch.battlEye'), t('gameSettings:launch.battlEyeHint')],
                       ] as const)
                     : []),
                 ] as const).map(([k, label, title]) => (
@@ -333,9 +337,9 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 <div className="mt-2.5 space-y-4 border-l border-white/[0.08] pl-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <MonoLabel className="mb-1.5">resolution</MonoLabel>
+                      <MonoLabel className="mb-1.5">{t('gameSettings:launch.resolutionKicker')}</MonoLabel>
                       <SelectField
-                        label="Gamescope resolution"
+                        label={t('gameSettings:launch.resolutionAria')}
                         value={resChoice || 'default'}
                         onChange={(v) => {
                           if (v === 'custom') return setResCustom(true);
@@ -344,25 +348,25 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                           setDraft((d) => ({ ...d, gamescope_w: w, gamescope_h: h }));
                         }}
                       >
-                        <SelectItem value="default">Game default</SelectItem>
-                        {display && <SelectItem value={`${display.w}x${display.h}`}>{display.w}×{display.h} (this display)</SelectItem>}
+                        <SelectItem value="default">{t('gameSettings:launch.gameDefault')}</SelectItem>
+                        {display && <SelectItem value={`${display.w}x${display.h}`}>{t('gameSettings:launch.thisDisplay', { w: display.w, h: display.h })}</SelectItem>}
                         {GS_RESOLUTIONS.filter((r) => !(display && r.w === display.w && r.h === display.h)).map((r) => (
                           <SelectItem key={`${r.w}x${r.h}`} value={`${r.w}x${r.h}`}>{r.w}×{r.h}</SelectItem>
                         ))}
-                        <SelectItem value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? `Custom… (${draft.gamescope_w || '?'}×${draft.gamescope_h || '?'})` : 'Custom…'}</SelectItem>
+                        <SelectItem value="custom">{resChoice === 'custom' && draft.gamescope_w + draft.gamescope_h > 0 ? t('gameSettings:launch.customNamed', { w: draft.gamescope_w || '?', h: draft.gamescope_h || '?' }) : t('gameSettings:launch.custom')}</SelectItem>
                       </SelectField>
                       {resChoice === 'custom' && (
                         <div className="mt-2 flex items-center gap-2">
-                          <NumberField aria-label="gamescope width" min={0} step={10} hideSteppers value={draft.gamescope_w || undefined} onChange={(v) => set('gamescope_w', v ?? 0)} placeholder="width" className="min-w-0 flex-1" />
-                          <span className="text-white/55">×</span>
-                          <NumberField aria-label="gamescope height" min={0} step={10} hideSteppers value={draft.gamescope_h || undefined} onChange={(v) => set('gamescope_h', v ?? 0)} placeholder="height" className="min-w-0 flex-1" />
+                          <NumberField aria-label={t('gameSettings:launch.widthAria')} min={0} step={10} hideSteppers value={draft.gamescope_w || undefined} onChange={(v) => set('gamescope_w', v ?? 0)} placeholder={t('gameSettings:launch.widthPlaceholder')} className="min-w-0 flex-1" />
+                          <span className="text-white/55">{'×'}</span>
+                          <NumberField aria-label={t('gameSettings:launch.heightAria')} min={0} step={10} hideSteppers value={draft.gamescope_h || undefined} onChange={(v) => set('gamescope_h', v ?? 0)} placeholder={t('gameSettings:launch.heightPlaceholder')} className="min-w-0 flex-1" />
                         </div>
                       )}
                     </div>
                     <div>
-                      <MonoLabel className="mb-1.5">frame rate</MonoLabel>
+                      <MonoLabel className="mb-1.5">{t('gameSettings:launch.rateKicker')}</MonoLabel>
                       <SelectField
-                        label="Gamescope frame rate"
+                        label={t('gameSettings:launch.rateAria')}
                         value={rateSel || 'default'}
                         onChange={(v) => {
                           if (v === 'custom') return setRateCustom(true);
@@ -370,12 +374,12 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                           set('gamescope_r', v !== 'default' ? Number(v) : 0);
                         }}
                       >
-                        <SelectItem value="default">Game default</SelectItem>
-                        {GS_RATES.map((r) => <SelectItem key={r} value={String(r)}>{r} Hz</SelectItem>)}
-                        <SelectItem value="custom">{rateSel === 'custom' && draft.gamescope_r ? `Custom… (${draft.gamescope_r} Hz)` : 'Custom…'}</SelectItem>
+                        <SelectItem value="default">{t('gameSettings:launch.gameDefault')}</SelectItem>
+                        {GS_RATES.map((r) => <SelectItem key={r} value={String(r)}>{t('gameSettings:launch.rateHz', { r })}</SelectItem>)}
+                        <SelectItem value="custom">{rateSel === 'custom' && draft.gamescope_r ? t('gameSettings:launch.customRateNamed', { r: draft.gamescope_r }) : t('gameSettings:launch.custom')}</SelectItem>
                       </SelectField>
                       {rateSel === 'custom' && (
-                        <NumberField aria-label="gamescope refresh" min={0} hideSteppers value={draft.gamescope_r || undefined} onChange={(v) => set('gamescope_r', v ?? 0)} placeholder="Hz" className="mt-2" />
+                        <NumberField aria-label={t('gameSettings:launch.refreshAria')} min={0} hideSteppers value={draft.gamescope_r || undefined} onChange={(v) => set('gamescope_r', v ?? 0)} placeholder={t('gameSettings:launch.refreshPlaceholder')} className="mt-2" />
                       )}
                     </div>
                   </div>
@@ -384,19 +388,19 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             </div>
 
             <label className="block">
-              <MonoLabel className="mb-1.5">launch arguments</MonoLabel>
-              <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder="-novid -fullscreen" />
+              <MonoLabel className="mb-1.5">{t('gameSettings:launch.argsKicker')}</MonoLabel>
+              <Input value={draft.launch_arguments} onChange={(e) => set('launch_arguments', e.target.value)} placeholder={t('gameSettings:launch.argsPlaceholder')} />
             </label>
 
             {!isSteamClient && (
               <div>
-                <MonoLabel className="mb-1.5">working directory <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+                <MonoLabel className="mb-1.5">{t('gameSettings:launch.workdirKicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
                 <div className="flex items-center gap-2">
                   <Input
-                    aria-label="working directory"
+                    aria-label={t('gameSettings:launch.workdirAria')}
                     value={draft.working_dir}
                     onChange={(e) => set('working_dir', e.target.value)}
-                    placeholder={game.executable ? game.executable.split('/').slice(0, -1).join('/') || '/' : "The executable's folder"}
+                    placeholder={game.executable ? game.executable.split('/').slice(0, -1).join('/') || '/' : t('gameSettings:launch.workdirPlaceholder')}
                     spellCheck={false}
                     className="min-w-0 flex-1"
                   />
@@ -404,28 +408,28 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     variant="neutral"
                     size="sm"
                     onClick={() => {
-                      Effect.runPromise(LauncherApi.pickFolder('Choose the working directory', draft.working_dir || game.executable))
+                      Effect.runPromise(LauncherApi.pickFolder(t('gameSettings:launch.browseWorkdirTitle'), draft.working_dir || game.executable))
                         .then((picked) => { if (picked) set('working_dir', picked); })
                         .catch(() => {});
                     }}
                     className="flex-none"
                   >
-                    Browse…
+                    {t('gameSettings:launch.browse')}
                   </Button>
                 </div>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">Where the game runs. Empty means the executable's folder.</p>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:launch.workdirHint')}</p>
               </div>
             )}
 
             {!isSteamClient && !native && (
               <div>
-                <MonoLabel className="mb-1.5">wine prefix <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+                <MonoLabel className="mb-1.5">{t('gameSettings:launch.prefixKicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
                 <div className="flex items-center gap-2">
                   <Input
-                    aria-label="wine prefix"
+                    aria-label={t('gameSettings:launch.prefixAria')}
                     value={draft.wine_prefix}
                     onChange={(e) => set('wine_prefix', e.target.value)}
-                    placeholder="The default prefix folder"
+                    placeholder={t('gameSettings:launch.prefixPlaceholder')}
                     spellCheck={false}
                     className="min-w-0 flex-1"
                   />
@@ -433,19 +437,19 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     variant="neutral"
                     size="sm"
                     onClick={() => {
-                      Effect.runPromise(LauncherApi.pickFolder('Choose the Wine prefix folder', draft.wine_prefix || draft.working_dir || game.executable))
+                      Effect.runPromise(LauncherApi.pickFolder(t('gameSettings:launch.browsePrefixTitle'), draft.wine_prefix || draft.working_dir || game.executable))
                         .then((picked) => { if (picked) set('wine_prefix', picked); })
                         .catch(() => {});
                     }}
                     className="flex-none"
                   >
-                    Browse…
+                    {t('gameSettings:launch.browse')}
                   </Button>
                 </div>
                 <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
                   {draft.wine_prefix
-                    ? 'This prefix, for this game only. Empty falls back to the default prefix folder.'
-                    : 'Empty: this game uses a folder of its own in the default prefix folder. The folder is created on demand.'}
+                    ? t('gameSettings:launch.prefixCustom')
+                    : t('gameSettings:launch.prefixDefault')}
                 </p>
               </div>
             )}
@@ -454,41 +458,42 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               {draft.use_gamescope && (
                 <div className="space-y-4 border-l border-white/[0.08] pl-4">
                   <div className="divide-y divide-white/[0.07]">
-                    {GS_TOGGLES.map((t) => (
-                      <SwitchRow key={t.key} label={t.label} hint={t.flag} title={t.title} checked={gs.toggles[t.key]} onChange={(v) => setGs({ toggles: { ...gs.toggles, [t.key]: v } })} />
+                    {GS_TOGGLES.map((g) => (
+                      <SwitchRow key={g.key} label={gsToggleLabel(t, g.key)} hint={g.flag} title={gsToggleTitle(t, g.key)} checked={gs.toggles[g.key]} onChange={(v) => setGs({ toggles: { ...gs.toggles, [g.key]: v } })} />
                     ))}
                   </div>
                   <div>
-                    <MonoLabel className="mb-1.5">upscale filter</MonoLabel>
-                    <SegRow label="Gamescope upscale filter" options={GS_FILTERS} value={gs.filter} onChange={(v) => setGs({ filter: v })} />
+                    <MonoLabel className="mb-1.5">{t('gameSettings:launch.filterKicker')}</MonoLabel>
+                    <SegRow label={t('gameSettings:launch.filterLabel')} options={GS_FILTERS.map((f) => ({ ...f, label: gsFilterLabel(t, f.value) }))} value={gs.filter} onChange={(v) => setGs({ filter: v })} />
                   </div>
                   <label className="block">
-                    <MonoLabel className="mb-1.5">extra gamescope args</MonoLabel>
-                    <Input aria-label="gamescope args" value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder="--mangoapp" />
+                    <MonoLabel className="mb-1.5">{t('gameSettings:launch.extraGsKicker')}</MonoLabel>
+                    <Input aria-label={t('gameSettings:launch.extraGsAria')} value={gsExtra} onChange={(e) => { setGsExtra(e.target.value); set('gamescope_args', composeGamescopeArgs({ ...gs, extra: e.target.value })); }} placeholder={t('gameSettings:launch.extraGsPlaceholder')} />
                   </label>
                 </div>
               )}
               <div>
-                <MonoLabel className="mb-1.5">extra env vars</MonoLabel>
+                <MonoLabel className="mb-1.5">{t('gameSettings:launch.envKicker')}</MonoLabel>
                 <div className="space-y-1.5">
                   {envRows.map((r, i) => {
-                    const err = envKeyError(envRows, i);
+                    const err = envKeyError(envRows, i, t);
+                    const varFallback = t('gameSettings:launch.varFallback');
                     const upd = (patch: Partial<EnvRow>) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, ...patch } : x)));
                     return (
                       <div key={r.id}>
                         <div className="flex items-center gap-1.5">
-                          <Input aria-label="Variable name" aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder="KEY" spellCheck={false} className={cx('w-[40%] flex-none', err && 'ring-1 ring-orange-300/70')} />
-                          <Input aria-label={`Value of ${r.key || 'variable'}`} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder="value" spellCheck={false} className="min-w-0 flex-1" />
-                          <Button variant="ghost" size="icon" aria-label={`Remove ${r.key || 'variable'}`} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none">
+                          <Input aria-label={t('gameSettings:launch.varNameAria')} aria-invalid={!!err} value={r.key} onChange={(e) => upd({ key: e.target.value })} placeholder={t('gameSettings:launch.varNamePlaceholder')} spellCheck={false} className={cx('w-[40%] flex-none', err && 'ring-1 ring-orange-300/70')} />
+                          <Input aria-label={t('gameSettings:launch.varValueAria', { key: r.key || varFallback })} value={r.value} onChange={(e) => upd({ value: e.target.value })} placeholder={t('gameSettings:launch.varValuePlaceholder')} spellCheck={false} className="min-w-0 flex-1" />
+                          <Button variant="ghost" size="icon" aria-label={t('gameSettings:launch.removeVar', { key: r.key || varFallback })} onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none">
                             <X className="size-4" />
                           </Button>
                         </div>
-                        {err && <p role="status" className="mt-1 font-mono text-hint text-orange-300">{err}{err.startsWith('Duplicate') ? '' : ' (not saved)'}</p>}
+                        {err && <p role="status" className="mt-1 font-mono text-hint text-orange-300">{err}{err.startsWith(t('gameSettings:launch.duplicateKey')) ? '' : ` ${t('gameSettings:launch.notSaved')}`}</p>}
                       </div>
                     );
                   })}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className="mt-2">+ Add variable</Button>
+                <Button variant="ghost" size="sm" onClick={() => setEnvRows((rs) => [...rs, { id: nextRowId.current++, key: '', value: '' }])} className="mt-2">{t('gameSettings:launch.addVar')}</Button>
               </div>
             </AdvancedFold>
           </SettingGroup>
@@ -497,9 +502,9 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         <div className="min-w-0 space-y-5">
           <div className="rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-white/[0.07]">
             <div className="mb-1 flex items-center justify-between text-white/55">
-              <span>$ preview</span>
+              <span>{t('gameSettings:preview.label')}</span>
               {preview.cmd && (
-                <Button variant="ghost" size="none" onClick={() => copy([...envLines.map(([k, v]) => `${k}=${v}`), preview.cmd].join(' '))} className="rounded px-1 py-0.5" aria-label="Copy command">
+                <Button variant="ghost" size="none" onClick={() => copy([...envLines.map(([k, v]) => `${k}=${v}`), preview.cmd].join(' '))} className="rounded px-1 py-0.5" aria-label={t('gameSettings:preview.copyLabel')}>
                   <Copy className="size-3" />
                 </Button>
               )}
@@ -511,12 +516,12 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
 
           <div className="flex gap-2.5">
-            <Button variant="neutral" onClick={onClose} className="flex-1">Cancel</Button>
-            <Button variant="primary" onClick={() => { onSave(current); setInitial({ draft: JSON.stringify(draft), env: envSig }); }} className="flex-1">Save config</Button>
+            <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
+            <Button variant="primary" onClick={() => { onSave(current); setInitial({ draft: JSON.stringify(draft), env: envSig }); }} className="flex-1">{t('gameSettings:general.save')}</Button>
           </div>
-          {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">Unsaved changes. Save or Cancel.</div>}
+          {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">{t('gameSettings:general.unsaved')}</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
-            saved for next launch · prefix: {effectivePrefix}{draft.wine_prefix ? '' : ' (default)'}
+            {t('gameSettings:general.savedNote', { prefix: effectivePrefix })}{draft.wine_prefix ? '' : t('gameSettings:general.defaultSuffix')}
           </div>
         </div>
       </div>
@@ -527,9 +532,10 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 /** The standalone dialog around the general settings (the game page's own tab
  *  shell uses GeneralSettings directly). */
 export function SettingsModal(p: Props) {
+  const { t } = useTranslation('gameSettings');
   const [dirty, setDirty] = useState(false);
   return (
-    <Modal label={`Launcher settings for ${p.game.title}`} onClose={p.onClose} dismissable={!dirty} size="xl">
+    <Modal label={t('gameSettings:modal.title', { title: p.game.title })} onClose={p.onClose} dismissable={!dirty} size="xl">
       <GeneralSettings {...p} onDirty={setDirty} />
     </Modal>
   );

@@ -1,40 +1,108 @@
+// i18n: converted
+import type { TFunction } from 'i18next';
 import type { Game, GameSettings, HudPreset, SyncMode, DxLayer, Tweak, Upscaler } from '../types';
 
 // Proton flags the modal exposes. Each one is a real Proton env var toggled to 1.
-export const PROTON_FLAGS: { key: string; desc: string }[] = [
-  { key: 'PROTON_ENABLE_NVAPI', desc: 'Expose NVAPI to the game (DLSS, Reflex on NVIDIA)' },
-  { key: 'PROTON_HIDE_NVIDIA_GPU', desc: 'Report NVIDIA GPUs as AMD to work around vendor checks' },
-  { key: 'PROTON_ENABLE_WAYLAND', desc: 'Use the native Wayland driver (Proton 10+/GE)' },
-  { key: 'PROTON_NO_D3D11', desc: 'Disable D3D11 so the game falls back to another API' },
-  { key: 'PROTON_NO_D3D12', desc: 'Disable D3D12 so the game falls back to D3D11' },
-  { key: 'PROTON_FORCE_LARGE_ADDRESS_AWARE', desc: 'Let 32-bit games use more than 2 GB of RAM' },
-  { key: 'PROTON_OLD_GL_STRING', desc: 'Shorten the GL extension string for old games' },
-  { key: 'PROTON_LOG', desc: 'Write a debug log to $HOME/steam-<appid>.log' },
+// What each flag means lives in the gameSettings catalog (protonFlags.descs),
+// keyed by the flag itself.
+export const PROTON_FLAGS: { key: string }[] = [
+  { key: 'PROTON_ENABLE_NVAPI' },
+  { key: 'PROTON_HIDE_NVIDIA_GPU' },
+  { key: 'PROTON_ENABLE_WAYLAND' },
+  { key: 'PROTON_NO_D3D11' },
+  { key: 'PROTON_NO_D3D12' },
+  { key: 'PROTON_FORCE_LARGE_ADDRESS_AWARE' },
+  { key: 'PROTON_OLD_GL_STRING' },
+  { key: 'PROTON_LOG' },
 ];
 
-export const SYNC_MODES: { value: SyncMode; label: string; title: string }[] = [
-  { value: 'fsync', label: 'fsync', title: 'Proton default (fsync when the kernel supports it)' },
-  { value: 'esync', label: 'esync', title: 'PROTON_NO_FSYNC=1' },
-  { value: 'ntsync', label: 'ntsync', title: 'PROTON_USE_NTSYNC=1 (needs the ntsync kernel module)' },
-  { value: 'off', label: 'off', title: 'PROTON_NO_ESYNC=1 PROTON_NO_FSYNC=1' },
+/** What a Proton flag means, for its tooltip. */
+export function protonFlagDesc(t: TFunction, key: string): string {
+  switch (key) {
+    case 'PROTON_ENABLE_NVAPI': return t('gameSettings:protonFlags.descs.PROTON_ENABLE_NVAPI');
+    case 'PROTON_HIDE_NVIDIA_GPU': return t('gameSettings:protonFlags.descs.PROTON_HIDE_NVIDIA_GPU');
+    case 'PROTON_ENABLE_WAYLAND': return t('gameSettings:protonFlags.descs.PROTON_ENABLE_WAYLAND');
+    case 'PROTON_NO_D3D11': return t('gameSettings:protonFlags.descs.PROTON_NO_D3D11');
+    case 'PROTON_NO_D3D12': return t('gameSettings:protonFlags.descs.PROTON_NO_D3D12');
+    case 'PROTON_FORCE_LARGE_ADDRESS_AWARE': return t('gameSettings:protonFlags.descs.PROTON_FORCE_LARGE_ADDRESS_AWARE');
+    case 'PROTON_OLD_GL_STRING': return t('gameSettings:protonFlags.descs.PROTON_OLD_GL_STRING');
+    default: return t('gameSettings:protonFlags.descs.PROTON_LOG');
+  }
+}
+
+export const SYNC_MODES: { value: SyncMode; label: string }[] = [
+  { value: 'fsync', label: 'fsync' },
+  { value: 'esync', label: 'esync' },
+  { value: 'ntsync', label: 'ntsync' },
+  { value: 'off', label: 'off' },
 ];
 
-export const DX_LAYERS: { value: DxLayer; label: string; title: string }[] = [
-  { value: 'dxvk', label: 'DXVK (bundled)', title: 'The DXVK build shipped with the selected runner' },
-  { value: 'wined3d', label: 'WineD3D', title: 'PROTON_USE_WINED3D=1' },
+/** What a sync mode means, for its tooltip. */
+export function syncModeTitle(t: TFunction, value: SyncMode): string {
+  switch (value) {
+    case 'fsync': return t('gameSettings:sync.titles.fsync');
+    case 'esync': return t('gameSettings:sync.titles.esync');
+    case 'ntsync': return t('gameSettings:sync.titles.ntsync');
+    default: return t('gameSettings:sync.titles.off');
+  }
+}
+
+export const DX_LAYERS: { value: DxLayer }[] = [
+  { value: 'dxvk' },
+  { value: 'wined3d' },
 ];
 
-export const UPSCALERS: { value: Upscaler; label: string; title: string }[] = [
-  { value: 'native', label: 'native', title: 'No upscaling' },
-  { value: 'fsr1', label: 'FSR 1', title: 'WINE_FULLSCREEN_FSR=1 (GE-Proton only)' },
+/** The DX layer choices, for the segmented control. */
+export function dxLayerLabel(t: TFunction, value: DxLayer): string {
+  return value === 'dxvk' ? t('gameSettings:graphics.dxLayers.dxvk') : t('gameSettings:graphics.dxLayers.wined3d');
+}
+
+/** What a DX layer choice means, for its tooltip. */
+export function dxLayerTitle(t: TFunction, value: DxLayer): string {
+  return value === 'dxvk' ? t('gameSettings:graphics.dxTitles.dxvk') : t('gameSettings:graphics.dxTitles.wined3d');
+}
+
+export const UPSCALERS: { value: Upscaler }[] = [
+  { value: 'native' },
+  { value: 'fsr1' },
 ];
 
-export const HUD_PRESETS: { value: HudPreset; label: string; title: string }[] = [
-  { value: 'off', label: 'off', title: 'MangoHud disabled' },
-  { value: 'fps only', label: 'fps only', title: 'MANGOHUD_CONFIG=preset=1' },
-  { value: 'minimal', label: 'minimal', title: 'MANGOHUD_CONFIG=preset=2' },
-  { value: 'full', label: 'full', title: 'MANGOHUD_CONFIG=preset=4' },
+/** The upscaler choices, for the segmented control. */
+export function upscalerLabel(t: TFunction, value: Upscaler): string {
+  return value === 'fsr1' ? t('gameSettings:graphics.upscalers.fsr1') : t('gameSettings:graphics.upscalers.native');
+}
+
+/** What an upscaler choice means, for its tooltip. */
+export function upscalerTitle(t: TFunction, value: Upscaler): string {
+  return value === 'fsr1' ? t('gameSettings:graphics.upscalerTitles.fsr1') : t('gameSettings:graphics.upscalerTitles.native');
+}
+
+export const HUD_PRESETS: { value: HudPreset }[] = [
+  { value: 'off' },
+  { value: 'fps only' },
+  { value: 'minimal' },
+  { value: 'full' },
 ];
+
+/** The MangoHud choices, for the segmented control. */
+export function hudLabel(t: TFunction, value: HudPreset): string {
+  switch (value) {
+    case 'fps only': return t('gameSettings:graphics.huds.fps only');
+    case 'minimal': return t('gameSettings:graphics.huds.minimal');
+    case 'full': return t('gameSettings:graphics.huds.full');
+    default: return t('gameSettings:graphics.huds.off');
+  }
+}
+
+/** What a MangoHud choice sets, for its tooltip. */
+export function hudTitle(t: TFunction, value: HudPreset): string {
+  switch (value) {
+    case 'fps only': return t('gameSettings:graphics.hudTitles.fps only');
+    case 'minimal': return t('gameSettings:graphics.hudTitles.minimal');
+    case 'full': return t('gameSettings:graphics.hudTitles.full');
+    default: return t('gameSettings:graphics.hudTitles.off');
+  }
+}
 
 const HUD_CONFIG: Record<HudPreset, string | null> = {
   off: null,
@@ -178,26 +246,63 @@ export function setTweak(s: GameSettings, t: Tweak, on: boolean): GameSettings {
 // structured controls are folded into that string. Flag spellings checked
 // against `gamescope --help`.
 
-export const GS_TOGGLES: { key: GsToggleKey; flag: string; aliases: string[]; label: string; title: string }[] = [
-  { key: 'fullscreen', flag: '-f', aliases: ['--fullscreen'], label: 'fullscreen', title: '-f: make the window fullscreen' },
-  { key: 'borderless', flag: '-b', aliases: ['--borderless'], label: 'borderless', title: '-b: make the window borderless' },
-  { key: 'grabCursor', flag: '--force-grab-cursor', aliases: [], label: 'force grab cursor', title: '--force-grab-cursor: always use relative mouse mode' },
-  { key: 'hdr', flag: '--hdr-enabled', aliases: [], label: 'hdr', title: '--hdr-enabled: enable HDR output (needs the Gamescope WSI layer)' },
-  { key: 'vrr', flag: '--adaptive-sync', aliases: [], label: 'adaptive sync (vrr)', title: '--adaptive-sync: variable refresh rate if available' },
-  { key: 'wayland', flag: '--expose-wayland', aliases: [], label: 'expose wayland', title: '--expose-wayland: support Wayland clients via xdg-shell' },
+export const GS_TOGGLES: { key: GsToggleKey; flag: string; aliases: string[] }[] = [
+  { key: 'fullscreen', flag: '-f', aliases: ['--fullscreen'] },
+  { key: 'borderless', flag: '-b', aliases: ['--borderless'] },
+  { key: 'grabCursor', flag: '--force-grab-cursor', aliases: [] },
+  { key: 'hdr', flag: '--hdr-enabled', aliases: [] },
+  { key: 'vrr', flag: '--adaptive-sync', aliases: [] },
+  { key: 'wayland', flag: '--expose-wayland', aliases: [] },
 ];
+
+/** The gamescope switch labels, for the pipeline toggles. */
+export function gsToggleLabel(t: TFunction, key: GsToggleKey): string {
+  switch (key) {
+    case 'fullscreen': return t('gameSettings:gsToggles.fullscreen');
+    case 'borderless': return t('gameSettings:gsToggles.borderless');
+    case 'grabCursor': return t('gameSettings:gsToggles.grabCursor');
+    case 'hdr': return t('gameSettings:gsToggles.hdr');
+    case 'vrr': return t('gameSettings:gsToggles.vrr');
+    default: return t('gameSettings:gsToggles.wayland');
+  }
+}
+
+/** What a gamescope switch sets, for its tooltip. */
+export function gsToggleTitle(t: TFunction, key: GsToggleKey): string {
+  switch (key) {
+    case 'fullscreen': return t('gameSettings:gsToggleTitles.fullscreen');
+    case 'borderless': return t('gameSettings:gsToggleTitles.borderless');
+    case 'grabCursor': return t('gameSettings:gsToggleTitles.grabCursor');
+    case 'hdr': return t('gameSettings:gsToggleTitles.hdr');
+    case 'vrr': return t('gameSettings:gsToggleTitles.vrr');
+    default: return t('gameSettings:gsToggleTitles.wayland');
+  }
+}
 
 export type GsToggleKey = 'fullscreen' | 'borderless' | 'grabCursor' | 'hdr' | 'vrr' | 'wayland';
 export type GsFilter = '' | 'fsr' | 'nis' | 'linear' | 'nearest' | 'pixel';
 
-export const GS_FILTERS: { value: GsFilter; label: string; title: string }[] = [
-  { value: '', label: 'default', title: 'No -F flag' },
-  { value: 'linear', label: 'linear', title: '-F linear' },
-  { value: 'nearest', label: 'nearest', title: '-F nearest' },
-  { value: 'fsr', label: 'fsr', title: '-F fsr (AMD FidelityFX Super Resolution)' },
-  { value: 'nis', label: 'nis', title: '-F nis (NVIDIA Image Scaling)' },
-  { value: 'pixel', label: 'pixel', title: '-F pixel' },
+export const GS_FILTERS: { value: GsFilter; title: string }[] = [
+  { value: '', title: 'No -F flag' },
+  { value: 'linear', title: '-F linear' },
+  { value: 'nearest', title: '-F nearest' },
+  { value: 'fsr', title: '-F fsr (AMD FidelityFX Super Resolution)' },
+  { value: 'nis', title: '-F nis (NVIDIA Image Scaling)' },
+  { value: 'pixel', title: '-F pixel' },
 ];
+
+/** The gamescope upscale filter labels, for the segmented control. The titles
+ *  stay here: they spell the -F flag itself, the same in every language. */
+export function gsFilterLabel(t: TFunction, value: GsFilter): string {
+  switch (value) {
+    case 'linear': return t('gameSettings:gsFilters.linear');
+    case 'nearest': return t('gameSettings:gsFilters.nearest');
+    case 'fsr': return t('gameSettings:gsFilters.fsr');
+    case 'nis': return t('gameSettings:gsFilters.nis');
+    case 'pixel': return t('gameSettings:gsFilters.pixel');
+    default: return t('gameSettings:gsFilters.default');
+  }
+}
 
 export interface GsArgs {
   toggles: Record<GsToggleKey, boolean>;
@@ -267,11 +372,11 @@ export interface EnvRow {
 
 export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-export function envKeyError(rows: EnvRow[], index: number): string | null {
+export function envKeyError(rows: EnvRow[], index: number, t: TFunction): string | null {
   const key = rows[index].key;
   if (key === '') return null; // empty row: just ignored
-  if (!ENV_KEY_RE.test(key)) return 'Letters, digits and _ only; cannot start with a digit';
-  if (rows.slice(0, index).some((r) => r.key === key)) return 'Duplicate key, this value wins';
+  if (!ENV_KEY_RE.test(key)) return t('gameSettings:launch.badKey');
+  if (rows.slice(0, index).some((r) => r.key === key)) return t('gameSettings:launch.duplicateKey');
   return null;
 }
 

@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FolderInput, ShieldCheck, Trash2 } from 'lucide-react';
 import type { Game, GameJobKind, Job, StorePlugin } from '../types';
 import { Button } from '@/components/ds/button';
@@ -33,6 +35,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   /** The game is starting or running: it can't leave the library until it stops. */
   running?: boolean;
 }) {
+  const { t } = useTranslation(['gameSettings', 'common']);
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -57,7 +60,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   if (active) {
     return (
       <div className="space-y-3">
-        <p className="text-[12.5px] text-white/70">{game.title} is busy; its files can't be changed until this finishes.</p>
+        <p className="text-[12.5px] text-white/70">{t('gameSettings:maintenance.busy', { title: game.title })}</p>
         <JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} />
       </div>
     );
@@ -69,64 +72,74 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
     if (running) {
       return (
         <div className="space-y-5">
-          <Row title="Remove from library" text={`Stop ${game.title} before removing it from the library.`}>
-            <Button disabled><Trash2 className="h-3.5 w-3.5" /> Remove from library</Button>
+          <Row title={t('gameSettings:maintenance.removeTitle')} text={t('gameSettings:maintenance.removeRunning', { title: game.title })}>
+            <Button disabled><Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.removeTitle')}</Button>
           </Row>
         </div>
       );
     }
-    const stay = game.install_dir ? `Its files stay in ${game.install_dir}.` : `Its files stay on disk.`;
-    const removeText = `Removes ${game.title} from Platypus. ${stay}`;
-    const removeConfirmText = `Remove ${game.title} from Platypus? ${stay}`;
+    const stay = game.install_dir
+      ? t('gameSettings:maintenance.stayWithDir', { dir: game.install_dir })
+      : t('gameSettings:maintenance.stayBare');
+    const removeText = t('gameSettings:maintenance.removeText', { title: game.title, stay });
+    const removeConfirmText = t('gameSettings:maintenance.removeConfirm', { title: game.title, stay });
     return (
       <div className="space-y-5">
         {confirm ? (
-          <Row title="Remove from library" text={removeConfirmText}>
+          <Row title={t('gameSettings:maintenance.removeTitle')} text={removeConfirmText}>
             <div className="flex gap-2">
-              <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>Cancel</Button>
+              <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>{t('common:cancel')}</Button>
               <Button variant="danger" onClick={() => { setConfirm(false); onRemove?.(); onClose(); }}>
-                <Trash2 className="h-3.5 w-3.5" /> Remove from library
+                <Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.removeTitle')}
               </Button>
             </div>
           </Row>
         ) : (
-          <Row title="Remove from library" text={removeText}>
-            <Button onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" /> Remove from library</Button>
+          <Row title={t('gameSettings:maintenance.removeTitle')} text={removeText}>
+            <Button onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.removeTitle')}</Button>
           </Row>
         )}
       </div>
     );
   }
   if (!plugin) return null;
+  const size = formatBytes(game.size_bytes);
+  const uninstallText = size && game.install_dir
+    ? t('gameSettings:maintenance.uninstallConfirmFull', { title: game.title, size, dir: game.install_dir })
+    : size
+      ? t('gameSettings:maintenance.uninstallConfirmSize', { title: game.title, size })
+      : game.install_dir
+        ? t('gameSettings:maintenance.uninstallConfirmDir', { title: game.title, dir: game.install_dir })
+        : t('gameSettings:maintenance.uninstallConfirmBare', { title: game.title });
   return (
     <div className="space-y-5">
       <CapabilitySurface plugin={plugin} capability="verify" game={game}>
-        <Row title="Verify files" text={`Checks ${game.title}'s files against ${plugin.name}. A check only reports; repairing asks first.`}>
-          <Button onClick={() => setVerifyOpen(true)}><ShieldCheck className="h-3.5 w-3.5" /> Verify files</Button>
+        <Row title={t('gameSettings:maintenance.verifyTitle')} text={t('gameSettings:maintenance.verifyText', { title: game.title, plugin: plugin.name })}>
+          <Button onClick={() => setVerifyOpen(true)}><ShieldCheck className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.verifyTitle')}</Button>
         </Row>
       </CapabilitySurface>
 
-      <Row title="Move" text="Moves the game's folder to another folder or disk. Platypus checks the room first and keeps the old copy until the new one is checked.">
-        <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> Move…</Button>
+      <Row title={t('gameSettings:maintenance.moveTitle')} text={t('gameSettings:maintenance.moveText')}>
+        <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.moveAction')}</Button>
       </Row>
 
       {offers(plugin, 'install', { game }) && (confirm ? (
-        <Row title="Uninstall" text={`Delete ${game.title}${formatBytes(game.size_bytes) ? ` — ${formatBytes(game.size_bytes)}` : ''} ${game.install_dir ? ` in ${game.install_dir}` : ''}? Your cloud saves stay in the cloud.`}>
+        <Row title={t('gameSettings:maintenance.uninstallTitle')} text={uninstallText}>
           <div className="flex gap-2">
-            <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>Cancel</Button>
+            <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>{t('common:cancel')}</Button>
             <Button variant="danger" onClick={() => { setConfirm(false); onJob('uninstall'); onClose(); }}>
-              <Trash2 className="h-3.5 w-3.5" /> Delete game files
+              <Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.deleteFiles')}
             </Button>
           </div>
         </Row>
       ) : (
-        <Row title="Uninstall" text="Removes the game's files from this computer. Your saves in the cloud stay where they are.">
-          <Button onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" /> Uninstall</Button>
+        <Row title={t('gameSettings:maintenance.uninstallTitle')} text={t('gameSettings:maintenance.uninstallText')}>
+          <Button onClick={() => setConfirm(true)}><Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.uninstallTitle')}</Button>
         </Row>
       ))}
 
       {job?.state === 'failed' && (
-        <ErrorNotice message={job.error ?? ''} fallback={`The ${job.kind} didn't finish.`} onRetry={() => onJobAction('retry', job.id)} />
+        <ErrorNotice message={job.error ?? ''} fallback={t('gameSettings:maintenance.jobFailed', { kind: job.kind })} onRetry={() => onJobAction('retry', job.id)} />
       )}
 
       {verifyOpen && <VerifyDialog game={game} jobs={jobs} onClose={() => setVerifyOpen(false)} />}
@@ -137,7 +150,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
           onClose={() => setMoveOpen(false)}
           onQueued={() => {
             setMoveOpen(false);
-            onNotify(`Moving ${game.title} — see Downloads`, 'busy');
+            onNotify(t('gameSettings:maintenance.moving', { title: game.title }), 'busy');
             onClose();
           }}
         />

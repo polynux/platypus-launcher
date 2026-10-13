@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { TriangleAlert } from 'lucide-react';
 import type { Game, StorePlugin } from '../types';
 import { Modal } from './Modal';
@@ -26,6 +28,7 @@ export interface InstallDialogProps {
 /** "Install to…": the size of the install and where it goes, before it is queued.
  *  A game with install options picks the place in the options dialog instead. */
 export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: InstallDialogProps) {
+  const { t } = useTranslation(['gameOps', 'common']);
   const size = useInstallSize(game, plugin, true);
   const [folder, setFolder] = useState('');
   const [free, setFree] = useState(-1);
@@ -38,7 +41,7 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
     try {
       if (!(await ensureTerms(game))) return;
       await Effect.runPromise(LauncherApi.installGameTo(game, folder));
-      onNotify(`Install of ${game.title} queued`, 'busy');
+      onNotify(t('gameOps:install.queued', { title: game.title }), 'busy');
       onChanged();
       onClose();
     } catch (e) {
@@ -49,20 +52,20 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
   };
 
   return (
-    <Modal label={`Install ${game.title}`} onClose={onClose} size="md" dismissable={!busy}>
-      <h2 className="text-[20px] font-extrabold tracking-tight">Install {game.title}</h2>
+    <Modal label={t('gameOps:install.title', { title: game.title })} onClose={onClose} size="md" dismissable={!busy}>
+      <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:install.title', { title: game.title })}</h2>
       <p className="mt-1 text-[12.5px] text-white/70">{plugin.name}</p>
 
       <div className="mt-5 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-hint">
         <div className="flex justify-between gap-4">
-          <span className="text-white/55">Install size</span>
+          <span className="text-white/55">{t('gameOps:install.sizeLabel')}</span>
           <span className={cx(size.state === 'loading' ? 'text-white/55' : 'text-white/85')} data-testid="install-size">
-            {size.state === 'loading' ? 'checking…' : size.state === 'unknown' ? 'Size unknown' : formatBytes(size.total)}
+            {size.state === 'loading' ? t('gameOps:install.checking') : size.state === 'unknown' ? t('gameOps:install.unknown') : formatBytes(size.total)}
           </span>
         </div>
         {size.state === 'known' && size.added > 0 && (
           <div className="mt-1.5 flex justify-between gap-4 text-white/55">
-            <span>Including add-ons</span><span>+{formatBytes(size.added)}</span>
+            <span>{t('gameOps:install.addonsLabel')}</span><span>{t('gameOps:install.addedSize', { size: formatBytes(size.added) })}</span>
           </div>
         )}
       </div>
@@ -72,13 +75,13 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
       </div>
       {short && (
         <p role="alert" className="mt-3 flex items-center gap-1.5 font-mono text-hint text-red-300">
-          <TriangleAlert className="h-3.5 w-3.5" /> Not enough space there for this game.
+          <TriangleAlert className="h-3.5 w-3.5" /> {t('gameOps:install.short')}
         </p>
       )}
 
       <div className="mt-6 flex justify-end gap-2.5">
-        <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>Cancel</Button>
-        <Button variant="primary" size="sm" disabled={busy || short} onClick={() => void install()}>Install</Button>
+        <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button>
+        <Button variant="primary" size="sm" disabled={busy || short} onClick={() => void install()}>{t('gameOps:install.action')}</Button>
       </div>
     </Modal>
   );

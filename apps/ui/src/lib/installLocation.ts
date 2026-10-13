@@ -1,3 +1,5 @@
+// i18n: converted
+import type { TFunction } from 'i18next';
 import type { InstallLocation } from '../types';
 import { formatFreeBytes } from './format';
 
@@ -18,8 +20,13 @@ export function isShort(needed: number | null | undefined, free: number | null |
 }
 
 /** The name a kind of place is shown under. */
-export function kindLabel(kind: InstallLocation['kind'] | 'picked'): string {
-  return { default: 'Default', library: 'Game folder', recent: 'Recent', picked: 'Chosen' }[kind];
+export function kindLabel(kind: InstallLocation['kind'] | 'picked', t: TFunction): string {
+  switch (kind) {
+    case 'default': return t('gameOps:location.kinds.default');
+    case 'library': return t('gameOps:location.kinds.library');
+    case 'recent': return t('gameOps:location.kinds.recent');
+    default: return t('gameOps:location.kinds.picked');
+  }
 }
 
 /** A path with the home folder shortened, for the places the dialog lists. */

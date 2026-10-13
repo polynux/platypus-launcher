@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, StorePlugin, Tweak } from '../types';
 import { Modal } from './Modal';
@@ -18,7 +20,7 @@ import { MaintenanceTab } from './MaintenanceTab';
 import { TweaksPanel } from './TweaksPanel';
 import { LegalSection } from './LegalSection';
 import { cx } from './ui';
-import { TAB_LABELS, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
+import { tabLabel, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
 
 export interface GameSettingsModalProps {
   game: Game;
@@ -54,6 +56,7 @@ export interface GameSettingsModalProps {
  *  only where its content is on offer (see settingsTabs); the page keeps just
  *  Play or Install, the status and the key facts. */
 export function GameSettingsModal(p: GameSettingsModalProps) {
+  const { t } = useTranslation(['gameSettings', 'common']);
   const { game, plugin } = p;
   const tabs = useMemo(() => settingsTabs({ game, plugin, tweaks: p.tweaks }), [game, plugin, p.tweaks]);
   const [tab, setTab] = useState<GameSettingsTab>(() => pickTab(tabs, p.initialTab));
@@ -63,14 +66,14 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   useEffect(() => { if (shown !== tab) setTab(shown); }, [shown, tab]);
 
   return (
-    <Modal label={`Settings for ${game.title}`} onClose={p.onClose} dismissable={!dirty} size="xl">
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size="xl">
       <div className="@container">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="text-[20px] font-extrabold tracking-tight">Game settings</h2>
+            <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.heading')}</h2>
             <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
           </div>
-          <Button variant="neutral" size="icon" onClick={p.onClose} aria-label="Close" className="size-8 flex-none">
+          <Button variant="neutral" size="icon" onClick={p.onClose} aria-label={t('common:close')} className="size-8 flex-none">
             <X className="size-4" />
           </Button>
         </div>
@@ -78,21 +81,21 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
         <div className="grid gap-5 @2xl:min-h-[26rem] @2xl:grid-cols-[11rem_1fr]">
           <div
             role="tablist"
-            aria-label="Game settings sections"
+            aria-label={t('gameSettings:settingsModal.sections')}
             aria-orientation="vertical"
             className="flex flex-wrap gap-1.5 @2xl:sticky @2xl:top-0 @2xl:flex-col @2xl:flex-nowrap @2xl:self-start"
           >
-            {tabs.map((t) => (
+            {tabs.map((name) => (
               <button
-                key={t}
+                key={name}
                 role="tab"
-                id={`gs-tab-${t}`}
-                aria-selected={t === shown}
-                aria-controls={`gs-panel-${t}`}
-                tabIndex={t === shown ? 0 : -1}
-                onClick={() => setTab(t)}
+                id={`gs-tab-${name}`}
+                aria-selected={name === shown}
+                aria-controls={`gs-panel-${name}`}
+                tabIndex={name === shown ? 0 : -1}
+                onClick={() => setTab(name)}
                 onKeyDown={(e) => {
-                  const i = tabs.indexOf(t);
+                  const i = tabs.indexOf(name);
                   const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
                     : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length] : null;
                   if (!next) return;
@@ -102,10 +105,10 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                 }}
                 className={cx(
                   'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
-                  t === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
+                  name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
                 )}
               >
-                {TAB_LABELS[t]}
+                {tabLabel(t, name)}
               </button>
             ))}
           </div>
@@ -128,7 +131,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
             {shown !== 'general' && (
               <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
                 {/* The cloud panel brings its own heading. */}
-                {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{TAB_LABELS[shown]}</h3>}
+                {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{tabLabel(t, shown)}</h3>}
                 <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} />
               </section>
             )}
@@ -143,6 +146,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
  *  Empty clears it back to unknown. Saving reloads the library entry quietly,
  *  like a customization change. */
 function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void }) {
+  const { t } = useTranslation('gameSettings');
   const [raw, setRaw] = useState(game.release_year ? String(game.release_year) : '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -161,20 +165,20 @@ function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void
   };
   return (
     <div className="mb-6">
-      <span className="mb-1.5 block font-mono text-[12px] uppercase tracking-[0.14em] text-white/55">release year</span>
+      <span className="mb-1.5 block font-mono text-[12px] uppercase tracking-[0.14em] text-white/55">{t('gameSettings:year.kicker')}</span>
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => { e.preventDefault(); save(); }}
       >
         <Input
-          aria-label="Release year"
+          aria-label={t('gameSettings:year.aria')}
           value={raw}
           onChange={(e) => { setRaw(e.target.value); setError(null); }}
-          placeholder="Unknown"
+          placeholder={t('gameSettings:year.placeholder')}
           inputMode="numeric"
           className="w-32"
         />
-        <Button type="submit" variant="primary" size="sm" disabled={!dirty || saving}>Save year</Button>
+        <Button type="submit" variant="primary" size="sm" disabled={!dirty || saving}>{t('gameSettings:year.save')}</Button>
         {saved > 0 && (
           <Button
             type="button"
@@ -190,13 +194,15 @@ function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void
               );
             }}
           >
-            Clear
+            {t('gameSettings:year.clear')}
           </Button>
         )}
       </form>
       {parsed.error
+        // The message comes from the shared release-year check (owned by the
+        // library area's AddGameModal): it turns French with that conversion.
         ? <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{parsed.error}</p>
-        : error && <ErrorNotice message={error} fallback="Platypus couldn't save the release year." />}
+        : error && <ErrorNotice message={error} fallback={t('gameSettings:year.saveError')} />}
     </div>
   );
 }

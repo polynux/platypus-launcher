@@ -1,4 +1,6 @@
+// i18n: converted
 import React from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import type { Game, GameSettings, Tweak } from '../types';
 import { Button } from '@/components/ds/button';
 import { MonoLabel, Panel, TogglePill, cx } from './ui';
@@ -22,18 +24,23 @@ export function TweaksPanel({
   onOpenSettings: () => void;
   framed?: boolean;
 }) {
+  const { t } = useTranslation('gameSettings');
   const groups: [string, Tweak[]][] = [
-    ['recommended', tweaks.filter((t) => t.kind === 'recommended')],
-    ['if something breaks', tweaks.filter((t) => t.kind === 'troubleshoot')],
+    [t('gameSettings:tweaks.recommended'), tweaks.filter((tw) => tw.kind === 'recommended')],
+    [t('gameSettings:tweaks.troubleshoot'), tweaks.filter((tw) => tw.kind === 'troubleshoot')],
   ];
   const body = (
     <>
       <p className="text-[12px] leading-relaxed text-white/70">
-        Based on this machine, not the game's rating: a platinum game can still need them on your GPU.
+        {t('gameSettings:tweaks.intro')}
         {viaSteam && (
           <>
-            {' '}Steam applies these only through the game's{' '}
-            <Button variant="ghost" size="none" onClick={onOpenSettings} className="inline-flex rounded-none px-0 text-[12px] font-normal text-inherit underline decoration-white/30 underline-offset-2 hover:bg-transparent hover:text-white/80">launch options</Button>.
+            {' '}<Trans
+              i18nKey="gameSettings:tweaks.steamNote"
+              components={{
+                lo: <Button variant="ghost" size="none" onClick={onOpenSettings} className="inline-flex rounded-none px-0 text-[12px] font-normal text-inherit underline decoration-white/30 underline-offset-2 hover:bg-transparent hover:text-white/80" />,
+              }}
+            />
           </>
         )}
       </p>
@@ -42,22 +49,24 @@ export function TweaksPanel({
           <div key={label} className="mt-3">
             <MonoLabel className="mb-1.5">{label}</MonoLabel>
             <div className="divide-y divide-white/[0.07]">
-              {list.map((t) => {
-                const on = tweakApplied(game.settings, t);
+              {list.map((tw) => {
+                const on = tweakApplied(game.settings, tw);
                 return (
                   <button
-                    key={t.id}
+                    key={tw.id}
                     role="switch"
                     aria-checked={on}
-                    onClick={() => onChange(setTweak(game.settings, t, !on), `${on ? 'Removed' : 'Applied'} "${t.title}"`)}
+                    onClick={() => onChange(setTweak(game.settings, tw, !on), on
+                      ? t('gameSettings:tweaks.removed', { title: tw.title })
+                      : t('gameSettings:tweaks.applied', { title: tw.title }))}
                     className="flex w-full items-start gap-3 py-2.5 text-left transition hover:text-white"
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[12.5px] font-semibold text-white/90">{t.title}</span>
-                      <span className="block text-[12px] leading-snug text-white/55">{t.reason}</span>
-                      {t.env && Object.keys(t.env).length > 0 && (
+                      <span className="block text-[12.5px] font-semibold text-white/90">{tw.title}</span>
+                      <span className="block text-[12px] leading-snug text-white/55">{tw.reason}</span>
+                      {tw.env && Object.keys(tw.env).length > 0 && (
                         <span className="mt-1 block truncate font-mono text-hint text-sky-200/60">
-                          {Object.entries(t.env).map(([k, v]) => `${k}=${v}`).join(' ')}
+                          {Object.entries(tw.env).map(([k, v]) => `${k}=${v}`).join(' ')}
                         </span>
                       )}
                     </span>
@@ -73,7 +82,7 @@ export function TweaksPanel({
   );
   return framed ? (
     <Panel className="bg-white/[0.05]">
-      <h2 className="mb-1 text-[15px] font-bold">Suggested tweaks</h2>
+      <h2 className="mb-1 text-[15px] font-bold">{t('gameSettings:tweaks.title')}</h2>
       {body}
     </Panel>
   ) : body;
