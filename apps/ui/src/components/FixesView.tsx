@@ -1,3 +1,4 @@
+// i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import type { Game } from '../types';
@@ -8,7 +9,7 @@ import { attentionReason, coverImages, needsAttention, storeLabel } from '../lib
 type Filter = 'attention' | 'all';
 
 export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
-  const { t } = useTranslation('nav');
+  const { t } = useTranslation(['nav', 'fixes']);
   const [filter, setFilter] = useState<Filter>('attention');
   const withData = games.filter((g) => g.fix_info);
   const shown = filter === 'attention' ? withData.filter(needsAttention) : withData;
@@ -19,26 +20,25 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.fixes')}</h1>
           <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">
-            Curated recipes (Lutris, community) and ProtonDB ratings for your library. {withData.length} of {games.length} titles have data.
+            {t('fixes:introWhat')} {t('fixes:introCount', { have: withData.length, total: games.length })}
           </p>
           <p className="mt-1.5 max-w-[75ch] text-[12px] leading-relaxed text-white/70">
-            A fix is a recipe of winetricks packages and DLL overrides for one game. ProtonDB tiers run from Platinum (works out of the box)
-            through Gold, Silver and Bronze to Borked (doesn't run).
+            {t('fixes:about')}
           </p>
         </div>
         <SegRow<Filter>
-          label="Filter"
+          label={t('fixes:filter.label')}
           value={filter}
           onChange={setFilter}
-          options={[{ value: 'attention', label: 'needs attention' }, { value: 'all', label: 'all rated' }]}
+          options={[{ value: 'attention', label: t('fixes:filter.attention') }, { value: 'all', label: t('fixes:filter.all') }]}
         />
       </header>
 
       {shown.length === 0 ? (
-        <EmptyState label={withData.length ? 'all clear' : 'no fix data yet'}>
+        <EmptyState label={withData.length ? t('fixes:empty.clearTitle') : t('fixes:empty.noneTitle')}>
           {withData.length
-            ? 'No titles need attention. Switch to "all rated" to browse ProtonDB tiers.'
-            : 'Compatibility data loads in the background after a scan. ProtonDB needs a network connection.'}
+            ? t('fixes:empty.clearBody', { allLabel: t('fixes:filter.all') })
+            : t('fixes:empty.noneBody')}
         </EmptyState>
       ) : (
         <div className="space-y-3">

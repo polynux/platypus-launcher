@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { FamilyMember, StorePlugin } from '../types';
 import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
@@ -45,6 +47,7 @@ export function FamiliesPanel({ plugin }: { plugin: StorePlugin }) {
 
 /** Loads the members once the capability is on: nothing is asked of a plugin without it. */
 function FamiliesList({ plugin }: { plugin: StorePlugin }) {
+  const { t } = useTranslation('family');
   const [members, setMembers] = useState<FamilyMember[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,17 +63,17 @@ function FamiliesList({ plugin }: { plugin: StorePlugin }) {
   }, [plugin.id]);
 
   return (
-    <section aria-label="Families" className="space-y-2.5">
-      <MonoLabel>families</MonoLabel>
-      {error && <ErrorNotice message={error} fallback="Platypus couldn't read the family members." />}
-      {!error && members === null && <p className="font-mono text-hint text-white/55">loading…</p>}
-      {members && members.length === 0 && <p className="text-[12px] text-white/70">No family members on this account.</p>}
+    <section aria-label={t('family:panel.label')} className="space-y-2.5">
+      <MonoLabel>{t('family:panel.heading')}</MonoLabel>
+      {error && <ErrorNotice message={error} fallback={t('family:panel.error')} />}
+      {!error && members === null && <p className="font-mono text-hint text-white/55">{t('family:panel.loading')}</p>}
+      {members && members.length === 0 && <p className="text-[12px] text-white/70">{t('family:panel.empty')}</p>}
       {members && members.length > 0 && (
-        <ul aria-label="Family members" className="space-y-2">
+        <ul aria-label={t('family:panel.members')} className="space-y-2">
           {members.map((m) => <MemberRow key={m.id} member={m} />)}
         </ul>
       )}
-      <p className="text-hint leading-relaxed text-white/55">Shown as the store reports them. Platypus doesn't enforce the family's rules.</p>
+      <p className="text-hint leading-relaxed text-white/55">{t('family:panel.note')}</p>
     </section>
   );
 }

@@ -1,0 +1,17 @@
+{
+  "panel": {
+    "label": "Families",
+    "heading": "families",
+    "members": "Family members",
+    "loading": "loading…",
+    "empty": "No family members on this account.",
+    "note": "Shown as the store reports them. Platypus doesn't enforce the family's rules.",
+    "error": "Platypus couldn't read the family members."
+  },
+  "role": {
+    "adult": "adult",
+    "child": "child"
+  },
+  "countdown_one": "{{count}} s left",
+  "countdown_other": "{{count}} s left"
+}

@@ -11,10 +11,7 @@
   },
   "folders": {
     "heading": "Game folders",
-    "description": {
-      "before": "Where games install. A store's games go in their own subfolder of the default folder, for example",
-      "after": ". Each game's “Install to…” step offers every folder here. Steam keeps using its own library folders."
-    },
+    "description": "Where games install. A store's games go in their own subfolder of the default folder, for example <path>{{path}}/epic</path>. Each game's “Install to…” step offers every folder here. Steam keeps using its own library folders.",
     "pending": "not created yet",
     "default": "default",
     "makeDefaultLabel": "Make {{folder}} the default folder",

@@ -1,6 +1,6 @@
 // i18n: converted
 import React, { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { FolderOpen, X } from 'lucide-react';
 import { LauncherApi } from '../effect/runtime';
@@ -45,8 +45,11 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
     <section className="max-w-2xl border-t border-white/[0.07] py-6">
       <h2 className="text-[14px] font-bold">{t('folders.heading')}</h2>
       <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-        {t('folders.description.before')}{' '}
-        <span className="font-mono text-hint text-white/75">{shortPath(defaultPath ?? '~/Games') + '/epic'}</span>{t('folders.description.after')}
+        <Trans
+          i18nKey="settings:folders.description"
+          values={{ path: shortPath(defaultPath ?? '~/Games') }}
+          components={{ path: <span className="font-mono text-hint text-white/75" /> }}
+        />
       </p>
       <ul className="divide-y divide-white/[0.06] border-y border-white/[0.07]" aria-label={t('folders.heading')}>
         {(folders ?? []).map((f) => (

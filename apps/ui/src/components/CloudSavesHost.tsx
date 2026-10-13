@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { ActivityEvent, CloudPrompt, CloudStatus, Game } from '../types';
 import { Button } from './ds/button';
 import { Modal } from './Modal';
@@ -30,6 +32,7 @@ export function CloudSavesHost({
   onLog: (e: Omit<ActivityEvent, 'id' | 'ts'>) => void;
 }) {
   const [pending, setPending] = useState<Pending | null>(null);
+  const { t } = useTranslation('cloud');
   const gamesRef = useRef(games);
   gamesRef.current = games;
   const notifyRef = useRef(onNotify);
@@ -55,8 +58,7 @@ export function CloudSavesHost({
   if (!pending) return null;
   const close = () => setPending(null);
   const game = games.find((g) => g.id === pending.gameId);
-  const { title } = pending;
-  const run = (op: Effect.Effect<string, Error>) => {
+  const { title } = pending;  const run = (op: Effect.Effect<string, Error>) => {
     close();
     Effect.runPromise(op).then((m) => m && notifyRef.current(m, 'busy')).catch((e) => notifyRef.current(errMsg(e), 'err'));
   };
@@ -65,12 +67,12 @@ export function CloudSavesHost({
   // dialog that only says what is pending.
   if (!game) {
     return (
-      <Modal label="Cloud saves need a decision" onClose={close}>
+      <Modal label={t('cloud:host.decisionLabel')} onClose={close}>
         <h2 className="text-[19px] font-extrabold tracking-tight">{title}</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-white/70">Open the game's page to decide.</p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-white/70">{t('cloud:host.openGame')}</p>
         <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={close}>Close</Button>
+          <Button variant="ghost" onClick={close}>{t('common:close')}</Button>
         </div>
       </Modal>
     );
@@ -88,7 +90,7 @@ export function CloudSavesHost({
             setPending({ ...pending, status: info.status });
             return;
           }
-          notifyRef.current('Saves settled', 'ok');
+          notifyRef.current(t('cloud:host.settled'), 'ok');
           run(LauncherApi.launchGame(game));
         }}
       />
@@ -98,28 +100,28 @@ export function CloudSavesHost({
   if (pending.kind === 'client-running') {
     const name = pending.client || 'the store client';
     return (
-      <Modal label="Store client running" onClose={close}>
-        <h2 className="text-[19px] font-extrabold tracking-tight">{name} is running</h2>
+      <Modal label={t('cloud:host.clientLabel')} onClose={close}>
+        <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:host.clientRunning', { name })}</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" onClick={close}>Cancel</Button>
-          <Button variant="neutral" onClick={() => run(LauncherApi.launchGameAnyway(game, 'client-running'))}>Launch without cloud sync</Button>
-          <Button variant="primary" onClick={() => run(LauncherApi.launchGameViaClient(game))}>Launch through {name}</Button>
+          <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
+          <Button variant="neutral" onClick={() => run(LauncherApi.launchGameAnyway(game, 'client-running'))}>{t('cloud:host.launchWithoutSync')}</Button>
+          <Button variant="primary" onClick={() => run(LauncherApi.launchGameViaClient(game))}>{t('cloud:panel.launchVia', { name })}</Button>
         </div>
       </Modal>
     );
   }
 
   return (
-    <Modal label="Cloud saves not synced" onClose={close}>
-      <h2 className="text-[19px] font-extrabold tracking-tight">Cloud saves aren't synced</h2>
+    <Modal label={t('cloud:host.offlineLabel')} onClose={close}>
+      <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:host.offlineLabel')}</h2>
       <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
       <p className="mt-2 text-[12.5px] leading-relaxed text-white/70">
-        You can launch {game.title} anyway. Its saves on this device may be older or newer than the cloud's.
+        {t('cloud:host.offlineWhy', { title: game.title })}
       </p>
       <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" onClick={close}>Cancel</Button>
-        <Button variant="primary" onClick={() => run(LauncherApi.launchGameAnyway(game, 'offline'))}>Launch anyway</Button>
+        <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
+        <Button variant="primary" onClick={() => run(LauncherApi.launchGameAnyway(game, 'offline'))}>{t('cloud:host.launchAnyway')}</Button>
       </div>
     </Modal>
   );

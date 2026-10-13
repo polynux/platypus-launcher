@@ -10,6 +10,52 @@
   "later": "Later",
   "details": "Details",
   "retrying": "Retrying…",
+  "done": "Done",
   "libraryRescanned": "Library rescanned",
-  "settingsSaved": "Settings saved"
+  "settingsSaved": "Settings saved",
+  "redeem": {
+    "label": "Redeem a code",
+    "heading": "redeem",
+    "title": "Redeem a code",
+    "store": "Store",
+    "code": "Code",
+    "codePlaceholder": "XXXXX-XXXXX-XXXXX",
+    "granted": "granted",
+    "redeemAnother": "Redeem another",
+    "redeem": "Redeem",
+    "redeeming": "Redeeming…",
+    "error": "That code didn't go through."
+  },
+  "lightbox": {
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next",
+    "closeViewer": "Close viewer",
+    "previousMedia": "Previous media",
+    "nextMedia": "Next media",
+    "viewer": "{{alt}} media viewer",
+    "video": "{{alt}} video {{index}}",
+    "videoTitle": ": {{title}}",
+    "screenshot": "{{alt}} screenshot {{index}}",
+    "media": "{{alt}} media {{index}}",
+    "videoError": "This video can't be played here."
+  },
+  "terms": {
+    "dialogLabel": "Terms for {{title}}",
+    "heading": "Terms for {{title}}",
+    "intro": "Read these before {{title}} is installed. Platypus doesn't accept them for you.",
+    "version": "version {{version}}",
+    "read": "Read",
+    "accept": "I accept",
+    "error": "Platypus couldn't read the terms just now."
+  },
+  "legal": {
+    "label": "Legal",
+    "heading": "legal",
+    "version": "v{{version}}",
+    "accepted": "accepted {{date}}",
+    "pending": "not accepted yet",
+    "read": "read",
+    "error": "Platypus couldn't read the terms for this game."
+  }
 }

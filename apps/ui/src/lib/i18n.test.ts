@@ -104,7 +104,7 @@ describe('pluralization (JSON v4 _one/_other via Intl.PluralRules)', () => {
       resources: {
         en: {
           common: {
-            ...(enCommon as Record<string, string>),
+            ...(enCommon as Record<string, unknown>),
             i18nTestGames_one: '{{count}} game',
             i18nTestGames_other: '{{count}} games',
           },

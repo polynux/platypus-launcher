@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { RedeemResult, StorePlugin } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
@@ -17,6 +19,7 @@ export const MAX_CODE_LENGTH = 128;
  *  now (`stores`, the caller filters them). The code goes to that store only;
  *  the result lists what it granted. A second submit waits for the first. */
 export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClose: () => void }) {
+  const { t } = useTranslation('common');
   const [storeId, setStoreId] = useState(stores[0]?.id ?? '');
   const plugin = stores.find((s) => s.id === storeId) ?? stores[0];
   const [code, setCode] = useState('');
@@ -40,32 +43,32 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
   };
 
   return (
-    <Modal label="Redeem a code" onClose={onClose}>
+    <Modal label={t('common:redeem.label')} onClose={onClose}>
       <div className="p-6">
-        <MonoLabel className="mb-2">redeem</MonoLabel>
-        <h2 className="mb-4 text-[18px] font-bold">Redeem a code</h2>
+        <MonoLabel className="mb-2">{t('common:redeem.heading')}</MonoLabel>
+        <h2 className="mb-4 text-[18px] font-bold">{t('common:redeem.title')}</h2>
         {result ? (
           <div className="space-y-3 text-[14px]">
             <p className="text-white/80">{result.message}</p>
             {result.titles.length > 0 && (
               <div>
-                <MonoLabel className="mb-1">granted</MonoLabel>
+                <MonoLabel className="mb-1">{t('common:redeem.granted')}</MonoLabel>
                 <ul className="space-y-1">
-                  {result.titles.map((t) => (
-                    <li key={t} className="text-amber-200">{t}</li>
+                  {result.titles.map((title) => (
+                    <li key={title} className="text-amber-200">{title}</li>
                   ))}
                 </ul>
               </div>
             )}
             <div className="mt-6 flex gap-2">
-              <Button onClick={() => setResult(null)} className="flex-1 text-white/70">Redeem another</Button>
-              <Button onClick={onClose} className="flex-1 text-sky-100">Done</Button>
+              <Button onClick={() => setResult(null)} className="flex-1 text-white/70">{t('common:redeem.redeemAnother')}</Button>
+              <Button onClick={onClose} className="flex-1 text-sky-100">{t('common:done')}</Button>
             </div>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3">
             <label className="block text-[13px] text-white/70">
-              Store
+              {t('common:redeem.store')}
               <select
                 value={plugin?.id ?? ''}
                 onChange={(e) => { setStoreId(e.target.value); setError(null); }}
@@ -78,7 +81,7 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
               </select>
             </label>
             <label className="block text-[13px] text-white/70">
-              Code
+              {t('common:redeem.code')}
               <Input
                 value={code}
                 maxLength={MAX_CODE_LENGTH}
@@ -86,15 +89,15 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
                 autoComplete="off"
                 spellCheck={false}
                 className="mt-1.5 font-mono"
-                placeholder="XXXXX-XXXXX-XXXXX"
+                placeholder={t('common:redeem.codePlaceholder')}
                 disabled={busy}
               />
             </label>
-            {error && <ErrorNotice className="text-[13px]" message={error} fallback="That code didn't go through." />}
+            {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('common:redeem.error')} />}
             <div className="mt-6 flex gap-2">
-              <Button type="button" onClick={onClose} className="flex-1 text-white/70">Cancel</Button>
+              <Button type="button" onClick={onClose} className="flex-1 text-white/70">{t('common:cancel')}</Button>
               <Button type="submit" disabled={!plugin || !code.trim() || busy} className="flex-1 text-sky-100">
-                {busy ? 'Redeeming…' : 'Redeem'}
+                {busy ? t('common:redeem.redeeming') : t('common:redeem.redeem')}
               </Button>
             </div>
           </form>

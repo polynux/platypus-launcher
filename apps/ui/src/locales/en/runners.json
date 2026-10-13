@@ -1,0 +1,13 @@
+{
+  "intro": "Proton, GE-Proton and Wine builds detected on this system.",
+  "about": "A runner is the build that runs a Windows game on Linux. Each game picks one in its settings; native Linux games need none.",
+  "rescan": "Rescan",
+  "scanning": "Scanning",
+  "emptyTitle": "no runners",
+  "emptyBody": "No Proton or Wine builds found. Install Proton from Steam, or drop GE-Proton into ~/.steam/root/compatibilitytools.d.",
+  "badge": {
+    "custom": "custom",
+    "system": "system",
+    "found": "found"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "introWhat": "Curated recipes (Lutris, community) and ProtonDB ratings for your library.",
+  "introCount": "{{have}} of {{total}} titles have data.",
+  "about": "A fix is a recipe of winetricks packages and DLL overrides for one game. ProtonDB tiers run from Platinum (works out of the box) through Gold, Silver and Bronze to Borked (doesn't run).",
+  "filter": {
+    "label": "Filter",
+    "attention": "needs attention",
+    "all": "all rated"
+  },
+  "empty": {
+    "clearTitle": "all clear",
+    "clearBody": "No titles need attention. Switch to “{{allLabel}}” to browse ProtonDB tiers.",
+    "noneTitle": "no fix data yet",
+    "noneBody": "Compatibility data loads in the background after a scan. ProtonDB needs a network connection."
+  },
+  "attention": {
+    "borked": "ProtonDB reports this title as borked. Try a different runner or check the reports.",
+    "bronze": "ProtonDB rates this title bronze. It may need tweaks to run well."
+  }
+}

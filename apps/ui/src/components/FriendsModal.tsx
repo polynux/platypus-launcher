@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
 import { Modal } from './Modal';
 import { cx, LinkButton } from './ui';
@@ -11,12 +13,12 @@ import { FamiliesPanel } from './FamiliesPanel';
 import {
   canSetStatus,
   connectionLine,
-  FRIEND_STATE_LABEL,
+  friendStateLabel,
   groupFriends,
   initials,
   SOCIAL_STATUSES,
   stateDot,
-  STATUS_LABEL,
+  statusLabel,
 } from '../lib/social';
 import type { SocialFriend, SocialStatus, SocialView, StorePlugin } from '../types';
 
@@ -54,27 +56,28 @@ const ROWS_PER_GROUP = 200;
 /** Every store's friends in one modal: a section per store, grouped In game /
  *  Online / Offline, with a search over all of them. */
 export function FriendsModal(p: FriendsModalProps) {
+  const { t } = useTranslation('chat');
   const [query, setQuery] = useState('');
   if (p.chat) {
     return (
-      <Modal label="Friends" onClose={p.onBackFromChat ?? p.onClose} size="lg">
+      <Modal label={t('chat:modal.title')} onClose={p.onBackFromChat ?? p.onClose} size="lg">
         <div className="flex h-[70vh] max-h-[640px] flex-col p-5">{p.chat}</div>
       </Modal>
     );
   }
   return (
-    <Modal label="Friends" onClose={p.onClose} size="lg">
+    <Modal label={t('chat:modal.title')} onClose={p.onClose} size="lg">
       <div className="flex max-h-[80vh] flex-col gap-4 p-5">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[17px] font-extrabold tracking-tight">Friends</h2>
+          <h2 className="text-[17px] font-extrabold tracking-tight">{t('chat:modal.title')}</h2>
           <label className="relative block w-64">
-            <span className="sr-only">Search friends</span>
+            <span className="sr-only">{t('chat:modal.searchLabel')}</span>
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/55" />
             <Input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search friends…"
+              placeholder={t('chat:modal.searchPlaceholder')}
               className="pl-8.5 font-sans"
             />
           </label>
@@ -93,22 +96,23 @@ export function FriendsModal(p: FriendsModalProps) {
 type SectionProps = FriendsModalProps & { view: SocialView; label: string; query: string };
 
 function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame, unreadOf, onOpenChat, chatAlerts, onSetChatAlerts }: SectionProps) {
+  const { t } = useTranslation('chat');
   const line = connectionLine(view.connection);
   const storePlugin = plugins.find((x) => x.id === view.plugin);
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
   const total = groups.inGame.length + groups.online.length + groups.offline.length;
   const canReconnect = view.connection.state === 'replaced' || view.connection.state === 'loggedOut';
   return (
-    <section aria-label={`${label} friends`} className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 first:border-t-0 first:pt-0">
+    <section aria-label={t('chat:modal.section', { label })} className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 first:border-t-0 first:pt-0">
       <header className="flex items-center justify-between gap-3">
         <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-white/55">{label}</h3>
         <Button variant="ghost" size="sm" onClick={() => onSetEnabled(view.plugin, !view.enabled)}>
-          {view.enabled ? 'Turn off' : 'Turn on'}
+          {view.enabled ? t('chat:modal.turnOff') : t('chat:modal.turnOn')}
         </Button>
       </header>
 
       {!view.enabled ? (
-        <p className="text-[12.5px] text-white/70">Friends are off for {label}. Turn them on to see who is online.</p>
+        <p className="text-[12.5px] text-white/70">{t('chat:modal.friendsOff', { label })}</p>
       ) : (
         <>
           {line && (
@@ -116,24 +120,24 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
               <span>{line}</span>
               {canReconnect && (
                 <Button variant="ghost" size="sm" onClick={() => onReconnect(view.plugin)}>
-                  Reconnect
+                  {t('chat:modal.reconnect')}
                 </Button>
               )}
             </div>
           )}
           <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/60">
-            <span>Show what I&apos;m playing to friends</span>
+            <span>{t('chat:modal.showPlaying')}</span>
             <Switch
-              aria-label={`Show what I'm playing to friends on ${label}`}
+              aria-label={t('chat:modal.showPlayingLabel', { label })}
               checked={view.showPlaying}
               onCheckedChange={(show) => onSetPlaying(view.plugin, show)}
             />
           </label>
           {chatAlerts && onSetChatAlerts && view.plugin in chatAlerts && (
             <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/60">
-              <span>Alert me to new messages from friends</span>
+              <span>{t('chat:modal.chatAlerts')}</span>
               <Switch
-                aria-label={`Message alerts on ${label}`}
+                aria-label={t('chat:modal.chatAlertsLabel', { label })}
                 checked={chatAlerts[view.plugin]}
                 onCheckedChange={(on) => onSetChatAlerts(view.plugin, on)}
               />
@@ -150,12 +154,12 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
                 disabled={!canSetStatus(view)}
                 onValueChange={(v) => onSetStatus(view.plugin, v as SocialStatus)}
               >
-                <SelectTrigger aria-label={`Your status on ${label}`} className="w-36">
+                <SelectTrigger aria-label={t('chat:modal.statusLabel', { label })} className="w-36">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {SOCIAL_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+                    <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -164,13 +168,13 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
 
           {total === 0 && (
             <p className="text-[12.5px] text-white/70">
-              {view.friends.length === 0 ? `No friends on ${label} yet.` : `No friends match “${query.trim()}”.`}
+              {view.friends.length === 0 ? t('chat:modal.noFriends', { label }) : t('chat:modal.noMatch', { query: query.trim() })}
             </p>
           )}
 
-          <FriendGroup title="In game" friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
-          <FriendGroup title="Online" friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
-          <FriendGroup title="Offline" friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.inGame')} friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.online')} friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.offline')} friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
         </>
       )}
 
@@ -189,6 +193,7 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
   onOpenChat?: (plugin: string, friend: SocialFriend) => void;
 }) {
   const [shown, setShown] = useState(ROWS_PER_GROUP);
+  const { t } = useTranslation('chat');
   if (friends.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
@@ -204,19 +209,19 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
               onOpenChat={onOpenChat && (() => onOpenChat(plugin, f))}
             />
             {unreadOf && unreadOf(plugin, f.id) > 0 && (
-              <span aria-label={`${unreadOf(plugin, f.id)} unread messages`} className="rounded-full bg-amber-300 px-1.5 font-mono text-hint font-bold text-[#130f0a]">
+              <span aria-label={t('chat:row.unread', { count: unreadOf(plugin, f.id) })} className="rounded-full bg-amber-300 px-1.5 font-mono text-hint font-bold text-[#130f0a]">
                 {unreadOf(plugin, f.id)}
               </span>
             )}
             {f.game?.id && inLibrary(f.game.id) && (
-              <LinkButton onClick={() => onOpenGame(f.game!.id!)}>open</LinkButton>
+              <LinkButton onClick={() => onOpenGame(f.game!.id!)}>{t('chat:row.openGame')}</LinkButton>
             )}
           </li>
         ))}
       </ul>
       {friends.length > shown && (
         <LinkButton onClick={() => setShown((n) => n + ROWS_PER_GROUP)}>
-          Show {Math.min(ROWS_PER_GROUP, friends.length - shown)} more
+          {t('chat:group.showMore', { count: Math.min(ROWS_PER_GROUP, friends.length - shown) })}
         </LinkButton>
       )}
     </div>
@@ -224,13 +229,14 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
 }
 
 function FriendRowMain({ friend: f, onOpenChat }: { friend: SocialFriend; onOpenChat?: () => void }) {
+  const { t } = useTranslation('chat');
   const body = (
     <>
       <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold text-white/85">{f.name}</div>
         <div className="truncate text-hint text-white/55">
-          {f.game ? `Playing ${f.game.title}` : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? `Last seen ${agoLabel(f.lastSeen)}` : 'Offline') : FRIEND_STATE_LABEL[f.state]}
+          {f.game ? t('chat:row.playing', { title: f.game.title }) : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? t('chat:row.lastSeen', { when: agoLabel(f.lastSeen) }) : t('chat:row.offline')) : friendStateLabel(f.state)}
         </div>
       </div>
     </>

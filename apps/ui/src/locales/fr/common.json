@@ -10,6 +10,52 @@
   "later": "Plus tard",
   "details": "Détails",
   "retrying": "Nouvel essai…",
+  "done": "Terminé",
   "libraryRescanned": "Bibliothèque actualisée",
-  "settingsSaved": "Paramètres enregistrés"
+  "settingsSaved": "Paramètres enregistrés",
+  "redeem": {
+    "label": "Utiliser un code",
+    "heading": "utiliser",
+    "title": "Utiliser un code",
+    "store": "Boutique",
+    "code": "Code",
+    "codePlaceholder": "XXXXX-XXXXX-XXXXX",
+    "granted": "attribué",
+    "redeemAnother": "Utiliser un autre code",
+    "redeem": "Utiliser",
+    "redeeming": "Utilisation…",
+    "error": "Ce code n'est pas passé."
+  },
+  "lightbox": {
+    "close": "Fermer",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "closeViewer": "Fermer la visionneuse",
+    "previousMedia": "Média précédent",
+    "nextMedia": "Média suivant",
+    "viewer": "Visionneuse média de {{alt}}",
+    "video": "{{alt}}, vidéo {{index}}",
+    "videoTitle": " : {{title}}",
+    "screenshot": "{{alt}}, capture {{index}}",
+    "media": "{{alt}}, média {{index}}",
+    "videoError": "Cette vidéo ne peut pas être lue ici."
+  },
+  "terms": {
+    "dialogLabel": "Conditions pour {{title}}",
+    "heading": "Conditions pour {{title}}",
+    "intro": "Lisez-les avant que {{title}} soit installé. Platypus ne les accepte pas pour vous.",
+    "version": "version {{version}}",
+    "read": "Lire",
+    "accept": "J'accepte",
+    "error": "Platypus n'a pas pu lire les conditions."
+  },
+  "legal": {
+    "label": "Mentions légales",
+    "heading": "mentions légales",
+    "version": "v{{version}}",
+    "accepted": "accepté le {{date}}",
+    "pending": "pas encore accepté",
+    "read": "lire",
+    "error": "Platypus n'a pas pu lire les conditions de ce jeu."
+  }
 }

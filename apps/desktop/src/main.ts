@@ -139,7 +139,7 @@ function registerChatIPC(): void {
     } catch {
       settingOn = true;
     }
-    const outcome = chatNotifier.notify(raw, { focused, settingOn }, () =>
+    const outcome = chatNotifier.notify(raw, { focused, settingOn, lang: shellLang }, () =>
       openChatConversation(raw.plugin, raw.friendId),
     );
     return { ok: true, shown: outcome !== 'dropped' };

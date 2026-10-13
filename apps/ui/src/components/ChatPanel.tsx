@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cx, LinkButton } from './ui';
 import { Button } from './ds/button';
 import { Textarea } from './ds/textarea';
@@ -27,6 +29,7 @@ interface ChatPanelProps {
  *  only when they are http or https; everything else is plain text. It lives inside the friends modal,
  *  which provides the dialog and its Escape handling. */
 export function ChatPanel(p: ChatPanelProps) {
+  const { t } = useTranslation('chat');
   const [text, setText] = useState('');
   const log = useRef<HTMLDivElement>(null);
   // Whether the log is at its newest end as the user left it: only then does a new message follow it down.
@@ -67,7 +70,7 @@ export function ChatPanel(p: ChatPanelProps) {
         <div className="flex min-w-0 items-center gap-2">
           {p.onBack && (
             <Button variant="ghost" size="sm" onClick={p.onBack} className="flex-none">
-              Back
+              {t('common:back')}
             </Button>
           )}
           <div className="min-w-0">
@@ -76,7 +79,7 @@ export function ChatPanel(p: ChatPanelProps) {
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={p.onClose} className="flex-none">
-          Close
+          {t('common:close')}
         </Button>
       </header>
 
@@ -89,7 +92,7 @@ export function ChatPanel(p: ChatPanelProps) {
       <div
         ref={log}
         role="log"
-        aria-label={`Messages with ${p.friendName}`}
+        aria-label={t('chat:panel.logLabel', { name: p.friendName })}
         onScroll={(e) => {
           const el = e.currentTarget;
           atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -98,26 +101,26 @@ export function ChatPanel(p: ChatPanelProps) {
       >
         {p.view?.more && (
           <div className="self-center">
-            <LinkButton onClick={p.onLoadOlder}>Load older messages</LinkButton>
+            <LinkButton onClick={p.onLoadOlder}>{t('chat:panel.loadOlder')}</LinkButton>
           </div>
         )}
-        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/70">Loading…</p>}
+        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/70">{t('chat:panel.loading')}</p>}
         {p.view?.loaded && messages.length === 0 && (
-          <p className="text-[12.5px] text-white/70">No messages yet. Say hello.</p>
+          <p className="text-[12.5px] text-white/70">{t('chat:panel.empty')}</p>
         )}
         {messages.map((m) => (
           <MessageRow key={messageKey(m)} message={m} onResend={p.onResend} />
         ))}
       </div>
 
-      {p.view?.typing && <p className="text-hint italic text-white/55">{p.friendName} is typing…</p>}
+      {p.view?.typing && <p className="text-hint italic text-white/55">{t('chat:panel.typing', { name: p.friendName })}</p>}
 
       <div className="flex items-end gap-2">
         <Textarea
-          aria-label={`Message ${p.friendName}`}
+          aria-label={t('chat:panel.messageLabel', { name: p.friendName })}
           rows={2}
           value={text}
-          placeholder="Write a message"
+          placeholder={t('chat:panel.placeholder')}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -128,7 +131,7 @@ export function ChatPanel(p: ChatPanelProps) {
           className="flex-1 font-sans"
         />
         <Button variant="primary" size="md" onClick={submit} disabled={!canSendChat(text)}>
-          Send
+          {t('chat:panel.send')}
         </Button>
       </div>
     </div>
@@ -139,8 +142,9 @@ function MessageRow({ message, onResend }: {
   message: ChatMessage;
   onResend: (clientId: string) => void;
 }) {
+  const { t } = useTranslation('chat');
   const mine = message.from === 'self';
-  const state = message.status === 'sending' ? 'Sending…' : message.status === 'failed' ? 'Not sent' : clockLabel(message.sentAt);
+  const state = message.status === 'sending' ? t('chat:panel.sending') : message.status === 'failed' ? t('chat:panel.notSent') : clockLabel(message.sentAt);
   return (
     <div className={cx('flex max-w-[82%] flex-col gap-0.5', mine ? 'self-end items-end' : 'self-start items-start')}>
       <div
@@ -163,7 +167,7 @@ function MessageRow({ message, onResend }: {
       <div className="flex items-center gap-2 font-mono text-hint text-white/55">
         <span className={message.status === 'failed' ? 'text-red-300' : undefined}>{state}</span>
         {message.status === 'failed' && message.clientId && (
-          <LinkButton onClick={() => onResend(message.clientId!)}>Send again</LinkButton>
+          <LinkButton onClick={() => onResend(message.clientId!)}>{t('chat:panel.sendAgain')}</LinkButton>
         )}
       </div>
     </div>

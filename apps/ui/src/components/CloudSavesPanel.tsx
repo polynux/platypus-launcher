@@ -1,12 +1,14 @@
+// i18n: converted
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { Loader2, Play, RefreshCw, X } from 'lucide-react';
 import type { CloudInfo, CloudMode, Game, StorePlugin } from '../types';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
 import { CapabilitySurface } from '../lib/capabilities';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
-import { MODE_HELP, STATE_CHIP, agoLabel, asCloudMode, describeCounts } from '../lib/cloud';
+import { agoLabel, asCloudMode, describeCounts, modeHelp, modeName, stateChip } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { ErrorNotice, RawDetails } from './ErrorNotice';
 import { MonoLabel, Panel, SegRow, cx } from './ui';
@@ -31,6 +33,7 @@ export function CloudSavesPanel({ game, plugin, framed = true }: { game: Game; p
 }
 
 function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
+  const { t } = useTranslation('cloud');
   const [info, setInfo] = useState<CloudInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +119,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
 
   const st = info?.status ?? null;
   const busy = checking || !!progress || !!info?.busy;
-  const chip = st ? STATE_CHIP[st.state] : null;
+  const chip = st ? stateChip(st.state) : null;
   const client = st?.client?.running ? st.client : null;
   const when = st?.checkedAt ? agoLabel(st.checkedAt) : '';
   const running = !!info?.running;
@@ -125,11 +128,11 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
   return (
     <Frame>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-[15px] font-bold">Cloud saves</h2>
+        <h2 className="text-[15px] font-bold">{t('cloud:panel.title')}</h2>
         {chip ? (
           <Badge data-testid="cloud-state" variant={chip.variant}>{chip.label}</Badge>
         ) : (
-          <Badge data-testid="cloud-state" variant="neutral">{info?.mode === 'off' ? 'off' : checking ? 'checking' : 'not checked'}</Badge>
+          <Badge data-testid="cloud-state" variant="neutral">{info?.mode === 'off' ? t('cloud:state.off') : checking ? t('cloud:state.checking') : t('cloud:state.unchecked')}</Badge>
         )}
       </div>
 
@@ -142,23 +145,23 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
       {st && describeCounts(st.counts) && (
         <p className="mt-1.5 font-mono text-hint text-white/55" data-testid="cloud-counts">{describeCounts(st.counts)}</p>
       )}
-      {when && <p className="mt-1 font-mono text-hint text-white/55">checked {when}</p>}
+      {when && <p className="mt-1 font-mono text-hint text-white/55">{t('cloud:panel.checked', { when })}</p>}
       {info?.skipped && (
         <p role="note" className="mt-2 text-[12px] leading-relaxed text-white/65" data-testid="cloud-skipped">
-          Launches don't sync these saves: {info.skipped}
+          {t('cloud:panel.skipped', { reason: info.skipped })}
         </p>
       )}
 
       {client && (
         <div role="note" className="mt-3 rounded-xl bg-amber-300/[0.07] px-3.5 py-2.5 text-[12px] leading-relaxed text-white/75 ring-1 ring-amber-300/25">
           <p>
-            <span className="font-bold text-amber-200">{client.name} is running.</span>{' '}
-            Platypus doesn't sync this game while it is open, because two programs writing the same saves cause conflicts.
-            {client.canLaunch ? ` Launch it through ${client.name} instead, or close ${client.name} to sync.` : ` Close ${client.name} to sync.`}
+            <span className="font-bold text-amber-200">{t('cloud:panel.clientRunning', { name: client.name })}</span>{' '}
+            {t('cloud:panel.clientWhy')}{' '}
+            {client.canLaunch ? t('cloud:panel.clientInstead', { name: client.name }) : t('cloud:panel.clientClose', { name: client.name })}
           </p>
           {client.canLaunch && (
             <Button variant="neutral" size="sm" className="mt-2" onClick={viaClient}>
-              <Play className="h-3.5 w-3.5" /> Launch through {client.name}
+              <Play className="h-3.5 w-3.5" /> {t('cloud:panel.launchVia', { name: client.name })}
             </Button>
           )}
         </div>
@@ -173,7 +176,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
               {progress && progress.total > 0 ? ` · ${progress.done}/${progress.total}` : ''}
             </span>
             {!checking && (
-              <Button variant="ghost" size="none" className="rounded p-0.5" aria-label="Cancel cloud sync" onClick={cancel}>
+              <Button variant="ghost" size="none" className="rounded p-0.5" aria-label={t('cloud:panel.cancelSync')} onClick={cancel}>
                 <X className="h-3.5 w-3.5" />
               </Button>
             )}
@@ -189,36 +192,36 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
 
       {/* The same reason as the note above is not repeated as an error. */}
       {error && error !== info?.skipped && (
-        <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't reach the cloud saves just now." />
+        <ErrorNotice className="mt-2" message={error} fallback={t('cloud:panel.error')} />
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="neutral" size="sm" onClick={() => void check()} disabled={checking || !!progress}>
-          <RefreshCw className={cx('h-3.5 w-3.5', checking && 'animate-spin')} /> Check now
+          <RefreshCw className={cx('h-3.5 w-3.5', checking && 'animate-spin')} /> {t('cloud:panel.check')}
         </Button>
         {st?.state === 'conflict' && (st.conflicts?.length ?? 0) > 0 && (
-          <Button variant="primary" size="sm" disabled={running} onClick={() => setResolving(true)}>Choose which saves to keep…</Button>
+          <Button variant="primary" size="sm" disabled={running} onClick={() => setResolving(true)}>{t('cloud:panel.choose')}</Button>
         )}
       </div>
       {running && st?.state === 'conflict' && (
-        <p className="mt-2 text-hint text-white/55">{game.title} is running. Choose its saves after it exits.</p>
+        <p className="mt-2 text-hint text-white/55">{t('cloud:panel.runningConflict', { title: game.title })}</p>
       )}
 
       {info && (
         <div className="mt-4 border-t border-white/[0.05] pt-3">
-          <MonoLabel className="mb-1.5">sync for this game</MonoLabel>
+          <MonoLabel className="mb-1.5">{t('cloud:panel.syncForGame')}</MonoLabel>
           <SegRow<CloudMode | 'default'>
-            label="Sync mode for this game"
+            label={t('cloud:panel.modeLabel')}
             value={info.game_mode ? asCloudMode(info.game_mode) : 'default'}
             onChange={setMode}
             options={[
-              { value: 'default', label: `Default · ${info.plugin_mode}`, title: 'Follow the store plugin\'s setting' },
-              { value: 'off', label: 'Off' },
-              { value: 'ask', label: 'Ask' },
-              { value: 'auto', label: 'Auto' },
+              { value: 'default', label: t('cloud:panel.defaultOption', { mode: modeName(asCloudMode(info.plugin_mode)) }), title: t('cloud:panel.defaultTitle') },
+              { value: 'off', label: t('cloud:mode.off') },
+              { value: 'ask', label: t('cloud:mode.ask') },
+              { value: 'auto', label: t('cloud:mode.auto') },
             ]}
           />
-          <p className="mt-2 text-hint leading-snug text-white/55">{MODE_HELP[info.mode]}</p>
+          <p className="mt-2 text-hint leading-snug text-white/55">{modeHelp(info.mode)}</p>
         </div>
       )}
 

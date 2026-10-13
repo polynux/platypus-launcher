@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import type { CloudConflict, CloudInfo, CloudStatus, Game } from '../types';
 import { Badge } from './ds/badge';
@@ -28,6 +30,7 @@ interface Props {
  *  sizes and dates and a choice (Keep this device / Keep cloud / Decide later).
  *  Platypus never picks for the user. */
 export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunchAnyway }: Props) {
+  const { t } = useTranslation('cloud');
   const conflicts = status.conflicts ?? [];
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [busy, setBusy] = useState(false);
@@ -49,40 +52,39 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
   };
 
   return (
-    <Modal label="Cloud save conflict" onClose={onClose} size="lg">
-      <h2 className="text-[19px] font-extrabold tracking-tight">Saves changed on both sides</h2>
+    <Modal label={t('cloud:conflict.label')} onClose={onClose} size="lg">
+      <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:conflict.heading')}</h2>
       <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">
-        {game.title} has {conflicts.length === 1 ? 'a save file' : `${conflicts.length} save files`} that changed on this device and in the cloud.
-        Platypus won't overwrite either without your say. Keeping the cloud copy backs up the file on this device first;
-        keeping this device's copy replaces the cloud one.
+        {t('cloud:conflict.intro', { title: game.title, count: conflicts.length })}{' '}
+        {t('cloud:conflict.explanation')}
       </p>
 
       {conflicts.length > 1 && (
         <div className="mt-3 flex items-center gap-3 font-mono text-hint text-white/55">
-          all files:
-          <Button variant="link" onClick={() => setAll('local')}>keep this device</Button>
-          <Button variant="link" onClick={() => setAll('remote')}>keep cloud</Button>
-          <Button variant="link" onClick={() => setAll('later')}>decide later</Button>
+          {t('cloud:conflict.allFiles')}
+          <Button variant="link" onClick={() => setAll('local')}>{t('cloud:conflict.keepLocal')}</Button>
+          <Button variant="link" onClick={() => setAll('remote')}>{t('cloud:conflict.keepRemote')}</Button>
+          <Button variant="link" onClick={() => setAll('later')}>{t('cloud:conflict.decideLater')}</Button>
         </div>
       )}
 
-      <ul aria-label="Conflicting files" className="mt-4 space-y-3">
+      <ul aria-label={t('cloud:conflict.filesLabel')} className="mt-4 space-y-3">
         {conflicts.map((c) => (
           <li key={c.path} className="rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/[0.07]">
             <div className="truncate font-mono text-[12px] text-white/85 select-text" title={c.path}>{c.path}</div>
             <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
-              <Side title="This device" file={c.local} newer={newerSide(c) === 'local'} />
-              <Side title="Cloud" file={c.remote} newer={newerSide(c) === 'remote'} from={c.remote.machine} />
+              <Side title={t('cloud:conflict.local')} file={c.local} newer={newerSide(c) === 'local'} />
+              <Side title={t('cloud:conflict.remote')} file={c.remote} newer={newerSide(c) === 'remote'} from={c.remote.machine} />
             </div>
             <div className="mt-3">
               <SegRow<Choice>
-                label={`Choice for ${c.path}`}
+                label={t('cloud:conflict.choice', { path: c.path })}
                 value={choiceOf(c.path)}
                 onChange={(v) => setChoices((prev) => ({ ...prev, [c.path]: v }))}
                 options={[
-                  { value: 'local', label: 'Keep this device' },
-                  { value: 'remote', label: 'Keep cloud' },
-                  { value: 'later', label: 'Decide later' },
+                  { value: 'local', label: t('cloud:conflict.optLocal') },
+                  { value: 'remote', label: t('cloud:conflict.optRemote') },
+                  { value: 'later', label: t('cloud:conflict.optLater') },
                 ]}
               />
             </div>
@@ -90,19 +92,19 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
         ))}
       </ul>
 
-      {status.backupDir && <p className="mt-3 font-mono text-hint text-white/55 select-text">backups: {status.backupDir}</p>}
-      {error && <ErrorNotice className="mt-3" message={error} fallback="Platypus couldn't settle these saves. Nothing was changed on either side." />}
+      {status.backupDir && <p className="mt-3 font-mono text-hint text-white/55 select-text">{t('cloud:conflict.backups', { dir: status.backupDir })}</p>}
+      {error && <ErrorNotice className="mt-3" message={error} fallback={t('cloud:conflict.error')} />}
 
       <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
         {onLaunchAnyway && (
           <Button variant="neutral" onClick={onLaunchAnyway} disabled={busy} className="mr-auto">
-            Launch without resolving
+            {t('cloud:conflict.launchAnyway')}
           </Button>
         )}
-        <Button variant="ghost" onClick={onClose} disabled={busy}>Close</Button>
+        <Button variant="ghost" onClick={onClose} disabled={busy}>{t('common:close')}</Button>
         <Button variant="primary" onClick={apply} disabled={busy || chosen.length === 0}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          {chosen.length === 0 ? 'Apply choices' : `Apply ${chosen.length} choice${chosen.length === 1 ? '' : 's'}`}
+          {chosen.length === 0 ? t('cloud:conflict.applyNone') : t('cloud:conflict.apply', { count: chosen.length })}
         </Button>
       </div>
     </Modal>
@@ -115,15 +117,16 @@ function newerSide(c: CloudConflict): 'local' | 'remote' | null {
 }
 
 function Side({ title, file, newer, from }: { title: string; file: CloudConflict['local']; newer: boolean; from?: string }) {
+  const { t } = useTranslation('cloud');
   return (
     <div className={cx('rounded-xl px-3 py-2.5 ring-1', newer ? 'bg-amber-300/[0.06] ring-amber-300/25' : 'ring-white/[0.07]')}>
       <div className="flex items-center justify-between gap-2">
         <MonoLabel>{title}</MonoLabel>
-        {newer && <Badge variant="accent">newer</Badge>}
+        {newer && <Badge variant="accent">{t('cloud:conflict.newer')}</Badge>}
       </div>
       <div className="mt-1.5 font-mono text-[12px] text-white/85">{fileSize(file.size)}</div>
       <div className="font-mono text-hint text-white/55">{whenLabel(file.mtime)}</div>
-      {from && <div className="font-mono text-hint text-white/55">from {from}</div>}
+      {from && <div className="font-mono text-hint text-white/55">{t('cloud:conflict.from', { machine: from })}</div>}
     </div>
   );
 }

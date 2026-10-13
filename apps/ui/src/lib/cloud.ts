@@ -1,6 +1,7 @@
 import type { CloudEvent, CloudInfo, CloudMode, CloudState, CloudStatus } from '../types';
 import { formatBytes } from './games';
 import { currentLocale } from './format';
+import i18n from './i18n';
 import { plainError } from './plainError';
 
 export const CLOUD_MODES: CloudMode[] = ['off', 'ask', 'auto'];
@@ -11,31 +12,66 @@ export function asCloudMode(s: string): CloudMode {
   return s === 'off' || s === 'auto' ? s : 'ask';
 }
 
-export const MODE_HELP: Record<CloudMode, string> = {
-  off: "Platypus doesn't sync this game's saves.",
-  ask: 'Syncs on its own when nothing clashes; asks when saves changed on both sides or the store is unreachable.',
-  auto: 'Like ask, but once you launch anyway while the store is unreachable it stops asking for this game. Conflicts always ask.',
+/** What a sync mode means, as the game page and Settings name it. Unknown wire
+ *  values read as "ask", like asCloudMode. */
+const MODE_HELP_KEY: Record<CloudMode, string> = {
+  off: 'cloud:modeHelp.off',
+  ask: 'cloud:modeHelp.ask',
+  auto: 'cloud:modeHelp.auto',
 };
+
+export function modeHelp(mode: string): string {
+  return i18n.t(MODE_HELP_KEY[asCloudMode(mode)]);
+}
+
+/** A sync mode on its own, as the mode controls name it. */
+const MODE_NAME_KEY: Record<CloudMode, string> = {
+  off: 'cloud:mode.off',
+  ask: 'cloud:mode.ask',
+  auto: 'cloud:mode.auto',
+};
+
+export function modeName(mode: string): string {
+  return i18n.t(MODE_NAME_KEY[asCloudMode(mode)]);
+}
 
 type ChipVariant = 'ok' | 'info' | 'bronze' | 'neutral' | 'borked';
 
-export const STATE_CHIP: Record<CloudState, { label: string; variant: ChipVariant }> = {
-  synced: { label: 'in sync', variant: 'ok' },
-  pending: { label: 'changes waiting', variant: 'info' },
-  conflict: { label: 'conflict', variant: 'bronze' },
-  unsupported: { label: 'not supported', variant: 'neutral' },
-  offline: { label: 'offline', variant: 'bronze' },
-  error: { label: 'error', variant: 'borked' },
+const STATE_LABEL_KEY: Record<CloudState, string> = {
+  synced: 'cloud:state.synced',
+  pending: 'cloud:state.pending',
+  conflict: 'cloud:state.conflict',
+  unsupported: 'cloud:state.unsupported',
+  offline: 'cloud:state.offline',
+  error: 'cloud:state.error',
 };
+
+const STATE_VARIANT: Record<CloudState, ChipVariant> = {
+  synced: 'ok',
+  pending: 'info',
+  conflict: 'bronze',
+  unsupported: 'neutral',
+  offline: 'bronze',
+  error: 'borked',
+};
+
+/** The state chip of the game page: the translated label with its colour, or
+ *  null for a state Platypus doesn't know (the panel falls back to its
+ *  unchecked badge, as before). */
+export function stateChip(state: string): { label: string; variant: ChipVariant } | null {
+  if (!(state in STATE_LABEL_KEY)) return null;
+  const s = state as CloudState;
+  return { label: i18n.t(STATE_LABEL_KEY[s]), variant: STATE_VARIANT[s] };
+}
 
 /** "3 in sync · 1 to download · 1 to upload": zero counts are left out. */
 export function describeCounts(c: CloudStatus['counts']): string {
   const parts = [
-    c.same > 0 && `${c.same} in sync`,
-    c.download > 0 && `${c.download} to download`,
-    c.upload > 0 && `${c.upload} to upload`,
-    c.conflict > 0 && `${c.conflict} in conflict`,
-    c.unmapped > 0 && `${c.unmapped} not placed on this device`,
+    c.same > 0 && i18n.t('cloud:counts.same', { count: c.same }),
+    c.download > 0 && i18n.t('cloud:counts.download', { count: c.download }),
+    c.upload > 0 && i18n.t('cloud:counts.upload', { count: c.upload }),
+    c.conflict > 0 && i18n.t('cloud:counts.conflict', { count: c.conflict }),
+    c.unmapped > 0 && i18n.t('cloud:counts.unmapped', { count: c.unmapped }),
   ].filter(Boolean) as string[];
   return parts.join(' · ');
 }
@@ -49,7 +85,7 @@ export function fileSize(n: number, locale: string = currentLocale()): string {
 
 /** "Mar 3, 2026, 4:12 PM" in the user's locale. */
 export function whenLabel(unixSeconds: number, locale: string = currentLocale()): string {
-  if (!unixSeconds) return 'unknown date';
+  if (!unixSeconds) return i18n.t('cloud:unknownDate');
   return new Date(unixSeconds * 1000).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
@@ -57,9 +93,9 @@ export function whenLabel(unixSeconds: number, locale: string = currentLocale())
 export function agoLabel(unixSeconds: number, nowMs = Date.now()): string {
   if (!unixSeconds) return '';
   const s = Math.max(0, Math.round(nowMs / 1000 - unixSeconds));
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 45) return i18n.t('cloud:ago.now');
+  if (s < 3600) return i18n.t('cloud:ago.minutes', { count: Math.max(1, Math.round(s / 60)) });
+  if (s < 86400) return i18n.t('cloud:ago.hours', { count: Math.round(s / 3600) });
   return whenLabel(unixSeconds);
 }
 
@@ -77,18 +113,20 @@ export interface CloudNotice {
  *  Progress and plain status changes are silent; the game page shows them. */
 export function cloudNotice(e: CloudEvent, title: string): CloudNotice | null {
   switch (e.kind) {
-    case 'pushed':
-      return { toast: { msg: `${e.message ?? 'Saves uploaded'} · ${title}`, kind: 'ok' }, activity: { detail: `${e.message ?? 'Saves uploaded'} · ${title}`, meta: 'cloud' } };
+    case 'pushed': {
+      const msg = e.message ?? i18n.t('cloud:notice.uploaded');
+      return { toast: { msg: `${msg} · ${title}`, kind: 'ok' }, activity: { detail: `${msg} · ${title}`, meta: 'cloud' } };
+    }
     case 'status':
       return e.message ? { toast: { msg: `${e.message} · ${title}`, kind: 'ok' }, activity: { detail: `${e.message} · ${title}`, meta: 'cloud' } } : null;
     case 'failed':
-      return { toast: { msg: e.message ?? `${title}'s cloud sync failed`, kind: 'err' }, activity: { detail: `Cloud sync failed · ${title}`, meta: plainError(e.message, 'Open the game page for details') } };
+      return { toast: { msg: e.message ?? i18n.t('cloud:notice.failed', { title }), kind: 'err' }, activity: { detail: i18n.t('cloud:notice.failedDetail', { title }), meta: plainError(e.message, i18n.t('cloud:notice.openGame')) } };
     case 'skipped':
-      return { toast: { msg: e.message ?? `${title} was not synced`, kind: 'busy' }, activity: { detail: `Cloud sync skipped · ${title}`, meta: e.message?.slice(0, 80) } };
+      return { toast: { msg: e.message ?? i18n.t('cloud:notice.skipped', { title }), kind: 'busy' }, activity: { detail: i18n.t('cloud:notice.skippedDetail', { title }), meta: e.message?.slice(0, 80) } };
     case 'canceled':
-      return { toast: { msg: 'Cloud sync canceled', kind: 'busy' }, activity: { detail: `Cloud sync canceled · ${title}` } };
+      return { toast: { msg: i18n.t('cloud:notice.canceled'), kind: 'busy' }, activity: { detail: `${i18n.t('cloud:notice.canceled')} · ${title}` } };
     case 'prompt':
-      return { activity: { detail: `Cloud saves need a decision · ${title}`, meta: e.prompt } };
+      return { activity: { detail: i18n.t('cloud:notice.prompt', { title }), meta: e.prompt } };
     default:
       return null;
   }

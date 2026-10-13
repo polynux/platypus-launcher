@@ -1,0 +1,20 @@
+{
+  "introWhat": "Recettes préparées (Lutris, communauté) et notes ProtonDB pour votre bibliothèque.",
+  "introCount": "{{have}} titres sur {{total}} ont des données.",
+  "about": "Un fix est une recette de paquets winetricks et de substitutions DLL pour un jeu. Les niveaux ProtonDB vont de Platinum (fonctionne tel quel) à Borked (ne fonctionne pas), en passant par Gold, Silver et Bronze.",
+  "filter": {
+    "label": "Filtrer",
+    "attention": "à surveiller",
+    "all": "tous notés"
+  },
+  "empty": {
+    "clearTitle": "tout est en ordre",
+    "clearBody": "Aucun titre à surveiller. Passez à « {{allLabel}} » pour parcourir les niveaux ProtonDB.",
+    "noneTitle": "pas encore de données de compatibilité",
+    "noneBody": "Les données de compatibilité se chargent en arrière-plan après une analyse. ProtonDB a besoin d'une connexion réseau."
+  },
+  "attention": {
+    "borked": "ProtonDB signale ce titre comme borked. Essayez un autre runner ou consultez les rapports.",
+    "bronze": "ProtonDB note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner."
+  }
+}
