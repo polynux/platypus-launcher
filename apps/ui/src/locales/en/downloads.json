@@ -1,0 +1,17 @@
+{
+  "installed": "Installed {{title}}",
+  "updated": "Updated {{title}}",
+  "uninstalled": "Uninstalled {{title}}",
+  "jobFailed": "{{title}}: {{error}}",
+  "queued": "{{action}} of {{title}} queued",
+  "action": {
+    "install": "Install",
+    "update": "Update",
+    "uninstall": "Uninstall"
+  },
+  "actionFailed": {
+    "install": "install failed",
+    "update": "update failed",
+    "uninstall": "uninstall failed"
+  }
+}

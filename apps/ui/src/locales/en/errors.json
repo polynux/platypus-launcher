@@ -1,0 +1,6 @@
+{
+  "fallback": "Something went wrong. Try again.",
+  "gameFailed": "{{title}}: {{error}}",
+  "launchFailedText": "launch failed",
+  "notPersisted": "Not saved to disk, applies this session: {{error}}"
+}

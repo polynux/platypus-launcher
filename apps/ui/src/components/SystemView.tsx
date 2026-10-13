@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { ProtonVersion } from '../types';
@@ -12,11 +13,12 @@ interface SystemViewProps {
 }
 
 export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
+  const { t } = useTranslation('nav');
   return (
     <div className="p-7">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">Runners</h1>
+          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.runners')}</h1>
           <p className="mt-0.5 text-[12.5px] text-white/70">Proton, GE-Proton and Wine builds detected on this system.</p>
           <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/70">
             A runner is the build that runs a Windows game on Linux. Each game picks one in its settings; native Linux games need none.

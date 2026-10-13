@@ -175,6 +175,10 @@ export const LauncherApi = {
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 
+  // The UI language (issue #39): "" is System, else a BCP 47 tag. Switching
+  // applies live through applyLanguage (lib/i18n), without a restart.
+  setLanguage: (lang: string) => call<LauncherSettings>('SetLanguage', () => App.SetLanguage(lang)),
+
   // The one-time Hydra→Platypus migration notice (issue #14). Resolves null
   // when there is nothing to show. Go marshals nil slices as null; normalize
   // null lists to [] at the edge so consumers never crash on list.map.

@@ -1,0 +1,8 @@
+{
+  "launching": "Lancement de {{title}}",
+  "nowRunning": "{{title}} est en cours d'exécution",
+  "stopBeforeRemove": "Arrêtez « {{title}} » avant de le retirer",
+  "added": "« {{title}} » ajouté",
+  "removed": "« {{title}} » retiré",
+  "folderAllowed": "Les jeux de {{folder}} peuvent maintenant se lancer"
+}

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
 import type { Job } from '../types';
@@ -103,6 +104,7 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
 }
 
 export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: DownloadsViewProps) {
+  const { t } = useTranslation('nav');
   const active = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
   const finished = jobs.filter((j) => !active.includes(j)).sort((a, b) => b.updated_at - a.updated_at);
   const [clearing, setClearing] = useState(false);
@@ -114,7 +116,7 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
     <div className="p-7">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">Downloads</h1>
+          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
           <p className="mt-0.5 text-[12.5px] text-white/70">
             Installs, updates and uninstalls run one at a time. A paused download keeps its data and resumes from there; an interrupted install resumes when Platypus starts again.
           </p>

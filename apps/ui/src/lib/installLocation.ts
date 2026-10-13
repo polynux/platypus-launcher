@@ -1,13 +1,14 @@
 import type { InstallLocation } from '../types';
-import { formatBytes } from './games';
+import { formatFreeBytes } from './format';
 
 // Install location (the install dialog): what the choices mean for the user.
 // Core checks the folder again when the install is queued; these keep the
 // dialog's view of the same facts.
 
-/** The room at a place as the dialog says it ("120 GB free"); empty when unreadable. */
+/** The room at a place as the dialog says it ("120 GB free" in English);
+ *  the suffix follows the UI locale (see lib/format). Empty when unreadable. */
 export function freeLabel(free: number | undefined): string {
-  return free != null && free >= 0 ? `${formatBytes(free) || '0 B'} free` : '';
+  return free != null && free >= 0 ? formatFreeBytes(free) : '';
 }
 
 /** Whether `needed` bytes don't fit in `free`. Unknown on either side fits: the

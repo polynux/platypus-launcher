@@ -1,0 +1,8 @@
+{
+  "launching": "Launching {{title}}",
+  "nowRunning": "{{title}} is running",
+  "stopBeforeRemove": "Stop \"{{title}}\" before removing it",
+  "added": "Added \"{{title}}\"",
+  "removed": "Removed \"{{title}}\"",
+  "folderAllowed": "Games in {{folder}} can be launched now"
+}

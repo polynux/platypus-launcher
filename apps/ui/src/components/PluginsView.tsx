@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
@@ -59,6 +60,7 @@ export function resetPluginsAuthCache(): void {
 }
 
 export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
+  const { t } = useTranslation('nav');
   const [auth, setAuth] = useState<Record<string, AuthState>>(() => Object.fromEntries(authCache));
   const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
   const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
@@ -125,7 +127,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
     <div className="p-7">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">Plugins</h1>
+          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
           <p className="mt-0.5 max-w-xl text-[12.5px] text-white/70">
             Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.
           </p>

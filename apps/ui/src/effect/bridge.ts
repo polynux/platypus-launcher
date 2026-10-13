@@ -8,6 +8,8 @@ export interface PlatypusBridge {
   on(event: string, cb: (data: unknown) => void): () => void;
   /** Opens an http(s) address in the user's browser. The shell refuses anything else. */
   openExternal(url: string): void;
+  /** The shell session: OS languages and dev mode (issue #39). Absent outside the shell. */
+  getSessionInfo?: () => Promise<SessionInfo>;
   /** Asks the shell for a desktop notification for a chat message; main
    *  decides (focus, the launcher switch, coalescing). Absent outside the shell. */
   notifyChat?: (msg: ChatNotifyPayload) => Promise<boolean>;
@@ -15,6 +17,14 @@ export interface PlatypusBridge {
   onChatOpen?: (cb: (target: ChatOpenTarget) => void) => () => void;
   /** The embedded store view (issue #17): the native view over the Store page. Absent outside the shell. */
   store?: StoreBridge;
+}
+
+/** What the shell reports about this session (issue #39). */
+export interface SessionInfo {
+  /** The OS language list in preference order (Electron's getPreferredSystemLanguages). */
+  systemLanguages: string[];
+  /** True in a dev session (PLATYPUS_DEVTOOLS): the pseudo-locale is offered. */
+  devtools: boolean;
 }
 
 /** A chat message asking the shell for a desktop notification (issue #12):

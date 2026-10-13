@@ -32,15 +32,15 @@ import { isLiveState } from './lib/sessions';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import { useTranslation } from 'react-i18next';
 import { RawDetails } from './components/ErrorNotice';
+import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { hasDetails, plainError } from './lib/plainError';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind; raw?: string }
 
-/** What an error toast says when the message is developer text. */
-const TOAST_ERROR_FALLBACK = 'Something went wrong. Try again.';
 
 const NOTICE_STYLE: Record<NoticeKind, string> = {
   ok: 'border-emerald-300/50 text-emerald-100',
@@ -52,6 +52,7 @@ const NOTICE_DOT: Record<NoticeKind, string> = { ok: 'bg-emerald-400', err: 'bg-
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function App() {
+  const { t } = useTranslation(['nav', 'common']);
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
   const [plugins, setPlugins] = useState<StorePlugin[]>([]);
@@ -95,11 +96,12 @@ export function App() {
     // An error toast says a plain sentence; the raw text waits behind Details,
     // and the toast stays long enough to open it.
     const isErr = kind === 'err';
-    const raw = isErr && hasDetails(msg, TOAST_ERROR_FALLBACK) ? msg : undefined;
-    setNotice({ msg: isErr ? plainError(msg, TOAST_ERROR_FALLBACK) : msg, kind, raw });
+    const raw = isErr && hasDetails(msg, t('errors:fallback')) ? msg : undefined;
+    setNotice({ msg: isErr ? plainError(msg, t('errors:fallback')) : msg, kind, raw });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(null), isErr ? 8000 : 3500);
-  }, []);
+    // t is a dep: toasts follow a live language switch.
+  }, [t]);
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
   const main = useRef<HTMLElement>(null);
@@ -175,7 +177,7 @@ export function App() {
         .then(([libR, rR, pR, savedR, sessR]) => {
           const failures: string[] = [];
           const saved: Record<string, GameSettings> = savedR.ok ? savedR.value : {};
-          if (!savedR.ok) failures.push(`Settings: ${errMsg((savedR as { ok: false; error: Error }).error)}`);
+          if (!savedR.ok) failures.push(`${t('nav:title.settings')}: ${errMsg((savedR as { ok: false; error: Error }).error)}`);
           if (libR.ok) {
             const lib = (libR as { ok: true; value: { games: Game[]; warnings: SourceWarning[] } }).value;
             const g = lib.games;
@@ -194,18 +196,18 @@ export function App() {
             });
             for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : w.unavailable ? 'unavailable right now' : 'library unavailable'}`, meta: w.message });
           } else {
-            failures.push(`Library: ${errMsg((libR as { ok: false; error: Error }).error)}`);
+            failures.push(`${t('nav:title.library')}: ${errMsg((libR as { ok: false; error: Error }).error)}`);
           }
           if (rR.ok) {
             setRunners((rR as { ok: true; value: ProtonVersion[] }).value);
           } else {
-            failures.push(`Runners: ${errMsg((rR as { ok: false; error: Error }).error)}`);
+            failures.push(`${t('nav:title.runners')}: ${errMsg((rR as { ok: false; error: Error }).error)}`);
           }
           if (pR.ok) {
             setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
             void refreshSocial();
           } else {
-            failures.push(`Plugins: ${errMsg((pR as { ok: false; error: Error }).error)}`);
+            failures.push(`${t('nav:title.plugins')}: ${errMsg((pR as { ok: false; error: Error }).error)}`);
           }
           // Hydrate sessions so a window opened after a launch shows Playing (CORE-1/FE-2).
           const live = sessR.ok ? (sessR as { ok: true; value: SessionEvent[] }).value : [];
@@ -229,7 +231,7 @@ export function App() {
             notify(msg, 'err');
           } else {
             setLoadError(null);
-            if (reason === 'rescan') notify('Library rescanned');
+            if (reason === 'rescan') notify(t('common:libraryRescanned'));
           }
           // Updates can change store metadata (login, reinstall, a new pin):
           // evict the details cache so the next visit refetches (FE-6). Only
@@ -250,8 +252,30 @@ export function App() {
           setScanning(false);
         });
     },
-    [log, notify, refreshSocial]
+    // t is a dep: rescan notices follow a live language switch (the startup
+    // scan still runs once: `started` guards it).
+    [log, notify, refreshSocial, t]
   );
+
+  // The launcher language (issue #39): the shell's OS list behind System,
+  // the core's setting for the explicit choice. Applies live, no restart.
+  useEffect(() => {
+    // A missing or failing settings read keeps English: the language is a
+    // preference, never a reason to break startup (or tests with a partial
+    // core mock).
+    void loadSessionInfo()
+      .then(() => {
+        try {
+          return Effect.runPromise(LauncherApi.getLauncherSettings());
+        } catch {
+          return null;
+        }
+      })
+      .then(
+        (st) => applyLanguage(st?.language ?? ''),
+        () => applyLanguage(''),
+      );
+  }, []);
 
   // StrictMode mounts effects twice in dev; scan only once on startup.
   const started = useRef(false);
@@ -305,7 +329,7 @@ export function App() {
     if (launchingId || sessions[game.id]) return;
     setLaunchingId(game.id);
     Effect.runPromise(LauncherApi.launchGame(game))
-      .then((res) => notify(res || `Launching ${game.title}`, 'busy'))
+      .then((res) => notify(res || t('game:launching', { title: game.title }), 'busy'))
       .catch((err) => notify(errMsg(err), 'err'))
       .finally(() => setLaunchingId(null));
   };
@@ -326,7 +350,7 @@ export function App() {
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
-            notify(`${title} is running`);
+            notify(t('game:nowRunning', { title }));
             log({ type: 'session', game: title, detail: `Started ${title}`, meta: e.pid ? `pid ${e.pid}` : undefined });
           }
           return;
@@ -336,7 +360,7 @@ export function App() {
           return rest;
         });
         if (e.state === 'failed') {
-          notify(`${title}: ${e.message ?? 'launch failed'}`, 'err');
+          notify(t('errors:gameFailed', { title, error: e.message ?? t('errors:launchFailedText') }), 'err');
           log({ type: 'session', game: title, detail: `${title} failed to start`, meta: e.message?.slice(0, 80) });
         } else {
           const started = sessionStart.current[e.game_id];
@@ -382,11 +406,11 @@ export function App() {
     if (!g) return;
     Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
-        notify('Settings saved');
+        notify(t('common:settingsSaved'));
         log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}` });
       })
       .catch((err) => {
-        notify(`Not saved to disk, applies this session: ${errMsg(err)}`, 'err');
+        notify(t('errors:notPersisted', { error: errMsg(err) }), 'err');
         log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
       });
   };
@@ -414,16 +438,16 @@ export function App() {
         const prev = jobStates.current.get(j.id);
         jobStates.current.set(j.id, j.state);
         if (initial || prev === j.state) continue;
-        const verb = j.kind === 'uninstall' ? 'Uninstalled' : j.kind === 'update' ? 'Updated' : 'Installed';
+        const verbKey = j.kind === 'uninstall' ? 'uninstalled' : j.kind === 'update' ? 'updated' : 'installed';
         if (j.state === 'done') {
           refresh = true;
           // Optimistic flip so the game page updates before the refresh
           // round-trip (FE-4); the refresh reconciles afterwards.
           setGames((prev) => optimisticGamesAfterJob(prev, j));
-          notify(`${verb} ${j.title}`);
-          log({ type: 'download', game: j.title, detail: `${verb} ${j.title}`, meta: j.source });
+          notify(t(`downloads:${verbKey}`, { title: j.title }));
+          log({ type: 'download', game: j.title, detail: `${verbKey} ${j.title}`, meta: j.source });
         } else if (j.state === 'failed') {
-          notify(`${j.title}: ${j.error ?? `${j.kind} failed`}`, 'err');
+          notify(t('downloads:jobFailed', { title: j.title, error: j.error ?? t(`downloads:actionFailed.${j.kind}`) }), 'err');
           log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error });
         }
       }
@@ -474,7 +498,7 @@ export function App() {
     const queue = kind === 'uninstall' ? Promise.resolve(true) : ensureTerms(game);
     queue
       .then((ok) => ok && Effect.runPromise(op(game))
-        .then(() => notify(`${kind === 'install' ? 'Install' : kind === 'update' ? 'Update' : 'Uninstall'} of ${game.title} queued`, 'busy')))
+        .then(() => notify(t('downloads:queued', { action: t(`downloads:action.${kind}`), title: game.title }), 'busy')))
       .catch((err) => notify(errMsg(err), 'err'));
   };
 
@@ -491,7 +515,7 @@ export function App() {
   const allowFolder = (game: Game, folder: string) => {
     Effect.runPromise(LauncherApi.allowGameFolder(game.source, folder))
       .then(() => {
-        notify(`Games in ${folder} can be launched now`);
+        notify(t('game:folderAllowed', { folder }));
         loadData('update');
       })
       .catch((err) => notify(errMsg(err), 'err'));
@@ -515,7 +539,7 @@ export function App() {
     ).then(({ game }) => {
       // Sideloaded games lead the library, like before, with their saved settings.
       setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
-      notify(`Added "${title}"`);
+      notify(t('game:added', { title }));
       log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
     });
   };
@@ -526,7 +550,7 @@ export function App() {
   // the user is still on this game's page: a navigation meanwhile wins.
   const removeGame = (game: Game) => {
     if (sessions[game.id] || launchingId === game.id) {
-      notify(`Stop "${game.title}" before removing it`, 'err');
+      notify(t('game:stopBeforeRemove', { title: game.title }), 'err');
       return;
     }
     Effect.runPromise(LauncherApi.removeCustomGame(game.id))
@@ -534,7 +558,7 @@ export function App() {
         setGames((prev) => prev.filter((x) => x.id !== game.id));
         invalidateGameDetailsCache(game.id);
         setView((v) => (v.name === 'game' && v.id === game.id ? { name: v.from } : v));
-        notify(`Removed "${game.title}"`);
+        notify(t('game:removed', { title: game.title }));
         log({ type: 'remove', game: game.title, detail: `Removed ${game.title} from library`, meta: game.install_dir || undefined });
       })
       .catch((err) => notify(errMsg(err), 'err'));
@@ -599,8 +623,8 @@ export function App() {
       return (
         <div className="p-7">
           <EmptyState
-            label="backend unreachable"
-            action={<Button variant="primary" size="sm" onClick={() => loadData('rescan')}>Retry</Button>}
+            label={t('nav:backendUnreachable')}
+            action={<Button variant="primary" size="sm" onClick={() => loadData('rescan')}>{t('common:retry')}</Button>}
           >
             {loadError}
           </EmptyState>
@@ -677,7 +701,7 @@ export function App() {
             onRemove={() => removeGame(currentGame)}
           />
         ) : (
-          <div className="p-7"><EmptyState label="not found">This game is no longer in the library. A rescan may have removed it.</EmptyState></div>
+          <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
         );
       case 'activity':
         return <ActivityView events={activity} />;
@@ -721,7 +745,7 @@ export function App() {
         if (!plugin) {
           return (
             <div className="p-7">
-              <EmptyState label="store unavailable">This store is no longer available. It may have been disabled or removed.</EmptyState>
+              <EmptyState label={t('store:unavailable')}>{t('store:unavailableDetail')}</EmptyState>
             </div>
           );
         }

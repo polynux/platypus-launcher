@@ -1,4 +1,5 @@
 import type { Game, GameSettings } from '../types';
+import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 
 /** A game "needs attention" when it has a curated fix recipe or a poor ProtonDB tier. */
 export function needsAttention(g: Game): boolean {
@@ -38,17 +39,10 @@ export function storeLabel(s: string): string {
   return { steam: 'Steam', gog: 'GOG', epic: 'Epic', ubisoft: 'Ubisoft', custom: 'Sideloaded' }[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** 1.4 GB, 820 MB: decimal units, like file managers on Linux. */
+/** 1.4 GB, 820 MB: decimal units, like file managers on Linux. The number
+ *  follows the UI locale (see lib/format); English output is unchanged. */
 export function formatBytes(n?: number): string {
-  if (!n || n <= 0) return '';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-  let i = 0;
-  let v = n;
-  while (v >= 1000 && i < units.length - 1) {
-    v /= 1000;
-    i++;
-  }
-  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+  return formatBytesLocale(n);
 }
 
 /** Whether the game comes from a store plugin. */
@@ -70,12 +64,7 @@ export function hoursPlayed(g: Game): number | undefined {
 }
 
 export function lastPlayedLabel(g: Game, now = Date.now()): string | undefined {
-  if (!g.last_played_at) return undefined;
-  const days = Math.floor((now / 1000 - g.last_played_at) / 86400);
-  if (days < 1) return 'today';
-  if (days < 2) return 'yesterday';
-  if (days < 30) return `${days}d ago`;
-  return new Date(g.last_played_at * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatLastPlayed(g.last_played_at, now);
 }
 
 /** Most recently played first; never-played titles keep scan order at the end. */

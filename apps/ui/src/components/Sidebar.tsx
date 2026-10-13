@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, Search, Settings, Square, Ticket } from 'lucide-react';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
@@ -67,6 +68,7 @@ function readToolsOpen(): boolean {
 type NavItem = { key: NavKey; label: string; count?: number; dot?: boolean };
 
 export function Sidebar(p: SidebarProps) {
+  const { t } = useTranslation(['nav', 'common']);
   const active: NavKey | 'store' = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
   // Enabled plugins that declare a storefront: the embedded store section (issue #17).
   const storeEntries = p.stores ?? [];
@@ -83,15 +85,15 @@ export function Sidebar(p: SidebarProps) {
   };
 
   const main: NavItem[] = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'library', label: 'Library', count: p.gameCount },
-    { key: 'downloads', label: 'Downloads', count: p.downloadCount || undefined },
-    { key: 'activity', label: 'Activity' },
+    { key: 'dashboard', label: t('nav:dashboard') },
+    { key: 'library', label: t('nav:library'), count: p.gameCount },
+    { key: 'downloads', label: t('nav:downloads'), count: p.downloadCount || undefined },
+    { key: 'activity', label: t('nav:activity') },
   ];
   const tools: NavItem[] = [
-    { key: 'fixes', label: 'Fixes', count: p.fixCount || undefined },
-    { key: 'runners', label: 'Runners', count: p.runnerCount || undefined },
-    { key: 'plugins', label: 'Plugins', dot: p.authNeeded },
+    { key: 'fixes', label: t('nav:fixes'), count: p.fixCount || undefined },
+    { key: 'runners', label: t('nav:runners'), count: p.runnerCount || undefined },
+    { key: 'plugins', label: t('nav:plugins'), dot: p.authNeeded },
   ];
   // A closed Tools group still shows that a tool is active or needs attention on its header.
   const toolsHasActive = tools.some((t) => t.key === active);
@@ -115,11 +117,11 @@ export function Sidebar(p: SidebarProps) {
     >
       <span>{n.label}</span>
       {n.key === 'library' && p.loading ? (
-        <span aria-label="counting games" className="h-4 w-7 animate-pulse rounded-full bg-white/15 motion-reduce:animate-none" />
+        <span aria-label={t('nav:countingGames')} className="h-4 w-7 animate-pulse rounded-full bg-white/15 motion-reduce:animate-none" />
       ) : (
         n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>
       )}
-      {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label="needs attention" />}
+      {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label={t('nav:needsAttention')} />}
     </button>
   );
 
@@ -129,12 +131,12 @@ export function Sidebar(p: SidebarProps) {
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">P</span>
         <div>
           <div className="text-[15px] font-extrabold tracking-tight">Platypus</div>
-          <div className="font-mono text-micro uppercase tracking-[0.16em] text-white/55">game hub</div>
+          <div className="font-mono text-micro uppercase tracking-[0.16em] text-white/55">{t('nav:tagline')}</div>
         </div>
       </div>
 
       <label className="relative mb-4 block flex-none">
-        <span className="sr-only">Search library</span>
+        <span className="sr-only">{t('nav:searchLibrary')}</span>
         <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/55" />
         <Input
           type="search"
@@ -145,14 +147,14 @@ export function Sidebar(p: SidebarProps) {
             if (e.key === 'Enter' && p.view.name !== 'library') p.onNavigate({ name: 'library' });
             if (e.key === 'Escape') p.onSearch('');
           }}
-          placeholder="Search…"
+          placeholder={t('nav:searchPlaceholder')}
           className="pl-8.5 font-sans"
         />
       </label>
 
       {/* The nav and sources scroll when the window is short; the search above and the footer below stay put. */}
       <div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-        <nav aria-label="Main">
+        <nav aria-label={t('nav:main')}>
           {main.map((n) => navButton(n))}
 
           <button
@@ -165,10 +167,10 @@ export function Sidebar(p: SidebarProps) {
               toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-white/55 hover:text-white/70'
             )}
           >
-            <span>Tools</span>
+            <span>{t('nav:tools')}</span>
             <span className="flex items-center gap-2">
               {!toolsOpen && toolsAttention > 0 && <Badge variant="neutral" className="h-4 rounded-full px-1.5 tracking-normal tabular-nums">{toolsAttention}</Badge>}
-              {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label="needs attention" />}
+              {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label={t('nav:needsAttention')} />}
               <ChevronDown className={cx('h-3.5 w-3.5 transition-transform motion-reduce:transition-none', toolsOpen ? '' : '-rotate-90')} aria-hidden />
             </span>
           </button>
@@ -177,14 +179,14 @@ export function Sidebar(p: SidebarProps) {
           </div>
         </nav>
 
-        <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">sources</div>
+        <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('nav:sources')}</div>
         {[
           ...SOURCES,
           // Stores that only plugins provide, then sideloaded games.
           ...Object.keys(p.storeCounts)
             .filter((k) => k !== 'custom' && !SOURCES.some((s) => s.key === k))
             .map((k) => ({ key: k, label: storeLabel(k) })),
-          ...(p.storeCounts.custom ? [{ key: 'custom', label: 'Sideloaded' }] : []),
+          ...(p.storeCounts.custom ? [{ key: 'custom', label: t('nav:sideloaded') }] : []),
         ].map((s) => {
           const count = p.storeCounts[s.key] ?? 0;
           return (
@@ -198,14 +200,14 @@ export function Sidebar(p: SidebarProps) {
                 {s.label}
               </span>
               <span className="font-mono text-hint tabular-nums text-white/55">
-                {p.loading ? <span aria-label="counting games" className="inline-block h-2.5 w-5 animate-pulse rounded bg-white/15 motion-reduce:animate-none" /> : count || '—'}
+                {p.loading ? <span aria-label={t('nav:countingGames')} className="inline-block h-2.5 w-5 animate-pulse rounded bg-white/15 motion-reduce:animate-none" /> : count || '—'}
               </span>
             </button>
           );
         })}
         {storeEntries.length > 0 && (
           <>
-            <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">store</div>
+            <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('nav:store')}</div>
             {storeEntries.map((s) => (
               <button
                 key={s.id}
@@ -228,7 +230,7 @@ export function Sidebar(p: SidebarProps) {
       <div className="mt-auto flex flex-none flex-col gap-2 pt-4">
         {p.canRedeem && (
           <Button variant="neutral" onClick={p.onRedeem} className="w-full">
-            <Ticket className="h-3.5 w-3.5" /> Redeem a code
+            <Ticket className="h-3.5 w-3.5" /> {t('nav:redeemCode')}
           </Button>
         )}
         <button
@@ -241,12 +243,12 @@ export function Sidebar(p: SidebarProps) {
           )}
         >
           <Settings className="h-3.5 w-3.5" aria-hidden />
-          Settings
+          {t('nav:settings')}
         </button>
         <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
         {p.sessions.map((e) => {
           const running = e.state === 'running';
-          const label = running ? 'playing' : e.state === 'stopping' ? 'stopping' : 'starting';
+          const label = running ? t('nav:playing') : e.state === 'stopping' ? t('nav:stopping') : t('nav:starting');
           return (
             <div
               key={e.game_id}
@@ -267,13 +269,13 @@ export function Sidebar(p: SidebarProps) {
                       variant="ghost"
                       size="icon"
                       onClick={() => p.onStop(e.game_id)}
-                      aria-label={`Stop ${e.title}`}
+                      aria-label={t('nav:stopGame', { title: e.title })}
                       className="size-7 flex-none text-white/55 hover:text-red-200"
                     >
                       <Square className="h-3 w-3 fill-current" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Stop</TooltipContent>
+                  <TooltipContent>{t('nav:stop')}</TooltipContent>
                 </Tooltip>
               )}
             </div>

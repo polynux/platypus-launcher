@@ -205,16 +205,12 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
   return <img ref={img} src={current} alt="" loading="lazy" decoding="async" onError={fail} onLoad={loaded} className={cx('object-cover', className)} />;
 }
 
+import { formatClock, formatRelativeAge } from '../lib/format';
+
 export function relTime(ts: number, now = Date.now()): string {
-  const s = Math.max(0, Math.round((now - ts) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
+  return formatRelativeAge(ts, now);
 }
 
 export function clock(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  return formatClock(ts);
 }
