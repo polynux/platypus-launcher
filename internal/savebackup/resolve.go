@@ -37,11 +37,16 @@ type Context struct {
 
 // prefixFor is the Wine identity shared with cloudContext (app_cloud.go):
 // Proton prefixes use the pfx/ folder and the steamuser account, plain Wine
-// uses the prefix itself and the login name.
+// uses the prefix itself and the login name. A custom wine_prefix already
+// pointing at the pfx dir is normalised once, never <prefix>/pfx/pfx
+// (issue #60).
 func prefixFor(prefixPath, login string, proton bool) (string, string) {
 	if proton {
 		if login == "" {
 			login = "steamuser"
+		}
+		if filepath.Base(filepath.Clean(prefixPath)) == "pfx" {
+			return prefixPath, "steamuser"
 		}
 		return filepath.Join(prefixPath, "pfx"), "steamuser"
 	}
@@ -337,7 +342,7 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	driveCUser := ""
 	if p, ok := ctx.Roots["prefix"]; ok {
 		driveC = filepath.Join(p, "drive_c")
-		driveCUser = filepath.Join(driveC, "users", ctx.WinUser)
+		driveCUser = winUserDir(driveC, ctx.WinUser)
 	}
 	winUser := ctx.WinUser
 	if winUser == "" {
@@ -392,6 +397,45 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	return kept, unresolved
 }
 
+// winUserDir picks the Windows user folder inside a prefix's drive_c:
+// users/<winUser> when it exists (the prefix's own login→steamuser link
+// resolves on its own), else the steamuser folder Proton/umu prefixes
+// provide, else the wanted path so the pattern still expands and simply
+// matches nothing (issue #60).
+func winUserDir(driveC, winUser string) string {
+	if driveC == "" || winUser == "" {
+		return ""
+	}
+	want := filepath.Join(driveC, "users", winUser)
+	if _, err := os.Lstat(want); err == nil {
+		return want
+	}
+	if winUser != "steamuser" {
+		if alt := filepath.Join(driveC, "users", "steamuser"); alt != want {
+			if _, err := os.Lstat(alt); err == nil {
+				return alt
+			}
+		}
+	}
+	return want
+}
+
+// globBase is a glob pattern's static parent for display: everything before
+// the first metacharacter, cut back to its directory. "" when the pattern
+// starts with a metacharacter (issue #60).
+func globBase(pattern string) string {
+	i := strings.IndexAny(pattern, "*?[")
+	if i < 0 {
+		return pattern
+	}
+	dir := pattern[:i]
+	j := strings.LastIndex(dir, string(filepath.Separator))
+	if j <= 0 {
+		return ""
+	}
+	return filepath.Clean(dir[:j])
+}
+
 func containsToken(patterns []string, token string) bool {
 	for _, p := range patterns {
 		if strings.Contains(p, token) {
@@ -440,9 +484,13 @@ func ResolvePaths(game types.Game, userPaths []string, entry *GameEntry, ctx Con
 			unresolved += un
 			for _, p := range expanded {
 				patterns = append(patterns, resolvedPattern{Pattern: p, Root: rootLabelFor(p, ctx), Origin: "manifest"})
-				// Record the literal parent for display when glob-free.
+				// Record the literal parent for display when glob-free; for
+				// glob patterns list the static parent so the Maintenance
+				// tab shows the folder as found automatically (issue #60).
 				if !strings.ContainsAny(p, "*?[") {
 					addRoot(p, "manifest")
+				} else if base := globBase(p); base != "" {
+					addRoot(base, "manifest")
 				}
 			}
 		}

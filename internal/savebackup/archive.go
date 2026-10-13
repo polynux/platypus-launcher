@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -74,6 +75,10 @@ func fileSHA256(path string) (string, error) {
 // counts, and the total bytes.
 func Enumerate(patterns []resolvedPattern, ctx Context) (files []Enumerated, skipped, unresolved, count int, bytes int64) {
 	seen := map[string]bool{}
+	// resolved dedupes when two paths lead to the same file (e.g. through
+	// the prefix's users/<login> → steamuser link): the first wins, the
+	// second is dropped silently, never counted twice (issue #60).
+	resolved := map[string]bool{}
 	for _, rp := range patterns {
 		matches, err := expandGlob(rp.Pattern)
 		if err != nil || len(matches) == 0 {
@@ -97,7 +102,7 @@ func Enumerate(patterns []resolvedPattern, ctx Context) (files []Enumerated, ski
 			if !st.Mode().IsRegular() {
 				if st.IsDir() {
 					// A bare user path may name a folder: walk it.
-					n, s, b := walkDirInto(m, rp, ctx, seen, &files)
+					n, s, b := walkDirInto(m, rp, ctx, seen, resolved, &files)
 					_ = n
 					skipped += s
 					bytes += b
@@ -108,6 +113,9 @@ func Enumerate(patterns []resolvedPattern, ctx Context) (files []Enumerated, ski
 			}
 			key := rp.Root + "\x00" + relTo(m, ctx, rp)
 			if seen[key] {
+				continue
+			}
+			if resolvedKey(m, resolved) {
 				continue
 			}
 			seen[key] = true
@@ -127,7 +135,7 @@ type Enumerated struct {
 	Mtime int64
 }
 
-func walkDirInto(dir string, rp resolvedPattern, ctx Context, seen map[string]bool, files *[]Enumerated) (n, skipped int, bytes int64) {
+func walkDirInto(dir string, rp resolvedPattern, ctx Context, seen, resolved map[string]bool, files *[]Enumerated) (n, skipped int, bytes int64) {
 	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			skipped++
@@ -157,6 +165,9 @@ func walkDirInto(dir string, rp resolvedPattern, ctx Context, seen map[string]bo
 		if seen[key] {
 			return nil
 		}
+		if resolvedKey(p, resolved) {
+			return nil
+		}
 		seen[key] = true
 		*files = append(*files, Enumerated{Abs: p, Root: rp.Root, Rel: rel, Size: info.Size(), Mtime: info.ModTime().Unix()})
 		bytes += info.Size()
@@ -164,6 +175,22 @@ func walkDirInto(dir string, rp resolvedPattern, ctx Context, seen map[string]bo
 		return nil
 	})
 	return n, skipped, bytes
+}
+
+// resolvedKey reports whether abs resolves to an already-seen file, marking
+// it seen when new. EvalSymlinks follows the prefix's own path components,
+// so two spellings of one file share one key (issue #60). Unresolvable paths
+// key on themselves and are treated as new.
+func resolvedKey(abs string, resolved map[string]bool) bool {
+	key := abs
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		key = r
+	}
+	if resolved[key] {
+		return true
+	}
+	resolved[key] = true
+	return false
 }
 
 func relTo(abs string, ctx Context, rp resolvedPattern) string {
@@ -235,9 +262,22 @@ func checkInside(path string, ctx Context) error {
 	return fmt.Errorf("outside any save root")
 }
 
-// expandGlob expands a pattern with * as in the manifest spec. It uses the
-// standard glob (which never follows symlinks at match time: Lstat later
-// enforces it per file).
+// Glob limits (issue #60): one pattern descends at most globMaxDepth levels
+// below its static parent and reports at most globMaxFiles matches; the rest
+// are dropped so a ** over a huge tree can't hang the backup.
+const (
+	globMaxDepth = 12
+	globMaxFiles = 10000
+)
+
+// expandGlob expands a pattern per the Ludusavi manifest spec: after
+// placeholder substitution a path is a glob where * matches within one
+// folder name, ** as a whole segment matches zero or more folders, ?
+// matches one character and [...] matches a character class. {a,b}
+// alternates are not supported. Symlinked directories are never descended
+// into; matches reached through the prefix's own path components (pfx,
+// users/<login>) still resolve because the OS follows those while the walk
+// itself stays put (issue #60).
 func expandGlob(pattern string) ([]string, error) {
 	if !strings.ContainsAny(pattern, "*?[") {
 		if _, err := os.Lstat(pattern); err != nil {
@@ -245,7 +285,94 @@ func expandGlob(pattern string) ([]string, error) {
 		}
 		return []string{pattern}, nil
 	}
-	return filepath.Glob(pattern)
+	segs := strings.Split(filepath.Clean(pattern), string(filepath.Separator))
+	first := len(segs)
+	for i, s := range segs {
+		if strings.ContainsAny(s, "*?[") {
+			first = i
+			break
+		}
+	}
+	base := strings.Join(segs[:first], string(filepath.Separator))
+	if base == "" {
+		if filepath.IsAbs(pattern) {
+			base = string(filepath.Separator)
+		} else {
+			base = "."
+		}
+	}
+	// The static base may itself sit behind the prefix's own links; Stat
+	// follows those. Everything collected below it is Lstat-checked.
+	if st, err := os.Stat(base); err != nil || !st.IsDir() {
+		return nil, nil
+	}
+	var out []string
+	var walk func(dir string, rest []string, depth int)
+	walk = func(dir string, rest []string, depth int) {
+		if len(out) >= globMaxFiles || depth > globMaxDepth {
+			return
+		}
+		if len(rest) == 0 {
+			// A trailing ** matched zero folders: the dir itself.
+			out = append(out, dir)
+			return
+		}
+		seg, last := rest[0], len(rest) == 1
+		if seg == "**" {
+			// Zero folders: keep matching here.
+			walk(dir, rest[1:], depth)
+			if depth >= globMaxDepth {
+				return
+			}
+			// One or more folders: every real subdir, staying at **.
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				return
+			}
+			for _, e := range entries {
+				if len(out) >= globMaxFiles {
+					return
+				}
+				if !e.IsDir() || e.Type()&fs.ModeSymlink != 0 {
+					continue
+				}
+				walk(filepath.Join(dir, e.Name()), rest, depth+1)
+			}
+			return
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, e := range entries {
+			if len(out) >= globMaxFiles {
+				return
+			}
+			ok, err := path.Match(seg, e.Name())
+			if err != nil || !ok {
+				continue
+			}
+			full := filepath.Join(dir, e.Name())
+			if last {
+				// Files, dirs and links alike: Enumerate decides (a
+				// symlinked file is counted skipped there, a dir is
+				// walked). Skip only vanished entries.
+				if _, err := os.Lstat(full); err != nil {
+					continue
+				}
+				out = append(out, full)
+				continue
+			}
+			// Descend into real directories only, never symlinks.
+			if !e.IsDir() || e.Type()&fs.ModeSymlink != 0 {
+				continue
+			}
+			walk(full, rest[1:], depth+1)
+		}
+	}
+	walk(base, segs[first:], 0)
+	sort.Strings(out)
+	return out, nil
 }
 
 // WriteBackup writes one backup zip: <backupsRoot>/<gameID>/<utc>-<trigger>-<shortid>.zip,
