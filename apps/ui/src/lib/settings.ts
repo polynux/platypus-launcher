@@ -205,6 +205,13 @@ export function runnerShort(runnerId: string, runners: { id: string; name: strin
   return (r?.name ?? runnerId).split(' ')[0];
 }
 
+/** The runner option label (issue #48): the umu entry is labelled in the UI
+ *  language, every other runner keeps the name the core reported. */
+export function runnerDisplayName(t: TFunction, r: { id: string; name: string }): string {
+  if (r.id === 'umu') return t('gameSettings:runner.umuOption');
+  return r.name;
+}
+
 /** Whether every env var and wrapper of a tweak is already in the settings. */
 export function tweakApplied(s: GameSettings, t: Tweak): boolean {
   const env = toBackendGame({ settings: s } as Game).settings.env_vars;

@@ -26,7 +26,8 @@
     "detail": "{{kind}} · {{path}}",
     "autoDetail": "newest GE-Proton, then Experimental",
     "none": "no runner installed",
-    "noneInstalled": "No Proton or Wine runners detected."
+    "noneInstalled": "No Proton or Wine runners detected.",
+    "umuOption": "Proton via umu (recommended)"
   },
   "sync": {
     "kicker": "sync",

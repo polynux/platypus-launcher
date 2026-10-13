@@ -26,7 +26,8 @@
     "detail": "{{kind}} · {{path}}",
     "autoDetail": "le dernier GE-Proton, puis Experimental",
     "none": "aucun runner installé",
-    "noneInstalled": "Aucun runner Proton ou Wine détecté."
+    "noneInstalled": "Aucun runner Proton ou Wine détecté.",
+    "umuOption": "Proton via umu (recommandé)"
   },
   "sync": {
     "kicker": "synchro",

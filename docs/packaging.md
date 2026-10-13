@@ -38,3 +38,14 @@ platypus
 Steam installs are still found at `~/.local/share/Steam` first;
 `$XDG_DATA_HOME/Steam` joins as an extra candidate. `PLATYPUS_STEAM_ROOT`
 pins the Steam lookup to one folder (packagers, test fixtures).
+
+## umu-launcher (issue #48)
+
+Windows games can run through umu-launcher (see `docs/umu.md`); Platypus
+uses it when `umu-run` is installed and falls back to a direct Proton/Wine
+launch otherwise. Recommendation: depend on the distro's `umu-launcher`
+package (`pacman -S umu-launcher` on Arch, `dnf install umu-launcher` on
+Nobara, `pkgs.umu-launcher` on NixOS) rather than bundling it. Where no
+distro package exists (e.g. inside a Flatpak), bundle the `umu-run` zipapp
+with its Python dependencies instead; Platypus never writes to the
+Lutris-bundled copy under `~/.local/share/lutris/runtime/umu`.
