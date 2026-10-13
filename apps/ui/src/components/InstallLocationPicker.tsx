@@ -9,8 +9,7 @@ import { MonoLabel, cx } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { freeLabel, isShort, kindLabel } from '../lib/installLocation';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 type Row = Omit<InstallLocation, 'kind'> & { kind: InstallLocation['kind'] | 'picked' };
 
@@ -45,7 +44,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
         const def = list.find((l) => l.kind === 'default');
         if (def) onChange('', def.free_bytes);
       },
-      (e) => live && setError(errMsg(e)),
+      (e) => live && setError(coreErrMsg(e)),
     );
     return () => { live = false; };
     // The places depend on the game's store, not on what the parent does with the choice.
@@ -71,7 +70,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
       });
       onChange(check.folder, check.free_bytes);
     } catch (e) {
-      setError(errMsg(e));
+      setError(coreErrMsg(e));
     } finally {
       setBusy(false);
     }

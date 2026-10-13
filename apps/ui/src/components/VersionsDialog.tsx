@@ -19,8 +19,7 @@ import {
 } from '../lib/versions';
 import type { VersionPin } from '../types';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** Reloading the channel list after an unlock: sync or async. */
 type ReloadChannels = Promise<void> | void;
@@ -76,7 +75,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
     setError(null);
     return Effect.runPromise(LauncherApi.getGameVersions(game)).then(
       (v) => { setInfo(v); if (resetPin) setPinIt(v.pinned != null); },
-      (e) => setError(errMsg(e)),
+      (e) => setError(coreErrMsg(e)),
     );
   }, [game]);
   useEffect(() => { void load(); }, [load]);
@@ -118,7 +117,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(errMsg(e), 'err');
+      onNotify(coreErrMsg(e), 'err');
       setStep('pick');
     } finally {
       setBusy(false);
@@ -131,7 +130,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       if (previous) await Effect.runPromise(LauncherApi.pinGameVersion(game, previous));
       else await Effect.runPromise(LauncherApi.unpinGameVersion(game.id));
     } catch (e) {
-      onNotify(t('gameOps:versions.pinRestoreError', { error: errMsg(e) }), 'err');
+      onNotify(t('gameOps:versions.pinRestoreError', { error: coreErrMsg(e) }), 'err');
     }
   };
 
@@ -143,7 +142,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       onChanged();
       await load();
     } catch (e) {
-      onNotify(errMsg(e), 'err');
+      onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }
@@ -158,7 +157,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(errMsg(e), 'err');
+      onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }
@@ -423,7 +422,7 @@ function UnlockForm({
         setProblem(t('gameOps:versions.unlockRejected'));
       }
     } catch (err) {
-      setProblem(errMsg(err));
+      setProblem(coreErrMsg(err));
     } finally {
       setBusy(false);
     }

@@ -11,8 +11,7 @@ import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
 import { effectiveValue } from '../lib/pluginSettings';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** A saved setting that the plugin answers with its own words. */
 export function SettingError({ message }: { message: string }) {
@@ -101,7 +100,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   // Reads the view and the values the backend holds.
   const reload = (live: () => boolean) => Effect.runPromise(loadRef.current()).then(
     (v) => { if (live()) { setView(v); setValues(v.values); } },
-    (e) => { if (live()) setError(errMsg(e)); },
+    (e) => { if (live()) setError(coreErrMsg(e)); },
   );
 
   useEffect(() => {
@@ -122,7 +121,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
         if (res.applied) onNotify?.(t('plugins:settings.saved'));
         else setNotice(res.message ?? t('plugins:settings.notApplied'));
       },
-      (e) => { setError(errMsg(e)); return reload(() => true); },
+      (e) => { setError(coreErrMsg(e)); return reload(() => true); },
     ));
   };
 

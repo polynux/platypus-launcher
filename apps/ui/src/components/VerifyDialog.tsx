@@ -8,8 +8,7 @@ import { Button } from '@/components/ds/button';
 import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 export interface VerifyDialogProps {
   game: Game;
@@ -31,7 +30,7 @@ export function VerifyDialog({ game, jobs, onClose }: VerifyDialogProps) {
     setError(null);
     Effect.runPromise(repair ? LauncherApi.repairGame(game) : LauncherApi.verifyGame(game)).then(
       (job) => setJobId(job.id),
-      (e) => setError(errMsg(e)),
+      (e) => setError(coreErrMsg(e)),
     ).finally(() => setBusy(false));
   };
 

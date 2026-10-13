@@ -10,8 +10,7 @@ import { Cover, MonoLabel, cx } from './ui';
 import { LauncherApi, onLibrary } from '../effect/runtime';
 import { ART_KINDS, currentArt, hasCustomization, type ArtKindInfo } from '../lib/customize';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 const SHAPE: Record<ArtKindInfo['shape'], string> = {
   portrait: 'aspect-[2/3] w-14',
@@ -112,7 +111,7 @@ export function CustomizationTab({ game, onChanged }: {
     setError(null);
     Effect.runPromise(LauncherApi.getCustomization(game.id)).then(
       (c) => live && apply(c),
-      (e) => live && setError(errMsg(e)),
+      (e) => live && setError(coreErrMsg(e)),
     );
     return () => { live = false; };
   }, [game.id]);
@@ -143,7 +142,7 @@ export function CustomizationTab({ game, onChanged }: {
         onChanged();
       }
     } catch (e) {
-      setError(errMsg(e));
+      setError(coreErrMsg(e));
     } finally {
       setBusy(null);
     }

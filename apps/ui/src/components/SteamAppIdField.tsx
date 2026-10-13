@@ -10,8 +10,7 @@ import { Input } from '@/components/ds/input';
 import { MonoLabel } from './ui';
 import { ErrorNotice } from './ErrorNotice';
 import { ExternalLink } from './ExternalLink';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** The Steam AppID the ratings use for a game, set by the user. It saves on its
  *  own, apart from the form's Save: a Steam AppID is the only thing it changes.
@@ -37,7 +36,7 @@ export function SteamAppIdField({ game }: { game: Game }) {
     setError(null);
     Effect.runPromise(LauncherApi.setGameSteamAppID(game, next))
       .then((c) => update(c))
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => setError(coreErrMsg(e)))
       .finally(() => setBusy(false));
   };
 

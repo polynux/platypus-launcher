@@ -12,8 +12,7 @@ import { agoLabel, asCloudMode, describeCounts, modeHelp, modeName, stateChip } 
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { ErrorNotice, RawDetails } from './ErrorNotice';
 import { MonoLabel, Panel, SegRow, cx } from './ui';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** Games already checked on their own this session: opening a game page checks
  *  once, then "Check now" is the user's. */
@@ -43,7 +42,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
   gameRef.current = game;
 
   const refresh = useCallback(() => {
-    return Effect.runPromise(LauncherApi.getCloudInfo(gameRef.current)).then(setInfo).catch((e) => setError(errMsg(e)));
+    return Effect.runPromise(LauncherApi.getCloudInfo(gameRef.current)).then(setInfo).catch((e) => setError(coreErrMsg(e)));
   }, []);
 
   const check = useCallback(() => {
@@ -51,7 +50,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
     setError(null);
     return Effect.runPromise(LauncherApi.checkCloudSaves(gameRef.current))
       .then(setInfo)
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => setError(coreErrMsg(e)))
       .finally(() => {
         setChecking(false);
         setProgress(null);
@@ -73,7 +72,7 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
           void check();
         }
       })
-      .catch((e) => live && setError(errMsg(e)));
+      .catch((e) => live && setError(coreErrMsg(e)));
     return () => { live = false; };
     // Reload for another game, not on every settings edit of this one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,16 +104,16 @@ function CloudSavesRow({ game, framed }: { game: Game; framed: boolean }) {
   const setMode = (v: CloudMode | 'default') => {
     Effect.runPromise(LauncherApi.setCloudGameMode(game.id, v === 'default' ? '' : v))
       .then(refresh)
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(coreErrMsg(e)));
   };
 
   const viaClient = () => {
     setError(null);
-    Effect.runPromise(LauncherApi.launchGameViaClient(game)).catch((e) => setError(errMsg(e)));
+    Effect.runPromise(LauncherApi.launchGameViaClient(game)).catch((e) => setError(coreErrMsg(e)));
   };
 
   const cancel = () => {
-    Effect.runPromise(LauncherApi.cancelCloudSync(game.id)).catch((e) => setError(errMsg(e)));
+    Effect.runPromise(LauncherApi.cancelCloudSync(game.id)).catch((e) => setError(coreErrMsg(e)));
   };
 
   const st = info?.status ?? null;

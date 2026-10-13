@@ -11,10 +11,9 @@ import { LauncherApi } from '../effect/runtime';
 import { fileSize, whenLabel } from '../lib/cloud';
 import { MonoLabel, SegRow, cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
+import { coreErrMsg } from '../lib/coreError';
 
 type Choice = 'local' | 'remote' | 'later';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface Props {
   game: Game;
@@ -47,7 +46,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
     for (const c of chosen) payload[c.path] = choiceOf(c.path) as 'local' | 'remote';
     Effect.runPromise(LauncherApi.resolveCloudSaves(game, payload))
       .then(onResolved)
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => setError(coreErrMsg(e)))
       .finally(() => setBusy(false));
   };
 

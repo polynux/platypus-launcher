@@ -8,9 +8,9 @@ import { Modal } from './Modal';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { LauncherApi, onCloud } from '../effect/runtime';
 import { cloudNotice } from '../lib/cloud';
+import { coreErrMsg } from '../lib/coreError';
 
 type Notify = (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface Pending {
   gameId: string;
@@ -60,7 +60,7 @@ export function CloudSavesHost({
   const game = games.find((g) => g.id === pending.gameId);
   const { title } = pending;  const run = (op: Effect.Effect<string, Error>) => {
     close();
-    Effect.runPromise(op).then((m) => m && notifyRef.current(m, 'busy')).catch((e) => notifyRef.current(errMsg(e), 'err'));
+    Effect.runPromise(op).then((m) => m && notifyRef.current(m, 'busy')).catch((e) => notifyRef.current(coreErrMsg(e), 'err'));
   };
 
   // Every action needs the game itself. One that left the library gets a

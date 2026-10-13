@@ -13,8 +13,7 @@ import { isShort } from '../lib/installLocation';
 import { ensureTerms } from '../lib/termsRequest';
 import { useInstallSize } from '../lib/installSize';
 import { cx } from './ui';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 export interface InstallDialogProps {
   game: Game;
@@ -45,7 +44,7 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(errMsg(e), 'err');
+      onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }
