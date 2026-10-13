@@ -7,11 +7,11 @@ import (
 	"slices"
 	"sync"
 
+	"platypus/internal/apperr"
 	"platypus/internal/plugins"
 	"platypus/internal/settings"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Plugin settings (the `settings` capability, protocol 1.8, docs/plugins/

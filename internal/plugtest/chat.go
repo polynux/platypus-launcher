@@ -17,9 +17,9 @@ import (
 // The unread snapshot (chat.unreadCounts, protocol 1.13) is optional: a store
 // without it answers -32601, and core keeps the notification-only behaviour.
 var (
-	ChatHistoryKeys = []string{"messages", "more"}
-	ChatMessageKeys = []string{"id", "from", "text", "sentAt"}
-	ChatSendKeys    = []string{"id", "sentAt"}
+	ChatHistoryKeys      = []string{"messages", "more"}
+	ChatMessageKeys      = []string{"id", "from", "text", "sentAt"}
+	ChatSendKeys         = []string{"id", "sentAt"}
 	ChatUnreadCountsKeys = []string{"counts"}
 	ChatUnreadCountKeys  = []string{"friendId", "unread"}
 )

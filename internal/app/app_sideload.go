@@ -37,4 +37,3 @@ func (a *App) PickGameExecutable(start string) (string, error) {
 func (a *App) PickFolder(title, start string) (string, error) {
 	return a.chooseFolder(title, start)
 }
-

@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/cloudsync"
 	"platypus/internal/runner"
 	"platypus/internal/session"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // cloudShutdownGrace is how long Platypus waits for running cloud syncs when it

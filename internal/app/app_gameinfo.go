@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/sanitize"
 	"platypus/internal/steam"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Sideloaded game info from online sources (issue #38): a sideloaded game's

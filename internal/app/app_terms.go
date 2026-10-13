@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Terms (protocol 1.11, the `terms` capability, docs/plugins/protocol.md

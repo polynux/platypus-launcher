@@ -12,10 +12,10 @@ import (
 	"time"
 	"unicode"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Game version selection: the `versions` capability. The plugin lists channels

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"slices"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Verify files: the `verify` capability (protocol 1.4). The plugin checks the

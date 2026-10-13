@@ -9,10 +9,10 @@ import (
 	"strings"
 	"syscall"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/settings"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Install location: where a game installs. Core owns installDir (plugins never

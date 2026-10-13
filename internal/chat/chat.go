@@ -30,9 +30,9 @@ import (
 
 // Methods core calls. The notifications the plugin sends are the constants below.
 const (
-	MethodHistory     = "chat.history"
-	MethodSend        = "chat.send"
-	MethodMarkRead    = "chat.markRead"
+	MethodHistory      = "chat.history"
+	MethodSend         = "chat.send"
+	MethodMarkRead     = "chat.markRead"
 	MethodUnreadCounts = "chat.unreadCounts"
 
 	NoteMessage = "chat.message"

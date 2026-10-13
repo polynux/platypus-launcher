@@ -68,7 +68,7 @@ type record struct {
 }
 
 type file struct {
-	Version int              `json:"version"`
+	Version int               `json:"version"`
 	Games   map[string]record `json:"games"`
 }
 

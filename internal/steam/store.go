@@ -28,8 +28,8 @@ type StoreClient struct {
 	Base       string
 	// Locale is the BCP 47 tag for store lookups ("fr-FR", "fr", "en").
 	Locale string
-	mu         sync.Mutex
-	cache      map[string]*storeApp
+	mu     sync.Mutex
+	cache  map[string]*storeApp
 }
 
 // DefaultStoreBase serves the public appdetails JSON.

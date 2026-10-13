@@ -12,12 +12,12 @@ import (
 
 type fakePickerHost struct {
 	stderrHost
-	file     FileDialog
-	fileRet  string
-	fileErr  error
-	dir      DirectoryDialog
-	dirRet   string
-	dirErr   error
+	file    FileDialog
+	fileRet string
+	fileErr error
+	dir     DirectoryDialog
+	dirRet  string
+	dirErr  error
 }
 
 func (f *fakePickerHost) OpenFile(d FileDialog) (string, error) {

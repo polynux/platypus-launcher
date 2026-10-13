@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/relocate"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Move: the `move` capability (protocol 1.4) takes an installed game to

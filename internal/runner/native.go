@@ -19,14 +19,14 @@ import (
 type ExecKind string
 
 const (
-	ExecELF             ExecKind = "elf"
-	ExecAppImage        ExecKind = "appimage"
-	ExecScript          ExecKind = "script"
-	ExecWindowsExe      ExecKind = "windows-exe"
+	ExecELF              ExecKind = "elf"
+	ExecAppImage         ExecKind = "appimage"
+	ExecScript           ExecKind = "script"
+	ExecWindowsExe       ExecKind = "windows-exe"
 	ExecWindowsInstaller ExecKind = "windows-installer"
-	ExecWindowsScript   ExecKind = "windows-script"
-	ExecWindowsShortcut ExecKind = "windows-shortcut"
-	ExecUnknown         ExecKind = "unknown"
+	ExecWindowsScript    ExecKind = "windows-script"
+	ExecWindowsShortcut  ExecKind = "windows-shortcut"
+	ExecUnknown          ExecKind = "unknown"
 )
 
 // Detected is one executable's kind: Native runs without Wine/Proton.

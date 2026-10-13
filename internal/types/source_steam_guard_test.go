@@ -20,11 +20,11 @@ import (
 // allowedSourceSteam names the non-test files that may mention SourceSteam,
 // with why each one is generic.
 var allowedSourceSteam = map[string]string{
-	"internal/types/models.go":    "the type definition",
-	"internal/steam/vdf.go":       "the Steam domain scan (the bundled plugin's data source)",
-	"internal/app/app.go":         "legacy inference for games from before Game.Source existed",
-	"internal/app/app_compat.go":  "store-based ratings: Steam games use their own AppID, like any store game",
-	"internal/runner/umu.go":      "store-based umu rule for Steam-store games",
+	"internal/types/models.go":       "the type definition",
+	"internal/steam/vdf.go":          "the Steam domain scan (the bundled plugin's data source)",
+	"internal/app/app.go":            "legacy inference for games from before Game.Source existed",
+	"internal/app/app_compat.go":     "store-based ratings: Steam games use their own AppID, like any store game",
+	"internal/runner/umu.go":         "store-based umu rule for Steam-store games",
 	"internal/savebackup/resolve.go": "store-based save resolution for Steam-store games",
 	"internal/savebackup/service.go": "store-based save resolution for Steam-store games",
 }

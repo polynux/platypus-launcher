@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
+	"platypus/internal/apperr"
 	"platypus/internal/customize"
 	"platypus/internal/onlineart"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Online artwork for sideloaded games (issues #36, art fallbacks): Steam's

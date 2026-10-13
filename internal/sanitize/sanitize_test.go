@@ -7,8 +7,8 @@ import (
 
 func TestHostileInputs(t *testing.T) {
 	cases := []struct {
-		name  string
-		in    string
+		name   string
+		in     string
 		absent []string
 	}{
 		{"script", `<p>hi</p><script>alert(1)</script>`, []string{"<script", "alert(1)"}},

@@ -404,17 +404,17 @@ type GameDetails struct {
 	// (issue #38): "steam", "gog" or "lutris". Empty for store games and
 	// for sideloaded games with no linked info. InfoSourceName is the
 	// store name for the attribution line ("Steam", "GOG", "Lutris / IGDB").
-	InfoSource     string            `json:"info_source,omitempty"`
-	InfoSourceName string            `json:"info_source_name,omitempty"`
+	InfoSource     string `json:"info_source,omitempty"`
+	InfoSourceName string `json:"info_source_name,omitempty"`
 	// InfoStale marks details served from the cache while offline
 	// (issue #44): the fetch was skipped, so the info may be out of date.
-	InfoStale      bool              `json:"info_stale,omitempty"`
-	Languages      []string          `json:"languages,omitempty"`
-	Controller     string            `json:"controller,omitempty"` // "full" | "partial" | ""
-	Requirements   *GameRequirements `json:"requirements,omitempty"`
-	AgeRating      string            `json:"age_rating,omitempty"`
-	Tags           []string          `json:"tags,omitempty"`
-	Videos         []GameVideo       `json:"videos,omitempty"`
+	InfoStale    bool              `json:"info_stale,omitempty"`
+	Languages    []string          `json:"languages,omitempty"`
+	Controller   string            `json:"controller,omitempty"` // "full" | "partial" | ""
+	Requirements *GameRequirements `json:"requirements,omitempty"`
+	AgeRating    string            `json:"age_rating,omitempty"`
+	Tags         []string          `json:"tags,omitempty"`
+	Videos       []GameVideo       `json:"videos,omitempty"`
 }
 
 // GameRequirements are the store's system requirements, sanitized HTML or

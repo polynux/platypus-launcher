@@ -6,10 +6,10 @@ import (
 	"slices"
 	"strings"
 
+	"platypus/internal/apperr"
 	"platypus/internal/chat"
 	"platypus/internal/plugins"
 	"platypus/internal/social"
-	"platypus/internal/apperr"
 )
 
 // chatBackend reaches plugins for the chat orchestrator.
@@ -125,7 +125,7 @@ func (a *App) ChatAlerts() map[string]bool {
 // SetChatAlerts turns a store's message alerts on or off.
 func (a *App) SetChatAlerts(pluginID string, on bool) error {
 	if !a.plugins.Has(pluginID, "chat") {
-		return apperr.New("chat.none", pluginID + " has no chat", map[string]string{"plugin": pluginID})
+		return apperr.New("chat.none", pluginID+" has no chat", map[string]string{"plugin": pluginID})
 	}
 	return a.settings.SetChatAlerts(pluginID, on)
 }

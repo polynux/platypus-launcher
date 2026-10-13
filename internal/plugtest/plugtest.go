@@ -837,11 +837,11 @@ var (
 		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",
 		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos"}
 	// The drm block of game.details (protocol 1.10, "Compat").
-	DRMKeys    = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
+	DRMKeys = []string{"drmFree", "onlineRequired", "launcher", "denuvoLikely", "notes"}
 	// requirements and a video of game.details (protocol 1.12, "Media").
 	RequirementsKeys = []string{"minimum", "recommended"}
 	VideoKeys        = []string{"url", "thumbnail", "title", "mime"}
-	LaunchKeys = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
+	LaunchKeys       = []string{"exe", "args", "cwd", "env", "needsWine", "redact",
 		"delegate", "client", "command", "find", "startTimeout"}
 
 	// The versions capability (docs/plugins/protocol.md, "Versions").

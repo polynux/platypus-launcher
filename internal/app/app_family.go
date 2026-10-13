@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/plugins"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Family (the `family` capability, protocol 1.8, docs/plans/launcher-parity.md

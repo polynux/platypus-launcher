@@ -100,4 +100,3 @@ func TestDismissMigrationNoticePersists(t *testing.T) {
 		t.Errorf("notice after relaunch = %+v, want nil", n)
 	}
 }
-

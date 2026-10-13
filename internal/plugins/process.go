@@ -128,8 +128,8 @@ type process struct {
 	dataDir   string            // PLATYPUS_PLUGIN_DATA
 	env       map[string]string // extra variables for the plugin process (issue #41)
 	declared  []string          // the manifest's capabilities
-	protocols []Version  // what Platypus speaks
-	offered   VersionSet // what the manifest says the plugin speaks
+	protocols []Version         // what Platypus speaks
+	offered   VersionSet        // what the manifest says the plugin speaks
 	transport Transport
 	onExit    func(error) // unexpected exits only
 	onReady   func()      // after a successful initialize, once per run

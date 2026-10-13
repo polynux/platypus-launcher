@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/stats"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Playtime, achievements and redeem: the `playtime`, `achievements` and

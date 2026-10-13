@@ -9,9 +9,9 @@ import (
 	"slices"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Plugin calls made from the Plugins view: a login can wait on the store.

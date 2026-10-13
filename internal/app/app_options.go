@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // Install options: the `install-options` capability (protocol 1.5,

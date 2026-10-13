@@ -20,7 +20,7 @@ import (
 var localeFiles embed.FS
 
 var (
-	localeMu     sync.Mutex
+	localeMu      sync.Mutex
 	currentLocale = "en"
 	localeTables  = map[string]map[string]string{}
 )

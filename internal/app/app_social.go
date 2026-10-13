@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/plugins"
 	"platypus/internal/social"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // socialStatusTimeout bounds a status change sent to a store.

@@ -50,7 +50,10 @@ func writeBundled(t *testing.T, bundledDir, version string) {
 
 func TestCompareVersions(t *testing.T) {
 	t.Parallel()
-	cases := []struct{ a, b string; want int }{
+	cases := []struct {
+		a, b string
+		want int
+	}{
 		{"1.0.0", "1.0.0", 0},
 		{"1.0.1", "1.0.0", 1},
 		{"1.0.0", "1.0.1", -1},

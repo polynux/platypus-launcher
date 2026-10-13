@@ -7,10 +7,10 @@ import (
 	"log"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // jobBackend runs queue jobs through the owning plugin.

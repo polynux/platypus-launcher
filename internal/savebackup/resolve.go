@@ -66,6 +66,7 @@ func effectiveUmuPrefix(prefixPath string) string {
 	}
 	return prefixPath
 }
+
 // isSteamGame reports built-in Steam (local client) games: they have no
 // plugin and run through the Steam client, with their Proton prefix at
 // <steam library>/steamapps/compatdata/<appid>/pfx.
