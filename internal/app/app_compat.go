@@ -136,16 +136,28 @@ func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source
 	return "", ""
 }
 
+// compatCtx is the context for compat lookups: the app's while online, with
+// a 1 s deadline while offline (issue #44). Background work skips its
+// fetches while offline; on-demand lookups still try, briefly.
+func (a *App) compatCtx() (context.Context, context.CancelFunc) {
+	if a.netOnline() {
+		return context.WithCancel(a.baseCtx())
+	}
+	return context.WithTimeout(a.baseCtx(), time.Second)
+}
+
 // GetGameFix returns the curated fix from data plugins, or the game's ProtonDB
 // tier when it has one worth showing (a Steam AppID and enough reports).
 // Steam's Deck verdict rides along either way, when Steam has one.
 // Plugin games get their ProtonDB tier only through a Steam AppID hint or one
 // the user set; nothing is matched by title.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
+	ctx, cancel := a.compatCtx()
+	defer cancel()
 	return a.gameFix(game, a.pluginHints(game), func(appID string) (compat.Rating, bool) {
-		return a.compat.ProtonDB(a.baseCtx(), appID)
+		return a.compat.ProtonDB(ctx, appID)
 	}, func(appID string) (compat.DeckResult, bool) {
-		return a.compat.DeckRating(a.baseCtx(), appID)
+		return a.compat.DeckRating(ctx, appID)
 	})
 }
 
@@ -220,13 +232,15 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 	}
 	hints := a.pluginHints(game)
 	now := time.Now()
+	ctx, cancel := a.compatCtx()
+	defer cancel()
 	c.Native = game.Native || (hints != nil && slices.Contains(hints.Platforms, "linux"))
 	c.SteamAppID, c.SteamAppIDSource = a.ratingAppID(game, hints)
 	if c.SteamAppID != "" {
-		if r, ok := a.compat.ProtonDB(a.baseCtx(), c.SteamAppID); ok {
+		if r, ok := a.compat.ProtonDB(ctx, c.SteamAppID); ok {
 			c.ProtonDB = protonRating(r, c.SteamAppID)
 		}
-		if d, ok := a.compat.DeckRating(a.baseCtx(), c.SteamAppID); ok && d.Found {
+		if d, ok := a.compat.DeckRating(ctx, c.SteamAppID); ok && d.Found {
 			c.Deck = deckRating(d, c.SteamAppID)
 		}
 	}
@@ -235,7 +249,7 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 		c.DRMNotes = hints.DRM.Notes
 	}
 	// AreWeAntiCheatYet goes first: it is the only source with the Linux status.
-	if cat := a.compat.AntiCheatCatalogue(a.baseCtx()); cat != nil {
+	if cat := a.compat.AntiCheatCatalogue(ctx); cat != nil {
 		if e, ok := cat.BySteam(c.SteamAppID); ok {
 			c.AntiCheat = append(c.AntiCheat, compat.AntiCheatBadges(e, cat.FetchedAt)...)
 		} else if e, ok := cat.ByEpic(game.StoreAppID); ok && game.Store == types.StoreEpic {
@@ -245,7 +259,7 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 	// PCGamingWiki is asked by Steam AppID only; it adds the anti-cheat names
 	// AreWeAntiCheatYet doesn't list (see Compat.Wiki).
 	if c.SteamAppID != "" {
-		if w, ok := a.compat.WikiPage(a.baseCtx(), c.SteamAppID); ok && w.Found {
+		if w, ok := a.compat.WikiPage(ctx, c.SteamAppID); ok && w.Found {
 			drm := compat.WikiDRMBadges(w.Record, w.FetchedAt, hints != nil && hints.DRM != nil)
 			ac := newAntiCheat(c.AntiCheat, compat.WikiAntiCheatBadges(w.Record, w.FetchedAt))
 			c.DRM = append(c.DRM, drm...)

@@ -153,8 +153,12 @@ func (a *App) startPlaytimeOnce(plugin string) {
 }
 
 // readPlaytime reads a plugin's playtime in the background, unless a read of
-// that plugin is already in flight.
+// that plugin is already in flight. While offline the refresh is skipped
+// (issue #44): the cached numbers stay until the next trigger.
 func (a *App) readPlaytime(plugin string) {
+	if !a.netOnline() {
+		return
+	}
 	if !a.stats.claim(plugin) {
 		return
 	}

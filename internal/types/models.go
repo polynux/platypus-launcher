@@ -406,6 +406,9 @@ type GameDetails struct {
 	// store name for the attribution line ("Steam", "GOG", "Lutris / IGDB").
 	InfoSource     string            `json:"info_source,omitempty"`
 	InfoSourceName string            `json:"info_source_name,omitempty"`
+	// InfoStale marks details served from the cache while offline
+	// (issue #44): the fetch was skipped, so the info may be out of date.
+	InfoStale      bool              `json:"info_stale,omitempty"`
 	Languages      []string          `json:"languages,omitempty"`
 	Controller     string            `json:"controller,omitempty"` // "full" | "partial" | ""
 	Requirements   *GameRequirements `json:"requirements,omitempty"`
@@ -456,6 +459,15 @@ type SessionEvent struct {
 	State   string `json:"state"` // "starting" | "running" | "stopped" | "failed"
 	PID     int    `json:"pid,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+// NetState is what GetNetState returns (issue #44): whether the machine
+// looks online, and when the current state began (unix seconds, 0 when the
+// state never changed). The UI shows a small "Offline" indicator in the
+// library toolbar while offline.
+type NetState struct {
+	Online bool  `json:"online"`
+	Since  int64 `json:"since"`
 }
 
 // Job is an install, update or uninstall run by a store plugin.

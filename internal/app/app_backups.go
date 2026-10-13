@@ -123,6 +123,8 @@ func (a *App) saveService() *savebackup.Service {
 		DataDir:  dataDir,
 		CacheDir: cacheDir,
 		Home:     home,
+		// The manifest refresh feeds the offline tracker (issue #44).
+		Client: a.netClient(nil, 15*time.Second),
 		Emit: func(e savebackup.Event) {
 			a.host.Emit("backups", e)
 		},
@@ -145,6 +147,11 @@ func (a *App) startSavebackups(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(5 * time.Second):
+		}
+		// Offline: the manifest refresh is background work and stays put
+		// (issue #44). The next startup retries it.
+		if !a.netOnline() {
+			return
 		}
 		if a.deferWhileGameRuns(func() { svc.MaybeRefresh(ctx) }) {
 			return

@@ -22,6 +22,7 @@ import (
 
 // artClient is the lookup client: the injected one in tests, the live Steam
 // endpoints otherwise. The client's locale follows the effective locale.
+// The live client's requests feed the offline tracker (issue #44).
 func (a *App) artClient() *onlineart.Client {
 	if a.artwork != nil {
 		a.artwork.Locale = a.Locale()
@@ -29,6 +30,7 @@ func (a *App) artClient() *onlineart.Client {
 	}
 	c := onlineart.New()
 	c.Locale = a.Locale()
+	c.HTTP = a.netClient(c.HTTP, onlineart.Timeout)
 	return c
 }
 
@@ -607,6 +609,11 @@ func (a *App) noteOnlineYear(gameID string, year int) {
 // online-sourced art, never hand-picked art.
 func (a *App) autoArtwork(gameID, title string) {
 	if !a.settings.ArtworkOnline() {
+		return
+	}
+	// Offline: no automatic online lookups (issue #44). The user can still
+	// search by hand once back online.
+	if !a.netOnline() {
 		return
 	}
 	cl := a.artClient()

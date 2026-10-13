@@ -134,7 +134,11 @@ func (a *App) SetChatAlerts(pluginID string, on bool) error {
 // (chat.unreadCounts, protocol 1.13): badges are right after a restart,
 // without waiting for the next message. A store that speaks an older
 // protocol, or answers an error, keeps today's behaviour, silently.
+// While offline the refresh is skipped (issue #44).
 func (a *App) refreshChatUnread(pluginID string) {
+	if !a.netOnline() {
+		return
+	}
 	if a.chat == nil || a.plugins == nil {
 		return
 	}

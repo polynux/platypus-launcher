@@ -28,11 +28,16 @@ import (
 const libraryCacheTTL = 30 * time.Second
 
 // libraryCacheEntry is one source's last listing, failure included: a source
-// that failed (logged out, store down) isn't retried on every read.
+// that failed (logged out, store down) isn't retried on every read. lastGood
+// is the last successful listing (issue #44): when a source fails, its games
+// come from lastGood or the on-disk snapshot, with a stale warning, so the
+// library survives an offline restart.
 type libraryCacheEntry struct {
 	games []types.Game
 	err   error
 	at    time.Time
+	// lastGood is the last successful listing of this source.
+	lastGood []types.Game
 }
 
 // libraryCache is the per-source library cache. The zero value is ready to
@@ -41,6 +46,10 @@ type libraryCache struct {
 	mu      sync.Mutex
 	ttl     time.Duration
 	entries map[string]libraryCacheEntry
+	// snapDir is where per-source snapshots live
+	// (<snapDir>/<source>.json), written after each success. Empty means
+	// memory only (tests).
+	snapDir string
 }
 
 func (c *libraryCache) age() time.Duration {
@@ -63,11 +72,38 @@ func (c *libraryCache) fresh(source string) ([]types.Game, error, bool) {
 
 func (c *libraryCache) set(source string, games []types.Game, err error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	e := c.entries[source]
+	if err == nil {
+		e.lastGood = games
+	} else if e.lastGood == nil {
+		// No success yet in this run: the on-disk snapshot (an earlier
+		// run's last good listing) stands in, so the library survives an
+		// offline restart.
+		e.lastGood = loadLibrarySnapshot(c.snapDir, source)
+	}
+	e.games, e.err, e.at = games, err, time.Now()
 	if c.entries == nil {
 		c.entries = map[string]libraryCacheEntry{}
 	}
-	c.entries[source] = libraryCacheEntry{games: games, err: err, at: time.Now()}
+	c.entries[source] = e
+	c.mu.Unlock()
+	if err == nil {
+		saveLibrarySnapshot(c.snapDir, source, games)
+	}
+}
+
+// lastGood returns the source's last successful listing: the in-memory one,
+// else the on-disk snapshot. ok is false when there is none.
+func (c *libraryCache) lastGood(source string) ([]types.Game, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.entries[source]; ok && len(e.lastGood) > 0 {
+		return e.lastGood, true
+	}
+	if games := loadLibrarySnapshot(c.snapDir, source); len(games) > 0 {
+		return games, true
+	}
+	return nil, false
 }
 
 func (c *libraryCache) invalidate(source string) {
@@ -172,6 +208,14 @@ func (a *App) getLibrary(force bool) (types.Library, error) {
 			defer cancel()
 			games, err := all[i].Library(ctx)
 			a.library.set(all[i].ID(), games, err)
+			if err != nil && len(games) == 0 {
+				// The source failed: serve its last good listing (or the
+				// on-disk snapshot) with a stale warning, so one broken
+				// source — or an offline restart — can't hide the library.
+				if good, ok := a.library.lastGood(all[i].ID()); ok {
+					games = good
+				}
+			}
 			results[i], errs[i] = games, err
 			finished <- i
 		}()
