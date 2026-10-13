@@ -10,6 +10,7 @@ import (
 	"platypus/internal/customize"
 	"platypus/internal/onlineart"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Online artwork for sideloaded games (issues #36, art fallbacks): Steam's
@@ -48,7 +49,7 @@ func (a *App) isCustomGameID(id string) bool {
 // shows. When the switch is off it refuses: nothing goes out.
 func (a *App) SearchArtOnline(title string) ([]types.ArtCandidate, error) {
 	if !a.settings.ArtworkOnline() {
-		return nil, fmt.Errorf("finding artwork online is switched off")
+		return nil, apperr.New("art.off", "finding artwork online is switched off", nil)
 	}
 	cl := a.artClient()
 	steam, serr := cl.Search(title)
@@ -141,32 +142,32 @@ func (a *App) cachedArtCandidate(source, id string) (onlineart.Candidate, bool) 
 // yet takes the store's (both best-effort).
 func (a *App) ApplyOnlineArt(gameID, source, id string) (types.Customization, error) {
 	if !a.settings.ArtworkOnline() {
-		return types.Customization{}, fmt.Errorf("finding artwork online is switched off")
+		return types.Customization{}, apperr.New("art.off", "finding artwork online is switched off", nil)
 	}
 	if !a.isCustomGameID(gameID) {
-		return types.Customization{}, fmt.Errorf("art lookup is for sideloaded games")
+		return types.Customization{}, apperr.New("art.sideloadOnly", "art lookup is for sideloaded games", nil)
 	}
 	source = strings.ToLower(strings.TrimSpace(source))
 	id = strings.TrimSpace(id)
 	switch source {
 	case "gog":
 		if id == "" {
-			return types.Customization{}, fmt.Errorf("a GOG product id is a string")
+			return types.Customization{}, apperr.New("gog.productId.invalid", "a GOG product id is a string", nil)
 		}
 		return a.applyGOGArt(gameID, id)
 	case "lutris":
 		if id == "" {
-			return types.Customization{}, fmt.Errorf("a Lutris slug is a string")
+			return types.Customization{}, apperr.New("lutris.slug.invalid", "a Lutris slug is a string", nil)
 		}
 		return a.applyLutrisArt(gameID, id)
 	case "steam", "":
 		appID, err := strconv.Atoi(id)
 		if err != nil || appID <= 0 {
-			return types.Customization{}, fmt.Errorf("a Steam app id is a number")
+			return types.Customization{}, apperr.New("steam.appid.invalid", "a Steam app id is a number", nil)
 		}
 		return a.applySteamArt(gameID, appID)
 	default:
-		return types.Customization{}, fmt.Errorf("unknown art source %q", source)
+		return types.Customization{}, apperr.New("art.source.unknown", fmt.Sprintf("unknown art source %q", source), map[string]string{"source": source})
 	}
 }
 
@@ -192,7 +193,7 @@ func (a *App) applySteamArt(gameID string, appID int) (types.Customization, erro
 	}
 	if len(applied) == 0 {
 		c, _ := a.customization(gameID)
-		return c, fmt.Errorf("Steam has no cover or banner art for %s", name)
+		return c, apperr.New("art.steam.none", fmt.Sprintf("Steam has no cover or banner art for %s", name), map[string]string{"name": name})
 	}
 	if logoErr != nil {
 		a.host.Warnf("artwork logo for %s: %v", name, logoErr)
@@ -232,7 +233,7 @@ func (a *App) applyGOGArt(gameID, productID string) (types.Customization, error)
 		}
 	}
 	c, _ := a.customization(gameID)
-	return c, fmt.Errorf("that GOG result is stale: search for the art again, then apply it")
+	return c, apperr.New("art.gog.stale", "that GOG result is stale: search for the art again, then apply it", nil)
 }
 
 // applyGOGCandidate stores one GOG hit's art with manual semantics.
@@ -244,7 +245,7 @@ func (a *App) applyGOGCandidate(gameID string, hit onlineart.Candidate) (types.C
 	}
 	if len(applied) == 0 {
 		c, _ := a.customization(gameID)
-		return c, fmt.Errorf("GOG has no cover or banner art for %s", hit.Name)
+		return c, apperr.New("art.gog.none", fmt.Sprintf("GOG has no cover or banner art for %s", hit.Name), map[string]string{"name": hit.Name})
 	}
 	if logoErr != nil {
 		a.host.Warnf("artwork logo for %s: %v", hit.Name, logoErr)
@@ -274,7 +275,7 @@ func (a *App) applyLutrisArt(gameID, slug string) (types.Customization, error) {
 		// Steam had nothing usable: fall through to the Lutris cover.
 		if cand.CoverURL == "" {
 			c, _ := a.customization(gameID)
-			return c, fmt.Errorf("Steam has no cover or banner art for %s", name)
+			return c, apperr.New("art.steam.none", fmt.Sprintf("Steam has no cover or banner art for %s", name), map[string]string{"name": name})
 		}
 	}
 	applied, err := a.fetchAndStoreLutrisArt(gameID, cand, false)
@@ -284,7 +285,7 @@ func (a *App) applyLutrisArt(gameID, slug string) (types.Customization, error) {
 	}
 	if len(applied) == 0 {
 		c, _ := a.customization(gameID)
-		return c, fmt.Errorf("Lutris has no cover art for %s", name)
+		return c, apperr.New("art.lutris.none", fmt.Sprintf("Lutris has no cover art for %s", name), map[string]string{"name": name})
 	}
 	a.noteOnlineYear(gameID, cand.Year)
 	a.maybeAutoLinkInfo(gameID, "lutris", cand.ID)

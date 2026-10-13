@@ -9,8 +9,7 @@ import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { formatBytes } from '../lib/games';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 export interface MoveDialogProps {
   game: Game;
@@ -41,7 +40,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
       },
       (e) => {
         setCheck(null);
-        setError(errMsg(e));
+        setError(coreErrMsg(e));
       },
     ).finally(() => setBusy(false));
   };
@@ -51,7 +50,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
       (folder) => {
         if (folder) inspect(folder);
       },
-      (e) => setError(errMsg(e)),
+      (e) => setError(coreErrMsg(e)),
     );
   };
 
@@ -60,7 +59,7 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
     setBusy(true);
     Effect.runPromise(LauncherApi.moveGame(game, parent)).then(
       (job) => onQueued(job),
-      (e) => setError(errMsg(e)),
+      (e) => setError(coreErrMsg(e)),
     ).finally(() => setBusy(false));
   };
 

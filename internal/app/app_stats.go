@@ -13,6 +13,7 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/stats"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Playtime, achievements and redeem: the `playtime`, `achievements` and
@@ -284,20 +285,20 @@ func (a *App) GetGameAchievements(game types.Game) (*types.AchievementProgress, 
 func (a *App) RedeemCode(source, code string) (types.RedeemResult, error) {
 	p, ok := a.plugins.Plugin(source)
 	if !ok {
-		return types.RedeemResult{}, fmt.Errorf("%s isn't a store plugin", source)
+		return types.RedeemResult{}, apperr.New("redeem.notStore", fmt.Sprintf("%s isn't a store plugin", source), map[string]string{"source": source})
 	}
 	if p.Status != plugins.StatusReady {
-		return types.RedeemResult{}, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return types.RedeemResult{}, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	if !a.plugins.Has(source, "redeem") {
-		return types.RedeemResult{}, fmt.Errorf("%s doesn't redeem codes", p.Manifest.Name)
+		return types.RedeemResult{}, apperr.New("redeem.unsupported", fmt.Sprintf("%s doesn't redeem codes", p.Manifest.Name), map[string]string{"name": p.Manifest.Name})
 	}
 	clean, err := stats.CleanCode(code)
 	if err != nil {
 		return types.RedeemResult{}, err
 	}
 	if !a.stats.redeemMu.TryLock() {
-		return types.RedeemResult{}, errors.New("a code is already being redeemed")
+		return types.RedeemResult{}, apperr.New("redeem.busy", "a code is already being redeemed", nil)
 	}
 	defer a.stats.redeemMu.Unlock()
 

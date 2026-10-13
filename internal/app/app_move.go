@@ -17,6 +17,7 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/relocate"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Move: the `move` capability (protocol 1.4) takes an installed game to
@@ -31,8 +32,8 @@ const moveSpaceMargin = 1.02
 const relocatedTimeout = 30 * time.Second
 
 var (
-	errMoveStoppedEarly = errors.New("the move was canceled before it started")
-	errMoveStillStops   = errors.New("the earlier move of this game is still stopping; try again in a moment")
+	errMoveStoppedEarly = apperr.New("move.canceled", "the move was canceled before it started", nil)
+	errMoveStillStops   = apperr.New("move.stopping", "the earlier move of this game is still stopping; try again in a moment", nil)
 )
 
 // coreMoves tracks the core moves that run in a goroutine: one run per job,
@@ -121,7 +122,7 @@ func moveParams(j types.Job) map[string]any {
 func (a *App) currentFolder(game types.Game) (string, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return "", fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return "", apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	// Through the library cache: planning a move doesn't re-list the store
 	// on its own.
@@ -134,16 +135,16 @@ func (a *App) currentFolder(game types.Game) (string, error) {
 			continue
 		}
 		if !g.IsInstalled {
-			return "", fmt.Errorf("%s is not installed", game.Title)
+			return "", apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 		}
 		if g.InstallDir == "" {
 			// The store says it is installed but names no folder (a store client,
 			// a borrowed copy kept elsewhere): say what is known, not "not installed".
-			return "", fmt.Errorf("%s is installed, but Platypus doesn't know which folder holds its files", game.Title)
+			return "", apperr.New("move.unknownLocation", fmt.Sprintf("%s is installed, but Platypus doesn't know which folder holds its files", game.Title), map[string]string{"title": game.Title})
 		}
 		return g.InstallDir, nil
 	}
-	return "", fmt.Errorf("%s is not in %s's library", game.Title, p.Manifest.Name)
+	return "", apperr.New("move.notInLibrary", fmt.Sprintf("%s is not in %s's library", game.Title, p.Manifest.Name), map[string]string{"title": game.Title, "plugin": p.Manifest.Name})
 }
 
 // moveSpace is what a move from → to needs and what the destination has free.
@@ -163,8 +164,9 @@ func moveSpace(from, to string) (need, free int64, err error) {
 
 // noRoom is the refusal for a move that doesn't fit.
 func noRoom(dir string, need, free int64) error {
-	return fmt.Errorf("not enough space in %s: the game needs %s, %s is free",
-		dir, jobs.HumanBytes(need), jobs.HumanBytes(free))
+	needS, freeS := jobs.HumanBytes(need), jobs.HumanBytes(free)
+	return apperr.New("move.noSpace", fmt.Sprintf("not enough space in %s: the game needs %s, %s is free",
+		dir, needS, freeS), map[string]string{"dir": dir, "need": needS, "free": freeS})
 }
 
 // planMove checks a move of game into parent (the folder the user picked):
@@ -175,20 +177,20 @@ func noRoom(dir string, need, free int64) error {
 func (a *App) planMove(game types.Game, parent string) (string, types.MoveCheck, error) {
 	check := types.MoveCheck{PluginMoves: a.plugins.Has(game.Source, "move")}
 	if !game.IsInstalled {
-		return "", check, fmt.Errorf("%s is not installed", game.Title)
+		return "", check, apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 	}
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return "", check, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return "", check, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	if p.Status != plugins.StatusReady {
-		return "", check, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return "", check, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	if a.isRunning(game.ID) {
-		return "", check, fmt.Errorf("%s is running", game.Title)
+		return "", check, apperr.New("game.running", fmt.Sprintf("%s is running", game.Title), map[string]string{"title": game.Title})
 	}
 	if !filepath.IsAbs(parent) {
-		return "", check, fmt.Errorf("choose a folder to move %s into", game.Title)
+		return "", check, apperr.New("move.chooseFolder", fmt.Sprintf("choose a folder to move %s into", game.Title), map[string]string{"title": game.Title})
 	}
 	from, err := a.currentFolder(game)
 	if err != nil {
@@ -201,16 +203,16 @@ func (a *App) planMove(game types.Game, parent string) (string, types.MoveCheck,
 	to := filepath.Join(parent, filepath.Base(from))
 	check.To = to
 	if strings.HasPrefix(to, from+string(filepath.Separator)) {
-		return "", check, fmt.Errorf("%s is inside the game's folder", to)
+		return "", check, apperr.New("move.insideGame", fmt.Sprintf("%s is inside the game's folder", to), map[string]string{"path": to})
 	}
 	if err := checkFolderFor(to, a.settings.GamesFolder(), "move into", a.homeDir()); err != nil {
 		return "", check, err
 	}
 	if _, err := os.Lstat(to); err == nil {
-		return "", check, fmt.Errorf("%s already exists; choose another folder", to)
+		return "", check, apperr.New("move.exists", fmt.Sprintf("%s already exists; choose another folder", to), map[string]string{"path": to})
 	}
 	if info, err := os.Stat(parent); err != nil || !info.IsDir() {
-		return "", check, fmt.Errorf("%s is not a folder", parent)
+		return "", check, apperr.New("move.notFolder", fmt.Sprintf("%s is not a folder", parent), map[string]string{"path": parent})
 	}
 	if _, _, err := relocate.Check(from, to); err != nil {
 		return "", check, err

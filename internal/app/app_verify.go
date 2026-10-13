@@ -7,6 +7,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Verify files: the `verify` capability (protocol 1.4). The plugin checks the
@@ -21,16 +22,16 @@ import (
 func (a *App) verifyGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return plugins.Plugin{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return plugins.Plugin{}, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	if p.Status != plugins.StatusReady {
-		return p, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return p, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	if !a.plugins.Has(game.Source, "verify") {
-		return p, fmt.Errorf("%s can't verify files", p.Manifest.Name)
+		return p, apperr.New("verify.unsupported", fmt.Sprintf("%s can't verify files", p.Manifest.Name), map[string]string{"name": p.Manifest.Name})
 	}
 	if game.Features != nil && !slices.Contains(game.Features, "verify") {
-		return p, fmt.Errorf("%s can't verify %s", p.Manifest.Name, game.Title)
+		return p, apperr.New("verify.gameUnsupported", fmt.Sprintf("%s can't verify %s", p.Manifest.Name, game.Title), map[string]string{"name": p.Manifest.Name, "title": game.Title})
 	}
 	return p, nil
 }
@@ -55,7 +56,7 @@ func (a *App) RepairGame(game types.Game) (types.Job, error) {
 	}
 	last, ok := a.lastVerify(game.ID)
 	if !ok || last.Verify == nil || last.Verify.Damaged+last.Verify.Missing == 0 {
-		return types.Job{}, fmt.Errorf("check %s first: there is no damage report to repair from", game.Title)
+		return types.Job{}, apperr.New("verify.noReport", fmt.Sprintf("check %s first: there is no damage report to repair from", game.Title), map[string]string{"title": game.Title})
 	}
 	return a.jobs.AddVerify(game.Source, game.ID, game.StoreAppID, game.Title, folder, true)
 }
@@ -64,13 +65,13 @@ func (a *App) RepairGame(game types.Game) (types.Job, error) {
 // folder it runs in: the one the library reports, not the UI's copy.
 func (a *App) verifyFolder(game types.Game) (string, error) {
 	if !game.IsInstalled {
-		return "", fmt.Errorf("%s is not installed", game.Title)
+		return "", apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 	}
 	if _, err := a.verifyGate(game); err != nil {
 		return "", err
 	}
 	if a.isRunning(game.ID) {
-		return "", fmt.Errorf("%s is running", game.Title)
+		return "", apperr.New("game.running", fmt.Sprintf("%s is running", game.Title), map[string]string{"title": game.Title})
 	}
 	folder, err := a.currentFolder(game)
 	if err != nil {

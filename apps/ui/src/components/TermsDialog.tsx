@@ -11,8 +11,7 @@ import { openExternal } from '../lib/external';
 import { notifyTermsAccepted, termURL } from '../lib/terms';
 import { cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 export interface TermsDialogProps {
   game: Game;
@@ -40,7 +39,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
       notifyTermsAccepted();
       onAccepted();
     } catch (e) {
-      setError(errMsg(e));
+      setError(coreErrMsg(e));
     } finally {
       setBusy(false);
     }

@@ -9,8 +9,7 @@ import { Button } from '@/components/ds/button';
 import { freeLabel, shortPath } from '../lib/installLocation';
 import { MonoLabel } from './ui';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** The game folders in Settings: the default one, where installs go, then the
  *  library folders. Each game's "Install to…" step offers all of them. */
@@ -21,7 +20,7 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch((e) => setError(errMsg(e)));
+    Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch((e) => setError(coreErrMsg(e)));
   }, []);
 
   const run = (job: Promise<GameFolder[]>, done?: string) => {
@@ -29,14 +28,14 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
     setError(null);
     return job
       .then((list) => { setFolders(list); if (done) onNotify(done); })
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => setError(coreErrMsg(e)))
       .finally(() => setBusy(false));
   };
 
   const add = () => {
     Effect.runPromise(LauncherApi.chooseGameFolder())
       .then((path) => { if (path) return run(Effect.runPromise(LauncherApi.addGameFolder(path)), t('folders.added')); })
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(coreErrMsg(e)));
   };
 
   const defaultPath = folders?.find((f) => f.is_default)?.path;

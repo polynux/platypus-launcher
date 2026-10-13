@@ -11,6 +11,7 @@ import (
 
 	"platypus/internal/plugins"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Plugin calls made from the Plugins view: a login can wait on the store.
@@ -218,10 +219,10 @@ func (a *App) OpenPluginsFolder() error {
 func (a *App) authCall(id, method string, params, result any) error {
 	p, ok := a.plugins.Plugin(id)
 	if !ok {
-		return fmt.Errorf("unknown plugin %q", id)
+		return apperr.New("plugin.unknown", fmt.Sprintf("unknown plugin %q", id), map[string]string{"id": id})
 	}
 	if !a.plugins.Has(id, "auth") {
-		return fmt.Errorf("%s has no login", p.Manifest.Name)
+		return apperr.New("plugin.noLogin", fmt.Sprintf("%s has no login", p.Manifest.Name), map[string]string{"name": p.Manifest.Name})
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, authTimeout)
 	defer cancel()

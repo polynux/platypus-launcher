@@ -11,6 +11,7 @@ import (
 	"platypus/internal/settings"
 	"platypus/internal/stores"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Plugin settings (the `settings` capability, protocol 1.8, docs/plugins/
@@ -130,7 +131,7 @@ func (a *App) gameSettingsGate(game types.Game) (plugins.Plugin, error) {
 		return p, err
 	}
 	if !slices.Contains(game.Features, "settings") {
-		return p, fmt.Errorf("%s has no settings for %s", p.Manifest.Name, game.Title)
+		return p, apperr.New("plugin.settings.none", fmt.Sprintf("%s has no settings for %s", p.Manifest.Name, game.Title), map[string]string{"name": p.Manifest.Name, "title": game.Title})
 	}
 	return p, nil
 }

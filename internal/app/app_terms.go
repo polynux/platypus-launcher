@@ -11,6 +11,7 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/stores"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Terms (protocol 1.11, the `terms` capability, docs/plugins/protocol.md
@@ -47,10 +48,10 @@ func (a *App) termsOffered(ctx context.Context, game types.Game) bool {
 func (a *App) termsAdapter(game types.Game) (*stores.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return nil, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return nil, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	if p.Status != plugins.StatusReady {
-		return nil, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return nil, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	return stores.NewPlugin(a.plugins, p, nil), nil
 }
@@ -99,7 +100,7 @@ func (a *App) AcceptGameTerms(game types.Game, refs []types.TermRef) error {
 	for _, ref := range refs {
 		i := slices.IndexFunc(terms, func(t types.GameTerm) bool { return t.ID == ref.ID && t.Version == ref.Version })
 		if i < 0 {
-			return fmt.Errorf("the terms of %s changed; look at them again", game.Title)
+			return apperr.New("terms.changed", fmt.Sprintf("the terms of %s changed; look at them again", game.Title), map[string]string{"title": game.Title})
 		}
 		accepted = append(accepted, types.TermAcceptance{ID: ref.ID, Version: ref.Version})
 	}
@@ -126,7 +127,7 @@ func (a *App) AcceptGameTerms(game types.Game, refs []types.TermRef) error {
 func (a *App) termsGate(game types.Game) error {
 	terms, err := a.gameTerms(appCtx(a), game)
 	if err != nil {
-		return fmt.Errorf("couldn't read the terms of %s from the store; retry: %w", game.Title, err)
+		return apperr.Wrap("terms.unreadable", fmt.Errorf("couldn't read the terms of %s from the store; retry: %w", game.Title, err), map[string]string{"title": game.Title})
 	}
 	pending := types.Pending(terms)
 	if len(pending) == 0 {
@@ -136,7 +137,7 @@ func (a *App) termsGate(game types.Game) error {
 	for i, t := range pending {
 		titles[i] = t.Title
 	}
-	return fmt.Errorf("accept the terms of %s first: %s", game.Title, strings.Join(titles, ", "))
+	return apperr.New("terms.acceptFirst", fmt.Sprintf("accept the terms of %s first: %s", game.Title, strings.Join(titles, ", ")), map[string]string{"title": game.Title, "terms": strings.Join(titles, ", ")})
 }
 
 // termsKind says whether a queued kind is gated by terms: a fresh install and

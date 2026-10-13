@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, Notification, protocol,
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createChatNotifier, validNotifyMessage } from './chatNotify.ts';
-import { Core } from './core.ts';
+import { Core, errorData } from './core.ts';
 import { resolveShellLanguage, shellText } from './locale.ts';
 import { resolvePaths } from './paths.ts';
 import { coreEnv, resolveUserData } from './userdata.ts';
@@ -175,7 +175,11 @@ function registerIPC(): void {
     try {
       return { ok: true, result: await core.call(method, args) };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      // A coded core error (issue #39, phase 3) keeps its translatable
+      // payload across the IPC: the page looks up errors:<code>.
+      const data = errorData(err);
+      const error = err instanceof Error ? err.message : String(err);
+      return data === undefined ? { ok: false, error } : { ok: false, error, data };
     }
   });
   ipcMain.on('platypus:openExternal', (e, raw: unknown) => {

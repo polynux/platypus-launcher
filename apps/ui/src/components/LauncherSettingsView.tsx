@@ -13,10 +13,10 @@ import { PSEUDO_LOCALE, applyLanguage, loadSessionInfo, pseudoAvailable } from '
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
 import { ErrorNotice } from './ErrorNotice';
+import { coreErrMsg } from '../lib/coreError';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 interface LauncherSettingsViewProps {
   onNotify: (msg: string, kind?: 'ok' | 'err') => void;
@@ -35,7 +35,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   useEffect(() => {
     Effect.runPromise(LauncherApi.getLauncherSettings())
       .then((s) => { setSaved(s); setCleanupDays(s.cancel_cleanup_days); })
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(coreErrMsg(e)));
   }, []);
 
   const saveCleanupDays = (days: number) => {
@@ -47,7 +47,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         setCleanupDays(s.cancel_cleanup_days);
         onNotify(t('cleanup.saved'));
       })
-      .catch((e) => setCleanupError(errMsg(e)))
+      .catch((e) => setCleanupError(coreErrMsg(e)))
       .finally(() => setBusy(false));
   };
 
@@ -142,7 +142,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
         return applyLanguage(saved);
       })
       .then(() => onNotify(t('language.saved')))
-      .catch((e) => onNotify(errMsg(e), 'err'))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
   // Language names stay in their own language (endonyms): translating them
@@ -193,7 +193,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
         setOn(s.ratings_online ?? next);
         onNotify(next ? t('ratings.on') : t('ratings.off'));
       })
-      .catch((e) => onNotify(errMsg(e), 'err'))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
   return (
@@ -235,7 +235,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
         setOn(s.artwork_online ?? next);
         onNotify(next ? t('artwork.on') : t('artwork.off'));
       })
-      .catch((e) => onNotify(errMsg(e), 'err'))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
   return (
@@ -274,7 +274,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
         setOn(s.game_info_online ?? next);
         onNotify(next ? t('gameInfo.on') : t('gameInfo.off'));
       })
-      .catch((e) => onNotify(errMsg(e), 'err'))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
   return (
@@ -313,7 +313,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
         setOn(s.chat_desktop_notify ?? next);
         onNotify(next ? t('chat.on') : t('chat.off'));
       })
-      .catch((e) => onNotify(errMsg(e), 'err'))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
   return (
@@ -343,7 +343,7 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
   useEffect(() => {
     Effect.runPromise(LauncherApi.getLauncherSettings())
       .then((s) => { setSaved(s); setFolder(s.prefixes_folder ?? ''); })
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(coreErrMsg(e)));
   }, []);
 
   const dirty = saved != null && folder.trim() !== (saved.prefixes_folder ?? '');
@@ -358,14 +358,14 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
         setFolder(s.prefixes_folder ?? '');
         onNotify(path ? t('prefixes.saved') : t('prefixes.resetDone'));
       })
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => setError(coreErrMsg(e)))
       .finally(() => setBusy(false));
   };
 
   const browse = () => {
     Effect.runPromise(LauncherApi.pickFolder(t('prefixes.browseTitle'), folder.trim() || saved?.prefixes_folder || saved?.default_prefixes_folder || ''))
       .then((picked) => { if (picked) { setFolder(picked); setError(null); } })
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(coreErrMsg(e)));
   };
 
   return (

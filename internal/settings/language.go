@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"platypus/internal/apperr"
 )
 
 var langRe = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
@@ -23,7 +25,9 @@ func (s *Store) Language() string {
 func (s *Store) SetLanguage(lang string) error {
 	lang = strings.TrimSpace(lang)
 	if lang != "" && !langRe.MatchString(lang) {
-		return fmt.Errorf("language must be empty (System) or a BCP 47 tag like fr, got %q", lang)
+		return apperr.New("settings.language.invalid",
+			fmt.Sprintf("language must be empty (System) or a BCP 47 tag like fr, got %q", lang),
+			map[string]string{"lang": lang})
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

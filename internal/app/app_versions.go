@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -14,6 +15,7 @@ import (
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Game version selection: the `versions` capability. The plugin lists channels
@@ -44,20 +46,20 @@ const (
 func (a *App) versionsGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return plugins.Plugin{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return plugins.Plugin{}, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	if p.Status != plugins.StatusReady {
-		return p, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return p, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	if !a.plugins.Has(game.Source, "versions") {
-		return p, fmt.Errorf("%s doesn't offer version selection", p.Manifest.Name)
+		return p, apperr.New("versions.unsupported", fmt.Sprintf("%s doesn't offer version selection", p.Manifest.Name), map[string]string{"name": p.Manifest.Name})
 	}
 	listed, err := a.libraryCopy(game)
 	if err != nil {
 		return p, err
 	}
 	if listed.Features != nil && !slices.Contains(listed.Features, "versions") {
-		return p, fmt.Errorf("%s has a single version here", game.Title)
+		return p, apperr.New("versions.single", fmt.Sprintf("%s has a single version here", game.Title), map[string]string{"title": game.Title})
 	}
 	return p, nil
 }
@@ -67,7 +69,7 @@ func (a *App) versionsGate(game types.Game) (plugins.Plugin, error) {
 // re-list the store on its own.
 func (a *App) libraryCopy(game types.Game) (types.Game, error) {
 	if _, ok := a.stores.Get(game.Source); !ok {
-		return types.Game{}, fmt.Errorf("%s isn't in your library", game.Title)
+		return types.Game{}, apperr.New("game.notInLibrary", fmt.Sprintf("%s isn't in your library", game.Title), map[string]string{"title": game.Title})
 	}
 	games, err := a.sourceLibrary(game.Source)
 	if err != nil {
@@ -78,7 +80,7 @@ func (a *App) libraryCopy(game types.Game) (types.Game, error) {
 			return g, nil
 		}
 	}
-	return types.Game{}, fmt.Errorf("%s isn't in your library", game.Title)
+	return types.Game{}, apperr.New("game.notInLibrary", fmt.Sprintf("%s isn't in your library", game.Title), map[string]string{"title": game.Title})
 }
 
 // GetGameVersions asks the game's plugin which channels and builds it can
@@ -181,10 +183,10 @@ func (a *App) UnlockVersionChannel(game types.Game, channel, password string) (b
 		return false, err
 	}
 	if channel == "" || len(channel) > maxTargetField {
-		return false, errors.New("pick a channel to unlock")
+		return false, apperr.New("versions.channel.missing", "pick a channel to unlock", nil)
 	}
 	if password == "" || len(password) > maxPassword {
-		return false, errors.New("type the channel's password")
+		return false, apperr.New("versions.password.missing", "type the channel's password", nil)
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, unlockTimeout)
 	defer cancel()
@@ -195,7 +197,7 @@ func (a *App) UnlockVersionChannel(game types.Game, channel, password string) (b
 	if err := a.plugins.Call(ctx, game.Source, "versions.unlock", params, &res); err != nil {
 		var re *jsonrpc.Error
 		if errors.As(err, &re) && re.Code == jsonrpc.CodeMethodNotFound {
-			return false, errors.New("this store has no channel passwords")
+			return false, apperr.New("versions.password.unsupported", "this store has no channel passwords", nil)
 		}
 		return false, err
 	}
@@ -220,10 +222,10 @@ func (a *App) UnpinGameVersion(gameID string) error {
 // InstallGameVersion installs a game at a specific version.
 func (a *App) InstallGameVersion(game types.Game, target types.VersionTarget) (types.Job, error) {
 	if game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is already installed; switch its version instead", game.Title)
+		return types.Job{}, apperr.New("versions.installedUseSwitch", fmt.Sprintf("%s is already installed; switch its version instead", game.Title), map[string]string{"title": game.Title})
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
+		return types.Job{}, apperr.New("install.cannotInstall", fmt.Sprintf("%s can't be installed by Platypus", game.Title), map[string]string{"title": game.Title})
 	}
 	return a.queueVersionJob("install", game, target)
 }
@@ -232,7 +234,7 @@ func (a *App) InstallGameVersion(game types.Game, target types.VersionTarget) (t
 // build counts: that is a downgrade, and the UI has warned about it).
 func (a *App) UpdateGameVersion(game types.Game, target types.VersionTarget) (types.Job, error) {
 	if !game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
+		return types.Job{}, apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 	}
 	return a.queueVersionJob("update", game, target)
 }
@@ -258,7 +260,7 @@ func (a *App) pinnedTarget(game types.Game) (*types.VersionTarget, error) {
 		return nil, nil
 	}
 	if _, err := a.versionsGate(game); err != nil {
-		return nil, fmt.Errorf("%s is pinned to %s, which this store can't install right now (%v); unpin it to continue", game.Title, pin.ID, err)
+		return nil, apperr.New("versions.pinnedStale", fmt.Sprintf("%s is pinned to %s, which this store can't install right now (%v); unpin it to continue", game.Title, pin.ID, err), map[string]string{"title": game.Title, "pin": pin.ID})
 	}
 	t := a.withArchiveRef(game.ID, pin.Target())
 	return &t, nil
@@ -285,19 +287,19 @@ func (a *App) withArchiveRef(gameID string, t types.VersionTarget) types.Version
 // reference, which Platypus adds itself.
 func validateTarget(t types.VersionTarget) (types.VersionTarget, error) {
 	if t.Channel == "" && t.Build == "" && len(t.Manual) == 0 {
-		return t, errors.New("pick a channel, a build, or type what the store asks for")
+		return t, apperr.New("versions.target.missing", "pick a channel, a build, or type what the store asks for", nil)
 	}
 	bad := func(s string) bool {
 		return len(s) > maxTargetField || strings.IndexFunc(s, unicode.IsControl) >= 0
 	}
 	if bad(t.Channel) || bad(t.Build) {
-		return t, errors.New("that version id is not valid")
+		return t, apperr.New("versions.target.invalid", "that version id is not valid", nil)
 	}
 	if len(t.ArchiveRef) > 0 {
-		return t, errors.New("that version id is not valid")
+		return t, apperr.New("versions.target.invalid", "that version id is not valid", nil)
 	}
 	if len(t.Manual) > maxManualKeys {
-		return t, fmt.Errorf("at most %d values may be typed", maxManualKeys)
+		return t, apperr.New("versions.manual.tooMany", fmt.Sprintf("at most %d values may be typed", maxManualKeys), map[string]string{"max": strconv.Itoa(maxManualKeys)})
 	}
 	if len(t.Manual) == 0 {
 		return t, nil
@@ -312,7 +314,7 @@ func validateTarget(t types.VersionTarget) (types.VersionTarget, error) {
 	for k, v := range t.Manual {
 		v = strings.TrimSpace(v)
 		if k == "" || bad(k) || v == "" || typedBad(v) {
-			return t, errors.New("a typed value is empty or not valid")
+			return t, apperr.New("versions.manual.invalid", "a typed value is empty or not valid", nil)
 		}
 		manual[k] = v
 	}

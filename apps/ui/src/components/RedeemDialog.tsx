@@ -9,8 +9,7 @@ import { Input } from './ds/input';
 import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** Matches the core's cap (stats.MaxCodeLen): the input can't type past it. */
 export const MAX_CODE_LENGTH = 128;
@@ -38,7 +37,7 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
         setResult(r);
         setCode('');
       },
-      (err) => setError(errMsg(err)),
+      (err) => setError(coreErrMsg(err)),
     ).finally(() => setBusy(false));
   };
 

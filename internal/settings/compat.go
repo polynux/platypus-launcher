@@ -1,11 +1,14 @@
 package settings
 
 import (
-	"errors"
 	"strings"
+
+	"platypus/internal/apperr"
 )
 
-var errBadAppID = errors.New("a Steam AppID is a number")
+func errBadAppID() *apperr.Error {
+	return apperr.New("steam.appid.invalid", "a Steam AppID is a number", nil)
+}
 
 // RatingsOnline says whether Platypus may fetch compatibility ratings and
 // anti-cheat data from the network. On until the user switches it off.
@@ -97,7 +100,7 @@ func (s *Store) SetInfoSource(gameID, source, id string) error {
 	case source == "lutris" && id != "":
 		link = "lutris:" + id
 	default:
-		return errors.New("an info source is gog or lutris")
+		return apperr.New("info.source.invalid", "an info source is gog or lutris", nil)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -138,7 +141,7 @@ func (s *Store) SetCompatAppID(gameID, appID string) error {
 	appID = strings.TrimSpace(appID)
 	for _, r := range appID {
 		if r < '0' || r > '9' {
-			return errBadAppID
+			return errBadAppID()
 		}
 	}
 	s.mu.Lock()

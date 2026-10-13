@@ -18,8 +18,7 @@ import { formatBytes } from '../lib/games';
 import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 export interface InstallOptionsDialogProps {
   game: Game;
@@ -57,7 +56,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
     let live = true;
     Effect.runPromise(LauncherApi.getGameOptions(game)).then(
       (o) => { if (live) { setGroups(o.groups); setChoices(o.chosen); setSaved(o.chosen); } },
-      (e) => { if (live) setError(errMsg(e)); },
+      (e) => { if (live) setError(coreErrMsg(e)); },
     );
     Effect.runPromise(LauncherApi.getInstallFreeSpace(game)).then(
       (bytes) => { if (live) setFree(bytes); },
@@ -108,7 +107,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       onChanged();
       onClose();
     } catch (e) {
-      onNotify(errMsg(e), 'err');
+      onNotify(coreErrMsg(e), 'err');
     } finally {
       setBusy(false);
     }

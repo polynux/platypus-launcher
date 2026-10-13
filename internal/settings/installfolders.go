@@ -1,12 +1,14 @@
 package settings
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+
+	"platypus/internal/apperr"
 )
 
 // MaxRecentInstall is how many folders Platypus remembers from "Install to…".
@@ -16,11 +18,12 @@ const MaxRecentInstall = 5
 const MaxGameFolders = 32
 
 // CleanFolder expands "~/", requires an absolute path and cleans it. It does
-// not touch the disk beyond refusing a path that is a file.
+// not touch the disk beyond refusing a path that is a file. Errors are coded
+// (issue #39, phase 3): the UI translates them, the message stays English.
 func CleanFolder(path string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("cannot determine home directory: %w", err)
+		return "", apperr.Wrap("settings.home.unknown", fmt.Errorf("cannot determine home directory: %w", err), nil)
 	}
 	return CleanFolderFor(path, home)
 }
@@ -30,16 +33,20 @@ func CleanFolderFor(path, home string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "~" || strings.HasPrefix(path, "~/") {
 		if home == "" {
-			return "", fmt.Errorf("cannot determine home directory")
+			return "", apperr.New("settings.home.unknown", "cannot determine home directory", nil)
 		}
 		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
 	}
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("a folder must be an absolute path, got %q", path)
+		return "", apperr.New("settings.folder.notAbsolute",
+			fmt.Sprintf("a folder must be an absolute path, got %q", path),
+			map[string]string{"path": path})
 	}
 	path = filepath.Clean(path)
 	if st, err := os.Stat(path); err == nil && !st.IsDir() {
-		return "", fmt.Errorf("%s is a file, not a folder", path)
+		return "", apperr.New("settings.folder.isFile",
+			fmt.Sprintf("%s is a file, not a folder", path),
+			map[string]string{"path": path})
 	}
 	return path, nil
 }
@@ -98,7 +105,9 @@ func (s *Store) SetGamesFolder(path string) (string, error) {
 	defer s.mu.Unlock()
 	list := append([]string{path}, slices.DeleteFunc(slices.Clone(s.folderListLocked()), func(p string) bool { return p == path })...)
 	if len(list)-1 > MaxGameFolders {
-		return "", fmt.Errorf("at most %d game folders", MaxGameFolders)
+		return "", apperr.New("settings.folders.full",
+			fmt.Sprintf("at most %d game folders", MaxGameFolders),
+			map[string]string{"max": strconv.Itoa(MaxGameFolders)})
 	}
 	if err := s.saveFoldersLocked(list); err != nil {
 		return "", err
@@ -120,7 +129,9 @@ func (s *Store) AddGameFolder(path string) ([]string, error) {
 		return slices.Clone(list[1:]), nil
 	}
 	if len(list)-1 >= MaxGameFolders {
-		return nil, fmt.Errorf("at most %d game folders", MaxGameFolders)
+		return nil, apperr.New("settings.folders.full",
+			fmt.Sprintf("at most %d game folders", MaxGameFolders),
+			map[string]string{"max": strconv.Itoa(MaxGameFolders)})
 	}
 	next := append(slices.Clone(list), path)
 	if err := s.saveFoldersLocked(next); err != nil {
@@ -138,7 +149,8 @@ func (s *Store) RemoveGameFolder(path string) ([]string, error) {
 	defer s.mu.Unlock()
 	list := s.folderListLocked()
 	if path == list[0] {
-		return nil, errors.New("the default game folder can't be removed; make another folder the default first")
+		return nil, apperr.New("settings.folders.default.remove",
+			"the default game folder can't be removed; make another folder the default first", nil)
 	}
 	i := slices.Index(list, path)
 	if i < 0 {

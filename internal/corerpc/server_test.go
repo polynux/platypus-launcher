@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"platypus/internal/apperr"
 )
 
 type thing struct{ started bool }
@@ -18,9 +20,15 @@ type pair struct {
 	B []int  `json:"b"`
 }
 
-func (t *thing) Add(a, b int) int              { return a + b }
-func (t *thing) Echo(p pair) pair              { return p }
-func (t *thing) Fail() error                   { return errors.New("nope") }
+func (t *thing) Add(a, b int) int { return a + b }
+func (t *thing) Echo(p pair) pair { return p }
+func (t *thing) Fail() error      { return errors.New("nope") }
+func (t *thing) Coded() error {
+	return apperr.New("game.running", "Doom is running", map[string]string{"title": "Doom"})
+}
+func (t *thing) Wrapped() error {
+	return apperr.Wrap("test.wrapped", errors.New("no such file"), nil)
+}
 func (t *thing) Both(s string) (string, error) { return s + "!", nil }
 func (t *thing) Boom()                         { panic("kaboom") }
 func (t *thing) Nothing()                      {}
@@ -98,7 +106,7 @@ func TestInitializeListsMethods(t *testing.T) {
 		t.Errorf("protocol = %q", hello.Protocol)
 	}
 	got := strings.Join(hello.Methods, ",")
-	if got != "Add,Boom,Both,Echo,Fail,Nil,Nothing" {
+	if got != "Add,Boom,Both,Coded,Echo,Fail,Nil,Nothing,Wrapped" {
 		t.Errorf("methods = %s (unexported and function-taking methods must be left out)", got)
 	}
 }
@@ -185,6 +193,38 @@ func TestErrorsAreResponses(t *testing.T) {
 	// The server survives all of that.
 	if r := h.call(2, "Add", `[1,1]`); string(r["result"]) != "2" {
 		t.Errorf("after errors: %s", r["result"])
+	}
+}
+
+func TestCodedErrorsCarryDataAndKeepTheMessage(t *testing.T) {
+	h := start(t)
+	h.init()
+
+	r := h.call(2, "Coded", `[]`)
+	var e Error
+	if err := json.Unmarshal(r["error"], &e); err != nil {
+		t.Fatalf("bad error: %v", err)
+	}
+	if e.Code != CodeAppError || e.Message != "Doom is running" {
+		t.Errorf("error = %+v, want code %d message %q", e, CodeAppError, "Doom is running")
+	}
+	if e.Data == nil || e.Data.Code != "game.running" || e.Data.Params["title"] != "Doom" {
+		t.Errorf("data = %+v, want code game.running with title Doom", e.Data)
+	}
+
+	r = h.call(2, "Wrapped", `[]`)
+	e = Error{}
+	json.Unmarshal(r["error"], &e)
+	if e.Message != "no such file" || e.Data == nil || e.Data.Code != "test.wrapped" {
+		t.Errorf("wrapped error = %+v", e)
+	}
+
+	// A plain error carries no data, as before.
+	r = h.call(2, "Fail", `[]`)
+	e = Error{}
+	json.Unmarshal(r["error"], &e)
+	if e.Message != "nope" || e.Data != nil {
+		t.Errorf("plain error = %+v, want message only", e)
 	}
 }
 

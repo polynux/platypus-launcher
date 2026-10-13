@@ -8,8 +8,7 @@ import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
 import { memberInitial, roleLabel } from '../lib/family';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 /** One member: an avatar (or the initial when there is none or it fails to
  *  load), the name, the role and the state the store reports. */
@@ -57,7 +56,7 @@ function FamiliesList({ plugin }: { plugin: StorePlugin }) {
     setError(null);
     Effect.runPromise(LauncherApi.getFamilyMembers(plugin.id)).then(
       (list) => { if (live) setMembers(list); },
-      (e) => { if (live) setError(errMsg(e)); },
+      (e) => { if (live) setError(coreErrMsg(e)); },
     );
     return () => { live = false; };
   }, [plugin.id]);

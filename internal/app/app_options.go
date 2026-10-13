@@ -10,6 +10,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Install options: the `install-options` capability (protocol 1.5,
@@ -53,13 +54,13 @@ func (a *App) optionsOffered(ctx context.Context, game types.Game) bool {
 func (a *App) optionsGate(game types.Game) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return plugins.Plugin{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return plugins.Plugin{}, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	if p.Status != plugins.StatusReady {
-		return p, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return p, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	if !a.optionsOffered(a.ctx, game) {
-		return p, fmt.Errorf("%s doesn't offer install options for %s", p.Manifest.Name, game.Title)
+		return p, apperr.New("install.noOptions", fmt.Sprintf("%s doesn't offer install options for %s", p.Manifest.Name, game.Title), map[string]string{"name": p.Manifest.Name, "title": game.Title})
 	}
 	return p, nil
 }
@@ -117,7 +118,7 @@ func (a *App) optionsForJob(ctx context.Context, j types.Job) (types.InstallOpti
 	}
 	groups, err := a.fetchGroups(ctx, j.Source, j.StoreGameID)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't check add-ons with the store; retry: %w", err)
+		return nil, apperr.Wrap("install.addonsRetry", fmt.Errorf("couldn't check add-ons with the store; retry: %w", err), nil)
 	}
 	resolved, err := types.ResolveOptions(groups, j.Options, types.Check{Installed: j.Kind == jobs.KindUpdate})
 	if err != nil {
@@ -154,10 +155,10 @@ func (a *App) GetGameOptions(game types.Game) (types.GameOptions, error) {
 // useful in the TypeScript bridge.
 func (a *App) InstallGameWithOptions(game types.Game, options map[string]any) (types.Job, error) {
 	if game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
+		return types.Job{}, apperr.New("install.alreadyInstalled", fmt.Sprintf("%s is already installed", game.Title), map[string]string{"title": game.Title})
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
+		return types.Job{}, apperr.New("install.cannotInstall", fmt.Sprintf("%s can't be installed by Platypus", game.Title), map[string]string{"title": game.Title})
 	}
 	return a.queueWithOptions(jobs.KindInstall, game, options)
 }
@@ -167,7 +168,7 @@ func (a *App) InstallGameWithOptions(game types.Game, options map[string]any) (t
 // and removes what was switched off only where the store allows it.
 func (a *App) UpdateGameWithOptions(game types.Game, options map[string]any) (types.Job, error) {
 	if !game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
+		return types.Job{}, apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 	}
 	return a.queueWithOptions(jobs.KindUpdate, game, options)
 }

@@ -33,6 +33,7 @@ import (
 	"platypus/internal/steam"
 	"platypus/internal/stores"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // How long a store plugin gets for library.list (legendary refreshes its
@@ -543,7 +544,7 @@ func (a *App) SetCustomGameYear(id string, year int) (types.Game, error) {
 			return g, nil
 		}
 	}
-	return types.Game{}, fmt.Errorf("unknown game %q", id)
+	return types.Game{}, apperr.New("game.notFound", fmt.Sprintf("unknown game %q", id), map[string]string{"id": id})
 }
 
 // RemoveCustomGame forgets a hand-added game; its files stay on disk.
@@ -680,9 +681,9 @@ func (a *App) selectRunner(game types.Game) (types.ProtonVersion, error) {
 		return r, nil
 	}
 	if runner.IsAuto(game.Settings.RunnerID) {
-		return types.ProtonVersion{}, fmt.Errorf("no Proton or Wine runner installed")
+		return types.ProtonVersion{}, apperr.New("game.noRunner", "no Proton or Wine runner installed", nil)
 	}
-	return types.ProtonVersion{}, fmt.Errorf("runner %q is not installed", game.Settings.RunnerID)
+	return types.ProtonVersion{}, apperr.New("game.runnerMissing", fmt.Sprintf("runner %q is not installed", game.Settings.RunnerID), map[string]string{"id": game.Settings.RunnerID})
 }
 
 // prepared is a launch ready to run.
@@ -708,7 +709,7 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 		}
 		launch = l
 	} else if game.Source != "" && game.Source != types.SourceCustom {
-		return nil, fmt.Errorf("%s comes from %s, which isn't approved and enabled", game.Title, game.Source)
+		return nil, apperr.New("plugin.notApproved", fmt.Sprintf("%s comes from %s, which isn't approved and enabled", game.Title, game.Source), map[string]string{"title": game.Title, "source": game.Source})
 	}
 
 	switch {
@@ -813,7 +814,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	unlock := a.lockGame(game.ID)
 	defer unlock()
 	if a.isRunning(game.ID) {
-		return "", fmt.Errorf("%s is already running", game.Title)
+		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
 	if err := a.heldByJob(game); err != nil {
 		return "", err
@@ -829,7 +830,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		}
 	}
 	if len(filtered) == 0 {
-		return "", fmt.Errorf("game %q has no launch target", game.Title)
+		return "", apperr.New("game.noLaunchTarget", fmt.Sprintf("game %q has no launch target", game.Title), map[string]string{"title": game.Title})
 	}
 
 	a.noteSocialGame(game)
@@ -853,7 +854,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 	if err != nil {
 		if errors.Is(err, session.ErrAlreadyRunning) {
 			// Never abandon here: the record Launching wrote may belong to the game that runs.
-			return "", fmt.Errorf("%s is already running", game.Title)
+			return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 		}
 		push.abandon()
 		return "", err
@@ -874,7 +875,7 @@ func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunc
 	}
 	go func() { _ = cmd.Wait() }()
 	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
-		return "", fmt.Errorf("%s is already running", game.Title)
+		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
 	return "Asked " + cl.Client + " to start " + game.Title, nil
 }
@@ -895,7 +896,7 @@ func (a *App) ForceStopGame(gameID string) error {
 func (a *App) stopGame(gameID string, force bool) error {
 	err := a.sessions.Stop(gameID, force)
 	if errors.Is(err, session.ErrNotRunning) {
-		return errors.New("that game is not running")
+		return apperr.New("game.notRunning", "that game is not running", nil)
 	}
 	return err
 }
@@ -1021,7 +1022,7 @@ func (a *App) cleanGameSettingsPaths(gameSettings map[string]any) error {
 				return fmt.Errorf("working directory: %w", err)
 			}
 			if !st.IsDir() {
-				return fmt.Errorf("%s is a file, not a folder", clean)
+				return apperr.New("settings.workdir.notFolder", fmt.Sprintf("%s is a file, not a folder", clean), map[string]string{"path": clean})
 			}
 			gameSettings["working_dir"] = clean
 		}

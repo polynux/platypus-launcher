@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/datadir"
 	"platypus/internal/types"
 )
@@ -133,7 +135,9 @@ func ValidateReleaseYear(year int) error {
 	}
 	max := time.Now().Year() + 1
 	if year < 1970 || year > max {
-		return fmt.Errorf("release year must be between 1970 and %d, got %d", max, year)
+		return apperr.New("settings.year.invalid",
+			fmt.Sprintf("release year must be between 1970 and %d, got %d", max, year),
+			map[string]string{"max": strconv.Itoa(max), "year": strconv.Itoa(year)})
 	}
 	return nil
 }
@@ -230,7 +234,9 @@ func (s *Store) CancelCleanupDays() int {
 // right away).
 func (s *Store) SetCancelCleanupDays(days int) error {
 	if days < 0 || days > MaxCancelCleanupDays {
-		return fmt.Errorf("keep canceled downloads between 0 and %d days, got %d", MaxCancelCleanupDays, days)
+		return apperr.New("settings.cleanupDays.invalid",
+			fmt.Sprintf("keep canceled downloads between 0 and %d days, got %d", MaxCancelCleanupDays, days),
+			map[string]string{"max": strconv.Itoa(MaxCancelCleanupDays), "days": strconv.Itoa(days)})
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -290,21 +296,27 @@ func (s *Store) AddCustomGame(title, executable string) (CustomGame, error) {
 	title = strings.TrimSpace(title)
 	executable = strings.TrimSpace(executable)
 	if title == "" {
-		return CustomGame{}, errors.New("the game needs a title")
+		return CustomGame{}, apperr.New("sideload.title.missing", "the game needs a title", nil)
 	}
 	if !filepath.IsAbs(executable) {
-		return CustomGame{}, fmt.Errorf("executable must be an absolute path, got %q", executable)
+		return CustomGame{}, apperr.New("sideload.executable.notAbsolute",
+			fmt.Sprintf("executable must be an absolute path, got %q", executable),
+			map[string]string{"executable": executable})
 	}
 	real, err := filepath.EvalSymlinks(executable)
 	if err != nil {
-		return CustomGame{}, fmt.Errorf("executable: %w", err)
+		return CustomGame{}, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": executable})
 	}
 	st, err := os.Stat(real)
 	if err != nil {
-		return CustomGame{}, fmt.Errorf("executable: %w", err)
+		return CustomGame{}, apperr.Wrap("sideload.executable.unreadable",
+			fmt.Errorf("executable: %w", err), map[string]string{"executable": executable})
 	}
 	if !st.Mode().IsRegular() {
-		return CustomGame{}, fmt.Errorf("%s is not a file", executable)
+		return CustomGame{}, apperr.New("sideload.executable.notFile",
+			fmt.Sprintf("%s is not a file", executable),
+			map[string]string{"executable": executable})
 	}
 	executable = real
 
@@ -312,7 +324,9 @@ func (s *Store) AddCustomGame(title, executable string) (CustomGame, error) {
 	defer s.mu.Unlock()
 	for _, g := range s.data.CustomGames {
 		if g.Executable == executable {
-			return CustomGame{}, fmt.Errorf("%s is already in your library as %q", executable, g.Title)
+			return CustomGame{}, apperr.New("sideload.duplicate",
+				fmt.Sprintf("%s is already in your library as %q", executable, g.Title),
+				map[string]string{"executable": executable, "title": g.Title})
 		}
 	}
 	g := CustomGame{
@@ -368,7 +382,7 @@ func (s *Store) RemoveCustomGame(id string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("unknown game %q", id)
+	return apperr.New("sideload.unknown", fmt.Sprintf("unknown game %q", id), map[string]string{"id": id})
 }
 
 // SetCustomGameYear saves a hand-added game's release year (0 clears it:
@@ -390,7 +404,7 @@ func (s *Store) SetCustomGameYear(id string, year int) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("unknown game %q", id)
+	return apperr.New("sideload.unknown", fmt.Sprintf("unknown game %q", id), map[string]string{"id": id})
 }
 
 // PluginState returns what the user decided for a plugin; ok is false if the

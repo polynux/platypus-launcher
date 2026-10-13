@@ -3,13 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"slices"
 	"strings"
 
 	"platypus/internal/chat"
 	"platypus/internal/plugins"
 	"platypus/internal/social"
+	"platypus/internal/apperr"
 )
 
 // chatBackend reaches plugins for the chat orchestrator.
@@ -55,7 +55,7 @@ func (a *App) chatPlugins() []string {
 }
 
 // errNoChat is what the chat calls answer before the manager exists.
-var errNoChat = errors.New("chat is not running")
+var errNoChat = apperr.New("chat.off", "chat is not running", nil)
 
 // ChatOpen shows a friend's conversation: its history loads the first time,
 // and its unread messages are marked read.
@@ -125,7 +125,7 @@ func (a *App) ChatAlerts() map[string]bool {
 // SetChatAlerts turns a store's message alerts on or off.
 func (a *App) SetChatAlerts(pluginID string, on bool) error {
 	if !a.plugins.Has(pluginID, "chat") {
-		return errors.New(pluginID + " has no chat")
+		return apperr.New("chat.none", pluginID + " has no chat", map[string]string{"plugin": pluginID})
 	}
 	return a.settings.SetChatAlerts(pluginID, on)
 }

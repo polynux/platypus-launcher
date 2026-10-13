@@ -17,8 +17,7 @@ import { PluginSettingsPanel } from './PluginSettings';
 import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
 import { ErrorNotice } from './ErrorNotice';
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+import { coreErrMsg } from '../lib/coreError';
 
 interface PluginsViewProps {
   plugins: StorePlugin[];
@@ -76,7 +75,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
     (rescan = false) =>
       Effect.runPromise(rescan ? LauncherApi.rescanPlugins() : LauncherApi.listPlugins())
         .then(onPlugins)
-        .catch((e) => onNotify(errMsg(e), 'err')),
+        .catch((e) => onNotify(coreErrMsg(e), 'err')),
     [onPlugins, onNotify]
   );
 
@@ -93,7 +92,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       statusFetched.current.add(id);
       Effect.runPromise(LauncherApi.authStatus(id))
         .then((s) => storeAuth(id, s))
-        .catch((e) => storeAuth(id, { error: errMsg(e) }));
+        .catch((e) => storeAuth(id, { error: coreErrMsg(e) }));
     }
   }, [readyIds, storeAuth]);
 
@@ -107,7 +106,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
         onNotify(done);
         return refresh().then(onLibraryChanged);
       })
-      .catch((e) => onNotify(errMsg(e), 'err'))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(null));
   };
 
@@ -122,7 +121,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
   const chooseFolder = (p: StorePlugin) =>
     Effect.runPromise(LauncherApi.choosePluginInstallFolder(p.id))
       .then((path) => path && act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, path), t('plugins:notify.installsInto', { name: p.name, path })))
-      .catch((e) => onNotify(errMsg(e), 'err'));
+      .catch((e) => onNotify(coreErrMsg(e), 'err'));
 
   return (
     <div className="p-7">
@@ -134,7 +133,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="neutral" onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(errMsg(e), 'err'))}>
+          <Button variant="neutral" onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'))}>
             <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
           </Button>
           <Button variant="neutral" onClick={() => refresh(true).then(onLibraryChanged)}>
@@ -479,7 +478,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
     begunFor.current = plugin.id;
     Effect.runPromise(LauncherApi.authBegin(plugin.id))
       .then(setPrompt)
-      .catch((e) => setError(errMsg(e)));
+      .catch((e) => setError(coreErrMsg(e)));
   }, [plugin.id]);
 
   // QR logins finish outside the form: the store's mobile app approves and
@@ -566,7 +565,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
     setError(null);
     Effect.runPromise(LauncherApi.authComplete(plugin.id, values))
       .then((s) => (s.loggedIn ? onDone(s) : setError(t('plugins:auth.stillLoggedOut'))))
-      .catch((e) => setError(errMsg(e)))
+      .catch((e) => setError(coreErrMsg(e)))
       .finally(() => setSubmitting(false));
   };
 

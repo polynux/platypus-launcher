@@ -8,6 +8,7 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/social"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // socialStatusTimeout bounds a status change sent to a store.
@@ -131,7 +132,7 @@ func (a *App) SocialViews() []social.View {
 func (a *App) SetSocialEnabled(pluginID string, enabled bool) error {
 	p, ok := a.plugins.Plugin(pluginID)
 	if !ok || !a.plugins.Has(pluginID, "social") {
-		return fmt.Errorf("%s has no friends list", pluginID)
+		return apperr.New("social.none", fmt.Sprintf("%s has no friends list", pluginID), map[string]string{"plugin": pluginID})
 	}
 	if err := a.settings.SetSocialEnabled(pluginID, enabled); err != nil {
 		return err
@@ -148,7 +149,7 @@ func (a *App) SetSocialEnabled(pluginID string, enabled bool) error {
 // plays on a plugin's store.
 func (a *App) SetSocialPlaying(pluginID string, show bool) error {
 	if !a.plugins.Has(pluginID, "social") {
-		return fmt.Errorf("%s has no friends list", pluginID)
+		return apperr.New("social.none", fmt.Sprintf("%s has no friends list", pluginID), map[string]string{"plugin": pluginID})
 	}
 	if err := a.settings.SetSocialPlaying(pluginID, show); err != nil {
 		return err
@@ -164,7 +165,7 @@ func (a *App) SetSocialPlaying(pluginID string, show bool) error {
 func (a *App) RestartSocial(pluginID string) error {
 	p, ok := a.plugins.Plugin(pluginID)
 	if !ok || !a.plugins.Has(pluginID, "social") {
-		return fmt.Errorf("%s has no friends list", pluginID)
+		return apperr.New("social.none", fmt.Sprintf("%s has no friends list", pluginID), map[string]string{"plugin": pluginID})
 	}
 	a.social.Stop(pluginID)
 	if a.socialWanted(p) {
@@ -190,7 +191,7 @@ func (a *App) socialLoggedIn(pluginID string) {
 // away, busy, snooze or invisible.
 func (a *App) SetSocialStatus(pluginID, state string) error {
 	if a.social == nil {
-		return fmt.Errorf("friends are not running")
+		return apperr.New("social.off", "friends are not running", nil)
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, socialStatusTimeout)
 	defer cancel()

@@ -21,7 +21,34 @@ interface Message {
   method?: string;
   params?: unknown;
   result?: unknown;
-  error?: { code: number; message: string };
+  error?: CoreErrorBody;
+}
+
+/** The JSON-RPC error body the core sends (internal/corerpc). Data carries a
+ *  translatable core error (issue #39, phase 3): the code and its
+ *  already-formatted params. The message stays the English text. */
+export interface CoreErrorBody {
+  code: number;
+  message: string;
+  data?: CoreErrorData;
+}
+
+/** The translatable payload of a core error. */
+export interface CoreErrorData {
+  code: string;
+  params?: Record<string, string>;
+}
+
+/** A core failure with its translatable payload attached, if it had one. */
+export function coreError(message: string, data?: CoreErrorData): Error & { data?: CoreErrorData } {
+  const err = new Error(message) as Error & { data?: CoreErrorData };
+  if (data !== undefined) err.data = data;
+  return err;
+}
+
+/** The translatable payload riding on an error, if any. */
+export function errorData(err: unknown): CoreErrorData | undefined {
+  return (err as { data?: CoreErrorData } | null | undefined)?.data;
 }
 
 type RequestHandler = (params: unknown) => Promise<unknown>;
@@ -148,7 +175,7 @@ export class Core {
     const p = this.pending.get(m.id);
     if (!p) return;
     this.pending.delete(m.id);
-    if (m.error) p.reject(new Error(m.error.message));
+    if (m.error) p.reject(coreError(m.error.message, m.error.data));
     else p.resolve(m.result);
   }
 

@@ -38,10 +38,10 @@ import { RawDetails } from './components/ErrorNotice';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { hasDetails, plainError } from './lib/plainError';
+import { coreErrMsg } from './lib/coreError';
 
 type NoticeKind = 'ok' | 'err' | 'busy';
 interface Notice { msg: string; kind: NoticeKind; raw?: string }
-
 
 const NOTICE_STYLE: Record<NoticeKind, string> = {
   ok: 'border-emerald-300/50 text-emerald-100',
@@ -49,8 +49,6 @@ const NOTICE_STYLE: Record<NoticeKind, string> = {
   busy: 'border-amber-300/50 text-amber-100',
 };
 const NOTICE_DOT: Record<NoticeKind, string> = { ok: 'bg-emerald-400', err: 'bg-red-400', busy: 'bg-amber-300' };
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function App() {
   const { t } = useTranslation(['nav', 'common', 'activity']);
@@ -178,7 +176,7 @@ export function App() {
         .then(([libR, rR, pR, savedR, sessR]) => {
           const failures: string[] = [];
           const saved: Record<string, GameSettings> = savedR.ok ? savedR.value : {};
-          if (!savedR.ok) failures.push(`${t('nav:title.settings')}: ${errMsg((savedR as { ok: false; error: Error }).error)}`);
+          if (!savedR.ok) failures.push(`${t('nav:title.settings')}: ${coreErrMsg((savedR as { ok: false; error: Error }).error)}`);
           if (libR.ok) {
             const lib = (libR as { ok: true; value: { games: Game[]; warnings: SourceWarning[] } }).value;
             const g = lib.games;
@@ -207,18 +205,18 @@ export function App() {
               meta: w.message,
             });
           } else {
-            failures.push(`${t('nav:title.library')}: ${errMsg((libR as { ok: false; error: Error }).error)}`);
+            failures.push(`${t('nav:title.library')}: ${coreErrMsg((libR as { ok: false; error: Error }).error)}`);
           }
           if (rR.ok) {
             setRunners((rR as { ok: true; value: ProtonVersion[] }).value);
           } else {
-            failures.push(`${t('nav:title.runners')}: ${errMsg((rR as { ok: false; error: Error }).error)}`);
+            failures.push(`${t('nav:title.runners')}: ${coreErrMsg((rR as { ok: false; error: Error }).error)}`);
           }
           if (pR.ok) {
             setPlugins((pR as { ok: true; value: StorePlugin[] }).value);
             void refreshSocial();
           } else {
-            failures.push(`${t('nav:title.plugins')}: ${errMsg((pR as { ok: false; error: Error }).error)}`);
+            failures.push(`${t('nav:title.plugins')}: ${coreErrMsg((pR as { ok: false; error: Error }).error)}`);
           }
           // Hydrate sessions so a window opened after a launch shows Playing (CORE-1/FE-2).
           const live = sessR.ok ? (sessR as { ok: true; value: SessionEvent[] }).value : [];
@@ -253,7 +251,7 @@ export function App() {
         })
         .catch((err) => {
           // Unreachable: every call is guarded. Kept as a safety net.
-          const msg = errMsg(err);
+          const msg = coreErrMsg(err);
           setLoadError(msg);
           notify(msg, 'err');
         })
@@ -341,12 +339,12 @@ export function App() {
     setLaunchingId(game.id);
     Effect.runPromise(LauncherApi.launchGame(game))
       .then((res) => notify(res || t('game:launching', { title: game.title }), 'busy'))
-      .catch((err) => notify(errMsg(err), 'err'))
+      .catch((err) => notify(coreErrMsg(err), 'err'))
       .finally(() => setLaunchingId(null));
   };
 
   const stop = (gameId: string, force: boolean) => {
-    Effect.runPromise(force ? LauncherApi.forceStopGame(gameId) : LauncherApi.stopGame(gameId)).catch((err) => notify(errMsg(err), 'err'));
+    Effect.runPromise(force ? LauncherApi.forceStopGame(gameId) : LauncherApi.stopGame(gameId)).catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
   // Real session state comes from the backend: for Steam games it watches the
@@ -421,7 +419,7 @@ export function App() {
         log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
       })
       .catch((err) => {
-        notify(t('errors:notPersisted', { error: errMsg(err) }), 'err');
+        notify(t('errors:notPersisted', { error: coreErrMsg(err) }), 'err');
         log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }), meta: t('activity:log.tweakSessionOnly') });
       });
   };
@@ -439,7 +437,7 @@ export function App() {
     setView({ name: 'library' });
     Effect.runPromise(LauncherApi.invalidateLibrary(pluginId))
       .then(() => loadRef.current('update'))
-      .catch((err) => notify(errMsg(err), 'err'));
+      .catch((err) => notify(coreErrMsg(err), 'err'));
   }, [notify]);
   useEffect(() => {
     const apply = (list: Job[], initial = false) => {
@@ -511,7 +509,7 @@ export function App() {
     queue
       .then((ok) => ok && Effect.runPromise(op(game))
         .then(() => notify(t('downloads:queued', { action: t(`downloads:action.${kind}`), title: game.title }), 'busy')))
-      .catch((err) => notify(errMsg(err), 'err'));
+      .catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
   const jobAction = (action: 'cancel' | 'retry' | 'pause' | 'resume' | 'discard', id: string) => {
@@ -521,7 +519,7 @@ export function App() {
       : action === 'pause' ? LauncherApi.pauseJob
       : action === 'resume' ? LauncherApi.resumeJob
       : LauncherApi.discardJob;
-    Effect.runPromise(call(id)).catch((err) => notify(errMsg(err), 'err'));
+    Effect.runPromise(call(id)).catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
   const allowFolder = (game: Game, folder: string) => {
@@ -530,7 +528,7 @@ export function App() {
         notify(t('game:folderAllowed', { folder }));
         loadData('update');
       })
-      .catch((err) => notify(errMsg(err), 'err'));
+      .catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
   // Adding is all-or-nothing: the modal stays open until the returned promise
@@ -573,7 +571,7 @@ export function App() {
         notify(t('game:removed', { title: game.title }));
         log({ type: 'remove', game: game.title, detail: t('activity:log.removed', { title: game.title }), meta: game.install_dir || undefined });
       })
-      .catch((err) => notify(errMsg(err), 'err'));
+      .catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
   const installedGames = useMemo(() => games.filter((g) => g.is_installed), [games]);
@@ -624,7 +622,7 @@ export function App() {
   // returns) and hides the banner at once, without waiting for a relaunch.
   const dismissMigration = () => {
     setMigration(null);
-    Effect.runPromise(LauncherApi.dismissMigrationNotice()).catch((err) => notify(errMsg(err), 'err'));
+    Effect.runPromise(LauncherApi.dismissMigrationNotice()).catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
@@ -743,7 +741,7 @@ export function App() {
               Effect.runPromise(LauncherApi.clearFinishedJobs())
                 .then(() => Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {}))
                 .catch((err) => {
-                  notify(errMsg(err), 'err');
+                  notify(coreErrMsg(err), 'err');
                   Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
                 });
             }}
@@ -833,13 +831,13 @@ export function App() {
           inLibrary={(id) => libraryIds.has(id)}
           onClose={closeFriends}
           onSetEnabled={(plugin, enabled) =>
-            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+            Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
           onSetStatus={(plugin, state: SocialStatus) =>
-            Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(errMsg(err), 'err'))}
+            Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(coreErrMsg(err), 'err'))}
           onSetPlaying={(plugin, show) =>
-            Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+            Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
           onReconnect={(plugin) =>
-            Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(errMsg(err), 'err'))}
+            Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
           onOpenGame={(id) => { closeFriends(); openGame(id); }}
           unreadOf={chat.unreadOf}
           onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
