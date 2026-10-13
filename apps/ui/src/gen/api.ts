@@ -66,6 +66,7 @@ export interface CoreApi {
   ListJobs(): Promise<types.Job[]>;
   ListSessions(): Promise<types.SessionEvent[]>;
   ListStorePlugins(): Promise<types.StorePlugin[]>;
+  Locale(): Promise<string>;
   MakeDefaultGameFolder(path: string): Promise<types.GameFolder[]>;
   MigrationNotice(): Promise<types.MigrationNotice | null>;
   MoveGame(game: types.Game, parent: string): Promise<types.Job>;
@@ -121,6 +122,7 @@ export interface CoreApi {
   SetSocialEnabled(pluginID: string, enabled: boolean): Promise<void>;
   SetSocialPlaying(pluginID: string, show: boolean): Promise<void>;
   SetSocialStatus(pluginID: string, state: string): Promise<void>;
+  SetSystemLanguages(langs: string[]): Promise<string>;
   SocialViews(): Promise<social.View[]>;
   StopGame(gameID: string): Promise<void>;
   UninstallGame(game: types.Game): Promise<types.Job>;
@@ -193,6 +195,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ListJobs',
   'ListSessions',
   'ListStorePlugins',
+  'Locale',
   'MakeDefaultGameFolder',
   'MigrationNotice',
   'MoveGame',
@@ -248,6 +251,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetSocialEnabled',
   'SetSocialPlaying',
   'SetSocialStatus',
+  'SetSystemLanguages',
   'SocialViews',
   'StopGame',
   'UninstallGame',

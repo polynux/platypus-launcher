@@ -94,6 +94,14 @@ async function startCore(): Promise<Core> {
     return r.canceled ? '' : (r.filePaths[0] ?? '');
   });
   await c.initialize();
+  // The core resolves the effective locale from the setting plus these
+  // desktop languages (issue #39, phase 4). Best-effort: an old core
+  // without the method still starts.
+  try {
+    await c.call('SetSystemLanguages', [app.getPreferredSystemLanguages()]);
+  } catch {
+    // Old core or a core that failed to start: startCore's caller reports it.
+  }
   return c;
 }
 

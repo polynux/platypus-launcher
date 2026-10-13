@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"platypus/internal/locale"
 	"platypus/internal/sanitize"
 	"platypus/internal/types"
 )
@@ -18,11 +19,15 @@ import (
 // StoreClient fetches public app metadata from the Steam Store API and caches
 // it for the session (the endpoint is rate limited to ~200 requests / 5 min).
 // Base overrides the store endpoint (default DefaultStoreBase) and HTTPClient
-// overrides the transport; tests point both at httptest.
+// overrides the transport; tests point both at httptest. Locale is the BCP 47
+// tag the store answers in (issue #39, phase 4); empty means English. The
+// cache keys on app id + Steam language so French and English never mix.
 type StoreClient struct {
 	http       *http.Client
 	HTTPClient *http.Client
 	Base       string
+	// Locale is the BCP 47 tag for store lookups ("fr-FR", "fr", "en").
+	Locale string
 	mu         sync.Mutex
 	cache      map[string]*storeApp
 }
@@ -39,6 +44,14 @@ func (c *StoreClient) storeBase() string {
 		return strings.TrimSuffix(strings.TrimSpace(c.Base), "/")
 	}
 	return DefaultStoreBase
+}
+
+// steamLang is the store's `l=` value for the client's locale.
+func (c *StoreClient) steamLang() string {
+	if c == nil || strings.TrimSpace(c.Locale) == "" {
+		return "english"
+	}
+	return locale.SteamLanguage(c.Locale)
 }
 
 func (c *StoreClient) httpClient() *http.Client {
@@ -93,17 +106,19 @@ type storeApp struct {
 }
 
 func (c *StoreClient) app(appID string) (*storeApp, error) {
+	lang := c.steamLang()
+	key := appID + "\x00" + lang
 	c.mu.Lock()
 	if c.cache == nil {
 		c.cache = map[string]*storeApp{}
 	}
-	if a, ok := c.cache[appID]; ok {
+	if a, ok := c.cache[key]; ok {
 		c.mu.Unlock()
 		return a, nil
 	}
 	c.mu.Unlock()
 
-	url := fmt.Sprintf("%s/api/appdetails?appids=%s&l=english", c.storeBase(), appID)
+	url := fmt.Sprintf("%s/api/appdetails?appids=%s&l=%s", c.storeBase(), appID, lang)
 	resp, err := c.httpClient().Get(url)
 	if err != nil {
 		return nil, err
@@ -130,7 +145,7 @@ func (c *StoreClient) app(appID string) (*storeApp, error) {
 	if c.cache == nil {
 		c.cache = map[string]*storeApp{}
 	}
-	c.cache[appID] = a
+	c.cache[key] = a
 	c.mu.Unlock()
 	return a, nil
 }

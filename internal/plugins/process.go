@@ -134,6 +134,7 @@ type process struct {
 	onExit    func(error) // unexpected exits only
 	onReady   func()      // after a successful initialize, once per run
 	notify    jsonrpc.NotifyFunc
+	locale    func() string // the effective BCP 47 tag for initialize {locale}
 	t         timings
 
 	mu        sync.Mutex
@@ -439,7 +440,17 @@ func (p *process) initialize(conn Conn) {
 	for i, v := range supported {
 		offer[i] = v.String()
 	}
-	err := conn.Call(ctx, "initialize", map[string]any{"api": APIVersion, "protocols": offer}, &res)
+	params := map[string]any{"api": APIVersion, "protocols": offer}
+	if p.locale != nil {
+		if loc := p.locale(); loc != "" {
+			params["locale"] = loc
+		} else {
+			params["locale"] = "en"
+		}
+	} else {
+		params["locale"] = "en"
+	}
+	err := conn.Call(ctx, "initialize", params, &res)
 	if err == nil {
 		err = p.settleProtocol(&res, supported)
 	}

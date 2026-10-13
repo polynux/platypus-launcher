@@ -192,6 +192,12 @@ var MediaVersion = Version{Major: 1, Minor: 12}
 // today's behaviour, with badges set by the chat.unread notifications alone.
 var UnreadCountsVersion = Version{Major: 1, Minor: 13}
 
+// LocaleVersion is the first protocol revision with the user's locale
+// (initialize {locale}, the locale.changed notification, issue #39).
+// Platypus sends locale.changed only to a plugin that speaks it; an older
+// plugin gets the new locale on its next start.
+var LocaleVersion = Version{Major: 1, Minor: 14}
+
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus
 // shows no badge for it. Plugins map their own store fields to these:

@@ -40,6 +40,86 @@ import steam_cm  # the CM session module, next to this file
 
 API = 1
 CODE_AUTH_REQUIRED = -32001
+
+# The user's BCP 47 locale from initialize {locale} (protocol 1.14), kept
+# current through locale.changed {locale}. Plugin UI text is returned
+# already-localized for it (issue #39, phase 4): mode notes and a few
+# user-facing errors via the small LOCALES dict below, falling back to
+# English. Store lookups pass the Steam language (l=<steam_lang>).
+LOCALE = "en"
+LOCALE_LOCK = threading.Lock()
+
+STEAM_LANG_MAP = {
+    "en": "english", "fr": "french", "de": "german", "es": "spanish",
+    "it": "italian", "ja": "japanese", "ko": "korean", "pt": "portuguese",
+    "ru": "russian", "pl": "polish", "nl": "dutch", "da": "danish",
+    "no": "norwegian", "nb": "norwegian", "sv": "swedish", "fi": "finnish",
+    "cs": "czech", "hu": "hungarian", "tr": "turkish", "ar": "arabic",
+    "th": "thai", "uk": "ukrainian", "el": "greek", "bg": "bulgarian",
+    "ro": "romanian", "vi": "vietnamese", "zh": "schinese",
+}
+
+LOCALES = {
+    "en": {
+        "mode_none": "Launch mode: no Steamworks — runs directly, fully without Steam.",
+        "mode_optional": "Launch mode: Steamworks present but optional — runs directly with SteamAppId set.",
+        "mode_client": "Launch mode: needs the Steam client — Platypus starts the real client hidden.",
+        "need_login": "log in to Steam first",
+        "need_login_expired": "log in to Steam first (the session expired)",
+        "not_installed": "app {app} is not installed",
+    },
+    "fr": {
+        "mode_none": "Mode de lancement : sans Steamworks — fonctionne directement, entièrement sans Steam.",
+        "mode_optional": "Mode de lancement : Steamworks présent mais facultatif — fonctionne directement avec SteamAppId défini.",
+        "mode_client": "Mode de lancement : nécessite le client Steam — Platypus démarre le vrai client en arrière-plan.",
+        "need_login": "connectez-vous à Steam d'abord",
+        "need_login_expired": "connectez-vous à Steam d'abord (la session a expiré)",
+        "not_installed": "l'application {app} n'est pas installée",
+    },
+}
+
+
+def set_locale(tag):
+    global LOCALE
+    tag = (tag or "").strip() or "en"
+    with LOCALE_LOCK:
+        LOCALE = tag
+
+
+def locale_base():
+    with LOCALE_LOCK:
+        tag = LOCALE
+    tag = (tag or "").strip().lower()
+    if "-" in tag:
+        tag = tag.split("-")[0]
+    return tag or "en"
+
+
+def tr(key, **fmt):
+    base = locale_base()
+    table = LOCALES.get(base, {})
+    s = table.get(key) or LOCALES["en"].get(key) or key
+    if fmt:
+        try:
+            s = s.format(**fmt)
+        except (KeyError, IndexError):
+            pass
+    return s
+
+
+def steam_lang():
+    with LOCALE_LOCK:
+        tag = (LOCALE or "").strip().lower()
+    if tag in ("pt-br", "pt_br"):
+        return "brazilian"
+    if tag.startswith("es-") and tag != "es-es":
+        return "latam"
+    if tag in ("zh-cn", "zh-sg", "zh-my"):
+        return "schinese"
+    if tag in ("zh-tw", "zh-hk", "zh-mo"):
+        return "tchinese"
+    base = tag.split("-")[0] if "-" in tag else tag
+    return STEAM_LANG_MAP.get(base or "en", "english")
 # Access tokens are cached until shortly before their JWT exp; Steam re-issue
 # is one CM round trip when this lapses mid-session.
 ACCESS_TOKEN_MARGIN = 300
@@ -1182,7 +1262,7 @@ def resolve_art_assets(app_ids, deadline=None):
 
 def library_list(_params):
     if not logged_in():
-        raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
     token = access_token()
     steamid = steam_cm.jwt_payload(token).get("sub")
     try:
@@ -1252,11 +1332,11 @@ def library_list(_params):
 
 
 def mode_note(mode):
-    """What the game page says about how the game launches."""
+    """What the game page says about how the game launches, in the user's locale."""
     return {
-        "none": "Launch mode: no Steamworks — runs directly, fully without Steam.",
-        "optional": "Launch mode: Steamworks present but optional — runs directly with SteamAppId set.",
-        "client": "Launch mode: needs the Steam client — Platypus starts the real client hidden.",
+        "none": tr("mode_none"),
+        "optional": tr("mode_optional"),
+        "client": tr("mode_client"),
     }.get(mode, "")
 
 
@@ -1277,7 +1357,7 @@ def dl_request(params, extra=None):
     The token travels on stdin, never argv, and is never logged."""
     token = refresh_token()
     if not token:
-        raise RPCError("log in to Steam first", CODE_AUTH_REQUIRED)
+        raise RPCError(tr("need_login"), CODE_AUTH_REQUIRED)
     req = {"refresh_token": token, "app_id": int(params["id"]),
            "branch": params.get("branch") or "public"}
     # A password-protected beta branch. Stdin only, like the token: never
@@ -1339,7 +1419,7 @@ def dl_run(subcommand, req, job_id=None, game_dir=None):
             result = msg
         elif msg.get("type") == "error":
             if msg.get("code") == "auth-required":
-                raise RPCError("log in to Steam first (the session expired)", CODE_AUTH_REQUIRED)
+                raise RPCError(tr("need_login_expired"), CODE_AUTH_REQUIRED)
             raise RPCError("download failed: {}".format(msg.get("message") or tail(line)))
     rc = proc.wait()
     if result is None:
@@ -1371,7 +1451,7 @@ def start_job(params, kind):
     app, job_id = str(params["id"]), params["jobId"]
     if kind == "uninstall":
         if app not in load_state("installed.json", {}):
-            raise RPCError(f"app {app} is not installed")
+            raise RPCError(tr("not_installed", app=app))
         ev = threading.Event()
         if not claim_job(job_id, {"canceled": False, "id": app, "proc": None, "event": ev}):
             return {}
@@ -1444,7 +1524,7 @@ def follow_install(job_id, app, game_dir, dl_kind="install", branch=None):
         if job.get("canceled"):
             return
         if e.code == CODE_AUTH_REQUIRED:
-            notify("job.failed", {"jobId": job_id, "error": "log in to Steam first (the session expired)"})
+            notify("job.failed", {"jobId": job_id, "error": tr("need_login_expired")})
         else:
             notify("job.failed", {"jobId": job_id, "error": str(e)})
         return
@@ -1653,7 +1733,7 @@ def launch_spec(params):
     installed = load_state("installed.json", {})
     ig = installed.get(app)
     if not ig:
-        raise RPCError(f"app {app} is not installed")
+        raise RPCError(tr("not_installed", app=app))
     path, exe = ig.get("path") or "", ig.get("executable") or ""
     if not exe or not os.path.isfile(exe):
         exe = find_executable(path, native=bool(ig.get("native")))
@@ -1739,7 +1819,7 @@ def game_details(params):
     store uses). Richer facts are protocol 1.12; core sanitizes the HTML."""
     app = str(params["id"])
     try:
-        data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app}&l=english")
+        data = api_get(f"https://store.steampowered.com/api/appdetails?appids={app}&l={steam_lang()}")
     except Exception:
         return {}
     if isinstance(data, dict) and data.get("_test"):
@@ -1965,7 +2045,9 @@ def job_discard(params):
 # --- dispatch --------------------------------------------------------------
 
 def initialize(params):
-    return {"name": "Steam (standalone)", "version": "0.1.0", "api": API,
+    set_locale((params or {}).get("locale") or "en")
+    return {"name": "Steam (standalone)", "version": "0.3.0", "api": API,
+            "protocol": "1.14",
             "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
 
 
@@ -2016,7 +2098,11 @@ def main():
             send({"error": {"code": -32700, "message": str(e)}})
             continue
         if "id" not in msg:
-            continue  # notifications need no answer
+            # Core→plugin notifications need no answer. locale.changed
+            # (protocol 1.14) keeps texts in the user's language.
+            if msg.get("method") == "locale.changed":
+                set_locale((msg.get("params") or {}).get("locale") or "en")
+            continue
         # Library listing and logins can take seconds; keep reading so
         # job.cancel stays responsive.
         threading.Thread(target=handle, args=(msg,), daemon=True).start()

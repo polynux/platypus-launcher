@@ -1,4 +1,4 @@
-# Store plugin protocol (1.13, draft)
+# Store plugin protocol (1.14, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -110,7 +110,7 @@ other errors can contain.
 
 | Method | Params | Result |
 |---|---|---|
-| `initialize` | `{ api, protocols }` | `{ name, version, protocol, capabilities, features, missing }` |
+| `initialize` | `{ api, protocols, locale }` | `{ name, version, protocol, capabilities, features, missing }` |
 | `auth.status` | | `{ loggedIn, user?, qr? }` |
 | `auth.begin` | | `{ url?, instructions?, qr?, fields: [{ id, label, secret?, placeholder? }] }` |
 | `auth.complete` | `{ fields: { <id>: value } }` | `{ loggedIn, user? }` |
@@ -449,7 +449,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -481,10 +481,11 @@ that doesn't know it.
   1.12: the media and richer facts of `game.details` (`descriptionHtml`, `website`, `storeUrl`, `languages`,
   `controller`, `requirements` (`minimum`, `recommended`), `ageRating`, `tags`, `videos` (`url`, `thumbnail`,
   `title`, `mime`); see [Media](#media-112)). 1.13: the unread snapshot of chat (`chat.unreadCounts`, see
-  [Chat](#chat-19)).
+  [Chat](#chat-19)). 1.14: the user's locale (`initialize` `{locale}`, the `locale.changed` notification;
+  see [Locale](#locale-114)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12 or 1.13 method.
+  1.10, 1.11, 1.12, 1.13 or 1.14 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -1106,6 +1107,48 @@ game.acceptTerms { id, terms: [{ id, version }] } -> {}      optional: the store
   read (the store is down) can't be installed, and the install says so; retry later.
 - **Install size.** `game.installSize` doesn't carry terms: Platypus reads them from `game.details` only, so the size
   stays a cheap call.
+
+## Locale (1.14)
+
+Protocol 1.14 gives plugins the user's language (issue #39), so store data
+comes back translated where stores support it, and plugin UI text can be
+translated. No capability: declaring 1.14 in the manifest is the opt-in.
+
+```
+initialize { api, protocols, locale } -> { ... }   locale is BCP 47 ("fr-FR", "fr", "en")
+locale.changed { locale }                         notification, core -> plugin, no reply
+```
+
+- **initialize.** Platypus sends its supported versions plus `locale`, the
+  effective BCP 47 tag (the launcher setting, else the first desktop
+  language, else English). An old plugin ignores the unknown field; a new
+  one localizes from it. The core also passes the locale to the stores
+  itself (Steam `l=french`, GOG `locale=fr-FR`).
+- **locale.changed.** When the user switches language, Platypus sends this
+  notification to every running plugin that negotiated 1.14 or later.
+  Plugins on older protocols get the new locale on their next start; the
+  core never restarts a plugin for this. Library titles wait for the next
+  rescan; the next game page fetches in the new language.
+- **The recommended path** is that the plugin returns already-localized
+  text for the locale it was given — the simplest for plugin authors, and
+  the same for Go and Python. Keep a per-plugin `locales/<lang>.json`
+  catalog the plugin loads itself, falling back to English key by key:
+  ```json
+  { "details_summary": "A tiny fake game…", "auth_instructions": "Type the code…" }
+  ```
+  ```go
+  //go:embed locales/*.json
+  var localeFiles embed.FS
+  // text(key) looks up the current locale's table, else English.
+  ```
+  The echo plugin (`plugins/echo`) is the reference: `locales/en.json`
+  plus `locales/fr.json`, two strings (`details_summary`,
+  `auth_instructions`). The Steam plugin does the same with a small inline
+  dict (`mode_note`, login errors). There is no core-side key resolution
+  for plugin text in this phase: the plugin localizes, the core passes
+  through.
+- **Gating.** `locale` is sent to every plugin (old ones ignore it);
+  `locale.changed` goes only to plugins that negotiated 1.14 or later.
 
 ## Out of scope
 

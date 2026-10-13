@@ -18,6 +18,13 @@ func NewSteam() *Steam {
 	return &Steam{meta: steam.NewStoreClient()}
 }
 
+// SetLocale sets the BCP 47 tag for store metadata lookups.
+func (s *Steam) SetLocale(locale string) {
+	if s != nil && s.meta != nil {
+		s.meta.Locale = locale
+	}
+}
+
 func (s *Steam) ID() string { return types.SourceSteam }
 
 func (s *Steam) Library(context.Context) ([]types.Game, error) {

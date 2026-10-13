@@ -20,18 +20,20 @@ import (
 // Sideloaded game info from online sources (issue #38): a sideloaded game's
 // info source is its Steam compat AppID when set, else its per-game
 // info_source ("gog:<id>" or "lutris:<slug>"), else nothing. Details are
-// cached on disk under the data dir, keyed by game id + source, refreshed
-// after 7 days or when the link changes. Opening the game page never hits
-// the network twice; offline or on a fetch error the stale cache serves, or
-// empty details with no error (no toast).
+// cached on disk under the data dir, keyed by game id + source + language,
+// refreshed after 7 days or when the link or language changes. Opening the
+// game page never hits the network twice; offline or on a fetch error the
+// stale cache serves, or empty details with no error (no toast).
 
 // gameInfoTTL is how long a sideloaded game's cached details last before a
 // fresh fetch.
 const gameInfoTTL = 7 * 24 * time.Hour
 
-// gameInfoEntry is one cached GameDetails with the link it was fetched for.
+// gameInfoEntry is one cached GameDetails with the link and language it was
+// fetched for.
 type gameInfoEntry struct {
 	Link      string            `json:"link"`
+	Language  string            `json:"language,omitempty"`
 	FetchedAt int64             `json:"fetched_at"` // unix seconds
 	Details   types.GameDetails `json:"details"`
 }
@@ -82,12 +84,16 @@ func infoNames(source string) (infoSource, infoSourceName string) {
 }
 
 // sideloadSteamClient is the Steam details client for sideloaded games: the
-// injected one in tests, the live store endpoint otherwise.
+// injected one in tests, the live store endpoint otherwise. The client's
+// locale follows the effective locale so descriptions come back translated.
 func (a *App) sideloadSteamClient() *steam.StoreClient {
 	if a.sideloadSteam != nil {
+		a.sideloadSteam.Locale = a.Locale()
 		return a.sideloadSteam
 	}
-	return steam.NewStoreClient()
+	c := steam.NewStoreClient()
+	c.Locale = a.Locale()
+	return c
 }
 
 // infoCachePath names the disk cache file (issue #41: re-fetchable data
@@ -153,14 +159,15 @@ func (a *App) cachedInfoEntry(gameID string) (gameInfoEntry, bool) {
 	return e, ok
 }
 
-// storeInfoEntry saves one fetched details under gameID.
+// storeInfoEntry saves one fetched details under gameID, tagged with the
+// locale it was fetched in.
 func (a *App) storeInfoEntry(gameID, link string, d *types.GameDetails) {
 	a.loadInfoCache()
 	a.infoCacheMu.Lock()
 	if a.infoCache == nil {
 		a.infoCache = map[string]gameInfoEntry{}
 	}
-	a.infoCache[gameID] = gameInfoEntry{Link: link, FetchedAt: time.Now().Unix(), Details: *d}
+	a.infoCache[gameID] = gameInfoEntry{Link: link, Language: a.Locale(), FetchedAt: time.Now().Unix(), Details: *d}
 	snapshot := make(map[string]gameInfoEntry, len(a.infoCache))
 	for k, v := range a.infoCache {
 		snapshot[k] = v
@@ -235,7 +242,14 @@ func (a *App) getSideloadedDetails(gameID string) (*types.GameDetails, error) {
 		}
 		return &types.GameDetails{}, nil
 	}
-	if hasCached && cached.Link == link && time.Since(time.Unix(cached.FetchedAt, 0)) < gameInfoTTL {
+	// The cache keys on game id + link + language: a language switch refetches
+	// even when the link is unchanged. Entries written before the language
+	// tag existed count as English.
+	cachedLang := cached.Language
+	if cachedLang == "" {
+		cachedLang = "en"
+	}
+	if hasCached && cached.Link == link && cachedLang == a.Locale() && time.Since(time.Unix(cached.FetchedAt, 0)) < gameInfoTTL {
 		d := cached.Details
 		return &d, nil
 	}

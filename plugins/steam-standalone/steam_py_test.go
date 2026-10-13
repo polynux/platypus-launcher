@@ -224,3 +224,41 @@ func TestSteamFindExecutableSearchesSubfolders(t *testing.T) {
 		t.Fatalf("find_executable = %q, want bin/x64/Game.exe", got)
 	}
 }
+
+// I18N-4: with locale fr, the store details request carries l=french and the
+// launch-mode note is French; English is the default and the fallback.
+func TestSteamLocaleDetailsAndModeNote(t *testing.T) {
+	got := pyRun(t, `
+hs.set_locale("fr")
+urls = []
+def fake_api(url, token=None):
+    urls.append(url)
+    return {"367520": {"success": True, "data": {
+        "short_description": "x", "genres": [], "developers": [],
+        "publishers": [], "release_date": {}, "screenshots": []}}}
+hs.api_get = fake_api
+hs.resolve_art_assets = lambda apps, deadline: {}
+hs.game_details({"id": "367520"})
+print("l=french" in urls[0], hs.mode_note("none").startswith("Mode de lancement"))
+hs.set_locale("en")
+print(hs.mode_note("client").startswith("Launch mode"), hs.steam_lang())
+hs.set_locale("de")
+print(hs.tr("mode_none").startswith("Launch mode"))
+`)
+	if got != "True True\nTrue english\nTrue" {
+		t.Fatalf("locale fr/en = %q", got)
+	}
+}
+
+// I18N-4: user-facing login errors are French under fr.
+func TestSteamLocaleErrors(t *testing.T) {
+	got := pyRun(t, `
+hs.set_locale("fr")
+print(hs.tr("need_login"), "|", hs.tr("not_installed", app="10"))
+hs.set_locale("en")
+print(hs.tr("need_login"))
+`)
+	if got != "connectez-vous à Steam d'abord | l'application 10 n'est pas installée\nlog in to Steam first" {
+		t.Fatalf("locale errors = %q", got)
+	}
+}
