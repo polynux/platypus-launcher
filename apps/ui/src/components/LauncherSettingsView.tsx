@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PSEUDO_LOCALE, applyLanguage, loadSessionInfo, pseudoAvailable } from '../lib/i18n';
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
+import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 
@@ -108,6 +109,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       <GameInfoSetting onNotify={onNotify} />
 
       <ChatNotificationsSetting onNotify={onNotify} />
+
+      <BackupsSetting onNotify={onNotify} />
 
       <CloudSavesDefaults plugins={plugins} />
     </div>

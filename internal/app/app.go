@@ -27,6 +27,7 @@ import (
 	"platypus/internal/playlog"
 	"platypus/internal/plugins"
 	"platypus/internal/runner"
+	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/settings"
 	"platypus/internal/social"
@@ -143,6 +144,11 @@ type App struct {
 	// migration is what the Hydra→Platypus data move did at startup
 	// (internal/migrate); MigrationNotice shows it once (issue #14).
 	migration migrate.Report
+	// savebk backs up game saves (issue #42); nil until startup sets it
+	// up, and in tests that don't need it (every method tolerates nil).
+	savebk *savebackup.Service
+	// backups tracks the core-run backup/restore jobs, like moves.
+	backups coreBackups
 	// backupGateForTests overrides backupBeforeDelete in tests (issue #43);
 	// nil in production, where the stub (issue #42: the real gate) runs.
 	backupGateForTests func(ctx context.Context, game types.Game, trigger string, allowNoSaves bool) (types.SaveGate, error)
@@ -370,6 +376,7 @@ func (a *App) startup(ctx context.Context) {
 		a.stores.SetLocale(a.Locale())
 	}
 	a.startCloud(ctx, dataDir)
+	a.startSavebackups(ctx)
 	a.startSocial(ctx)
 	a.startChat(ctx)
 	a.syncSocial()
@@ -866,6 +873,9 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		return note, nil
 	}
 	opts = append(opts, push.options()...)
+	// The session hooks run in order: the cloud push first, the save backup
+	// second (issue #42; the backup waits, bounded, while a cloud job runs).
+	opts = append(opts, a.afterSessionHook(game))
 	pid, err := a.sessions.StartDirect(game.ID, cmd, p.shown(), p.redact, opts...)
 	if err != nil {
 		if errors.Is(err, session.ErrAlreadyRunning) {

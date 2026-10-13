@@ -57,9 +57,11 @@ type ExitInfo struct {
 // WithOnExit registers a callback for when the launch's process has ended and
 // the game is no longer tracked. It runs on the tracker's goroutine after the
 // final session event, so it must return quickly (start a goroutine for real
-// work). It does not run when the process never started.
+// work). It does not run when the process never started. Several hooks may be
+// registered; they run in registration order (issue #42: the cloud push
+// first, the save backup second).
 func WithOnExit(fn func(ExitInfo)) StartOption {
-	return func(e *entry) { e.onExit = fn }
+	return func(e *entry) { e.onExits = append(e.onExits, fn) }
 }
 
 // prepareForStop puts the launch in its own process group (so a stop reaches

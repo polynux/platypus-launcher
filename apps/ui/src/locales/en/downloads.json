@@ -10,12 +10,18 @@
     "uninstall": "Uninstall",
     "verify": "Verify",
     "move": "Move",
+    "backup": "Backup",
+    "restore": "Restore",
     "remove": "Remove"
   },
   "actionFailed": {
     "install": "install failed",
     "update": "update failed",
-    "uninstall": "uninstall failed"
+    "uninstall": "uninstall failed",
+    "verify": "verify failed",
+    "move": "move failed",
+    "backup": "backup failed",
+    "restore": "restore failed"
   },
   "kind": {
     "install": "install",
@@ -23,6 +29,8 @@
     "uninstall": "uninstall",
     "verify": "verify",
     "move": "move",
+    "backup": "Backup",
+    "restore": "Restore",
     "remove": "remove"
   },
   "state": {
@@ -64,5 +72,7 @@
     "discardJob": "Discard downloaded data of {{title}}",
     "progressOf": "{{title}} progress",
     "cancelKind": "Cancel {{kind}}"
-  }
+  },
+  "backedUp": "Backed up {{title}}",
+  "restored": "Restored {{title}}"
 }

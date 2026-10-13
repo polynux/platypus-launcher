@@ -10,12 +10,18 @@
     "uninstall": "Désinstallation",
     "verify": "Vérification",
     "move": "Déplacement",
+    "backup": "Sauvegarde",
+    "restore": "Restauration",
     "remove": "Suppression"
   },
   "actionFailed": {
     "install": "l'installation a échoué",
     "update": "la mise à jour a échoué",
-    "uninstall": "la désinstallation a échoué"
+    "uninstall": "la désinstallation a échoué",
+    "verify": "échec de la vérification",
+    "move": "échec du déplacement",
+    "backup": "échec de la sauvegarde",
+    "restore": "échec de la restauration"
   },
   "kind": {
     "install": "installation",
@@ -23,6 +29,8 @@
     "uninstall": "désinstallation",
     "verify": "vérification",
     "move": "déplacement",
+    "backup": "Sauvegarde",
+    "restore": "Restauration",
     "remove": "suppression"
   },
   "state": {
@@ -64,5 +72,7 @@
     "discardJob": "Supprimer les données téléchargées de {{title}}",
     "progressOf": "progression de {{title}}",
     "cancelKind": "Annuler : {{kind}}"
-  }
+  },
+  "backedUp": "{{title}} sauvegardé",
+  "restored": "{{title}} restauré"
 }

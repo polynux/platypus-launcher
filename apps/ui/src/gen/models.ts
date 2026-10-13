@@ -119,6 +119,15 @@ export namespace types {
     qr?: string;
   }
 
+  export interface BackupSettings {
+    folder: string;
+    default_folder: string;
+    keep: number;
+    mode: string;
+    after_session: boolean;
+    manifest: string;
+  }
+
   export interface CloudClient {
     running: boolean;
     name: string;
@@ -560,11 +569,38 @@ export namespace types {
     reason_params?: Record<string, string>;
   }
 
+  export interface RestorePreview {
+    overwritten: number;
+    added: number;
+    kept: number;
+    files: number;
+    bytes: number;
+  }
+
+  export interface SaveBackup {
+    id: string;
+    game_id: string;
+    created_at: number;
+    trigger: string;
+    files: number;
+    bytes: number;
+    size: number;
+    unchanged?: boolean;
+  }
+
   export interface SaveGate {
     backup_id?: string;
     files: number;
     bytes: number;
     no_paths: boolean;
+    unchanged?: boolean;
+    off?: boolean;
+  }
+
+  export interface SavePath {
+    path: string;
+    origin: string;
+    exists: boolean;
   }
 
   export interface SessionEvent {

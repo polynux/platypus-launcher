@@ -140,7 +140,9 @@
     },
     "folder": {
       "isFile": "{{path}} is a file, not a folder.",
-      "notAbsolute": "A folder must be an absolute path, got {{path}}."
+      "notAbsolute": "A folder must be an absolute path, got {{path}}.",
+      "noHome": "Cannot expand ~ without a home folder.",
+      "isRoot": "The backups folder cannot be the filesystem root."
     },
     "folders": {
       "default": {
@@ -159,7 +161,20 @@
     },
     "year": {
       "invalid": "Release year must be between 1970 and {{max}}, got {{year}}."
-    }
+    },
+    "backupsMode": {
+      "invalid": "Unknown backups mode {{mode}}."
+    },
+    "keepBackups": {
+      "invalid": "Keep between 1 and 100 backups, got {{keep}}."
+    },
+    "saveBackup": {
+      "invalid": "Unknown per-game backup mode {{mode}}."
+    },
+    "game": {
+      "missing": "Game id is empty."
+    },
+    "unavailable": "Settings are not ready."
   },
   "sideload": {
     "duplicate": "{{executable}} is already in your library as {{title}}.",
@@ -212,5 +227,14 @@
       "missing": "Pick a channel, a build, or type what the store asks for."
     },
     "unsupported": "{{name}} doesn't offer version selection."
+  },
+  "savebackup": {
+    "noPaths": "Platypus knows no save paths for {{title}}; add some or delete without a save backup.",
+    "failed": "The save backup failed: {{error}}",
+    "running": "{{title}} is running; back up its saves after it exits.",
+    "cloudBusy": "Cloud sync is busy for {{title}}; back up once it finishes.",
+    "clientRunning": "Close {{client}} first: it is running and would write the same saves.",
+    "queued": "{{title}} already has a save backup queued.",
+    "unknown": "Unknown save backup version."
   }
 }

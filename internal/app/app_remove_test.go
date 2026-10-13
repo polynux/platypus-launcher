@@ -44,6 +44,11 @@ func newRemoveEnv(t *testing.T) *removeEnv {
 		t.Fatal(err)
 	}
 	a.jobs.SetOnFinished(a.jobFinished)
+	// The removal mechanics are tested with a gate that passes; the real
+	// save gate has its own test below and in app_backups_test.go.
+	a.backupGateForTests = func(context.Context, types.Game, string, bool) (types.SaveGate, error) {
+		return types.SaveGate{}, nil
+	}
 	return &removeEnv{a: a, home: root}
 }
 
@@ -666,5 +671,41 @@ func TestRemoveThroughSymlinkedParent(t *testing.T) {
 	}
 	if _, err := os.Stat(drive); err != nil {
 		t.Fatalf("the drive folder went too: %v", err)
+	}
+}
+
+// With the real save gate, a removal of a game with no known save paths is
+// refused until the user allows it, and nothing is deleted meanwhile.
+func TestRemoveRealGateNeedsAllowNoSaves(t *testing.T) {
+	t.Parallel()
+	e := newRemoveEnv(t)
+	e.a.backupGateForTests = nil
+	game := e.addGame(t, "Gem", filepath.Join("Games", "Gem", "gem.sh"))
+	check, err := e.a.CheckRemove(game.ID, types.RemoveOptions{DeleteFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !check.Saves.NoPaths {
+		t.Fatalf("saves preview = %+v, want no paths", check.Saves)
+	}
+	job, err := e.a.RemoveGame(game.ID, types.RemoveOptions{DeleteFiles: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j := e.runQueue(t, job.ID); j.State != jobs.StateFailed || !strings.Contains(j.Error, "no save paths") {
+		t.Fatalf("job = %s (%s), want failed on no save paths", j.State, j.Error)
+	}
+	if _, err := os.Stat(filepath.Join(e.home, "Games", "Gem", "gem.sh")); err != nil {
+		t.Fatalf("the game files went without a backup: %v", err)
+	}
+	job, err = e.a.RemoveGame(game.ID, types.RemoveOptions{DeleteFiles: true, AllowNoSaves: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j := e.runQueue(t, job.ID); j.State != jobs.StateDone {
+		t.Fatalf("job = %s (%s), want done", j.State, j.Error)
+	}
+	if _, err := os.Stat(filepath.Join(e.home, "Games", "Gem")); !os.IsNotExist(err) {
+		t.Fatalf("game folder still there: %v", err)
 	}
 }

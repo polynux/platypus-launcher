@@ -21,6 +21,8 @@ const VERB_KEY: Record<Job['kind'], string> = {
   uninstall: 'downloads:action.uninstall',
   verify: 'downloads:action.verify',
   move: 'downloads:action.move',
+  backup: 'downloads:action.backup',
+  restore: 'downloads:action.restore',
   remove: 'downloads:action.remove',
 };
 
@@ -30,6 +32,8 @@ const KIND_KEY: Record<Job['kind'], string> = {
   uninstall: 'downloads:kind.uninstall',
   verify: 'downloads:kind.verify',
   move: 'downloads:kind.move',
+  backup: 'downloads:kind.backup',
+  restore: 'downloads:kind.restore',
   remove: 'downloads:kind.remove',
 };
 

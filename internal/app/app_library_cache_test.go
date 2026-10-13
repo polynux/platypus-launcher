@@ -219,10 +219,11 @@ func TestLibraryFreshAfterInstallAndUninstall(t *testing.T) {
 	}
 
 	// Uninstalling reads the folder through the cache, then the completion
-	// drops it: the scan after shows the game as owned, not installed.
+	// drops it: the scan after shows the game as owned, not installed. The
+	// uninstall skips its save backup (issue #42 covers the gate).
 	installed := tiny(lib)
 	installed.IsInstalled = true
-	uj, err := e.a.UninstallGame(installed)
+	uj, err := e.a.UninstallGameWithoutBackup(installed)
 	if err != nil {
 		t.Fatal(err)
 	}

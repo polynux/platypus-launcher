@@ -471,7 +471,8 @@ type Job struct {
 	// DeletePrefix and DeleteFiles say what a remove job deletes: the
 	// sideloaded game's Wine prefix and/or its game files (issue #43). At
 	// least one is set. AllowNoSaves lets the save gate pass when no known
-	// save paths apply to the deleted folders.
+	// save paths apply (a remove, or an uninstall after the user checked
+	// "delete without a save backup", issue #42).
 	DeletePrefix bool `json:"delete_prefix,omitempty"`
 	DeleteFiles  bool `json:"delete_files,omitempty"`
 	AllowNoSaves bool `json:"allow_no_saves,omitempty"`

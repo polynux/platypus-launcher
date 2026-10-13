@@ -13,6 +13,7 @@ import type {
   CloudPrompt,
   CloudSettings,
   ArtKind,
+  BackupSettings,
   Customization,
   ArtCandidate,
   GameFolder,
@@ -36,6 +37,9 @@ import type {
   MigrationNotice,
   MoveCheck,
   ProtonVersion,
+  SaveBackup,
+  SavePath,
+  RestorePreview,
   RemoveCheck,
   RemoveOptions,
   SessionEvent,
@@ -400,6 +404,30 @@ export const LauncherApi = {
   installGame: (game: Game) => call<Job>('InstallGame', () => App.InstallGame(backend(game))),
   updateGame: (game: Game) => call<Job>('UpdateGame', () => App.UpdateGame(backend(game))),
   uninstallGame: (game: Game) => call<Job>('UninstallGame', () => App.UninstallGame(backend(game))),
+  uninstallGameWithoutBackup: (game: Game) =>
+    call<Job>('UninstallGameWithoutBackup', () => App.UninstallGameWithoutBackup(backend(game))),
+  // Save backups (issue #42): paths, versions, manual backup, restore, delete.
+  getSavePaths: (game: Game) =>
+    call<SavePath[]>('GetSavePaths', async () => (await App.GetSavePaths(backend(game))) ?? []),
+  listSaveBackups: (gameId: string) =>
+    call<SaveBackup[]>('ListSaveBackups', async () => (await App.ListSaveBackups(gameId)) ?? []),
+  createSaveBackup: (game: Game) => call<Job>('CreateSaveBackup', () => App.CreateSaveBackup(backend(game))),
+  restoreSaveBackup: (game: Game, backupId: string) =>
+    call<Job>('RestoreSaveBackup', () => App.RestoreSaveBackup(backend(game), backupId)),
+  previewRestoreSaveBackup: (game: Game, backupId: string) =>
+    call<RestorePreview>('PreviewRestoreSaveBackup', () => App.PreviewRestoreSaveBackup(backend(game), backupId)),
+  deleteSaveBackup: (gameId: string, backupId: string) =>
+    call<void>('DeleteSaveBackup', () => App.DeleteSaveBackup(gameId, backupId)),
+  getBackupSettings: () => call<BackupSettings>('GetBackupSettings', () => App.GetBackupSettings()),
+  setBackupSettings: (folder: string, keep: number, mode: string, afterSession: boolean) =>
+    call<BackupSettings>('SetBackupSettings', () => App.SetBackupSettings(folder, keep, mode, afterSession)),
+  setGameSavePaths: (gameId: string, paths: string[]) =>
+    call<void>('SetGameSavePaths', () => App.SetGameSavePaths(gameId, paths)),
+  setGameSaveBackup: (gameId: string, mode: string) =>
+    call<void>('SetGameSaveBackup', () => App.SetGameSaveBackup(gameId, mode)),
+  getGameSaveBackup: (gameId: string) =>
+    call<string>('GetGameSaveBackup', () => App.GetGameSaveBackup(gameId)),
+  refreshSaveManifest: () => call<void>('RefreshSaveManifest', () => App.RefreshSaveManifest()),
   cancelJob: (id: string) => call<void>('CancelJob', () => App.CancelJob(id)),
   retryJob: (id: string) => call<void>('RetryJob', () => App.RetryJob(id)),
   clearFinishedJobs: () => call<void>('ClearFinishedJobs', () => App.ClearFinishedJobs()),

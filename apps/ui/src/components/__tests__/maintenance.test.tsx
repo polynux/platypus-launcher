@@ -15,6 +15,9 @@ const api = vi.hoisted(() => ({
   getGameDetails: vi.fn(),
   getGameVersions: vi.fn(),
   getInstallSize: vi.fn(),
+  getSavePaths: vi.fn(),
+  getGameSaveBackup: vi.fn(),
+  listSaveBackups: vi.fn(),
 }));
 
 vi.mock('../../effect/runtime', () => ({
@@ -68,6 +71,9 @@ beforeEach(() => {
     saves: { backup_id: '', files: 0, bytes: 0, no_paths: false },
   });
   api.removeGame.mockResolvedValue(job({ id: 'remove-1', kind: 'remove' }));
+  api.getSavePaths.mockResolvedValue([]);
+  api.getGameSaveBackup.mockResolvedValue('');
+  api.listSaveBackups.mockResolvedValue([]);
 });
 
 /** Opens the game settings from the page's gear, then a tab by its name. */
@@ -292,6 +298,18 @@ describe('Remove from library for sideloaded games', () => {
     expect(remove.disabled).toBe(false);
     fireEvent.click(remove);
     expect(onRemove).toHaveBeenCalledWith({ delete_prefix: true, delete_files: false, allow_no_saves: true });
+  });
+
+  it('says saves are not backed up when backups are off for the game', async () => {
+    api.checkRemove.mockResolvedValue({
+      targets: [{ kind: 'files', path: '/games/sideload', bytes: 2_000_000, exists: true, allowed: true }],
+      saves: { backup_id: '', files: 0, bytes: 0, no_paths: false, off: true },
+    });
+    render(<GamePage game={custom()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(await screen.findByText(/Save backups are off for this game/)).toBeTruthy();
+    expect(screen.queryByText(/Saves will be backed up first/)).toBeNull();
   });
 
   it('shows the backup line when saves apply', async () => {

@@ -418,8 +418,8 @@ func reasonOf(err error) (reason, code string, params map[string]string) {
 // CheckRemove says what removing a sideloaded game would delete, before the
 // user confirms. Each requested target carries its path and size, or is
 // disallowed with its reason (refused, not found). Saves previews the save
-// gate (issue #42): the stub reports no backup yet, so the UI offers the
-// "back up first" line until #42 fills the preview in.
+// gate (issue #42): backups off, no known save paths, or the saves that
+// will be backed up first.
 func (a *App) CheckRemove(gameID string, opts types.RemoveOptions) (types.RemoveCheck, error) {
 	check := types.RemoveCheck{}
 	game, err := a.customGameByID(gameID)
@@ -460,6 +460,7 @@ func (a *App) CheckRemove(gameID string, opts types.RemoveOptions) (types.Remove
 		}
 		check.Targets = append(check.Targets, rt)
 	}
+	check.Saves = a.savesPreview(game)
 	return check, nil
 }
 

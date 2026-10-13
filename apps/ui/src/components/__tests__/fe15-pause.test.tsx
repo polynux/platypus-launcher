@@ -101,6 +101,11 @@ vi.mock('../../effect/runtime', () => ({
       Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: 7 } as never),
     setCancelCleanupDays: (days: number) =>
       Effect.succeed({ games_folder: '/g', default_games_folder: '/g', cancel_cleanup_days: days } as never),
+    getBackupSettings: () =>
+      Effect.succeed({ folder: '/b', default_folder: '/b', keep: 10, mode: 'destructive', after_session: false, manifest: 'none' } as never),
+    setBackupSettings: () =>
+      Effect.succeed({ folder: '/b', default_folder: '/b', keep: 10, mode: 'destructive', after_session: false, manifest: 'none' } as never),
+    refreshSaveManifest: () => Effect.succeed(undefined as never),
   },
 }));
 
