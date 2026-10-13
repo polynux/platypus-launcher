@@ -4,5 +4,194 @@
   "launchFailedText": "le lancement a échoué",
   "notPersisted": "Non enregistré sur le disque, vaut pour cette session : {{error}}",
   "retry": "Réessayer",
-  "noticeFallback": "Platypus n'a pas pu aller au bout. Réessayez."
+  "noticeFallback": "Platypus n'a pas pu aller au bout. Réessayez.",
+  "art": {
+    "gog": {
+      "none": "GOG n'a pas d'illustrations (couverture ou bannière) pour « {{name}} ».",
+      "stale": "Ce résultat GOG est périmé : recherchez à nouveau l'illustration, puis appliquez-la."
+    },
+    "lutris": {
+      "none": "Lutris n'a pas de couverture pour « {{name}} »."
+    },
+    "off": "La recherche d'illustrations en ligne est éteinte.",
+    "sideloadOnly": "La recherche d'illustrations est réservée aux jeux ajoutés.",
+    "source": {
+      "unknown": "Source d'illustrations inconnue : « {{source}} »."
+    },
+    "steam": {
+      "none": "Steam n'a pas d'illustrations (couverture ou bannière) pour « {{name}} »."
+    }
+  },
+  "chat": {
+    "none": "« {{plugin}} » n'a pas de chat.",
+    "off": "Le chat n'est pas démarré."
+  },
+  "cloud": {
+    "none": "Ce jeu n'a pas de sauvegardes cloud que Platypus peut synchroniser.",
+    "running": "« {{title}} » est en cours d'exécution ; choisissez ses sauvegardes après sa fermeture."
+  },
+  "family": {
+    "copyUnavailable": "La copie de « {{name}} » n'est pas disponible pour l'instant.",
+    "noCopy": "« {{title}} » n'a pas de copie de ce membre de la famille.",
+    "notLent": "« {{title}} » n'est pas prêté ici.",
+    "ownCopy": "« {{title}} » est votre propre copie : il n'y a rien à choisir.",
+    "unsupported": "« {{name}} » n'offre pas la famille."
+  },
+  "game": {
+    "launchBusy": "« {{title}} » est occupé ({{what}}) ; lancez-le une fois terminé.",
+    "noClientLaunch": "« {{title}} » ne peut pas être démarré via un client de boutique.",
+    "noCommand": "« {{title}} » n'a renvoyé aucune commande.",
+    "noLaunchTarget": "Le jeu « {{title}} » n'a pas de cible de lancement.",
+    "noRunner": "Aucun runner Proton ou Wine installé.",
+    "notFound": "Jeu inconnu : « {{id}} ».",
+    "notFromStore": "« {{title}} » ne vient pas d'un plugin de boutique.",
+    "notInLibrary": "« {{title}} » n'est pas dans votre bibliothèque.",
+    "notInstalled": "« {{title}} » n'est pas installé.",
+    "notRunning": "Ce jeu n'est pas en cours d'exécution.",
+    "runnerMissing": "Le runner « {{id}} » n'est pas installé.",
+    "running": "« {{title}} » est déjà en cours d'exécution."
+  },
+  "gog": {
+    "productId": {
+      "invalid": "Un identifiant produit GOG est une chaîne."
+    }
+  },
+  "info": {
+    "id": {
+      "empty": "Un identifiant d'info est vide."
+    },
+    "off": "La recherche d'infos de jeux en ligne est éteinte.",
+    "sideloadOnly": "Lier des infos en ligne est réservé aux jeux ajoutés.",
+    "source": {
+      "invalid": "Une source d'infos, c'est gog ou lutris.",
+      "unknown": "Source d'infos inconnue : « {{source}} »."
+    }
+  },
+  "install": {
+    "addonsRetry": "Impossible de vérifier les modules auprès de la boutique ; réessayez.",
+    "alreadyInstalled": "« {{title}} » est déjà installé.",
+    "cannotInstall": "« {{title}} » ne peut pas être installé par Platypus.",
+    "folder": {
+      "isFile": "« {{path}} » est un fichier, pas un dossier.",
+      "noParent": "Aucun dossier n'existe au-dessus de « {{dir}} ».",
+      "notWritable": "Vous ne pouvez pas écrire dans « {{path}} ».",
+      "ownData": "Refus d'installer dans le dossier de données de Platypus (« {{path}} »)."
+    },
+    "installedUseMove": "« {{title}} » est déjà installé ; utilisez Déplacer pour le mettre ailleurs.",
+    "noOptions": "« {{name}} » n'offre pas d'options d'installation pour « {{title}} ».",
+    "notSupported": "« {{name}} » ne peut pas installer de jeux."
+  },
+  "jobs": {
+    "pinnedStale": "« {{title}} » a été mis en file pour une version choisie, que la boutique ne peut plus installer ; annulez la tâche ou détachez la version du jeu pour installer la plus récente."
+  },
+  "lutris": {
+    "slug": {
+      "invalid": "Un slug Lutris est une chaîne."
+    }
+  },
+  "move": {
+    "canceled": "Le déplacement a été annulé avant de commencer.",
+    "chooseFolder": "Choisissez un dossier où déplacer « {{title}} ».",
+    "exists": "« {{path}} » existe déjà ; choisissez un autre dossier.",
+    "insideGame": "« {{path}} » est à l'intérieur du dossier du jeu.",
+    "noSpace": "Pas assez de place dans « {{dir}} » : le jeu a besoin de {{need}}, {{free}} de libres.",
+    "notFolder": "« {{path}} » n'est pas un dossier.",
+    "notInLibrary": "« {{title}} » n'est pas dans la bibliothèque de {{plugin}}.",
+    "stopping": "Le déplacement précédent de ce jeu est encore en train de s'arrêter ; réessayez dans un instant.",
+    "unknownLocation": "« {{title}} » est installé, mais Platypus ne sait pas quel dossier contient ses fichiers."
+  },
+  "plugin": {
+    "noLogin": "« {{name}} » n'a pas de connexion.",
+    "notApproved": "« {{title}} » vient de {{source}}, qui n'est ni approuvé ni activé.",
+    "notReady": "« {{name}} » est {{status}}.",
+    "settings": {
+      "none": "« {{name}} » n'a pas de réglages pour « {{title}} ».",
+      "unsupported": "« {{name}} » n'offre pas de réglages."
+    },
+    "unknown": "Plugin inconnu : « {{id}} »."
+  },
+  "redeem": {
+    "busy": "Un code est déjà en cours d'échange.",
+    "notStore": "« {{source}} » n'est pas un plugin de boutique.",
+    "unsupported": "« {{name}} » n'échange pas de codes."
+  },
+  "settings": {
+    "cleanupDays": {
+      "invalid": "Conservez les téléchargements annulés entre 0 et {{max}} jours, pas {{days}}."
+    },
+    "folder": {
+      "isFile": "« {{path}} » est un fichier, pas un dossier.",
+      "notAbsolute": "Un dossier doit être un chemin absolu, pas « {{path}} »."
+    },
+    "folders": {
+      "default": {
+        "remove": "Le dossier de jeux par défaut ne peut pas être retiré ; choisissez d'abord un autre dossier par défaut."
+      },
+      "full": "Au plus {{max}} dossiers de jeux."
+    },
+    "home": {
+      "unknown": "Impossible de déterminer le dossier personnel."
+    },
+    "language": {
+      "invalid": "La langue doit être vide (Système) ou un code BCP 47 comme fr, pas « {{lang}} »."
+    },
+    "workdir": {
+      "notFolder": "« {{path}} » est un fichier, pas un dossier."
+    },
+    "year": {
+      "invalid": "L'année de sortie doit être comprise entre 1970 et {{max}} (reçu : {{year}})."
+    }
+  },
+  "sideload": {
+    "duplicate": "« {{executable}} » est déjà dans votre bibliothèque sous le nom « {{title}} ».",
+    "executable": {
+      "notAbsolute": "L'exécutable doit être un chemin absolu, pas « {{executable}} ».",
+      "notFile": "« {{executable}} » n'est pas un fichier.",
+      "unreadable": "Impossible de lire l'exécutable « {{executable}} »."
+    },
+    "title": {
+      "missing": "Le jeu a besoin d'un titre."
+    },
+    "unknown": "Jeu inconnu : « {{id}} »."
+  },
+  "social": {
+    "none": "« {{plugin}} » n'a pas de liste d'amis.",
+    "off": "Le service d'amis n'est pas démarré."
+  },
+  "steam": {
+    "appid": {
+      "invalid": "Un AppID Steam est un nombre."
+    }
+  },
+  "terms": {
+    "acceptFirst": "Acceptez d'abord les conditions de « {{title}} » : {{terms}}.",
+    "changed": "Les conditions de « {{title}} » ont changé ; regardez-les à nouveau.",
+    "unreadable": "Impossible de lire les conditions de « {{title}} » auprès de la boutique ; réessayez."
+  },
+  "verify": {
+    "gameUnsupported": "« {{name}} » ne peut pas vérifier « {{title}} ».",
+    "noReport": "Vérifiez « {{title}} » d'abord : il n'y a pas de rapport de dégâts à réparer.",
+    "unsupported": "« {{name}} » ne peut pas vérifier les fichiers."
+  },
+  "versions": {
+    "channel": {
+      "missing": "Choisissez un canal à déverrouiller."
+    },
+    "installedUseSwitch": "« {{title}} » est déjà installé ; changez plutôt sa version.",
+    "manual": {
+      "invalid": "Une valeur tapée est vide ou non valable.",
+      "tooMany": "Au plus {{max}} valeurs à taper."
+    },
+    "password": {
+      "missing": "Tapez le mot de passe du canal.",
+      "unsupported": "Cette boutique n'a pas de mots de passe de canal."
+    },
+    "pinnedStale": "« {{title}} » est bloqué sur {{pin}}, que cette boutique ne peut pas installer pour l'instant ; détachez-le pour continuer.",
+    "single": "« {{title}} » n'a qu'une seule version ici.",
+    "target": {
+      "invalid": "Cet identifiant de version n'est pas valable.",
+      "missing": "Choisissez un canal, une version, ou tapez ce que la boutique demande."
+    },
+    "unsupported": "« {{name}} » n'offre pas le choix de version."
+  }
 }

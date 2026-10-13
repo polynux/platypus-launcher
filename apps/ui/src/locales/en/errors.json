@@ -4,5 +4,194 @@
   "launchFailedText": "launch failed",
   "notPersisted": "Not saved to disk, applies this session: {{error}}",
   "retry": "Try again",
-  "noticeFallback": "Platypus couldn't finish that. Try again."
+  "noticeFallback": "Platypus couldn't finish that. Try again.",
+  "art": {
+    "gog": {
+      "none": "GOG has no cover or banner art for {{name}}.",
+      "stale": "That GOG result is stale: search for the art again, then apply it."
+    },
+    "lutris": {
+      "none": "Lutris has no cover art for {{name}}."
+    },
+    "off": "Finding artwork online is switched off.",
+    "sideloadOnly": "Art lookup is for sideloaded games.",
+    "source": {
+      "unknown": "Unknown art source {{source}}."
+    },
+    "steam": {
+      "none": "Steam has no cover or banner art for {{name}}."
+    }
+  },
+  "chat": {
+    "none": "{{plugin}} has no chat.",
+    "off": "Chat is not running."
+  },
+  "cloud": {
+    "none": "This game has no cloud saves Platypus can sync.",
+    "running": "{{title}} is running; choose its saves after it exits."
+  },
+  "family": {
+    "copyUnavailable": "The copy from {{name}} isn't available right now.",
+    "noCopy": "{{title}} has no copy from that family member.",
+    "notLent": "{{title}} isn't lent here.",
+    "ownCopy": "{{title}} is your own copy: there is nothing to choose.",
+    "unsupported": "{{name}} doesn't offer family."
+  },
+  "game": {
+    "launchBusy": "{{title}} is being {{what}}; launch it once that finishes.",
+    "noClientLaunch": "{{title}} can't be started through a store client.",
+    "noCommand": "{{title}} returned no command.",
+    "noLaunchTarget": "Game {{title}} has no launch target.",
+    "noRunner": "No Proton or Wine runner installed.",
+    "notFound": "Unknown game {{id}}.",
+    "notFromStore": "{{title}} doesn't come from a store plugin.",
+    "notInLibrary": "{{title}} isn't in your library.",
+    "notInstalled": "{{title}} is not installed.",
+    "notRunning": "That game is not running.",
+    "runnerMissing": "Runner {{id}} is not installed.",
+    "running": "{{title}} is already running."
+  },
+  "gog": {
+    "productId": {
+      "invalid": "A GOG product id is a string."
+    }
+  },
+  "info": {
+    "id": {
+      "empty": "An info id is empty."
+    },
+    "off": "Finding game info online is switched off.",
+    "sideloadOnly": "Info linking is for sideloaded games.",
+    "source": {
+      "invalid": "An info source is gog or lutris.",
+      "unknown": "Unknown info source {{source}}."
+    }
+  },
+  "install": {
+    "addonsRetry": "Couldn't check add-ons with the store; retry.",
+    "alreadyInstalled": "{{title}} is already installed.",
+    "cannotInstall": "{{title}} can't be installed by Platypus.",
+    "folder": {
+      "isFile": "{{path}} is a file, not a folder.",
+      "noParent": "No folder exists above {{dir}}.",
+      "notWritable": "You can't write to {{path}}.",
+      "ownData": "Refusing to install into Platypus's own data folder ({{path}})."
+    },
+    "installedUseMove": "{{title}} is installed; use Move to put it elsewhere.",
+    "noOptions": "{{name}} doesn't offer install options for {{title}}.",
+    "notSupported": "{{name}} can't install games."
+  },
+  "jobs": {
+    "pinnedStale": "{{title}} was queued for a chosen version, which the store can't install now; cancel the job or unpin the game to install the latest."
+  },
+  "lutris": {
+    "slug": {
+      "invalid": "A Lutris slug is a string."
+    }
+  },
+  "move": {
+    "canceled": "The move was canceled before it started.",
+    "chooseFolder": "Choose a folder to move {{title}} into.",
+    "exists": "{{path}} already exists; choose another folder.",
+    "insideGame": "{{path}} is inside the game's folder.",
+    "noSpace": "Not enough space in {{dir}}: the game needs {{need}}, {{free}} is free.",
+    "notFolder": "{{path}} is not a folder.",
+    "notInLibrary": "{{title}} is not in {{plugin}}'s library.",
+    "stopping": "The earlier move of this game is still stopping; try again in a moment.",
+    "unknownLocation": "{{title}} is installed, but Platypus doesn't know which folder holds its files."
+  },
+  "plugin": {
+    "noLogin": "{{name}} has no login.",
+    "notApproved": "{{title}} comes from {{source}}, which isn't approved and enabled.",
+    "notReady": "{{name}} is {{status}}.",
+    "settings": {
+      "none": "{{name}} has no settings for {{title}}.",
+      "unsupported": "{{name}} doesn't offer settings."
+    },
+    "unknown": "Unknown plugin {{id}}."
+  },
+  "redeem": {
+    "busy": "A code is already being redeemed.",
+    "notStore": "{{source}} isn't a store plugin.",
+    "unsupported": "{{name}} doesn't redeem codes."
+  },
+  "settings": {
+    "cleanupDays": {
+      "invalid": "Keep canceled downloads between 0 and {{max}} days, got {{days}}."
+    },
+    "folder": {
+      "isFile": "{{path}} is a file, not a folder.",
+      "notAbsolute": "A folder must be an absolute path, got {{path}}."
+    },
+    "folders": {
+      "default": {
+        "remove": "The default game folder can't be removed; make another folder the default first."
+      },
+      "full": "At most {{max}} game folders."
+    },
+    "home": {
+      "unknown": "Cannot determine home directory."
+    },
+    "language": {
+      "invalid": "Language must be empty (System) or a BCP 47 tag like fr, got {{lang}}."
+    },
+    "workdir": {
+      "notFolder": "{{path}} is a file, not a folder."
+    },
+    "year": {
+      "invalid": "Release year must be between 1970 and {{max}}, got {{year}}."
+    }
+  },
+  "sideload": {
+    "duplicate": "{{executable}} is already in your library as {{title}}.",
+    "executable": {
+      "notAbsolute": "Executable must be an absolute path, got {{executable}}.",
+      "notFile": "{{executable}} is not a file.",
+      "unreadable": "Couldn't read the executable {{executable}}."
+    },
+    "title": {
+      "missing": "The game needs a title."
+    },
+    "unknown": "Unknown game {{id}}."
+  },
+  "social": {
+    "none": "{{plugin}} has no friends list.",
+    "off": "Friends are not running."
+  },
+  "steam": {
+    "appid": {
+      "invalid": "A Steam AppID is a number."
+    }
+  },
+  "terms": {
+    "acceptFirst": "Accept the terms of {{title}} first: {{terms}}.",
+    "changed": "The terms of {{title}} changed; look at them again.",
+    "unreadable": "Couldn't read the terms of {{title}} from the store; retry."
+  },
+  "verify": {
+    "gameUnsupported": "{{name}} can't verify {{title}}.",
+    "noReport": "Check {{title}} first: there is no damage report to repair from.",
+    "unsupported": "{{name}} can't verify files."
+  },
+  "versions": {
+    "channel": {
+      "missing": "Pick a channel to unlock."
+    },
+    "installedUseSwitch": "{{title}} is already installed; switch its version instead.",
+    "manual": {
+      "invalid": "A typed value is empty or not valid.",
+      "tooMany": "At most {{max}} values may be typed."
+    },
+    "password": {
+      "missing": "Type the channel's password.",
+      "unsupported": "This store has no channel passwords."
+    },
+    "pinnedStale": "{{title}} is pinned to {{pin}}, which this store can't install right now; unpin it to continue.",
+    "single": "{{title}} has a single version here.",
+    "target": {
+      "invalid": "That version id is not valid.",
+      "missing": "Pick a channel, a build, or type what the store asks for."
+    },
+    "unsupported": "{{name}} doesn't offer version selection."
+  }
 }
