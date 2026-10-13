@@ -121,6 +121,13 @@
     "yearRangeError": "The release year is between 1970 and {{max}}.",
     "pickWorkDir": "Choose the working directory",
     "pickPrefix": "Choose the Wine prefix folder",
+    "runWith": "Run with",
+    "runHelp": "How this game starts. Automatic follows what the file looks like; override it when detection gets it wrong.",
+    "runAutoNative": "Automatic (detected: native)",
+    "runAutoWine": "Automatic (detected: Wine)",
+    "runAutoUnknown": "Automatic",
+    "runNative": "Native Linux",
+    "runWine": "Wine / Proton",
     "submit": "Add game"
   }
 }

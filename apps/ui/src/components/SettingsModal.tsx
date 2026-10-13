@@ -33,6 +33,8 @@ interface GeneralProps extends Props {
   onDirty?: (dirty: boolean) => void;
   /** Inside a tab of the game settings: no title row or close button of its own. */
   embedded?: boolean;
+  /** The game's executable changed (or its bit did): the library should reload. */
+  onChanged?: () => void;
 }
 
 /** Physical pixels of the display the window is on. */
@@ -107,7 +109,7 @@ function AdvancedFold({ set, children }: { set: number; children: React.ReactNod
 
 /** The launcher's own settings for one game (runner, wrappers, env…): the form
  *  of the "General" tab, and of the standalone settings dialog. */
-export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded }: GeneralProps) {
+export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded, onChanged }: GeneralProps) {
   const { t } = useTranslation(['gameSettings', 'common']);
   const [draft, setDraft] = useState<GameSettings>(() => normalizeSettings(game.settings));
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => envToRows(normalizeSettings(game.settings).env_vars));
@@ -138,6 +140,25 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
   const native = !!game.native;
+  // What the executable looks like by content (issue #47): the default of the
+  // "Run with" choice. Sideloaded games resolve it again here so the choice
+  // shows the detected value even before anything is saved.
+  const isCustom = game.store === 'custom';
+  const [detected, setDetected] = useState<{ native: boolean; kind: string } | null>(null);
+  useEffect(() => {
+    if (!isCustom || !game.executable) {
+      setDetected(null);
+      return;
+    }
+    let live = true;
+    Effect.runPromise(LauncherApi.detectGameExecutable(game.executable)).then(
+      (d) => { if (live) setDetected(d); },
+      () => { if (live) setDetected(null); },
+    );
+    return () => { live = false; };
+  }, [isCustom, game.executable, game.id]);
+  const runMode = draft.run_mode ?? '';
+  const effectiveNative = runMode === 'native' ? true : runMode === 'wine' ? false : (detected?.native ?? native);
   const validEnv = useMemo(() => rowsToEnv(envRows), [envRows]);
   const current = { ...draft, env_vars: validEnv };
   const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, validEnv]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -182,7 +203,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
   // How many folded settings are off their defaults: the Advanced folds report them while closed.
   const syncSet = !['default', 'fsync'].includes(draft.sync_mode ?? 'fsync') ? 1 : 0;
-  const runnerSet = (native ? 0 : syncSet + flags.length) + tricks.length;
+  const runnerSet = (effectiveNative ? 0 : syncSet + flags.length) + tricks.length;
   const gsSet = GS_TOGGLES.filter((t) => gs.toggles[t.key]).length + (gs.filter ? 1 : 0) + (gsExtra.trim() ? 1 : 0);
   const launchSet = envRows.length + (draft.use_gamescope ? gsSet : 0);
 
@@ -220,8 +241,18 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         <div className="min-w-0 space-y-7">
           <SteamAppIdField game={game} />
 
+          {isCustom && (
+            <CustomProgram
+              game={game}
+              detected={detected}
+              runMode={runMode}
+              onRunMode={(v) => set('run_mode', v)}
+              onChanged={onChanged}
+            />
+          )}
+
           <SettingGroup label={t('gameSettings:groups.runner')}>
-            {native ? (
+            {effectiveNative ? (
               <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
                 <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
                   {t('gameSettings:runner.nativeNote')}
@@ -251,14 +282,14 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               </div>
             )}
             <AdvancedFold set={runnerSet}>
-              {!native && (
+              {!effectiveNative && (
                 <div>
                   <MonoLabel className="mb-1.5">{t('gameSettings:sync.kicker')}</MonoLabel>
                   <SegRow label={t('gameSettings:sync.label')} options={SYNC_MODES.map((m) => ({ value: m.value, label: m.label, title: syncModeTitle(t, m.value) }))} value={draft.sync_mode === 'default' ? 'fsync' : draft.sync_mode!} onChange={(v) => set('sync_mode', v)} />
                   <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:sync.description')}</p>
                 </div>
               )}
-              {!native && (
+              {!effectiveNative && (
                 <div>
                   <MonoLabel className="mb-2">{t('gameSettings:protonFlags.kicker')}</MonoLabel>
                   <p className="mb-2 text-[12px] leading-relaxed text-white/70">{t('gameSettings:protonFlags.description')}</p>
@@ -295,7 +326,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             </AdvancedFold>
           </SettingGroup>
 
-          {!native && (
+          {!effectiveNative && (
             <SettingGroup label={t('gameSettings:groups.graphics')}>
               <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 <div>
@@ -322,7 +353,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 {([
                   ['use_gamemode', t('gameSettings:launch.gamemode'), t('gameSettings:launch.gamemodeHint')],
                   ['use_gamescope', t('gameSettings:launch.gamescope'), t('gameSettings:launch.gamescopeHint')],
-                  ...(!native
+                  ...(!effectiveNative
                     ? ([
                         ['eac_runtime', t('gameSettings:launch.eac'), t('gameSettings:launch.eacHint')],
                         ['battleye_runtime', t('gameSettings:launch.battlEye'), t('gameSettings:launch.battlEyeHint')],
@@ -421,7 +452,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
               </div>
             )}
 
-            {!isSteamClient && !native && (
+            {!isSteamClient && !effectiveNative && (
               <div>
                 <MonoLabel className="mb-1.5">{t('gameSettings:launch.prefixKicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
                 <div className="flex items-center gap-2">
@@ -521,11 +552,120 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">{t('gameSettings:general.unsaved')}</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
-            {t('gameSettings:general.savedNote', { prefix: effectivePrefix })}{draft.wine_prefix ? '' : t('gameSettings:general.defaultSuffix')}
+            {effectiveNative && isCustom
+              ? t('gameSettings:general.savedNativeNote')
+              : <>{t('gameSettings:general.savedNote', { prefix: effectivePrefix })}{draft.wine_prefix ? '' : t('gameSettings:general.defaultSuffix')}</>}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/** A sideloaded game's program (issue #47): its executable, how it runs
+ *  (detected by content, overridable per game), and the execute bit. */
+function CustomProgram({ game, detected, runMode, onRunMode, onChanged }: {
+  game: Game;
+  detected: { native: boolean; kind: string } | null;
+  runMode: string;
+  onRunMode: (v: string) => void;
+  onChanged?: () => void;
+}) {
+  const { t } = useTranslation(['gameSettings', 'common']);
+  const [exe, setExe] = useState(game.executable);
+  const [savingExe, setSavingExe] = useState(false);
+  const [exeError, setExeError] = useState<string | null>(null);
+  const [execOk, setExecOk] = useState<boolean | null>(null);
+  const [makingExec, setMakingExec] = useState(false);
+  const [execError, setExecError] = useState<string | null>(null);
+  useEffect(() => { setExe(game.executable); }, [game.id, game.executable]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let live = true;
+    setExecOk(null);
+    setExecError(null);
+    Effect.runPromise(LauncherApi.isGameExecutable(game.id)).then(
+      (ok) => { if (live) setExecOk(ok); },
+      () => { if (live) setExecOk(null); },
+    );
+    return () => { live = false; };
+  }, [game.id]);
+  const effectiveNative = runMode === 'native' ? true : runMode === 'wine' ? false : (detected?.native ?? game.native);
+  const exeDirty = exe.trim() !== game.executable;
+  const saveExe = () => {
+    const next = exe.trim();
+    if (!next || !exeDirty || savingExe) return;
+    setSavingExe(true);
+    setExeError(null);
+    Effect.runPromise(LauncherApi.updateCustomGameExecutable(game.id, next)).then(
+      () => { setSavingExe(false); onChanged?.(); },
+      (e) => { setSavingExe(false); setExeError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+  const makeExec = () => {
+    if (makingExec) return;
+    setMakingExec(true);
+    setExecError(null);
+    Effect.runPromise(LauncherApi.makeGameExecutable(game.id)).then(
+      () => { setMakingExec(false); setExecOk(true); onChanged?.(); },
+      (e) => { setMakingExec(false); setExecError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+  return (
+    <SettingGroup label={t('gameSettings:program.kicker')}>
+      <div>
+        <MonoLabel className="mb-1.5">{t('gameSettings:program.exeKicker')}</MonoLabel>
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label={t('gameSettings:program.exeAria')}
+            value={exe}
+            onChange={(e) => { setExe(e.target.value); setExeError(null); }}
+            spellCheck={false}
+            className="min-w-0 flex-1"
+          />
+          <Button
+            variant="neutral"
+            size="sm"
+            onClick={() => {
+              Effect.runPromise(LauncherApi.pickGameExecutable(exe.trim() || game.executable))
+                .then((picked) => { if (picked) { setExe(picked); setExeError(null); } })
+                .catch(() => {});
+            }}
+            className="flex-none"
+          >
+            {t('gameSettings:program.browse')}
+          </Button>
+          <Button variant="primary" size="sm" disabled={!exeDirty || savingExe} onClick={saveExe} className="flex-none">
+            {t('gameSettings:program.saveExe')}
+          </Button>
+        </div>
+        {detected && (
+          <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
+            {detected.native ? t('gameSettings:program.detectedNative') : t('gameSettings:program.detectedWine')}
+          </p>
+        )}
+        {exeError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{exeError}</p>}
+      </div>
+      <div>
+        <MonoLabel className="mb-1.5">{t('gameSettings:program.runKicker')}</MonoLabel>
+        <SelectField label={t('gameSettings:program.runKicker')} value={runMode || 'auto'} onChange={(v) => onRunMode(v === 'auto' ? '' : v)}>
+          <SelectItem value="auto">{detected == null ? t('gameSettings:program.runAutoUnknown') : detected.native ? t('gameSettings:program.runAutoNative') : t('gameSettings:program.runAutoWine')}</SelectItem>
+          <SelectItem value="native">{t('gameSettings:program.runNative')}</SelectItem>
+          <SelectItem value="wine">{t('gameSettings:program.runWine')}</SelectItem>
+        </SelectField>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:program.runHelp')}</p>
+      </div>
+      {effectiveNative && execOk === false && (
+        <div className="rounded-2xl bg-amber-300/[0.06] p-4 ring-1 ring-amber-300/25">
+          <p className="text-[12.5px] leading-relaxed text-amber-100/85">{t('gameSettings:program.notExecutable')}</p>
+          <div className="mt-2.5">
+            <Button variant="primary" size="sm" disabled={makingExec} onClick={makeExec}>
+              {makingExec ? t('gameSettings:program.makingExecutable') : t('gameSettings:program.makeExecutable')}
+            </Button>
+          </div>
+          {execError && <p role="alert" className="mt-1.5 font-mono text-hint text-orange-300">{execError}</p>}
+        </div>
+      )}
+    </SettingGroup>
   );
 }
 

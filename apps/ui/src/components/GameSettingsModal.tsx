@@ -144,6 +144,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                 onSave={p.onSaveSettings}
                 onCopied={p.onCopied}
                 onDirty={setDirty}
+                onChanged={p.onCustomized}
               />
               <LegalSection game={game} plugin={plugin} />
             </section>
