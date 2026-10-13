@@ -124,6 +124,13 @@ func ScanProtonVersionsFor(home string) []types.ProtonVersion {
 		})
 	}
 
+	// 5. umu-launcher when installed (issue #48): offered as
+	// "Proton via umu" for Windows games. It never wins the auto pick
+	// (PickAuto skips it); auto prefers it explicitly in SelectUmu.
+	if umuPath, ok := FindUmuFor(home); ok {
+		versions = append(versions, UmuEntry(umuPath))
+	}
+
 	// Mark the runner "auto" resolves to so the UI can show it.
 	if pick, ok := PickAuto(versions); ok {
 		for i := range versions {

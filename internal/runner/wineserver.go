@@ -20,6 +20,25 @@ func WineserverStopCommand(r types.ProtonVersion, env map[string]string, force b
 	if r.Path == "" || prefix == "" {
 		return nil
 	}
+	if IsUmu(r) {
+		// umu's WINEPREFIX is already the Wine prefix itself (see
+		// EffectiveUmuPrefix): never append pfx. Its wineserver ships with
+		// the PROTONPATH build; a codename (UMU-Latest) names no local
+		// build, so there is nothing to stop.
+		protonPath := env["PROTONPATH"]
+		if protonPath == "" || !filepath.IsAbs(protonPath) {
+			return nil
+		}
+		for _, c := range []string{
+			filepath.Join(protonPath, "files", "bin", "wineserver"),
+			filepath.Join(protonPath, "dist", "bin", "wineserver"),
+		} {
+			if st, err := os.Stat(c); err == nil && !st.IsDir() {
+				return stopCmd(c, prefix, force)
+			}
+		}
+		return nil
+	}
 	bin := wineserverFor(r.Path)
 	if bin == "" {
 		return nil
@@ -28,6 +47,10 @@ func WineserverStopCommand(r types.ProtonVersion, env map[string]string, force b
 		// STEAM_COMPAT_DATA_PATH holds the real prefix under pfx/.
 		prefix = filepath.Join(prefix, "pfx")
 	}
+	return stopCmd(bin, prefix, force)
+}
+
+func stopCmd(bin, prefix string, force bool) *exec.Cmd {
 	arg := "-k"
 	if force {
 		arg = "-k9"
