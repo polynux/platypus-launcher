@@ -1,18 +1,21 @@
-import { useTranslation } from 'react-i18next';
+// i18n: converted
+import { useTranslation, Trans } from 'react-i18next';
 import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
 import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
-import { CompatChip } from './CompatBadges';
-import { TIER_FILTERS, TIER_LABEL, cardCompat, tierFilterValue, type TierFilter } from '../lib/compat';
+import { CompatChip, tierMeaning } from './CompatBadges';
+import { TIER_FILTERS, cardCompat, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
-import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, storeLabel } from '../lib/games';
+import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
+import { formatCount } from '../lib/format';
+import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 import { WindowedGrid, WindowedRows } from './WindowedList';
@@ -21,6 +24,8 @@ import { PluginLogo } from './PluginLogo';
 export type LibraryMode = 'cards' | 'table';
 /** installed: what can be played now; owned: everything store plugins report too. */
 export type Ownership = 'installed' | 'owned';
+
+type T = (key: string, vars?: Record<string, unknown>) => string;
 
 interface LibraryProps {
   games: Game[];
@@ -70,12 +75,32 @@ export function sortGames(games: Game[], sort: Sort | null): Game[] {
     return (sort.dir === 'asc' ? c : -c) || a.title.localeCompare(b.title);
   });
 }
-const SORT_OPTIONS: [SortKey | '', string][] = [['', 'default'], ['title', 'title'], ['year', 'year'], ['last', 'recently played'], ['hours', 'hours played'], ['size', 'size'], ['tier', 'tier']];
+const SORT_KEYS: (SortKey | '')[] = ['', 'title', 'year', 'last', 'hours', 'size', 'tier'];
 const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
+
+function sortOptionLabel(t: T, k: SortKey | ''): string {
+  switch (k) {
+    case '':
+      return t('library:sortDefault');
+    case 'title':
+      return t('library:sortOption.title');
+    case 'year':
+      return t('library:sortOption.year');
+    case 'last':
+      return t('library:sortOption.recent');
+    case 'hours':
+      return t('library:sortOption.hours');
+    case 'size':
+      return t('library:sortOption.size');
+    case 'tier':
+      return t('library:sortOption.tier');
+  }
+}
 
 const DEFAULT_SORT = 'default'; // Radix forbids '' as an item value
 
 function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort | null) => void }) {
+  const { t } = useTranslation('library');
   const asc = sort?.dir === 'asc';
   return (
     <div className="flex items-center gap-1.5">
@@ -83,11 +108,11 @@ function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort
         value={sort?.key ?? DEFAULT_SORT}
         onValueChange={(v) => onChange(v === DEFAULT_SORT ? null : { key: v as SortKey, dir: defaultDir(v as SortKey) })}
       >
-        <SelectTrigger aria-label="Sort by" className="w-44 uppercase tracking-wider">
+        <SelectTrigger aria-label={t('library:sortBy')} className="w-44 uppercase tracking-wider">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {SORT_OPTIONS.map(([v, l]) => <SelectItem key={v || DEFAULT_SORT} value={v || DEFAULT_SORT}>{v ? l : 'default'}</SelectItem>)}
+          {SORT_KEYS.map((v) => <SelectItem key={v || DEFAULT_SORT} value={v || DEFAULT_SORT}>{v ? sortOptionLabel(t, v) : sortOptionLabel(t, '')}</SelectItem>)}
         </SelectContent>
       </Select>
       {sort && (
@@ -96,13 +121,13 @@ function SortControl({ sort, onChange }: { sort: Sort | null; onChange: (s: Sort
             <Button
               variant="neutral"
               size="icon"
-              aria-label={asc ? 'Ascending, switch to descending' : 'Descending, switch to ascending'}
+              aria-label={asc ? t('library:ascToDesc') : t('library:descToAsc')}
               onClick={() => onChange({ ...sort, dir: asc ? 'desc' : 'asc' })}
             >
               {asc ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{asc ? 'Ascending' : 'Descending'}</TooltipContent>
+          <TooltipContent>{asc ? t('library:ascending') : t('library:descending')}</TooltipContent>
         </Tooltip>
       )}
     </div>
@@ -119,17 +144,39 @@ function FilterGroup({ label, labelClass, children }: { label: string; labelClas
   );
 }
 
+function tierOptionLabel(t: T, v: TierFilter): string {
+  switch (v) {
+    case 'all':
+      return t('library:tierAll');
+    case 'native':
+      return t('library:tierNative');
+    case 'none':
+      return t('library:tierNone');
+    case 'platinum':
+      return t('library:tierName.platinum');
+    case 'gold':
+      return t('library:tierName.gold');
+    case 'silver':
+      return t('library:tierName.silver');
+    case 'bronze':
+      return t('library:tierName.bronze');
+    case 'borked':
+      return t('library:tierName.borked');
+  }
+}
+
 /** Filters the library by compatibility: native builds, a ProtonDB tier, or none. */
 function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (v: TierFilter) => void }) {
+  const { t } = useTranslation('library');
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TierFilter)}>
-      <SelectTrigger aria-label="Filter by tier" className="w-40 uppercase tracking-wider">
+      <SelectTrigger aria-label={t('library:tierFilterAria')} className="w-40 uppercase tracking-wider">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {TIER_FILTERS.map((t) => (
-          <SelectItem key={t} value={t}>
-            {t === 'all' ? 'all' : t === 'none' ? 'no rating' : t === 'native' ? 'native' : TIER_LABEL[t] ?? t}
+        {TIER_FILTERS.map((v) => (
+          <SelectItem key={v} value={v}>
+            {tierOptionLabel(t, v)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -137,10 +184,26 @@ function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (
   );
 }
 
-function jobLabel(j: Job): string {
-  if (j.state === 'queued') return `${j.kind} queued`;
-  return j.percent >= 0 ? `${j.kind === 'uninstall' ? 'removing' : 'installing'} ${Math.round(j.percent)}%` : j.phase ?? j.kind;
+function jobLabel(t: T, j: Job): string {
+  if (j.state === 'queued') return t('library:job.queued', { kind: j.kind });
+  if (j.percent >= 0) {
+    const percent = formatCount(Math.round(j.percent));
+    return j.kind === 'uninstall' ? t('library:job.removing', { percent }) : t('library:job.installing', { percent });
+  }
+  return j.phase ?? j.kind;
 }
+
+/** The store name for display: brand stores keep their name, sideloaded games translate. */
+function displayStore(t: T, s: string): string {
+  return s === 'custom' ? t('library:storeSideloaded') : storeLabel(s);
+}
+
+/** The compact recency word for a game ("today", "5d ago"), through the library catalog. */
+function recencyWord(t: T, g: Game): string | undefined {
+  const r = recencyOf(g.last_played_at);
+  return r ? renderRecency(t, 'library:recency', r) : undefined;
+}
+
 const TABLE_COLS = 'grid-cols-[16px_minmax(180px,2fr)_5rem_7.5rem_4.5rem_6rem_4rem_7rem]';
 
 function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string; sort: Sort | null; onSort: (k: SortKey) => void; right?: boolean }) {
@@ -164,17 +227,19 @@ const cardRowHeight = (width: number) => width * 1.5 + CARD_FOOTER;
 const TABLE_ROW_HEIGHT = 44;
 
 const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; job?: Job; onOpen: (id: string) => void }) {
+  const { t } = useTranslation('library');
+  const hours = hoursPlayed(g);
   return (
     <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'flex h-full flex-col')}>
       <div className="relative flex-none">
         <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
         {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
         {g.shared_by && (
-          <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">Shared by {g.shared_by.name}</Badge>
+          <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">{t('library:sharedBy', { name: g.shared_by.name })}</Badge>
         )}
         {job ? (
           <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
-            <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(job)}</div>
+            <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(t, job)}</div>
             <div className="mt-1 h-1 rounded-full bg-white/15">
               <div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(job.percent, 2)}%` }} />
             </div>
@@ -182,7 +247,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
         ) : (
           !g.is_installed && (
             <Badge variant="neutral" className="absolute bottom-2 left-2 gap-1 bg-black/65 text-white/70">
-              {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? 'not installed' : 'owned'}
+              {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? t('library:cardNotInstalled') : t('library:cardOwned')}
             </Badge>
           )
         )}
@@ -190,7 +255,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
       <div className="h-[82px] flex-none overflow-hidden px-2.5 py-2">
         <div className="truncate text-hint font-bold">{g.title}</div>
         <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
-          {[hoursPlayed(g) != null && `${hoursPlayed(g)}h`, lastPlayedLabel(g), storeLabel(g.store), g.release_year ? String(g.release_year) : null, g.update_available && 'update'].filter(Boolean).join(' · ')}
+          {[hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ')}
         </div>
         {cardCompat(g) || g.fix_info?.deck ? <CompatChip game={g} className="mt-1.5" /> : null}
       </div>
@@ -199,6 +264,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
 });
 
 const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { game: Game; index: number; runners: ProtonVersion[]; onOpen: (id: string) => void }) {
+  const { t } = useTranslation('library');
   const tier = g.native ? 'native' : g.fix_info?.tier;
   return (
     <div role="row" aria-rowindex={index + 2} className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-amber-300/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}>
@@ -207,21 +273,21 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { g
         <button onClick={() => onOpen(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
           <Cover src={coverImages(g)} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
           <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
-          {g.shared_by && <Badge variant="neutral" className="flex-none">Shared by {g.shared_by.name}</Badge>}
+          {g.shared_by && <Badge variant="neutral" className="flex-none">{t('library:sharedBy', { name: g.shared_by.name })}</Badge>}
         </button>
       </span>
       <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-white/55')}>{tier ?? '—'}</span>
       <span role="cell" className="truncate font-mono text-hint text-white/55">{runnerShort(g.settings.runner_id, runners)}</span>
       <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
       <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{g.release_year ?? '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : 'not installed') || '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint text-white/55">{lastPlayedLabel(g) ?? '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : t('library:table.notInstalled')) || '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint text-white/55">{recencyWord(t, g) ?? '—'}</span>
     </div>
   );
 });
 
 export function LibraryView(p: LibraryProps) {
-  const { t } = useTranslation('nav');
+  const { t } = useTranslation(['library', 'nav']);
   const [sort, setSort] = useState<Sort | null>(null);
   const [tier, setTier] = useState<TierFilter>('all');
   // Family: the games borrowed from a family member, when the library has any.
@@ -270,16 +336,17 @@ export function LibraryView(p: LibraryProps) {
           <div>
             <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.library')}</h1>
             <p className="mt-0.5 text-[12.5px] tabular-nums text-white/70">
-              {filtered.length} shown · {installedCount} installed{owned > installedCount ? ` · ${owned} owned` : ''}
-              {p.lastScan ? ` · scanned ${clock(p.lastScan)}` : ''}
+              {t('library:counts', { shown: formatCount(filtered.length), installed: formatCount(installedCount) })}
+              {owned > installedCount ? t('library:ownedSuffix', { owned: formatCount(owned) }) : ''}
+              {p.lastScan ? t('library:scannedSuffix', { time: clock(p.lastScan) }) : ''}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <FilterGroup label="view">
-              <SegRow label="View" value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: 'cards' }, { value: 'table', label: 'table' }]} />
+            <FilterGroup label={t('library:view')}>
+              <SegRow label={t('library:view')} value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: t('library:mode.cards') }, { value: 'table', label: t('library:mode.table') }]} />
             </FilterGroup>
             <Button variant="primary" onClick={p.onAddGame}>
-              <Plus className="h-3.5 w-3.5" strokeWidth={3} /> Add game
+              <Plus className="h-3.5 w-3.5" strokeWidth={3} /> {t('library:addGame')}
             </Button>
           </div>
         </div>
@@ -289,10 +356,10 @@ export function LibraryView(p: LibraryProps) {
           <div className="relative">
             <Input
               type="search"
-              aria-label="Filter library"
+              aria-label={t('library:searchAria')}
               value={p.search}
               onChange={(e) => p.onSearch(e.target.value)}
-              placeholder="filter…"
+              placeholder={t('library:searchPlaceholder')}
               className="w-48 pr-9 [&::-webkit-search-cancel-button]:hidden"
             />
             {p.search && (
@@ -301,33 +368,33 @@ export function LibraryView(p: LibraryProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label="Clear search"
+                    aria-label={t('library:clearSearch')}
                     onClick={() => p.onSearch('')}
                     className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-white/55"
                   >
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Clear search</TooltipContent>
+                <TooltipContent>{t('library:clearSearch')}</TooltipContent>
               </Tooltip>
             )}
           </div>
           {/* One store (or none) has nothing to choose between: the chips show only with two or more. */}
           {sources.length > 2 && (
-            <FilterGroup label="store">
+            <FilterGroup label={t('library:store')}>
               <SegRow
-                label="Store"
+                label={t('library:store')}
                 value={source}
                 onChange={p.onSource}
                 options={sources.map((s) => ({
                   value: s,
                   label:
                     s === 'all' ? (
-                      'all'
+                      t('library:all')
                     ) : s === 'custom' ? (
                       <span className="inline-flex items-center gap-1.5 leading-none">
                         <PackagePlus className="h-4 w-4" aria-hidden />
-                        <span>sideloaded</span>
+                        <span>{t('library:sideloaded')}</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5">
@@ -345,7 +412,7 @@ export function LibraryView(p: LibraryProps) {
             aria-controls="library-filters"
             onClick={() => setFiltersOpen((o) => !o)}
           >
-            <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+            <SlidersHorizontal className="h-3.5 w-3.5" /> {t('library:filters')}
             {extraFilters > 0 && <Badge variant="accent" className="h-5 rounded-full tracking-normal tabular-nums">{extraFilters}</Badge>}
           </Button>
         </div>
@@ -354,19 +421,19 @@ export function LibraryView(p: LibraryProps) {
           // One row per group, labels in a shared column: the panel never wraps a group onto a second line.
           <div id="library-filters" className="flex flex-col items-start gap-2.5 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
             {owned > installedCount && (
-              <FilterGroup label="show" labelClass="w-14">
-                <SegRow label="Show" value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: 'installed' }, { value: 'owned', label: 'owned' }]} />
+              <FilterGroup label={t('library:show')} labelClass="w-14">
+                <SegRow label={t('library:show')} value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: t('library:installed') }, { value: 'owned', label: t('library:owned') }]} />
               </FilterGroup>
             )}
             {hasBorrowed && (
-              <FilterGroup label="family" labelClass="w-14">
-                <SegRow label="Family" value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: 'all' }, { value: 'with-me', label: 'shared with me' }]} />
+              <FilterGroup label={t('library:family')} labelClass="w-14">
+                <SegRow label={t('library:family')} value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: t('library:all') }, { value: 'with-me', label: t('library:sharedWithMe') }]} />
               </FilterGroup>
             )}
-            <FilterGroup label="tier" labelClass="w-14">
+            <FilterGroup label={t('library:tier')} labelClass="w-14">
               <TierFilterControl value={tier} onChange={setTier} />
             </FilterGroup>
-            <FilterGroup label="sort" labelClass="w-14">
+            <FilterGroup label={t('library:sort')} labelClass="w-14">
               <SortControl sort={sort} onChange={setSort} />
             </FilterGroup>
           </div>
@@ -378,11 +445,30 @@ export function LibraryView(p: LibraryProps) {
           {p.warnings.map((w) => (
             <div key={w.source} role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-4 py-3 ring-1 ring-amber-300/25">
               <p className="min-w-0 text-[12.5px] text-white/75">
-                <span className="font-bold text-amber-200">{pluginName(w.source)}</span>{' '}
-                {w.needs_auth ? 'is logged out, so its games are missing.' : w.unavailable ? <>isn't available right now: <span className="font-mono text-[12px] text-white/55">{w.message}</span></> : <>couldn't list its games: <span className="font-mono text-[12px] text-white/55">{w.message}</span></>}
+                {w.needs_auth ? (
+                  <Trans i18nKey="library:warningLoggedOut" values={{ name: pluginName(w.source) }} components={{ name: <span className="font-bold text-amber-200" /> }} />
+                ) : w.unavailable ? (
+                  <Trans
+                    i18nKey="library:warningUnavailable"
+                    values={{ name: pluginName(w.source), message: w.message }}
+                    components={{
+                      name: <span className="font-bold text-amber-200" />,
+                      msg: <span className="font-mono text-[12px] text-white/55" />,
+                    }}
+                  />
+                ) : (
+                  <Trans
+                    i18nKey="library:warningListFailed"
+                    values={{ name: pluginName(w.source), message: w.message }}
+                    components={{
+                      name: <span className="font-bold text-amber-200" />,
+                      msg: <span className="font-mono text-[12px] text-white/55" />,
+                    }}
+                  />
+                )}
               </p>
               <Button variant="primary" size="sm" className="flex-none" onClick={() => p.onNavigate({ name: 'plugins' })}>
-                {w.needs_auth && <LogIn className="h-3.5 w-3.5" />} {w.needs_auth ? 'Log in' : 'Plugins'}
+                {w.needs_auth && <LogIn className="h-3.5 w-3.5" />} {w.needs_auth ? t('library:login') : t('library:plugins')}
               </Button>
             </div>
           ))}
@@ -390,18 +476,18 @@ export function LibraryView(p: LibraryProps) {
       )}
 
       {filtered.length === 0 ? (
-        <EmptyState label="no titles match">
+        <EmptyState label={t('library:empty')}>
           {p.games.length === 0
-            ? 'No games were found in any source. Install something in Steam, or add a store plugin in Plugins.'
+            ? t('library:emptyNoGames')
             : p.ownership === 'installed' && installedCount === 0
-              ? 'Nothing is installed yet. Switch to "owned" to install a game from a store plugin.'
-              : 'Nothing matches this filter. Clear the search or pick another source.'}
+              ? t('library:emptyNotInstalled')
+              : t('library:emptyNoMatch')}
         </EmptyState>
       ) : p.mode === 'cards' ? (
         <>
           {played.length > 0 && (
             <section className="mb-8">
-              <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">Last played</h2>
+              <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">{t('library:lastPlayed')}</h2>
               <div className="grid gap-4 lg:grid-cols-3">
                 {played.map((g) => (
                   <button key={g.id} onClick={() => p.onOpenGame(g.id)} className="group relative overflow-hidden rounded-3xl text-left ring-1 ring-white/[0.08] transition hover:ring-amber-300/40">
@@ -410,11 +496,11 @@ export function LibraryView(p: LibraryProps) {
                     <div className="absolute bottom-4 left-5 right-5">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="truncate text-[16px] font-extrabold tracking-tight">{g.title}</span>
-                        {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
+                        {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} title={tierMeaning(t, g.fix_info.tier)} />}
                       </div>
                       <div className="mt-1 flex items-center gap-2 font-mono text-hint text-white/55">
-                        {hoursPlayed(g) != null && <><span>{hoursPlayed(g)}h</span><span>·</span></>}
-                        <span>{lastPlayedLabel(g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
+                        {hoursPlayed(g) != null && <><span>{t('library:cardHours', { hours: formatDecimal1(hoursPlayed(g)!) })}</span><span>·</span></>}
+                        <span>{recencyWord(t, g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
                       </div>
                       {hoursPlayed(g) != null && (
                         <div className="mt-2.5 h-1 rounded-full bg-white/[0.14]">
@@ -432,7 +518,7 @@ export function LibraryView(p: LibraryProps) {
           )}
 
           <section className="mb-8">
-            <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">All titles</h2>
+            <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">{t('library:allTitles')}</h2>
             <WindowedGrid
               items={rest}
               itemKey={(g) => g.id}
@@ -448,7 +534,7 @@ export function LibraryView(p: LibraryProps) {
             <ActivityPanel events={p.activity} limit={6} onFullLog={() => p.onNavigate({ name: 'activity' })} />
             {recentlyAdded.length > 0 && (
               <Panel className="bg-white/[0.04]">
-                <h2 className="mb-3 text-[14px] font-bold">Recently added</h2>
+                <h2 className="mb-3 text-[14px] font-bold">{t('library:recentlyAdded')}</h2>
                 <RecentList games={recentlyAdded} onOpenGame={p.onOpenGame} />
               </Panel>
             )}
@@ -456,15 +542,15 @@ export function LibraryView(p: LibraryProps) {
         </>
       ) : (
         <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
-          <div role="table" aria-label="Library" aria-rowcount={tableRows.length + 1} className="min-w-[800px]">
+          <div role="table" aria-label={t('library:table.label')} aria-rowcount={tableRows.length + 1} className="min-w-[800px]">
             <div role="row" aria-rowindex={1} className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-white/55', TABLE_COLS)}>
-              <span role="columnheader"><span className="sr-only">status</span></span>
-              <SortHead k="title" label="title" sort={sort} onSort={toggleSort} />
-              <SortHead k="tier" label="tier" sort={sort} onSort={toggleSort} /><span role="columnheader">runner</span>
-              <SortHead k="hours" label="hrs" sort={sort} onSort={toggleSort} right />
-              <SortHead k="year" label="year" sort={sort} onSort={toggleSort} right />
-              <SortHead k="size" label="size" sort={sort} onSort={toggleSort} right />
-              <SortHead k="last" label="last played" sort={sort} onSort={toggleSort} right />
+              <span role="columnheader"><span className="sr-only">{t('library:table.statusSr')}</span></span>
+              <SortHead k="title" label={t('library:table.title')} sort={sort} onSort={toggleSort} />
+              <SortHead k="tier" label={t('library:table.tier')} sort={sort} onSort={toggleSort} /><span role="columnheader">{t('library:table.runner')}</span>
+              <SortHead k="hours" label={t('library:table.hours')} sort={sort} onSort={toggleSort} right />
+              <SortHead k="year" label={t('library:table.year')} sort={sort} onSort={toggleSort} right />
+              <SortHead k="size" label={t('library:table.size')} sort={sort} onSort={toggleSort} right />
+              <SortHead k="last" label={t('library:table.lastPlayed')} sort={sort} onSort={toggleSort} right />
             </div>
             <WindowedRows
               items={tableRows}

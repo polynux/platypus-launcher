@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { ImagePlus, RotateCcw, Search } from 'lucide-react';
 import type { ArtCandidate, ArtKind, Customization, Game } from '../types';
@@ -17,6 +19,72 @@ const SHAPE: Record<ArtKindInfo['shape'], string> = {
   square: 'aspect-square w-14',
 };
 
+type T = (key: string, vars?: Record<string, unknown>) => string;
+
+/** The per-kind catalog copy (labels, hints, accessible names, picker titles),
+ *  keyed statically so the key check sees every key. */
+function kindCopy(t: T, kind: ArtKind) {
+  switch (kind) {
+    case 'cover':
+      return {
+        label: t('game:custom.art.cover.label'),
+        hint: t('game:custom.art.cover.hint'),
+        chooseAria: t('game:custom.art.cover.chooseAria'),
+        resetAria: t('game:custom.art.cover.resetAria'),
+        pick: (title: string) => t('game:custom.art.cover.pick', { title }),
+      };
+    case 'banner':
+      return {
+        label: t('game:custom.art.banner.label'),
+        hint: t('game:custom.art.banner.hint'),
+        chooseAria: t('game:custom.art.banner.chooseAria'),
+        resetAria: t('game:custom.art.banner.resetAria'),
+        pick: (title: string) => t('game:custom.art.banner.pick', { title }),
+      };
+    case 'logo':
+      return {
+        label: t('game:custom.art.logo.label'),
+        hint: t('game:custom.art.logo.hint'),
+        chooseAria: t('game:custom.art.logo.chooseAria'),
+        resetAria: t('game:custom.art.logo.resetAria'),
+        pick: (title: string) => t('game:custom.art.logo.pick', { title }),
+      };
+    case 'icon':
+      return {
+        label: t('game:custom.art.icon.label'),
+        hint: t('game:custom.art.icon.hint'),
+        chooseAria: t('game:custom.art.icon.chooseAria'),
+        resetAria: t('game:custom.art.icon.resetAria'),
+        pick: (title: string) => t('game:custom.art.icon.pick', { title }),
+      };
+    case 'background':
+      return {
+        label: t('game:custom.art.background.label'),
+        hint: t('game:custom.art.background.hint'),
+        chooseAria: t('game:custom.art.background.chooseAria'),
+        resetAria: t('game:custom.art.background.resetAria'),
+        pick: (title: string) => t('game:custom.art.background.pick', { title }),
+      };
+  }
+}
+
+/** The attribution line for art the lookup stored. */
+function artSourceText(t: T, artSource: string, name?: string): string {
+  const label = artSource.startsWith('gog:')
+    ? t('game:artSource.gog')
+    : artSource.startsWith('lutris:')
+      ? t('game:artSource.lutris')
+      : t('game:artSource.steam');
+  return name ? t('game:artSource.withName', { label, name }) : label;
+}
+
+/** The small source label of one candidate row. */
+function candidateSource(t: T, c: ArtCandidate): string {
+  if (c.source === 'gog') return t('game:source.gog');
+  if (c.source === 'lutris') return t('game:source.lutris');
+  return t('game:source.steam');
+}
+
 /** The user's own title and art for a game. It is Platypus's, not the store's: the
  *  images are copied into Platypus's data folder, and a reset brings the store's
  *  back. The plugin never hears of any of it. */
@@ -25,6 +93,7 @@ export function CustomizationTab({ game, onChanged }: {
   /** The customization changed: the library should reload to carry it. */
   onChanged: () => void;
 }) {
+  const { t } = useTranslation('game');
   const [custom, setCustom] = useState<Customization | null>(null);
   const [title, setTitle] = useState('');
   const [sortTitle, setSortTitle] = useState('');
@@ -63,6 +132,7 @@ export function CustomizationTab({ game, onChanged }: {
   }, [game.id]);
 
   /** Runs one change, keeps the form in step with what core answers and tells the owner. */
+  // i18n:allow: TypeScript Promise generic in the parameter type, not user-facing text
   const run = async (what: string, change: () => Promise<Customization | null>) => {
     setBusy(what);
     setError(null);
@@ -80,7 +150,7 @@ export function CustomizationTab({ game, onChanged }: {
   };
 
   const choose = (info: ArtKindInfo) => run(info.kind, async () => {
-    const path = await Effect.runPromise(LauncherApi.pickImage(`Choose the ${info.label.toLowerCase()} of ${game.title}`));
+    const path = await Effect.runPromise(LauncherApi.pickImage(kindCopy(t, info.kind).pick(game.title)));
     if (!path) return null;
     return Effect.runPromise(LauncherApi.setCustomArt(game.id, info.kind, path));
   });
@@ -94,40 +164,40 @@ export function CustomizationTab({ game, onChanged }: {
   return (
     <div className="space-y-6">
       <p className="text-[12.5px] leading-relaxed text-white/70">
-        Change how {storeTitle} looks in Platypus. Images are copied into Platypus's own folder, so the file you pick can move or go.
-        This stays on this computer and never reaches the store.
+        {t('game:custom.intro', { title: storeTitle })}
       </p>
 
       <section>
-        <MonoLabel className="mb-1.5">title</MonoLabel>
+        <MonoLabel className="mb-1.5">{t('game:custom.titleSection')}</MonoLabel>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-[12px] text-white/55">Title</span>
-            <Input aria-label="Custom title" value={title} placeholder={storeTitle} maxLength={200} onChange={(e) => setTitle(e.target.value)} disabled={!custom} />
+            <span className="mb-1 block text-[12px] text-white/55">{t('game:custom.titleLabel')}</span>
+            <Input aria-label={t('game:custom.customTitleAria')} value={title} placeholder={storeTitle} maxLength={200} onChange={(e) => setTitle(e.target.value)} disabled={!custom} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[12px] text-white/55">Sort as</span>
-            <Input aria-label="Sort title" value={sortTitle} placeholder={title || storeTitle} maxLength={200} onChange={(e) => setSortTitle(e.target.value)} disabled={!custom} />
+            <span className="mb-1 block text-[12px] text-white/55">{t('game:custom.sortLabel')}</span>
+            <Input aria-label={t('game:custom.sortTitleAria')} value={sortTitle} placeholder={title || storeTitle} maxLength={200} onChange={(e) => setSortTitle(e.target.value)} disabled={!custom} />
           </label>
         </div>
         <div className="mt-2 flex gap-2">
-          <Button variant="primary" size="sm" disabled={!titleDirty || busy != null} onClick={() => void saveTitle()}>Save title</Button>
+          <Button variant="primary" size="sm" disabled={!titleDirty || busy != null} onClick={() => void saveTitle()}>{t('game:custom.saveTitle')}</Button>
           <Button variant="neutral" size="sm" disabled={!custom || (custom.title === '' && custom.sort_title === '') || busy != null}
             onClick={() => void run('title', () => Effect.runPromise(LauncherApi.setCustomTitle(game.id, '', '')))}>
-            Use the store's title
+            {t('game:custom.useStoreTitle')}
           </Button>
         </div>
       </section>
 
       <section>
-        <MonoLabel className="mb-1.5">art</MonoLabel>
+        <MonoLabel className="mb-1.5">{t('game:custom.artSection')}</MonoLabel>
         {custom?.art_source && (
           <p className="mb-2 font-mono text-hint text-white/55" data-testid="art-attribution">
-            {artSourceLabel(custom.art_source)}{custom.art_source_name ? ` · ${custom.art_source_name}` : ''}
+            {artSourceText(t, custom.art_source, custom.art_source_name || undefined)}
           </p>
         )}
         <ul className="space-y-2">
           {ART_KINDS.map((info) => {
+            const copy = kindCopy(t, info.kind);
             const mine = custom?.art[info.kind];
             const src = mine ?? currentArt(game, info.kind);
             return (
@@ -135,18 +205,18 @@ export function CustomizationTab({ game, onChanged }: {
                 <Cover src={src} title="" className={cx('flex-none rounded-lg ring-1 ring-white/10', SHAPE[info.shape])} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-[12.5px] font-semibold text-white/90">
-                    {info.label}
-                    {mine && <span className="rounded bg-amber-300/15 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-amber-200">yours</span>}
+                    {copy.label}
+                    {mine && <span className="rounded bg-amber-300/15 px-1.5 py-0.5 font-mono text-micro uppercase tracking-wider text-amber-200">{t('game:custom.yours')}</span>}
                   </div>
-                  <div className="truncate text-hint text-white/55">{info.hint}</div>
+                  <div className="truncate text-hint text-white/55">{copy.hint}</div>
                 </div>
                 <div className="flex flex-none gap-1.5">
-                  <Button variant="neutral" size="sm" disabled={!custom || busy != null} onClick={() => void choose(info)} aria-label={`Choose ${info.label.toLowerCase()} image`}>
-                    <ImagePlus className="h-3.5 w-3.5" /> {mine ? 'Replace' : 'Choose'}
+                  <Button variant="neutral" size="sm" disabled={!custom || busy != null} onClick={() => void choose(info)} aria-label={copy.chooseAria}>
+                    <ImagePlus className="h-3.5 w-3.5" /> {mine ? t('game:custom.replace') : t('game:custom.choose')}
                   </Button>
                   {mine && (
-                    <Button variant="ghost" size="sm" disabled={busy != null} onClick={() => void reset(info.kind)} aria-label={`Reset ${info.label.toLowerCase()} to the store's`}>
-                      <RotateCcw className="h-3.5 w-3.5" /> Reset
+                    <Button variant="ghost" size="sm" disabled={busy != null} onClick={() => void reset(info.kind)} aria-label={copy.resetAria}>
+                      <RotateCcw className="h-3.5 w-3.5" /> {t('game:custom.reset')}
                     </Button>
                   )}
                 </div>
@@ -160,23 +230,15 @@ export function CustomizationTab({ game, onChanged }: {
         <OnlineArtFinder game={game} onApplied={apply} onChanged={onChanged} />
       )}
 
-      {error && <ErrorNotice message={error} fallback="Platypus couldn't save the customization." />}
+      {error && <ErrorNotice message={error} fallback={t('game:custom.saveFailed')} />}
 
       {hasCustomization(custom) && (
         <Button variant="neutral" size="sm" disabled={busy != null} onClick={() => void resetAll()}>
-          <RotateCcw className="h-3.5 w-3.5" /> Reset everything to the store's
+          <RotateCcw className="h-3.5 w-3.5" /> {t('game:custom.resetAll')}
         </Button>
       )}
     </div>
   );
-}
-
-/** The attribution line for art the lookup stored: "Art from Steam",
- *  "Art from GOG" or "Art via Lutris / IGDB". */
-function artSourceLabel(artSource: string): string {
-  if (artSource.startsWith('gog:')) return 'Art from GOG';
-  if (artSource.startsWith('lutris:')) return 'Art via Lutris / IGDB';
-  return 'Art from Steam';
 }
 
 /** One candidate's identity across sources (Steam app ids are numbers, GOG
@@ -185,16 +247,9 @@ function applyKey(c: ArtCandidate): string {
   return `${c.source || 'steam'}:${c.id || c.app_id}`;
 }
 
-/** The small source label of one candidate row. */
-function candidateSource(c: ArtCandidate): string {
-  if (c.source === 'gog') return 'GOG';
-  if (c.source === 'lutris') return 'Lutris';
-  return 'Steam';
-}
-
 /** The small id detail of one candidate row. */
-function candidateDetail(c: ArtCandidate): string {
-  if (c.source === 'steam') return `Steam app ${c.app_id}`;
+function candidateDetail(t: T, c: ArtCandidate): string {
+  if (c.source === 'steam') return t('game:source.steamApp', { id: c.app_id });
   return c.id;
 }
 
@@ -210,6 +265,7 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
   /** The customization changed: the library should reload to carry it. */
   onChanged: () => void;
 }) {
+  const { t } = useTranslation('game');
   const storeTitle = game.store_title || game.title;
   const [query, setQuery] = useState(game.title);
   const [candidates, setCandidates] = useState<ArtCandidate[] | null>(null);
@@ -240,29 +296,27 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
 
   return (
     <section>
-      <MonoLabel className="mb-1.5">find art online</MonoLabel>
+      <MonoLabel className="mb-1.5">{t('game:custom.finder.heading')}</MonoLabel>
       <p className="mb-2 text-[12px] leading-relaxed text-white/55">
-        Search for {storeTitle}'s cover, banner and logo: Steam first, with GOG and Lutris (IGDB) as
-        fallbacks when Steam is thin. Applying replaces the art above;
-        art you picked by hand is only replaced when you choose it here.
+        {t('game:custom.finder.help', { title: storeTitle })}
       </p>
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => { e.preventDefault(); search(); }}
       >
         <Input
-          aria-label="Search for art online"
+          aria-label={t('game:custom.finder.searchAria')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={storeTitle}
           className="min-w-0 max-w-xs flex-1"
         />
         <Button type="submit" variant="neutral" size="sm" disabled={!query.trim() || searching || applying != null}>
-          <Search className="h-3.5 w-3.5" /> {searching ? 'Searching…' : 'Search'}
+          <Search className="h-3.5 w-3.5" /> {searching ? t('game:custom.finder.searching') : t('game:custom.finder.search')}
         </Button>
       </form>
       {candidates != null && candidates.length === 0 && (
-        <p className="mt-2 text-[12px] text-white/55">No artwork found for that title. The placeholder stays.</p>
+        <p className="mt-2 text-[12px] text-white/55">{t('game:custom.finder.noneFound')}</p>
       )}
       {candidates != null && candidates.length > 0 && (
         <ul className="mt-2 space-y-2">
@@ -276,18 +330,18 @@ function OnlineArtFinder({ game, onApplied, onChanged }: {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12.5px] font-semibold text-white/90">{c.name}</div>
                 <div className="font-mono text-hint text-white/55">
-                  <span data-testid="candidate-source">{candidateSource(c)}</span>
-                  {c.year ? ` · ${c.year}` : ''} · {candidateDetail(c)}
+                  <span data-testid="candidate-source">{candidateSource(t, c)}</span>
+                  {c.year ? ` · ${c.year}` : ''} · {candidateDetail(t, c)}
                 </div>
               </div>
               <Button variant="primary" size="sm" disabled={searching || applying != null} onClick={() => apply(c)}>
-                {applying === applyKey(c) ? 'Applying…' : 'Apply'}
+                {applying === applyKey(c) ? t('game:custom.finder.applying') : t('game:custom.finder.apply')}
               </Button>
             </li>
           ))}
         </ul>
       )}
-      {error && <ErrorNotice message={error} fallback="Platypus couldn't find art online." />}
+      {error && <ErrorNotice message={error} fallback={t('game:custom.finder.failed')} />}
     </section>
   );
 }

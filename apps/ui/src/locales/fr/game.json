@@ -4,5 +4,313 @@
   "stopBeforeRemove": "Arrêtez « {{title}} » avant de le retirer",
   "added": "« {{title}} » ajouté",
   "removed": "« {{title}} » retiré",
-  "folderAllowed": "Les jeux de {{folder}} peuvent maintenant se lancer"
+  "folderAllowed": "Les jeux de {{folder}} peuvent maintenant se lancer",
+  "copied": "Copié dans le presse-papiers",
+  "refreshing": "actualisation de la bibliothèque…",
+  "session": "cette session",
+  "play": {
+    "play": "Jouer",
+    "launching": "Lancement",
+    "playing": "En jeu",
+    "starting": "Démarrage",
+    "stop": "Arrêter",
+    "stopping": "Arrêt en cours…",
+    "forceStop": "Forcer l'arrêt"
+  },
+  "hero": {
+    "notInstalled": "non installé",
+    "updateAvailable": "mise à jour disponible",
+    "pinned": "épinglé",
+    "update": "Mettre à jour",
+    "gameSettings": "Paramètres du jeu",
+    "openInStore": "Ouvrir {{title}} dans {{store}}",
+    "openInStoreTip": "Ouvrir dans la boutique",
+    "hoursLogged": "{{hours}} h de jeu",
+    "lastPlayed": "joué {{when}}",
+    "playtimeBoth": "en local {{local}} · boutique {{store}}",
+    "playtimeStore": "boutique {{store}}"
+  },
+  "store": {
+    "sideloaded": "Jeux ajoutés"
+  },
+  "tier": {
+    "platinum": "Platine",
+    "gold": "Or",
+    "silver": "Argent",
+    "bronze": "Bronze",
+    "borked": "Non fonctionnel"
+  },
+  "tierMeaning": {
+    "platinum": "Fonctionne parfaitement sans réglages",
+    "gold": "Fonctionne après quelques réglages",
+    "silver": "Fonctionne, avec des problèmes notables",
+    "bronze": "Tourne, avec des plantages ou des problèmes majeurs",
+    "borked": "Ne fonctionne pas ou n'est pas jouable"
+  },
+  "tierBadge": {
+    "protondb": "· protondb",
+    "curated": "· sélection"
+  },
+  "source": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "lutris": "Lutris",
+    "steamApp": "Jeu Steam {{id}}"
+  },
+  "artSource": {
+    "steam": "Illustrations venues de Steam",
+    "gog": "Illustrations venues de GOG",
+    "lutris": "Illustrations via Lutris / IGDB",
+    "withName": "{{label}} · {{name}}"
+  },
+  "compat": {
+    "heading": "Compatibilité",
+    "native": "Natif",
+    "nativeTitle": "Version Linux native de la boutique : fonctionne sans Proton",
+    "tierTitle": "{{prefix}} : {{tier}}",
+    "protondbPrefix": "ProtonDB",
+    "fixPrefix": "Correctif",
+    "noneReported": "Aucun DRM ni anti-triche signalé pour ce jeu.",
+    "drmLabel": "DRM",
+    "anticheatLabel": "Anti-triche",
+    "badgeSource": "Source : {{source}}, vérifié le {{date}}.",
+    "ratingNoReports": "Aucune évaluation ProtonDB",
+    "ratingFew_one": "Peu d'évaluations ProtonDB ({{count}})",
+    "ratingFew_other": "Peu d'évaluations ProtonDB ({{count}})",
+    "rating_one": "{{tier}} · {{count}} évaluation",
+    "rating_other": "{{tier}} · {{count}} évaluations",
+    "asOf": "au {{date}}",
+    "refreshing": "actualisation",
+    "protondbLink": "protondb ↗",
+    "steamLink": "steam ↗",
+    "appIdLine": "AppID Steam {{id}} ({{source}})",
+    "noReports": "ProtonDB n'a aucune évaluation pour ce titre.",
+    "rated": "ProtonDB évalue ce titre {{tier}}, d'après les retours de la communauté.",
+    "noneLoaded": "Aucun rapport de compatibilité chargé pour ce titre pour l'instant.",
+    "borkedNote": "ProtonDB déclare ce titre non fonctionnel. Essayez un autre exécuteur ou lisez les évaluations.",
+    "bronzeNote": "ProtonDB évalue ce titre bronze. Il demandera peut-être des réglages pour bien tourner.",
+    "recipe": "recette : winetricks {{mods}}"
+  },
+  "deck": {
+    "badge": "Deck · {{verdict}}",
+    "verified": "Vérifié",
+    "playable": "Jouable",
+    "unsupported": "Non pris en charge",
+    "tooltip": "Steam Deck : {{verdict}}.{{notes}} Compatibilité Steam Deck, d'après Steam."
+  },
+  "appIdSource": {
+    "user": "défini par vous",
+    "plugin": "venu de la boutique",
+    "steam": "jeu Steam",
+    "none": "aucune"
+  },
+  "wiki": {
+    "creditLabel": "Crédit PCGamingWiki",
+    "attribution": "Source : contributeurs PCGamingWiki, CC BY-NC-SA 3.0",
+    "onWiki": "{{title}} sur PCGamingWiki ↗",
+    "licence": "licence ↗",
+    "readOn": "lu le {{date}}"
+  },
+  "facts": {
+    "runner": "Exécuteur",
+    "dx": "Couche DX",
+    "wrappers": "Wrappers",
+    "launchVia": "Lancé via",
+    "protondb": "ProtonDB",
+    "deck": "Steam Deck",
+    "nativeRunner": "aucun · version Linux native",
+    "steamRunner": "choisi dans Steam",
+    "autoRunner": "auto · {{name}}",
+    "noRunner": "aucun installé",
+    "missingRunner": "{{id}} (manquant)",
+    "dxUnused": "inutilisée",
+    "dxWined3d": "WineD3D",
+    "dxBundled": "DXVK (inclus)",
+    "noWrappers": "aucun",
+    "steamClient": "client Steam",
+    "viaPlatypus": "Platypus · {{name}}",
+    "protondbNative": "non évalué · version native",
+    "protondbPending": "pas encore récupéré",
+    "protondbNoAppId": "pas d'AppID Steam",
+    "deckPending": "pas encore évalué",
+    "deckNoAppId": "pas d'AppID Steam",
+    "pending": "…"
+  },
+  "about": {
+    "heading": "À propos",
+    "showMore": "Afficher plus",
+    "showLess": "Afficher moins",
+    "noDescription": "Pas de description de la boutique pour ce titre.",
+    "storeUnavailable": "Données de la boutique indisponibles : {{error}}",
+    "developer": "Développeur",
+    "publisher": "Éditeur",
+    "release": "Sortie",
+    "genres": "Genres",
+    "languages": "Langues",
+    "controller": "Manette",
+    "controllerFull": "Prise en charge complète des manettes",
+    "controllerPartial": "Prise en charge partielle des manettes",
+    "ageRating": "Classification",
+    "reqLabel": "Configuration requise",
+    "reqMinimum": "Minimale",
+    "reqRecommended": "Recommandée",
+    "linkWebsite": "Site web",
+    "linkStore": "Page de la boutique",
+    "linkProtondb": "ProtonDB",
+    "linkPcgw": "PCGamingWiki",
+    "infoFrom": "Infos venues de",
+    "unlink": "Dissocier",
+    "unlinking": "Dissociation…"
+  },
+  "info": {
+    "find": "Trouver des infos en ligne",
+    "heading": "trouver des infos en ligne",
+    "help": "Cherchez la description et les détails de {{title}} sur Steam, GOG et Lutris (IGDB). L'association ne change jamais votre titre ni votre année.",
+    "searchAria": "Chercher des infos en ligne",
+    "search": "Chercher",
+    "searching": "Recherche…",
+    "noneFound": "Aucune info trouvée pour ce titre.",
+    "link": "Associer",
+    "linking": "Association…",
+    "linkFailed": "Platypus n'a pas pu associer ces infos."
+  },
+  "media": {
+    "trailerLabel": "Lire la bande-annonce {{suffix}}({{index}} sur {{total}})",
+    "screenshotLabel": "Voir la capture {{index}}",
+    "openTrailer": "Ouvrir la bande-annonce dans la visionneuse",
+    "openShots": "Ouvrir les captures dans le diaporama",
+    "openViewer": "Ouvrir la visionneuse"
+  },
+  "install": {
+    "installTo": "Installer vers…",
+    "install": "Installer",
+    "retryInstall": "Réessayer l'installation",
+    "cantInstall": "Installation impossible ici",
+    "noteWithVersion": "s'installe dans {{folder}} · <v>Choisir la version</v> · <d>changer le défaut</d>",
+    "notePlain": "s'installe dans {{folder}} · <d>changer le défaut</d>",
+    "lastAttempt": "La dernière tentative n'a pas abouti."
+  },
+  "installSize": {
+    "checking": "vérification de la taille d'installation…",
+    "unknown": "Taille inconnue",
+    "unknownTitle": "La boutique n'indique pas la taille",
+    "known": "Taille d'installation : {{size}}",
+    "addons": " · dont {{size}} de contenus additionnels"
+  },
+  "outside": {
+    "title": "Installé hors du dossier de {{name}}",
+    "body": "Platypus ne lance les jeux {{name}} que depuis <folder>{{folder}}</folder> ou les dossiers autorisés. Celui-ci est dans <dir>{{dir}}</dir>, probablement depuis avant que Platypus ne le gère.",
+    "allow": "Autoriser ce dossier"
+  },
+  "installation": {
+    "heading": "Installation",
+    "store": "Boutique",
+    "folder": "Dossier",
+    "version": "Version",
+    "pinnedTo": "Épinglé sur",
+    "size": "Taille",
+    "unknownFolder": "inconnu de Platypus",
+    "jobFailed": "« {{kind}} » n'a pas abouti."
+  },
+  "achievements": {
+    "heading": "Succès",
+    "countKnown": "{{unlocked}}/{{total}} · {{percent}} %",
+    "countTotal": "{{total}} au total",
+    "steamHint": "Votre progression n'est pas encore en cache. Ouvrez ce jeu une fois dans la bibliothèque Steam et elle apparaîtra ici.",
+    "storeHint": "La boutique liste ces succès ; votre progression là-bas n'est pas accessible à Platypus.",
+    "showing": "{{shown}} sur {{total}} affichés · {{reason}}",
+    "reasonSample": "Steam ne garde qu'un échantillon en local",
+    "reasonHighlight": "mis en avant par la boutique",
+    "ofPlayers": "{{share}} des joueurs"
+  },
+  "progress": {
+    "label": "Vos succès",
+    "barLabel": "Succès débloqués",
+    "count": "{{unlocked}}/{{total}} · {{percent}} %",
+    "showing": "{{shown}} sur {{total}} affichés",
+    "unlockedOn": "débloqué le {{date}}",
+    "unlocked": "débloqué",
+    "shareOfPlayers": "{{share}} des joueurs",
+    "hidden": "caché",
+    "locked": "verrouillé"
+  },
+  "steamAppId": {
+    "heading": "appid steam pour les évaluations",
+    "aria": "AppID Steam pour les évaluations",
+    "placeholder": "p. ex. 620",
+    "numberError": "Un AppID Steam est un nombre, comme 620.",
+    "current": "Actuellement {{id}} ({{source}}). Vérifiez sur <a>sa page Steam</a>.",
+    "none": "Pas d'AppID Steam pour ce jeu, donc pas d'évaluation ProtonDB. Vérifiez sur <a>la recherche Steam</a>.",
+    "failed": "Platypus n'a pas pu vérifier cet AppID Steam."
+  },
+  "custom": {
+    "intro": "Changez l'apparence de {{title}} dans Platypus. Les images sont copiées dans le dossier propre de Platypus, donc le fichier choisi peut ensuite bouger ou disparaître. Tout reste sur cet ordinateur et n'atteint jamais la boutique.",
+    "titleSection": "titre",
+    "titleLabel": "Titre",
+    "sortLabel": "Trier comme",
+    "customTitleAria": "Titre personnalisé",
+    "sortTitleAria": "Titre de tri",
+    "saveTitle": "Enregistrer le titre",
+    "useStoreTitle": "Reprendre le titre de la boutique",
+    "artSection": "illustrations",
+    "yours": "les vôtres",
+    "choose": "Choisir",
+    "replace": "Remplacer",
+    "reset": "Réinitialiser",
+    "resetAll": "Tout reprendre de la boutique",
+    "saveFailed": "Platypus n'a pas pu enregistrer la personnalisation.",
+    "art": {
+      "cover": {
+        "label": "Jaquette",
+        "hint": "Cartes de la bibliothèque · portrait, environ 2:3",
+        "chooseAria": "Choisir une image de jaquette",
+        "resetAria": "Reprendre la jaquette de la boutique",
+        "pick": "Choisir la jaquette de {{title}}"
+      },
+      "banner": {
+        "label": "Bannière",
+        "hint": "Haut de la page du jeu et cartes larges · large, environ 3:1",
+        "chooseAria": "Choisir une image de bannière",
+        "resetAria": "Reprendre la bannière de la boutique",
+        "pick": "Choisir la bannière de {{title}}"
+      },
+      "logo": {
+        "label": "Logo",
+        "hint": "Sur la bannière à la place du titre · PNG transparent",
+        "chooseAria": "Choisir une image de logo",
+        "resetAria": "Reprendre le logo de la boutique",
+        "pick": "Choisir le logo de {{title}}"
+      },
+      "icon": {
+        "label": "Icône",
+        "hint": "Petites listes · carré",
+        "chooseAria": "Choisir une image d'icône",
+        "resetAria": "Reprendre l'icône de la boutique",
+        "pick": "Choisir l'icône de {{title}}"
+      },
+      "background": {
+        "label": "Fond",
+        "hint": "Fond discret de la page du jeu · large",
+        "chooseAria": "Choisir une image de fond",
+        "resetAria": "Reprendre le fond de la boutique",
+        "pick": "Choisir le fond de {{title}}"
+      }
+    },
+    "finder": {
+      "heading": "trouver des illustrations en ligne",
+      "help": "Cherchez la jaquette, la bannière et le logo de {{title}} : Steam d'abord, avec GOG et Lutris (IGDB) en renfort quand Steam est maigre. Appliquer remplace les illustrations ci-dessus ; celles choisies à la main ne sont remplacées que si vous le demandez ici.",
+      "searchAria": "Chercher des illustrations en ligne",
+      "search": "Chercher",
+      "searching": "Recherche…",
+      "noneFound": "Aucune illustration trouvée pour ce titre. L'image générique reste.",
+      "apply": "Appliquer",
+      "applying": "Application…",
+      "failed": "Platypus n'a pas trouvé d'illustrations en ligne."
+    }
+  },
+  "recency": {
+    "today": "aujourd'hui",
+    "yesterday": "hier",
+    "daysAgo": "il y a {{count}} j"
+  }
 }

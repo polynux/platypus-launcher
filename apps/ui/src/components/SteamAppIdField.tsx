@@ -1,8 +1,9 @@
+// i18n: converted
 import { useEffect, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
 import type { Game } from '../types';
-import { appIdSourceLabel } from '../lib/compat';
 import { useCompat } from '../lib/useCompat';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
@@ -16,6 +17,7 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
  *  own, apart from the form's Save: a Steam AppID is the only thing it changes.
  *  Platypus never looks a game up by its title; the links are for checking by hand. */
 export function SteamAppIdField({ game }: { game: Game }) {
+  const { t } = useTranslation('game');
   const { compat, update } = useCompat(game);
   const userSet = compat?.steam_app_id_source === 'user' ? compat.steam_app_id ?? '' : '';
   const effective = compat?.steam_app_id ?? '';
@@ -28,7 +30,7 @@ export function SteamAppIdField({ game }: { game: Game }) {
     const next = draft.trim();
     if (next === userSet) return;
     if (next !== '' && !/^\d+$/.test(next)) {
-      setError('A Steam AppID is a number, like 620.');
+      setError(t('game:steamAppId.numberError'));
       return;
     }
     setBusy(true);
@@ -42,10 +44,15 @@ export function SteamAppIdField({ game }: { game: Game }) {
   const href = effective
     ? `https://store.steampowered.com/app/${effective}`
     : `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title)}`;
+  const source =
+    compat?.steam_app_id_source === 'user' ? t('game:appIdSource.user')
+    : compat?.steam_app_id_source === 'plugin' ? t('game:appIdSource.plugin')
+    : compat?.steam_app_id_source === 'steam' ? t('game:appIdSource.steam')
+    : t('game:appIdSource.none');
 
   return (
     <div className="border-b border-white/[0.07] pb-5">
-      <MonoLabel className="mb-2">steam appid for ratings</MonoLabel>
+      <MonoLabel className="mb-2">{t('game:steamAppId.heading')}</MonoLabel>
       <form
         className="flex items-center gap-2"
         onSubmit={(e) => {
@@ -54,11 +61,11 @@ export function SteamAppIdField({ game }: { game: Game }) {
         }}
       >
         <Input
-          aria-label="Steam AppID for ratings"
+          aria-label={t('game:steamAppId.aria')}
           aria-invalid={!!error}
           inputMode="numeric"
           value={draft}
-          placeholder={effective ? effective : 'e.g. 620'}
+          placeholder={effective ? effective : t('game:steamAppId.placeholder')}
           onChange={(e) => {
             setDraft(e.target.value);
             setError(null);
@@ -69,21 +76,24 @@ export function SteamAppIdField({ game }: { game: Game }) {
           className="w-32 font-mono"
         />
         <Button type="submit" variant="neutral" size="sm" disabled={busy || draft.trim() === userSet}>
-          Save
+          {t('common:save')}
         </Button>
       </form>
       <p className="mt-2 text-[12px] leading-relaxed text-white/70">
-        {effective
-          ? `Currently ${effective} (${appIdSourceLabel(compat?.steam_app_id_source)}).`
-          : 'No Steam AppID for this game, so there is no ProtonDB rating.'}{' '}
-        Check it on{' '}
-        <ExternalLink href={href} className="text-amber-200/80 hover:text-amber-200">
-          {effective ? 'its Steam page' : 'Steam search'} ↗
-        </ExternalLink>
-        .
+        {effective ? (
+          <Trans
+            i18nKey="game:steamAppId.current"
+            values={{ id: effective, source }}
+            components={{ a: <ExternalLink href={href} className="text-amber-200/80 hover:text-amber-200" /> }}
+          />
+        ) : (
+          <Trans
+            i18nKey="game:steamAppId.none"
+            components={{ a: <ExternalLink href={href} className="text-amber-200/80 hover:text-amber-200" /> }}
+          />
+        )}
       </p>
-      {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't check that Steam app ID." />}
+      {error && <ErrorNotice className="mt-2" message={error} fallback={t('game:steamAppId.failed')} />}
     </div>
   );
 }
-

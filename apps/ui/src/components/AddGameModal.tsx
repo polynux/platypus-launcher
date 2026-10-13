@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { ChevronDown } from 'lucide-react';
 import { Modal } from './Modal';
@@ -23,18 +25,24 @@ export interface AddGameOptions {
   releaseYear?: number;
 }
 
-/** Whether a release-year input holds a usable year: empty clears it (unknown). */
-export function parseReleaseYear(raw: string): { year?: number; error?: string } {
+/** Whether a release-year input holds a usable year: empty clears it (unknown).
+ *  The `code` lets callers render the failure from their own catalogs. */
+export function parseReleaseYear(raw: string): { year?: number; error?: string; code?: 'format' | 'range' } {
   const s = raw.trim();
   if (!s) return {};
-  if (!/^\d{4}$/.test(s)) return { error: 'The release year is four digits, e.g. 2011.' };
+  if (!/^\d{4}$/.test(s)) return { error: 'The release year is four digits, e.g. 2011.', code: 'format' };
   const year = Number(s);
   const max = new Date().getFullYear() + 1;
-  if (year < 1970 || year > max) return { error: `The release year is between 1970 and ${max}.` };
+  if (year < 1970 || year > max) return { error: `The release year is between 1970 and ${max}.`, code: 'range' };
   return { year };
 }
 
-export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, exe: string, opts: AddGameOptions) => Promise<void> | void }) {
+/** Adding is all-or-nothing: either it resolves or it throws, and the dialog
+ *  stays open until it settles. */
+export type AddGameResult = Promise<void> | void;
+
+export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (title: string, exe: string, opts: AddGameOptions) => AddGameResult }) {
+  const { t } = useTranslation(['library', 'common']);
   const [title, setTitle] = useState('');
   const [exe, setExe] = useState('');
   const [workingDir, setWorkingDir] = useState('');
@@ -52,6 +60,11 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const yearParsed = parseReleaseYear(releaseYear);
   const advancedSet = (workingDir.trim() ? 1 : 0) + (winePrefix.trim() ? 1 : 0) + (yearParsed.year ? 1 : 0);
 
+  const yearErrorText = (code: 'format' | 'range'): string =>
+    code === 'format'
+      ? t('library:addDialog.yearFormatError')
+      : t('library:addDialog.yearRangeError', { max: new Date().getFullYear() + 1 });
+
   const browseExe = () => {
     Effect.runPromise(LauncherApi.pickGameExecutable(exe.trim()))
       .then((picked) => {
@@ -66,7 +79,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   };
 
   const browseWork = () => {
-    Effect.runPromise(LauncherApi.pickFolder('Choose the working directory', workingDir.trim() || exe.trim()))
+    Effect.runPromise(LauncherApi.pickFolder(t('library:addDialog.pickWorkDir'), workingDir.trim() || exe.trim()))
       .then((picked) => {
         if (!picked) return;
         setWorkingDir(picked);
@@ -76,7 +89,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   };
 
   const browsePrefix = () => {
-    Effect.runPromise(LauncherApi.pickFolder('Choose the Wine prefix folder', winePrefix.trim() || workingDir.trim() || exe.trim()))
+    Effect.runPromise(LauncherApi.pickFolder(t('library:addDialog.pickPrefix'), winePrefix.trim() || workingDir.trim() || exe.trim()))
       .then((picked) => {
         if (!picked) return;
         setWinePrefix(picked);
@@ -88,17 +101,17 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const submit = () => {
     const work = workingDir.trim();
     if (work && !work.startsWith('/')) {
-      setWorkError('The working directory must be an absolute path.');
+      setWorkError(t('library:addDialog.workError'));
       return;
     }
     const prefix = winePrefix.trim();
     if (prefix && !prefix.startsWith('/') && !prefix.startsWith('~/')) {
-      setPrefixError('The Wine prefix must be an absolute path.');
+      setPrefixError(t('library:addDialog.prefixError'));
       return;
     }
     const parsed = parseReleaseYear(releaseYear);
     if (parsed.error) {
-      setYearError(parsed.error);
+      setYearError(yearErrorText(parsed.code ?? 'format'));
       setAdvancedOpen(true); // a field error must be visible, not folded shut
       return;
     }
@@ -133,31 +146,31 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   };
 
   return (
-    <Modal label="Add game" onClose={onClose} size="md">
+    <Modal label={t('library:addDialog.title')} onClose={onClose} size="md">
       <form
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <h2 className="text-[20px] font-extrabold tracking-tight">Add game</h2>
-        <p className="mt-1 text-[12.5px] text-white/70">Sideload a game by its executable path. It's saved to your library and runs through Platypus's runner pipeline.</p>
+        <h2 className="text-[20px] font-extrabold tracking-tight">{t('library:addDialog.title')}</h2>
+        <p className="mt-1 text-[12.5px] text-white/70">{t('library:addDialog.description')}</p>
         <label className="mt-5 block">
-          <MonoLabel className="mb-1.5">title</MonoLabel>
-          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My Game" />
+          <MonoLabel className="mb-1.5">{t('library:addDialog.titleSection')}</MonoLabel>
+          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('library:addDialog.titlePlaceholder')} />
         </label>
         <div className="mt-4">
-          <MonoLabel className="mb-1.5">executable</MonoLabel>
+          <MonoLabel className="mb-1.5">{t('library:addDialog.exeSection')}</MonoLabel>
           <div className="flex items-center gap-2">
             <Input
               value={exe}
               onChange={(e) => setExe(e.target.value)}
-              placeholder="/home/you/Games/game/game.exe"
-              aria-label="executable"
+              placeholder={t('library:addDialog.exePlaceholder')}
+              aria-label={t('library:addDialog.exeAria')}
               className="min-w-0 flex-1"
             />
             <Button type="button" variant="neutral" onClick={browseExe} className="flex-none">
-              Browse…
+              {t('library:addDialog.browse')}
             </Button>
           </div>
         </div>
@@ -169,62 +182,62 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
             className="flex items-center gap-1.5 font-mono text-[12px] text-white/60 transition hover:text-white/85"
           >
             <ChevronDown className={cx('size-3.5 transition-transform', advancedOpen ? '' : '-rotate-90')} aria-hidden />
-            Advanced
-            {advancedSet > 0 && <span className="tabular-nums text-amber-200/90">· {advancedSet} set</span>}
+            {t('library:addDialog.advanced')}
+            {advancedSet > 0 && <span className="tabular-nums text-amber-200/90">{t('library:addDialog.advancedSet', { count: advancedSet })}</span>}
           </button>
           <div hidden={!advancedOpen} className="mt-4 space-y-5">
             <div>
-              <MonoLabel className="mb-1.5">working directory <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.workDir')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
               <div className="flex items-center gap-2">
                 <Input
                   value={workingDir}
                   onChange={(e) => { setWorkingDir(e.target.value); setWorkError(null); }}
-                  placeholder="The executable's folder"
-                  aria-label="working directory"
+                  placeholder={t('library:addDialog.workPlaceholder')}
+                  aria-label={t('library:addDialog.workAria')}
                   className="min-w-0 flex-1"
                 />
                 <Button type="button" variant="neutral" onClick={browseWork} className="flex-none">
-                  Browse…
+                  {t('library:addDialog.browse')}
                 </Button>
               </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">Where the game runs. Empty means the executable's folder.</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.workHelp')}</p>
               {workError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{workError}</p>}
             </div>
             <div>
-              <MonoLabel className="mb-1.5">wine prefix <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.prefix')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
               <div className="flex items-center gap-2">
                 <Input
                   value={winePrefix}
                   onChange={(e) => { setWinePrefix(e.target.value); setPrefixError(null); }}
-                  placeholder="The default prefix folder"
-                  aria-label="wine prefix"
+                  placeholder={t('library:addDialog.prefixPlaceholder')}
+                  aria-label={t('library:addDialog.prefixAria')}
                   className="min-w-0 flex-1"
                 />
                 <Button type="button" variant="neutral" onClick={browsePrefix} className="flex-none">
-                  Browse…
+                  {t('library:addDialog.browse')}
                 </Button>
               </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">The Wine prefix the game runs in. Empty falls back to the default prefix folder; the folder is created on demand.</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.prefixHelp')}</p>
               {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{prefixError}</p>}
             </div>
             <div>
-              <MonoLabel className="mb-1.5">release year <span className="normal-case tracking-normal text-white/55">· optional</span></MonoLabel>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.year')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
               <Input
                 value={releaseYear}
                 onChange={(e) => { setReleaseYear(e.target.value); setYearError(null); }}
-                placeholder="e.g. 2011"
-                aria-label="release year"
+                placeholder={t('library:addDialog.yearPlaceholder')}
+                aria-label={t('library:addDialog.yearAria')}
                 inputMode="numeric"
                 className="w-32"
               />
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">The year the game came out. Empty means unknown; it shows on the card and the game page, and sorts with the store games.</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.yearHelp')}</p>
               {yearError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{yearError}</p>}
             </div>
           </div>
         </div>
         <div className="mt-6 flex justify-end gap-2.5">
-          <Button variant="neutral" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!valid || saving}>Add game</Button>
+          <Button variant="neutral" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button type="submit" variant="primary" disabled={!valid || saving}>{t('library:addDialog.submit')}</Button>
         </div>
         {saveError && <p role="alert" className="mt-3 font-mono text-hint text-orange-300">{saveError}</p>}
       </form>
