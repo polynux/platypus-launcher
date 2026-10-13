@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"platypus/internal/apperr"
 	"platypus/internal/chat"
 	"platypus/internal/cloudsync"
 	"platypus/internal/compat"
@@ -34,7 +35,6 @@ import (
 	"platypus/internal/steam"
 	"platypus/internal/stores"
 	"platypus/internal/types"
-	"platypus/internal/apperr"
 )
 
 // How long a store plugin gets for library.list (legendary refreshes its
@@ -921,7 +921,13 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 		if err != nil {
 			return nil, err
 		}
-		args, env, err := runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
+		var args []string
+		var env map[string]string
+		if runner.IsUmu(r) {
+			args, env, err = a.umuCommand(game, r, runner.Target{Exe: game.Executable}, preview)
+		} else {
+			args, env, err = runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
+		}
 		if err != nil {
 			return nil, err
 		}

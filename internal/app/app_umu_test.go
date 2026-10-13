@@ -75,7 +75,7 @@ func TestSelectRunnerUmuMissingErrors(t *testing.T) {
 func TestPrepareLaunchAutoUsesUmu(t *testing.T) {
 	a := umuApp(t, true)
 	exe := filepath.Join(t.TempDir(), "g.exe")
-	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := os.WriteFile(exe, []byte("MZ\x90\x00"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	g := types.Game{ID: "g", Title: "G", Source: types.SourceCustom, Store: types.StoreCustom, Executable: exe}
