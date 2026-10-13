@@ -213,6 +213,27 @@
   gap: 0.75rem;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 }
+
+/* Game card badges (issues #61, #62): the card is the container, so each
+   card picks its own label length. Wide cards show the full "ProtonDB · Gold"
+   and "Deck · Verified" badges; narrow cards show the tier/verdict only, with
+   the full text kept in the badge tooltip. Rows outside a card (recently-added
+   lists) have no container, so the query stays false and they keep the full
+   labels. */
+.card-compat {
+  container-type: inline-size;
+}
+.card-compat .badge-short {
+  display: none;
+}
+@container (max-width: 190px) {
+  .card-compat .badge-full {
+    display: none;
+  }
+  .card-compat .badge-short {
+    display: inline;
+  }
+}
 .no-scrollbar {
   scrollbar-width: none;
 }

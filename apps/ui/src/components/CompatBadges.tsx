@@ -89,17 +89,24 @@ function deckTooltip(t: T, rating: string, notes?: string[] | null): string {
 
 /** The badge on a library card: Native for a Linux build, else the game's tier,
  *  with the Steam Deck verdict beside it when Steam has one. Nothing when
- *  there's no answer worth showing. */
-export function CompatChip({ game, className }: { game: Game; className?: string }) {
+ *  there's no answer worth showing.
+ *
+ *  Card layout (issues #61, #62): the row wraps, every badge stays inside the
+ *  card (`min-w-0 max-w-full`, shrink-capped with ellipsis as a last resort),
+ *  and each badge carries a full and a compact label — the card (`.card-compat`,
+ *  see style.css) shows the full "ProtonDB · Gold" text on wide cards and the
+ *  tier/verdict only on narrow ones, the full text kept in the tooltip. */
+export function CompatChip({ game, className, hideNative }: { game: Game; className?: string; /** Hide the whole chip for native builds (dashboard). */ hideNative?: boolean }) {
   const { t } = useTranslation('game');
+  if (hideNative && game.native) return null;
   const c = cardCompat(game);
   const deck = game.fix_info?.deck;
   if (!c && !deck) return null;
   const deckBadge = deck ? <DeckBadge rating={deck} notes={game.fix_info?.deck_notes} /> : null;
   if (c?.kind === 'native') {
     return (
-      <span className={cx('inline-flex max-w-full flex-wrap items-center gap-1.5', className)}>
-        <Badge variant="info" title={t('game:compat.nativeTitle')} className="max-w-full truncate">
+      <span className={cx('inline-flex min-w-0 max-w-full flex-wrap content-start items-start gap-1.5', className)}>
+        <Badge variant="info" title={t('game:compat.nativeTitle')} className="min-w-0 max-w-full shrink-0 truncate">
           {t('game:compat.native')}
         </Badge>
         {deckBadge}
@@ -112,10 +119,11 @@ export function CompatChip({ game, className }: { game: Game; className?: string
   const label = tierLabel(t, tier);
   const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((x) => x === tier) ?? 'silver';
   return (
-    <span className={cx('inline-flex max-w-full flex-wrap items-center gap-1.5', className)}>
+    <span className={cx('inline-flex min-w-0 max-w-full flex-wrap content-start items-start gap-1.5', className)}>
       {c && (
-        <Badge variant={variant} title={t('game:compat.tierTitle', { prefix, tier: label })} className="max-w-full truncate">
-          <span className="truncate">{prefix} · {label}</span>
+        <Badge variant={variant} title={t('game:compat.tierTitle', { prefix, tier: label })} className="min-w-0 max-w-full shrink-0 truncate">
+          <span className="badge-full truncate">{prefix} · {label}</span>
+          <span className="badge-short truncate">{label}</span>
         </Badge>
       )}
       {deckBadge}
@@ -123,17 +131,44 @@ export function CompatChip({ game, className }: { game: Game; className?: string
   );
 }
 
+/** The shared text block of a game card (issues #61, #62): title, meta line
+ *  and badges, top-aligned, with a badge row of stable height so cards in a
+ *  row stay aligned however many badges (0, 1 or 2) each card shows. */
+export function GameCardBody({ title, meta, game, hideNative, className }: {
+  title: string;
+  /** One-line summary under the title (playtime, recency, store…); kept whole in a tooltip. */
+  meta: string;
+  game: Game;
+  /** Hide the whole chip for native builds (dashboard). */
+  hideNative?: boolean;
+  className?: string;
+}) {
+  return (
+    <div className={cx('flex min-w-0 flex-1 flex-col justify-start', className)}>
+      <div className="truncate text-hint font-bold" title={title}>{title}</div>
+      <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55" title={meta || undefined}>{meta || ' '}</div>
+      <div className="mt-1.5 min-h-[3.375rem] min-w-0 max-w-full">
+        <CompatChip game={game} hideNative={hideNative} />
+      </div>
+    </div>
+  );
+}
+
 /** One Steam Deck verdict badge, with its caveats in a tooltip. Nothing when
- *  Steam has no verdict. Verified reads green, Playable amber, Unsupported red. */
+ *  Steam has no verdict. Verified reads green, Playable amber, Unsupported red.
+ *  Like the tier badge it carries a full ("Deck · Verified") and a compact
+ *  (verdict only) label for narrow cards, the full text kept in the tooltip. */
 export function DeckBadge({ rating, notes, className }: { rating: string; notes?: string[] | null; className?: string }) {
   const { t } = useTranslation('game');
   if (!rating) return null;
   const variant = rating === 'verified' ? 'ok' : rating === 'playable' ? 'accent' : 'borked';
+  const verdict = deckLabel(t, rating);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Badge variant={variant} className={cx('cursor-help', className)}>
-          {t('game:deck.badge', { verdict: deckLabel(t, rating) })}
+        <Badge variant={variant} className={cx('min-w-0 max-w-full shrink-0 cursor-help truncate', className)}>
+          <span className="badge-full truncate">{t('game:deck.badge', { verdict })}</span>
+          <span className="badge-short truncate">{verdict}</span>
         </Badge>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">{deckTooltip(t, rating, notes)}</TooltipContent>
