@@ -16,7 +16,7 @@ import { LauncherApi } from '../effect/runtime';
 import {
   DX_LAYERS, GS_FILTERS, GS_RATES, GS_RESOLUTIONS, GS_TOGGLES, HUD_PRESETS, PROTON_FLAGS, SYNC_MODES, UPSCALERS, WINETRICKS_VERBS,
   composeGamescopeArgs, dxLayerLabel, dxLayerTitle, envKeyError, envToRows, gsFilterLabel, gsToggleLabel, gsToggleTitle,
-  hudLabel, hudTitle, protonFlagDesc, rowsToEnv, syncModeTitle, upscalerLabel, upscalerTitle,
+  hudLabel, hudTitle, protonFlagDesc, rowsToEnv, runnerDisplayName, syncModeTitle, upscalerLabel, upscalerTitle,
   type EnvRow, normalizeSettings, parseGamescopeArgs, rateChoice, resolutionChoice, steamLaunchOptions, toBackendGame,
 } from '../lib/settings';
 
@@ -69,6 +69,7 @@ function SwitchRow({ label, hint, title, checked, onChange }: { label: string; h
 }
 
 function runnerKind(r: ProtonVersion): string {
+  if (r.id === 'umu') return 'umu';
   if (r.is_system) return 'system';
   if (r.is_custom) return 'custom · compatibilitytools.d';
   return 'steam';
@@ -183,8 +184,8 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   const chosenRunner = isAuto ? undefined : runners.find((r) => r.id === selectedRunner);
   const runnerMissing = !isAuto && !chosenRunner;
   const runnerValue = isAuto ? 'auto' : selectedRunner;
-  const runnerGroups = (['steam', 'custom', 'system'] as const)
-    .map((k) => [k, runners.filter((r) => (r.is_system ? 'system' : r.is_custom ? 'custom' : 'steam') === k)] as const)
+  const runnerGroups = (['umu', 'steam', 'custom', 'system'] as const)
+    .map((k) => [k, runners.filter((r) => (r.id === 'umu' ? 'umu' : r.is_system ? 'system' : r.is_custom ? 'custom' : 'steam') === k)] as const)
     .filter(([, l]) => l.length > 0);
 
   const display = useMemo(displayResolution, []);
@@ -267,7 +268,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                   {runnerGroups.map(([kind, list]) => (
                     <SelectGroup key={kind}>
                       <SelectLabel>{kind}</SelectLabel>
-                      {list.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}{r.is_default ? ' (default)' : ''}</SelectItem>)}
+                      {list.map((r) => <SelectItem key={r.id} value={r.id}>{runnerDisplayName(t, r)}{r.is_default ? ' (default)' : ''}</SelectItem>)}
                     </SelectGroup>
                   ))}
                 </SelectField>

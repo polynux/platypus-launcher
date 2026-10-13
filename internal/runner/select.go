@@ -55,10 +55,14 @@ func rank(r types.ProtonVersion) int {
 // PickAuto returns the best runner for "auto". Within a family the highest
 // version wins, so GE-Proton10-34 beats GE-Proton10-32. Builds with a suffix
 // after the version (e.g. "-rtsp23-4" test builds) are skipped when a plain
-// release of the same family exists.
+// release of the same family exists. The umu launcher entry is skipped: it
+// is not a Proton/Wine build (auto prefers it separately, see SelectUmu).
 func PickAuto(runners []types.ProtonVersion) (types.ProtonVersion, bool) {
 	best := -1
 	for i, r := range runners {
+		if IsUmu(r) {
+			continue
+		}
 		if best < 0 || better(r, runners[best]) {
 			best = i
 		}

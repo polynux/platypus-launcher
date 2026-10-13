@@ -48,6 +48,24 @@ func prefixFor(prefixPath, login string, proton bool) (string, string) {
 	return prefixPath, login
 }
 
+// isUmuPath mirrors runner.IsUmuPath (kept local so savebackup doesn't grow
+// a dependency on runner): a runner path that is the umu launcher.
+func isUmuPath(path string) bool {
+	return strings.HasSuffix(path, "/umu-run") || strings.HasSuffix(path, "/umu_run.py") || path == "umu-run" || path == "umu_run.py"
+}
+
+// effectiveUmuPrefix mirrors runner.EffectiveUmuPrefix: the WINEPREFIX umu
+// runs with. A <compat>/pfx layout (made by a direct Proton launch) is
+// reused as is, otherwise the prefix itself.
+func effectiveUmuPrefix(prefixPath string) string {
+	if prefixPath == "" {
+		return ""
+	}
+	if st, err := os.Stat(filepath.Join(prefixPath, "pfx")); err == nil && st.IsDir() {
+		return filepath.Join(prefixPath, "pfx")
+	}
+	return prefixPath
+}
 // isSteamGame reports built-in Steam (local client) games: they have no
 // plugin and run through the Steam client, with their Proton prefix at
 // <steam library>/steamapps/compatdata/<appid>/pfx.
@@ -64,7 +82,8 @@ func isSteamGame(game types.Game) bool {
 // Built-in Steam games ignore runnerPath: their prefix is the Steam
 // compatdata folder when it exists (Proton + steamuser), otherwise they are
 // native (no prefix). Plugin games use exactly the prefix the runner and
-// cloudContext use (PrefixPathFor + the pfx/steamuser rule).
+// cloudContext use (PrefixPathFor + the pfx/steamuser rule); an umu-run
+// path uses the effective umu prefix instead (issue #48).
 func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, steamRoot string) Context {
 	if steamRoot == "" {
 		steamRoot = filepath.Join(home, ".local", "share", "Steam")
@@ -94,12 +113,20 @@ func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, s
 	if native {
 		windows = false
 	}
-	proton := windows && strings.HasSuffix(runnerPath, "proton")
+	umu := windows && isUmuPath(runnerPath)
+	proton := windows && (strings.HasSuffix(runnerPath, "proton") || umu)
 	login := currentLogin()
 	prefix := ""
 	if windows {
 		prefix = PrefixPathFor(game, home, prefixesFolder, dataDir)
-		prefix, login = prefixFor(prefix, login, proton)
+		if umu {
+			// umu runs with the pfx dir itself (issue #48): a prefix made
+			// by a direct Proton launch keeps working, no migration.
+			prefix = effectiveUmuPrefix(prefix)
+			login = "steamuser"
+		} else {
+			prefix, login = prefixFor(prefix, login, proton)
+		}
 	}
 	roots := map[string]string{
 		"home":      home,
