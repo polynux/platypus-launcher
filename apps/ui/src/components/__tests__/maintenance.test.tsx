@@ -341,6 +341,58 @@ describe('Remove from library for sideloaded games', () => {
   });
 });
 
+describe('Save backups for every game', () => {
+  const steamGame = (): Game => game({
+    id: 'steam_10', source: 'steam', store: 'steam', store_app_id: '10',
+    title: 'Steam Counter', install_dir: '/home/you/.local/share/Steam/steamapps/common/Counter',
+    executable: '', is_installed: true, installable: false, features: null,
+  });
+
+  it('shows Save backups for a Steam game with no plugin', async () => {
+    render(<GamePage game={steamGame()} plugin={undefined} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/save backups/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Back up now/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull();
+  });
+
+  it('shows only Save backups for an uninstalled plugin game', async () => {
+    render(<GamePage game={game({ is_installed: false })} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/save backups/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Back up now/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Move/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull();
+  });
+
+  it('keeps the remove confirm panel stacked with reserved detail lines', async () => {
+    const customGame = (): Game => game({
+      id: 'custom-1', source: 'custom', store: 'custom', store_app_id: 'custom',
+      title: 'Sideloaded Gem', install_dir: '/games/sideload', executable: '/games/sideload/gem',
+      features: null,
+    });
+    render(<GamePage game={customGame()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    const panel = screen.getByTestId('remove-confirm-panel');
+    // Stacked: no side-by-side flex-wrap row, content stacks full width.
+    expect(panel.className).not.toMatch(/flex-wrap/);
+    expect(panel.querySelector('.mt-3.flex.min-w-0.flex-col')).toBeTruthy();
+    // While measuring, the detail lines reserve the same single line the paths take.
+    expect(screen.getAllByText('Measuring…').length).toBeGreaterThan(0);
+    await screen.findByText(/\/pfx\/gem/);
+    // Long paths truncate with a tooltip and never push the layout.
+    const details = panel.querySelectorAll('span.truncate');
+    expect(details.length).toBeGreaterThan(0);
+    for (const d of Array.from(details)) {
+      expect(d.getAttribute('title')).toBeTruthy();
+      expect(d.className).toMatch(/min-h-\[18px\]/);
+    }
+  });
+});
+
 describe('VerifyDialog', () => {
   it('starts a check when it opens and offers a repair after damage is found', async () => {
     api.verifyGame.mockResolvedValue(job({ id: 'check-1' }));

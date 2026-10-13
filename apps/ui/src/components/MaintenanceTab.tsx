@@ -117,7 +117,18 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
       </div>
     );
   }
-  if (!plugin) return null;
+  if (!plugin) {
+    // Built-in Steam games have no plugin: Maintenance is just Save backups.
+    return (
+      <div className="space-y-5">
+        <SaveBackupsSection game={game} onNotify={onNotify} />
+        {job?.state === 'failed' && (
+          <ErrorNotice message={job.error ?? ''} fallback={t('gameSettings:maintenance.jobFailed', { kind: job.kind })} onRetry={() => onJobAction('retry', job.id)} />
+        )}
+      </div>
+    );
+  }
+  const installed = game.is_installed;
   const size = formatBytes(game.size_bytes);
   const uninstallText = size && game.install_dir
     ? t('gameSettings:maintenance.uninstallConfirmFull', { title: game.title, size, dir: game.install_dir })
@@ -130,17 +141,21 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   return (
     <div className="space-y-5">
       <SaveBackupsSection game={game} onNotify={onNotify} />
-      <CapabilitySurface plugin={plugin} capability="verify" game={game}>
-        <Row title={t('gameSettings:maintenance.verifyTitle')} text={t('gameSettings:maintenance.verifyText', { title: game.title, plugin: plugin.name })}>
-          <Button onClick={() => setVerifyOpen(true)}><ShieldCheck className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.verifyTitle')}</Button>
+      {installed && (
+        <CapabilitySurface plugin={plugin} capability="verify" game={game}>
+          <Row title={t('gameSettings:maintenance.verifyTitle')} text={t('gameSettings:maintenance.verifyText', { title: game.title, plugin: plugin.name })}>
+            <Button onClick={() => setVerifyOpen(true)}><ShieldCheck className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.verifyTitle')}</Button>
+          </Row>
+        </CapabilitySurface>
+      )}
+
+      {installed && (
+        <Row title={t('gameSettings:maintenance.moveTitle')} text={t('gameSettings:maintenance.moveText')}>
+          <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.moveAction')}</Button>
         </Row>
-      </CapabilitySurface>
+      )}
 
-      <Row title={t('gameSettings:maintenance.moveTitle')} text={t('gameSettings:maintenance.moveText')}>
-        <Button onClick={() => setMoveOpen(true)}><FolderInput className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.moveAction')}</Button>
-      </Row>
-
-      {offers(plugin, 'install', { game }) && (confirm ? (
+      {installed && offers(plugin, 'install', { game }) && (confirm ? (
         <Row title={t('gameSettings:maintenance.uninstallTitle')} text={uninstallText}>
           <div className="space-y-2">
             <p className="text-[12px] text-white/60">
@@ -225,7 +240,13 @@ function reasonText(target: RemoveTarget): string {
 /** The confirm panel for removing a sideloaded game: library only by
  *  default, with unchecked boxes for deleting the Wine prefix and the game
  *  files. Each box shows its path and size once the check answers
- *  ("measuring…" until then), or is disabled with its reason. */
+ *  ("measuring…" until then), or is disabled with its reason.
+ *
+ *  Stable from the first frame: the title and text sit on top full width
+ *  (the same block as the first row, so nothing jumps sideways), then the
+ *  checkboxes, the backup line and the buttons stack below full width. The
+ *  detail line reserves one line while measuring, and long paths truncate
+ *  with a tooltip instead of pushing the layout. */
 function RemoveConfirmPanel({ game, onCancel, onRemove }: {
   game: Game;
   onCancel: () => void;
@@ -269,8 +290,12 @@ function RemoveConfirmPanel({ game, onCancel, onRemove }: {
         : (nouns[0] ?? ''),
     });
   return (
-    <Row title={t('gameSettings:maintenance.removeTitle')} text={summary}>
-      <div className="flex flex-col gap-2.5">
+    <section data-testid="remove-confirm-panel" className="border-b border-white/[0.06] pb-5 last:border-b-0">
+      <div className="min-w-0">
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.removeTitle').toLowerCase()}</MonoLabel>
+        <p className="text-[12.5px] leading-relaxed text-white/60">{summary}</p>
+      </div>
+      <div className="mt-3 flex min-w-0 flex-col gap-2.5">
         <TargetBox
           label={t('gameSettings:maintenance.removePrefix')}
           target={prefix}
@@ -300,12 +325,12 @@ function RemoveConfirmPanel({ game, onCancel, onRemove }: {
               </span>
             </label>
           ) : check.saves?.off ? (
-            <p className="text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupOff')}</p>
+            <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupOff')}</p>
           ) : (
-            <p className="text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupFirst')}</p>
+            <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupFirst')}</p>
           )
         ) : (
-          <p className="text-[12px] text-white/55">{t('gameSettings:maintenance.removeMeasuring')}</p>
+          <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeMeasuring')}</p>
         )}
         {error && <ErrorNotice message={error} fallback={t('gameSettings:maintenance.removeError', { title: game.title })} />}
         <div className="flex gap-2">
@@ -322,11 +347,14 @@ function RemoveConfirmPanel({ game, onCancel, onRemove }: {
           </Button>
         </div>
       </div>
-    </Row>
+    </section>
   );
 }
 
-/** One deletion checkbox: path and size when allowed, the reason when not. */
+/** One deletion checkbox: path and size when allowed, the reason when not.
+ *  The detail line keeps one line reserved while measuring so the check
+ *  landing doesn't shift the panel; long paths truncate with a tooltip and
+ *  wrap inside their own line without pushing the layout. */
 function TargetBox({ label, target, measuring, checked, onChange }: {
   label: string;
   target: RemoveTarget | undefined;
@@ -340,17 +368,17 @@ function TargetBox({ label, target, measuring, checked, onChange }: {
       ? `${target.path} · ${formatBytes(target.bytes)}`
       : reasonText(target);
   return (
-    <label className="flex items-start gap-2 text-[12.5px] leading-snug text-white/70">
+    <label className="flex min-w-0 items-start gap-2 text-[12.5px] leading-snug text-white/70">
       <input
         type="checkbox"
         checked={checked}
         disabled={!target?.allowed}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-3.5 w-3.5 accent-amber-300"
+        className="mt-0.5 h-3.5 w-3.5 flex-none accent-amber-300"
       />
-      <span>
+      <span className="min-w-0 flex-1">
         {label}
-        <span className="block font-mono text-[12px] text-white/55" title={target?.path}>{detail}</span>
+        <span className="block min-h-[18px] truncate font-mono text-[12px] text-white/55" title={target?.path ?? detail}>{detail}</span>
       </span>
     </label>
   );
