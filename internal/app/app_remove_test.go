@@ -53,12 +53,14 @@ func newRemoveEnv(t *testing.T) *removeEnv {
 }
 
 // addGame registers a sideloaded game with its executable at exeRel (below
-// the temp home) and returns it as the library holds it.
+// the temp home) and returns it as the library holds it. The file holds
+// Windows content (MZ), so the game is a Wine game with a prefix: prefix
+// mechanics are what these tests exercise (native games have none, #47).
 func (e *removeEnv) addGame(t *testing.T, title, exeRel string) types.Game {
 	t.Helper()
 	exe := filepath.Join(e.home, exeRel)
 	mustDir(t, filepath.Dir(exe))
-	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	if err := os.WriteFile(exe, []byte("MZ\x90\x00"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	g, err := e.a.settings.AddCustomGame(title, exe)

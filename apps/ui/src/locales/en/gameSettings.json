@@ -188,10 +188,30 @@
     "label": "$ preview",
     "copyLabel": "Copy command"
   },
+  "program": {
+    "kicker": "program",
+    "exeKicker": "executable",
+    "exeAria": "executable",
+    "browse": "Browse…",
+    "saveExe": "Save",
+    "detectedNative": "Detected as a native Linux program.",
+    "detectedWine": "Detected as a Windows program (runs with Wine / Proton).",
+    "runKicker": "Run with",
+    "runHelp": "Automatic follows what the file looks like; override it when detection gets it wrong.",
+    "runAutoNative": "Automatic (detected: native)",
+    "runAutoWine": "Automatic (detected: Wine)",
+    "runAutoUnknown": "Automatic",
+    "runNative": "Native Linux",
+    "runWine": "Wine / Proton",
+    "notExecutable": "This file is not executable, so it can't start.",
+    "makeExecutable": "Make it executable",
+    "makingExecutable": "Making executable…"
+  },
   "general": {
     "save": "Save config",
     "unsaved": "Unsaved changes. Save or Cancel.",
     "savedNote": "saved for next launch · prefix: {{prefix}}",
+    "savedNativeNote": "saved for next launch · runs natively, no prefix",
     "defaultSuffix": " (default)"
   },
   "settingsModal": {

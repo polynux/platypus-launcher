@@ -188,10 +188,30 @@
     "label": "$ aperçu",
     "copyLabel": "Copier la commande"
   },
+  "program": {
+    "kicker": "programme",
+    "exeKicker": "exécutable",
+    "exeAria": "exécutable",
+    "browse": "Parcourir…",
+    "saveExe": "Enregistrer",
+    "detectedNative": "Détecté comme un programme Linux natif.",
+    "detectedWine": "Détecté comme un programme Windows (tourne avec Wine / Proton).",
+    "runKicker": "Exécuter avec",
+    "runHelp": "Automatique suit ce que le fichier révèle ; forcez un choix quand la détection se trompe.",
+    "runAutoNative": "Automatique (détecté : natif)",
+    "runAutoWine": "Automatique (détecté : Wine)",
+    "runAutoUnknown": "Automatique",
+    "runNative": "Linux natif",
+    "runWine": "Wine / Proton",
+    "notExecutable": "Ce fichier n'est pas exécutable, il ne peut donc pas démarrer.",
+    "makeExecutable": "Le rendre exécutable",
+    "makingExecutable": "Changement en cours…"
+  },
   "general": {
     "save": "Enregistrer",
     "unsaved": "Modifications non enregistrées. Enregistrez ou annulez.",
     "savedNote": "enregistré pour le prochain lancement · préfixe : {{prefix}}",
+    "savedNativeNote": "enregistré pour le prochain lancement · tourne en natif, sans préfixe",
     "defaultSuffix": " (par défaut)"
   },
   "settingsModal": {

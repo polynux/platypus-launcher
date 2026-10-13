@@ -260,7 +260,7 @@ function useRemoveCheck(game: Game, enabled: boolean, refresh: unknown) {
     // Opening the panel asks again (save folders may have changed) but keeps
     // what is shown until the answer lands; only another game starts empty.
     setState((s) => (s.id === game.id ? s : { id: game.id, check: null, error: null }));
-    Effect.runPromise(LauncherApi.checkRemove(game.id, { delete_prefix: true, delete_files: true, allow_no_saves: false })).then(
+    Effect.runPromise(LauncherApi.checkRemove(game.id, { delete_prefix: !game.native, delete_files: true, allow_no_saves: false })).then(
       (c) => { if (live) setState({ id: game.id, check: c, error: null }); },
       (e) => { if (live) setState({ id: game.id, check: null, error: coreErrMsg(e) }); },
     );
@@ -292,7 +292,8 @@ function reasonText(target: RemoveTarget): string {
 
 /** The confirm panel for removing a sideloaded game: library only by
  *  default, with unchecked boxes for deleting the Wine prefix and the game
- *  files. Each box shows its path and size once the check answers
+ *  files (native games have no prefix, so only the files box shows).
+ *  Each box shows its path and size once the check answers
  *  ("measuring…" until then), or is disabled with its reason.
  *
  *  Stable from the first frame: the title and text sit on top full width
@@ -345,6 +346,8 @@ function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
         <p className="text-[12.5px] leading-relaxed text-white/60">{summary}</p>
       </div>
       <div className="mt-3 flex min-w-0 flex-col gap-2.5">
+        {/* Native games have no Wine prefix (issue #47): no box to check. */}
+        {!game.native && (
         <TargetBox
           label={t('gameSettings:maintenance.removePrefix')}
           target={prefix}
@@ -352,6 +355,7 @@ function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
           checked={deletePrefix}
           onChange={setDeletePrefix}
         />
+        )}
         <TargetBox
           label={t('gameSettings:maintenance.removeFiles')}
           target={files}
