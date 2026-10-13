@@ -13,6 +13,7 @@ import (
 	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/settings"
+	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -169,13 +170,19 @@ func (a *App) backupIDs(game types.Game) (string, string) {
 	return savebackup.GameIDs(game, compat, info)
 }
 
+// backupSteamRoot is the Steam client folder for save resolution: the real
+// install when found, else "" for the default under home.
+func (a *App) backupSteamRoot() string {
+	return steam.RootFor(a.homeDir())
+}
+
 // backupCtx builds the resolution context for a game.
 func (a *App) backupCtx(game types.Game, steamID, gogID string) savebackup.Context {
 	folder, err := a.currentFolder(game)
 	if err == nil {
 		game.InstallDir = folder
 	}
-	ctx := savebackup.NewContextFor(game, a.homeDir(), a.prefixesFolder(), a.resolvedDataDir(), a.backupRunner(game), "")
+	ctx := savebackup.NewContextFor(game, a.homeDir(), a.prefixesFolder(), a.resolvedDataDir(), a.backupRunner(game), a.backupSteamRoot())
 	ctx.SteamID, ctx.GogID = steamID, gogID
 	return ctx
 }
@@ -206,7 +213,7 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	if ferr == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), a.backupSteamRoot(), userPaths)
 	if len(patterns) == 0 {
 		g := types.SaveGate{NoPaths: true}
 		if allowNoSaves {
@@ -220,6 +227,7 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	// action deletes: simpler, and never less safe.
 	b, warned, skippedOut, unresolvedOut, err := svc.Backup(game, trigger, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
 	_ = skippedOut
@@ -250,7 +258,7 @@ func (a *App) savesPreview(game types.Game) types.SaveGate {
 	if folder, err := a.currentFolder(game); err == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), a.backupSteamRoot(), userPaths)
 	if len(patterns) == 0 {
 		return types.SaveGate{NoPaths: true}
 	}
@@ -320,7 +328,7 @@ func (a *App) GetSavePaths(game types.Game) ([]types.SavePath, error) {
 	if err == nil {
 		game.InstallDir = folder
 	}
-	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), a.backupSteamRoot(), userPaths)
 	if roots == nil {
 		return []types.SavePath{}, nil
 	}
@@ -557,6 +565,7 @@ func (a *App) runCoreBackup(ctx context.Context, j types.Job) {
 	}
 	_, _, _, _, err := a.saveService().Backup(game, trigger, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
 	if err != nil {
@@ -608,6 +617,7 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 		}
 		_, _, _, _, err := svc.Backup(game, triggerBeforeRestore, savebackup.BackupOptions{
 			RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
 		return err
@@ -653,6 +663,7 @@ func (a *App) backupAfterSession(game types.Game) {
 	}
 	_, _, _, _, err := a.saveService().Backup(game, triggerAfterSession, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
 	if err != nil {

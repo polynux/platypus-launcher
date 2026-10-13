@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -27,6 +28,9 @@ type Context struct {
 	// SteamID / GogID are the matched store ids for <storeGameId>.
 	SteamID string
 	GogID   string
+	// StoreUserID resolves <storeUserId> for Steam games: the single
+	// userdata/<id> folder when there is exactly one, else "" (unresolved).
+	StoreUserID string
 	// OSUser is the login name for <osUserName>.
 	OSUser string
 }
@@ -44,22 +48,58 @@ func prefixFor(prefixPath, login string, proton bool) (string, string) {
 	return prefixPath, login
 }
 
+// isSteamGame reports built-in Steam (local client) games: they have no
+// plugin and run through the Steam client, with their Proton prefix at
+// <steam library>/steamapps/compatdata/<appid>/pfx.
+func isSteamGame(game types.Game) bool {
+	return (game.Source == types.SourceSteam || game.Store == types.StoreSteam) && game.StoreAppID != ""
+}
+
 // NewContextFor builds the resolution context for a game. runnerPath != ""
 // means the game runs through Wine/Proton; a path ending in "proton" is a
 // Proton runner (the pfx/ + steamuser rule). prefixesFolder is where Wine
 // prefixes are created ("" = the default under dataDir). steamRoot is the
 // Steam client folder ("" = ~/.local/share/Steam).
+//
+// Built-in Steam games ignore runnerPath: their prefix is the Steam
+// compatdata folder when it exists (Proton + steamuser), otherwise they are
+// native (no prefix). Plugin games use exactly the prefix the runner and
+// cloudContext use (PrefixPathFor + the pfx/steamuser rule).
 func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, steamRoot string) Context {
+	if steamRoot == "" {
+		steamRoot = filepath.Join(home, ".local", "share", "Steam")
+	}
+	if isSteamGame(game) {
+		roots := map[string]string{
+			"home":      home,
+			"xdgData":   xdgDirFor("XDG_DATA_HOME", home, ".local/share"),
+			"xdgConfig": xdgDirFor("XDG_CONFIG_HOME", home, ".config"),
+			"steam":     steamRoot,
+		}
+		if game.InstallDir != "" {
+			roots["install"] = game.InstallDir
+		}
+		ctx := Context{
+			Roots: roots, OSUser: currentLogin(),
+			StoreUserID: steam.SingleUserID(steamRoot),
+		}
+		if prefix, ok := steam.CompatPrefix(steamRoot, game.StoreAppID); ok {
+			ctx.Windows, ctx.Proton, ctx.WinUser = true, true, "steamuser"
+			ctx.Roots["prefix"] = prefix
+		}
+		return ctx
+	}
 	windows := runnerPath != ""
+	native := game.Native
+	if native {
+		windows = false
+	}
 	proton := windows && strings.HasSuffix(runnerPath, "proton")
 	login := currentLogin()
 	prefix := ""
 	if windows {
 		prefix = PrefixPathFor(game, home, prefixesFolder, dataDir)
 		prefix, login = prefixFor(prefix, login, proton)
-	}
-	if steamRoot == "" {
-		steamRoot = filepath.Join(home, ".local", "share", "Steam")
 	}
 	roots := map[string]string{
 		"home":      home,
@@ -307,8 +347,9 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	expand("<osUserName>", firstNonEmpty(winUser, ctx.OSUser), firstNonEmpty(winUser, ctx.OSUser) != "")
 	storeGameID := firstNonEmpty(ctx.SteamID, ctx.GogID)
 	expand("<storeGameId>", storeGameID, storeGameID != "")
-	// <storeUserId> is unknown to Platypus: unresolvable, skip and count.
-	expand("<storeUserId>", "", false)
+	// <storeUserId> resolves for Steam games to the single userdata/<id>
+	// folder when there is exactly one; otherwise it stays unresolved.
+	expand("<storeUserId>", ctx.StoreUserID, ctx.StoreUserID != "")
 	// Normalise separators: the manifest uses Windows backslashes.
 	for i, p := range out {
 		out[i] = filepath.Clean(strings.ReplaceAll(p, "\\", string(filepath.Separator)))
