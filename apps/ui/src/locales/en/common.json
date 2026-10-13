@@ -11,6 +11,11 @@
   "details": "Details",
   "retrying": "Retrying…",
   "done": "Done",
+  "toast": {
+    "close": "Close notification",
+    "region": "Notifications",
+    "count": "×{{count}}"
+  },
   "libraryRescanned": "Library rescanned",
   "settingsSaved": "Settings saved",
   "redeem": {

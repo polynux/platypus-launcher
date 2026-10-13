@@ -35,21 +35,12 @@ import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import { useTranslation } from 'react-i18next';
-import { RawDetails } from './components/ErrorNotice';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { hasDetails, plainError } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
-
-type NoticeKind = 'ok' | 'err' | 'busy';
-interface Notice { msg: string; kind: NoticeKind; raw?: string }
-
-const NOTICE_STYLE: Record<NoticeKind, string> = {
-  ok: 'border-emerald-300/50 text-emerald-100',
-  err: 'border-red-400/50 text-red-100',
-  busy: 'border-amber-300/50 text-amber-100',
-};
-const NOTICE_DOT: Record<NoticeKind, string> = { ok: 'bg-emerald-400', err: 'bg-red-400', busy: 'bg-amber-300' };
+import { Toaster } from './components/ds/sonner';
+import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
 
 export function App() {
   const { t } = useTranslation(['nav', 'common', 'activity']);
@@ -92,22 +83,28 @@ export function App() {
     setActivity((prev) => [{ ...e, id: ++eventId.current, ts: Date.now() }, ...prev].slice(0, 200));
   }, []);
 
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The one-time Hydra→Platypus migration notice (issue #14). Null when there
   // is nothing to show; dismissing persists it in the core and hides it here.
   const [migration, setMigration] = useState<MigrationNotice | null>(null);
+  // Every in-app notice goes through Sonner (issue #64): stacked top-right
+  // toasts, newest on top. onNotify props stay (least churn) as a thin
+  // wrapper: ok → success, err → error, busy → info.
   const notify = useCallback((msg: string, kind: NoticeKind = 'ok') => {
-    // An error toast says a plain sentence; the raw text waits behind Details,
-    // and the toast stays long enough to open it.
-    const isErr = kind === 'err';
-    const raw = isErr && hasDetails(msg, t('errors:fallback')) ? msg : undefined;
-    setNotice({ msg: isErr ? plainError(msg, t('errors:fallback')) : msg, kind, raw });
-    if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), isErr ? 8000 : 3500);
+    // An error toast says a plain sentence; the raw text rides as the
+    // toast description, and the toast stays long enough to read it.
+    const fallback = t('errors:fallback');
+    if (kind === 'err') {
+      const raw = hasDetails(msg, fallback) ? msg : undefined;
+      toastNotify.error(plainError(msg, fallback), raw ? { description: raw } : undefined);
+      return;
+    }
+    if (kind === 'busy') {
+      toastNotify.info(msg);
+      return;
+    }
+    toastNotify.success(msg);
     // t is a dep: toasts follow a live language switch.
   }, [t]);
-  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current); }, []);
 
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
@@ -875,26 +872,7 @@ export function App() {
         />
       )}
 
-      {notice && (
-        <div
-          role="status"
-          title={notice.msg}
-          className={cx(
-            // z-[60]: above the modal overlay (z-50) — a toast (e.g. a save
-            // or scan failure) must stay visible over an open dialog and not
-            // rely on DOM order. Shape unchanged (DESIGN.md §6.6).
-            'fixed bottom-4 right-4 z-[60] flex max-w-md items-center gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[12px]',
-            NOTICE_STYLE[notice.kind]
-          )}
-          style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}
-        >
-          <span className={cx('h-1.5 w-1.5 flex-none rounded-full', NOTICE_DOT[notice.kind])} />
-          <div className="min-w-0 space-y-1">
-            <span title={notice.msg} className="block break-words line-clamp-3">{notice.msg}</span>
-            {notice.raw && <RawDetails text={notice.raw} />}
-          </div>
-        </div>
-      )}
+      <Toaster />
     </div>
     </TooltipProvider>
   );

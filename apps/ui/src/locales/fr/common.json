@@ -11,6 +11,11 @@
   "details": "Détails",
   "retrying": "Nouvel essai…",
   "done": "Terminé",
+  "toast": {
+    "close": "Fermer la notification",
+    "region": "Notifications",
+    "count": "×{{count}}"
+  },
   "libraryRescanned": "Bibliothèque actualisée",
   "settingsSaved": "Paramètres enregistrés",
   "redeem": {
