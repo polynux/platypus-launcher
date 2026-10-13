@@ -67,7 +67,7 @@ type Options struct {
 	Settings *settings.Store // approvals and per-plugin folders
 	// Home is the user's home for the "not the home folder itself" guard
 	// (issue #41); empty reads the process home.
-	Home string
+	Home     string
 	OnNotify NotifyFunc
 	// OnExit is called when a plugin exits without being asked to (crash),
 	// so work in flight can be restarted.
@@ -158,6 +158,15 @@ func NewManager(o Options) *Manager {
 		}
 	}
 	return m
+}
+
+// DataDirOf is the private data folder a plugin gets as PLATYPUS_PLUGIN_DATA
+// ("" when the manager has none).
+func (m *Manager) DataDirOf(id string) string {
+	if m == nil || m.dataDir == "" || id == "" {
+		return ""
+	}
+	return filepath.Join(m.dataDir, id)
 }
 
 // Dir is the plugins folder.

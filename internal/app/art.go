@@ -80,9 +80,9 @@ func PluginArt(a *App, next http.Handler) http.Handler {
 }
 
 // pluginGameArtAllowed reports whether the local art file may be served: the
-// plugin is known and the path (after EvalSymlinks) sits inside its declared
-// permissions.read folders. Non-absolute paths never pass (DecodeGameArt
-// already refused them).
+// plugin is known and the path (after EvalSymlinks) sits inside its own
+// data folder (PLATYPUS_PLUGIN_DATA) or one of its declared permissions.read
+// folders. Non-absolute paths never pass (DecodeGameArt already refused them).
 func (a *App) pluginGameArtAllowed(id, path string) bool {
 	p, ok := a.plugins.Plugin(id)
 	if !ok {
@@ -93,7 +93,8 @@ func (a *App) pluginGameArtAllowed(id, path string) bool {
 		real = r
 	}
 	home := a.homeDir()
-	for _, folder := range p.Manifest.Permissions.Read {
+	folders := append([]string{a.plugins.DataDirOf(id)}, p.Manifest.Permissions.Read...)
+	for _, folder := range folders {
 		f := folder
 		if f == "~" {
 			f = home
@@ -112,6 +113,7 @@ func (a *App) pluginGameArtAllowed(id, path string) bool {
 	}
 	return false
 }
+
 // PluginGameArt serves a store plugin's local art files under
 // /platypus-art/<plugin-id>/<base64url(abs path)> (the local-art capability,
 // protocol 1.15, issue #44). The core rewrites each file:// art URL to one of

@@ -454,8 +454,8 @@ func (s *Plugin) artURL(raw string) string {
 
 // localArtURL rewrites a file:// art URL to the local art server, or "" when
 // it doesn't qualify. It refuses non-absolute paths, extensions other than
-// jpg/jpeg/png/webp, and paths outside the plugin's declared permissions.read
-// folders (checked after EvalSymlinks). Without the local-art capability,
+// jpg/jpeg/png/webp, and paths outside the plugin's data folder and declared
+// permissions.read folders (checked after EvalSymlinks). Without the local-art capability,
 // file:// is dropped, as today.
 func (s *Plugin) localArtURL(raw string) string {
 	if !s.has("local-art") || !s.speaksOffline() {
@@ -482,11 +482,15 @@ func (s *Plugin) localArtURL(raw string) string {
 	return GameArtURLPrefix + s.ID() + "/" + base64.RawURLEncoding.EncodeToString([]byte(path))
 }
 
-// readFolders expands the plugin's permissions.read folders (~ and ~/… to the
-// user's home) for the local-art containment check.
+// readFolders is where local art may live: the plugin's own data folder
+// (PLATYPUS_PLUGIN_DATA) and its permissions.read folders (~ and ~/… expanded
+// to the user's home), for the local-art containment check.
 func (s *Plugin) readFolders() []string {
 	home, _ := os.UserHomeDir()
 	var out []string
+	if d := s.m.DataDirOf(s.ID()); d != "" {
+		out = append(out, d)
+	}
 	for _, p := range s.p.Manifest.Permissions.Read {
 		if p == "~" {
 			p = home

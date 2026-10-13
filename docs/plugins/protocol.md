@@ -1190,8 +1190,8 @@ never stand in the way (issue #44).
   `/platypus-art/<plugin-id>/<base64url(abs path)>` and serves it with
   `http.ServeFile`, `Cache-Control: max-age=86400` and `nosniff`. It refuses
   non-absolute paths, extensions other than jpg/jpeg/png/webp, and paths
-  outside the plugin's declared `permissions.read` folders (checked after
-  `EvalSymlinks`). Without the capability, `file://` is dropped, as before.
+  outside the plugin's own data folder (`PLATYPUS_PLUGIN_DATA`) and its
+  declared `permissions.read` folders (checked after `EvalSymlinks`). Without the capability, `file://` is dropped, as before.
 - **The manifest `gameIdPrefix`** (see above): optional, default
   `p.<plugin id>.`, only for bundled/first-party plugins. It lets the built-in
   Steam source move into its own plugin with byte-identical ids (issue #54).

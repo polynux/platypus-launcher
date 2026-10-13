@@ -9,8 +9,8 @@ package main
 //	slow     no offline key (unknown)
 //	client   offline "network" (its store client needs the network)
 //	licensed cloudSync (the store itself syncs this game's saves)
-//	tiny     file:// cover under /tmp/platypus-echo-art (the local-art
-//	         capability; plugin.json declares that folder in permissions.read)
+//	tiny     file:// cover under its PLATYPUS_PLUGIN_DATA folder (the
+//	         local-art capability; a plugin's own data folder is always servable)
 
 import (
 	"encoding/base64"
@@ -18,9 +18,14 @@ import (
 	"path/filepath"
 )
 
-// echoArtDir is the folder the local-art fixture lives in. plugin.json
-// declares it in permissions.read, so the core serves files under it.
-const echoArtDir = "/tmp/platypus-echo-art"
+// echoArtDir is the folder the local-art fixture lives in: echo's own data
+// folder, which the core always serves art from. "" without one.
+func echoArtDir() string {
+	if d := os.Getenv("PLATYPUS_PLUGIN_DATA"); d != "" {
+		return filepath.Join(d, "art")
+	}
+	return ""
+}
 
 // offlineFor is the offline value library.list reports for a game: "ok",
 // "network", or "" (absent, meaning unknown).
@@ -44,11 +49,15 @@ func cloudSyncFor(id string) bool {
 // 1x1 PNG under echoArtDir. It is written lazily so a read-only checkout
 // still runs echo without it until library.list is called.
 func echoArtFile() string {
-	path := filepath.Join(echoArtDir, "cover.png")
+	dir := echoArtDir()
+	if dir == "" {
+		return ""
+	}
+	path := filepath.Join(dir, "cover.png")
 	if _, err := os.Stat(path); err == nil {
 		return path
 	}
-	if err := os.MkdirAll(echoArtDir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ""
 	}
 	// A 1x1 transparent PNG.

@@ -110,3 +110,24 @@ func TestPluginGameArtRefusesOutsideReadFolders(t *testing.T) {
 		}
 	}
 }
+
+// A plugin's own data folder is always servable, without a read permission.
+func TestPluginGameArtServesFromTheDataFolder(t *testing.T) {
+	t.Parallel()
+	mgr := artTestManager(t, t.TempDir())
+	dataDir := mgr.DataDirOf("echo")
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	art := filepath.Join(dataDir, "cover.png")
+	if err := os.WriteFile(art, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{plugins: mgr}
+	req := httptest.NewRequest("GET", "/platypus-art/echo/"+base64.RawURLEncoding.EncodeToString([]byte(art)), nil)
+	rec := httptest.NewRecorder()
+	PluginGameArt(a, http.NotFoundHandler()).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
