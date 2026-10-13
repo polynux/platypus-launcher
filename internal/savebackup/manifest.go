@@ -20,9 +20,9 @@ import (
 
 // FileEntry is one file pattern of a manifest game entry that holds saves.
 type FileEntry struct {
-	Pattern string   `json:"pattern"`
-	Tags    []string `json:"tags,omitempty"`
-	WhenOS  []string `json:"when_os,omitempty"`
+	Pattern   string   `json:"pattern"`
+	Tags      []string `json:"tags,omitempty"`
+	WhenOS    []string `json:"when_os,omitempty"`
 	WhenStore []string `json:"when_store,omitempty"`
 }
 
@@ -47,10 +47,14 @@ type Index struct {
 
 // dirs.go: cache layout helpers live here to keep manifest.go small.
 func savesCacheDir(cacheDir string) string { return filepath.Join(cacheDir, "saves") }
-func manifestPath(cacheDir string) string  { return filepath.Join(savesCacheDir(cacheDir), "manifest.yaml") }
-func etagPath(cacheDir string) string      { return filepath.Join(savesCacheDir(cacheDir), "manifest.etag") }
-func metaPath(cacheDir string) string      { return filepath.Join(savesCacheDir(cacheDir), "manifest.json") }
-func indexPath(cacheDir string) string     { return filepath.Join(savesCacheDir(cacheDir), "index.json.gz") }
+func manifestPath(cacheDir string) string {
+	return filepath.Join(savesCacheDir(cacheDir), "manifest.yaml")
+}
+func etagPath(cacheDir string) string { return filepath.Join(savesCacheDir(cacheDir), "manifest.etag") }
+func metaPath(cacheDir string) string { return filepath.Join(savesCacheDir(cacheDir), "manifest.json") }
+func indexPath(cacheDir string) string {
+	return filepath.Join(savesCacheDir(cacheDir), "index.json.gz")
+}
 
 // manifestMeta remembers when the manifest was last fetched and its ETag.
 type manifestMeta struct {

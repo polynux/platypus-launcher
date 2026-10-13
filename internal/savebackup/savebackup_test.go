@@ -173,9 +173,9 @@ func TestPlaceholdersInFakePrefixes(t *testing.T) {
 		}
 		ctx.WinUser = user
 		cases := map[string]string{
-			"<winAppData>/TestGame/roam.sav":       "save2",
-			"<winLocalAppData>/TestGame/loc.sav":   "save3",
-			"<winLocalAppDataLow>/TestGame/low.sav": "save4",
+			"<winAppData>/TestGame/roam.sav":             "save2",
+			"<winLocalAppData>/TestGame/loc.sav":         "save3",
+			"<winLocalAppDataLow>/TestGame/low.sav":      "save4",
 			"<winDocuments>/My Games/TestGame/slot1.sav": "save1",
 			"<winPublic>/TestGame/pub.sav":               "save5",
 			"<winProgramData>/TestGame/prog.sav":         "save6",
@@ -218,13 +218,18 @@ func TestHomeXdgBaseGameRootPlaceholders(t *testing.T) {
 		"<home>/.local/share/t/s.sav": true,
 		"<xdgData>/t/s.sav":           true,
 		"<xdgConfig>/t/c.sav":         true,
-		"<game>/g.sav":                true,
-		"<base>/T/g.sav":              true,
-		"<root>/g.sav":                true,
+		"<base>/g.sav":                true,
+		"<root>/<game>/g.sav":         true,
+		"<root>/T/g.sav":              true,
 	} {
 		expanded, un := expandPattern(pattern, ctx, game)
 		if un != 0 || len(expanded) != 1 {
 			t.Errorf("%s: expanded=%v unresolved=%d", pattern, expanded, un)
+		}
+	}
+	for _, pattern := range []string{"<base>/g.sav", "<root>/<game>/g.sav"} {
+		if expanded, _ := expandPattern(pattern, ctx, game); len(expanded) != 1 || expanded[0] != filepath.Join(install, "g.sav") {
+			t.Errorf("%s expanded to %v, want the install folder's g.sav", pattern, expanded)
 		}
 	}
 	if _, un := expandPattern("<osUserName>/x", ctx, game); un != 0 {

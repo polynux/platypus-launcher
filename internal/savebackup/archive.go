@@ -499,7 +499,7 @@ func Restore(backupsRoot, gameID, backupID string, ctx Context) (overwritten, ad
 			if err != nil {
 				return 0, 0, err
 			}
-		 derr := json.NewDecoder(rc).Decode(&meta)
+			derr := json.NewDecoder(rc).Decode(&meta)
 			rc.Close()
 			if derr != nil {
 				return 0, 0, derr

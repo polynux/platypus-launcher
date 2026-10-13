@@ -69,9 +69,6 @@ func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, s
 	}
 	if game.InstallDir != "" {
 		roots["install"] = game.InstallDir
-		if p := filepath.Dir(game.InstallDir); p != "" {
-			roots["base"] = p
-		}
 	}
 	if prefix != "" {
 		roots["prefix"] = prefix
@@ -285,17 +282,14 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	home, _ := get("home")
 	xdgData, _ := get("xdgData")
 	xdgConfig, _ := get("xdgConfig")
+	// Ludusavi's install placeholders: <base> is the game's install folder,
+	// <root> the folder games are installed in and <game> the install
+	// folder's name, so <root>/<game> is <base> again. Paths that leave the
+	// install folder are dropped later by the containment check.
 	install, hasInstall := get("install")
-	base, hasBase := get("base")
-	if !hasBase && hasInstall {
-		base = filepath.Dir(install)
-		hasBase = base != ""
-	}
-	rootLabel := ""
-	if p, ok := get("prefix"); ok {
-		rootLabel = p
-	} else if hasInstall {
-		rootLabel = install
+	gameDir, rootDir := "", ""
+	if hasInstall {
+		gameDir, rootDir = filepath.Base(install), filepath.Dir(install)
 	}
 	expand("<winAppData>", filepath.Join(driveCUser, "AppData", "Roaming"), driveCUser != "")
 	expand("<winLocalAppData>", filepath.Join(driveCUser, "AppData", "Local"), driveCUser != "")
@@ -307,9 +301,9 @@ func expandPattern(pattern string, ctx Context, game types.Game) ([]string, int)
 	expand("<home>", home, home != "")
 	expand("<xdgData>", xdgData, xdgData != "")
 	expand("<xdgConfig>", xdgConfig, xdgConfig != "")
-	expand("<base>", base, hasBase)
-	expand("<game>", install, hasInstall)
-	expand("<root>", rootLabel, rootLabel != "")
+	expand("<base>", install, hasInstall)
+	expand("<root>", rootDir, hasInstall)
+	expand("<game>", gameDir, hasInstall)
 	expand("<osUserName>", firstNonEmpty(winUser, ctx.OSUser), firstNonEmpty(winUser, ctx.OSUser) != "")
 	storeGameID := firstNonEmpty(ctx.SteamID, ctx.GogID)
 	expand("<storeGameId>", storeGameID, storeGameID != "")
