@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -239,6 +240,10 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	})
 	_ = skippedOut
 	_ = unresolvedOut
+	if errors.Is(err, savebackup.ErrNothingFound) {
+		// Known paths, nothing on disk: nothing to protect.
+		return types.SaveGate{}, nil
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return types.SaveGate{}, ctx.Err()
@@ -308,7 +313,10 @@ func (a *App) gameHasCloudSync(game types.Game) bool {
 			return true
 		}
 	}
-	if game.Source == types.SourceSteam || game.Store == types.StoreSteam {
+	// Only the built-in Steam source launches through the Steam client, which
+	// syncs Steam Cloud; a plugin game with store "steam" (steam-standalone)
+	// is covered by the plugin's own cloud-saves capability above.
+	if game.Source == types.SourceSteam {
 		if game.StoreAppID == "" {
 			return false
 		}
@@ -655,6 +663,9 @@ func (a *App) runCoreBackup(ctx context.Context, j types.Job) {
 		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
+	if errors.Is(err, savebackup.ErrNothingFound) {
+		err = fmt.Errorf("no save files of %s were found on disk; nothing was backed up", game.Title)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -707,6 +718,9 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
+		if errors.Is(err, savebackup.ErrNothingFound) {
+			return nil // nothing on disk to keep before restoring
+		}
 		return err
 	}
 	if _, _, err := svc.Restore(game, j.Destination, rctx, safety); err != nil {
@@ -752,7 +766,7 @@ func (a *App) backupAfterSession(game types.Game) {
 		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, savebackup.ErrNothingFound) {
 		a.host.Emit("backups", savebackup.Event{Kind: savebackup.EvFailed, GameID: game.ID, Trigger: triggerAfterSession, Message: err.Error()})
 	}
 }

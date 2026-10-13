@@ -96,6 +96,13 @@ func TestGameHasCloudSyncSteam(t *testing.T) {
 	if a.gameHasCloudSync(steamGame) {
 		t.Fatal("uncached Steam game should be false")
 	}
+	// A plugin game with store "steam" (steam-standalone) isn't synced by
+	// the Steam client: Steam Cloud in the store data doesn't count for it.
+	withFakeSteam(a, true, true)
+	standalone := types.Game{ID: "ss_10", Source: "steam-standalone", Store: types.StoreSteam, StoreAppID: "10", Title: "Steam Game"}
+	if a.gameHasCloudSync(standalone) {
+		t.Fatal("a steam-standalone game counted as synced by the Steam client")
+	}
 }
 
 func TestAutoBackupStateRules(t *testing.T) {
@@ -147,12 +154,14 @@ func TestAutoBackupStateRules(t *testing.T) {
 func TestAfterSessionDefaultOnSkipsCloud(t *testing.T) {
 	t.Parallel()
 	a, _ := cloudApp(t, nil, nil)
+	home := t.TempDir()
 	a.savebk = savebackup.New(savebackup.Options{
 		Settings: a.settings, DataDir: filepath.Join(t.TempDir(), "data"),
-		CacheDir: filepath.Join(t.TempDir(), "cache"), Home: t.TempDir(),
+		CacheDir: filepath.Join(t.TempDir(), "cache"), Home: home,
 	})
 	g := echoGame(t, a)
-	saves := filepath.Join(t.TempDir(), "saves")
+	// Saves live under the backup service's home, a context root.
+	saves := filepath.Join(home, "saves")
 	if err := os.MkdirAll(saves, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -172,8 +181,8 @@ func TestAfterSessionDefaultOnSkipsCloud(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.backupAfterSession(g)
-	if got := a.savebk.List(g.ID); len(got) != 1 {
-		t.Fatalf("forced cloud backups = %d, want 1", len(got))
+	if got := a.savebk.List(g.ID); len(got) != 1 || got[0].Files != 1 {
+		t.Fatalf("forced cloud backups = %+v, want 1 with the save", got)
 	}
 }
 
