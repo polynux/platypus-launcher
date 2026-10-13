@@ -11,6 +11,7 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/stores"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Family (the `family` capability, protocol 1.8, docs/plans/launcher-parity.md
@@ -41,10 +42,10 @@ func appCtx(a *App) context.Context {
 func (a *App) capabilityGate(source, capability string) (plugins.Plugin, error) {
 	p, ok := a.plugins.Plugin(source)
 	if !ok {
-		return plugins.Plugin{}, fmt.Errorf("%s doesn't come from a store plugin", source)
+		return plugins.Plugin{}, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", source), map[string]string{"title": source})
 	}
 	if p.Status != plugins.StatusReady {
-		return p, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return p, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	ctx, cancel := context.WithTimeout(appCtx(a), optionsTimeout)
 	defer cancel()
@@ -52,6 +53,18 @@ func (a *App) capabilityGate(source, capability string) (plugins.Plugin, error) 
 		return p, err
 	}
 	if !a.plugins.Has(source, capability) {
+		// The capability names a user-facing feature (issue #39, phase 3),
+		// so each known one has its own code; anything else stays plain.
+		switch capability {
+		case "family":
+			return p, apperr.New("family.unsupported",
+				fmt.Sprintf("%s doesn't offer %s", p.Manifest.Name, capability),
+				map[string]string{"name": p.Manifest.Name})
+		case "settings":
+			return p, apperr.New("plugin.settings.unsupported",
+				fmt.Sprintf("%s doesn't offer %s", p.Manifest.Name, capability),
+				map[string]string{"name": p.Manifest.Name})
+		}
 		return p, fmt.Errorf("%s doesn't offer %s", p.Manifest.Name, capability)
 	}
 	return p, nil
@@ -84,17 +97,17 @@ func (a *App) SetPreferredCopy(game types.Game, ownerID string) error {
 		return err
 	}
 	if listed.Features != nil && !slices.Contains(listed.Features, "family") {
-		return fmt.Errorf("%s isn't lent here", game.Title)
+		return apperr.New("family.notLent", fmt.Sprintf("%s isn't lent here", game.Title), map[string]string{"title": game.Title})
 	}
 	if listed.SharedBy == nil {
-		return fmt.Errorf("%s is your own copy: there is nothing to choose", game.Title)
+		return apperr.New("family.ownCopy", fmt.Sprintf("%s is your own copy: there is nothing to choose", game.Title), map[string]string{"title": game.Title})
 	}
 	copy := slices.IndexFunc(listed.Copies, func(c types.GameCopy) bool { return c.OwnerID == ownerID })
 	switch {
 	case copy < 0:
-		return fmt.Errorf("%s has no copy from that family member", game.Title)
+		return apperr.New("family.noCopy", fmt.Sprintf("%s has no copy from that family member", game.Title), map[string]string{"title": game.Title})
 	case !listed.Copies[copy].Available:
-		return fmt.Errorf("the copy from %s isn't available right now", listed.Copies[copy].OwnerName)
+		return apperr.New("family.copyUnavailable", fmt.Sprintf("the copy from %s isn't available right now", listed.Copies[copy].OwnerName), map[string]string{"name": listed.Copies[copy].OwnerName})
 	}
 	ctx, cancel := context.WithTimeout(appCtx(a), familyTimeout)
 	defer cancel()

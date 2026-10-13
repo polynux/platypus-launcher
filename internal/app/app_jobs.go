@@ -10,6 +10,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // jobBackend runs queue jobs through the owning plugin.
@@ -63,7 +64,7 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 func (a *App) jobTargetGate(j types.Job) error {
 	game := types.Game{ID: j.GameID, Source: j.Source, StoreAppID: j.StoreGameID, Title: j.Title}
 	if _, err := a.versionsGate(game); err != nil {
-		return fmt.Errorf("%s was queued for a chosen version, which the store can't install now (%v); cancel the job or unpin the game to install the latest", j.Title, err)
+		return apperr.New("jobs.pinnedStale", fmt.Sprintf("%s was queued for a chosen version, which the store can't install now (%v); cancel the job or unpin the game to install the latest", j.Title, err), map[string]string{"title": j.Title})
 	}
 	return nil
 }
@@ -123,7 +124,7 @@ func (a *App) heldByJob(game types.Game) error {
 	if j.Kind == jobs.KindMove {
 		what = "moved"
 	}
-	return fmt.Errorf("%s is being %s; launch it once that finishes", game.Title, what)
+	return apperr.New("game.launchBusy", fmt.Sprintf("%s is being %s; launch it once that finishes", game.Title, what), map[string]string{"title": game.Title, "what": what})
 }
 
 // jobFinished drops the finished job's source from the library cache and keeps
@@ -167,13 +168,13 @@ func (a *App) queueJobWith(kind string, game types.Game, target *types.VersionTa
 func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarget, options types.InstallOptions, picked string) (types.Job, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return types.Job{}, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return types.Job{}, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	if p.Status != plugins.StatusReady {
-		return types.Job{}, fmt.Errorf("%s is %s", p.Manifest.Name, p.Status)
+		return types.Job{}, apperr.New("plugin.notReady", fmt.Sprintf("%s is %s", p.Manifest.Name, p.Status), map[string]string{"name": p.Manifest.Name, "status": string(p.Status)})
 	}
 	if !a.plugins.Has(game.Source, "install") {
-		return types.Job{}, fmt.Errorf("%s can't install games", p.Manifest.Name)
+		return types.Job{}, apperr.New("install.notSupported", fmt.Sprintf("%s can't install games", p.Manifest.Name), map[string]string{"name": p.Manifest.Name})
 	}
 	if termsKind(kind) {
 		if err := a.termsGate(game); err != nil {
@@ -202,10 +203,10 @@ func (a *App) queueJobIn(kind string, game types.Game, target *types.VersionTarg
 // at a version (pinned) installs that version.
 func (a *App) InstallGame(game types.Game) (types.Job, error) {
 	if game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
+		return types.Job{}, apperr.New("install.alreadyInstalled", fmt.Sprintf("%s is already installed", game.Title), map[string]string{"title": game.Title})
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
+		return types.Job{}, apperr.New("install.cannotInstall", fmt.Sprintf("%s can't be installed by Platypus", game.Title), map[string]string{"title": game.Title})
 	}
 	target, err := a.pinnedTarget(game)
 	if err != nil {
@@ -218,7 +219,7 @@ func (a *App) InstallGame(game types.Game) (types.Job, error) {
 // updated to its pin, not to the latest version.
 func (a *App) UpdateGame(game types.Game) (types.Job, error) {
 	if !game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
+		return types.Job{}, apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 	}
 	target, err := a.pinnedTarget(game)
 	if err != nil {
@@ -230,10 +231,10 @@ func (a *App) UpdateGame(game types.Game) (types.Job, error) {
 // UninstallGame queues removal of an installed plugin game.
 func (a *App) UninstallGame(game types.Game) (types.Job, error) {
 	if !game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is not installed", game.Title)
+		return types.Job{}, apperr.New("game.notInstalled", fmt.Sprintf("%s is not installed", game.Title), map[string]string{"title": game.Title})
 	}
 	if a.isRunning(game.ID) {
-		return types.Job{}, fmt.Errorf("%s is running", game.Title)
+		return types.Job{}, apperr.New("game.running", fmt.Sprintf("%s is running", game.Title), map[string]string{"title": game.Title})
 	}
 	folder, err := a.currentFolder(game)
 	if err != nil {

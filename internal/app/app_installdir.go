@@ -12,6 +12,7 @@ import (
 	"platypus/internal/jobs"
 	"platypus/internal/settings"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Install location: where a game installs. Core owns installDir (plugins never
@@ -44,7 +45,7 @@ func existingAncestor(dir string) (string, error) {
 		st, err := os.Stat(p)
 		if err == nil {
 			if !st.IsDir() {
-				return "", fmt.Errorf("%s is a file, not a folder", p)
+				return "", apperr.New("install.folder.isFile", fmt.Sprintf("%s is a file, not a folder", p), map[string]string{"path": p})
 			}
 			return p, nil
 		}
@@ -52,7 +53,7 @@ func existingAncestor(dir string) (string, error) {
 			return "", err
 		}
 		if filepath.Dir(p) == p {
-			return "", fmt.Errorf("no folder exists above %s", dir)
+			return "", apperr.New("install.folder.noParent", fmt.Sprintf("no folder exists above %s", dir), map[string]string{"dir": dir})
 		}
 	}
 }
@@ -86,10 +87,10 @@ func (a *App) checkInstallFolder(folder string) (string, error) {
 		return "", err
 	}
 	if data := a.resolvedDataDir(); data != "" && (resolved == data || strings.HasPrefix(resolved, data+string(filepath.Separator))) {
-		return "", fmt.Errorf("refusing to install into Platypus's own data folder (%s)", data)
+		return "", apperr.New("install.folder.ownData", fmt.Sprintf("refusing to install into Platypus's own data folder (%s)", data), map[string]string{"path": data})
 	}
 	if err := syscall.Access(anc, 2); err != nil { // W_OK
-		return "", fmt.Errorf("you can't write to %s", anc)
+		return "", apperr.New("install.folder.notWritable", fmt.Sprintf("you can't write to %s", anc), map[string]string{"path": anc})
 	}
 	return clean, nil
 }
@@ -112,7 +113,7 @@ func (a *App) CheckInstallFolder(folder string) (types.InstallFolderCheck, error
 func (a *App) GetInstallLocations(game types.Game) ([]types.InstallLocation, error) {
 	p, ok := a.plugins.Plugin(game.Source)
 	if !ok {
-		return nil, fmt.Errorf("%s doesn't come from a store plugin", game.Title)
+		return nil, apperr.New("game.notFromStore", fmt.Sprintf("%s doesn't come from a store plugin", game.Title), map[string]string{"title": game.Title})
 	}
 	def, _ := a.plugins.InstallFolder(game.Source, a.settings.GamesFolder())
 	var out []types.InstallLocation
@@ -146,7 +147,7 @@ func (a *App) installFolderFor(game types.Game, folder string) (string, bool, er
 		return "", false, nil
 	}
 	if game.IsInstalled {
-		return "", false, fmt.Errorf("%s is installed; use Move to put it elsewhere", game.Title)
+		return "", false, apperr.New("install.installedUseMove", fmt.Sprintf("%s is installed; use Move to put it elsewhere", game.Title), map[string]string{"title": game.Title})
 	}
 	clean, err := a.checkInstallFolder(folder)
 	if err != nil {
@@ -176,10 +177,10 @@ func (a *App) rememberInstallFolder(source, folder string) {
 // store's own folder, like InstallGame).
 func (a *App) InstallGameTo(game types.Game, folder string) (types.Job, error) {
 	if game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
+		return types.Job{}, apperr.New("install.alreadyInstalled", fmt.Sprintf("%s is already installed", game.Title), map[string]string{"title": game.Title})
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
+		return types.Job{}, apperr.New("install.cannotInstall", fmt.Sprintf("%s can't be installed by Platypus", game.Title), map[string]string{"title": game.Title})
 	}
 	target, err := a.pinnedTarget(game)
 	if err != nil {
@@ -192,10 +193,10 @@ func (a *App) InstallGameTo(game types.Game, folder string) (types.Job, error) {
 // picked ("" is the store's own folder).
 func (a *App) InstallGameWithOptionsTo(game types.Game, options map[string]any, folder string) (types.Job, error) {
 	if game.IsInstalled {
-		return types.Job{}, fmt.Errorf("%s is already installed", game.Title)
+		return types.Job{}, apperr.New("install.alreadyInstalled", fmt.Sprintf("%s is already installed", game.Title), map[string]string{"title": game.Title})
 	}
 	if !game.Installable {
-		return types.Job{}, fmt.Errorf("%s can't be installed by Platypus", game.Title)
+		return types.Job{}, apperr.New("install.cannotInstall", fmt.Sprintf("%s can't be installed by Platypus", game.Title), map[string]string{"title": game.Title})
 	}
 	return a.queueWithOptionsIn(jobs.KindInstall, game, options, folder)
 }

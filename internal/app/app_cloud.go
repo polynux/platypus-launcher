@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +16,7 @@ import (
 	"platypus/internal/session"
 	"platypus/internal/stores"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // cloudShutdownGrace is how long Platypus waits for running cloud syncs when it
@@ -216,7 +216,7 @@ func (a *App) GetCloudInfo(game types.Game) types.CloudInfo {
 func (a *App) CheckCloudSaves(game types.Game) (types.CloudInfo, error) {
 	g, ok := a.cloudGame(game)
 	if !ok {
-		return a.cloudInfo(game), errors.New("this game has no cloud saves Platypus can sync")
+		return a.cloudInfo(game), apperr.New("cloud.none", "this game has no cloud saves Platypus can sync", nil)
 	}
 	cc, err := a.cloudContextFor(game)
 	if err != nil {
@@ -236,11 +236,11 @@ func (a *App) ResolveCloudSaves(game types.Game, choices map[string]string) (typ
 	defer unlock()
 	g, ok := a.cloudGame(game)
 	if !ok {
-		return a.cloudInfo(game), errors.New("this game has no cloud saves Platypus can sync")
+		return a.cloudInfo(game), apperr.New("cloud.none", "this game has no cloud saves Platypus can sync", nil)
 	}
 	if a.isRunning(game.ID) {
 		// The game writes its saves while it runs: settle them after it exits.
-		return a.cloudInfo(game), fmt.Errorf("%s is running; choose its saves after it exits", game.Title)
+		return a.cloudInfo(game), apperr.New("cloud.running", fmt.Sprintf("%s is running; choose its saves after it exits", game.Title), map[string]string{"title": game.Title})
 	}
 	cc, err := a.cloudContextFor(game)
 	if err != nil {
@@ -274,7 +274,7 @@ func (a *App) LaunchGameViaClient(game types.Game) (string, error) {
 	unlock := a.lockGame(game.ID)
 	defer unlock()
 	if a.isRunning(game.ID) {
-		return "", fmt.Errorf("%s is already running", game.Title)
+		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
 	if err := a.heldByJob(game); err != nil {
 		return "", err
@@ -282,7 +282,7 @@ func (a *App) LaunchGameViaClient(game types.Game) (string, error) {
 	s, ok := a.stores.Get(sourceOf(game))
 	cl, isCl := s.(stores.ClientLauncher)
 	if !ok || !isCl {
-		return "", fmt.Errorf("%s can't be started through a store client", game.Title)
+		return "", apperr.New("game.noClientLaunch", fmt.Sprintf("%s can't be started through a store client", game.Title), map[string]string{"title": game.Title})
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, launchTimeout)
 	defer cancel()
@@ -291,7 +291,7 @@ func (a *App) LaunchGameViaClient(game types.Game) (string, error) {
 		return "", err
 	}
 	if len(launch.Command) == 0 {
-		return "", fmt.Errorf("%s returned no command", game.Title)
+		return "", apperr.New("game.noCommand", fmt.Sprintf("%s returned no command", game.Title), map[string]string{"title": game.Title})
 	}
 	cmd := exec.Command(launch.Command[0], launch.Command[1:]...)
 	cmd.Env = os.Environ()

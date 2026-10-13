@@ -14,6 +14,7 @@ import (
 	"platypus/internal/sanitize"
 	"platypus/internal/steam"
 	"platypus/internal/types"
+	"platypus/internal/apperr"
 )
 
 // Sideloaded game info from online sources (issue #38): a sideloaded game's
@@ -256,13 +257,13 @@ func (a *App) getSideloadedDetails(gameID string) (*types.GameDetails, error) {
 func (a *App) fetchSideloadedDetails(link string) (*types.GameDetails, error) {
 	parts := strings.SplitN(strings.TrimSpace(link), ":", 2)
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("unknown info source %q", link)
+		return nil, apperr.New("info.source.unknown", fmt.Sprintf("unknown info source %q", link), map[string]string{"source": link})
 	}
 	source, id := strings.ToLower(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
 	switch source {
 	case "steam":
 		if id == "" {
-			return nil, fmt.Errorf("a Steam app id is a number")
+			return nil, apperr.New("steam.appid.invalid", "a Steam app id is a number", nil)
 		}
 		d, err := a.sideloadSteamClient().Details("", id)
 		if err != nil {
@@ -278,7 +279,7 @@ func (a *App) fetchSideloadedDetails(link string) (*types.GameDetails, error) {
 	case "lutris":
 		return a.fetchLutrisDetails(id)
 	default:
-		return nil, fmt.Errorf("unknown info source %q", source)
+		return nil, apperr.New("info.source.unknown", fmt.Sprintf("unknown info source %q", source), map[string]string{"source": source})
 	}
 }
 
@@ -314,7 +315,7 @@ func formatGOGDate(raw string) string {
 // recent search saw the product.
 func (a *App) fetchGOGDetails(productID string) (*types.GameDetails, error) {
 	if strings.TrimSpace(productID) == "" {
-		return nil, fmt.Errorf("a GOG product id is a string")
+		return nil, apperr.New("gog.productId.invalid", "a GOG product id is a string", nil)
 	}
 	g, err := a.artClient().GOGGame(productID)
 	if err != nil {
@@ -358,7 +359,7 @@ func (a *App) fetchGOGDetails(productID string) (*types.GameDetails, error) {
 // genres and year alongside, with a link to the Lutris page.
 func (a *App) fetchLutrisDetails(slug string) (*types.GameDetails, error) {
 	if strings.TrimSpace(slug) == "" {
-		return nil, fmt.Errorf("a Lutris slug is a string")
+		return nil, apperr.New("lutris.slug.invalid", "a Lutris slug is a string", nil)
 	}
 	l, err := a.artClient().LutrisInfo(slug)
 	if err != nil {
@@ -406,10 +407,10 @@ func (a *App) maybeAutoLinkInfo(gameID, source, id string) {
 // art auto-apply. When the switch is off linking is refused.
 func (a *App) LinkGameInfo(gameID, source, id string) (string, error) {
 	if !a.isCustomGameID(gameID) {
-		return "", fmt.Errorf("info linking is for sideloaded games")
+		return "", apperr.New("info.sideloadOnly", "info linking is for sideloaded games", nil)
 	}
 	if a.settings == nil || !a.settings.GameInfoOnline() {
-		return "", fmt.Errorf("finding game info online is switched off")
+		return "", apperr.New("info.off", "finding game info online is switched off", nil)
 	}
 	source = strings.ToLower(strings.TrimSpace(source))
 	id = strings.TrimSpace(id)
@@ -426,7 +427,7 @@ func (a *App) LinkGameInfo(gameID, source, id string) (string, error) {
 	switch source {
 	case "steam":
 		if _, err := strconv.Atoi(id); err != nil || strings.TrimSpace(id) == "" {
-			return "", fmt.Errorf("a Steam app id is a number")
+			return "", apperr.New("steam.appid.invalid", "a Steam app id is a number", nil)
 		}
 		var title string
 		for _, g := range a.settings.CustomGames() {
@@ -443,7 +444,7 @@ func (a *App) LinkGameInfo(gameID, source, id string) (string, error) {
 		return "steam:" + strings.TrimSpace(id), nil
 	case "gog", "lutris":
 		if id == "" {
-			return "", fmt.Errorf("an info id is empty")
+			return "", apperr.New("info.id.empty", "an info id is empty", nil)
 		}
 		_, _, prev := a.infoLinkFor(gameID)
 		next := source + ":" + id
@@ -455,7 +456,7 @@ func (a *App) LinkGameInfo(gameID, source, id string) (string, error) {
 		}
 		return next, nil
 	default:
-		return "", fmt.Errorf("unknown info source %q", source)
+		return "", apperr.New("info.source.unknown", fmt.Sprintf("unknown info source %q", source), map[string]string{"source": source})
 	}
 }
 
