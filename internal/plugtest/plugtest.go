@@ -370,8 +370,13 @@ func (s Suite) Conformance(t *testing.T) {
 		if g.ID == "" || g.Title == "" || g.StoreAppID == "" {
 			t.Fatalf("library entry missing id/title/store id: %+v", g)
 		}
-		if g.ID != stores.GameID(s.ID, g.StoreAppID) {
-			t.Fatalf("game id %q is not p.<plugin>.<store id> form", g.ID)
+		if g.ID != sess.Store.WireID(g.StoreAppID) {
+			t.Fatalf("game id %q is not the plugin's gameIdPrefix form", g.ID)
+		}
+		switch g.Offline {
+		case "ok", "network", "unknown", "":
+		default:
+			t.Fatalf("game %q has offline %q, want ok/network/unknown", g.ID, g.Offline)
 		}
 	}
 	game := s.PickGame(t, games)
@@ -386,6 +391,16 @@ func (s Suite) Conformance(t *testing.T) {
 	}
 	for _, g := range rawLib.Games {
 		checkKeys(t, "library.list game", g, LibraryKeys)
+		var wire struct {
+			Offline string `json:"offline"`
+		}
+		if err := json.Unmarshal(g, &wire); err == nil {
+			switch wire.Offline {
+			case "", "ok", "network", "unknown":
+			default:
+				t.Errorf("library.list game has offline %q, want ok/network/unknown", wire.Offline)
+			}
+		}
 		if has("family") {
 			var gid struct {
 				ID string `json:"id"`
@@ -817,7 +832,7 @@ func (s *Session) checkHandshake(t *testing.T) {
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
+		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",
 		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos"}

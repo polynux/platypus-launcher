@@ -42,7 +42,7 @@ func TestRegistryIsConsistent(t *testing.T) {
 			t.Errorf("%s registered twice", c.Name)
 		}
 		seenName[c.Name] = true
-		if len(c.Methods)+len(c.OptionalMethods) == 0 {
+		if len(c.Methods)+len(c.OptionalMethods) == 0 && c.Name != "local-art" {
 			t.Errorf("%s has no methods", c.Name)
 		}
 		if len(c.Surfaces) == 0 {

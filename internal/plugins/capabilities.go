@@ -94,6 +94,9 @@ var registry = []Capability{
 	{Name: "terms", Since: rev111, Orchestrated: true,
 		OptionalMethods: []string{"game.acceptTerms"},
 		Surfaces:        []string{"terms-dialog", "legal"}},
+	{Name: "local-art", Since: "1.15", Orchestrated: true,
+		Methods:  []string{},
+		Surfaces: []string{"library", "game-page"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:

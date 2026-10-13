@@ -295,9 +295,14 @@ func (a *App) savesPreview(game types.Game) types.SaveGate {
 // plugin offers cloud-saves for this game (the capability, and the game's
 // features where the protocol says so) and the effective cloud mode isn't
 // off; or, for built-in Steam games, when the cached store details say the
-// game has Steam Cloud (category 23, no new request per game). Unknown means
-// false.
+// game has Steam Cloud (category 23, no new request per game). A plugin game
+// whose library entry says cloudSync (protocol 1.15, issue #44: "the store
+// itself syncs this game's saves") also counts, alongside the capability
+// rule. Unknown means false.
 func (a *App) gameHasCloudSync(game types.Game) bool {
+	if game.CloudSync {
+		return true
+	}
 	if g, ok := a.cloudGame(game); ok {
 		mode := ""
 		if a.cloud != nil {

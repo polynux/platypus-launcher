@@ -59,6 +59,14 @@ type LibraryGame struct {
 	CoverURL  string `json:"coverUrl,omitempty"`  // portrait
 	HeroURL   string `json:"heroUrl,omitempty"`   // wide background
 	BannerURL string `json:"bannerUrl,omitempty"` // wide card
+	// Offline says whether the game launches without a network (protocol
+	// 1.15, issue #44): "ok", "network" or "unknown". Absent means
+	// "unknown". The conformance suite rejects other values.
+	Offline string `json:"offline,omitempty"`
+	// CloudSync says the store itself syncs this game's saves (protocol
+	// 1.15, issue #44). gameHasCloudSync uses it for plugin games, alongside
+	// the cloud-saves capability rule.
+	CloudSync bool `json:"cloudSync,omitempty"`
 	// Features narrows the capabilities the plugin offers for this game
 	// (names from the registry). Absent (nil) means all of them; an empty
 	// list means none. Names the plugin doesn't offer at runtime are ignored.
@@ -197,6 +205,13 @@ var UnreadCountsVersion = Version{Major: 1, Minor: 13}
 // Platypus sends locale.changed only to a plugin that speaks it; an older
 // plugin gets the new locale on its next start.
 var LocaleVersion = Version{Major: 1, Minor: 14}
+
+// OfflineVersion is the first protocol revision with offline launches
+// (LibraryGame.offline/cloudSync, the local-art capability, gameIdPrefix,
+// the executable param of game.launchSpec, optional requires; issue #44).
+// Platypus reads those fields only from a plugin that speaks it; an older
+// plugin keeps today's behaviour.
+var OfflineVersion = Version{Major: 1, Minor: 15}
 
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus

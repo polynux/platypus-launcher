@@ -189,9 +189,9 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: 1.0 to 1.14, so it meets the highest
+// defaultProtocols is what echo speaks: 1.0 to 1.15, so it meets the highest
 // revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"}
 
 var (
 	knobMu  sync.Mutex
@@ -499,6 +499,9 @@ type params struct {
 	JobID      string            `json:"jobId"`
 	InstallDir string            `json:"installDir"`
 	Preview    bool              `json:"preview"`
+	// Executable is the user's per-game executable override (protocol 1.15):
+	// the plugin answers with a direct spec for that file.
+	Executable string            `json:"executable"`
 	Fields     map[string]string `json:"fields"`
 	Protocols  []string          `json:"protocols"` // initialize: the versions Platypus speaks
 	Locale     string            `json:"locale"`    // initialize (1.14): the user's BCP 47 locale
@@ -807,6 +810,16 @@ func library() (any, error) {
 			"id": id, "title": g.title, "installed": installed, "installable": g.external == "" && !g.client && g.lentBy == "",
 			"version": "1.0", "note": g.note, "native": g.native,
 		}
+		// Offline-launch fixtures (protocol 1.15, issue #44).
+		if off := offlineFor(id); off != "" {
+			e["offline"] = off
+		}
+		if cloudSyncFor(id) {
+			e["cloudSync"] = true
+		}
+		if art := echoArtURL(id); art != "" {
+			e["coverUrl"] = art
+		}
 		if g.lentBy != "" {
 			owner := effectiveOwnerLocked(id)
 			e["sharedBy"] = map[string]any{"id": owner, "name": familyName(owner)}
@@ -949,6 +962,15 @@ func launchSpec(p params) (any, error) {
 	g, ok := games[p.ID]
 	if !ok {
 		return nil, fmt.Errorf("unknown game %q", p.ID)
+	}
+	// The user's per-game executable override (protocol 1.15): answer with
+	// a direct spec for that file. The core sends it instead of bypassing
+	// the plugin.
+	if p.Executable != "" {
+		if !filepath.IsAbs(p.Executable) {
+			return nil, fmt.Errorf("executable %q must be an absolute path", p.Executable)
+		}
+		return map[string]any{"exe": p.Executable}, nil
 	}
 	if g.lentBy != "" {
 		stMu.Lock()
