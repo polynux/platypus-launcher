@@ -63,6 +63,16 @@ contextBridge.exposeInMainWorld('platypus', {
     if (!reply.ok) throw new Error(reply.error);
     return reply.result;
   },
+  // The shell session for i18n (issue #39): the OS language list behind the
+  // UI's System choice, and whether this is a dev session (the pseudo-locale
+  // is offered). Main answers from Electron, not the page.
+  async getSessionInfo(): Promise<{ systemLanguages: string[]; devtools: boolean }> {
+    const reply = (await ipcRenderer.invoke('platypus:session-info')) as
+      | { ok: true; result: { systemLanguages: string[]; devtools: boolean } }
+      | { ok: false; error: string };
+    if (!reply.ok) throw new Error(reply.error);
+    return reply.result;
+  },
   on(event: string, cb: (data: unknown) => void): () => void {
     let set = listeners.get(event);
     if (!set) listeners.set(event, (set = new Set()));
