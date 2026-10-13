@@ -331,6 +331,10 @@ type LauncherSettings struct {
 	// Language is the UI language the user picked (issue #39): "" means
 	// System, resolved in the shell from the OS languages.
 	Language string `json:"language"`
+	// MinimizeToTray is the "Minimize to tray while a game runs" switch
+	// (issue #49), off by default. The shell reads it and hides the window
+	// to the tray while a game session runs.
+	MinimizeToTray bool `json:"minimize_to_tray"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when

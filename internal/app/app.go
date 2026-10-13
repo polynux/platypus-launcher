@@ -941,6 +941,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolderFor(a.resolvedDataDir()),
 		Language:              a.settings.Language(),
+		MinimizeToTray:        a.settings.MinimizeToTray(),
 	}
 }
 

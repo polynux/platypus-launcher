@@ -454,6 +454,7 @@ export namespace types {
     prefixes_folder: string;
     default_prefixes_folder: string;
     language: string;
+    minimize_to_tray: boolean;
   }
 
   export interface LedgerEntry {

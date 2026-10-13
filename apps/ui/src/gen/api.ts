@@ -130,6 +130,7 @@ export interface CoreApi {
   SetGameSavePaths(gameID: string, paths: string[]): Promise<void>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
   SetLanguage(lang: string): Promise<types.LauncherSettings>;
+  SetMinimizeToTray(on: boolean): Promise<types.LauncherSettings>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
   SetPluginInstallFolder(id: string, path: string): Promise<void>;
   SetPreferredCopy(game: types.Game, ownerID: string): Promise<void>;
@@ -276,6 +277,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetGameSavePaths',
   'SetGameSteamAppID',
   'SetLanguage',
+  'SetMinimizeToTray',
   'SetPluginEnabled',
   'SetPluginInstallFolder',
   'SetPreferredCopy',
