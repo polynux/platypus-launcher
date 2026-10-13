@@ -157,6 +157,8 @@ export type RemoveCheck = gen.RemoveCheck;
 export type RemoveTarget = gen.RemoveTarget;
 /** What a backup-before-delete step did (issue #42). */
 export type SaveGate = gen.SaveGate;
+/** Whether after-session automatic backups run for a game and why. */
+export type AutoBackupState = gen.AutoBackupState;
 
 export type VersionTarget = gen.VersionTarget;
 export type VersionChannel = gen.VersionChannel;

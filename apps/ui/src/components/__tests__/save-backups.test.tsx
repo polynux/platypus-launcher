@@ -14,6 +14,7 @@ const apiMocks = vi.hoisted(() => ({
   listSaveBackups: vi.fn(),
   getSavePaths: vi.fn(),
   getGameSaveBackup: vi.fn(),
+  getAutoBackupState: vi.fn(),
   createSaveBackup: vi.fn(),
   restoreSaveBackup: vi.fn(),
   previewRestoreSaveBackup: vi.fn(),
@@ -52,6 +53,7 @@ beforeEach(() => {
     { path: '/saves/b', origin: 'manifest', exists: false },
   ] as never));
   apiMocks.getGameSaveBackup.mockReturnValue(Effect.succeed('' as never));
+  apiMocks.getAutoBackupState.mockReturnValue(Effect.succeed({ on: true, reason: 'on' } as never));
   apiMocks.createSaveBackup.mockReturnValue(Effect.succeed({ id: 'j1', kind: 'backup' } as never));
   apiMocks.previewRestoreSaveBackup.mockReturnValue(Effect.succeed({ overwritten: 1, added: 2, kept: 3, files: 6, bytes: 60 } as never));
 });

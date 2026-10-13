@@ -40,6 +40,7 @@ import type {
   SaveBackup,
   SavePath,
   RestorePreview,
+  AutoBackupState,
   RemoveCheck,
   RemoveOptions,
   SessionEvent,
@@ -427,6 +428,8 @@ export const LauncherApi = {
     call<void>('SetGameSaveBackup', () => App.SetGameSaveBackup(gameId, mode)),
   getGameSaveBackup: (gameId: string) =>
     call<string>('GetGameSaveBackup', () => App.GetGameSaveBackup(gameId)),
+  getAutoBackupState: (game: Game) =>
+    call<AutoBackupState>('GetAutoBackupState', () => App.GetAutoBackupState(backend(game))),
   refreshSaveManifest: () => call<void>('RefreshSaveManifest', () => App.RefreshSaveManifest()),
   cancelJob: (id: string) => call<void>('CancelJob', () => App.CancelJob(id)),
   retryJob: (id: string) => call<void>('RetryJob', () => App.RetryJob(id)),

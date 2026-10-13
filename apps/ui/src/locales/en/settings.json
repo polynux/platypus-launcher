@@ -98,7 +98,7 @@
    "off": "Never back up automatically."
   },
   "afterSessionLabel": "Back up after each session",
-  "afterSessionHint": "Take a backup when a game exits. Cloud saves sync first; the backup waits for them briefly.",
+  "afterSessionHint": "Take a backup after each session, except games whose store syncs saves to the cloud. Cloud saves sync first; the backup waits for them briefly.",
   "manifestLabel": "Save list",
   "manifest": {
    "ready": "Up to date",

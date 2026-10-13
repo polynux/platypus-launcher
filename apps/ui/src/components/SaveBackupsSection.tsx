@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
-import type { Game, SaveBackup, SavePath, RestorePreview } from '../types';
+import type { Game, SaveBackup, SavePath, RestorePreview, AutoBackupState } from '../types';
 import { Button } from '@/components/ds/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
 import { ErrorNotice } from './ErrorNotice';
@@ -26,6 +26,7 @@ export function SaveBackupsSection({ game, onNotify }: {
   const [backups, setBackups] = useState<SaveBackup[] | null>(null);
   const [paths, setPaths] = useState<SavePath[] | null>(null);
   const [mode, setMode] = useState('');
+  const [auto, setAuto] = useState<AutoBackupState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
@@ -44,6 +45,9 @@ export function SaveBackupsSection({ game, onNotify }: {
     Effect.runPromise(LauncherApi.getGameSaveBackup(game.id))
       .then(setMode)
       .catch(() => setMode(''));
+    Effect.runPromise(LauncherApi.getAutoBackupState(game))
+      .then(setAuto)
+      .catch(() => setAuto(null));
   };
 
   useEffect(reload, [game.id]);
@@ -104,6 +108,18 @@ export function SaveBackupsSection({ game, onNotify }: {
       .catch((e) => setError(coreErrMsg(e)));
   };
 
+  const autoText = auto == null
+    ? null
+    : auto.on
+      ? t('gameSettings:maintenance.saveBackups.autoOn')
+      : auto.reason === 'cloud'
+        ? t('gameSettings:maintenance.saveBackups.autoOffCloud')
+        : t('gameSettings:maintenance.saveBackups.autoOff');
+  // Restoring writes into the game's current folders: without an install
+  // (an uninstalled game) the targets aren't on disk, so Restore stays off
+  // with a short reason while Delete still works.
+  const canRestore = game.is_installed !== false;
+
   return (
     <div className="space-y-5">
       <section>
@@ -127,6 +143,7 @@ export function SaveBackupsSection({ game, onNotify }: {
             </Select>
           </label>
         </div>
+        {autoText && <p className="mt-2 text-[12px] text-white/55">{autoText}</p>}
       </section>
 
       <section>
@@ -163,7 +180,13 @@ export function SaveBackupsSection({ game, onNotify }: {
                     </>
                   ) : (
                     <>
-                      <Button variant="ghost" size="sm" onClick={() => askRestore(b.id)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => askRestore(b.id)}
+                        disabled={!canRestore}
+                        title={!canRestore ? t('gameSettings:maintenance.saveBackups.restoreUnavailable') : undefined}
+                      >
                         {t('gameSettings:maintenance.saveBackups.restore')}
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => { setConfirmRestore(null); setRestorePreview(null); setConfirmDelete(b.id); }}>
@@ -177,6 +200,9 @@ export function SaveBackupsSection({ game, onNotify }: {
           </ul>
         )}
       </section>
+      {!canRestore && backups != null && backups.length > 0 && (
+        <p className="text-[12px] text-white/55">{t('gameSettings:maintenance.saveBackups.restoreUnavailable')}</p>
+      )}
 
       <section>
         <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.pathsHeading').toLowerCase()}</MonoLabel>

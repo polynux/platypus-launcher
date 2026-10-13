@@ -98,7 +98,7 @@
    "off": "Jamais de sauvegarde automatique."
   },
   "afterSessionLabel": "Sauvegarder après chaque session",
-  "afterSessionHint": "Sauvegarde à la sortie d’un jeu. Le cloud se synchronise d’abord ; la sauvegarde l’attend brièvement.",
+  "afterSessionHint": "Sauvegarde après chaque session, sauf les jeux dont la boutique synchronise les sauvegardes dans le cloud. Le cloud se synchronise d’abord ; la sauvegarde l’attend brièvement.",
   "manifestLabel": "Liste des sauvegardes",
   "manifest": {
    "ready": "À jour",

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import { FolderInput, ShieldCheck, Trash2 } from 'lucide-react';
-import type { Game, GameJobKind, Job, RemoveCheck, RemoveOptions, RemoveTarget, SavePath, StorePlugin } from '../types';
+import type { Game, GameJobKind, Job, RemoveCheck, RemoveOptions, RemoveTarget, SavePath, StorePlugin, AutoBackupState } from '../types';
 import { Button } from '@/components/ds/button';
 import { CapabilitySurface, offers } from '../lib/capabilities';
 import { JobProgress } from './JobProgress';
@@ -47,14 +47,17 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [savePaths, setSavePaths] = useState<SavePath[] | null>(null);
+  const [autoState, setAutoState] = useState<AutoBackupState | null>(null);
   const [allowNoBackup, setAllowNoBackup] = useState(false);
   useEffect(() => { setConfirm(false); setVerifyOpen(false); setMoveOpen(false); }, [game.id]);
-  useEffect(() => { setSavePaths(null); setAllowNoBackup(false); }, [game.id, confirm]);
+  useEffect(() => { setSavePaths(null); setAutoState(null); setAllowNoBackup(false); }, [game.id, confirm]);
   // The uninstall confirm shows the backup line: what the gate will back up,
-  // or the "delete without a save backup" checkbox when no paths are known.
+  // the cloud line when the store syncs saves, or the "delete without a save
+  // backup" checkbox when no paths are known without cloud.
   useEffect(() => {
     if (!confirm || game.store === 'custom') return;
     Effect.runPromise(LauncherApi.getSavePaths(game)).then(setSavePaths).catch(() => setSavePaths([]));
+    Effect.runPromise(LauncherApi.getAutoBackupState(game)).then(setAutoState).catch(() => setAutoState(null));
   }, [confirm, game]);
   // A game that starts while the confirm row is open closes it: a running
   // game can't be removed, so there is nothing left to answer.
@@ -138,6 +141,8 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
         ? t('gameSettings:maintenance.uninstallConfirmDir', { title: game.title, dir: game.install_dir })
         : t('gameSettings:maintenance.uninstallConfirmBare', { title: game.title });
   const noSavePaths = savePaths != null && savePaths.length === 0;
+  const cloudNoSaves = noSavePaths && autoState?.reason === 'cloud';
+  const needsNoSavesCheck = noSavePaths && !cloudNoSaves;
   return (
     <div className="space-y-5">
       <SaveBackupsSection game={game} onNotify={onNotify} />
@@ -159,11 +164,13 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
         <Row title={t('gameSettings:maintenance.uninstallTitle')} text={uninstallText}>
           <div className="space-y-2">
             <p className="text-[12px] text-white/60">
-              {noSavePaths
-                ? t('gameSettings:maintenance.saveBackups.uninstallNoSaves')
-                : t('gameSettings:maintenance.saveBackups.uninstallBackedUp')}
+              {cloudNoSaves
+                ? t('gameSettings:maintenance.saveBackups.uninstallCloudNoSaves')
+                : noSavePaths
+                  ? t('gameSettings:maintenance.saveBackups.uninstallNoSaves')
+                  : t('gameSettings:maintenance.saveBackups.uninstallBackedUp')}
             </p>
-            {noSavePaths && (
+            {needsNoSavesCheck && (
               <label className="flex items-center gap-2 text-[12.5px] text-white/75">
                 <input
                   type="checkbox"
@@ -176,7 +183,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
             )}
             <div className="flex gap-2">
               <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>{t('common:cancel')}</Button>
-              {noSavePaths ? (
+              {needsNoSavesCheck ? (
                 <Button variant="danger" disabled={!allowNoBackup} title={allowNoBackup ? undefined : t('gameSettings:maintenance.saveBackups.needsCheck')} onClick={uninstallWithoutBackup}>
                   <Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.deleteFiles')}
                 </Button>
@@ -272,7 +279,9 @@ function RemoveConfirmPanel({ game, onCancel, onRemove }: {
   const files = targets.find((x) => x.kind === 'files');
   const deleting = deletePrefix || deleteFiles;
   const noPaths = check?.saves?.no_paths ?? false;
-  // Deleting without known saves needs the explicit confirmation.
+  const cloudNoSaves = check?.saves?.cloud ?? false;
+  // Deleting without known saves needs the explicit confirmation, unless the
+  // cloud holds the saves.
   const blocked = deleting && noPaths && !allowNoSaves;
   const stay = game.install_dir
     ? t('gameSettings:maintenance.stayWithDir', { dir: game.install_dir })
@@ -324,6 +333,8 @@ function RemoveConfirmPanel({ game, onCancel, onRemove }: {
                 <span className="block text-[12px] text-white/55">{t('gameSettings:maintenance.removeAllowNoSaves')}</span>
               </span>
             </label>
+          ) : cloudNoSaves ? (
+            <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeCloudNoSaves')}</p>
           ) : check.saves?.off ? (
             <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupOff')}</p>
           ) : (
