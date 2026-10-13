@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import type { Game } from '../types';
 import { Cover, EmptyState, SegRow, TierBadge, TweakDot } from './ui';
@@ -7,6 +8,7 @@ import { attentionReason, coverImages, needsAttention, storeLabel } from '../lib
 type Filter = 'attention' | 'all';
 
 export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
+  const { t } = useTranslation('nav');
   const [filter, setFilter] = useState<Filter>('attention');
   const withData = games.filter((g) => g.fix_info);
   const shown = filter === 'attention' ? withData.filter(needsAttention) : withData;
@@ -15,7 +17,7 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
     <div className="p-7">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">Fixes</h1>
+          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.fixes')}</h1>
           <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">
             Curated recipes (Lutris, community) and ProtonDB ratings for your library. {withData.length} of {games.length} titles have data.
           </p>

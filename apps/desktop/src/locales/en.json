@@ -1,0 +1,5 @@
+{
+  "appName": "Platypus",
+  "coreCrashed": "The Platypus core stopped unexpectedly (exit {{code}}). See the terminal for its log.",
+  "coreStartFailed": "Could not start the Platypus core:\n{{error}}"
+}

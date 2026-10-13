@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, X } from 'lucide-react';
 import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
@@ -220,6 +221,7 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { g
 });
 
 export function LibraryView(p: LibraryProps) {
+  const { t } = useTranslation('nav');
   const [sort, setSort] = useState<Sort | null>(null);
   const [tier, setTier] = useState<TierFilter>('all');
   // Family: the games borrowed from a family member, when the library has any.
@@ -266,7 +268,7 @@ export function LibraryView(p: LibraryProps) {
       <header className="mb-6 space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-[23px] font-extrabold tracking-tight">Library</h1>
+            <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.library')}</h1>
             <p className="mt-0.5 text-[12.5px] tabular-nums text-white/70">
               {filtered.length} shown · {installedCount} installed{owned > installedCount ? ` · ${owned} owned` : ''}
               {p.lastScan ? ` · scanned ${clock(p.lastScan)}` : ''}

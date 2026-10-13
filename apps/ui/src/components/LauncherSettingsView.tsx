@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
@@ -6,6 +7,8 @@ import { NumberField } from '@/components/ds/number-field';
 import { Input } from '@/components/ds/input';
 import { Switch } from '@/components/ds/switch';
 import { Button } from '@/components/ds/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
+import { PSEUDO_LOCALE, applyLanguage, loadSessionInfo, pseudoAvailable } from '../lib/i18n';
 import { CloudSavesDefaults } from './CloudSavesSetting';
 import { GameFoldersSettings } from './GameFoldersSettings';
 import { ErrorNotice } from './ErrorNotice';
@@ -21,6 +24,7 @@ interface LauncherSettingsViewProps {
 }
 
 export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
+  const { t } = useTranslation('settings');
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,7 +44,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       .then((s) => {
         setSaved(s);
         setCleanupDays(s.cancel_cleanup_days);
-        onNotify('Download cleanup setting saved');
+        onNotify(t('cleanup.saved'));
       })
       .catch((e) => setCleanupError(errMsg(e)))
       .finally(() => setBusy(false));
@@ -51,20 +55,21 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   return (
     <div className="p-7">
       <header className="mb-2">
-        <h1 className="text-[23px] font-extrabold tracking-tight">Settings</h1>
-        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.</p>
+        <h1 className="text-[23px] font-extrabold tracking-tight">{t('settings:title')}</h1>
+        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">{t('subtitle')}</p>
       </header>
-      {error && <ErrorNotice className="mt-2" message={error} fallback="Platypus couldn't load the settings." />}
+      {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
+
+      <LanguageSetting onNotify={onNotify} />
 
       <GameFoldersSettings onNotify={onNotify} />
 
       <PrefixesFolderSetting onNotify={onNotify} />
 
       <section className={SECTION}>
-        <h2 className="text-[14px] font-bold">Canceled downloads</h2>
+        <h2 className="text-[14px] font-bold">{t('cleanup.heading')}</h2>
         <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-          How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that
-          time. 0 deletes it right away; a paused download is never touched.
+{t('cleanup.description')}
         </p>
         <form
           className="flex flex-wrap items-center gap-2"
@@ -74,7 +79,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
           }}
         >
           <label className="flex items-center gap-2">
-            <span className="text-[12.5px] text-white/70">Keep for</span>
+            <span className="text-[12.5px] text-white/70">{t('cleanup.keepFor')}</span>
             <NumberField
               min={0}
               max={365}
@@ -83,15 +88,15 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
               value={cleanupDays === '' ? undefined : cleanupDays}
               onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }}
               disabled={!saved}
-              aria-label="Days to keep canceled downloads' data"
+              aria-label={t('cleanup.daysLabel')}
               className="w-24"
             />
-            <span className="text-[12.5px] text-white/70">days</span>
+            <span className="text-[12.5px] text-white/70">{t('cleanup.days')}</span>
           </label>
-          <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>Save</Button>
+          <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
         </form>
         <div className="mt-2.5 flex min-h-4 items-center gap-4">
-          {cleanupError ? <ErrorNotice message={cleanupError} fallback="Platypus couldn't clean up those folders." /> : <span />}
+          {cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}
         </div>
       </section>
 
@@ -108,9 +113,68 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   );
 }
 
+/** The UI language (issue #39): System follows the desktop language, or an
+ *  explicit language. Saving applies it live, without a restart. */
+export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
+  const [value, setValue] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [dev, setDev] = useState(false);
+  useEffect(() => {
+    let live = true;
+    try {
+      Effect.runPromise(LauncherApi.getLauncherSettings())
+        .then((s) => live && setValue(s?.language ?? ''))
+        .catch(() => live && setValue(''));
+    } catch {
+      setValue('');
+    }
+    void loadSessionInfo().then(() => live && setDev(pseudoAvailable()));
+    return () => { live = false; };
+  }, []);
+  const change = (next: string) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setLanguage(next))
+      .then((s) => {
+        const saved = s.language ?? next;
+        setValue(saved);
+        return applyLanguage(saved);
+      })
+      .then(() => onNotify(t('language.saved')))
+      .catch((e) => onNotify(errMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  // Language names stay in their own language (endonyms): translating them
+  // would hide what the option means.
+  const options = [
+    { value: '', label: t('language.system') },
+    { value: 'en', label: 'English' },
+    { value: 'fr', label: 'Français' },
+  ];
+  if (dev) options.push({ value: PSEUDO_LOCALE, label: `${PSEUDO_LOCALE} (pseudo)` });
+  return (
+    <section className={SECTION}>
+      <h2 className="text-[14px] font-bold">{t('language.heading')}</h2>
+      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('language.description')}</p>
+      <Select value={value ?? ''} onValueChange={change} disabled={value === null || busy}>
+        <SelectTrigger aria-label={t('language.label')} className="w-64">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((o) => (
+            <SelectItem key={o.value || 'system'} value={o.value}>{o.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {dev && <p className="mt-2 font-mono text-hint text-white/55">{t('language.pseudoNote')}</p>}
+    </section>
+  );
+}
+
 /** "Fetch game info online" and the credits for the data Platypus shows. Off, Platypus
  *  keeps what it fetched before and asks the network for nothing new. */
 export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -123,7 +187,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
     Effect.runPromise(LauncherApi.setRatingsOnline(next))
       .then((s) => {
         setOn(s.ratings_online ?? next);
-        onNotify(next ? 'Game info will be fetched online' : 'Game info stays offline');
+        onNotify(next ? t('ratings.on') : t('ratings.off'));
       })
       .catch((e) => onNotify(errMsg(e), 'err'))
       .finally(() => setBusy(false));
@@ -132,17 +196,17 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h2 className="text-[14px] font-bold">Ratings, protection and anti-cheat data</h2>
+          <h2 className="text-[14px] font-bold">{t('ratings.heading')}</h2>
           <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-            Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.
+{t('ratings.description')}
           </p>
         </div>
-        <Switch aria-label="Fetch game info online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+        <Switch aria-label={t('ratings.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
       <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
-        <p>Compatibility ratings: ProtonDB community reports (protondb.com).</p>
-        <p>Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.</p>
-        <p>Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet).</p>
+        <p>{t('ratings.creditCompat')}</p>
+        <p>{t('ratings.creditWiki')}</p>
+        <p>{t('ratings.creditAnticheat')}</p>
       </div>
     </section>
   );
@@ -152,6 +216,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
  *  store search after an add, and the on-demand finder in the art panel. Off,
  *  nothing goes out: the placeholder art stays and no search runs. */
 export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -164,7 +229,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
     Effect.runPromise(LauncherApi.setArtworkOnline(next))
       .then((s) => {
         setOn(s.artwork_online ?? next);
-        onNotify(next ? 'Sideloaded games will look up their art online' : 'Artwork stays offline');
+        onNotify(next ? t('artwork.on') : t('artwork.off'));
       })
       .catch((e) => onNotify(errMsg(e), 'err'))
       .finally(() => setBusy(false));
@@ -173,16 +238,15 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h2 className="text-[14px] font-bold">Sideloaded artwork lookup</h2>
+          <h2 className="text-[14px] font-bold">{t('artwork.heading')}</h2>
           <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-            Find cover and banner art online for games you added by hand, from Steam's public store. Off, Platypus keeps
-            the placeholder and asks nothing new; art you already have stays.
+{t('artwork.description')}
           </p>
         </div>
-        <Switch aria-label="Find artwork online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+        <Switch aria-label={t('artwork.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
       <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
-        <p>Artwork: Steam store search and CDN images (store.steampowered.com).</p>
+        <p>{t('artwork.creditArt')}</p>
       </div>
     </section>
   );
@@ -191,6 +255,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
  *  description and details lookup. Off, nothing goes out: the game page keeps
  *  what it cached before and no new fetch runs. */
 export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -203,7 +268,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
     Effect.runPromise(LauncherApi.setGameInfoOnline(next))
       .then((s) => {
         setOn(s.game_info_online ?? next);
-        onNotify(next ? 'Sideloaded games will look up their info online' : 'Game info stays offline');
+        onNotify(next ? t('gameInfo.on') : t('gameInfo.off'));
       })
       .catch((e) => onNotify(errMsg(e), 'err'))
       .finally(() => setBusy(false));
@@ -212,16 +277,15 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h2 className="text-[14px] font-bold">Sideloaded game info lookup</h2>
+          <h2 className="text-[14px] font-bold">{t('gameInfo.heading')}</h2>
           <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-            Find descriptions and details online for games you added by hand, from Steam, GOG and Lutris (IGDB).
-            Off, Platypus keeps what it fetched before and asks nothing new.
+{t('gameInfo.description')}
           </p>
         </div>
-        <Switch aria-label="Find game info online" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+        <Switch aria-label={t('gameInfo.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
       <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
-        <p>Game info: Steam store details, GOG product descriptions and Lutris (IGDB) summaries.</p>
+        <p>{t('gameInfo.creditInfo')}</p>
       </div>
     </section>
   );
@@ -230,6 +294,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
  *  new chat message when the window isn't focused. Off, only the in-app toasts
  *  stay. On by default, like the other switches. */
 export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
   const [on, setOn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -242,7 +307,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
     Effect.runPromise(LauncherApi.setChatDesktopNotify(next))
       .then((s) => {
         setOn(s.chat_desktop_notify ?? next);
-        onNotify(next ? 'Chat will notify on the desktop' : 'Chat stays in the app');
+        onNotify(next ? t('chat.on') : t('chat.off'));
       })
       .catch((e) => onNotify(errMsg(e), 'err'))
       .finally(() => setBusy(false));
@@ -251,13 +316,12 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h2 className="text-[14px] font-bold">Chat notifications</h2>
+          <h2 className="text-[14px] font-bold">{t('chat.heading')}</h2>
           <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-            Show a desktop notification for a new chat message when the Platypus window isn't focused. Clicking it
-            opens the conversation. Off, new messages only raise the in-app toasts.
+{t('chat.description')}
           </p>
         </div>
-        <Switch aria-label="Desktop notifications for chat" checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
+        <Switch aria-label={t('chat.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
     </section>
   );
@@ -266,6 +330,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
  *  this folder, unless the game has its own prefix. Changing it never moves
  *  or deletes existing prefixes; empty resets it to the default. */
 export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [folder, setFolder] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -287,25 +352,23 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
       .then((s) => {
         setSaved(s);
         setFolder(s.prefixes_folder ?? '');
-        onNotify(path ? 'Wine prefix folder saved' : 'Wine prefix folder reset to the default');
+        onNotify(path ? t('prefixes.saved') : t('prefixes.resetDone'));
       })
       .catch((e) => setError(errMsg(e)))
       .finally(() => setBusy(false));
   };
 
   const browse = () => {
-    Effect.runPromise(LauncherApi.pickFolder('Choose the default Wine prefix folder', folder.trim() || saved?.prefixes_folder || saved?.default_prefixes_folder || ''))
+    Effect.runPromise(LauncherApi.pickFolder(t('prefixes.browseTitle'), folder.trim() || saved?.prefixes_folder || saved?.default_prefixes_folder || ''))
       .then((picked) => { if (picked) { setFolder(picked); setError(null); } })
       .catch((e) => setError(errMsg(e)));
   };
 
   return (
     <section className={SECTION}>
-      <h2 className="text-[14px] font-bold">Wine prefix folder</h2>
+      <h2 className="text-[14px] font-bold">{t('prefixes.heading')}</h2>
       <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-        Where new Wine prefixes are created, one folder per game. A game's own prefix setting still wins.
-        Changing this folder does not move or delete existing prefixes. Games that already have a prefix keep it:
-        Platypus pins it in their settings.
+{t('prefixes.description')}
       </p>
       <form
         className="flex flex-wrap items-center gap-2"
@@ -315,29 +378,25 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
         }}
       >
         <Input
-          aria-label="Default Wine prefix folder"
+          aria-label={t('prefixes.label')}
           value={folder}
           onChange={(e) => { setFolder(e.target.value); setError(null); }}
-          placeholder={saved?.default_prefixes_folder || 'The default prefix folder'}
+          placeholder={saved?.default_prefixes_folder || t('prefixes.placeholder')}
           spellCheck={false}
           disabled={!saved}
           className="min-w-0 max-w-xl flex-1"
         />
-        <Button type="button" variant="neutral" onClick={browse} disabled={!saved || busy}>
-          Browse…
-        </Button>
-        <Button type="submit" variant="primary" disabled={!dirty || busy}>Save</Button>
+        <Button type="button" variant="neutral" onClick={browse} disabled={!saved || busy}>{t('prefixes.browse')}</Button>
+        <Button type="submit" variant="primary" disabled={!dirty || busy}>{t('prefixes.save')}</Button>
         {custom && (
-          <Button type="button" variant="ghost" onClick={() => save('')} disabled={busy}>
-            Reset to default
-          </Button>
+          <Button type="button" variant="ghost" onClick={() => save('')} disabled={busy}>{t('prefixes.reset')}</Button>
         )}
       </form>
       <div className="mt-2.5 flex min-h-4 flex-wrap items-center gap-4">
-        {error ? <ErrorNotice message={error} fallback="Platypus couldn't change the Wine prefix folder." /> : <span />}
+        {error ? <ErrorNotice message={error} fallback={t('prefixError')} /> : <span />}
         {saved && (
           <span className="font-mono text-hint text-white/55">
-            Prefixes are created in {folder.trim() || saved.prefixes_folder || saved.default_prefixes_folder || 'the default folder'}.
+{t('prefixes.effective', { folder: folder.trim() || saved.prefixes_folder || saved.default_prefixes_folder || t('prefixes.placeholder') })}
           </span>
         )}
       </div>

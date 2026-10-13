@@ -436,6 +436,7 @@ export namespace types {
     chat_desktop_notify: boolean;
     prefixes_folder: string;
     default_prefixes_folder: string;
+    language: string;
   }
 
   export interface LedgerEntry {

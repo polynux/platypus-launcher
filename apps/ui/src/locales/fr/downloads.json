@@ -1,0 +1,17 @@
+{
+  "installed": "{{title}} installé",
+  "updated": "{{title}} mis à jour",
+  "uninstalled": "{{title}} désinstallé",
+  "jobFailed": "{{title}} : {{error}}",
+  "queued": "{{action}} de {{title}} en file",
+  "action": {
+    "install": "Installation",
+    "update": "Mise à jour",
+    "uninstall": "Désinstallation"
+  },
+  "actionFailed": {
+    "install": "l'installation a échoué",
+    "update": "la mise à jour a échoué",
+    "uninstall": "la désinstallation a échoué"
+  }
+}

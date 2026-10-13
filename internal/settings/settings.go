@@ -99,6 +99,9 @@ type file struct {
 	// PrefixesFolder is where Wine prefixes are created (issue #37). Empty
 	// means the default (<data>/prefixes).
 	PrefixesFolder string `json:"prefixes_folder,omitempty"`
+	// Language is the UI language the user picked (issue #39): "" means
+	// System, resolved in the shell from the OS languages.
+	Language string `json:"language,omitempty"`
 	// MigrationNoticeDismissed remembers that the user dismissed the one-time
 	// Hydra→Platypus migration notice (issue #14), so it never returns.
 	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`

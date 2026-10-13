@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach } from 'vitest';
+import i18n, { setSessionInfo } from '../lib/i18n';
 
 // jsdom lacks scrollTo; App scrolls main on view change.
 if (!Element.prototype.scrollTo) {
@@ -59,7 +60,11 @@ globalThis.fetch = ((input: unknown, init?: unknown) => {
 // Every test runs as if inside the desktop shell: the UI only talks to the Go
 // core through window.platypus (see effect/bridge.ts). Tests that assert on
 // bridge calls override openExternal (or the whole stub) themselves.
-beforeEach(() => {
+// i18n starts in English (issue #39): tests asserting English text run under
+// the default `en`, and each test resets any language it changed.
+beforeEach(async () => {
+  setSessionInfo(null);
+  if (i18n.language !== 'en') await i18n.changeLanguage('en');
   window.platypus = {
     invoke: async () => {
       throw new Error('unexpected core call in test');

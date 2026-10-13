@@ -1,0 +1,86 @@
+{
+  "title": "Paramètres",
+  "subtitle": "Réglages généraux de Platypus, enregistrés dans ~/.local/share/platypus/settings.json.",
+  "language": {
+    "heading": "Langue",
+    "description": "La langue du lanceur. Système suit la langue de votre bureau. S'applique aussitôt, sans redémarrage.",
+    "label": "Langue",
+    "system": "Système",
+    "saved": "Langue enregistrée",
+    "pseudoNote": "Pseudo-langue pour vérifier les mises en page (développement uniquement)."
+  },
+  "folders": {
+    "heading": "Dossiers de jeux",
+    "description": {
+      "before": "Où s'installent les jeux. Les jeux d'une boutique vont dans leur propre sous-dossier du dossier par défaut, par exemple",
+      "after": ". L'étape « Installer vers… » de chaque jeu propose tous les dossiers ci-dessous. Steam garde ses propres dossiers de bibliothèque."
+    },
+    "pending": "pas encore créé",
+    "default": "par défaut",
+    "makeDefaultLabel": "Faire de {{folder}} le dossier par défaut",
+    "madeDefault": "Dossier de jeux par défaut changé",
+    "makeDefault": "par défaut",
+    "removeLabel": "Retirer {{folder}}",
+    "removed": "Dossier de jeux retiré",
+    "error": "Platypus n'a pas pu changer les dossiers de jeux.",
+    "add": "Ajouter un dossier…",
+    "added": "Dossier de jeux ajouté"
+  },
+  "prefixes": {
+    "heading": "Dossier des préfixes Wine",
+    "description": "Où sont créés les nouveaux préfixes Wine, un dossier par jeu. Le préfixe propre d'un jeu reste prioritaire. Changer ce dossier ne déplace ni ne supprime les préfixes existants. Les jeux qui ont déjà un préfixe le gardent : Platypus l'épingle dans leurs paramètres.",
+    "label": "Dossier des préfixes Wine par défaut",
+    "placeholder": "Le dossier des préfixes par défaut",
+    "browse": "Parcourir…",
+    "save": "Enregistrer",
+    "reset": "Réinitialiser",
+    "browseTitle": "Choisissez le dossier des préfixes Wine par défaut",
+    "effective": "Les préfixes sont créés dans {{folder}}.",
+    "saved": "Dossier des préfixes Wine enregistré",
+    "resetDone": "Dossier des préfixes Wine réinitialisé"
+  },
+  "cleanup": {
+    "heading": "Téléchargements annulés",
+    "description": "Combien de temps Platypus garde les données partiellement téléchargées d'un téléchargement annulé avant de les supprimer. Le téléchargement peut encore reprendre pendant ce temps. 0 le supprime aussitôt ; un téléchargement en pause n'est jamais touché.",
+    "keepFor": "Garder pendant",
+    "days": "jours",
+    "daysLabel": "Jours de conservation des données des téléchargements annulés",
+    "saved": "Réglage du nettoyage des téléchargements enregistré"
+  },
+  "ratings": {
+    "heading": "Notes, protection et données anti-triche",
+    "description": "Récupérer en ligne les notes ProtonDB, les infos de protection de PCGamingWiki et la liste anti-triche. Désactivé, Platypus affiche ce qu'il a déjà enregistré sans rien demander de nouveau.",
+    "label": "Récupérer les infos des jeux en ligne",
+    "on": "Les infos des jeux seront récupérées en ligne",
+    "off": "Les infos des jeux restent hors ligne",
+    "creditCompat": "Notes de compatibilité : rapports de la communauté ProtonDB (protondb.com).",
+    "creditWiki": "Infos de protection : contributeurs PCGamingWiki, CC BY-NC-SA 3.0 (pcgamingwiki.com). Pour ce lanceur non commercial uniquement.",
+    "creditAnticheat": "Liste anti-triche : AreWeAntiCheatYet, licence MIT (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet)."
+  },
+  "artwork": {
+    "heading": "Recherche des visuels des jeux ajoutés",
+    "description": "Trouver en ligne les jaquettes et bannières des jeux que vous avez ajoutés à la main, depuis la boutique publique de Steam. Désactivé, Platypus garde l'image générique sans rien demander de nouveau ; vos visuels déjà récupérés restent.",
+    "label": "Trouver les visuels en ligne",
+    "on": "Les jeux ajoutés chercheront leurs visuels en ligne",
+    "off": "Les visuels restent hors ligne",
+    "creditArt": "Visuels : recherche et images CDN du magasin Steam (store.steampowered.com)."
+  },
+  "gameInfo": {
+    "heading": "Recherche des infos des jeux ajoutés",
+    "description": "Trouver en ligne descriptions et détails des jeux que vous avez ajoutés à la main, depuis Steam, GOG et Lutris (IGDB). Désactivé, Platypus garde ce qu'il a déjà récupéré sans rien demander de nouveau.",
+    "label": "Trouver les infos des jeux en ligne",
+    "on": "Les jeux ajoutés chercheront leurs infos en ligne",
+    "off": "Les infos des jeux restent hors ligne",
+    "creditInfo": "Infos des jeux : fiches Steam, descriptions GOG et résumés Lutris (IGDB)."
+  },
+  "chat": {
+    "heading": "Notifications de discussion",
+    "description": "Afficher une notification système pour un nouveau message quand la fenêtre Platypus n'est pas au premier plan. Un clic ouvre la conversation. Désactivé, les nouveaux messages n'affichent que les notifications internes.",
+    "label": "Notifications de discussion sur le bureau",
+    "on": "La discussion notifiera sur le bureau",
+    "off": "La discussion reste dans l'application"
+  },
+  "loadError": "Platypus n'a pas pu charger les paramètres.",
+  "prefixError": "Platypus n'a pas pu changer le dossier des préfixes Wine.",
+  "cleanupError": "Platypus n'a pas pu nettoyer ces dossiers."
+}

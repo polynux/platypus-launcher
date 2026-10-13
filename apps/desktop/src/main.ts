@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createChatNotifier, validNotifyMessage } from './chatNotify.ts';
 import { Core } from './core.ts';
+import { resolveShellLanguage, shellText } from './locale.ts';
 import { resolvePaths } from './paths.ts';
 import { coreEnv, resolveUserData } from './userdata.ts';
 import { APP_ORIGIN, csp, isAppURL, isArtPath, safePath, staticFile, webURL } from './security.ts';
@@ -50,6 +51,21 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 let core: Core | undefined;
 let quitting = false;
 let storesRef: StoreViews | undefined;
+// The shell's own language (issue #39): resolved from the launcher setting
+// once the core answers, system languages until then.
+let shellLang = resolveShellLanguage('', app.getPreferredSystemLanguages());
+
+async function refreshShellLang(): Promise<void> {
+  try {
+    const s = (await core?.call('GetLauncherSettings', [])) as { language?: unknown } | undefined;
+    shellLang = resolveShellLanguage(
+      typeof s?.language === 'string' ? s.language : '',
+      app.getPreferredSystemLanguages(),
+    );
+  } catch {
+    // An unreadable setting keeps the system-resolved language.
+  }
+}
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -60,7 +76,7 @@ async function startCore(): Promise<Core> {
   };
   c.onCrash = (code) => {
     if (quitting) return;
-    dialog.showErrorBox('Platypus', `The Platypus core stopped unexpectedly (exit ${code}). See the terminal for its log.`);
+    dialog.showErrorBox(shellText(shellLang, 'appName'), shellText(shellLang, 'coreCrashed', { code: code ?? '?' }));
     app.exit(1);
   };
   c.handlers.set('dialog.openFile', async (p) => {
@@ -127,6 +143,21 @@ function registerChatIPC(): void {
       openChatConversation(raw.plugin, raw.friendId),
     );
     return { ok: true, shown: outcome !== 'dropped' };
+  });
+}
+
+/** The shell session for the UI's language choice (issue #39): the OS
+ *  language list and whether this is a dev session. Only the app page may ask. */
+function registerSessionIPC(): void {
+  ipcMain.handle('platypus:session-info', (e) => {
+    if (!fromApp(e)) return { ok: false, error: 'refused: not the app page' };
+    return {
+      ok: true,
+      result: {
+        systemLanguages: app.getPreferredSystemLanguages(),
+        devtools: !app.isPackaged && process.env.PLATYPUS_DEVTOOLS === '1',
+      },
+    };
   });
 }
 
@@ -332,12 +363,17 @@ void app.whenReady().then(async () => {
   try {
     core = await startCore();
   } catch (err) {
-    dialog.showErrorBox('Platypus', `Could not start the Platypus core:\n${err instanceof Error ? err.message : String(err)}`);
+    dialog.showErrorBox(
+      shellText(shellLang, 'appName'),
+      shellText(shellLang, 'coreStartFailed', { error: err instanceof Error ? err.message : String(err) }),
+    );
     app.exit(1);
     return;
   }
   registerIPC();
+  registerSessionIPC();
   registerChatIPC();
+  await refreshShellLang();
   registerAppProtocol();
   const stores = createWindow();
   registerStoreIPC(stores);

@@ -328,6 +328,9 @@ type LauncherSettings struct {
 	// DefaultPrefixesFolder is <data>/prefixes, used when PrefixesFolder
 	// is empty.
 	DefaultPrefixesFolder string `json:"default_prefixes_folder"`
+	// Language is the UI language the user picked (issue #39): "" means
+	// System, resolved in the shell from the OS languages.
+	Language string `json:"language"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when

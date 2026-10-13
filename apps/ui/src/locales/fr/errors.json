@@ -1,0 +1,6 @@
+{
+  "fallback": "Quelque chose a mal tourné. Réessayez.",
+  "gameFailed": "{{title}} : {{error}}",
+  "launchFailedText": "le lancement a échoué",
+  "notPersisted": "Non enregistré sur le disque, vaut pour cette session : {{error}}"
+}

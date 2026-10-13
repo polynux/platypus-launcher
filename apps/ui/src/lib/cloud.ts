@@ -1,5 +1,6 @@
 import type { CloudEvent, CloudInfo, CloudMode, CloudState, CloudStatus } from '../types';
 import { formatBytes } from './games';
+import { currentLocale } from './format';
 import { plainError } from './plainError';
 
 export const CLOUD_MODES: CloudMode[] = ['off', 'ask', 'auto'];
@@ -41,15 +42,15 @@ export function describeCounts(c: CloudStatus['counts']): string {
 
 /** A file size. Save files are small and two copies often differ by a few
  *  bytes, so below 1 MB it is the exact count ("3,705 B"); an empty file is "0 B". */
-export function fileSize(n: number): string {
-  if (n < 1_000_000) return `${Math.max(0, n).toLocaleString()} B`;
+export function fileSize(n: number, locale: string = currentLocale()): string {
+  if (n < 1_000_000) return `${Math.max(0, n).toLocaleString(locale)} B`;
   return formatBytes(n);
 }
 
 /** "Mar 3, 2026, 4:12 PM" in the user's locale. */
-export function whenLabel(unixSeconds: number): string {
+export function whenLabel(unixSeconds: number, locale: string = currentLocale()): string {
   if (!unixSeconds) return 'unknown date';
-  return new Date(unixSeconds * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(unixSeconds * 1000).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 /** "just now", "5 min ago", "3 h ago", or a date for anything older. */
