@@ -28,7 +28,7 @@ cat > "$dest/plugin.json" <<EOF
   "author": "you",
   "description": "Scaffolded store plugin: lists one game, installs and launches it. Edit bin/platypus-$id.",
   "manifestVersion": 1,
-  "protocol": { "versions": ["1.0"], "transport": "jsonrpc-stdio" },
+  "protocol": { "versions": ["1.0", "1.14"], "transport": "jsonrpc-stdio" },
   "store": "$store",
   "exec": "bin/platypus-$id",
   "capabilities": ["library", "install", "launch", "auth"],
@@ -53,6 +53,26 @@ import threading
 
 API = 1
 CODE_AUTH_REQUIRED = -32001
+
+# The user's locale from initialize {locale} (protocol 1.14), kept current
+# through locale.changed. Return already-localized text for it (issue #39):
+# look up a small per-plugin table, falling back to English. See
+# docs/plugins/protocol.md §Locale; plugins/echo/locales/ is the reference.
+LOCALE = "en"
+STRINGS = {
+    "en": {"login_hint": "Log in to the store, then paste anything to continue."},
+    "fr": {"login_hint": "Connectez-vous au magasin, puis collez n'importe quoi pour continuer."},
+}
+
+
+def set_locale(tag):
+    global LOCALE
+    LOCALE = (tag or "").strip() or "en"
+
+
+def tr(key):
+    base = (LOCALE or "").strip().lower().split("-")[0] or "en"
+    return (STRINGS.get(base) or {}).get(key) or STRINGS["en"].get(key) or key
 
 
 class RPCError(Exception):
@@ -94,7 +114,7 @@ def auth_status(_params=None):
 def auth_begin(_params):
     # BEGIN STORE: point the user at the real login and ask for the credential.
     return {
-        "instructions": "Log in to the store, then paste anything to continue.",
+        "instructions": tr("login_hint"),
         "fields": [{"id": "token", "label": "login code", "secret": True}],
     }
 
@@ -288,8 +308,10 @@ def game_details(params):
 # --- dispatch ------------------------------------------------------------
 
 def initialize(params):
+    set_locale((params or {}).get("locale") or "en")
     return {"name": "STUBNAME", "version": "0.1.0",
-            "api": API, "capabilities": ["library", "install", "launch", "auth"], "missing": []}
+            "api": API, "protocol": "1.14",
+            "capabilities": ["library", "install", "launch", "auth"], "missing": []}
 
 
 METHODS = {
@@ -338,6 +360,8 @@ def main():
             send({"error": {"code": -32700, "message": str(e)}})
             continue
         if "id" not in msg:
+            if msg.get("method") == "locale.changed":
+                set_locale((msg.get("params") or {}).get("locale") or "en")
             continue  # notifications need no answer
         # Installs and logins take a while; answer concurrently so
         # job.cancel stays responsive.

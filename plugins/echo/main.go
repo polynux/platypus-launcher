@@ -33,7 +33,7 @@
 //	ECHO_UNAVAILABLE   methods that answer -32002 "unavailable right now"
 //	ECHO_MISSING       methods that answer -32601 "method not found"
 //	ECHO_INIT_OMIT     set: initialize leaves `capabilities` out (means "all declared")
-//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.13); it answers the highest Platypus also offers
+//	ECHO_PROTOCOLS     protocol versions echo speaks (default 1.0 to 1.14); it answers the highest Platypus also offers
 //	ECHO_NO_PROTOCOL   set: initialize leaves `protocol` out, like a plugin from before negotiation
 //	ECHO_PROTOCOL      protocol version initialize answers whatever was negotiated (a protocol violation)
 //	ECHO_FUTURE        set: initialize carries a field, and echo sends a notification, that only a newer Platypus knows
@@ -189,9 +189,9 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: 1.0 to 1.13, so it meets the highest
+// defaultProtocols is what echo speaks: 1.0 to 1.14, so it meets the highest
 // revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"}
 
 var (
 	knobMu  sync.Mutex
@@ -313,7 +313,12 @@ func versionLess(a, b string) bool {
 func initializeResult(p params) (map[string]any, error) {
 	knobMu.Lock()
 	defer knobMu.Unlock()
-	res := map[string]any{"name": "Echo (test plugin)", "version": "0.3.0", "api": 1, "missing": []any{}}
+	res := map[string]any{"name": "Echo (test plugin)", "version": "0.4.0", "api": 1, "missing": []any{}}
+	loc := strings.TrimSpace(p.Locale)
+	if loc == "" {
+		loc = "en"
+	}
+	setLocale(loc)
 	if os.Getenv("ECHO_NO_PROTOCOL") == "" {
 		picked, ok := negotiate(p.Protocols)
 		if v := os.Getenv("ECHO_PROTOCOL"); v != "" {
@@ -430,6 +435,7 @@ func save() {
 func main() {
 	load()
 	loadKnobs()
+	loadLocales()
 	loadCloud()
 	loadSocial()
 	loadChat()
@@ -447,10 +453,25 @@ func main() {
 			continue
 		}
 		if m.ID == nil {
+			handleNotification(m.Method, m.Params)
 			continue // notifications need no answer
 		}
 		go handle(m)
 	}
+}
+
+// handleNotification applies core→plugin notifications that carry no reply.
+// locale.changed (protocol 1.14) keeps the plugin's texts in the user's
+// language without a restart.
+func handleNotification(method string, raw json.RawMessage) {
+	if method != "locale.changed" {
+		return
+	}
+	var p struct {
+		Locale string `json:"locale"`
+	}
+	_ = json.Unmarshal(raw, &p)
+	setLocale(p.Locale)
 }
 
 func handle(m message) {
@@ -480,6 +501,7 @@ type params struct {
 	Preview    bool              `json:"preview"`
 	Fields     map[string]string `json:"fields"`
 	Protocols  []string          `json:"protocols"` // initialize: the versions Platypus speaks
+	Locale     string            `json:"locale"`    // initialize (1.14): the user's BCP 47 locale
 
 	// family.setPreferredCopy: the owner whose copy of the game is picked.
 	OwnerID string `json:"ownerId"`
@@ -563,7 +585,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "auth.begin":
 		return map[string]any{
 			"url":          "https://example.com/platypus-echo-login",
-			"instructions": "Echo has no real login page. Type the code letmein.",
+			"instructions": text("auth_instructions"),
 			"fields":       []map[string]any{{"id": "code", "label": "Code", "placeholder": "letmein"}},
 		}, nil
 	case "auth.complete":
@@ -599,7 +621,7 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		out := map[string]any{}
 		if g.details {
 			out = map[string]any{
-				"summary":     "A tiny fake game from the Echo test store, shown on its game page.",
+				"summary":     text("details_summary"),
 				"screenshots": echoScreenshots(p.ID),
 				"genres":      []string{"Test"},
 				"developers":  []string{"Echo Software"},
