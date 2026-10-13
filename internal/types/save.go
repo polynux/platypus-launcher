@@ -4,7 +4,9 @@ package types
 // anything (issue #42). BackupID names the backup the gate just wrote (""
 // when none); Files and Bytes count what it holds; NoPaths means Platypus
 // knows no save paths for the game, so the UI must ask for an explicit
-// "delete without a save backup" confirmation.
+// "delete without a save backup" confirmation. Cloud means the game's store
+// syncs saves to the cloud, so a no-paths gate passes without that
+// confirmation (the cloud holds the saves).
 type SaveGate struct {
 	BackupID string `json:"backup_id,omitempty"`
 	Files    int    `json:"files"`
@@ -16,6 +18,10 @@ type SaveGate struct {
 	// Off is true in a preview when backups don't apply to the game (turned
 	// off globally or for it): nothing will be backed up first.
 	Off bool `json:"off,omitempty"`
+	// Cloud is true in a preview when the game's store syncs saves to the
+	// cloud and no save paths are known: the gate passes without the
+	// delete-without-backup confirmation.
+	Cloud bool `json:"cloud,omitempty"`
 }
 
 // SavePath is one resolved save location of a game: where it is on disk,
@@ -80,4 +86,12 @@ type RestorePreview struct {
 	Kept        int   `json:"kept"`
 	Files       int   `json:"files"`
 	Bytes       int64 `json:"bytes"`
+}
+
+// AutoBackupState is whether after-session automatic backups run for a game
+// and why: "on", "cloud" (the store syncs saves, so Platypus skips unless the
+// per-game override forces it) or "off".
+type AutoBackupState struct {
+	On     bool   `json:"on"`
+	Reason string `json:"reason"`
 }

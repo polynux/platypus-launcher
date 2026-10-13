@@ -143,11 +143,23 @@ func (s *Store) SetBackupsMode(mode string) error {
 	return nil
 }
 
-// BackupAfterSession says whether a backup runs after each session (off by default).
+// BackupAfterSession says whether a backup runs after each session: on by
+// default (unset means on), explicit false switches it off.
 func (s *Store) BackupAfterSession() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.data.BackupAfterSession
+	if s.data.BackupAfterSession == nil {
+		return true
+	}
+	return *s.data.BackupAfterSession
+}
+
+// BackupAfterSessionSet reports whether the user explicitly chose the
+// after-session switch (unset means the default on).
+func (s *Store) BackupAfterSessionSet() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.BackupAfterSession != nil
 }
 
 // SetBackupAfterSession saves the after-session switch.
@@ -155,7 +167,8 @@ func (s *Store) SetBackupAfterSession(on bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	prev := s.data.BackupAfterSession
-	s.data.BackupAfterSession = on
+	v := on
+	s.data.BackupAfterSession = &v
 	if err := s.save(); err != nil {
 		s.data.BackupAfterSession = prev
 		return err

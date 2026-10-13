@@ -1,6 +1,9 @@
 package steam
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,5 +94,51 @@ func TestSingleUserID(t *testing.T) {
 	}
 	if got := SingleUserID(root2); got != "333" {
 		t.Fatalf("user with stray dir = %q, want 333", got)
+	}
+}
+
+func TestCachedHasSteamCloud(t *testing.T) {
+	t.Parallel()
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		app := r.URL.Query().Get("appids")
+		cloud := `{"id":23,"description":"Steam Cloud"}`
+		if app == "2" {
+			cloud = `{"id":4,"description":"Single-player"}`
+		}
+		fmt.Fprintf(w, `{%q: {"success": true, "data": {"categories": [%s]}}}`, app, cloud)
+	}))
+	defer srv.Close()
+	c := NewStoreClient()
+	c.Base = srv.URL
+	c.HTTPClient = srv.Client()
+	if has, ok := c.CachedHasSteamCloud("1"); ok || has {
+		t.Fatalf("uncached = %v,%v, want false,false", has, ok)
+	}
+	if _, err := c.Details("", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Details("", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 2 {
+		t.Fatalf("hits = %d, want 2", hits)
+	}
+	if has, ok := c.CachedHasSteamCloud("1"); !ok || !has {
+		t.Fatalf("cloud game = %v,%v, want true,true", has, ok)
+	}
+	if has, ok := c.CachedHasSteamCloud("2"); !ok || has {
+		t.Fatalf("non-cloud game = %v,%v, want false,true", has, ok)
+	}
+	if has, ok := c.CachedHasSteamCloud("3"); ok || has {
+		t.Fatalf("unknown game = %v,%v, want false,false", has, ok)
+	}
+	// Cached answers cost no new request.
+	if _, err := c.Details("", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 2 {
+		t.Fatalf("cached details hit the network: %d", hits)
 	}
 }

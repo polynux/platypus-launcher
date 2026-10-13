@@ -174,8 +174,11 @@ func (t *Tracker) StopAll() {
 
 // WatchClient follows a game started through a store's own client (Steam).
 // client names it in messages; find returns the game's PID, or 0 while it
-// isn't running. It reports false when the game is already tracked.
-func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration) bool {
+// isn't running. It reports false when the game is already tracked. opts
+// register on-exit hooks like StartDirect: they run after the final stopped
+// event when the game actually ran (not when the client never started it),
+// so after-session backups fire for client launches too.
+func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeout time.Duration, opts ...StartOption) bool {
 	if startTimeout <= 0 {
 		startTimeout = clientStartTimeout
 	}
@@ -183,6 +186,11 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 	if e == nil {
 		return false
 	}
+	t.mu.Lock()
+	for _, o := range opts {
+		o(e)
+	}
+	t.mu.Unlock()
 	msg := "Waiting for " + client + " to start the game"
 	t.setMessage(gameID, msg)
 	t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: msg})
@@ -214,7 +222,14 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 		for find() != 0 {
 			time.Sleep(pollEvery)
 		}
+		stoppedByUser := t.userStopped(e)
+		t.mu.Lock()
+		hooks := append([]func(ExitInfo){}, e.onExits...)
+		t.mu.Unlock()
 		t.emitStopped(gameID, e)
+		for _, h := range hooks {
+			h(ExitInfo{Stopped: stoppedByUser})
+		}
 	}()
 	return true
 }

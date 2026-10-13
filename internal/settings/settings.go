@@ -123,8 +123,10 @@ type file struct {
 	// BackupsMode is the global save-backup mode (issue #42): "destructive"
 	// (default), "all" or "off". Empty means the default.
 	BackupsMode string `json:"backups_mode,omitempty"`
-	// BackupAfterSession runs a backup after each session (issue #42).
-	BackupAfterSession bool `json:"backup_after_session,omitempty"`
+	// BackupAfterSession runs a backup after each session. A pointer: unset
+	// means on (backups for all games without cloud sync), false is an
+	// explicit off.
+	BackupAfterSession *bool `json:"backup_after_session,omitempty"`
 	// GameSaveBackup is each game's backup override by Platypus game id
 	// (issue #42): "" follows the global mode, "on" or "off".
 	GameSaveBackup map[string]string `json:"game_save_backup,omitempty"`

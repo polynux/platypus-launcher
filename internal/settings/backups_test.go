@@ -18,8 +18,11 @@ func TestBackupSettingsRoundTrip(t *testing.T) {
 	if s.KeepBackups() != DefaultKeepBackups {
 		t.Errorf("keep = %d, want %d", s.KeepBackups(), DefaultKeepBackups)
 	}
-	if s.BackupAfterSession() {
-		t.Error("after-session defaults on")
+	if !s.BackupAfterSession() {
+		t.Error("after-session defaults on (unset means on)")
+	}
+	if s.BackupAfterSessionSet() {
+		t.Error("after-session should be unset initially")
 	}
 	if got := s.ResolvedBackupsDir(filepath.Join(home, "data")); got != filepath.Join(home, "data", "backups") {
 		t.Errorf("backups dir = %q", got)

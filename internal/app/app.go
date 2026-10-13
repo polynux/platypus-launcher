@@ -895,12 +895,14 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 // and follows the game itself. With the client running, the command forwards
 // the request and exits; if not, it becomes the client and keeps running.
 // Either way, follow the game itself (Steam: its reaper process), not this PID.
+// The after-session backup hook runs when the client-tracked session ends,
+// like for direct launches.
 func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunch) (string, error) {
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 	}
 	go func() { _ = cmd.Wait() }()
-	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout) {
+	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout, a.afterSessionHook(game)) {
 		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
 	return "Asked " + cl.Client + " to start " + game.Title, nil

@@ -79,6 +79,7 @@ type storeApp struct {
 		Description string `json:"description"`
 	} `json:"genres"`
 	Categories []struct {
+		ID          int    `json:"id"`
 		Description string `json:"description"`
 	} `json:"categories"`
 	ReleaseDate struct {
@@ -239,6 +240,39 @@ func (c *StoreClient) Details(root, appID string) (*types.GameDetails, error) {
 	return d, nil
 }
 
+// SteamCloudCategoryID is the appdetails category id for Steam Cloud.
+const SteamCloudCategoryID = 23
+
+// CachedHasSteamCloud reports whether the cached appdetails for appID include
+// Steam Cloud (category 23), using only what the client already fetched: no
+// store round trip. ok is false when nothing is cached for the app (unknown
+// means false for callers).
+func (c *StoreClient) CachedHasSteamCloud(appID string) (has, ok bool) {
+	if c == nil || appID == "" {
+		return false, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, a := range c.cache {
+		if key != appID && len(key) <= len(appID) {
+			continue
+		}
+		if key != appID && key[:len(appID)+1] != appID+"\x00" {
+			continue
+		}
+		if a == nil {
+			continue
+		}
+		ok = true
+		for _, cat := range a.Categories {
+			if cat.ID == SteamCloudCategoryID {
+				return true, true
+			}
+		}
+	}
+	return false, ok
+}
+
 // parseLanguages turns the Store's supported_languages HTML ("English<strong>*</strong>,
 // French, …") into plain language names.
 func parseLanguages(raw string) []string {
@@ -333,6 +367,7 @@ func requiredAge(v any) string {
 }
 
 func categoryNames(in []struct {
+	ID          int    `json:"id"`
 	Description string `json:"description"`
 }) []string {
 	out := make([]string, 0, len(in))

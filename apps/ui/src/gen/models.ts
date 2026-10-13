@@ -119,6 +119,11 @@ export namespace types {
     qr?: string;
   }
 
+  export interface AutoBackupState {
+    on: boolean;
+    reason: string;
+  }
+
   export interface BackupSettings {
     folder: string;
     default_folder: string;
@@ -595,6 +600,7 @@ export namespace types {
     no_paths: boolean;
     unchanged?: boolean;
     off?: boolean;
+    cloud?: boolean;
   }
 
   export interface SavePath {
