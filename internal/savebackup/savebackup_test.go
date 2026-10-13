@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -701,5 +702,20 @@ func TestBackupIDsStayInsideTheBackupsFolder(t *testing.T) {
 	svc := New(Options{Settings: newTestSettings(t, root), DataDir: root, CacheDir: filepath.Join(root, "cache"), Home: root})
 	if err := svc.Delete("g", "../../escape"); err == nil {
 		t.Error("deleting a climbing backup id was accepted")
+	}
+}
+
+// Nothing on disk: no empty version is written.
+func TestBackupWithNothingFoundWritesNothing(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	svc := New(Options{Settings: newTestSettings(t, home), DataDir: filepath.Join(home, "data"), CacheDir: filepath.Join(home, "cache"), Home: home})
+	game := types.Game{ID: "g1", Source: "custom", Title: "G1", InstallDir: home}
+	_, _, _, _, err := svc.Backup(game, "manual", BackupOptions{UserPaths: []string{filepath.Join(home, "missing")}})
+	if !errors.Is(err, ErrNothingFound) {
+		t.Fatalf("err = %v, want ErrNothingFound", err)
+	}
+	if got := svc.List("g1"); len(got) != 0 {
+		t.Fatalf("an empty backup was written: %+v", got)
 	}
 }

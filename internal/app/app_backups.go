@@ -2,17 +2,20 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"platypus/internal/apperr"
+	"platypus/internal/cloudsync"
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
 	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/settings"
+	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -169,13 +172,19 @@ func (a *App) backupIDs(game types.Game) (string, string) {
 	return savebackup.GameIDs(game, compat, info)
 }
 
+// backupSteamRoot is the Steam client folder for save resolution: the real
+// install when found, else "" for the default under home.
+func (a *App) backupSteamRoot() string {
+	return steam.RootFor(a.homeDir())
+}
+
 // backupCtx builds the resolution context for a game.
 func (a *App) backupCtx(game types.Game, steamID, gogID string) savebackup.Context {
 	folder, err := a.currentFolder(game)
 	if err == nil {
 		game.InstallDir = folder
 	}
-	ctx := savebackup.NewContextFor(game, a.homeDir(), a.prefixesFolder(), a.resolvedDataDir(), a.backupRunner(game), "")
+	ctx := savebackup.NewContextFor(game, a.homeDir(), a.prefixesFolder(), a.resolvedDataDir(), a.backupRunner(game), a.backupSteamRoot())
 	ctx.SteamID, ctx.GogID = steamID, gogID
 	return ctx
 }
@@ -206,8 +215,14 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	if ferr == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), a.backupSteamRoot(), userPaths)
 	if len(patterns) == 0 {
+		// Cloud games with no known save paths pass without the
+		// "delete without a save backup" confirmation: the cloud holds
+		// the saves. Games without cloud still ask.
+		if a.gameHasCloudSync(game) {
+			return types.SaveGate{Cloud: true}, nil
+		}
 		g := types.SaveGate{NoPaths: true}
 		if allowNoSaves {
 			return g, nil
@@ -220,10 +235,15 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	// action deletes: simpler, and never less safe.
 	b, warned, skippedOut, unresolvedOut, err := svc.Backup(game, trigger, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
 	_ = skippedOut
 	_ = unresolvedOut
+	if errors.Is(err, savebackup.ErrNothingFound) {
+		// Known paths, nothing on disk: nothing to protect.
+		return types.SaveGate{}, nil
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return types.SaveGate{}, ctx.Err()
@@ -237,7 +257,8 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 }
 
 // savesPreview is what the gate would do, without backing anything up: off,
-// no known save paths, or how many save files exist now (CheckRemove).
+// no known save paths, cloud (a cloud game with no known paths passes without
+// confirmation), or how many save files exist now (CheckRemove).
 func (a *App) savesPreview(game types.Game) types.SaveGate {
 	if a.settings != nil && !savebackup.BackupsApplies(a.settings, game.ID) {
 		return types.SaveGate{Off: true}
@@ -250,8 +271,11 @@ func (a *App) savesPreview(game types.Game) types.SaveGate {
 	if folder, err := a.currentFolder(game); err == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), a.backupSteamRoot(), userPaths)
 	if len(patterns) == 0 {
+		if a.gameHasCloudSync(game) {
+			return types.SaveGate{Cloud: true}
+		}
 		return types.SaveGate{NoPaths: true}
 	}
 	files, _, _, _, _ := savebackup.Enumerate(patterns, rctx)
@@ -260,6 +284,85 @@ func (a *App) savesPreview(game types.Game) types.SaveGate {
 		g.Bytes += f.Size
 	}
 	return g
+}
+
+// gameHasCloudSync reports whether the game's store syncs its saves to the
+// cloud, so automatic backups skip it by default. It is true when the game's
+// plugin offers cloud-saves for this game (the capability, and the game's
+// features where the protocol says so) and the effective cloud mode isn't
+// off; or, for built-in Steam games, when the cached store details say the
+// game has Steam Cloud (category 23, no new request per game). Unknown means
+// false.
+func (a *App) gameHasCloudSync(game types.Game) bool {
+	if g, ok := a.cloudGame(game); ok {
+		mode := ""
+		if a.cloud != nil {
+			mode = a.cloud.Mode(g)
+		} else if a.settings != nil {
+			if m := a.settings.CloudGameMode(game.ID); types.ValidCloudMode(m) {
+				mode = m
+			} else if m := a.settings.CloudPluginMode(game.Source); types.ValidCloudMode(m) {
+				mode = m
+			} else {
+				mode = cloudsync.DefaultMode
+			}
+		} else {
+			mode = cloudsync.DefaultMode
+		}
+		if mode != types.CloudOff {
+			return true
+		}
+	}
+	// Only the built-in Steam source launches through the Steam client, which
+	// syncs Steam Cloud; a plugin game with store "steam" (steam-standalone)
+	// is covered by the plugin's own cloud-saves capability above.
+	if game.Source == types.SourceSteam {
+		if game.StoreAppID == "" {
+			return false
+		}
+		if a.stores != nil {
+			if s, ok := a.stores.Get(types.SourceSteam); ok {
+				type cloudCacher interface {
+					HasSteamCloudCached(string) (bool, bool)
+				}
+				if st, ok := s.(cloudCacher); ok {
+					if has, cached := st.HasSteamCloudCached(game.StoreAppID); cached {
+						return has
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// autoBackupState is whether after-session automatic backups run for a game:
+// on by default for games without cloud sync, skipped for games with cloud
+// sync unless the per-game override forces it on. The per-game "off" always
+// disables.
+func (a *App) autoBackupState(game types.Game) types.AutoBackupState {
+	if a.settings != nil {
+		if a.settings.GameSaveBackup(game.ID) == "off" {
+			return types.AutoBackupState{On: false, Reason: "off"}
+		}
+		if a.settings.BackupsMode() == settings.BackupsOff && a.settings.GameSaveBackup(game.ID) != "on" {
+			return types.AutoBackupState{On: false, Reason: "off"}
+		}
+	}
+	cloud := a.gameHasCloudSync(game)
+	if cloud && (a.settings == nil || a.settings.GameSaveBackup(game.ID) != "on") {
+		return types.AutoBackupState{On: false, Reason: "cloud"}
+	}
+	if a.settings != nil && !a.settings.BackupAfterSession() && a.settings.GameSaveBackup(game.ID) != "on" {
+		return types.AutoBackupState{On: false, Reason: "off"}
+	}
+	return types.AutoBackupState{On: true, Reason: "on"}
+}
+
+// GetAutoBackupState returns whether after-session automatic backups run for
+// a game and why, for the Maintenance section's effective-state line.
+func (a *App) GetAutoBackupState(game types.Game) (types.AutoBackupState, error) {
+	return a.autoBackupState(game), nil
 }
 
 // backupCloudGate refuses a destructive backup while a cloud job holds the
@@ -320,7 +423,7 @@ func (a *App) GetSavePaths(game types.Game) ([]types.SavePath, error) {
 	if err == nil {
 		game.InstallDir = folder
 	}
-	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), "", userPaths)
+	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupRunner(game), a.prefixesFolder(), a.backupSteamRoot(), userPaths)
 	if roots == nil {
 		return []types.SavePath{}, nil
 	}
@@ -557,8 +660,12 @@ func (a *App) runCoreBackup(ctx context.Context, j types.Job) {
 	}
 	_, _, _, _, err := a.saveService().Backup(game, trigger, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
+	if errors.Is(err, savebackup.ErrNothingFound) {
+		err = fmt.Errorf("no save files of %s were found on disk; nothing was backed up", game.Title)
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return
@@ -608,8 +715,12 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 		}
 		_, _, _, _, err := svc.Backup(game, triggerBeforeRestore, savebackup.BackupOptions{
 			RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
+		if errors.Is(err, savebackup.ErrNothingFound) {
+			return nil // nothing on disk to keep before restoring
+		}
 		return err
 	}
 	if _, _, err := svc.Restore(game, j.Destination, rctx, safety); err != nil {
@@ -622,14 +733,13 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 	a.jobs.Notify(j.Source, "job.done", plugins.JobUpdate{JobID: j.ID})
 }
 
-// backupAfterSession runs after a session when backup_after_session is on
-// (off by default): cloud push first, backup second. It waits, bounded, while
-// a cloud job for the game runs, then skips with an event when still busy.
+// backupAfterSession runs after a session for games without cloud sync, on
+// by default (backup_after_session unset means on; the per-game "on" forces
+// it for cloud games, "off" disables it). Cloud push runs first, backup
+// second. It waits, bounded, while a cloud job for the game runs, then skips
+// with an event when still busy.
 func (a *App) backupAfterSession(game types.Game) {
-	if a.settings == nil || !a.settings.BackupAfterSession() {
-		return
-	}
-	if a.settings.BackupsMode() == settings.BackupsOff || a.settings.GameSaveBackup(game.ID) == "off" {
+	if !a.autoBackupState(game).On {
 		return
 	}
 	if g, ok := a.cloudGame(game); ok && a.cloud != nil {
@@ -653,9 +763,10 @@ func (a *App) backupAfterSession(game types.Game) {
 	}
 	_, _, _, _, err := a.saveService().Backup(game, triggerAfterSession, savebackup.BackupOptions{
 		RunnerPath: a.backupRunner(game), PrefixesFolder: a.prefixesFolder(),
+		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, savebackup.ErrNothingFound) {
 		a.host.Emit("backups", savebackup.Event{Kind: savebackup.EvFailed, GameID: game.ID, Trigger: triggerAfterSession, Message: err.Error()})
 	}
 }

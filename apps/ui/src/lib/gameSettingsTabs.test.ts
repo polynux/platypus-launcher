@@ -35,15 +35,15 @@ describe('settingsTabs', () => {
 
   it('keeps file-acting tabs for an installed game; versions stay for choosing before the install', () => {
     const tabs = settingsTabs({ game: game({ is_installed: false }), plugin: plugin(ALL), tweaks: [tweak] });
-    expect(tabs).toEqual(['general', 'versions', 'plugin', 'customization']);
+    expect(tabs).toEqual(['general', 'versions', 'plugin', 'customization', 'maintenance']);
   });
 
   it("has no versions tab for a game Platypus can't install", () => {
     expect(settingsTabs({ game: game({ is_installed: false, installable: false }), plugin: plugin(ALL), tweaks: [] })).not.toContain('versions');
   });
 
-  it('gives Steam only the core tabs; sideloaded games get Maintenance for removing', () => {
-    expect(settingsTabs({ game: game({ source: 'steam', store: 'steam' as never }), tweaks: [] })).toEqual(['general', 'customization']);
+  it('gives every game Maintenance for save backups; sideloaded games get it for removing too', () => {
+    expect(settingsTabs({ game: game({ source: 'steam', store: 'steam' as never }), tweaks: [] })).toEqual(['general', 'customization', 'maintenance']);
     expect(settingsTabs({ game: game({ source: 'custom', store: 'custom' as never }), tweaks: [tweak] })).toEqual(['general', 'tweaks', 'customization', 'maintenance']);
     expect(settingsTabs({ game: game({ source: 'custom', store: 'custom' as never }), tweaks: [] })).toEqual(['general', 'customization', 'maintenance']);
   });

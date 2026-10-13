@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   getInstallSize: vi.fn(),
   getSavePaths: vi.fn(),
   getGameSaveBackup: vi.fn(),
+  getAutoBackupState: vi.fn(),
   listSaveBackups: vi.fn(),
 }));
 
@@ -73,6 +74,7 @@ beforeEach(() => {
   api.removeGame.mockResolvedValue(job({ id: 'remove-1', kind: 'remove' }));
   api.getSavePaths.mockResolvedValue([]);
   api.getGameSaveBackup.mockResolvedValue('');
+  api.getAutoBackupState.mockResolvedValue({ on: true, reason: 'on' });
   api.listSaveBackups.mockResolvedValue([]);
 });
 
@@ -338,6 +340,106 @@ describe('Remove from library for sideloaded games', () => {
     openTab('Maintenance');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(onJobAction).toHaveBeenCalledWith('retry', 'remove-1');
+  });
+});
+
+describe('Save backups for every game', () => {
+  const steamGame = (): Game => game({
+    id: 'steam_10', source: 'steam', store: 'steam', store_app_id: '10',
+    title: 'Steam Counter', install_dir: '/home/you/.local/share/Steam/steamapps/common/Counter',
+    executable: '', is_installed: true, installable: false, features: null,
+  });
+
+  it('shows Save backups for a Steam game with no plugin', async () => {
+    render(<GamePage game={steamGame()} plugin={undefined} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/save backups/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Back up now/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull();
+  });
+
+  it('shows only Save backups for an uninstalled plugin game', async () => {
+    render(<GamePage game={game({ is_installed: false })} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/save backups/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Back up now/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Verify files/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Move/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Uninstall' })).toBeNull();
+  });
+
+  it('shows the auto-backup state with its reason', async () => {
+    render(<GamePage game={game()} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/Automatic backups: on/)).toBeTruthy();
+  });
+
+  it('explains when the cloud syncs saves instead', async () => {
+    api.getAutoBackupState.mockResolvedValue({ on: false, reason: 'cloud' });
+    render(<GamePage game={game()} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/Steam Cloud syncs this game's saves/)).toBeTruthy();
+  });
+
+  it('passes the remove gate for a cloud game with no paths', async () => {
+    api.checkRemove.mockResolvedValue({
+      targets: [
+        { kind: 'prefix', path: '/pfx/gem', bytes: 1_000_000, exists: true, allowed: true },
+        { kind: 'files', path: '/games/sideload', bytes: 2_000_000, exists: true, allowed: true },
+      ],
+      saves: { backup_id: '', files: 0, bytes: 0, no_paths: false, cloud: true },
+    });
+    const onRemove = vi.fn();
+    render(<GamePage game={game({
+      id: 'custom-1', source: 'custom', store: 'custom', store_app_id: 'custom',
+      title: 'Sideloaded Gem', install_dir: '/games/sideload', executable: '/games/sideload/gem',
+      features: null,
+    })} {...base} onRemove={onRemove} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    expect(await screen.findByText(/syncs this game's saves to the cloud/)).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: /Delete without a save backup/ })).toBeNull();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also delete the Wine prefix/ }));
+    const remove = screen.getByRole<HTMLButtonElement>('button', { name: 'Remove from library' });
+    expect(remove.disabled).toBe(false);
+  });
+
+  it('disables restore for an uninstalled game while delete still works', async () => {
+    api.listSaveBackups.mockResolvedValue([
+      { id: 'b1', game_id: 'p.echo.tiny', created_at: 1700000000, trigger: 'manual', files: 1, bytes: 10, size: 100 },
+    ]);
+    render(<GamePage game={game({ is_installed: false })} plugin={plugin(['install'])} {...base} />);
+    openTab('Maintenance');
+    expect(await screen.findByText(/Restore unavailable/)).toBeTruthy();
+    const restore = screen.getByRole<HTMLButtonElement>('button', { name: /Restaurer|Restore/ });
+    expect(restore.disabled).toBe(true);
+    expect(screen.getByRole('button', { name: /Delete|Supprimer/ })).toBeTruthy();
+  });
+
+  it('keeps the remove confirm panel stacked with reserved detail lines', async () => {
+    const customGame = (): Game => game({
+      id: 'custom-1', source: 'custom', store: 'custom', store_app_id: 'custom',
+      title: 'Sideloaded Gem', install_dir: '/games/sideload', executable: '/games/sideload/gem',
+      features: null,
+    });
+    render(<GamePage game={customGame()} {...base} onRemove={() => {}} />);
+    openTab('Maintenance');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from library' }));
+    const panel = screen.getByTestId('remove-confirm-panel');
+    // Stacked: no side-by-side flex-wrap row, content stacks full width.
+    expect(panel.className).not.toMatch(/flex-wrap/);
+    expect(panel.querySelector('.mt-3.flex.min-w-0.flex-col')).toBeTruthy();
+    // While measuring, the detail lines reserve the same single line the paths take.
+    expect(screen.getAllByText('Measuring…').length).toBeGreaterThan(0);
+    await screen.findByText(/\/pfx\/gem/);
+    // Long paths truncate with a tooltip and never push the layout.
+    const details = panel.querySelectorAll('span.truncate');
+    expect(details.length).toBeGreaterThan(0);
+    for (const d of Array.from(details)) {
+      expect(d.getAttribute('title')).toBeTruthy();
+      expect(d.className).toMatch(/min-h-\[18px\]/);
+    }
   });
 });
 

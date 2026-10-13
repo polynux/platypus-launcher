@@ -3,6 +3,7 @@ package savebackup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -226,6 +227,10 @@ type BackupOptions struct {
 // Unchanged set when the saves equal the newest backup and nothing was
 // written), whether the 1 GiB warning tripped, and the skipped/unresolved
 // counts. Above 10 GiB it refuses.
+// ErrNothingFound means no save file is on disk for the game: Backup writes
+// no (empty) version then.
+var ErrNothingFound = errors.New("no save files found")
+
 func (s *Service) Backup(game types.Game, trigger string, o BackupOptions) (*types.SaveBackup, bool, int, int, error) {
 	now := o.Now
 	if now.IsZero() {
@@ -239,6 +244,9 @@ func (s *Service) Backup(game types.Game, trigger string, o BackupOptions) (*typ
 	}
 	_, patterns, unresolved := ResolvePaths(game, o.UserPaths, entry, ctx, o.SteamID, o.GogID)
 	files, skipped, _, _, bytes := Enumerate(patterns, ctx)
+	if len(files) == 0 {
+		return nil, false, skipped, unresolved, ErrNothingFound
+	}
 	tag := o.ManifestTag
 	if tag == "" {
 		tag = StoredEtag(s.cacheDir)

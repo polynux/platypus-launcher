@@ -38,6 +38,16 @@ func (s *Steam) Details(_ context.Context, game types.Game) (*types.GameDetails,
 	return s.meta.Details(steam.Root(), game.StoreAppID)
 }
 
+// HasSteamCloudCached reports whether the cached store details for appID
+// include Steam Cloud, without a new request. ok is false when nothing is
+// cached (unknown means false for callers).
+func (s *Steam) HasSteamCloudCached(appID string) (has, ok bool) {
+	if s == nil || s.meta == nil {
+		return false, false
+	}
+	return s.meta.CachedHasSteamCloud(appID)
+}
+
 // Launch hands the game to the Steam client unless the user set an
 // executable override, in which case Platypus runs that executable itself.
 func (s *Steam) Launch(_ context.Context, game types.Game, _ bool) (*Launch, error) {

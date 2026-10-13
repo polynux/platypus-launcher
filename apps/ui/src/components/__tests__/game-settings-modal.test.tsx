@@ -125,10 +125,10 @@ describe('the game settings dialog', () => {
     expect(tabNames()).toEqual(['General', 'Customization', 'Maintenance']);
   });
 
-  it('gives a Steam game only the core tabs', () => {
+  it('gives a Steam game the core tabs plus Maintenance for save backups', () => {
     page({}, game({ source: 'steam', store: 'steam' as never, store_app_id: '10', features: null }), undefined);
     fireEvent.click(gear());
-    expect(tabNames()).toEqual(['General', 'Customization']);
+    expect(tabNames()).toEqual(['General', 'Customization', 'Maintenance']);
   });
 
   it('holds the cloud saves in a tab, with Check now', async () => {

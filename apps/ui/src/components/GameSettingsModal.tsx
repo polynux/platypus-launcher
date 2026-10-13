@@ -234,9 +234,9 @@ function TabBody({ tab, onOpenGeneral, ...p }: GameSettingsModalProps & { tab: G
     case 'customization':
       return <CustomizationTab game={game} onChanged={p.onCustomized} />;
     case 'maintenance':
-      return (plugin || game.store === 'custom') ? (
+      return (
         <MaintenanceTab game={game} plugin={plugin} job={p.job} jobs={p.jobs} onJob={p.onJob} onJobAction={p.onJobAction} onNotify={p.onNotify} onClose={p.onClose} onRemove={p.onRemove} running={p.running} />
-      ) : null;
+      );
     default:
       return null;
   }

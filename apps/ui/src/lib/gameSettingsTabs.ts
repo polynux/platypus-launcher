@@ -42,9 +42,11 @@ export function settingsTabs({ game, plugin, tweaks }: TabContext): GameSettings
   if (fromPlugin && offers(plugin, 'settings', { game })) tabs.push('plugin');
   if (installed && tweaks.length > 0) tabs.push('tweaks');
   tabs.push('customization');
-  // Verify and uninstall need the plugin; a move is core's, for any installed plugin game.
-  // Custom games get Maintenance for Remove from library (no plugin needed).
-  if ((fromPlugin && installed) || game.store === 'custom') tabs.push('maintenance');
+  // Save backups live in Maintenance for every game (backups for all games):
+  // plugin-only rows (verify, move, uninstall) still need the plugin, but the
+  // tab itself always shows so backups stay reachable. A game with no other
+  // maintenance action shows just the Save backups section.
+  tabs.push('maintenance');
   return tabs;
 }
 

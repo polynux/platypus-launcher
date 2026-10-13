@@ -34,6 +34,7 @@ export interface CoreApi {
   DiscardJob(id: string): Promise<void>;
   DismissMigrationNotice(): Promise<void>;
   ForceStopGame(gameID: string): Promise<void>;
+  GetAutoBackupState(game: types.Game): Promise<types.AutoBackupState>;
   GetBackupSettings(): Promise<types.BackupSettings>;
   GetCloudInfo(game: types.Game): Promise<types.CloudInfo>;
   GetCloudSettings(): Promise<types.CloudSettings>;
@@ -179,6 +180,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'DiscardJob',
   'DismissMigrationNotice',
   'ForceStopGame',
+  'GetAutoBackupState',
   'GetBackupSettings',
   'GetCloudInfo',
   'GetCloudSettings',
