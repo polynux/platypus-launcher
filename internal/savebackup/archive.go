@@ -23,9 +23,49 @@ func backupFileName(trigger string, now time.Time) string {
 	return fmt.Sprintf("%s-%s-%s.zip", stamp, trigger, shortID())
 }
 
-// gameBackupDir is <backupsRoot>/<gameID>.
+// gameBackupDir is <backupsRoot>/<gameID>, with the id made safe as one
+// folder name (ids come from plugins and the UI).
 func gameBackupDir(backupsRoot, gameID string) string {
-	return filepath.Join(backupsRoot, gameID)
+	name := strings.NewReplacer("/", "_", "\\", "_").Replace(gameID)
+	if name == "" || name == "." || name == ".." {
+		name = "_" + name
+	}
+	return filepath.Join(backupsRoot, name)
+}
+
+// backupZip is the path of one backup, or false when backupID can't name a
+// file in the game's folder.
+func backupZip(backupsRoot, gameID, backupID string) (string, bool) {
+	id := strings.TrimSuffix(backupID, ".zip")
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return "", false
+	}
+	return filepath.Join(gameBackupDir(backupsRoot, gameID), id+".zip"), true
+}
+
+// restoreRoot is where a backed-up root label points now: the game's current
+// folder for it (a prefix or install folder may have moved since), else the
+// folder recorded in the backup.
+func restoreRoot(label string, meta types.BackupMeta, ctx Context) (string, bool) {
+	if r, ok := ctx.Roots[label]; ok && r != "" {
+		return r, true
+	}
+	r, ok := meta.Roots[label]
+	return r, ok && r != ""
+}
+
+// fileSHA256 hashes a file without reading it whole into memory.
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // Enumerate expands resolved patterns into files without following symlinks:
@@ -395,7 +435,11 @@ func readMeta(zipPath string) (types.BackupMeta, int64, bool) {
 
 // ReadBackupMeta reads a backup's embedded metadata.
 func ReadBackupMeta(backupsRoot, gameID, backupID string) (types.BackupMeta, bool) {
-	meta, _, ok := readMeta(filepath.Join(gameBackupDir(backupsRoot, gameID), backupID+".zip"))
+	p, ok := backupZip(backupsRoot, gameID, backupID)
+	if !ok {
+		return types.BackupMeta{}, false
+	}
+	meta, _, ok := readMeta(p)
 	return meta, ok
 }
 
@@ -451,25 +495,20 @@ func PreviewRestore(backupsRoot, gameID, backupID string, ctx Context) (types.Re
 		return pv, meta, fmt.Errorf("unknown backup %q", backupID)
 	}
 	for _, f := range meta.Files {
-		root, ok := meta.Roots[f.Root]
+		root, ok := restoreRoot(f.Root, meta, ctx)
 		if !ok {
-			if r, ok := ctx.Roots[f.Root]; ok {
-				root = r
-			} else {
-				continue
-			}
+			continue
 		}
 		// Zip-slip check on the stored relative path.
 		if !safeRel(f.Path) {
 			continue
 		}
 		abs := filepath.Join(root, f.Path)
-		data, err := os.ReadFile(abs)
+		sum, err := fileSHA256(abs)
 		if err != nil {
 			pv.Added++
 		} else {
-			sum := sha256.Sum256(data)
-			if hex.EncodeToString(sum[:]) == f.Sha256 {
+			if sum == f.Sha256 {
 				pv.Kept++
 			} else {
 				pv.Overwritten++
@@ -485,82 +524,98 @@ func PreviewRestore(backupsRoot, gameID, backupID string, ctx Context) (types.Re
 // written; extra files are never deleted. Zip-slip paths are refused. It
 // returns overwritten/added counts.
 func Restore(backupsRoot, gameID, backupID string, ctx Context) (overwritten, added int, err error) {
-	zipPath := filepath.Join(gameBackupDir(backupsRoot, gameID), backupID+".zip")
+	zipPath, ok := backupZip(backupsRoot, gameID, backupID)
+	if !ok {
+		return 0, 0, fmt.Errorf("unknown backup %q", backupID)
+	}
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer zr.Close()
 	var meta types.BackupMeta
-	contents := map[string][]byte{}
+	entries := map[string]*zip.File{}
 	for _, f := range zr.File {
-		if f.Name == "platypus-backup.json" {
-			rc, err := f.Open()
-			if err != nil {
-				return 0, 0, err
-			}
-			derr := json.NewDecoder(rc).Decode(&meta)
-			rc.Close()
-			if derr != nil {
-				return 0, 0, derr
-			}
+		if f.Name != "platypus-backup.json" {
+			entries[f.Name] = f
 			continue
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return 0, 0, err
 		}
-		data, err := io.ReadAll(io.LimitReader(rc, RefuseBytes+1))
+		derr := json.NewDecoder(rc).Decode(&meta)
 		rc.Close()
-		if err != nil {
-			return 0, 0, err
+		if derr != nil {
+			return 0, 0, derr
 		}
-		contents[f.Name] = data
 	}
 	for _, mf := range meta.Files {
 		if !safeRel(mf.Path) {
 			return overwritten, added, fmt.Errorf("backup holds an unsafe path; restore refused")
 		}
-		root, ok := meta.Roots[mf.Root]
+		root, ok := restoreRoot(mf.Root, meta, ctx)
 		if !ok {
-			if r, ok := ctx.Roots[mf.Root]; ok {
-				root = r
-			} else {
-				continue
-			}
+			continue
 		}
 		abs := filepath.Join(root, mf.Path)
 		if err := checkInside(abs, ctx); err != nil {
 			continue
 		}
 		// Never follow a symlinked destination: refuse the file.
-		if st, err := os.Lstat(abs); err == nil && st.Mode()&fs.ModeSymlink != 0 {
+		st, statErr := os.Lstat(abs)
+		if statErr == nil && st.Mode()&fs.ModeSymlink != 0 {
 			continue
 		}
-		data, ok := contents[filepath.Join(mf.Root, mf.Path)]
+		entry, ok := entries[filepath.ToSlash(filepath.Join(mf.Root, mf.Path))]
+		if !ok {
+			entry, ok = entries[filepath.Join(mf.Root, mf.Path)]
+		}
 		if !ok {
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 			return overwritten, added, err
 		}
-		_, existed := os.Lstat(abs)
-		if err := os.WriteFile(abs, data, 0o644); err != nil {
+		if err := extractTo(entry, abs); err != nil {
 			return overwritten, added, err
 		}
-		if existed == nil {
-			if prev, err := os.ReadFile(abs); err == nil && len(prev) == len(data) {
-				// written; count by prior existence is enough
-			}
-		}
-		if existed != nil {
-			added++
-		} else {
+		if statErr == nil {
 			overwritten++
+		} else {
+			added++
 		}
 		_ = os.Chtimes(abs, time.Now(), time.Unix(mf.Mtime, 0))
 	}
 	return overwritten, added, nil
+}
+
+// extractTo streams one zip entry to path through a temporary file and a
+// rename, so a failed write never leaves a half-written save behind.
+func extractTo(entry *zip.File, path string) error {
+	rc, err := entry.Open()
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".platypus-restore-*")
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(tmp, io.LimitReader(rc, RefuseBytes+1))
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), 0o644)
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+	}
+	return err
 }
 
 func safeRel(p string) bool {

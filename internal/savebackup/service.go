@@ -295,11 +295,10 @@ func (s *Service) List(gameID string) []types.SaveBackup {
 // Delete removes one backup version. The id is the zip's base name, with or
 // without the .zip suffix.
 func (s *Service) Delete(gameID, backupID string) error {
-	id := strings.TrimSuffix(backupID, ".zip")
-	if id == "" || strings.ContainsAny(id, `/\`) {
+	p, ok := backupZip(s.backupsRoot(), gameID, backupID)
+	if !ok {
 		return fmt.Errorf("unknown backup %q", backupID)
 	}
-	p := filepath.Join(gameBackupDir(s.backupsRoot(), gameID), id+".zip")
 	if _, _, ok := readMeta(p); !ok {
 		return fmt.Errorf("unknown backup %q", backupID)
 	}

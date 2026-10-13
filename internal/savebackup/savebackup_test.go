@@ -644,3 +644,62 @@ func poison(t *testing.T, zipPath string) {
 }
 
 var _ = testenv.Slow
+
+// A game moved since its backup restores into its current folder: root
+// labels resolve against the game as it is now, not where it was.
+func TestRestoreFollowsAMovedInstallFolder(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	dataDir := filepath.Join(home, "data")
+	oldDir := filepath.Join(home, "Games", "Old")
+	if err := os.MkdirAll(filepath.Join(oldDir, "saves"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldDir, "saves", "slot.sav"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := New(Options{Settings: newTestSettings(t, home), DataDir: dataDir, CacheDir: filepath.Join(home, "cache"), Home: home})
+	game := types.Game{ID: "g1", Source: "custom", Title: "G1", InstallDir: oldDir}
+	b, _, _, _, err := svc.Backup(game, "manual", BackupOptions{UserPaths: []string{filepath.Join(oldDir, "saves")}})
+	if err != nil || b.Files != 1 {
+		t.Fatalf("backup = %+v, %v", b, err)
+	}
+	newDir := filepath.Join(home, "Games", "New")
+	if err := os.Rename(oldDir, newDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(newDir, "saves", "slot.sav")); err != nil {
+		t.Fatal(err)
+	}
+	game.InstallDir = newDir
+	ctx := NewContextFor(game, home, "", dataDir, "", "")
+	if _, added, err := svc.Restore(game, b.ID, ctx, nil); err != nil || added != 1 {
+		t.Fatalf("restore added %d, %v; want 1 file", added, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(newDir, "saves", "slot.sav")); err != nil || string(data) != "v1" {
+		t.Fatalf("restored into the moved folder = %q, %v", data, err)
+	}
+	if _, err := os.Stat(oldDir); !os.IsNotExist(err) {
+		t.Fatalf("restore recreated the old folder: %v", err)
+	}
+}
+
+// Game and backup ids can't climb out of the backups folder.
+func TestBackupIDsStayInsideTheBackupsFolder(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, id := range []string{"..", ".", "", "a/../../x", `a\b`} {
+		if dir := gameBackupDir(root, id); filepath.Dir(dir) != root {
+			t.Errorf("game id %q maps to %s, outside %s", id, dir, root)
+		}
+	}
+	for _, id := range []string{"", ".", "..", "../x", "a/b", `a\b`} {
+		if p, ok := backupZip(root, "g", id); ok {
+			t.Errorf("backup id %q accepted as %s", id, p)
+		}
+	}
+	svc := New(Options{Settings: newTestSettings(t, root), DataDir: root, CacheDir: filepath.Join(root, "cache"), Home: root})
+	if err := svc.Delete("g", "../../escape"); err == nil {
+		t.Error("deleting a climbing backup id was accepted")
+	}
+}
