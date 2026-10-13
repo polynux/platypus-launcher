@@ -59,7 +59,7 @@ type entry struct {
 	doneOnce sync.Once
 	token    string // PLATYPUS_SESSION value in the game's environment (direct launches)
 	hook     func(force bool)
-	onExit   func(ExitInfo)
+	onExits  []func(ExitInfo)
 	stopping bool // the user asked to stop it
 	forceReq bool // ... and asked for SIGKILL before a pid was known
 }
@@ -305,8 +305,16 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		stoppedByUser := t.userStopped(e)
 		t.clearEntry(gameID, e)
 		failed := !stoppedByUser && err != nil && time.Since(started) < quickExit
-		if e.onExit != nil {
-			defer e.onExit(ExitInfo{Stopped: stoppedByUser, Failed: failed})
+		t.mu.Lock()
+		hooks := append([]func(ExitInfo){}, e.onExits...)
+		t.mu.Unlock()
+		if len(hooks) > 0 {
+			info := ExitInfo{Stopped: stoppedByUser, Failed: failed}
+			defer func() {
+				for _, h := range hooks {
+					h(info)
+				}
+			}()
 		}
 		if stoppedByUser {
 			// A stop by the user is never a failed launch, however fast the exit.

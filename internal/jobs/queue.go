@@ -32,6 +32,11 @@ const (
 	// another folder (game.move, or core's own move when the plugin has none).
 	KindVerify = "verify"
 	KindMove   = "move"
+	// KindBackup backs up a game's saves and KindRestore restores one backup
+	// (issue #42). Both are core-run: their own Add* constructors, the
+	// prepare size-check skip, RunsInCore, and discardParamsFor ErrNoData.
+	KindBackup  = "backup"
+	KindRestore = "restore"
 
 	StateQueued   = "queued"
 	StateRunning  = "running"
@@ -254,7 +259,7 @@ func (q *Queue) next(ctx context.Context) {
 		q.finish(snapshot.ID, StateFailed, err.Error())
 		return
 	}
-	startCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	startCtx, cancel := context.WithTimeout(ctx, startTimeoutFor(snapshot.Kind))
 	defer cancel()
 	if err := q.b.Start(startCtx, snapshot); err != nil {
 		if errors.Is(err, plugins.ErrExited) {
@@ -265,9 +270,21 @@ func (q *Queue) next(ctx context.Context) {
 	}
 }
 
+// startTimeoutFor bounds one job's Start dispatch. Backups run inside Start
+// (the uninstall gate backs up before game.uninstall, and backup/restore jobs
+// do their work there), so those kinds get longer than the 1 minute default.
+func startTimeoutFor(kind string) time.Duration {
+	switch kind {
+	case KindUninstall, KindBackup, KindRestore:
+		return 30 * time.Minute
+	default:
+		return time.Minute
+	}
+}
+
 // prepare checks free space and creates the install folder.
 func (q *Queue) prepare(ctx context.Context, job types.Job) error {
-	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove {
+	if job.Kind == KindUninstall || job.Kind == KindVerify || job.Kind == KindMove || job.Kind == KindBackup || job.Kind == KindRestore {
 		return nil // no download, so nothing to size; a move checks its space when it is queued
 	}
 	sizeCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -376,6 +393,31 @@ func (q *Queue) AddVerify(source, gameID, storeGameID, title, installDir string,
 	return q.enqueue(&types.Job{
 		Kind: KindVerify, Source: source, GameID: gameID, StoreGameID: storeGameID,
 		Title: title, InstallDir: installDir, Repair: repair,
+	})
+}
+
+// AddBackup queues a core-run save backup of a game's saves. trigger names
+// why it runs ("manual", "uninstall", "after-session", "before-restore") and
+// rides in Destination (no new Job field, so old queue files still parse).
+func (q *Queue) AddBackup(source, gameID, storeGameID, title, installDir, trigger string) (types.Job, error) {
+	if trigger == "" {
+		trigger = "manual"
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindBackup, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Destination: trigger,
+	})
+}
+
+// AddRestore queues a core-run restore of one backup version. The backup id
+// rides in Destination (no new Job field, so old queue files still parse).
+func (q *Queue) AddRestore(source, gameID, storeGameID, title, installDir, backupID string) (types.Job, error) {
+	if backupID == "" {
+		return types.Job{}, errors.New("a restore needs a backup id")
+	}
+	return q.enqueue(&types.Job{
+		Kind: KindRestore, Source: source, GameID: gameID, StoreGameID: storeGameID,
+		Title: title, InstallDir: installDir, Destination: backupID,
 	})
 }
 
@@ -799,6 +841,24 @@ func (q *Queue) find(id string) *types.Job {
 	return nil
 }
 
+// SetAllowNoSaves marks an uninstall to proceed without a save backup (issue
+// #42): the user checked "delete without a save backup" after the gate found
+// no known save paths.
+func (q *Queue) SetAllowNoSaves(id string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	j := q.find(id)
+	if j == nil {
+		return fmt.Errorf("no job %s", id)
+	}
+	if j.Kind != KindUninstall {
+		return fmt.Errorf("only an uninstall skips its save backup")
+	}
+	j.AllowNoSaves = true
+	q.changed(true)
+	return nil
+}
+
 // changed saves and emits. State changes do both at once; progress is
 // throttled. A failed state save is counted and remembered (see SaveErrors)
 // but never blocks the live UI. Callers hold q.mu.
@@ -913,7 +973,7 @@ func (q *Queue) Discard(ctx context.Context, id string) error {
 		q.mu.Unlock()
 		return fmt.Errorf("no job %s", id)
 	}
-	if j.Kind == KindVerify || j.Kind == KindMove {
+	if j.Kind == KindVerify || j.Kind == KindMove || j.Kind == KindBackup || j.Kind == KindRestore {
 		q.mu.Unlock()
 		return fmt.Errorf("%s: %w", j.Title, ErrNoData)
 	}

@@ -468,6 +468,10 @@ type Job struct {
 	Repair bool `json:"repair,omitempty"`
 	// Destination is where a move takes the game (InstallDir is where it is).
 	Destination string `json:"destination,omitempty"`
+	// AllowNoSaves says an uninstall may proceed without a save backup
+	// (issue #42): the user checked "delete without a save backup" after
+	// the gate found no known save paths.
+	AllowNoSaves bool `json:"allow_no_saves,omitempty"`
 	// Verify is what a verify job found, once it is done.
 	Verify *VerifyReport `json:"verify,omitempty"`
 	// Options are the install-option choices the install or update sends

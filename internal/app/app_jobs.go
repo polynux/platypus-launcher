@@ -45,6 +45,18 @@ func (b jobBackend) Start(ctx context.Context, j types.Job) error {
 			return b.a.startCoreMove(j) // runs on its own; reports through the queue
 		}
 		return b.a.plugins.Call(ctx, j.Source, "game.move", moveParams(j), nil)
+	case jobs.KindBackup:
+		return b.a.startCoreBackup(j) // runs on its own; reports through the queue
+	case jobs.KindRestore:
+		return b.a.startCoreRestore(j) // runs on its own; reports through the queue
+	case jobs.KindUninstall:
+		// The save backup runs before game.uninstall: a failed backup
+		// fails the job and the plugin never deletes anything.
+		game := types.Game{ID: j.GameID, Source: j.Source, StoreAppID: j.StoreGameID, Title: j.Title, InstallDir: j.InstallDir}
+		if _, err := b.a.backupBeforeDelete(ctx, game, triggerUninstall, j.AllowNoSaves); err != nil {
+			return err
+		}
+		return b.a.plugins.Call(ctx, j.Source, "game.uninstall", installParams(j, nil), nil)
 	}
 	if j.Target != nil {
 		if err := b.a.jobTargetGate(j); err != nil {
@@ -98,31 +110,46 @@ func installParams(j types.Job, options types.InstallOptions) map[string]any {
 }
 
 // Cancel stops a job. A core move stops and puts the game back; it is waited
-// for, so the folders are free when Cancel returns.
+// for, so the folders are free when Cancel returns. A core backup or restore
+// stops the same way.
 func (b jobBackend) Cancel(ctx context.Context, j types.Job) error {
 	if j.Kind == jobs.KindMove && !b.a.plugins.Has(j.Source, "move") {
 		b.a.moves.stop(ctx, j.ID)
+		return nil
+	}
+	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
+		b.a.backups.stop(ctx, j.ID)
 		return nil
 	}
 	return b.a.plugins.Call(ctx, j.Source, "job.cancel", map[string]any{"jobId": j.ID}, nil)
 }
 
 // RunsInCore says whether core is running the job's move itself, in a
-// goroutine of its own (see CoreRunner in the queue).
+// goroutine of its own (see CoreRunner in the queue). Core's own moves and
+// its backup/restore jobs all run there.
 func (b jobBackend) RunsInCore(j types.Job) bool {
+	if j.Kind == jobs.KindBackup || j.Kind == jobs.KindRestore {
+		return true
+	}
 	return b.a.moves.active(j.ID)
 }
 
-// heldByJob refuses a launch while a move or a check holds the game's folder:
-// the game would start from files that are being moved or checked.
+// heldByJob refuses a launch while a move, a check, a backup or a restore
+// holds the game: the game would start from files that are being moved,
+// checked or rewritten.
 func (a *App) heldByJob(game types.Game) error {
-	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify)
+	j, ok := a.jobs.Holding(game.ID, jobs.KindMove, jobs.KindVerify, jobs.KindBackup, jobs.KindRestore)
 	if !ok {
 		return nil
 	}
 	what := "checked"
-	if j.Kind == jobs.KindMove {
+	switch j.Kind {
+	case jobs.KindMove:
 		what = "moved"
+	case jobs.KindBackup:
+		what = "backed up"
+	case jobs.KindRestore:
+		what = "restored"
 	}
 	return apperr.New("game.launchBusy", fmt.Sprintf("%s is being %s; launch it once that finishes", game.Title, what), map[string]string{"title": game.Title, "what": what})
 }

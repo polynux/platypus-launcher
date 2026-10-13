@@ -170,7 +170,7 @@ func TestUninstallClearsAMovedGamesRecord(t *testing.T) {
 	if _, ok := e.a.settings.Relocation(game.ID); !ok {
 		t.Fatal("the move left no record")
 	}
-	u, err := e.a.UninstallGame(moved)
+	u, err := e.a.UninstallGameWithoutBackup(moved)
 	if err != nil {
 		t.Fatal(err)
 	}
