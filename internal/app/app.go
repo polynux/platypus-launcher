@@ -911,6 +911,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		ChatDesktopNotify:     a.settings.ChatDesktopNotify(),
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolderFor(a.resolvedDataDir()),
+		Language:              a.settings.Language(),
 	}
 }
 
@@ -974,6 +975,14 @@ func (a *App) prefixesFolder() string {
 		return ""
 	}
 	return a.settings.PrefixesFolder()
+}
+
+// SetLanguage saves the UI language ("" for System, issue #39).
+func (a *App) SetLanguage(lang string) (types.LauncherSettings, error) {
+	if err := a.settings.SetLanguage(lang); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
 }
 
 // GetLauncherSettings returns Platypus-wide settings.

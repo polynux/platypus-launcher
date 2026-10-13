@@ -112,6 +112,7 @@ export interface CoreApi {
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
   SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
+  SetLanguage(lang: string): Promise<types.LauncherSettings>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
   SetPluginInstallFolder(id: string, path: string): Promise<void>;
   SetPreferredCopy(game: types.Game, ownerID: string): Promise<void>;
@@ -238,6 +239,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCustomTitle',
   'SetGameInfoOnline',
   'SetGameSteamAppID',
+  'SetLanguage',
   'SetPluginEnabled',
   'SetPluginInstallFolder',
   'SetPreferredCopy',
