@@ -343,7 +343,10 @@ func (s *Store) AddCustomGame(title, executable string) (CustomGame, error) {
 	return g, nil
 }
 
-// RemoveCustomGame forgets a hand-added game; its files stay on disk.
+// RemoveCustomGame forgets a hand-added game; its files stay on disk. Its
+// per-game rows go with it (settings, compat AppID, info source, version
+// pin, install options, cloud mode and accepted terms), so no orphaned
+// entries accumulate in settings.json.
 func (s *Store) RemoveCustomGame(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -353,10 +356,18 @@ func (s *Store) RemoveCustomGame(id string) error {
 			prevSettings, hadSettings := s.data.Games[id]
 			prevCompat, hadCompat := s.data.CompatAppIDs[id]
 			prevInfo, hadInfo := s.data.InfoSources[id]
+			prevPin, hadPin := s.data.Pins[id]
+			prevOptions, hadOptions := s.data.InstallOptions[id]
+			prevCloud, hadCloud := s.data.CloudGames[id]
+			prevTerms, hadTerms := s.data.Terms[id]
 			s.data.CustomGames = append(s.data.CustomGames[:i], s.data.CustomGames[i+1:]...)
 			delete(s.data.Games, id)
 			delete(s.data.CompatAppIDs, id)
 			delete(s.data.InfoSources, id)
+			delete(s.data.Pins, id)
+			delete(s.data.InstallOptions, id)
+			delete(s.data.CloudGames, id)
+			delete(s.data.Terms, id)
 			if err := s.save(); err != nil {
 				s.data.CustomGames = prev
 				if hadSettings {
@@ -376,6 +387,30 @@ func (s *Store) RemoveCustomGame(id string) error {
 						s.data.InfoSources = map[string]string{}
 					}
 					s.data.InfoSources[id] = prevInfo
+				}
+				if hadPin {
+					if s.data.Pins == nil {
+						s.data.Pins = map[string]types.VersionPin{}
+					}
+					s.data.Pins[id] = prevPin
+				}
+				if hadOptions {
+					if s.data.InstallOptions == nil {
+						s.data.InstallOptions = map[string]types.InstallOptions{}
+					}
+					s.data.InstallOptions[id] = prevOptions
+				}
+				if hadCloud {
+					if s.data.CloudGames == nil {
+						s.data.CloudGames = map[string]string{}
+					}
+					s.data.CloudGames[id] = prevCloud
+				}
+				if hadTerms {
+					if s.data.Terms == nil {
+						s.data.Terms = map[string][]types.TermAcceptance{}
+					}
+					s.data.Terms[id] = prevTerms
 				}
 				return err
 			}
