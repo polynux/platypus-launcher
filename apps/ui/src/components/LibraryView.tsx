@@ -6,8 +6,8 @@ import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugi
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
 import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
-import { CompatChip, tierMeaning } from './CompatBadges';
-import { TIER_FILTERS, cardCompat, tierFilterValue, type TierFilter } from '../lib/compat';
+import { GameCardBody, tierMeaning } from './CompatBadges';
+import { TIER_FILTERS, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
@@ -220,8 +220,9 @@ function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string
 }
 
 /** Every card is as tall as its cover plus this footer, so the grid can leave the rows
- *  out of view unrendered. Room for the title, the details line and a compat chip. */
-const CARD_FOOTER = 82;
+ *  out of view unrendered. Room for the title, the details line and two lines of
+ *  compat badges (the badge row keeps a stable height, see GameCardBody). */
+const CARD_FOOTER = 112;
 const CARD_GAP = 12;
 const CARD_MIN_WIDTH = 140;
 const cardRowHeight = (width: number) => width * 1.5 + CARD_FOOTER;
@@ -230,8 +231,9 @@ const TABLE_ROW_HEIGHT = 44;
 const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; job?: Job; onOpen: (id: string) => void }) {
   const { t } = useTranslation('library');
   const hours = hoursPlayed(g);
+  const meta = [hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ');
   return (
-    <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'flex h-full flex-col')}>
+    <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}>
       <div className="relative flex-none">
         <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
         {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
@@ -253,13 +255,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
           )
         )}
       </div>
-      <div className="h-[82px] flex-none overflow-hidden px-2.5 py-2">
-        <div className="truncate text-hint font-bold">{g.title}</div>
-        <div className="truncate font-mono text-micro uppercase tracking-wider text-white/55">
-          {[hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ')}
-        </div>
-        {cardCompat(g) || g.fix_info?.deck ? <CompatChip game={g} className="mt-1.5" /> : null}
-      </div>
+      <GameCardBody title={g.title} meta={meta} game={g} className="px-2.5 py-2" />
     </button>
   );
 });
