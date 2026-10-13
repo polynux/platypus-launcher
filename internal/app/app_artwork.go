@@ -711,9 +711,13 @@ func (a *App) autoSteam(gameID string, appID int, name, label string) bool {
 }
 
 // maybeAutoArtwork starts the background lookup after an add, only when the
-// switch is on. It never blocks the add.
+// switch is on. It never blocks the add. While a game runs the lookup waits
+// for the last session to end (issue #49).
 func (a *App) maybeAutoArtwork(gameID, title string) {
 	if a.settings == nil || !a.settings.ArtworkOnline() {
+		return
+	}
+	if a.deferWhileGameRuns(func() { a.autoArtwork(gameID, title) }) {
 		return
 	}
 	go a.autoArtwork(gameID, title)

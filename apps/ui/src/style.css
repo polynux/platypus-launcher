@@ -171,6 +171,16 @@
   }
 }
 
+/* Paused while hidden or unfocused mid-game (issue #49, lib/pauseWhileHidden):
+   animations freeze and transitions stop, so a window nobody sees burns no
+   frames. Videos are paused from the hook itself. */
+.platypus-paused *,
+.platypus-paused *::before,
+.platypus-paused *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+
 /* Radial wash. Applied to the non-scrolling root, so no background-attachment
    is needed (WebKitGTK handles `fixed` unreliably). */
 .app-wash {

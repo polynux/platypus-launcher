@@ -77,6 +77,13 @@
   "on": "Chat will notify on the desktop",
   "off": "Chat stays in the app"
  },
+ "tray": {
+  "heading": "Minimize to tray",
+  "description": "While a game runs, hide the Platypus window to a tray icon instead of leaving it open. It comes back when the game exits, or from the tray menu (show, stop game, quit). Where the desktop has no tray, the window minimizes instead, so it never gets stuck out of reach.",
+  "label": "Minimize to tray while a game runs",
+  "on": "Platypus will hide to the tray while a game runs",
+  "off": "Platypus stays open while a game runs"
+ },
  "loadError": "Platypus couldn't load the settings.",
  "prefixError": "Platypus couldn't change the Wine prefix folder.",
  "cleanupError": "Platypus couldn't clean up those folders.",

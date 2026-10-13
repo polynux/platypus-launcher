@@ -380,6 +380,9 @@ export const LauncherApi = {
   // The "Desktop notifications for chat" switch (issue #12).
   setChatDesktopNotify: (on: boolean) => call<LauncherSettings>('SetChatDesktopNotify', () => App.SetChatDesktopNotify(on)),
 
+  // The "Minimize to tray while a game runs" switch (issue #49), off by default.
+  setMinimizeToTray: (on: boolean) => call<LauncherSettings>('SetMinimizeToTray', () => App.SetMinimizeToTray(on)),
+
   // Sideload dialog (issue #32): the native file picker for the game's
   // executable. "" means the user cancelled; a rejection means there is
   // no picker (the text field still works).

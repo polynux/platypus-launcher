@@ -104,6 +104,9 @@ type file struct {
 	// Language is the UI language the user picked (issue #39): "" means
 	// System, resolved in the shell from the OS languages.
 	Language string `json:"language,omitempty"`
+	// MinimizeToTray is the "Minimize to tray while a game runs" switch
+	// (issue #49). Off by default: a plain bool, unset means false.
+	MinimizeToTray bool `json:"minimize_to_tray,omitempty"`
 	// MigrationNoticeDismissed remembers that the user dismissed the one-time
 	// Hydra→Platypus migration notice (issue #14), so it never returns.
 	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`

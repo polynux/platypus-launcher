@@ -152,6 +152,13 @@ type App struct {
 	// backupGateForTests overrides backupBeforeDelete in tests (issue #43);
 	// nil in production, where the stub (issue #42: the real gate) runs.
 	backupGateForTests func(ctx context.Context, game types.Game, trigger string, allowNoSaves bool) (types.SaveGate, error)
+	// trayMu guards deferred, the non-urgent background work waiting for
+	// the last game session to end (issue #49).
+	trayMu sync.Mutex
+	// deferred holds background jobs put off while a game runs, in order:
+	// auto artwork lookups and the save-list manifest refresh. Drained
+	// when the last session ends (drainDeferred).
+	deferred []func()
 }
 
 // Options carries the folders one App run uses (issue #41). Empty fields
@@ -244,6 +251,9 @@ func (a *App) startup(ctx context.Context) {
 		a.playSession(e)
 		if e.State == "stopped" || e.State == "failed" {
 			a.schedulePlaytimeRefresh(e.GameID)
+			if !a.gameRunning() {
+				a.drainDeferred()
+			}
 		}
 	})
 
@@ -1131,6 +1141,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		PrefixesFolder:        a.settings.PrefixesFolder(),
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolderFor(a.resolvedDataDir()),
 		Language:              a.settings.Language(),
+		MinimizeToTray:        a.settings.MinimizeToTray(),
 	}
 }
 

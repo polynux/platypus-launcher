@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { cx } from './ui';
+import { usePageHidden } from '../lib/pauseWhileHidden';
 
 const FOCUSABLE = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
@@ -45,6 +46,12 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
   const n = list.length;
   const go = (d: number) => onIndex((index + d + n) % n);
   const [failed, setFailed] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Trailers never play to a hidden page (issue #49): pause on hide.
+  const pageHidden = usePageHidden();
+  useEffect(() => {
+    if (pageHidden) videoRef.current?.pause();
+  }, [pageHidden]);
 
   useEffect(() => {
     setFailed(null);
@@ -137,6 +144,7 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
             <p role="alert" className="max-w-md text-center text-[13px] text-white/70">{t('common:lightbox.videoError')}</p>
           ) : (
             <video
+              ref={videoRef}
               key={cur.src}
               src={cur.src}
               controls

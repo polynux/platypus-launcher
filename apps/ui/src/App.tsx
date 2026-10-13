@@ -30,6 +30,7 @@ import { reconcileViews, upsertView } from './lib/social';
 import { ensureTerms } from './lib/termsRequest';
 import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
+import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
@@ -76,6 +77,11 @@ export function App() {
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   // Games Platypus launched that are starting or running, keyed by game id.
   const [sessions, setSessions] = useState<Record<string, SessionEvent>>({});
+  // Use less while hidden or unfocused (issue #49): animations, transitions
+  // and videos pause while the page is hidden, or while blurred with a game
+  // running. Polling loops check document.hidden before scheduling (see
+  // PluginsView's QR poll); backgroundThrottling stays on in the shell.
+  usePauseWhileGameRuns(Object.keys(sessions).length > 0);
   const [tweaks, setTweaks] = useState<Tweak[]>([]);
   const [dismissedHero, setDismissedHero] = useState<ReadonlySet<string>>(() => new Set());
 
