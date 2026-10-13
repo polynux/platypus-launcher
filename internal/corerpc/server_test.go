@@ -27,7 +27,7 @@ func (t *thing) Coded() error {
 	return apperr.New("game.running", "Doom is running", map[string]string{"title": "Doom"})
 }
 func (t *thing) Wrapped() error {
-	return apperr.Wrap("settings.workdir.invalid", errors.New("no such file"), nil)
+	return apperr.Wrap("test.wrapped", errors.New("no such file"), nil)
 }
 func (t *thing) Both(s string) (string, error) { return s + "!", nil }
 func (t *thing) Boom()                         { panic("kaboom") }
@@ -215,7 +215,7 @@ func TestCodedErrorsCarryDataAndKeepTheMessage(t *testing.T) {
 	r = h.call(2, "Wrapped", `[]`)
 	e = Error{}
 	json.Unmarshal(r["error"], &e)
-	if e.Message != "no such file" || e.Data == nil || e.Data.Code != "settings.workdir.invalid" {
+	if e.Message != "no such file" || e.Data == nil || e.Data.Code != "test.wrapped" {
 		t.Errorf("wrapped error = %+v", e)
 	}
 

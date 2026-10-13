@@ -13,6 +13,18 @@ const opt = (name, fallback) => {
 };
 const localesDir = path.resolve(opt('--locales', path.join(root, 'src/locales')));
 const srcDir = path.resolve(opt('--src', path.join(root, 'src')));
+// Core error codes (issue #39, phase 3): --go points at the Go tree whose
+// apperr.New/Wrap codes must have errors: keys. It defaults to the repo's
+// tree when the UI source is the default too; a fixture --src without an
+// explicit --go skips the Go scan so the fixture stays hermetic.
+const repoRoot = path.resolve(root, '..', '..');
+const defaultSrc = path.resolve(path.join(root, 'src'));
+const goOpt = opt('--go', null);
+const goDirs = goOpt
+  ? [path.resolve(goOpt)]
+  : srcDir === defaultSrc
+    ? [path.join(repoRoot, 'internal'), path.join(repoRoot, 'cmd')]
+    : [];
 
 const PLURAL_SUFFIXES = ['_zero', '_one', '_two', '_few', '_many', '_other'];
 
@@ -115,11 +127,41 @@ for (const [ns, flat] of en) {
   enBases.set(ns, new Set([...flat.keys()].map(baseKey)));
 }
 
+// Coded core errors (issue #39, phase 3): every apperr.New/Wrap code in the
+// Go tree (test files excluded) is looked up by the UI as errors:<code>, so
+// the keys count as used here and must exist in en and in every shipped
+// locale (checked below; missing entries fail the run).
+function walkGo(dir, files = []) {
+  let entries;
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return files;
+  }
+  for (const e of entries) {
+    const p = path.join(dir, e);
+    if (statSync(p).isDirectory()) walkGo(p, files);
+    else if (e.endsWith('.go') && !e.endsWith('_test.go')) files.push(p);
+  }
+  return files;
+}
+
+const goCodes = new Set();
+for (const dir of goDirs) {
+  for (const f of walkGo(dir)) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/apperr\.(?:New|Wrap)\("([A-Za-z0-9.]+)"/g)) goCodes.add(m[1]);
+  }
+}
+for (const code of goCodes) used.add(`errors:${code}`);
+
 let missing = 0;
 for (const u of [...used].sort()) {
   const colon = u.indexOf(':');
   const ns = u.slice(0, colon);
   const key = u.slice(colon + 1);
+  // Core codes are reported below with their origin; skip the generic line.
+  if (ns === 'errors' && goCodes.has(key)) continue;
   const bases = enBases.get(ns);
   if (!bases) {
     console.error(`missing namespace in en: ${ns} (used by ${u})`);
@@ -138,6 +180,31 @@ for (const [ns, bases] of enBases) {
   }
 }
 for (const u of unused.sort()) console.warn(`warning: unused key in en: ${u}`);
+
+// Coded core errors (issue #39, phase 3): every apperr.New/Wrap code in the
+// Go tree (test files excluded) is looked up by the UI as errors:<code>, so
+// it must exist in en and in every shipped locale. Missing entries fail the
+// run; the keys also count as used, so they never warn as unused.
+for (const code of [...goCodes].sort()) {
+  const bases = enBases.get('errors');
+  if (!bases || !bases.has(code)) {
+    console.error(`missing key in en: errors:${code} (core code)`);
+    missing++;
+  }
+}
+const frFlat = readCatalog('fr').get('errors');
+if (frFlat) {
+  const frBases = new Set([...frFlat.keys()].map(baseKey));
+  for (const code of [...goCodes].sort()) {
+    if (!frBases.has(code)) {
+      console.error(`missing key in fr: errors:${code} (core code)`);
+      missing++;
+    }
+  }
+} else if (goCodes.size > 0) {
+  console.error('missing namespace in fr: errors (core codes)');
+  missing++;
+}
 
 // Per-locale completeness (informational).
 let langs = [];

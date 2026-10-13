@@ -77,4 +77,38 @@ describe('i18n:check', () => {
     });
     expect(run(dir).exit).toBe(0);
   });
+
+  it('fails on core codes missing from the errors catalogs', () => {
+    const dir = fixture({
+      locales: {
+        'en/errors.json': { game: { running: 'X is running.' } },
+        'fr/errors.json': { game: { running: 'X est en cours.' } },
+      },
+      src: { 'f.ts': `const a = 1;\n` },
+    });
+    const go = path.join(dir, 'go');
+    mkdirSync(go, { recursive: true });
+    writeFileSync(
+      path.join(go, 'a.go'),
+      `package x\nimport "platypus/internal/apperr"\n` +
+        `var _ = apperr.New("game.running", "X is running", nil)\n` +
+        `var _ = apperr.Wrap("game.gone", nil, nil)\n`,
+    );
+    const runGo = () => {
+      try {
+        const out = execFileSync(
+          process.execPath,
+          [script, '--locales', path.join(dir, 'locales'), '--src', path.join(dir, 'src'), '--go', go],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+        return { exit: 0, stdout: out.toString(), stderr: '' };
+      } catch (err) {
+        return { exit: err.status ?? 1, stdout: (err.stdout ?? '').toString(), stderr: (err.stderr ?? '').toString() };
+      }
+    };
+    const r = runGo();
+    expect(r.exit).toBe(1);
+    expect(r.stderr).toMatch(/missing key in en: errors:game\.gone \(core code\)/);
+    expect(r.stderr).toMatch(/missing key in fr: errors:game\.gone \(core code\)/);
+  });
 });
