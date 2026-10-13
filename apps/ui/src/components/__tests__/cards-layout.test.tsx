@@ -110,3 +110,24 @@ describe('card layout (#61, #62)', () => {
     expect(getByText('Playable').className).toContain('badge-short');
   });
 });
+
+// jsdom doesn't apply style.css, so guard the rule itself: the compact label
+// is hidden everywhere by default, not only inside cards (issue #63: the game
+// page showed "JOUABLEJOUABLE").
+describe('badge label CSS', () => {
+  it('hides the compact label outside narrow cards', async () => {
+    // The UI's tsconfig has no Node types: name the two calls this needs.
+    const fsName = 'node:fs';
+    const { readFileSync, existsSync } = (await import(/* @vite-ignore */ fsName)) as {
+      readFileSync(path: string, encoding: 'utf8'): string;
+      existsSync(path: string): boolean;
+    };
+    const cwd = (globalThis as unknown as { process: { cwd(): string } }).process.cwd();
+    // Vitest runs from apps/ui (bun run test:ui) or the repo root.
+    const file = ['src/style.css', 'apps/ui/src/style.css'].map((p) => `${cwd}/${p}`).find(existsSync);
+    expect(file).toBeTruthy();
+    const css = readFileSync(file!, 'utf8');
+    expect(css).toMatch(/^\.badge-short\s*\{\s*display:\s*none;\s*\}/m);
+    expect(css).toMatch(/@container \(max-width: 190px\)[\s\S]*\.card-compat \.badge-short\s*\{\s*display:\s*inline;/);
+  });
+});

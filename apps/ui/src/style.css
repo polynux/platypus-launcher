@@ -223,7 +223,9 @@
 .card-compat {
   container-type: inline-size;
 }
-.card-compat .badge-short {
+/* The compact label is hidden everywhere (game page, list rows) except in a
+   narrow card, below (issue #63). */
+.badge-short {
   display: none;
 }
 @container (max-width: 190px) {
