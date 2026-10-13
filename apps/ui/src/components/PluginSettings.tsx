@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { Game, SettingField, SettingValue, SettingsSaved, SettingsView, StorePlugin } from '../types';
 import { Input } from '@/components/ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
@@ -14,7 +16,8 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** A saved setting that the plugin answers with its own words. */
 export function SettingError({ message }: { message: string }) {
-  return <ErrorNotice message={message} fallback="The plugin couldn't save that setting." />;
+  const { t } = useTranslation('plugins');
+  return <ErrorNotice message={message} fallback={t('plugins:settings.saveFailed')} />;
 }
 
 /** One field of the form. Text and number commit when the user leaves the box
@@ -93,6 +96,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   saveRef.current = save;
   // Saves of this scope, one after the other: each waits for the one before.
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const { t } = useTranslation('plugins');
 
   // Reads the view and the values the backend holds.
   const reload = (live: () => boolean) => Effect.runPromise(loadRef.current()).then(
@@ -115,8 +119,8 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
     setNotice(null);
     queue.current = queue.current.then(() => Effect.runPromise(saveRef.current({ [id]: v })).then(
       (res) => {
-        if (res.applied) onNotify?.('Setting saved');
-        else setNotice(res.message ?? 'Saved, but the plugin did not take it yet');
+        if (res.applied) onNotify?.(t('plugins:settings.saved'));
+        else setNotice(res.message ?? t('plugins:settings.notApplied'));
       },
       (e) => { setError(errMsg(e)); return reload(() => true); },
     ));
@@ -148,7 +152,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
       {error && <SettingError message={error} />}
     </div>
   );
-  return framed ? <Panel className="bg-white/[0.05]"><MonoLabel className="mb-3">settings</MonoLabel>{body}</Panel> : body;
+  return framed ? <Panel className="bg-white/[0.05]"><MonoLabel className="mb-3">{t('plugins:settings.sectionTitle')}</MonoLabel>{body}</Panel> : body;
 }
 
 /** The plugin-wide settings of a store plugin, in the Plugins view. Shown only
@@ -169,6 +173,7 @@ export function PluginSettingsPanel({ plugin, onNotify }: { plugin: StorePlugin;
 /** The settings of one game, on its page. Only for a game whose features include
  *  `settings`; a game without any scope-game field shows nothing. */
 export function GameSettingsPanel({ game, plugin, onNotify, framed = true }: { game: Game; plugin: StorePlugin; onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; framed?: boolean }) {
+  const { t } = useTranslation('plugins');
   return (
     <CapabilitySurface plugin={plugin} capability="settings" game={game}>
       <SettingsEditor
@@ -177,7 +182,7 @@ export function GameSettingsPanel({ game, plugin, onNotify, framed = true }: { g
         save={(changed) => LauncherApi.saveGameSettingsFields(game, changed)}
         onNotify={onNotify}
         framed={framed}
-        emptyText={framed ? undefined : `${plugin.name} has no settings for ${game.title}.`}
+        emptyText={framed ? undefined : t('plugins:settings.noGameSettings', { plugin: plugin.name, title: game.title })}
       />
     </CapabilitySurface>
   );

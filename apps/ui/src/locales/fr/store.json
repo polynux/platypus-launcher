@@ -1,4 +1,21 @@
 {
   "unavailable": "boutique indisponible",
-  "unavailableDetail": "Cette boutique n'est plus disponible. Elle a peut-être été désactivée ou retirée."
+  "unavailableDetail": "Cette boutique n'est plus disponible. Elle a peut-être été désactivée ou retirée.",
+  "toolbar": {
+    "back": "Retour",
+    "forward": "Suivant",
+    "reload": "Recharger",
+    "home": "Accueil",
+    "openExternal": "Ouvrir dans le navigateur",
+    "close": "Fermer {{name}}"
+  },
+  "address": {
+    "loading": "chargement",
+    "lockOutside": "hors de la boutique",
+    "lockInside": "page de la boutique",
+    "outsideSuffix": "hors de {{name}}"
+  },
+  "blocked": "{{host}} ne fait pas partie de {{name}}. L'ouvrir dans votre navigateur ?",
+  "failed": "Impossible d'ouvrir {{name}} : {{error}}",
+  "needsShell": "La vue boutique a besoin de l'environnement de l'appli."
 }

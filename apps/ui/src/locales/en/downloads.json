@@ -7,11 +7,60 @@
   "action": {
     "install": "Install",
     "update": "Update",
-    "uninstall": "Uninstall"
+    "uninstall": "Uninstall",
+    "verify": "Verify",
+    "move": "Move"
   },
   "actionFailed": {
     "install": "install failed",
     "update": "update failed",
     "uninstall": "uninstall failed"
+  },
+  "kind": {
+    "install": "install",
+    "update": "update",
+    "uninstall": "uninstall",
+    "verify": "verify",
+    "move": "move"
+  },
+  "state": {
+    "queued": "queued",
+    "running": "running",
+    "paused": "paused",
+    "done": "done",
+    "failed": "failed",
+    "canceled": "canceled"
+  },
+  "header": {
+    "subtitle": "Installs, updates and uninstalls run one at a time. A paused download keeps its data and resumes from there; an interrupted install resumes when Platypus starts again.",
+    "resumeAll": "Resume all",
+    "clearFinished": "Clear finished",
+    "clearing": "Clearing…"
+  },
+  "section": {
+    "queue": "queue",
+    "finished": "finished"
+  },
+  "empty": {
+    "label": "queue empty",
+    "detail": "Nothing is downloading. Install a game from a store plugin on its game page."
+  },
+  "job": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "discard": "Discard data",
+    "resumeNote": "resume continues where it stopped",
+    "waiting": "waiting",
+    "attempt": "attempt {{count}}",
+    "sizesOf": "{{done}} of {{total}}",
+    "speedPerSec": "{{speed}}/s"
+  },
+  "aria": {
+    "pauseJob": "Pause {{title}}",
+    "resumeJob": "Resume {{title}}",
+    "cancelJob": "Cancel {{title}}",
+    "discardJob": "Discard downloaded data of {{title}}",
+    "progressOf": "{{title}} progress",
+    "cancelKind": "Cancel {{kind}}"
   }
 }

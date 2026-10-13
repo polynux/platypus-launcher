@@ -1,4 +1,21 @@
 {
   "unavailable": "store unavailable",
-  "unavailableDetail": "This store is no longer available. It may have been disabled or removed."
+  "unavailableDetail": "This store is no longer available. It may have been disabled or removed.",
+  "toolbar": {
+    "back": "Back",
+    "forward": "Forward",
+    "reload": "Reload",
+    "home": "Home",
+    "openExternal": "Open in browser",
+    "close": "Close {{name}}"
+  },
+  "address": {
+    "loading": "loading",
+    "lockOutside": "outside the store",
+    "lockInside": "store page",
+    "outsideSuffix": "outside {{name}}"
+  },
+  "blocked": "{{host}} isn't part of {{name}}. Open in your browser?",
+  "failed": "Couldn't open {{name}}: {{error}}",
+  "needsShell": "The store view needs the app shell."
 }

@@ -1,11 +1,15 @@
+// i18n: converted
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { ActivityEvent, Game, ProtonVersion, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip } from './CompatBadges';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
-import { attentionReason, byRecent, coverImages, greeting, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
+import { byRecent, coverImages, heroImages, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
+import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 
@@ -24,6 +28,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ games, runners, activity, ownedCount, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps) {
+  const { t } = useTranslation(['dashboard', 'common']);
   const waiting = games.filter(needsAttention);
   const pending = waiting.filter((g) => !dismissedHero.has(g.id));
   const hero = pending[0];
@@ -39,8 +44,8 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
     return (
       <div className="p-7">
         <WelcomeBanner installed={0} owned={ownedCount ?? 0} fixes={0} />
-        <EmptyState label="no titles found">
-          Platypus didn't find any installed games. Install something in Steam, or add a game from the Library.
+        <EmptyState label={t('dashboard:empty.label')}>
+          {t('dashboard:empty.detail')}
         </EmptyState>
       </div>
     );
@@ -54,27 +59,29 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
           <div className="absolute bottom-6 left-7 max-w-lg">
             <Badge variant="bronze" className="bg-orange-400 text-[#130f0a]">
-              {hero.fix_info?.source === 'protondb' ? 'needs attention' : 'fix available'}
+              {hero.fix_info?.source === 'protondb' ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
             </Badge>
             <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
-              {hero.fix_info?.source === 'protondb' ? `${hero.title} may need tweaks` : `${hero.title} has a community fix`}
+              {hero.fix_info?.source === 'protondb'
+                ? t('dashboard:hero.titleTweaks', { title: hero.title })
+                : t('dashboard:hero.titleFix', { title: hero.title })}
             </h1>
-            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/70">{attentionReason(hero)}</p>
+            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/70">{attentionReason(hero, t)}</p>
             <div className="mt-3.5 flex gap-2.5">
-              <Button variant="primary" onClick={() => onOpenGame(hero.id)}>Open game</Button>
-              <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>Later</Button>
+              <Button variant="primary" onClick={() => onOpenGame(hero.id)}>{t('dashboard:hero.openGame')}</Button>
+              <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>{t('common:later')}</Button>
               {pending.length > 1 && (
                 <Button variant="ghost" onClick={() => onDismissHero(pending.map((g) => g.id))}>
-                  Hide all {pending.length}
+                  {t('dashboard:hero.hideAll', { count: pending.length })}
                 </Button>
               )}
             </div>
           </div>
           <div className="absolute bottom-6 right-7 hidden gap-3 lg:flex">
             {[
-              ['installed', String(installed), 'text-amber-300'],
-              ...(owned > installed ? [['owned', String(owned), 'text-white/80']] : []),
-              ['fixes', String(waiting.length), 'text-orange-300'],
+              [t('dashboard:hero.statInstalled'), String(installed), 'text-amber-300'],
+              ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-white/80']] : []),
+              [t('dashboard:hero.statFixes'), String(waiting.length), 'text-orange-300'],
             ].map(([k, v, c]) => (
               <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
                 <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
@@ -90,8 +97,8 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
       <section className="grid gap-5 xl:grid-cols-[1.75fr_1fr]">
         <div className="min-w-0">
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-[16px] font-bold tracking-tight">{hasPlayData ? 'Continue playing' : 'Your games'}</h2>
-            <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>full library →</Button>
+            <h2 className="text-[16px] font-bold tracking-tight">{hasPlayData ? t('dashboard:continuePlaying') : t('dashboard:yourGames')}</h2>
+            <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>{t('dashboard:fullLibrary')}</Button>
           </div>
           <div className="cover-grid">
             {continueGames.map((g) => (
@@ -103,7 +110,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                 <div className="px-3 py-2.5">
                   <div className="truncate text-[12px] font-bold">{g.title}</div>
                   <div className="font-mono text-micro uppercase tracking-wider text-white/55">
-                    {hoursPlayed(g) != null ? `${hoursPlayed(g)}h · ` : ''}
+                    {g.playtime_minutes ? `${formatHours(g.playtime_minutes)} · ` : ''}
                     {runnerShort(g.settings.runner_id, runners)}
                   </div>
                   {!g.native && <CompatChip game={g} className="mt-1.5" />}
@@ -115,10 +122,10 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
 
         <div className="space-y-5">
           <div>
-            <h2 className="mb-2.5 text-[15px] font-bold">Waiting on you</h2>
+            <h2 className="mb-2.5 text-[15px] font-bold">{t('dashboard:waiting')}</h2>
             {waiting.length === 0 ? (
               <p className="rounded-2xl bg-white/[0.03] p-4 text-[12px] text-white/70 ring-1 ring-white/[0.05]">
-                Nothing needs attention. Curated fixes and low ProtonDB ratings show up here.
+                {t('dashboard:waitingEmpty')}
               </p>
             ) : (
               <div className="space-y-3">
@@ -132,12 +139,12 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
                       {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/70">{attentionReason(g)}</p>
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/70">{attentionReason(g, t)}</p>
                   </button>
                 ))}
                 {waiting.length > 3 && (
                   <Button variant="link" onClick={() => onNavigate({ name: 'fixes' })}>
-                    +{waiting.length - 3} more in fixes →
+                    {t('dashboard:moreInFixes', { count: waiting.length - 3 })}
                   </Button>
                 )}
               </div>
@@ -146,7 +153,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
 
           {recentlyAdded.length > 0 && (
             <Panel as="section" className="bg-white/[0.04]">
-              <h2 className="mb-2.5 text-[14px] font-bold">Recently added</h2>
+              <h2 className="mb-2.5 text-[14px] font-bold">{t('dashboard:recentlyAdded')}</h2>
               <RecentList games={recentlyAdded} onOpenGame={onOpenGame} />
             </Panel>
           )}
@@ -160,18 +167,53 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
   );
 }
 
+/** Why a game needs attention, in words. Curated recipes speak for
+ *  themselves (the plugin's own description); ProtonDB tiers are rendered
+ *  from the catalog so they follow the UI language. */
+function attentionReason(g: Game, t: TFunction): string {
+  const f = g.fix_info;
+  if (!f) return '';
+  if (f.source !== 'protondb') return f.description;
+  return t(f.tier === 'borked' ? 'dashboard:reason.borked' : 'dashboard:reason.bronze');
+}
+
+/** The store of a game, in words. The shared helper stays as is for the
+ *  areas that still render it; the dashboard reads the catalog so the one
+ *  coined word ("Sideloaded") follows the UI language. */
+function storeLabel(store: string, t: TFunction): string {
+  switch (store) {
+    case 'steam': return t('dashboard:store.steam');
+    case 'gog': return t('dashboard:store.gog');
+    case 'epic': return t('dashboard:store.epic');
+    case 'ubisoft': return t('dashboard:store.ubisoft');
+    case 'custom': return t('dashboard:store.custom');
+    default: return storeLabelFallback(store);
+  }
+}
+
 function WelcomeBanner({ installed, owned, fixes }: { installed: number; owned: number; fixes: number }) {
+  const { t } = useTranslation('dashboard');
+  const hour = new Date().getHours();
+  const greeting = hour < 5
+    ? t('dashboard:greeting.night')
+    : hour < 12
+      ? t('dashboard:greeting.morning')
+      : hour < 18
+        ? t('dashboard:greeting.afternoon')
+        : t('dashboard:greeting.evening');
   return (
     <Panel as="section" className="mb-6 p-6">
-      <h1 className="text-[25px] font-extrabold tracking-tight">{greeting()}</h1>
+      <h1 className="text-[25px] font-extrabold tracking-tight">{greeting}</h1>
       <p className="mt-1 font-mono text-[12px] tabular-nums text-white/55">
-        {installed} installed{owned > installed ? ` · ${owned} owned` : ''} · {fixes} {fixes === 1 ? 'fix' : 'fixes'}
+        {t('dashboard:welcome.installed', { count: installed })}
+        {owned > installed ? ` · ${t('dashboard:welcome.owned', { count: owned })}` : ''} · {t('dashboard:welcome.fixes', { count: fixes })}
       </p>
     </Panel>
   );
 }
 
 export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
+  const { t } = useTranslation('dashboard');
   return (
     <ul className="divide-y divide-white/[0.05]">
       {games.map((g) => (
@@ -180,7 +222,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
             <Cover src={coverImages(g)} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
-              <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store)}</div>
+              <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store, t)}</div>
             </div>
             {!g.native && <CompatChip game={g} className="flex-none" />}
           </button>

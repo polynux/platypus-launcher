@@ -14,7 +14,7 @@ import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
 import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
-import { DownloadsView } from './components/DownloadsView';
+import { DownloadsView, jobKindKey } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
 import { RedeemDialog } from './components/RedeemDialog';
@@ -53,7 +53,7 @@ const NOTICE_DOT: Record<NoticeKind, string> = { ok: 'bg-emerald-400', err: 'bg-
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function App() {
-  const { t } = useTranslation(['nav', 'common']);
+  const { t } = useTranslation(['nav', 'common', 'activity']);
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
   const [plugins, setPlugins] = useState<StorePlugin[]>([]);
@@ -192,10 +192,20 @@ export function App() {
             // Runner count uses whatever the runners call returned (possibly stale).
             log({
               type: 'update',
-              detail: `Library scan · ${installed} installed${installed < g.length ? `, ${g.length} owned` : ''}`,
-              meta: `${sources} source${sources === 1 ? '' : 's'}`,
+              detail: installed < g.length
+                ? t('activity:log.scanOwned', { count: installed, owned: g.length })
+                : t('activity:log.scan', { count: installed }),
+              meta: t('activity:log.sources', { count: sources }),
             });
-            for (const w of lib.warnings) log({ type: 'update', detail: `${w.source}: ${w.needs_auth ? 'logged out' : w.unavailable ? 'unavailable right now' : 'library unavailable'}`, meta: w.message });
+            for (const w of lib.warnings) log({
+              type: 'update',
+              detail: w.needs_auth
+                ? t('activity:log.warnLoggedOut', { source: w.source })
+                : w.unavailable
+                  ? t('activity:log.warnUnavailable', { source: w.source })
+                  : t('activity:log.warnLibrary', { source: w.source }),
+              meta: w.message,
+            });
           } else {
             failures.push(`${t('nav:title.library')}: ${errMsg((libR as { ok: false; error: Error }).error)}`);
           }
@@ -228,7 +238,7 @@ export function App() {
           if (failures.length > 0) {
             const msg = failures.join(' · ');
             setLoadError(msg);
-            log({ type: 'update', detail: 'Library scan had errors', meta: msg });
+            log({ type: 'update', detail: t('activity:log.scanErrors'), meta: msg });
             notify(msg, 'err');
           } else {
             setLoadError(null);
@@ -322,7 +332,7 @@ export function App() {
       if (found.size === 0) return;
       setGames((prev) => prev.map((g) => (found.has(g.id) && !g.fix_info ? { ...g, fix_info: found.get(g.id) } : g)));
       const curated = [...found.values()].filter((f) => f.source !== 'protondb').length;
-      log({ type: 'fix', detail: `Compatibility data for ${found.size} titles`, meta: curated ? `${curated} curated fixes` : 'protondb' });
+      log({ type: 'fix', detail: t('activity:log.fixData', { count: found.size }), meta: curated ? t('activity:log.fixMetaCurated', { count: curated }) : t('activity:log.fixMetaProtondb') });
     });
   }, [games, log, fixRetry]);
 
@@ -352,7 +362,7 @@ export function App() {
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
             notify(t('game:nowRunning', { title }));
-            log({ type: 'session', game: title, detail: `Started ${title}`, meta: e.pid ? `pid ${e.pid}` : undefined });
+            log({ type: 'session', game: title, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
           }
           return;
         }
@@ -362,12 +372,12 @@ export function App() {
         });
         if (e.state === 'failed') {
           notify(t('errors:gameFailed', { title, error: e.message ?? t('errors:launchFailedText') }), 'err');
-          log({ type: 'session', game: title, detail: `${title} failed to start`, meta: e.message?.slice(0, 80) });
+          log({ type: 'session', game: title, detail: t('activity:log.sessionFailed', { title }), meta: e.message?.slice(0, 80) });
         } else {
           const started = sessionStart.current[e.game_id];
           delete sessionStart.current[e.game_id];
           const mins = started ? Math.round((Date.now() - started) / 60000) : 0;
-          log({ type: 'session', game: title, detail: `Stopped ${title}`, meta: started ? `${mins} min session` : undefined });
+          log({ type: 'session', game: title, detail: t('activity:log.sessionStopped', { title }), meta: started ? t('activity:log.sessionMinutes', { count: mins }) : undefined });
         }
       }),
     [log, notify]
@@ -401,18 +411,18 @@ export function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  const saveSettings = (id: string, settings: GameSettings, what = 'Launcher settings changed') => {
+  const saveSettings = (id: string, settings: GameSettings, what = t('activity:log.tweakDefault')) => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
     if (!g) return;
     Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
         notify(t('common:settingsSaved'));
-        log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}` });
+        log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
       })
       .catch((err) => {
         notify(t('errors:notPersisted', { error: errMsg(err) }), 'err');
-        log({ type: 'tweak', game: g.title, detail: `${what} · ${g.title}`, meta: 'session only' });
+        log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }), meta: t('activity:log.tweakSessionOnly') });
       });
   };
 
@@ -440,16 +450,17 @@ export function App() {
         jobStates.current.set(j.id, j.state);
         if (initial || prev === j.state) continue;
         const verbKey = j.kind === 'uninstall' ? 'uninstalled' : j.kind === 'update' ? 'updated' : 'installed';
+        const action = t(j.kind === 'uninstall' ? 'activity:log.jobVerbUninstalled' : j.kind === 'update' ? 'activity:log.jobVerbUpdated' : 'activity:log.jobVerbInstalled');
         if (j.state === 'done') {
           refresh = true;
           // Optimistic flip so the game page updates before the refresh
           // round-trip (FE-4); the refresh reconciles afterwards.
           setGames((prev) => optimisticGamesAfterJob(prev, j));
           notify(t(`downloads:${verbKey}`, { title: j.title }));
-          log({ type: 'download', game: j.title, detail: `${verbKey} ${j.title}`, meta: j.source });
+          log({ type: 'download', game: j.title, detail: t('activity:log.jobDone', { action, title: j.title }), meta: j.source });
         } else if (j.state === 'failed') {
           notify(t('downloads:jobFailed', { title: j.title, error: j.error ?? t(`downloads:actionFailed.${j.kind}`) }), 'err');
-          log({ type: 'download', game: j.title, detail: `${j.kind} of ${j.title} failed`, meta: j.error });
+          log({ type: 'download', game: j.title, detail: t('activity:log.jobFailed', { kind: t(jobKindKey(j.kind)), title: j.title }), meta: j.error });
         }
       }
       if (refresh) loadRef.current('update');
@@ -541,7 +552,7 @@ export function App() {
       // Sideloaded games lead the library, like before, with their saved settings.
       setGames((prev) => [game, ...prev.filter((x) => x.id !== game.id)]);
       notify(t('game:added', { title }));
-      log({ type: 'add', game: title, detail: `Sideloaded ${title}`, meta: game.executable });
+      log({ type: 'add', game: title, detail: t('activity:log.sideloaded', { title }), meta: game.executable });
     });
   };
 
@@ -560,7 +571,7 @@ export function App() {
         invalidateGameDetailsCache(game.id);
         setView((v) => (v.name === 'game' && v.id === game.id ? { name: v.from } : v));
         notify(t('game:removed', { title: game.title }));
-        log({ type: 'remove', game: game.title, detail: `Removed ${game.title} from library`, meta: game.install_dir || undefined });
+        log({ type: 'remove', game: game.title, detail: t('activity:log.removed', { title: game.title }), meta: game.install_dir || undefined });
       })
       .catch((err) => notify(errMsg(err), 'err'));
   };
