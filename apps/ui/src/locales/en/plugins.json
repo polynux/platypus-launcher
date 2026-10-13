@@ -119,7 +119,6 @@
     "saveFailed": "The plugin couldn't save that setting."
   },
   "builtIn": {
-    "steam": "Reads your local Steam libraries and launches games through the Steam client.",
     "protondb": "Compatibility ratings and community notes for Steam games."
   }
 }

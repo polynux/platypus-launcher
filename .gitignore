@@ -38,6 +38,7 @@ __pycache__/
 /installed/
 internal/plugtest/plugins/
 plugins/echo/bin/
+plugins/steam/bin/
 
 # Root build output
 /platypus

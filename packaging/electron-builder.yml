@@ -1,9 +1,27 @@
 # Platypus distributable (issue #29). One root command builds it:
 # `bun run package`. It bundles the app's own pinned Electron (apps/desktop's
-# exact dependency, never the system one), the built UI, and a trimmed
-# platypus-core binary for linux-x64. Store plugins are NOT bundled: they
-# install per user with plugins/install.sh and approval pins them (see
-# docs/electron.md).
+# exact dependency, never the system one), the built UI, a trimmed
+# platypus-core binary for linux-x64, and the bundled steam plugin (issue
+# #54: <resources>/plugins/steam, next to the core, so the core auto-installs
+# it on first start). Other store plugins still install per user with
+# plugins/install.sh and approval pins them (see docs/electron.md).
+appId: io.github.polynux.platypus
+productName: Platypus
+directories:
+  app: apps/desktop
+  output: packaging/dist
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: packaging/stage/platypus-core
+    to: platypus-core
+  - from: apps/ui/dist
+    to: frontend
+  - from: packaging/icons/appicon.png
+    to: icon.png
+  - from: packaging/stage/bundled-plugins/steam
+    to: plugins/steam
 appId: io.github.polynux.platypus
 productName: Platypus
 directories:

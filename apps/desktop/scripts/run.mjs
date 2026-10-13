@@ -70,12 +70,16 @@ async function waitFor(port, ms = 30000) {
 
 console.log('» building the Go core');
 run('go', ['build', '-o', path.join(here, '.build/platypus-core'), './cmd/platypus-core'], repo);
+console.log('» building the bundled plugins');
+run('node', ['scripts/bundled-plugins.mjs', path.join(here, '.build/bundled-plugins')], here);
 console.log('» building the shell');
 run('node', ['scripts/build.mjs'], here);
 
 const env = {
   ...process.env,
   PLATYPUS_CORE: path.join(here, '.build/platypus-core'),
+  // Where the core finds the bundled steam plugin (issue #54).
+  PLATYPUS_BUNDLED_PLUGINS: path.join(here, '.build/bundled-plugins'),
   // Explicit, so the page never depends on how Electron judges "packaged".
   PLATYPUS_FRONTEND_DIST: path.join(frontend, 'dist'),
 };
