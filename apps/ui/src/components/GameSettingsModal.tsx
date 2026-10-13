@@ -10,7 +10,7 @@ import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
 import { ErrorNotice } from './ErrorNotice';
 import { parseReleaseYear } from './AddGameModal';
-import { GeneralSettings } from './SettingsModal';
+import { GeneralSettings, useGameSettingsDraft, type GameSettingsDraft } from './SettingsModal';
 import { CloudSavesPanel } from './CloudSavesPanel';
 import { GameSettingsPanel } from './PluginSettings';
 import { VersionsDialog } from './VersionsDialog';
@@ -69,6 +69,16 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // the element and starts at its top.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [shown]);
+  // One shared draft of the game's settings (issue #59): Suggested tweaks
+  // and General's Advanced section edit the same object, so a save from
+  // either tab writes the merged current values, never a stale copy.
+  const shared = useGameSettingsDraft(game);
+  const handleTweakChange = (s: GameSettings, what: string) => {
+    // The toggle was computed from the shared draft (see TabBody), so
+    // adopting it keeps General's unsaved edits in the saved payload.
+    shared.applySaved(s);
+    p.onChangeSettings(s, what);
+  };
   // The Maintenance core calls start with the dialog (issue #56), so the data
   // is usually ready before the tab is clicked. The tab awaits these same
   // promises: one fetch per dialog open, shared by the tab.
@@ -145,6 +155,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                 onCopied={p.onCopied}
                 onDirty={setDirty}
                 onChanged={p.onCustomized}
+                draftState={shared}
               />
               <LegalSection game={game} plugin={plugin} />
             </section>
@@ -152,7 +163,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
               <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
                 {/* The cloud panel brings its own heading. */}
                 {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{tabLabel(t, shown)}</h3>}
-                <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} />
+                <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} shared={shared} onTweakChange={handleTweakChange} />
               </section>
             )}
           </div>
@@ -228,7 +239,7 @@ function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void
   );
 }
 
-function TabBody({ tab, onOpenGeneral, ...p }: GameSettingsModalProps & { tab: GameSettingsTab; onOpenGeneral: () => void }) {
+function TabBody({ tab, onOpenGeneral, shared, onTweakChange, ...p }: GameSettingsModalProps & { tab: GameSettingsTab; onOpenGeneral: () => void; shared: GameSettingsDraft; onTweakChange: (s: GameSettings, what: string) => void }) {
   const { game, plugin } = p;
   const viaSteam = game.source === 'steam' && !game.executable;
   switch (tab) {
@@ -244,11 +255,13 @@ function TabBody({ tab, onOpenGeneral, ...p }: GameSettingsModalProps & { tab: G
       return (
         <TweaksPanel
           framed={false}
-          game={game}
+          // The shared draft (issue #59): the toggle reads the same settings
+          // General edits, so its instant save never drops those edits.
+          game={{ ...game, settings: shared.current }}
           // Proton-only env tweaks do nothing for a native build.
           tweaks={game.native ? p.tweaks.filter((t) => !Object.keys(t.env ?? {}).some((k) => /^(PROTON_|WINE_)/.test(k))) : p.tweaks}
           viaSteam={viaSteam}
-          onChange={p.onChangeSettings}
+          onChange={onTweakChange}
           onOpenSettings={onOpenGeneral}
         />
       );

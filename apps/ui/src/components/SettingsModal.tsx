@@ -108,17 +108,75 @@ function AdvancedFold({ set, children }: { set: number; children: React.ReactNod
   );
 }
 
-/** The launcher's own settings for one game (runner, wrappers, env…): the form
- *  of the "General" tab, and of the standalone settings dialog. */
-export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded, onChanged }: GeneralProps) {
-  const { t } = useTranslation(['gameSettings', 'common']);
+/** One shared draft of a game's settings (issue #59): Suggested tweaks and
+ *  General's Advanced section edit the same object, so a save from either
+ *  tab writes the merged current values and never a stale copy over the
+ *  other tab's changes. The dialog owns it; GeneralSettings uses it when
+ *  given, else falls back to its own (the standalone dialog). */
+export interface GameSettingsDraft {
+  draft: GameSettings;
+  setDraft: React.Dispatch<React.SetStateAction<GameSettings>>;
+  envRows: EnvRow[];
+  setEnvRows: React.Dispatch<React.SetStateAction<EnvRow[]>>;
+  nextRowId: React.MutableRefObject<number>;
+  /** The draft with the valid env rows folded in: what any save writes. */
+  current: GameSettings;
+  /** The form differs from the last save: Esc / click-outside stay inert. */
+  dirty: boolean;
+  /** The general form saved: its rows stay, the baseline catches up. */
+  markClean: () => void;
+  /** A save from the other tab landed: adopt it wholesale and rebase. */
+  applySaved: (s: GameSettings) => void;
+}
+
+function rowsSig(rows: EnvRow[]): string {
+  return JSON.stringify(rows.map((r) => [r.key, r.value]));
+}
+
+/** Owns a shared draft, initialized from the game's settings. */
+export function useGameSettingsDraft(game: Game): GameSettingsDraft {
   const [draft, setDraft] = useState<GameSettings>(() => normalizeSettings(game.settings));
   const [envRows, setEnvRows] = useState<EnvRow[]>(() => envToRows(normalizeSettings(game.settings).env_vars));
   const nextRowId = useRef(envRows.length);
-  // Dirty = draft or env rows differ from what was loaded: Esc / click-outside then stay inert.
-  const envSig = JSON.stringify(envRows.map((r) => [r.key, r.value]));
-  const [initial, setInitial] = useState({ draft: JSON.stringify(draft), env: envSig });
-  const dirty = JSON.stringify(draft) !== initial.draft || envSig !== initial.env;
+  const [initial, setInitial] = useState(() => ({ draft: JSON.stringify(draft), env: rowsSig(envRows) }));
+  const validEnv = useMemo(() => rowsToEnv(envRows), [envRows]);
+  const current = useMemo(() => ({ ...draft, env_vars: validEnv }), [draft, validEnv]);
+  const dirty = JSON.stringify(draft) !== initial.draft || rowsSig(envRows) !== initial.env;
+  const markClean = () => setInitial({ draft: JSON.stringify(draft), env: rowsSig(envRows) });
+  const applySaved = (s: GameSettings) => {
+    const n = normalizeSettings(s);
+    const rows = envToRows(n.env_vars);
+    nextRowId.current = rows.length;
+    setDraft(n);
+    setEnvRows(rows);
+    setInitial({ draft: JSON.stringify(n), env: rowsSig(rows) });
+  };
+  // The game changed under the dialog (the other tab saved and the new
+  // settings came back as props, or the library reloaded): a clean form
+  // follows them, unsaved edits stay put so no save drops them.
+  const prevId = useRef(game.id);
+  const prevSig = useRef(JSON.stringify(normalizeSettings(game.settings)));
+  const sig = JSON.stringify(normalizeSettings(game.settings));
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    if (prevId.current !== game.id || sig !== prevSig.current) {
+      const idChanged = prevId.current !== game.id;
+      prevId.current = game.id;
+      prevSig.current = sig;
+      if (idChanged || !dirtyRef.current) applySaved(game.settings);
+    }
+  }, [game.id, sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { draft, setDraft, envRows, setEnvRows, nextRowId, current, dirty, markClean, applySaved };
+}
+
+/** The launcher's own settings for one game (runner, wrappers, env…): the form
+ *  of the "General" tab, and of the standalone settings dialog. */
+export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDirty, embedded, onChanged, draftState }: GeneralProps & { draftState?: GameSettingsDraft }) {
+  const { t } = useTranslation(['gameSettings', 'common']);
+  const fallback = useGameSettingsDraft(game);
+  const shared = draftState ?? fallback;
+  const { draft, setDraft, envRows, setEnvRows, nextRowId, current, dirty, markClean } = shared;
   useEffect(() => { onDirty?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
@@ -160,9 +218,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   }, [isCustom, game.executable, game.id]);
   const runMode = draft.run_mode ?? '';
   const effectiveNative = runMode === 'native' ? true : runMode === 'wine' ? false : (detected?.native ?? native);
-  const validEnv = useMemo(() => rowsToEnv(envRows), [envRows]);
-  const current = { ...draft, env_vars: validEnv };
-  const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, draft, validEnv]); // eslint-disable-line react-hooks/exhaustive-deps
+  const backend = useMemo(() => toBackendGame({ ...game, settings: current }), [game, current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live preview from the real backend, debounced 300ms.
   useEffect(() => {
@@ -195,6 +251,9 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   const rateSel = rateCustom ? 'custom' : rateChoice(draft.gamescope_r);
   const gs = parseGamescopeArgs(draft.gamescope_args);
   const [gsExtra, setGsExtra] = useState(() => parseGamescopeArgs(draft.gamescope_args).extra);
+  // The other tab can rewrite the gamescope string (issue #59): the
+  // free-text field follows it instead of keeping a stale flag.
+  useEffect(() => { setGsExtra(parseGamescopeArgs(draft.gamescope_args).extra); }, [draft.gamescope_args]);
   // Toggling re-derives from the saved string, so the free-text field never keeps a flag a toggle now owns.
   const setGs = (patch: Partial<typeof gs>) => {
     const next = { ...gs, ...patch };
@@ -549,7 +608,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
           <div className="flex gap-2.5">
             <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
-            <Button variant="primary" onClick={() => { onSave(current); setInitial({ draft: JSON.stringify(draft), env: envSig }); }} className="flex-1">{t('gameSettings:general.save')}</Button>
+            <Button variant="primary" onClick={() => { onSave(current); markClean(); }} className="flex-1">{t('gameSettings:general.save')}</Button>
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">{t('gameSettings:general.unsaved')}</div>}
           <div className="font-mono text-[12px] leading-relaxed text-white/55">
