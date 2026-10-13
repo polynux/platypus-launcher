@@ -1,0 +1,26 @@
+{
+  "id": "steam",
+  "name": "Steam",
+  "version": "1.0.0",
+  "author": "Platypus",
+  "description": "Your Steam library from the local Steam client: installed games, art from the client's cache, launches through the Steam client, playtime and Steam Cloud.",
+  "manifestVersion": 1,
+  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"], "transport": "jsonrpc-stdio" },
+  "store": "steam",
+  "gameIdPrefix": "steam_",
+  "exec": "bin/platypus-steam",
+  "icon": "icon.svg",
+  "capabilities": ["library", "launch", "playtime", "local-art"],
+  "requires": [
+    { "bin": "steam", "hint": "install it from your distribution or store.steampowered.com", "optional": true },
+    { "bin": "flatpak", "hint": "install flatpak from your distribution", "optional": true },
+    { "bin": "xdg-open", "hint": "install xdg-utils from your distribution", "optional": true }
+  ],
+  "install_dir": "steam",
+  "permissions": {
+    "network": ["*.steampowered.com"],
+    "read": ["~/.local/share/Steam", "~/.steam/steam", "~/.var/app/com.valvesoftware.Steam/.local/share/Steam"],
+    "write": []
+  },
+  "storefront": { "url": "https://store.steampowered.com/", "domains": ["steampowered.com", "steamcommunity.com", "steamstatic.com", "valvesoftware.com"] }
+}
