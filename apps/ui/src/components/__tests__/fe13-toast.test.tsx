@@ -35,14 +35,13 @@ vi.mock('../../effect/runtime', () => ({
 import { App } from '../../App';
 
 describe('FE-13 toast keeps the full error', () => {
-  it('exposes a 200-char message in full (title) instead of a 90-char slice', async () => {
+  it('exposes a 200-char message in full instead of a 90-char slice', async () => {
     const { getByRole } = render(<App />);
-    const toast = await waitFor(() => getByRole('status'), { timeout: 5000 });
-    const inner = toast.querySelector('span:last-child') as HTMLElement | null;
-    const title = toast.getAttribute('title') ?? inner?.getAttribute('title') ?? '';
-    // Full text must be in the title for copy/hover (may carry a source prefix).
-    expect(title.includes(LONG)).toBe(true);
-    // And visible text must wrap, not single-line truncate.
-    expect(inner?.className.includes('truncate')).toBe(false);
+    // Errors are assertive (issue #64): the load failure is a toast error.
+    const toast = await waitFor(() => getByRole('alert'), { timeout: 5000 });
+    expect(toast.textContent ?? '').toContain(LONG.slice(0, 60));
+    // And visible text wraps (line-clamp), not single-line truncate.
+    expect(toast.className.includes('truncate')).toBe(false);
+    expect((toast.textContent ?? '').length).toBeGreaterThan(90);
   });
 });

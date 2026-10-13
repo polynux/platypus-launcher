@@ -79,7 +79,7 @@ describe('useChat', () => {
     expect(result.current.unread).toBe(2);
     expect(result.current.unreadOf('echo', '1')).toBe(2);
     act(() => vi.advanceTimersByTime(3000));
-    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on echo');
+    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on echo', 'busy');
     expect(JSON.stringify(notify.mock.calls)).not.toContain('secret words');
   });
 
@@ -100,8 +100,8 @@ describe('useChat', () => {
     expect(result.current.unread).toBe(5);
     expect(result.current.unreadOf('echo-b', '1')).toBe(3);
     act(() => vi.advanceTimersByTime(3000));
-    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on Echo (test plugin)');
-    expect(notify).toHaveBeenCalledWith('New message from Ben Ortiz on Echo B (test plugin)');
+    expect(notify).toHaveBeenCalledWith('New message from Ana Ruiz on Echo (test plugin)', 'busy');
+    expect(notify).toHaveBeenCalledWith('New message from Ben Ortiz on Echo B (test plugin)', 'busy');
   });
 
   it('coalesces the messages of one store that arrive together into one toast', async () => {
@@ -119,7 +119,7 @@ describe('useChat', () => {
     expect(notify).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(3000));
     expect(notify).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith('3 new messages from Ana Ruiz and Bo Lindqvist on echo');
+    expect(notify).toHaveBeenCalledWith('3 new messages from Ana Ruiz and Bo Lindqvist on echo', 'busy');
   });
 
   it('drops a conversation the backend evicted, and keeps a newer one', async () => {

@@ -45,7 +45,7 @@ const messageOf = (err: unknown) => (err instanceof Error ? err.message : String
  *  name and the store's (never the text). `storeNames` maps a plugin id to its name; the id is the fallback. */
 export function useChat(
   social: SocialView[],
-  notify: (msg: string, kind?: 'ok' | 'err') => void,
+  notify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void,
   storeNames: Record<string, string> = {},
 ): ChatState {
   const [conversations, setConversations] = useState<ChatView[]>([]);
@@ -68,7 +68,7 @@ export function useChat(
     // A store's new messages within a few seconds become one toast.
     const alerts = createAlertCoalescer((plugin, batch) => {
       const store = storeNamesRef.current[plugin] ?? plugin;
-      notifyRef.current(alertText(batch.count, batch.names, store));
+      notifyRef.current(alertText(batch.count, batch.names, store), 'busy');
     });
     const unsubscribe = onChat((e) => {
       if (e.dropped) {

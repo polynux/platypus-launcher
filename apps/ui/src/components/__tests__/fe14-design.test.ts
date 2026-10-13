@@ -15,14 +15,20 @@ describe('FE-14 design drift guards', () => {
   });
 
   it('toast matches DESIGN §6.6 instrument readout (rounded-[3px]) and sits above an open modal', () => {
+    // Issue #64: the toast layer is Sonner (ds/sonner.tsx + style.css), not
+    // the old bottom notice in App.tsx. The shape stays spec'd by §6.6
+    // (radius/border/mono); Sonner's own z-index (999999999) beats any z-50
+    // overlay wherever the toast mounts.
+    const sonner = src('components/ds/sonner.tsx');
+    expect(sonner).toContain('rounded-[3px]');
+    expect(sonner).toContain('bg-[#191410]');
+    expect(sonner).toContain('font-mono');
+    expect(sonner).toContain('top-right');
+    const css = src('style.css');
+    expect(css).toContain('platypus-toast');
     const app = src('App.tsx');
-    // FE-14 gave the toast z-50, the same as the modal overlay, so visibility
-    // over a modal relied on DOM order. The shape stays spec'd by §6.6
-    // (radius/border/mono); the stacking plane must not rely on DOM order:
-    // z-[60] beats any z-50 overlay wherever the toast mounts.
-    expect(app).toContain('z-[60]');
-    expect(app).toContain('rounded-[3px]');
-    expect(app.includes('z-[60] flex max-w-md')).toBe(true);
+    expect(app).toContain('Toaster');
+    expect(app.includes('fixed bottom-4 right-4')).toBe(false);
     const modal = src('components/ds/dialog.tsx');
     expect(modal).toContain('z-50');
   });

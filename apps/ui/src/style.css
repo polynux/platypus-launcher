@@ -181,6 +181,62 @@
   transition: none !important;
 }
 
+/* Toasts (issue #64, Sonner): top right, below the window controls. New
+   toasts still appear while a game runs (platypus-paused) but without
+   animation; prefers-reduced-motion (above) already stills them. Sonner's own
+   CSS disables its transitions under prefers-reduced-motion too. */
+.platypus-toaster {
+  z-index: 60;
+}
+.platypus-toast {
+  user-select: text;
+}
+.platypus-toast-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.platypus-toast-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.platypus-toast-count {
+  flex: none;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  font-size: 11px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+.platypus-toast-description {
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+/* Sonner's close-button vars (set from [dir]) place the button over the
+   toast's top corner; with `unstyled` the position comes from here. */
+.platypus-toast-close {
+  top: 0;
+  left: var(--toast-close-button-start);
+  right: var(--toast-close-button-end);
+  transform: var(--toast-close-button-transform);
+}
+.platypus-paused [data-sonner-toast],
+.platypus-paused [data-sonner-toast] > *,
+.platypus-paused [data-sonner-toaster] {
+  animation: none !important;
+  transition: none !important;
+}
+
 /* Radial wash. Applied to the non-scrolling root, so no background-attachment
    is needed (WebKitGTK handles `fixed` unreliably). */
 .app-wash {
