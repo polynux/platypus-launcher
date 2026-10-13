@@ -15,6 +15,7 @@ import { formatBytes } from '../lib/games';
 import { ErrorNotice } from './ErrorNotice';
 import { LauncherApi } from '../effect/runtime';
 import { coreErrMsg } from '../lib/coreError';
+import { useMaintenancePrefetch } from './maintenancePrefetch';
 import i18n from '../lib/i18n';
 
 /** The folder a game folder sits in ("" when there is none). */
@@ -49,18 +50,35 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   // A sideloaded game's removal check is fetched with the tab, not on click.
   const removeCheck = useRemoveCheck(game, game.store === 'custom' && !running, confirm);
   const [savePaths, setSavePaths] = useState<SavePath[] | null>(null);
-  const [autoState, setAutoState] = useState<AutoBackupState | null>(null);
+  // The auto-backup state: undefined until it lands, null when the call
+  // failed, so the confirm line can tell loading apart from an answer.
+  const [autoState, setAutoState] = useState<AutoBackupState | null | undefined>(undefined);
   const [allowNoBackup, setAllowNoBackup] = useState(false);
+  // The dialog starts the Maintenance calls when it opens (issue #56): the
+  // confirm below awaits the same promises instead of refetching.
+  const pre = useMaintenancePrefetch();
+  const shared = pre != null && pre.gameId === game.id ? pre : null;
   useEffect(() => { setConfirm(false); setVerifyOpen(false); setMoveOpen(false); }, [game.id]);
-  useEffect(() => { setSavePaths(null); setAutoState(null); setAllowNoBackup(false); }, [game.id, confirm]);
+  useEffect(() => { setSavePaths(null); setAutoState(undefined); setAllowNoBackup(false); }, [game.id, confirm]);
   // The uninstall confirm shows the backup line: what the gate will back up,
   // the cloud line when the store syncs saves, or the "delete without a save
-  // backup" checkbox when no paths are known without cloud.
+  // backup" checkbox when no paths are known without cloud. The dialog-open
+  // fetch (shared) usually answered already; the section's own reloads write
+  // their fresh answers back there too, so this never fires a second fetch
+  // for the same dialog open.
   useEffect(() => {
     if (!confirm || game.store === 'custom') return;
+    let live = true;
+    if (shared) {
+      if (shared.latest.paths !== undefined) setSavePaths(shared.latest.paths);
+      else shared.paths.then((v) => { if (live) setSavePaths(v); }, () => { if (live) setSavePaths([]); });
+      if (shared.latest.auto !== undefined) setAutoState(shared.latest.auto);
+      else void shared.auto.then((v) => { if (live) setAutoState(v); });
+      return () => { live = false; };
+    }
     Effect.runPromise(LauncherApi.getSavePaths(game)).then(setSavePaths).catch(() => setSavePaths([]));
     Effect.runPromise(LauncherApi.getAutoBackupState(game)).then(setAutoState).catch(() => setAutoState(null));
-  }, [confirm, game]);
+  }, [confirm, game, shared]); // eslint-disable-line react-hooks/exhaustive-deps
   // A game that starts while the confirm row is open closes it: a running
   // game can't be removed, so there is nothing left to answer.
   useEffect(() => { if (running) setConfirm(false); }, [running]);
@@ -165,13 +183,19 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
       {installed && offers(plugin, 'install', { game }) && (confirm ? (
         <Row title={t('gameSettings:maintenance.uninstallTitle')} text={uninstallText}>
           <div className="space-y-2">
-            <p className="text-[12px] text-white/60">
-              {cloudNoSaves
-                ? t('gameSettings:maintenance.saveBackups.uninstallCloudNoSaves')
-                : noSavePaths
-                  ? t('gameSettings:maintenance.saveBackups.uninstallNoSaves')
-                  : t('gameSettings:maintenance.saveBackups.uninstallBackedUp')}
-            </p>
+            {/* Loading text in place until the save paths and the auto-backup
+                state land: never an empty line, never the wrong line. */}
+            {savePaths == null || autoState === undefined ? (
+              <p role="status" className="text-[12px] text-white/60">{t('gameSettings:maintenance.saveBackups.loading')}</p>
+            ) : (
+              <p className="text-[12px] text-white/60">
+                {cloudNoSaves
+                  ? t('gameSettings:maintenance.saveBackups.uninstallCloudNoSaves')
+                  : noSavePaths
+                    ? t('gameSettings:maintenance.saveBackups.uninstallNoSaves')
+                    : t('gameSettings:maintenance.saveBackups.uninstallBackedUp')}
+              </p>
+            )}
             {needsNoSavesCheck && (
               <label className="flex items-center gap-2 text-[12.5px] text-white/75">
                 <input

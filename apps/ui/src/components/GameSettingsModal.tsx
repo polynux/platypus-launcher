@@ -21,6 +21,7 @@ import { TweaksPanel } from './TweaksPanel';
 import { LegalSection } from './LegalSection';
 import { cx } from './ui';
 import { tabLabel, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
+import { MaintenancePrefetchProvider, useMaintenancePrefetchSource } from './maintenancePrefetch';
 
 export interface GameSettingsModalProps {
   game: Game;
@@ -68,6 +69,10 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // the element and starts at its top.
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [shown]);
+  // The Maintenance core calls start with the dialog (issue #56), so the data
+  // is usually ready before the tab is clicked. The tab awaits these same
+  // promises: one fetch per dialog open, shared by the tab.
+  const maintenance = useMaintenancePrefetchSource(game);
 
   return (
     // Constant outer height across tabs (issue #57): about the Main tab's
@@ -91,6 +96,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
             scrollbar: the dialog itself never scrolls (no double scrollbars).
             Narrow widths stack the tabs above the content and keep the same
             outer height, with the content scrolling under the tabs. */}
+        <MaintenancePrefetchProvider pre={maintenance}>
         <div className="flex min-h-0 flex-1 flex-col gap-5 @2xl:grid @2xl:grid-cols-[11rem_1fr] @2xl:grid-rows-[minmax(0,1fr)]">
           <div
             role="tablist"
@@ -150,6 +156,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
             )}
           </div>
         </div>
+        </MaintenancePrefetchProvider>
       </div>
     </Modal>
   );
