@@ -36,6 +36,8 @@ import type {
   MigrationNotice,
   MoveCheck,
   ProtonVersion,
+  RemoveCheck,
+  RemoveOptions,
   SessionEvent,
   SocialStatus,
   SocialView,
@@ -169,6 +171,13 @@ export const LauncherApi = {
   addCustomGame: (title: string, executable: string) =>
     call<Game>('AddCustomGame', () => App.AddCustomGame(title, executable)),
   removeCustomGame: (id: string) => call<void>('RemoveCustomGame', () => App.RemoveCustomGame(id)),
+  // Removing a sideloaded game with its Wine prefix and/or game files
+  // (issue #43): CheckRemove says what would go, RemoveGame queues the
+  // deletion as a job. Library-only stays removeCustomGame.
+  checkRemove: (gameId: string, opts: RemoveOptions) =>
+    call<RemoveCheck>('CheckRemove', () => App.CheckRemove(gameId, opts)),
+  removeGame: (gameId: string, opts: RemoveOptions) =>
+    call<Job>('RemoveGame', () => App.RemoveGame(gameId, opts)),
   // A sideloaded game's release year (0 clears it: unknown).
   setCustomGameYear: (id: string, year: number) =>
     call<Game>('SetCustomGameYear', () => App.SetCustomGameYear(id, year)),

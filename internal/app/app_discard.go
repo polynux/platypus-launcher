@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"platypus/internal/jobs"
 	"platypus/internal/plugins"
@@ -46,7 +45,7 @@ func discardParamsFor(j types.Job, gamesRoot, home string) (map[string]any, erro
 	if j.Kind == jobs.KindUninstall {
 		return nil, fmt.Errorf("an uninstall has no downloaded data")
 	}
-	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindMove {
+	if j.Kind == jobs.KindVerify || j.Kind == jobs.KindMove || j.Kind == jobs.KindRemove {
 		// These work on the installed game: discarding would delete it.
 		return nil, jobs.ErrNoData
 	}
@@ -87,16 +86,11 @@ func checkFolderFor(dir, gamesRoot, action, home string) error {
 	if dir == "/" {
 		return fmt.Errorf("refusing to %s the filesystem root", action)
 	}
-	for _, sys := range []string{"/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/proc", "/run", "/sbin", "/sys", "/usr", "/var"} {
-		if dir == sys || strings.HasPrefix(dir, sys+"/") {
-			return fmt.Errorf("refusing to %s system folder %s", action, dir)
-		}
+	if isSystemDir(dir) {
+		return fmt.Errorf("refusing to %s system folder %s", action, dir)
 	}
-	if home != "" {
-		home = filepath.Clean(home)
-		if dir == home || strings.HasPrefix(home, dir+"/") {
-			return fmt.Errorf("refusing to %s your home folder or one above it (%s)", action, dir)
-		}
+	if home != "" && isHomeOrAbove(dir, home) {
+		return fmt.Errorf("refusing to %s your home folder or one above it (%s)", action, dir)
 	}
 	if root := filepath.Clean(gamesRoot); gamesRoot != "" && dir == root {
 		return fmt.Errorf("refusing to %s the Games folder itself (%s)", action, dir)

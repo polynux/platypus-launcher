@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"platypus/internal/types"
 )
 
 // CORE-11: removing a hand-added game must also drop its per-game settings,
@@ -29,10 +31,35 @@ func TestRemoveCustomGameDropsSettings(t *testing.T) {
 	if err := s.SetGameSettings(g.ID, map[string]any{"runner_id": "auto"}); err != nil {
 		t.Fatal(err)
 	}
+	// Every per-game row the game may hold goes with it.
+	if err := s.SetPin(g.ID, types.VersionPin{Kind: types.PinChannel, ID: "beta"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetOptions(g.ID, types.InstallOptions{"language": "fr"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCloudGameMode(g.ID, types.CloudOff); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AcceptTerms(g.ID, []types.TermAcceptance{{ID: "eula", Version: "3", At: 1}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.RemoveCustomGame(g.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := s.GameSettings()[g.ID]; ok {
 		t.Fatalf("settings for removed game %s survived", g.ID)
+	}
+	if _, ok := s.Pin(g.ID); ok {
+		t.Fatalf("pin for removed game %s survived", g.ID)
+	}
+	if _, ok := s.Options(g.ID); ok {
+		t.Fatalf("install options for removed game %s survived", g.ID)
+	}
+	if mode := s.CloudGameMode(g.ID); mode != "" {
+		t.Fatalf("cloud mode for removed game %s survived: %q", g.ID, mode)
+	}
+	if got := s.AcceptedTerms(g.ID); len(got) != 0 {
+		t.Fatalf("accepted terms for removed game %s survived: %v", g.ID, got)
 	}
 }

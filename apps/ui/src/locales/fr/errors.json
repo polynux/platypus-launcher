@@ -115,6 +115,25 @@
     "notStore": "« {{source}} » n'est pas un plugin de boutique.",
     "unsupported": "« {{name}} » n'échange pas de codes."
   },
+  "remove": {
+    "busy": "{{title}} a déjà un {{kind}} en attente.",
+    "escaped": "Refus de supprimer {{path}} : il se résout en dehors de lui-même.",
+    "gamesFolder": "Refus de supprimer {{path}} : il contient {{folder}} de Platypus.",
+    "home": "Refus de supprimer votre dossier personnel ou un dossier au-dessus ({{path}}).",
+    "noExecutable": "{{title}} n'a pas d'exécutable, Platypus ne sait donc pas quel dossier contient ses fichiers.",
+    "noMarker": "Refus de supprimer {{path}} : il ne contient pas de préfixe Wine (pas de system.reg).",
+    "notAbsolute": "Refus de supprimer {{path}} : ce n'est pas un chemin absolu propre.",
+    "notFound": "{{path}} n'est pas sur le disque.",
+    "nothingToDelete": "Choisissez quoi supprimer : le préfixe Wine, les fichiers du jeu, ou les deux.",
+    "ownData": "Refus de supprimer {{path}} : il contient {{folder}} de Platypus.",
+    "prefixesRoot": "Refus de supprimer {{path}} : il contient {{folder}} de Platypus.",
+    "root": "Refus de supprimer la racine du système de fichiers.",
+    "shared": "Refus de supprimer {{path}} : {{title}} l'utilise encore.",
+    "symlink": "Refus de supprimer {{path}} : c'est un lien symbolique.",
+    "system": "Refus de supprimer le dossier système {{path}}.",
+    "unreadable": "Refus de supprimer {{path}} : il ne peut pas être lu.",
+    "userDir": "Refus de supprimer {{path}} : il chevauche votre dossier {{folder}}."
+  },
   "settings": {
     "cleanupDays": {
       "invalid": "Conservez les téléchargements annulés entre 0 et {{max}} jours, pas {{days}}."
