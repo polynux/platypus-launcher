@@ -113,6 +113,7 @@
   "settings": {
     "saved": "Réglage enregistré",
     "notApplied": "Enregistré, mais le plugin ne l'a pas encore pris en compte",
+    "loading": "Chargement…",
     "sectionTitle": "réglages",
     "noGameSettings": "{{plugin}} n'a aucun réglage pour {{title}}.",
     "saveFailed": "Le plugin n'a pas pu enregistrer ce réglage."

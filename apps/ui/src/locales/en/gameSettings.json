@@ -250,6 +250,7 @@
     "saveBackups": {
       "heading": "Save backups",
       "description": "One zip per run, kept with the game. Restoring writes only the files the backup holds and takes a safety backup first.",
+      "loading": "Loading…",
       "backupNow": "Back up now",
       "backingUp": "Backing up…",
       "queued": "Backup queued.",

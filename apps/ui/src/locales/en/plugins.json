@@ -113,6 +113,7 @@
   "settings": {
     "saved": "Setting saved",
     "notApplied": "Saved, but the plugin did not take it yet",
+    "loading": "Loading…",
     "sectionTitle": "settings",
     "noGameSettings": "{{plugin}} has no settings for {{title}}.",
     "saveFailed": "The plugin couldn't save that setting."

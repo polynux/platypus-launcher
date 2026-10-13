@@ -250,6 +250,7 @@
     "saveBackups": {
       "heading": "Sauvegardes",
       "description": "Un zip par exécution, gardé avec le jeu. Restaurer n’écrit que les fichiers de la sauvegarde et fait d’abord une sauvegarde de sécurité.",
+      "loading": "Chargement…",
       "backupNow": "Sauvegarder",
       "backingUp": "Sauvegarde…",
       "queued": "Sauvegarde en file d’attente.",

@@ -126,7 +126,9 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   };
 
   if (error && !view) return <SettingError message={error} />;
-  if (!view) return null;
+  // Loading text in place, never an empty first frame (issue #56): the game
+  // settings' plugin tab renders this before the plugin answers.
+  if (!view) return <p role="status" className="text-[12.5px] text-white/55">{t('plugins:settings.loading')}</p>;
   if (view.groups.length === 0) return emptyText ? <p className="text-[12.5px] text-white/70">{emptyText}</p> : null;
   const body = (
     <div className="space-y-4">

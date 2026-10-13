@@ -11,6 +11,7 @@ import { MonoLabel } from './ui';
 import { formatBytes } from '../lib/games';
 import { coreErrMsg } from '../lib/coreError';
 import { currentLocale } from '../lib/format';
+import { useMaintenancePrefetch } from './maintenancePrefetch';
 
 function formatTime(ms: number): string {
   return new Date(ms * 1000).toLocaleString(currentLocale(), { dateStyle: 'medium', timeStyle: 'short' });
@@ -33,22 +34,48 @@ export function SaveBackupsSection({ game, onNotify }: {
   const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  // The dialog starts these calls when it opens (issue #56): await the same
+  // promises instead of firing new ones — one fetch per dialog open, shared
+  // by the tab. Outside the dialog there is nothing shared, so the section
+  // fetches for itself as before.
+  const pre = useMaintenancePrefetch();
+  const shared = pre != null && pre.gameId === game.id ? pre : null;
+
   const reload = () => {
     Effect.runPromise(LauncherApi.listSaveBackups(game.id))
-      .then(setBackups)
+      .then((v) => { if (shared) shared.latest.backups = v; setBackups(v); })
       .catch((e) => setError(coreErrMsg(e)));
     Effect.runPromise(LauncherApi.getSavePaths(game))
-      .then(setPaths)
+      .then((v) => { if (shared) shared.latest.paths = v; setPaths(v); })
       .catch((e) => setError(coreErrMsg(e)));
     Effect.runPromise(LauncherApi.getGameSaveBackup(game.id))
-      .then(setMode)
+      .then((v) => { if (shared) shared.latest.mode = v; setMode(v); })
       .catch(() => setMode(''));
     Effect.runPromise(LauncherApi.getAutoBackupState(game))
-      .then(setAuto)
+      .then((v) => { if (shared) shared.latest.auto = v; setAuto(v); })
       .catch(() => setAuto(null));
   };
 
-  useEffect(reload, [game.id]);
+  useEffect(() => {
+    if (!shared) {
+      reload();
+      return;
+    }
+    let live = true;
+    // Fresh answers the dialog already holds (a remount after an edit) apply
+    // at once; anything still flying is awaited, never refetched. Either way
+    // the first frame below already has its final structure (loading text in
+    // place, never null), so the tab never flashes empty.
+    if (shared.latest.backups !== undefined) setBackups(shared.latest.backups);
+    else shared.backups.then((v) => { if (live) setBackups(v); }, (e) => { if (live) setError(coreErrMsg(e)); });
+    if (shared.latest.paths !== undefined) setPaths(shared.latest.paths);
+    else shared.paths.then((v) => { if (live) setPaths(v); }, (e) => { if (live) setError(coreErrMsg(e)); });
+    if (shared.latest.mode !== undefined) setMode(shared.latest.mode);
+    else shared.mode.then((v) => { if (live) setMode(v); }, () => { if (live) setMode(''); });
+    if (shared.latest.auto !== undefined) setAuto(shared.latest.auto);
+    else void shared.auto.then((v) => { if (live) setAuto(v); });
+    return () => { live = false; };
+  }, [game.id, shared]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const backupNow = () => {
     setBusy(true);
@@ -151,11 +178,21 @@ export function SaveBackupsSection({ game, onNotify }: {
             </Select>
           </label>
         </div>
-        {autoText && <p className="mt-2 text-[12px] text-white/55">{autoText}</p>}
+        {/* The auto-backup line keeps its line from the first frame: loading
+            text in place until the state lands, never nothing. */}
+        {auto == null ? (
+          <p role="status" className="mt-2 min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.saveBackups.loading')}</p>
+        ) : autoText && (
+          <p className="mt-2 min-h-[18px] text-[12px] text-white/55">{autoText}</p>
+        )}
       </section>
 
       <section>
-        {backups == null ? null : backups.length === 0 ? (
+        {/* The backup list keeps its place from the first frame: loading text
+            until the versions land, never nothing. */}
+        {backups == null ? (
+          <p role="status" data-testid="save-backups-loading" className="text-[12.5px] text-white/55">{t('gameSettings:maintenance.saveBackups.loading')}</p>
+        ) : backups.length === 0 ? (
           <p className="text-[12.5px] text-white/55">{t('gameSettings:maintenance.saveBackups.empty')}</p>
         ) : (
           <ul className="space-y-2">
@@ -215,11 +252,17 @@ export function SaveBackupsSection({ game, onNotify }: {
       <section>
         <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.pathsHeading').toLowerCase()}</MonoLabel>
         <p className="text-[12.5px] leading-relaxed text-white/60">{t('gameSettings:maintenance.saveBackups.pathsDescription')}</p>
-        {paths != null && paths.length === 0 && (
-          <p className="mt-2 text-[12px] text-white/55">{t('gameSettings:maintenance.saveBackups.pathsNone')}</p>
-        )}
-        <ul className="mt-2 space-y-1">
-          {(paths ?? []).map((p) => (
+        {/* The path list keeps its place from the first frame: loading text
+            until the folders land, never an empty list. */}
+        {paths == null ? (
+          <p role="status" className="mt-2 text-[12px] text-white/55">{t('gameSettings:maintenance.saveBackups.loading')}</p>
+        ) : (
+          <>
+            {paths.length === 0 && (
+              <p className="mt-2 text-[12px] text-white/55">{t('gameSettings:maintenance.saveBackups.pathsNone')}</p>
+            )}
+            <ul className="mt-2 space-y-1">
+              {paths.map((p) => (
             <li key={`${p.origin}:${p.path}`} className="flex items-center justify-between gap-3 font-mono text-[12px]">
               <span className="min-w-0 truncate text-white/75" title={p.path}>{p.path}</span>
               <span className="flex flex-none items-center gap-2 text-white/50">
@@ -237,6 +280,8 @@ export function SaveBackupsSection({ game, onNotify }: {
             </li>
           ))}
         </ul>
+          </>
+        )}
         <div className="mt-2">
           <Button variant="ghost" size="sm" onClick={addFolder}>
             {t('gameSettings:maintenance.saveBackups.pathsAdd')}
