@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"platypus/internal/locale"
 )
 
 const (
@@ -89,7 +91,8 @@ type Candidate struct {
 // endpoints (defaults DefaultGOGBase, DefaultLutrisBase,
 // DefaultIGDBImageBase); Version is the Platypus version named in the
 // User-Agent (default "1.0"); HTTP does the requests (default an http.Client
-// with Timeout).
+// with Timeout). Locale is the BCP 47 tag for store lookups (issue #39,
+// phase 4); empty means English.
 type Client struct {
 	HTTP        *http.Client
 	SearchBase  string
@@ -100,6 +103,23 @@ type Client struct {
 	LutrisBase  string
 	IGDBBase    string
 	Version     string
+	Locale      string
+}
+
+// steamLang is the Steam store's `l=` value for the client's locale.
+func (c *Client) steamLang() string {
+	if c == nil || strings.TrimSpace(c.Locale) == "" {
+		return "english"
+	}
+	return locale.SteamLanguage(c.Locale)
+}
+
+// gogLocale is the GOG catalog's `locale=` value for the client's locale.
+func (c *Client) gogLocale() string {
+	if c == nil || strings.TrimSpace(c.Locale) == "" {
+		return "en-US"
+	}
+	return locale.GOGLocale(c.Locale)
 }
 
 func (c *Client) http() *http.Client {
@@ -187,7 +207,7 @@ func (c *Client) Search(title string) ([]Candidate, error) {
 		return nil, fmt.Errorf("title is empty")
 	}
 	u := c.searchBase() + "/api/storesearch/?" + url.Values{
-		"term": {title}, "l": {"english"}, "cc": {"US"},
+		"term": {title}, "l": {c.steamLang()}, "cc": {"US"},
 	}.Encode()
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
@@ -313,7 +333,7 @@ func (c *Client) GetItemAssets(appID int) (StoreAssets, error) {
 	}
 	input, err := json.Marshal(map[string]any{
 		"ids":     []any{map[string]any{"appid": appID}},
-		"context": map[string]any{"language": "english", "country_code": "US"},
+		"context": map[string]any{"language": c.steamLang(), "country_code": "US"},
 		"data_request": map[string]any{
 			"include_assets": true,
 		},
@@ -461,7 +481,7 @@ func (c *Client) Banner(appID int) ([]byte, error) {
 // release year. ("", 0, nil) means unknown: delisted or absent. It is only
 // the cheap extra of an art apply, never a lookup of its own.
 func (c *Client) AppInfo(appID int) (string, int, error) {
-	u := fmt.Sprintf("%s/api/appdetails?appids=%d&l=english", c.searchBase(), appID)
+	u := fmt.Sprintf("%s/api/appdetails?appids=%d&l=%s", c.searchBase(), appID, c.steamLang())
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
 		return "", 0, err
@@ -586,7 +606,7 @@ func (c *Client) SearchGOG(title string) ([]Candidate, error) {
 		return nil, fmt.Errorf("title is empty")
 	}
 	u := strings.TrimSuffix(c.gogBase(), "/") + "/v1/catalog?" + url.Values{
-		"limit": {"8"}, "query": {"like:" + title}, "locale": {"en-US"},
+		"limit": {"8"}, "query": {"like:" + title}, "locale": {c.gogLocale()},
 	}.Encode()
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {

@@ -133,6 +133,11 @@ type App struct {
 
 	gameMu    sync.Mutex
 	gameLocks map[string]*sync.Mutex // by game id; see lockGame
+	// localeMu guards systemLangs, the desktop languages the shell reports
+	// (issue #39, phase 4). The setting lives in settings.Store; the
+	// effective locale is setting else system list else English.
+	localeMu    sync.Mutex
+	systemLangs []string
 	// migration is what the Hydra→Platypus data move did at startup
 	// (internal/migrate); MigrationNotice shows it once (issue #14).
 	migration migrate.Report
@@ -352,6 +357,13 @@ func (a *App) startup(ctx context.Context) {
 	// Data plugins feed the fixes/tweaks registry; rebuilt here and on
 	// every rescan so installs and removals apply without a restart.
 	a.syncDataPlugins(found)
+	// The shell reports the desktop languages after initialize (see
+	// SetSystemLanguages); until then the setting alone decides the locale
+	// plugins start with.
+	a.plugins.SetLocale(a.Locale())
+	if a.stores != nil {
+		a.stores.SetLocale(a.Locale())
+	}
 	a.startCloud(ctx, dataDir)
 	a.startSocial(ctx)
 	a.startChat(ctx)
@@ -977,10 +989,17 @@ func (a *App) prefixesFolder() string {
 	return a.settings.PrefixesFolder()
 }
 
-// SetLanguage saves the UI language ("" for System, issue #39).
+// SetLanguage saves the UI language ("" for System, issue #39). When the
+// effective locale changes it notifies plugins that speak protocol 1.14 and
+// drops the localized store-data caches, so the next game page fetches in
+// the new language.
 func (a *App) SetLanguage(lang string) (types.LauncherSettings, error) {
+	before := a.Locale()
 	if err := a.settings.SetLanguage(lang); err != nil {
 		return a.launcherSettings(), err
+	}
+	if after := a.Locale(); after != before {
+		a.applyLocaleChange(after)
 	}
 	return a.launcherSettings(), nil
 }

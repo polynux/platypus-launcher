@@ -20,12 +20,15 @@ import (
 // guards everything: when off, nothing goes out.
 
 // artClient is the lookup client: the injected one in tests, the live Steam
-// endpoints otherwise.
+// endpoints otherwise. The client's locale follows the effective locale.
 func (a *App) artClient() *onlineart.Client {
 	if a.artwork != nil {
+		a.artwork.Locale = a.Locale()
 		return a.artwork
 	}
-	return onlineart.New()
+	c := onlineart.New()
+	c.Locale = a.Locale()
+	return c
 }
 
 // isCustomGameID says whether id is a sideloaded game: the lookup is for
