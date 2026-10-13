@@ -206,7 +206,7 @@
 }
 .platypus-toast-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   min-width: 0;
 }

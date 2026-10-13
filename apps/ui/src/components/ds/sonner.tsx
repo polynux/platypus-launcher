@@ -15,13 +15,13 @@ import { cn } from '@/lib/utils';
 // The launcher's floating-panel family (dialog surface, JobProgress): raised
 // ground, ring-1 instead of a border, the rounded-2xl card radius.
 const TOAST_BASE =
-  'platypus-toast group pointer-events-auto relative grid w-[360px] max-w-[calc(100vw-2rem)] grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5 rounded-2xl bg-[#191410] p-3.5 font-sans text-[13px] text-[#ece6da] shadow-[0_16px_40px_rgba(0,0,0,.5)] ring-1 ring-white/10';
+  'platypus-toast group pointer-events-auto relative grid w-[360px] max-w-[calc(100vw-2rem)] grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3.5 gap-y-2.5 rounded-2xl bg-[#191410] p-3.5 font-sans text-[14.5px] leading-snug text-[#ece6da] shadow-[0_16px_40px_rgba(0,0,0,.5)] ring-1 ring-white/10';
 
 /** A type glyph in a small tinted square, the same tints as the app's badges. */
 function TypeIcon({ Icon, tone, spin }: { Icon: typeof Info; tone: string; spin?: boolean }) {
   return (
-    <span aria-hidden className={cn('flex size-7 flex-none items-center justify-center rounded-lg', tone)}>
-      <Icon className={cn('size-4', spin && 'animate-spin')} />
+    <span aria-hidden className={cn('flex size-8 flex-none items-center justify-center rounded-lg', tone)}>
+      <Icon className={cn('size-[18px]', spin && 'animate-spin')} />
     </span>
   );
 }
@@ -60,7 +60,7 @@ export function Toaster() {
         classNames: {
           toast: TOAST_BASE,
           title: 'platypus-toast-title-wrap',
-          description: 'platypus-toast-description mt-0.5 text-[12.5px] leading-snug',
+          description: 'platypus-toast-description mt-0.5 text-[13px] leading-snug',
           actionButton:
             'platypus-toast-action col-start-2 inline-flex h-8 justify-self-start items-center rounded-xl bg-amber-300 px-3 text-[12px] font-extrabold text-[#130f0a] transition hover:bg-amber-200',
           cancelButton:
