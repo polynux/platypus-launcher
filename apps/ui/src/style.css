@@ -190,6 +190,19 @@
 }
 .platypus-toast {
   user-select: text;
+  /* Slide and fade in from the right, the app's modal timing (--animate-modal-in).
+     `translate` is its own property, so it stacks with Sonner's transform. */
+  animation: toast-in 150ms ease-out;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    translate: 12px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 .platypus-toast-title {
   display: flex;
@@ -197,38 +210,62 @@
   gap: 0.5rem;
   min-width: 0;
 }
+/* Collapsed back toasts show only their panel edge, not their text (Sonner
+   does this for styled toasts; `unstyled` skips that rule). */
+.platypus-toast[data-expanded='false'][data-front='false'] > * {
+  opacity: 0;
+}
 .platypus-toast-message {
   min-width: 0;
+  font-weight: 600;
+  color: var(--color-text);
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* The repeat count: the app's neutral badge (mono, small, translucent fill). */
 .platypus-toast-count {
   flex: none;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  padding: 0 0.4rem;
+  border-radius: 6px;
+  padding: 0 0.375rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-mono);
   font-size: 11px;
-  line-height: 1.5;
-  opacity: 0.85;
+  font-weight: 700;
+  line-height: 18px;
 }
+/* !important: Sonner's dark-theme description colour (specificity 0,3,1+). */
 .platypus-toast-description {
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.55) !important;
+  color: var(--color-text-body) !important;
 }
-/* Sonner's close-button vars (set from [dir]) place the button over the
-   toast's top corner; with `unstyled` the position comes from here. */
+/* A ghost icon button inside the panel's top-right corner. Sonner's dark-theme
+   rule paints a black disc on it (specificity above ours), hence !important.
+   Hidden until the toast is hovered or focused; errors keep it visible. */
 .platypus-toast-close {
-  top: 0;
-  left: var(--toast-close-button-start);
-  right: var(--toast-close-button-end);
-  transform: var(--toast-close-button-transform);
+  top: 0.5rem;
+  right: 0.5rem;
+  left: auto;
+  transform: none;
+  opacity: 0;
+  background: transparent !important;
+  border: 0 !important;
+  transition:
+    opacity 120ms,
+    background-color 120ms,
+    color 120ms;
+}
+.platypus-toast:hover .platypus-toast-close,
+.platypus-toast:focus-within .platypus-toast-close,
+.platypus-toast[data-type='error'] .platypus-toast-close {
+  opacity: 1;
 }
 .platypus-paused [data-sonner-toast],
 .platypus-paused [data-sonner-toast] > *,

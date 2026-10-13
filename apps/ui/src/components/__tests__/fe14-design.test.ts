@@ -14,15 +14,15 @@ describe('FE-14 design drift guards', () => {
     expect(dashboard.includes('backdrop-blur')).toBe(true);
   });
 
-  it('toast matches DESIGN §6.6 instrument readout (rounded-[3px]) and sits above an open modal', () => {
+  it('toast uses the launcher panel surface (rounded-2xl, sans) and sits above an open modal', () => {
     // Issue #64: the toast layer is Sonner (ds/sonner.tsx + style.css), not
-    // the old bottom notice in App.tsx. The shape stays spec'd by §6.6
-    // (radius/border/mono); Sonner's own z-index (999999999) beats any z-50
-    // overlay wherever the toast mounts.
+    // the old bottom notice in App.tsx. It is styled like the other floating
+    // panels (dialog surface, JobProgress), not a terminal box; Sonner's own
+    // z-index (999999999) beats any z-50 overlay wherever the toast mounts.
     const sonner = src('components/ds/sonner.tsx');
-    expect(sonner).toContain('rounded-[3px]');
+    expect(sonner).toContain('rounded-2xl');
     expect(sonner).toContain('bg-[#191410]');
-    expect(sonner).toContain('font-mono');
+    expect(sonner).toContain('font-sans');
     expect(sonner).toContain('top-right');
     const css = src('style.css');
     expect(css).toContain('platypus-toast');

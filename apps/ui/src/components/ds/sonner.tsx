@@ -4,19 +4,26 @@
 // stylesheet, allowed by style-src 'self'); Sonner also injects the same CSS
 // as a <style> tag at runtime, which the current style-src 'unsafe-inline'
 // permits — no CSP change for scripts, no style-src change. `unstyled` drops
-// Sonner's default colours so only our tokens show; the dots replace the
+// Sonner's default colours so only our tokens show; the type icons replace the
 // library's default icons.
 import 'sonner/dist/styles.css';
-import { X } from 'lucide-react';
+import { CheckCircle2, Info, Loader2, X, XCircle } from 'lucide-react';
 import { Toaster as SonnerToaster } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
+// The launcher's floating-panel family (dialog surface, JobProgress): raised
+// ground, ring-1 instead of a border, the rounded-2xl card radius.
 const TOAST_BASE =
-  'platypus-toast group pointer-events-auto relative flex w-[356px] max-w-[calc(100vw-2rem)] items-start gap-2.5 rounded-[3px] border bg-[#191410] px-3 py-2 font-mono text-[12px] leading-relaxed shadow-[0_10px_30px_rgba(0,0,0,.5)]';
+  'platypus-toast group pointer-events-auto relative grid w-[360px] max-w-[calc(100vw-2rem)] grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2.5 rounded-2xl bg-[#191410] p-3.5 font-sans text-[13px] text-[#ece6da] shadow-[0_16px_40px_rgba(0,0,0,.5)] ring-1 ring-white/10';
 
-function Dot({ className }: { className: string }) {
-  return <span aria-hidden className={cn('mt-[5px] h-1.5 w-1.5 flex-none rounded-full', className)} />;
+/** A type glyph in a small tinted square, the same tints as the app's badges. */
+function TypeIcon({ Icon, tone, spin }: { Icon: typeof Info; tone: string; spin?: boolean }) {
+  return (
+    <span aria-hidden className={cn('flex size-7 flex-none items-center justify-center rounded-lg', tone)}>
+      <Icon className={cn('size-4', spin && 'animate-spin')} />
+    </span>
+  );
 }
 
 /** The app's toast layer: top right, below the window controls, at most 3
@@ -41,11 +48,11 @@ export function Toaster() {
       containerAriaLabel={t('toast.region', 'Notifications')}
       className={cn('platypus-toaster')}
       icons={{
-        success: <Dot className="bg-emerald-400" />,
-        info: <Dot className="bg-sky-300" />,
-        error: <Dot className="bg-red-400" />,
-        loading: <Dot className="bg-amber-300" />,
-        close: <X className="h-3 w-3" />,
+        success: <TypeIcon Icon={CheckCircle2} tone="bg-emerald-400/15 text-emerald-300" />,
+        info: <TypeIcon Icon={Info} tone="bg-sky-300/10 text-sky-300" />,
+        error: <TypeIcon Icon={XCircle} tone="bg-red-500/15 text-red-300" />,
+        loading: <TypeIcon Icon={Loader2} tone="bg-amber-300/15 text-amber-300" spin />,
+        close: <X className="size-3.5" />,
       }}
       toastOptions={{
         unstyled: true,
@@ -53,20 +60,14 @@ export function Toaster() {
         classNames: {
           toast: TOAST_BASE,
           title: 'platypus-toast-title-wrap',
-          description: 'platypus-toast-description',
+          description: 'platypus-toast-description mt-0.5 text-[12.5px] leading-snug',
           actionButton:
-            'platypus-toast-action inline-flex h-6 flex-none items-center rounded-xl bg-amber-300 px-3 font-extrabold text-[#130f0a] transition hover:bg-amber-200',
+            'platypus-toast-action col-start-2 inline-flex h-8 justify-self-start items-center rounded-xl bg-amber-300 px-3 text-[12px] font-extrabold text-[#130f0a] transition hover:bg-amber-200',
           cancelButton:
-            'platypus-toast-cancel inline-flex h-6 flex-none items-center rounded-xl bg-white/[0.06] px-3 font-bold text-white/80 hover:bg-white/[0.1]',
+            'platypus-toast-cancel col-start-2 inline-flex h-8 justify-self-start items-center rounded-xl bg-white/[0.06] px-3 text-[12px] font-bold text-white/80 transition hover:bg-white/[0.1]',
           closeButton:
-            'platypus-toast-close absolute flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-[#191410] p-0 text-white/60 transition hover:text-white/90',
-          success: 'border-emerald-300/50 text-emerald-100',
-          info: 'border-sky-300/50 text-sky-100',
-          error: 'border-red-400/50 text-red-100',
-          warning: 'border-amber-300/50 text-amber-100',
-          default: 'border-white/10 text-[#ece6da]',
-          loading: 'border-amber-300/50 text-amber-100',
-          content: 'platypus-toast-content min-w-0 flex-1',
+            'platypus-toast-close absolute flex size-7 items-center justify-center rounded-xl p-0 text-white/60 transition hover:bg-white/[0.06] hover:text-white/90',
+          content: 'platypus-toast-content flex min-w-0 flex-1 flex-col pr-5',
           icon: 'platypus-toast-icon flex flex-none items-center',
         },
       }}
