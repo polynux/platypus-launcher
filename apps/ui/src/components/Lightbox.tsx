@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
@@ -38,6 +40,7 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
 }) {
   const root = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
+  const { t } = useTranslation('common');
   const list: MediaItem[] = items ?? (images ?? []).map((src) => ({ kind: 'image' as const, src }));
   const n = list.length;
   const go = (d: number) => onIndex((index + d + n) % n);
@@ -89,9 +92,9 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
   const cur = list[index];
   const label = cur
     ? cur.kind === 'video'
-      ? `${alt} video ${index + 1}${cur.title ? `: ${cur.title}` : ''}`
-      : `${alt} screenshot ${index + 1}`
-    : `${alt} media ${index + 1}`;
+      ? t('common:lightbox.video', { alt, index: index + 1 }) + (cur.title ? t('common:lightbox.videoTitle', { title: cur.title }) : '')
+      : t('common:lightbox.screenshot', { alt, index: index + 1 })
+    : t('common:lightbox.media', { alt, index: index + 1 });
 
   return (
     <TooltipProvider>
@@ -99,7 +102,7 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
       ref={root}
       role="dialog"
       aria-modal="true"
-      aria-label={`${alt} media viewer`}
+      aria-label={t('common:lightbox.viewer', { alt })}
       onKeyDown={onKeyDown}
       onClick={onClose}
       onWheel={onWheel}
@@ -114,24 +117,24 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 motion-safe:animate-[fadeIn_.15s_ease-out]"
     >
       <style>{'@keyframes fadeIn{from{opacity:0}to{opacity:1}}'}</style>
-      {tip('Close', <Button
+      {tip(t('common:lightbox.close'), <Button
         data-autofocus
         size="none"
         onClick={(e) => { e.stopPropagation(); onClose(); }}
-        aria-label="Close viewer"
+        aria-label={t('common:lightbox.closeViewer')}
         className={cx(nav, 'right-5 top-5')}
       >
         <X size={18} />
       </Button>, 'left')}
       {n > 1 && (
-        tip('Previous', <Button size="none" onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label="Previous media" className={cx(nav, 'left-5 top-1/2 -translate-y-1/2')}>
+        tip(t('common:lightbox.previous'), <Button size="none" onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label={t('common:lightbox.previousMedia')} className={cx(nav, 'left-5 top-1/2 -translate-y-1/2')}>
           <ChevronLeft size={22} />
         </Button>, 'right')
       )}
       <div onClick={(e) => e.stopPropagation()} className="flex max-h-[calc(100vh-6rem)] max-w-[calc(100vw-9rem)] flex-col items-center gap-2">
         {cur?.kind === 'video' ? (
           failed ? (
-            <p role="alert" className="max-w-md text-center text-[13px] text-white/70">This video can't be played here.</p>
+            <p role="alert" className="max-w-md text-center text-[13px] text-white/70">{t('common:lightbox.videoError')}</p>
           ) : (
             <video
               key={cur.src}
@@ -158,7 +161,7 @@ export function Lightbox({ images, items, index, alt, onIndex, onClose }: {
         )}
       </div>
       {n > 1 && (
-        tip('Next', <Button size="none" onClick={(e) => { e.stopPropagation(); go(1); }} aria-label="Next media" className={cx(nav, 'right-5 top-1/2 -translate-y-1/2')}>
+        tip(t('common:lightbox.next'), <Button size="none" onClick={(e) => { e.stopPropagation(); go(1); }} aria-label={t('common:lightbox.nextMedia')} className={cx(nav, 'right-5 top-1/2 -translate-y-1/2')}>
           <ChevronRight size={22} />
         </Button>, 'left')
       )}

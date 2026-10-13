@@ -1,1 +1,84 @@
-{}
+{
+  "panel": {
+    "logLabel": "Messages with {{name}}",
+    "messageLabel": "Message {{name}}",
+    "loadOlder": "Load older messages",
+    "loading": "Loading…",
+    "empty": "No messages yet. Say hello.",
+    "typing": "{{name}} is typing…",
+    "placeholder": "Write a message",
+    "send": "Send",
+    "sending": "Sending…",
+    "notSent": "Not sent",
+    "sendAgain": "Send again"
+  },
+  "modal": {
+    "title": "Friends",
+    "searchLabel": "Search friends",
+    "searchPlaceholder": "Search friends…",
+    "section": "{{label}} friends",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "friendsOff": "Friends are off for {{label}}. Turn them on to see who is online.",
+    "reconnect": "Reconnect",
+    "showPlaying": "Show what I'm playing to friends",
+    "showPlayingLabel": "Show what I'm playing to friends on {{label}}",
+    "chatAlerts": "Alert me to new messages from friends",
+    "chatAlertsLabel": "Message alerts on {{label}}",
+    "noFriends": "No friends on {{label}} yet.",
+    "noMatch": "No friends match “{{query}}”.",
+    "statusLabel": "Your status on {{label}}"
+  },
+  "group": {
+    "inGame": "In game",
+    "online": "Online",
+    "offline": "Offline",
+    "showMore": "Show {{count}} more"
+  },
+  "row": {
+    "playing": "Playing {{title}}",
+    "lastSeen": "Last seen {{when}}",
+    "offline": "Offline",
+    "unread_one": "{{count}} unread message",
+    "unread_other": "{{count}} unread messages",
+    "openGame": "open"
+  },
+  "summary": {
+    "label": "Friends: {{text}}",
+    "off": "off",
+    "none": "no friends online",
+    "disabled": "friends off",
+    "online": "{{count}} online",
+    "inGame": "{{count}} in game",
+    "new_one": "{{count}} new",
+    "new_other": "{{count}} new"
+  },
+  "status": {
+    "online": "Online",
+    "away": "Away",
+    "busy": "Busy",
+    "snooze": "Snooze",
+    "invisible": "Invisible"
+  },
+  "state": {
+    "online": "Online",
+    "offline": "Offline",
+    "away": "Away",
+    "busy": "Busy",
+    "snooze": "Snooze",
+    "looking": "Looking to play",
+    "invisible": "Offline"
+  },
+  "connection": {
+    "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
+    "replaced": "Another session replaced this one.",
+    "offline": "Offline.",
+    "loggedOut": "Signed out of the store."
+  },
+  "alert_one": "New message from {{name}} on {{store}}",
+  "alert_other": "{{count}} new messages from {{who}} on {{store}}",
+  "alertOthers_one": "{{first}} and {{count}} other",
+  "alertOthers_other": "{{first}} and {{count}} others",
+  "unknownFriend": "a friend"
+}

@@ -1,9 +1,11 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { CloudMode, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
-import { MODE_HELP, asCloudMode } from '../lib/cloud';
+import { asCloudMode, modeHelp } from '../lib/cloud';
 import { MonoLabel, Panel, SegRow } from './ui';
 import { ErrorNotice } from './ErrorNotice';
 
@@ -11,13 +13,14 @@ import { ErrorNotice } from './ErrorNotice';
  *  row each, in Settings. Games can override their store's default on their
  *  own page. Nothing renders when no store offers cloud saves. */
 export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
+  const { t } = useTranslation('cloud');
   const stores = plugins.filter((p) => p.status === 'ready' && offers(p, 'cloud-saves'));
   if (stores.length === 0) return null;
   return (
     <Panel as="section" className="mt-4 max-w-2xl">
-      <h2 className="mb-1 text-[14px] font-bold">Cloud saves</h2>
+      <h2 className="mb-1 text-[14px] font-bold">{t('cloud:panel.title')}</h2>
       <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-        Whether Platypus syncs each store's save files to its cloud. Each game can override its store's choice on its page.
+        {t('cloud:setting.description')}
       </p>
       <div className="space-y-4">
         {stores.map((p) => (
@@ -29,6 +32,7 @@ export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
 }
 
 function Row({ plugin }: { plugin: StorePlugin }) {
+  const { t } = useTranslation('cloud');
   const [mode, setMode] = useState<CloudMode>('ask');
   const [error, setError] = useState<string | null>(null);
 
@@ -55,14 +59,14 @@ function Row({ plugin }: { plugin: StorePlugin }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonoLabel>{plugin.name}</MonoLabel>
         <SegRow<CloudMode>
-          label={`Cloud saves for ${plugin.name}`}
+          label={t('cloud:setting.rowLabel', { name: plugin.name })}
           value={mode}
           onChange={change}
-          options={[{ value: 'off', label: 'Off' }, { value: 'ask', label: 'Ask' }, { value: 'auto', label: 'Auto' }]}
+          options={[{ value: 'off', label: t('cloud:mode.off') }, { value: 'ask', label: t('cloud:mode.ask') }, { value: 'auto', label: t('cloud:mode.auto') }]}
         />
       </div>
-      <p className="text-hint leading-snug text-white/55">{MODE_HELP[mode]}</p>
-      {error && <ErrorNotice message={error} fallback="Platypus couldn't save the cloud setting." />}
+      <p className="text-hint leading-snug text-white/55">{modeHelp(mode)}</p>
+      {error && <ErrorNotice message={error} fallback={t('cloud:setting.error')} />}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
+import i18n from './i18n';
 import { LauncherApi, onChat } from '../effect/runtime';
 import { notifyChat, onChatOpen } from '../effect/bridge';
 import { alertText, chatKey, chatNotifyTitle, clipNotifyText, dropConversation, notifyTextOf, unreadFor, unreadTotal, upsertConversation } from './chat';
@@ -34,7 +35,7 @@ export interface ChatState {
 /** A friend's name from the friends lists, or the id when no list has them. */
 export function friendNameOf(social: SocialView[], plugin: string, friendId: string): string {
   const f: SocialFriend | undefined = social.find((v) => v.plugin === plugin)?.friends.find((x) => x.id === friendId);
-  return f?.name ?? 'a friend';
+  return f?.name ?? i18n.t('chat:unknownFriend');
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));

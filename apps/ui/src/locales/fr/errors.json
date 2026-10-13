@@ -2,5 +2,7 @@
   "fallback": "Quelque chose a mal tourné. Réessayez.",
   "gameFailed": "{{title}} : {{error}}",
   "launchFailedText": "le lancement a échoué",
-  "notPersisted": "Non enregistré sur le disque, vaut pour cette session : {{error}}"
+  "notPersisted": "Non enregistré sur le disque, vaut pour cette session : {{error}}",
+  "retry": "Réessayer",
+  "noticeFallback": "Platypus n'a pas pu aller au bout. Réessayez."
 }

@@ -1,0 +1,17 @@
+{
+  "panel": {
+    "label": "Familles",
+    "heading": "familles",
+    "members": "Membres de la famille",
+    "loading": "chargement…",
+    "empty": "Aucun membre de la famille sur ce compte.",
+    "note": "Affichés tels que la boutique les rapporte. Platypus n'applique pas les règles de la famille.",
+    "error": "Platypus n'a pas pu lire les membres de la famille."
+  },
+  "role": {
+    "adult": "adulte",
+    "child": "enfant"
+  },
+  "countdown_one": "{{count}} s restante",
+  "countdown_other": "{{count}} s restantes"
+}

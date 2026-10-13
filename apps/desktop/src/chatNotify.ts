@@ -33,6 +33,8 @@ export interface ChatNotifyContext {
   focused: boolean;
   /** The "Desktop notifications for chat" switch. */
   settingOn: boolean;
+  /** The shell language for the coalesced count (issue #39); English when unset. */
+  lang?: string;
 }
 
 /** The most message text a notification carries, in characters. */
@@ -78,11 +80,16 @@ export function shouldShowNotification(msg: ChatNotifyMessage, ctx: ChatNotifyCo
   return true;
 }
 
+import { shellText } from './locale.ts';
+
 /** The body of a coalesced notification: the message text for the first one,
- *  "N new messages from X" once more arrived within the window. */
-export function coalescedBody(name: string, count: number, text: string): string {
+ *  "N new messages from X" once more arrived within the window. The count
+ *  follows the shell language's plural rules (issue #39). */
+export function coalescedBody(name: string, count: number, text: string, lang = 'en'): string {
   if (count <= 1) return clipNotifyText(text);
-  return `${count} new messages from ${name}`;
+  const rule = new Intl.PluralRules(lang).select(count);
+  const key = rule === 'one' ? 'chatNewMessages_one' : 'chatNewMessages_other';
+  return shellText(lang, key, { count, name });
 }
 
 export interface ShownNotification {
@@ -121,7 +128,7 @@ export function createChatNotifier(deps: {
       const count = (prev?.count ?? 0) + 1;
       prev?.notification.close();
       if (prev) clearTimeout(prev.timer);
-      const notification = deps.show(msg.title, coalescedBody(msg.name, count, msg.body), onClick);
+      const notification = deps.show(msg.title, coalescedBody(msg.name, count, msg.body, ctx.lang ?? 'en'), onClick);
       const timer = setTimeout(() => drop(key), windowMs);
       // A late timer must not drop a newer entry that reused the key.
       const entry = { notification, count, timer };

@@ -1,5 +1,6 @@
 import type { Game, GameSettings } from '../types';
 import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
+import i18n from './i18n';
 
 /** A game "needs attention" when it has a curated fix recipe or a poor ProtonDB tier. */
 export function needsAttention(g: Game): boolean {
@@ -14,8 +15,8 @@ export function attentionReason(g: Game): string {
   if (!f) return '';
   if (f.source !== 'protondb') return f.description;
   return f.tier === 'borked'
-    ? 'ProtonDB reports this title as borked. Try a different runner or check the reports.'
-    : 'ProtonDB rates this title bronze. It may need tweaks to run well.';
+    ? i18n.t('fixes:attention.borked')
+    : i18n.t('fixes:attention.bronze');
 }
 
 /** Portrait images to try in order. Older Steam titles 404 on the portrait

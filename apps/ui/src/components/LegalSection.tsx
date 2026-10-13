@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import type { Game, GameTerm, StorePlugin } from '../types';
 import { CapabilitySurface } from '../lib/capabilities';
 import { LauncherApi } from '../effect/runtime';
@@ -20,6 +22,7 @@ export function LegalSection({ game, plugin }: { game: Game; plugin: StorePlugin
 }
 
 function LegalList({ game }: { game: Game }) {
+  const { t } = useTranslation('common');
   const [terms, setTerms] = useState<GameTerm[] | null>(null);
   const [error, setError] = useState('');
   // Bumped when the user accepts terms elsewhere (the install dialog), so the
@@ -35,27 +38,27 @@ function LegalList({ game }: { game: Game }) {
     return () => { live = false; };
   }, [game, accepted]);
 
-  if (error) return <ErrorNotice message={error} fallback="Platypus couldn't read the terms for this game." />;
+  if (error) return <ErrorNotice message={error} fallback={t('common:legal.error')} />;
   if (!terms || terms.length === 0) return null;
   return (
-    <section className="mt-6" aria-label="Legal">
-      <MonoLabel className="mb-2">legal</MonoLabel>
+    <section className="mt-6" aria-label={t('common:legal.label')}>
+      <MonoLabel className="mb-2">{t('common:legal.heading')}</MonoLabel>
       <ul className="space-y-2">
-        {terms.map((t) => {
-          const link = termURL(t);
+        {terms.map((term) => {
+          const link = termURL(term);
           return (
-            <li key={`${t.id}@${t.version}`} className="flex items-center justify-between gap-3 font-mono text-hint">
+            <li key={`${term.id}@${term.version}`} className="flex items-center justify-between gap-3 font-mono text-hint">
               <span className="min-w-0 text-white/80">
-                {t.title} <span className="text-white/55">v{t.version}</span>
+                {term.title} <span className="text-white/55">{t('common:legal.version', { version: term.version })}</span>
               </span>
               <span className="flex shrink-0 items-center gap-3">
-                {t.accepted_at ? (
-                  <span className="text-white/55">accepted {acceptedLabel(t)}</span>
+                {term.accepted_at ? (
+                  <span className="text-white/55">{t('common:legal.accepted', { date: acceptedLabel(term) })}</span>
                 ) : (
-                  <span className="text-amber-200/80">not accepted yet</span>
+                  <span className="text-amber-200/80">{t('common:legal.pending')}</span>
                 )}
                 {link && (
-                  <button type="button" className="text-sky-200 hover:underline" onClick={() => openExternal(link)}>read</button>
+                  <button type="button" className="text-sky-200 hover:underline" onClick={() => openExternal(link)}>{t('common:legal.read')}</button>
                 )}
               </span>
             </li>

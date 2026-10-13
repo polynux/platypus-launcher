@@ -1,9 +1,12 @@
 import type { CopyComparison, CopyDiff, FamilyMember, Game, GameCopy } from '../types';
+import i18n from './i18n';
 
 /** The role as the Families section names it. A role Platypus doesn't know is
  *  shown as none. */
 export function roleLabel(role: string): string {
-  return role === 'adult' || role === 'child' ? role : '';
+  if (role === 'adult') return i18n.t('family:role.adult');
+  if (role === 'child') return i18n.t('family:role.child');
+  return '';
 }
 
 /** The first letter of a member's name, for an avatar that failed to load. */
@@ -19,7 +22,7 @@ export function sharedWithMe(games: Game[]): Game[] {
 /** A warning's countdown as the toast shows it: "42 s left", or nothing when
  *  the plugin gave no time. */
 export function countdownLabel(secondsLeft: number): string {
-  return secondsLeft > 0 ? `${secondsLeft} s left` : '';
+  return secondsLeft > 0 ? i18n.t('family:countdown', { count: secondsLeft }) : '';
 }
 
 /** The lender whose copy a borrowed game is played from: the one the user

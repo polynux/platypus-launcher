@@ -1,0 +1,114 @@
+{
+  "panel": {
+    "title": "Cloud saves",
+    "syncForGame": "sync for this game",
+    "modeLabel": "Sync mode for this game",
+    "defaultOption": "Default · {{mode}}",
+    "defaultTitle": "Follow the store plugin's setting",
+    "checked": "checked {{when}}",
+    "skipped": "Launches don't sync these saves: {{reason}}",
+    "clientRunning": "{{name}} is running.",
+    "clientWhy": "Platypus doesn't sync this game while it is open, because two programs writing the same saves cause conflicts.",
+    "clientInstead": "Launch it through {{name}} instead, or close {{name}} to sync.",
+    "clientClose": "Close {{name}} to sync.",
+    "launchVia": "Launch through {{name}}",
+    "cancelSync": "Cancel cloud sync",
+    "error": "Platypus couldn't reach the cloud saves just now.",
+    "check": "Check now",
+    "choose": "Choose which saves to keep…",
+    "runningConflict": "{{title}} is running. Choose its saves after it exits."
+  },
+  "mode": {
+    "off": "Off",
+    "ask": "Ask",
+    "auto": "Auto"
+  },
+  "modeHelp": {
+    "off": "Platypus doesn't sync this game's saves.",
+    "ask": "Syncs on its own when nothing clashes; asks when saves changed on both sides or the store is unreachable.",
+    "auto": "Like ask, but once you launch anyway while the store is unreachable it stops asking for this game. Conflicts always ask."
+  },
+  "state": {
+    "synced": "in sync",
+    "pending": "changes waiting",
+    "conflict": "conflict",
+    "unsupported": "not supported",
+    "offline": "offline",
+    "error": "error",
+    "off": "off",
+    "checking": "checking",
+    "unchecked": "not checked"
+  },
+  "counts": {
+    "same_one": "{{count}} in sync",
+    "same_other": "{{count}} in sync",
+    "download_one": "{{count}} to download",
+    "download_other": "{{count}} to download",
+    "upload_one": "{{count}} to upload",
+    "upload_other": "{{count}} to upload",
+    "conflict_one": "{{count}} in conflict",
+    "conflict_other": "{{count}} in conflict",
+    "unmapped_one": "{{count}} not placed on this device",
+    "unmapped_other": "{{count}} not placed on this device"
+  },
+  "setting": {
+    "description": "Whether Platypus syncs each store's save files to its cloud. Each game can override its store's choice on its page.",
+    "rowLabel": "Cloud saves for {{name}}",
+    "error": "Platypus couldn't save the cloud setting."
+  },
+  "conflict": {
+    "label": "Cloud save conflict",
+    "heading": "Saves changed on both sides",
+    "intro_one": "{{title}} has a save file that changed on this device and in the cloud.",
+    "intro_other": "{{title}} has {{count}} save files that changed on this device and in the cloud.",
+    "explanation": "Platypus won't overwrite either without your say. Keeping the cloud copy backs up the file on this device first; keeping this device's copy replaces the cloud one.",
+    "allFiles": "all files:",
+    "keepLocal": "keep this device",
+    "keepRemote": "keep cloud",
+    "decideLater": "decide later",
+    "optLocal": "Keep this device",
+    "optRemote": "Keep cloud",
+    "optLater": "Decide later",
+    "filesLabel": "Conflicting files",
+    "local": "This device",
+    "remote": "Cloud",
+    "newer": "newer",
+    "from": "from {{machine}}",
+    "choice": "Choice for {{path}}",
+    "backups": "backups: {{dir}}",
+    "error": "Platypus couldn't settle these saves. Nothing was changed on either side.",
+    "launchAnyway": "Launch without resolving",
+    "applyNone": "Apply choices",
+    "apply_one": "Apply {{count}} choice",
+    "apply_other": "Apply {{count}} choices"
+  },
+  "host": {
+    "decisionLabel": "Cloud saves need a decision",
+    "openGame": "Open the game's page to decide.",
+    "settled": "Saves settled",
+    "clientLabel": "Store client running",
+    "clientRunning": "{{name}} is running",
+    "offlineLabel": "Cloud saves not synced",
+    "offlineWhy": "You can launch {{title}} anyway. Its saves on this device may be older or newer than the cloud's.",
+    "launchAnyway": "Launch anyway",
+    "launchWithoutSync": "Launch without cloud sync"
+  },
+  "notice": {
+    "uploaded": "Saves uploaded",
+    "failed": "{{title}}'s cloud sync failed",
+    "failedDetail": "Cloud sync failed · {{title}}",
+    "openGame": "Open the game page for details",
+    "skipped": "{{title}} was not synced",
+    "skippedDetail": "Cloud sync skipped · {{title}}",
+    "canceled": "Cloud sync canceled",
+    "prompt": "Cloud saves need a decision · {{title}}"
+  },
+  "ago": {
+    "now": "just now",
+    "minutes_one": "{{count}} min ago",
+    "minutes_other": "{{count}} min ago",
+    "hours_one": "{{count}} h ago",
+    "hours_other": "{{count}} h ago"
+  },
+  "unknownDate": "unknown date"
+}

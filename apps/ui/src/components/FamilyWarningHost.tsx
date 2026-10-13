@@ -1,4 +1,6 @@
+// i18n: converted
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FamilyWarning, Game } from '../types';
 import { onFamily } from '../effect/runtime';
 import { countdownLabel } from '../lib/family';
@@ -18,6 +20,7 @@ interface Shown {
  *  the owner takes the game back. A warning about a game that is not in the
  *  library is not shown, and one without a time leaves after a while. */
 export function FamilyWarningHost({ games }: { games: Game[] }) {
+  const { t } = useTranslation();
   const [shown, setShown] = useState<Shown | null>(null);
 
   useEffect(() => onFamily((w) => setShown({ warning: w, left: w.seconds_left })), []);
@@ -54,7 +57,7 @@ export function FamilyWarningHost({ games }: { games: Game[] }) {
         <span className="block break-words text-white/75">{warning.message}</span>
         {counting && <span className="tabular-nums text-white/55">{countdownLabel(left)}</span>}
       </span>
-      <Button variant="ghost" size="sm" onClick={() => setShown(null)}>Dismiss</Button>
+      <Button variant="ghost" size="sm" onClick={() => setShown(null)}>{t('common:dismiss')}</Button>
     </div>
   );
 }

@@ -2,5 +2,7 @@
   "fallback": "Something went wrong. Try again.",
   "gameFailed": "{{title}}: {{error}}",
   "launchFailedText": "launch failed",
-  "notPersisted": "Not saved to disk, applies this session: {{error}}"
+  "notPersisted": "Not saved to disk, applies this session: {{error}}",
+  "retry": "Try again",
+  "noticeFallback": "Platypus couldn't finish that. Try again."
 }

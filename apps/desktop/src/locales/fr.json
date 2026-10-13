@@ -1,5 +1,7 @@
 {
   "appName": "Platypus",
   "coreCrashed": "Le cœur de Platypus s'est arrêté de façon inattendue (sortie {{code}}). Voyez le terminal pour son journal.",
-  "coreStartFailed": "Impossible de démarrer le cœur de Platypus :\n{{error}}"
+  "coreStartFailed": "Impossible de démarrer le cœur de Platypus :\n{{error}}",
+  "chatNewMessages_one": "{{count}} nouveau message de {{name}}",
+  "chatNewMessages_other": "{{count}} nouveaux messages de {{name}}"
 }

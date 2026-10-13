@@ -1,1 +1,84 @@
-{}
+{
+  "panel": {
+    "logLabel": "Messages avec {{name}}",
+    "messageLabel": "Message pour {{name}}",
+    "loadOlder": "Charger les messages plus anciens",
+    "loading": "Chargement…",
+    "empty": "Aucun message pour l'instant. Dites bonjour.",
+    "typing": "{{name}} est en train d'écrire…",
+    "placeholder": "Écrivez un message",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "notSent": "Non envoyé",
+    "sendAgain": "Renvoyer"
+  },
+  "modal": {
+    "title": "Amis",
+    "searchLabel": "Rechercher des amis",
+    "searchPlaceholder": "Rechercher des amis…",
+    "section": "Amis sur {{label}}",
+    "turnOff": "Désactiver",
+    "turnOn": "Activer",
+    "friendsOff": "Les amis sont désactivés pour {{label}}. Activez-les pour voir qui est en ligne.",
+    "reconnect": "Reconnecter",
+    "showPlaying": "Montrer à mes amis à quoi je joue",
+    "showPlayingLabel": "Montrer à mes amis à quoi je joue sur {{label}}",
+    "chatAlerts": "Me prévenir des nouveaux messages de mes amis",
+    "chatAlertsLabel": "Alertes de messages sur {{label}}",
+    "noFriends": "Pas encore d'amis sur {{label}}.",
+    "noMatch": "Aucun ami ne correspond à « {{query}} ».",
+    "statusLabel": "Votre statut sur {{label}}"
+  },
+  "group": {
+    "inGame": "En jeu",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "showMore": "Afficher {{count}} de plus"
+  },
+  "row": {
+    "playing": "Joue à {{title}}",
+    "lastSeen": "Vu {{when}}",
+    "offline": "Hors ligne",
+    "unread_one": "{{count}} message non lu",
+    "unread_other": "{{count}} messages non lus",
+    "openGame": "ouvrir"
+  },
+  "summary": {
+    "label": "Amis : {{text}}",
+    "off": "désactivés",
+    "none": "aucun ami en ligne",
+    "disabled": "amis désactivés",
+    "online": "{{count}} en ligne",
+    "inGame": "{{count}} en jeu",
+    "new_one": "{{count}} nouveau",
+    "new_other": "{{count}} nouveaux"
+  },
+  "status": {
+    "online": "En ligne",
+    "away": "Absent",
+    "busy": "Occupé",
+    "snooze": "En pause",
+    "invisible": "Invisible"
+  },
+  "state": {
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "away": "Absent",
+    "busy": "Occupé",
+    "snooze": "En pause",
+    "looking": "Souhaite jouer",
+    "invisible": "Hors ligne"
+  },
+  "connection": {
+    "connecting": "Connexion…",
+    "reconnecting": "Reconnexion…",
+    "replaced": "Une autre session a remplacé celle-ci.",
+    "offline": "Hors ligne.",
+    "loggedOut": "Déconnecté de la boutique."
+  },
+  "alert_one": "Nouveau message de {{name}} sur {{store}}",
+  "alert_other": "{{count}} nouveaux messages de {{who}} sur {{store}}",
+  "alertOthers_one": "{{first}} et {{count}} autre",
+  "alertOthers_other": "{{first}} et {{count}} autres",
+  "unknownFriend": "un ami"
+}

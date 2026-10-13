@@ -1,5 +1,7 @@
+// i18n: converted
 import React, { useState } from 'react';
 import { Effect } from 'effect';
+import { useTranslation } from 'react-i18next';
 import { ExternalLink } from 'lucide-react';
 import type { Game, GameTerm } from '../types';
 import { Modal } from './Modal';
@@ -26,6 +28,7 @@ export interface TermsDialogProps {
  *  read it, and "I accept" or Cancel. Platypus records the acceptance; it never
  *  accepts for the user, and the dialog offers nothing that would. */
 export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogProps) {
+  const { t } = useTranslation('common');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,20 +47,20 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
   };
 
   return (
-    <Modal label={`Terms for ${game.title}`} onClose={onCancel} size="md" dismissable={!busy}>
-      <h2 className="text-[20px] font-extrabold tracking-tight">Terms for {game.title}</h2>
+    <Modal label={t('common:terms.dialogLabel', { title: game.title })} onClose={onCancel} size="md" dismissable={!busy}>
+      <h2 className="text-[20px] font-extrabold tracking-tight">{t('common:terms.heading', { title: game.title })}</h2>
       <p className="mt-1 text-[12.5px] text-white/70">
-        Read these before {game.title} is installed. Platypus doesn't accept them for you.
+        {t('common:terms.intro', { title: game.title })}
       </p>
 
-      <ul className="mt-5 space-y-2" aria-label="Terms to accept">
-        {terms.map((t) => {
-          const link = termURL(t);
+      <ul className="mt-5 space-y-2" aria-label={t('common:terms.dialogLabel', { title: game.title })}>
+        {terms.map((term) => {
+          const link = termURL(term);
           return (
-            <li key={`${t.id}@${t.version}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3">
+            <li key={`${term.id}@${term.version}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3">
               <span className="min-w-0">
-                <span className="block text-[13px] text-white/90">{t.title}</span>
-                <span className="block font-mono text-hint text-white/55">version {t.version}</span>
+                <span className="block text-[13px] text-white/90">{term.title}</span>
+                <span className="block font-mono text-hint text-white/55">{t('common:terms.version', { version: term.version })}</span>
               </span>
               {link && (
                 <button
@@ -65,7 +68,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
                   onClick={() => openExternal(link)}
                   className={cx('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-hint text-sky-200 hover:bg-white/[0.06]')}
                 >
-                  <ExternalLink className="h-3.5 w-3.5" /> Read
+                  <ExternalLink className="h-3.5 w-3.5" /> {t('common:terms.read')}
                 </button>
               )}
             </li>
@@ -74,12 +77,12 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
       </ul>
 
       {error && (
-        <ErrorNotice className="mt-4" message={error} fallback="Platypus couldn't read the terms just now." />
+        <ErrorNotice className="mt-4" message={error} fallback={t('common:terms.error')} />
       )}
 
       <div className="mt-6 flex justify-end gap-2.5">
-        <Button variant="neutral" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>
-        <Button variant="primary" size="sm" disabled={busy} onClick={() => void accept()}>I accept</Button>
+        <Button variant="neutral" size="sm" disabled={busy} onClick={onCancel}>{t('common:cancel')}</Button>
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => void accept()}>{t('common:terms.accept')}</Button>
       </div>
     </Modal>
   );

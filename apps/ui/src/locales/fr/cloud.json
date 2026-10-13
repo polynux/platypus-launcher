@@ -1,0 +1,114 @@
+{
+  "panel": {
+    "title": "Sauvegardes cloud",
+    "syncForGame": "synchronisation pour ce jeu",
+    "modeLabel": "Mode de synchronisation pour ce jeu",
+    "defaultOption": "Défaut · {{mode}}",
+    "defaultTitle": "Suit le réglage de la boutique",
+    "checked": "vérifié {{when}}",
+    "skipped": "Les lancements ne synchronisent pas ces sauvegardes : {{reason}}",
+    "clientRunning": "{{name}} est en cours d'exécution.",
+    "clientWhy": "Platypus ne synchronise pas ce jeu pendant qu'il est ouvert, car deux programmes écrivant les mêmes sauvegardes créent des conflits.",
+    "clientInstead": "Lancez-le via {{name}} à la place, ou fermez {{name}} pour synchroniser.",
+    "clientClose": "Fermez {{name}} pour synchroniser.",
+    "launchVia": "Lancer via {{name}}",
+    "cancelSync": "Annuler la synchronisation",
+    "error": "Platypus n'a pas pu joindre les sauvegardes cloud.",
+    "check": "Vérifier",
+    "choose": "Choisir les sauvegardes à garder…",
+    "runningConflict": "{{title}} est en cours d'exécution. Choisissez ses sauvegardes après sa fermeture."
+  },
+  "mode": {
+    "off": "Désactivé",
+    "ask": "Demander",
+    "auto": "Auto"
+  },
+  "modeHelp": {
+    "off": "Platypus ne synchronise pas les sauvegardes de ce jeu.",
+    "ask": "Synchronise seul quand rien ne s'oppose ; demande quand les sauvegardes ont changé des deux côtés ou que la boutique est injoignable.",
+    "auto": "Comme demander, mais si vous lancez quand même alors que la boutique est injoignable, il ne demande plus pour ce jeu. Les conflits demandent toujours."
+  },
+  "state": {
+    "synced": "synchronisé",
+    "pending": "modifications en attente",
+    "conflict": "conflit",
+    "unsupported": "non pris en charge",
+    "offline": "hors ligne",
+    "error": "erreur",
+    "off": "désactivé",
+    "checking": "vérification…",
+    "unchecked": "non vérifié"
+  },
+  "counts": {
+    "same_one": "{{count}} synchronisé",
+    "same_other": "{{count}} synchronisés",
+    "download_one": "{{count}} à télécharger",
+    "download_other": "{{count}} à télécharger",
+    "upload_one": "{{count}} à téléverser",
+    "upload_other": "{{count}} à téléverser",
+    "conflict_one": "{{count}} en conflit",
+    "conflict_other": "{{count}} en conflit",
+    "unmapped_one": "{{count}} non placée sur cet appareil",
+    "unmapped_other": "{{count}} non placées sur cet appareil"
+  },
+  "setting": {
+    "description": "Si Platypus synchronise les fichiers de sauvegarde de chaque boutique vers son cloud. Chaque jeu peut remplacer le choix de sa boutique sur sa page.",
+    "rowLabel": "Sauvegardes cloud pour {{name}}",
+    "error": "Platypus n'a pas pu enregistrer le réglage cloud."
+  },
+  "conflict": {
+    "label": "Conflit de sauvegardes cloud",
+    "heading": "Sauvegardes modifiées des deux côtés",
+    "intro_one": "{{title}} a un fichier de sauvegarde modifié sur cet appareil et dans le cloud.",
+    "intro_other": "{{title}} a {{count}} fichiers de sauvegarde modifiés sur cet appareil et dans le cloud.",
+    "explanation": "Platypus n'écrasera ni l'un ni l'autre sans votre accord. Garder la copie du cloud sauvegarde d'abord le fichier de cet appareil ; garder la copie de cet appareil remplace celle du cloud.",
+    "allFiles": "tous les fichiers :",
+    "keepLocal": "garder cet appareil",
+    "keepRemote": "garder le cloud",
+    "decideLater": "décider plus tard",
+    "optLocal": "Garder cet appareil",
+    "optRemote": "Garder le cloud",
+    "optLater": "Décider plus tard",
+    "filesLabel": "Fichiers en conflit",
+    "local": "Cet appareil",
+    "remote": "Cloud",
+    "newer": "plus récent",
+    "from": "depuis {{machine}}",
+    "choice": "Choix pour {{path}}",
+    "backups": "sauvegardes : {{dir}}",
+    "error": "Platypus n'a pas pu départager ces sauvegardes. Rien n'a été modifié des deux côtés.",
+    "launchAnyway": "Lancer sans résoudre",
+    "applyNone": "Appliquer les choix",
+    "apply_one": "Appliquer {{count}} choix",
+    "apply_other": "Appliquer {{count}} choix"
+  },
+  "host": {
+    "decisionLabel": "Les sauvegardes cloud attendent une décision",
+    "openGame": "Ouvrez la page du jeu pour décider.",
+    "settled": "Sauvegardes résolues",
+    "clientLabel": "Client de la boutique en cours d'exécution",
+    "clientRunning": "{{name}} est en cours d'exécution",
+    "offlineLabel": "Sauvegardes cloud non synchronisées",
+    "offlineWhy": "Vous pouvez lancer {{title}} quand même. Ses sauvegardes sur cet appareil peuvent être plus anciennes ou plus récentes que celles du cloud.",
+    "launchAnyway": "Lancer quand même",
+    "launchWithoutSync": "Lancer sans synchronisation cloud"
+  },
+  "notice": {
+    "uploaded": "Sauvegardes téléversées",
+    "failed": "La synchronisation cloud de {{title}} a échoué",
+    "failedDetail": "Synchronisation cloud échouée · {{title}}",
+    "openGame": "Ouvrez la page du jeu pour plus de détails",
+    "skipped": "{{title}} n'a pas été synchronisé",
+    "skippedDetail": "Synchronisation cloud ignorée · {{title}}",
+    "canceled": "Synchronisation cloud annulée",
+    "prompt": "Les sauvegardes cloud attendent une décision · {{title}}"
+  },
+  "ago": {
+    "now": "à l'instant",
+    "minutes_one": "il y a {{count}} min",
+    "minutes_other": "il y a {{count}} min",
+    "hours_one": "il y a {{count}} h",
+    "hours_other": "il y a {{count}} h"
+  },
+  "unknownDate": "date inconnue"
+}

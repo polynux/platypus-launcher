@@ -63,6 +63,11 @@ test('the body is the message text clipped to ~140 chars', () => {
   assert.equal(coalescedBody('Ana Ruiz', 3, 'hello'), '3 new messages from Ana Ruiz');
 });
 
+test('the coalesced count follows the shell language', () => {
+  assert.equal(coalescedBody('Ana Ruiz', 3, 'hello', 'fr'), '3 nouveaux messages de Ana Ruiz');
+  assert.equal(coalescedBody('Ana Ruiz', 1, 'hello', 'fr'), 'hello');
+});
+
 test('a burst for one conversation shows once, then replaces with the count', () => {
   const shown: { title: string; body: string }[] = [];
   const closed: string[] = [];

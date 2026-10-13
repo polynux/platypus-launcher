@@ -1,24 +1,39 @@
-import type { FriendState, SocialConnState, SocialFriend, SocialStatus, SocialView } from '../types';
+import type { FriendState, SocialFriend, SocialStatus, SocialView } from '../types';
+import i18n from './i18n';
 
 export const SOCIAL_STATUSES: SocialStatus[] = ['online', 'away', 'busy', 'snooze', 'invisible'];
 
-export const STATUS_LABEL: Record<SocialStatus, string> = {
-  online: 'Online',
-  away: 'Away',
-  busy: 'Busy',
-  snooze: 'Snooze',
-  invisible: 'Invisible',
+/** A status a person can pick, as the friends modal names it. Unknown values
+ *  pass through unchanged (a store's own word). */
+const STATUS_KEY: Record<SocialStatus, string> = {
+  online: 'chat:status.online',
+  away: 'chat:status.away',
+  busy: 'chat:status.busy',
+  snooze: 'chat:status.snooze',
+  invisible: 'chat:status.invisible',
 };
 
-export const FRIEND_STATE_LABEL: Record<FriendState, string> = {
-  online: 'Online',
-  offline: 'Offline',
-  away: 'Away',
-  busy: 'Busy',
-  snooze: 'Snooze',
-  looking: 'Looking to play',
-  invisible: 'Offline',
+export function statusLabel(s: string): string {
+  const key = (STATUS_KEY as Record<string, string>)[s];
+  return key ? i18n.t(key) : s;
+}
+
+/** A friend's state, as the friends modal names it. Unknown values pass
+ *  through unchanged. */
+const FRIEND_STATE_KEY: Record<FriendState, string> = {
+  online: 'chat:state.online',
+  offline: 'chat:state.offline',
+  away: 'chat:state.away',
+  busy: 'chat:state.busy',
+  snooze: 'chat:state.snooze',
+  looking: 'chat:state.looking',
+  invisible: 'chat:state.invisible',
 };
+
+export function friendStateLabel(s: string): string {
+  const key = (FRIEND_STATE_KEY as Record<string, string>)[s];
+  return key ? i18n.t(key) : s;
+}
 
 /** Dot colour for a status or friend state: green online, amber away-ish, grey offline. */
 export function stateDot(state: string): string {
@@ -75,24 +90,36 @@ export function describeSummary(views: SocialView[]): { online: number; inGame: 
       if (f.game) inGame++;
     }
   }
-  const parts = [`${online} online`, inGame > 0 && `${inGame} in game`].filter(Boolean);
+  const parts = [i18n.t('chat:summary.online', { count: online })];
+  if (inGame > 0) parts.push(i18n.t('chat:summary.inGame', { count: inGame }));
   return { online, inGame, text: parts.join(' · ') };
 }
 
 /** The banner text that explains a store's connection, or null when it is online. */
 export function connectionLine(conn: SocialView['connection']): string | null {
-  const text = CONNECTION_TEXT[conn.state];
+  let text: string | null = null;
+  switch (conn.state) {
+    case 'connecting':
+      text = i18n.t('chat:connection.connecting');
+      break;
+    case 'reconnecting':
+      text = i18n.t('chat:connection.reconnecting');
+      break;
+    case 'replaced':
+      text = i18n.t('chat:connection.replaced');
+      break;
+    case 'offline':
+      text = i18n.t('chat:connection.offline');
+      break;
+    case 'loggedOut':
+      text = i18n.t('chat:connection.loggedOut');
+      break;
+    default:
+      text = null;
+  }
   if (!text) return null;
   return conn.message ? `${text} ${conn.message}` : text;
 }
-
-const CONNECTION_TEXT: Partial<Record<SocialConnState, string>> = {
-  connecting: 'Connecting…',
-  reconnecting: 'Reconnecting…',
-  replaced: 'Another session replaced this one.',
-  offline: 'Offline.',
-  loggedOut: 'Signed out of the store.',
-};
 
 /** A status can be changed only while the store session is online. */
 export function canSetStatus(v: SocialView): boolean {

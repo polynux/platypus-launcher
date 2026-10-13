@@ -1,0 +1,13 @@
+{
+  "intro": "Builds Proton, GE-Proton et Wine détectés sur ce système.",
+  "about": "Un runner est le build qui fait tourner un jeu Windows sur Linux. Chaque jeu en choisit un dans ses paramètres ; les jeux natifs Linux n'en ont pas besoin.",
+  "rescan": "Réanalyser",
+  "scanning": "Analyse en cours",
+  "emptyTitle": "aucun runner",
+  "emptyBody": "Aucun build Proton ou Wine trouvé. Installez Proton depuis Steam, ou déposez GE-Proton dans ~/.steam/root/compatibilitytools.d.",
+  "badge": {
+    "custom": "personnalisé",
+    "system": "système",
+    "found": "trouvé"
+  }
+}

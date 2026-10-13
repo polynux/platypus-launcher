@@ -11,10 +11,7 @@
   },
   "folders": {
     "heading": "Dossiers de jeux",
-    "description": {
-      "before": "Où s'installent les jeux. Les jeux d'une boutique vont dans leur propre sous-dossier du dossier par défaut, par exemple",
-      "after": ". L'étape « Installer vers… » de chaque jeu propose tous les dossiers ci-dessous. Steam garde ses propres dossiers de bibliothèque."
-    },
+    "description": "Où s'installent les jeux. Les jeux d'une boutique vont dans leur propre sous-dossier du dossier par défaut, par exemple <path>{{path}}/epic</path>. L'étape « Installer vers… » de chaque jeu propose tous les dossiers ci-dessous. Steam garde ses propres dossiers de bibliothèque.",
     "pending": "pas encore créé",
     "default": "par défaut",
     "makeDefaultLabel": "Faire de {{folder}} le dossier par défaut",

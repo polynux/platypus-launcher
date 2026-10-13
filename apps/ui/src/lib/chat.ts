@@ -1,4 +1,6 @@
 import type { ChatMessage, ChatView } from '../types';
+import i18n from './i18n';
+import { formatList } from './format';
 
 /** The most characters one message may hold (protocol 1.9). */
 export const CHAT_MAX_TEXT = 4096;
@@ -75,9 +77,13 @@ export function splitLinks(text: string): TextPart[] {
 /** The toast for the new messages of one store that arrived together: the one message names its friend,
  *  several name the friends they came from (never their text). */
 export function alertText(count: number, names: string[], store: string): string {
-  if (count <= 1) return `New message from ${names[0] ?? 'a friend'} on ${store}`;
-  const who = names.length <= 2 ? names.join(' and ') : `${names[0]} and ${names.length - 1} others`;
-  return `${count} new messages from ${who} on ${store}`;
+  if (count <= 1) {
+    return i18n.t('chat:alert', { count: 1, name: names[0] ?? i18n.t('chat:unknownFriend'), who: '', store });
+  }
+  const who = names.length <= 2
+    ? formatList(names)
+    : i18n.t('chat:alertOthers', { first: names[0], count: names.length - 1 });
+  return i18n.t('chat:alert', { count, name: '', who, store });
 }
 
 /** The most message text a desktop notification carries, in characters (issue #12). */

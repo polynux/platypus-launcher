@@ -1,5 +1,6 @@
 import type { GameTerm } from '../types';
 import { webURL } from './external';
+import { formatDate } from './format';
 
 /** The terms the user still has to accept: a version they haven't accepted
  *  counts, so a bumped version is asked again. */
@@ -10,7 +11,7 @@ export function pendingTerms(terms: GameTerm[]): GameTerm[] {
 /** When the user accepted a term, as a date for the Legal section ("" when not accepted). */
 export function acceptedLabel(term: Pick<GameTerm, 'accepted_at'>): string {
   if (!term.accepted_at) return '';
-  return new Date(term.accepted_at * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDate(term.accepted_at);
 }
 
 /** The term's link, when it is a web address the browser may open ('' otherwise). */
