@@ -3,5 +3,10 @@
   "coreCrashed": "The Platypus core stopped unexpectedly (exit {{code}}). See the terminal for its log.",
   "coreStartFailed": "Could not start the Platypus core:\n{{error}}",
   "chatNewMessages_one": "{{count}} new message from {{name}}",
-  "chatNewMessages_other": "{{count}} new messages from {{name}}"
+  "chatNewMessages_other": "{{count}} new messages from {{name}}",
+  "trayShow": "Show Platypus",
+  "trayStop": "Stop {{title}}",
+  "trayQuit": "Quit",
+  "trayTooltip": "Platypus",
+  "trayTooltipGame": "Platypus — {{title}}"
 }
