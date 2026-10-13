@@ -22,6 +22,7 @@ const apiMocks = vi.hoisted(() => ({
   setGameSavePaths: vi.fn(),
   setGameSaveBackup: vi.fn(),
   uninstallGameWithoutBackup: vi.fn(),
+  pickFolder: vi.fn(),
 }));
 
 vi.mock('../../effect/runtime', () => ({ LauncherApi: apiMocks }));
@@ -84,5 +85,27 @@ describe('SaveBackupsSection', () => {
     fireEvent.click(getByText('gameSettings:maintenance.saveBackups.backupNow'));
     await vi.waitFor(() => expect(apiMocks.createSaveBackup).toHaveBeenCalled());
     await vi.waitFor(() => expect(notified).toContain('gameSettings:maintenance.saveBackups.queued'));
+  });
+
+  it('adds a save folder with the folder picker and removes one of yours', async () => {
+    apiMocks.pickFolder.mockReturnValue(Effect.succeed('/saves/new' as never));
+    apiMocks.setGameSavePaths.mockReturnValue(Effect.succeed(undefined as never));
+    const { findByText, getByLabelText, queryByLabelText } = render(
+      <SaveBackupsSection game={game} onNotify={() => {}} />,
+    );
+    fireEvent.click(await findByText('gameSettings:maintenance.saveBackups.pathsAdd'));
+    await vi.waitFor(() => expect(apiMocks.setGameSavePaths).toHaveBeenCalledWith('g1', ['/saves/a', '/saves/new']));
+    // Only your own folders can be removed; found ones can't.
+    expect(queryByLabelText('gameSettings:maintenance.saveBackups.pathRemove')).toBeTruthy();
+    fireEvent.click(getByLabelText('gameSettings:maintenance.saveBackups.pathRemove'));
+    await vi.waitFor(() => expect(apiMocks.setGameSavePaths).toHaveBeenCalledWith('g1', []));
+  });
+
+  it('keeps the list when the picker is canceled', async () => {
+    apiMocks.pickFolder.mockReturnValue(Effect.succeed('' as never));
+    const { findByText } = render(<SaveBackupsSection game={game} onNotify={() => {}} />);
+    fireEvent.click(await findByText('gameSettings:maintenance.saveBackups.pathsAdd'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(apiMocks.setGameSavePaths).not.toHaveBeenCalled();
   });
 });

@@ -32,8 +32,6 @@ export function SaveBackupsSection({ game, onNotify }: {
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
   const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editText, setEditText] = useState('');
 
   const reload = () => {
     Effect.runPromise(LauncherApi.listSaveBackups(game.id))
@@ -90,16 +88,26 @@ export function SaveBackupsSection({ game, onNotify }: {
       .catch((e) => setError(coreErrMsg(e)));
   };
 
-  const savePaths = () => {
-    const lines = editText.split('\n').map((l) => l.trim()).filter(Boolean);
-    Effect.runPromise(LauncherApi.setGameSavePaths(game.id, lines))
+  // The user's own save folders: added with the folder picker, removed one
+  // by one. Found folders (the community list) aren't editable.
+  const userPaths = (paths ?? []).filter((p) => p.origin === 'user').map((p) => p.path);
+  const writePaths = (next: string[], doneKey: string) => {
+    Effect.runPromise(LauncherApi.setGameSavePaths(game.id, next))
       .then(() => {
-        setEditOpen(false);
-        onNotify(t('gameSettings:maintenance.saveBackups.pathsSaved'));
+        onNotify(t(doneKey));
         reload();
       })
       .catch((e) => setError(coreErrMsg(e)));
   };
+  const addFolder = () => {
+    Effect.runPromise(LauncherApi.pickFolder(t('gameSettings:maintenance.saveBackups.pathsPickTitle'), userPaths[0] || game.install_dir || ''))
+      .then((dir) => {
+        if (!dir || userPaths.includes(dir)) return;
+        writePaths([...userPaths, dir], 'gameSettings:maintenance.saveBackups.pathAdded');
+      })
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+  const removePath = (dir: string) => writePaths(userPaths.filter((p) => p !== dir), 'gameSettings:maintenance.saveBackups.pathRemoved');
 
   const saveMode = (next: string) => {
     setMode(next);
@@ -207,43 +215,33 @@ export function SaveBackupsSection({ game, onNotify }: {
       <section>
         <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.pathsHeading').toLowerCase()}</MonoLabel>
         <p className="text-[12.5px] leading-relaxed text-white/60">{t('gameSettings:maintenance.saveBackups.pathsDescription')}</p>
+        {paths != null && paths.length === 0 && (
+          <p className="mt-2 text-[12px] text-white/55">{t('gameSettings:maintenance.saveBackups.pathsNone')}</p>
+        )}
         <ul className="mt-2 space-y-1">
           {(paths ?? []).map((p) => (
-            <li key={`${p.origin}:${p.path}`} className="flex items-baseline justify-between gap-3 font-mono text-[12px]">
-              <span className="min-w-0 truncate text-white/75">{p.path}</span>
-              <span className="flex-none text-white/50">
+            <li key={`${p.origin}:${p.path}`} className="flex items-center justify-between gap-3 font-mono text-[12px]">
+              <span className="min-w-0 truncate text-white/75" title={p.path}>{p.path}</span>
+              <span className="flex flex-none items-center gap-2 text-white/50">
                 {p.origin === 'user'
                   ? t('gameSettings:maintenance.saveBackups.pathOrigin.user')
                   : t('gameSettings:maintenance.saveBackups.pathOrigin.manifest')}
                 {!p.exists && ` · ${t('gameSettings:maintenance.saveBackups.pathMissing')}`}
+                {p.origin === 'user' && (
+                  <Button variant="ghost" size="sm" onClick={() => removePath(p.path)}
+                    aria-label={t('gameSettings:maintenance.saveBackups.pathRemove', { path: p.path })}>
+                    {t('gameSettings:maintenance.saveBackups.pathRemoveShort')}
+                  </Button>
+                )}
               </span>
             </li>
           ))}
         </ul>
-        {editOpen ? (
-          <div className="mt-2 space-y-2">
-            <textarea
-              className="min-h-20 w-full rounded-lg bg-black/40 p-2 font-mono text-[12px] text-white/85 outline-none ring-white/10 focus:ring-1"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              placeholder={t('gameSettings:maintenance.saveBackups.pathsPlaceholder')}
-              aria-label={t('gameSettings:maintenance.saveBackups.pathsHeading')}
-            />
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setEditOpen(false)}>{t('common:cancel')}</Button>
-              <Button variant="primary" size="sm" onClick={savePaths}>{t('gameSettings:maintenance.saveBackups.pathsSave')}</Button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2">
-            <Button variant="ghost" size="sm" onClick={() => {
-              setEditText((paths ?? []).filter((p) => p.origin === 'user').map((p) => p.path).join('\n'));
-              setEditOpen(true);
-            }}>
-              {t('gameSettings:maintenance.saveBackups.pathsSave')}
-            </Button>
-          </div>
-        )}
+        <div className="mt-2">
+          <Button variant="ghost" size="sm" onClick={addFolder}>
+            {t('gameSettings:maintenance.saveBackups.pathsAdd')}
+          </Button>
+        </div>
       </section>
 
       {error && <ErrorNotice message={error} fallback={t('gameSettings:maintenance.saveBackups.loadError')} />}

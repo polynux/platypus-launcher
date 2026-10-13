@@ -272,25 +272,29 @@
         "off": "Never back up"
       },
       "pathsHeading": "Save locations",
-      "pathsDescription": "Where this game’s saves live. Yours first, then the community list.",
+      "pathsDescription": "The folders Platypus backs up for this game. They are found automatically from Ludusavi's community list; if your saves aren't there, add their folder.",
       "pathOrigin": {
-        "user": "yours",
-        "manifest": "list"
+        "user": "added by you",
+        "manifest": "found automatically"
       },
-      "pathMissing": "missing",
-      "pathsPlaceholder": "/path/to/saves (one per line)",
-      "pathsSave": "Save paths",
-      "pathsSaved": "Save locations saved.",
+      "pathMissing": "not on disk",
       "uninstallBackedUp": "Saves will be backed up first.",
       "uninstallNoSaves": "Platypus knows no save paths for this game.",
       "uninstallCloudNoSaves": "The store syncs this game's saves to the cloud.",
       "deleteWithoutBackup": "Delete without a save backup",
       "needsCheck": "Check the box to delete without a save backup.",
-      "restorePreview": "Restore {overwritten} overwritten, {added} added, {kept} kept?",
+      "restorePreview": "Restore {{overwritten}} overwritten, {{added}} added, {{kept}} kept?",
       "autoOn": "Automatic backups: on",
       "autoOff": "Automatic backups: off",
       "autoOffCloud": "Automatic backups off: Steam Cloud syncs this game's saves",
-      "restoreUnavailable": "Restore unavailable: the game's folders aren't on disk."
+      "restoreUnavailable": "Restore unavailable: the game's folders aren't on disk.",
+      "pathsAdd": "Add a save folder…",
+      "pathsPickTitle": "Choose the folder where this game keeps its saves",
+      "pathAdded": "Save folder added.",
+      "pathRemoved": "Save folder removed.",
+      "pathRemoveShort": "Remove",
+      "pathRemove": "Remove {{path}}",
+      "pathsNone": "No save folder known for this game yet. Add the folder where it keeps its saves."
     },
     "removePrefix": "Also delete the Wine prefix",
     "removeFiles": "Also delete the game files",

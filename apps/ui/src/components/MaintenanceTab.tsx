@@ -46,6 +46,8 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  // A sideloaded game's removal check is fetched with the tab, not on click.
+  const removeCheck = useRemoveCheck(game, game.store === 'custom' && !running, confirm);
   const [savePaths, setSavePaths] = useState<SavePath[] | null>(null);
   const [autoState, setAutoState] = useState<AutoBackupState | null>(null);
   const [allowNoBackup, setAllowNoBackup] = useState(false);
@@ -110,7 +112,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
       <div className="space-y-5">
         <SaveBackupsSection game={game} onNotify={onNotify} />
         {confirm ? (
-          <RemoveConfirmPanel game={game} onCancel={() => setConfirm(false)} onRemove={(opts) => { setConfirm(false); onRemove?.(opts); onClose(); }} />
+          <RemoveConfirmPanel game={game} check={removeCheck.check} error={removeCheck.error} onCancel={() => setConfirm(false)} onRemove={(opts) => { setConfirm(false); onRemove?.(opts); onClose(); }} />
         ) : (
           <RemoveFirstRow game={game} onConfirm={() => setConfirm(true)} />
         )}
@@ -223,6 +225,26 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
 }
 
 /** The first removal row: what leaving the library means on its own. */
+/** Fetches what removing a sideloaded game would delete as soon as the
+ *  Maintenance tab opens, so the confirm panel shows the paths and sizes
+ *  from its first frame instead of swapping them in. */
+function useRemoveCheck(game: Game, enabled: boolean, refresh: unknown) {
+  const [state, setState] = useState<{ id: string; check: RemoveCheck | null; error: string | null }>({ id: game.id, check: null, error: null });
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    // Opening the panel asks again (save folders may have changed) but keeps
+    // what is shown until the answer lands; only another game starts empty.
+    setState((s) => (s.id === game.id ? s : { id: game.id, check: null, error: null }));
+    Effect.runPromise(LauncherApi.checkRemove(game.id, { delete_prefix: true, delete_files: true, allow_no_saves: false })).then(
+      (c) => { if (live) setState({ id: game.id, check: c, error: null }); },
+      (e) => { if (live) setState({ id: game.id, check: null, error: coreErrMsg(e) }); },
+    );
+    return () => { live = false; };
+  }, [game.id, enabled, refresh]);
+  return state.id === game.id ? state : { check: null, error: null };
+}
+
 function RemoveFirstRow({ game, onConfirm }: { game: Game; onConfirm: () => void }) {
   const { t } = useTranslation(['gameSettings', 'common']);
   const stay = game.install_dir
@@ -254,8 +276,12 @@ function reasonText(target: RemoveTarget): string {
  *  checkboxes, the backup line and the buttons stack below full width. The
  *  detail line reserves one line while measuring, and long paths truncate
  *  with a tooltip instead of pushing the layout. */
-function RemoveConfirmPanel({ game, onCancel, onRemove }: {
+function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
   game: Game;
+  /** The removal check, fetched when the tab opened (useRemoveCheck), so
+   *  paths and sizes are there before the panel shows. */
+  check: RemoveCheck | null;
+  error: string | null;
   onCancel: () => void;
   onRemove: (opts: RemoveOptions) => void;
 }) {
@@ -263,17 +289,7 @@ function RemoveConfirmPanel({ game, onCancel, onRemove }: {
   const [deletePrefix, setDeletePrefix] = useState(false);
   const [deleteFiles, setDeleteFiles] = useState(false);
   const [allowNoSaves, setAllowNoSaves] = useState(false);
-  const [check, setCheck] = useState<RemoveCheck | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
-  useEffect(() => {
-    let live = true;
-    Effect.runPromise(LauncherApi.checkRemove(game.id, { delete_prefix: true, delete_files: true, allow_no_saves: false })).then(
-      (c) => { if (live) { setCheck(c); setError(null); } },
-      (e) => { if (live) { setCheck(null); setError(coreErrMsg(e)); } },
-    );
-    return () => { live = false; };
-  }, [game.id]);
   const targets = check?.targets ?? [];
   const prefix = targets.find((x) => x.kind === 'prefix');
   const files = targets.find((x) => x.kind === 'files');
