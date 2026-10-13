@@ -1,66 +1,76 @@
 {
-  "installed": "{{title}} installé",
-  "updated": "{{title}} mis à jour",
-  "uninstalled": "{{title}} désinstallé",
-  "jobFailed": "{{title}} : {{error}}",
-  "queued": "{{action}} de {{title}} en file",
-  "action": {
-    "install": "Installation",
-    "update": "Mise à jour",
-    "uninstall": "Désinstallation",
-    "verify": "Vérification",
-    "move": "Déplacement"
-  },
-  "actionFailed": {
-    "install": "l'installation a échoué",
-    "update": "la mise à jour a échoué",
-    "uninstall": "la désinstallation a échoué"
-  },
-  "kind": {
-    "install": "installation",
-    "update": "mise à jour",
-    "uninstall": "désinstallation",
-    "verify": "vérification",
-    "move": "déplacement"
-  },
-  "state": {
-    "queued": "en attente",
-    "running": "en cours",
-    "paused": "en pause",
-    "done": "terminé",
-    "failed": "échoué",
-    "canceled": "annulé"
-  },
-  "header": {
-    "subtitle": "Les installations, mises à jour et désinstallations s'exécutent une à la fois. Un téléchargement en pause garde ses données et reprend où il s'était arrêté ; une installation interrompue reprend au prochain démarrage de Platypus.",
-    "resumeAll": "Tout reprendre",
-    "clearFinished": "Effacer les terminés",
-    "clearing": "Effacement…"
-  },
-  "section": {
-    "queue": "file d'attente",
-    "finished": "terminés"
-  },
-  "empty": {
-    "label": "file vide",
-    "detail": "Rien ne télécharge. Installez un jeu depuis la page d'un jeu d'un plugin de boutique."
-  },
-  "job": {
-    "pause": "Pause",
-    "resume": "Reprendre",
-    "discard": "Supprimer les données",
-    "resumeNote": "la reprise continue où elle s'est arrêtée",
-    "waiting": "en attente",
-    "attempt": "tentative {{count}}",
-    "sizesOf": "{{done}} sur {{total}}",
-    "speedPerSec": "{{speed}}/s"
-  },
-  "aria": {
-    "pauseJob": "Mettre {{title}} en pause",
-    "resumeJob": "Reprendre {{title}}",
-    "cancelJob": "Annuler {{title}}",
-    "discardJob": "Supprimer les données téléchargées de {{title}}",
-    "progressOf": "progression de {{title}}",
-    "cancelKind": "Annuler : {{kind}}"
-  }
+ "installed": "{{title}} installé",
+ "updated": "{{title}} mis à jour",
+ "uninstalled": "{{title}} désinstallé",
+ "jobFailed": "{{title}} : {{error}}",
+ "queued": "{{action}} de {{title}} en file",
+ "action": {
+  "install": "Installation",
+  "update": "Mise à jour",
+  "uninstall": "Désinstallation",
+  "verify": "Vérification",
+  "move": "Déplacement",
+  "backup": "Sauvegarde",
+  "restore": "Restauration"
+ },
+ "actionFailed": {
+  "install": "l'installation a échoué",
+  "update": "la mise à jour a échoué",
+  "uninstall": "la désinstallation a échoué",
+  "verify": "échec de la vérification",
+  "move": "échec du déplacement",
+  "backup": "échec de la sauvegarde",
+  "restore": "échec de la restauration"
+ },
+ "kind": {
+  "install": "installation",
+  "update": "mise à jour",
+  "uninstall": "désinstallation",
+  "verify": "vérification",
+  "move": "déplacement",
+  "backup": "Sauvegarde",
+  "restore": "Restauration"
+ },
+ "state": {
+  "queued": "en attente",
+  "running": "en cours",
+  "paused": "en pause",
+  "done": "terminé",
+  "failed": "échoué",
+  "canceled": "annulé"
+ },
+ "header": {
+  "subtitle": "Les installations, mises à jour et désinstallations s'exécutent une à la fois. Un téléchargement en pause garde ses données et reprend où il s'était arrêté ; une installation interrompue reprend au prochain démarrage de Platypus.",
+  "resumeAll": "Tout reprendre",
+  "clearFinished": "Effacer les terminés",
+  "clearing": "Effacement…"
+ },
+ "section": {
+  "queue": "file d'attente",
+  "finished": "terminés"
+ },
+ "empty": {
+  "label": "file vide",
+  "detail": "Rien ne télécharge. Installez un jeu depuis la page d'un jeu d'un plugin de boutique."
+ },
+ "job": {
+  "pause": "Pause",
+  "resume": "Reprendre",
+  "discard": "Supprimer les données",
+  "resumeNote": "la reprise continue où elle s'est arrêtée",
+  "waiting": "en attente",
+  "attempt": "tentative {{count}}",
+  "sizesOf": "{{done}} sur {{total}}",
+  "speedPerSec": "{{speed}}/s"
+ },
+ "aria": {
+  "pauseJob": "Mettre {{title}} en pause",
+  "resumeJob": "Reprendre {{title}}",
+  "cancelJob": "Annuler {{title}}",
+  "discardJob": "Supprimer les données téléchargées de {{title}}",
+  "progressOf": "progression de {{title}}",
+  "cancelKind": "Annuler : {{kind}}"
+ },
+ "backedUp": "{{title}} sauvegardé",
+ "restored": "{{title}} restauré"
 }

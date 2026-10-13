@@ -1,0 +1,226 @@
+// i18n: converted
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Effect } from 'effect';
+import { LauncherApi } from '../effect/runtime';
+import type { Game, SaveBackup, SavePath, RestorePreview } from '../types';
+import { Button } from '@/components/ds/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
+import { ErrorNotice } from './ErrorNotice';
+import { MonoLabel } from './ui';
+import { formatBytes } from '../lib/games';
+import { coreErrMsg } from '../lib/coreError';
+import { currentLocale } from '../lib/format';
+
+function formatTime(ms: number): string {
+  return new Date(ms * 1000).toLocaleString(currentLocale(), { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** Maintenance → Save backups (issue #42): versions with restore/delete, a
+ *  per-game mode, and the save-paths editor with each path's origin. */
+export function SaveBackupsSection({ game, onNotify }: {
+  game: Game;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+}) {
+  const { t } = useTranslation(['gameSettings', 'common']);
+  const [backups, setBackups] = useState<SaveBackup[] | null>(null);
+  const [paths, setPaths] = useState<SavePath[] | null>(null);
+  const [mode, setMode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
+  const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const reload = () => {
+    Effect.runPromise(LauncherApi.listSaveBackups(game.id))
+      .then(setBackups)
+      .catch((e) => setError(coreErrMsg(e)));
+    Effect.runPromise(LauncherApi.getSavePaths(game))
+      .then(setPaths)
+      .catch((e) => setError(coreErrMsg(e)));
+    Effect.runPromise(LauncherApi.getGameSaveBackup(game.id))
+      .then(setMode)
+      .catch(() => setMode(''));
+  };
+
+  useEffect(reload, [game.id]);
+
+  const backupNow = () => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.createSaveBackup(game))
+      .then(() => {
+        onNotify(t('gameSettings:maintenance.saveBackups.queued'), 'busy');
+        reload();
+      })
+      .catch((e) => setError(coreErrMsg(e)))
+      .finally(() => setBusy(false));
+  };
+
+  const restore = (id: string) => {
+    setConfirmRestore(null);
+    setRestorePreview(null);
+    Effect.runPromise(LauncherApi.restoreSaveBackup(game, id))
+      .then(() => onNotify(t('gameSettings:maintenance.saveBackups.restoreQueued'), 'busy'))
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+
+  const askRestore = (id: string) => {
+    setConfirmDelete(null);
+    setConfirmRestore(id);
+    setRestorePreview(null);
+    Effect.runPromise(LauncherApi.previewRestoreSaveBackup(game, id))
+      .then(setRestorePreview)
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+
+  const remove = (id: string) => {
+    setConfirmDelete(null);
+    Effect.runPromise(LauncherApi.deleteSaveBackup(game.id, id))
+      .then(() => {
+        onNotify(t('gameSettings:maintenance.saveBackups.deleted'));
+        reload();
+      })
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+
+  const savePaths = () => {
+    const lines = editText.split('\n').map((l) => l.trim()).filter(Boolean);
+    Effect.runPromise(LauncherApi.setGameSavePaths(game.id, lines))
+      .then(() => {
+        setEditOpen(false);
+        onNotify(t('gameSettings:maintenance.saveBackups.pathsSaved'));
+        reload();
+      })
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+
+  const saveMode = (next: string) => {
+    setMode(next);
+    Effect.runPromise(LauncherApi.setGameSaveBackup(game.id, next))
+      .then(reload)
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+
+  return (
+    <div className="space-y-5">
+      <section>
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.heading').toLowerCase()}</MonoLabel>
+        <p className="text-[12.5px] leading-relaxed text-white/60">{t('gameSettings:maintenance.saveBackups.description')}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button onClick={backupNow} disabled={busy}>
+            {busy ? t('gameSettings:maintenance.saveBackups.backingUp') : t('gameSettings:maintenance.saveBackups.backupNow')}
+          </Button>
+          <label className="flex items-center gap-2">
+            <span className="text-[12.5px] text-white/70">{t('gameSettings:maintenance.saveBackups.modeLabel')}</span>
+            <Select value={mode} onValueChange={saveMode}>
+              <SelectTrigger aria-label={t('gameSettings:maintenance.saveBackups.modeLabel')} className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{t('gameSettings:maintenance.saveBackups.mode.follow')}</SelectItem>
+                <SelectItem value="on">{t('gameSettings:maintenance.saveBackups.mode.on')}</SelectItem>
+                <SelectItem value="off">{t('gameSettings:maintenance.saveBackups.mode.off')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
+      </section>
+
+      <section>
+        {backups == null ? null : backups.length === 0 ? (
+          <p className="text-[12.5px] text-white/55">{t('gameSettings:maintenance.saveBackups.empty')}</p>
+        ) : (
+          <ul className="space-y-2">
+            {backups.map((b) => (
+              <li key={b.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-lg bg-white/[0.03] px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-[12.5px] text-white/85">{formatTime(b.created_at)} · {b.trigger} · {formatBytes(b.size)}</div>
+                  <div className="font-mono text-[11.5px] text-white/50">{b.files} {t('gameSettings:maintenance.saveBackups.files')}</div>
+                </div>
+                <div className="flex flex-none gap-2">
+                  {confirmRestore === b.id ? (
+                    <>
+                      <span className="self-center text-[12px] text-white/60">
+                        {restorePreview
+                          ? t('gameSettings:maintenance.saveBackups.restorePreview', {
+                            overwritten: restorePreview.overwritten,
+                            added: restorePreview.added,
+                            kept: restorePreview.kept,
+                          })
+                          : t('gameSettings:maintenance.saveBackups.restoreConfirm')}
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={() => { setConfirmRestore(null); setRestorePreview(null); }}>{t('common:cancel')}</Button>
+                      <Button variant="danger" size="sm" onClick={() => restore(b.id)}>{t('gameSettings:maintenance.saveBackups.restore')}</Button>
+                    </>
+                  ) : confirmDelete === b.id ? (
+                    <>
+                      <span className="self-center text-[12px] text-white/60">{t('gameSettings:maintenance.saveBackups.deleteConfirm')}</span>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>{t('common:cancel')}</Button>
+                      <Button variant="danger" size="sm" onClick={() => remove(b.id)}>{t('gameSettings:maintenance.saveBackups.delete')}</Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => askRestore(b.id)}>
+                        {t('gameSettings:maintenance.saveBackups.restore')}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => { setConfirmRestore(null); setRestorePreview(null); setConfirmDelete(b.id); }}>
+                        {t('gameSettings:maintenance.saveBackups.delete')}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.pathsHeading').toLowerCase()}</MonoLabel>
+        <p className="text-[12.5px] leading-relaxed text-white/60">{t('gameSettings:maintenance.saveBackups.pathsDescription')}</p>
+        <ul className="mt-2 space-y-1">
+          {(paths ?? []).map((p) => (
+            <li key={`${p.origin}:${p.path}`} className="flex items-baseline justify-between gap-3 font-mono text-[12px]">
+              <span className="min-w-0 truncate text-white/75">{p.path}</span>
+              <span className="flex-none text-white/50">
+                {p.origin === 'user'
+                  ? t('gameSettings:maintenance.saveBackups.pathOrigin.user')
+                  : t('gameSettings:maintenance.saveBackups.pathOrigin.manifest')}
+                {!p.exists && ` · ${t('gameSettings:maintenance.saveBackups.pathMissing')}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {editOpen ? (
+          <div className="mt-2 space-y-2">
+            <textarea
+              className="min-h-20 w-full rounded-lg bg-black/40 p-2 font-mono text-[12px] text-white/85 outline-none ring-white/10 focus:ring-1"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              placeholder={t('gameSettings:maintenance.saveBackups.pathsPlaceholder')}
+              aria-label={t('gameSettings:maintenance.saveBackups.pathsHeading')}
+            />
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setEditOpen(false)}>{t('common:cancel')}</Button>
+              <Button variant="primary" size="sm" onClick={savePaths}>{t('gameSettings:maintenance.saveBackups.pathsSave')}</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2">
+            <Button variant="ghost" size="sm" onClick={() => {
+              setEditText((paths ?? []).filter((p) => p.origin === 'user').map((p) => p.path).join('\n'));
+              setEditOpen(true);
+            }}>
+              {t('gameSettings:maintenance.saveBackups.pathsSave')}
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {error && <ErrorNotice message={error} fallback={t('gameSettings:maintenance.saveBackups.loadError')} />}
+    </div>
+  );
+}

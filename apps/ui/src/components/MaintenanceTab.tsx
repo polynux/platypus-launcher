@@ -2,15 +2,19 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FolderInput, ShieldCheck, Trash2 } from 'lucide-react';
-import type { Game, GameJobKind, Job, StorePlugin } from '../types';
+import type { Game, GameJobKind, Job, SavePath, StorePlugin } from '../types';
 import { Button } from '@/components/ds/button';
 import { CapabilitySurface, offers } from '../lib/capabilities';
 import { JobProgress } from './JobProgress';
 import { MoveDialog } from './MoveDialog';
+import { SaveBackupsSection } from './SaveBackupsSection';
 import { VerifyDialog } from './VerifyDialog';
 import { MonoLabel } from './ui';
 import { formatBytes } from '../lib/games';
 import { ErrorNotice } from './ErrorNotice';
+import { LauncherApi } from '../effect/runtime';
+import { Effect } from 'effect';
+import { coreErrMsg } from '../lib/coreError';
 
 /** The folder a game folder sits in ("" when there is none). */
 export function parentFolder(dir?: string): string {
@@ -39,7 +43,16 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [savePaths, setSavePaths] = useState<SavePath[] | null>(null);
+  const [allowNoBackup, setAllowNoBackup] = useState(false);
   useEffect(() => { setConfirm(false); setVerifyOpen(false); setMoveOpen(false); }, [game.id]);
+  useEffect(() => { setSavePaths(null); setAllowNoBackup(false); }, [game.id, confirm]);
+  // The uninstall confirm shows the backup line: what the gate will back up,
+  // or the "delete without a save backup" checkbox when no paths are known.
+  useEffect(() => {
+    if (!confirm || game.store === 'custom') return;
+    Effect.runPromise(LauncherApi.getSavePaths(game)).then(setSavePaths).catch(() => setSavePaths([]));
+  }, [confirm, game]);
   // A game that starts while the confirm row is open closes it: a running
   // game can't be removed, so there is nothing left to answer.
   useEffect(() => { if (running) setConfirm(false); }, [running]);
@@ -56,6 +69,14 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
     return () => window.removeEventListener('keydown', onKey, true);
   }, [confirm]);
   const active = job && (job.state === 'queued' || job.state === 'running');
+
+  const uninstallWithoutBackup = () => {
+    setConfirm(false);
+    Effect.runPromise(LauncherApi.uninstallGameWithoutBackup(game))
+      .then(() => onNotify(t('downloads:queued', { action: t('downloads:action.uninstall'), title: game.title }), 'busy'))
+      .catch((err) => onNotify(coreErrMsg(err), 'err'));
+    onClose();
+  };
 
   if (active) {
     return (
@@ -85,6 +106,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
     const removeConfirmText = t('gameSettings:maintenance.removeConfirm', { title: game.title, stay });
     return (
       <div className="space-y-5">
+        <SaveBackupsSection game={game} onNotify={onNotify} />
         {confirm ? (
           <Row title={t('gameSettings:maintenance.removeTitle')} text={removeConfirmText}>
             <div className="flex gap-2">
@@ -111,8 +133,10 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
       : game.install_dir
         ? t('gameSettings:maintenance.uninstallConfirmDir', { title: game.title, dir: game.install_dir })
         : t('gameSettings:maintenance.uninstallConfirmBare', { title: game.title });
+  const noSavePaths = savePaths != null && savePaths.length === 0;
   return (
     <div className="space-y-5">
+      <SaveBackupsSection game={game} onNotify={onNotify} />
       <CapabilitySurface plugin={plugin} capability="verify" game={game}>
         <Row title={t('gameSettings:maintenance.verifyTitle')} text={t('gameSettings:maintenance.verifyText', { title: game.title, plugin: plugin.name })}>
           <Button onClick={() => setVerifyOpen(true)}><ShieldCheck className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.verifyTitle')}</Button>
@@ -125,11 +149,35 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
 
       {offers(plugin, 'install', { game }) && (confirm ? (
         <Row title={t('gameSettings:maintenance.uninstallTitle')} text={uninstallText}>
-          <div className="flex gap-2">
-            <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>{t('common:cancel')}</Button>
-            <Button variant="danger" onClick={() => { setConfirm(false); onJob('uninstall'); onClose(); }}>
-              <Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.deleteFiles')}
-            </Button>
+          <div className="space-y-2">
+            <p className="text-[12px] text-white/60">
+              {noSavePaths
+                ? t('gameSettings:maintenance.saveBackups.uninstallNoSaves')
+                : t('gameSettings:maintenance.saveBackups.uninstallBackedUp')}
+            </p>
+            {noSavePaths && (
+              <label className="flex items-center gap-2 text-[12.5px] text-white/75">
+                <input
+                  type="checkbox"
+                  checked={allowNoBackup}
+                  onChange={(e) => setAllowNoBackup(e.target.checked)}
+                  aria-label={t('gameSettings:maintenance.saveBackups.deleteWithoutBackup')}
+                />
+                {t('gameSettings:maintenance.saveBackups.deleteWithoutBackup')}
+              </label>
+            )}
+            <div className="flex gap-2">
+              <Button variant="ghost" autoFocus onClick={() => setConfirm(false)}>{t('common:cancel')}</Button>
+              {noSavePaths ? (
+                <Button variant="danger" disabled={!allowNoBackup} title={allowNoBackup ? undefined : t('gameSettings:maintenance.saveBackups.needsCheck')} onClick={uninstallWithoutBackup}>
+                  <Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.deleteFiles')}
+                </Button>
+              ) : (
+                <Button variant="danger" onClick={() => { setConfirm(false); onJob('uninstall'); onClose(); }}>
+                  <Trash2 className="h-3.5 w-3.5" /> {t('gameSettings:maintenance.deleteFiles')}
+                </Button>
+              )}
+            </div>
           </div>
         </Row>
       ) : (

@@ -447,8 +447,8 @@ export function App() {
         const prev = jobStates.current.get(j.id);
         jobStates.current.set(j.id, j.state);
         if (initial || prev === j.state) continue;
-        const verbKey = j.kind === 'uninstall' ? 'uninstalled' : j.kind === 'update' ? 'updated' : 'installed';
-        const action = t(j.kind === 'uninstall' ? 'activity:log.jobVerbUninstalled' : j.kind === 'update' ? 'activity:log.jobVerbUpdated' : 'activity:log.jobVerbInstalled');
+        const verbKey = j.kind === 'uninstall' ? 'uninstalled' : j.kind === 'update' ? 'updated' : j.kind === 'backup' ? 'backedUp' : j.kind === 'restore' ? 'restored' : 'installed';
+        const action = t(j.kind === 'uninstall' ? 'activity:log.jobVerbUninstalled' : j.kind === 'update' ? 'activity:log.jobVerbUpdated' : j.kind === 'backup' ? 'activity:log.jobVerbBackedUp' : j.kind === 'restore' ? 'activity:log.jobVerbRestored' : 'activity:log.jobVerbInstalled');
         if (j.state === 'done') {
           refresh = true;
           // Optimistic flip so the game page updates before the refresh

@@ -28,9 +28,12 @@ export interface CoreApi {
   ChooseGameFolder(): Promise<string>;
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
+  CreateSaveBackup(game: types.Game): Promise<types.Job>;
+  DeleteSaveBackup(gameID: string, backupID: string): Promise<void>;
   DiscardJob(id: string): Promise<void>;
   DismissMigrationNotice(): Promise<void>;
   ForceStopGame(gameID: string): Promise<void>;
+  GetBackupSettings(): Promise<types.BackupSettings>;
   GetCloudInfo(game: types.Game): Promise<types.CloudInfo>;
   GetCloudSettings(): Promise<types.CloudSettings>;
   GetCustomization(gameID: string): Promise<types.Customization>;
@@ -41,6 +44,7 @@ export interface CoreApi {
   GetGameFix(game: types.Game): Promise<types.GameFixInfo | null>;
   GetGameFolders(): Promise<types.GameFolder[]>;
   GetGameOptions(game: types.Game): Promise<types.GameOptions>;
+  GetGameSaveBackup(gameID: string): Promise<string>;
   GetGameSettings(): Promise<Record<string, Record<string, unknown>>>;
   GetGameSettingsFields(game: types.Game): Promise<types.SettingsView>;
   GetGameTerms(game: types.Game): Promise<types.GameTerm[]>;
@@ -52,6 +56,7 @@ export interface CoreApi {
   GetLibrary(): Promise<types.Library>;
   GetPluginSettings(source: string): Promise<types.SettingsView>;
   GetProtonVersions(): Promise<types.ProtonVersion[]>;
+  GetSavePaths(game: types.Game): Promise<types.SavePath[]>;
   GetTweaks(): Promise<types.Tweak[]>;
   InstallGame(game: types.Game): Promise<types.Job>;
   InstallGameTo(game: types.Game, folder: string): Promise<types.Job>;
@@ -64,6 +69,7 @@ export interface CoreApi {
   LaunchGameViaClient(game: types.Game): Promise<string>;
   LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
   ListJobs(): Promise<types.Job[]>;
+  ListSaveBackups(gameID: string): Promise<types.SaveBackup[]>;
   ListSessions(): Promise<types.SessionEvent[]>;
   ListStorePlugins(): Promise<types.StorePlugin[]>;
   Locale(): Promise<string>;
@@ -84,7 +90,10 @@ export interface CoreApi {
   PluginAuthStatus(id: string): Promise<types.AuthStatus>;
   PluginLogout(id: string): Promise<types.AuthStatus>;
   PreviewLaunchCommand(game: types.Game): Promise<string>;
+  PreviewRestoreSaveBackup(game: types.Game, backupID: string): Promise<types.RestorePreview>;
   RedeemCode(source: string, code: string): Promise<types.RedeemResult>;
+  RefreshSaveManifest(): Promise<void>;
+  RefreshSavePaths(game: types.Game): Promise<types.SavePath[]>;
   RemoveCustomGame(id: string): Promise<void>;
   RemoveGameFolder(path: string): Promise<types.GameFolder[]>;
   RepairGame(game: types.Game): Promise<types.Job>;
@@ -94,6 +103,7 @@ export interface CoreApi {
   ResetCustomization(gameID: string): Promise<types.Customization>;
   ResolveCloudSaves(game: types.Game, choices: Record<string, string>): Promise<types.CloudInfo>;
   RestartSocial(pluginID: string): Promise<void>;
+  RestoreSaveBackup(game: types.Game, backupID: string): Promise<types.Job>;
   ResumeAllJobs(): Promise<void>;
   ResumeJob(id: string): Promise<void>;
   RetryJob(id: string): Promise<void>;
@@ -103,6 +113,7 @@ export interface CoreApi {
   SavePluginSettings(source: string, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
   SearchArtOnline(title: string): Promise<types.ArtCandidate[]>;
   SetArtworkOnline(on: boolean): Promise<types.LauncherSettings>;
+  SetBackupSettings(folder: string, keep: number, mode: string, afterSession: boolean): Promise<types.BackupSettings>;
   SetCancelCleanupDays(days: number): Promise<types.LauncherSettings>;
   SetChatAlerts(pluginID: string, on: boolean): Promise<void>;
   SetChatDesktopNotify(on: boolean): Promise<types.LauncherSettings>;
@@ -112,6 +123,8 @@ export interface CoreApi {
   SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
   SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
+  SetGameSaveBackup(gameID: string, mode: string): Promise<void>;
+  SetGameSavePaths(gameID: string, paths: string[]): Promise<void>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
   SetLanguage(lang: string): Promise<types.LauncherSettings>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
@@ -126,6 +139,7 @@ export interface CoreApi {
   SocialViews(): Promise<social.View[]>;
   StopGame(gameID: string): Promise<void>;
   UninstallGame(game: types.Game): Promise<types.Job>;
+  UninstallGameWithoutBackup(game: types.Game): Promise<types.Job>;
   UnlockVersionChannel(game: types.Game, channel: string, password: string): Promise<boolean>;
   UnpinGameVersion(gameID: string): Promise<void>;
   UpdateGame(game: types.Game): Promise<types.Job>;
@@ -157,9 +171,12 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ChooseGameFolder',
   'ChoosePluginInstallFolder',
   'ClearFinishedJobs',
+  'CreateSaveBackup',
+  'DeleteSaveBackup',
   'DiscardJob',
   'DismissMigrationNotice',
   'ForceStopGame',
+  'GetBackupSettings',
   'GetCloudInfo',
   'GetCloudSettings',
   'GetCustomization',
@@ -170,6 +187,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetGameFix',
   'GetGameFolders',
   'GetGameOptions',
+  'GetGameSaveBackup',
   'GetGameSettings',
   'GetGameSettingsFields',
   'GetGameTerms',
@@ -181,6 +199,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetLibrary',
   'GetPluginSettings',
   'GetProtonVersions',
+  'GetSavePaths',
   'GetTweaks',
   'InstallGame',
   'InstallGameTo',
@@ -193,6 +212,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGameViaClient',
   'LinkGameInfo',
   'ListJobs',
+  'ListSaveBackups',
   'ListSessions',
   'ListStorePlugins',
   'Locale',
@@ -213,7 +233,10 @@ export const coreMethods: (keyof CoreApi)[] = [
   'PluginAuthStatus',
   'PluginLogout',
   'PreviewLaunchCommand',
+  'PreviewRestoreSaveBackup',
   'RedeemCode',
+  'RefreshSaveManifest',
+  'RefreshSavePaths',
   'RemoveCustomGame',
   'RemoveGameFolder',
   'RepairGame',
@@ -223,6 +246,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ResetCustomization',
   'ResolveCloudSaves',
   'RestartSocial',
+  'RestoreSaveBackup',
   'ResumeAllJobs',
   'ResumeJob',
   'RetryJob',
@@ -232,6 +256,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SavePluginSettings',
   'SearchArtOnline',
   'SetArtworkOnline',
+  'SetBackupSettings',
   'SetCancelCleanupDays',
   'SetChatAlerts',
   'SetChatDesktopNotify',
@@ -241,6 +266,8 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCustomGameYear',
   'SetCustomTitle',
   'SetGameInfoOnline',
+  'SetGameSaveBackup',
+  'SetGameSavePaths',
   'SetGameSteamAppID',
   'SetLanguage',
   'SetPluginEnabled',
@@ -255,6 +282,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SocialViews',
   'StopGame',
   'UninstallGame',
+  'UninstallGameWithoutBackup',
   'UnlockVersionChannel',
   'UnpinGameVersion',
   'UpdateGame',

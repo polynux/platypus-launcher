@@ -1,62 +1,64 @@
 {
-  "view": {
-    "subtitle": "Les analyses, lancements et changements de réglages de cette session. Le journal n'est pas encore conservé entre les sessions."
-  },
-  "feed": {
-    "empty": "Rien pour l'instant cette session. Les lancements, analyses et changements de réglages apparaissent ici."
-  },
-  "type": {
-    "session": "session",
-    "unlock": "succès",
-    "fix": "correctif",
-    "update": "mise à jour",
-    "add": "ajout",
-    "remove": "retrait",
-    "download": "téléchargement",
-    "tweak": "réglage",
-    "cloud": "cloud"
-  },
-  "panel": {
-    "title": "Activité",
-    "fullLog": "journal complet →"
-  },
-  "migration": {
-    "label": "Données déplacées de Hydra vers Platypus",
-    "welcome": "Bienvenue dans Platypus.",
-    "moved": "Vos données ont été déplacées de l'ancien dossier Hydra vers Platypus.",
-    "copied": "Vos données ont été copiées de l'ancien dossier Hydra vers Platypus. L'ancien dossier a été conservé tel quel.",
-    "setAside": "Ces plugins étaient faits pour Hydra et ont été mis de côté — réinstallez chacun puis approuvez-le à nouveau dans Plugins : <mono>{{names}}</mono>. Leurs connexions et réglages ont été gardés."
-  },
-  "log": {
-    "scan_one": "Analyse de la bibliothèque · {{count}} jeu installé",
-    "scan_other": "Analyse de la bibliothèque · {{count}} jeux installés",
-    "scanOwned_one": "Analyse de la bibliothèque · {{count}} jeu installé, {{owned}} au total",
-    "scanOwned_other": "Analyse de la bibliothèque · {{count}} jeux installés, {{owned}} au total",
-    "sources_one": "{{count}} source",
-    "sources_other": "{{count}} sources",
-    "warnLoggedOut": "{{source}} : déconnecté",
-    "warnUnavailable": "{{source}} : indisponible pour l'instant",
-    "warnLibrary": "{{source}} : bibliothèque indisponible",
-    "scanErrors": "L'analyse de la bibliothèque a rencontré des erreurs",
-    "fixData_one": "Données de compatibilité pour {{count}} titre",
-    "fixData_other": "Données de compatibilité pour {{count}} titres",
-    "fixMetaCurated_one": "{{count}} correctif suivi",
-    "fixMetaCurated_other": "{{count}} correctifs suivis",
-    "fixMetaProtondb": "protondb",
-    "sessionStarted": "{{title}} démarré",
-    "sessionStopped": "{{title}} arrêté",
-    "sessionFailed": "{{title}} n'a pas démarré",
-    "sessionPid": "pid {{pid}}",
-    "sessionMinutes": "session de {{count}} min",
-    "tweakDetail": "{{what}} · {{title}}",
-    "tweakSessionOnly": "cette session seulement",
-    "tweakDefault": "Réglages du lanceur modifiés",
-    "jobVerbInstalled": "installé",
-    "jobVerbUpdated": "mis à jour",
-    "jobVerbUninstalled": "désinstallé",
-    "jobDone": "{{title}} {{action}}",
-    "jobFailed": "{{kind}} de {{title}} a échoué",
-    "sideloaded": "{{title}} ajouté manuellement",
-    "removed": "{{title}} retiré de la bibliothèque"
-  }
+ "view": {
+  "subtitle": "Les analyses, lancements et changements de réglages de cette session. Le journal n'est pas encore conservé entre les sessions."
+ },
+ "feed": {
+  "empty": "Rien pour l'instant cette session. Les lancements, analyses et changements de réglages apparaissent ici."
+ },
+ "type": {
+  "session": "session",
+  "unlock": "succès",
+  "fix": "correctif",
+  "update": "mise à jour",
+  "add": "ajout",
+  "remove": "retrait",
+  "download": "téléchargement",
+  "tweak": "réglage",
+  "cloud": "cloud"
+ },
+ "panel": {
+  "title": "Activité",
+  "fullLog": "journal complet →"
+ },
+ "migration": {
+  "label": "Données déplacées de Hydra vers Platypus",
+  "welcome": "Bienvenue dans Platypus.",
+  "moved": "Vos données ont été déplacées de l'ancien dossier Hydra vers Platypus.",
+  "copied": "Vos données ont été copiées de l'ancien dossier Hydra vers Platypus. L'ancien dossier a été conservé tel quel.",
+  "setAside": "Ces plugins étaient faits pour Hydra et ont été mis de côté — réinstallez chacun puis approuvez-le à nouveau dans Plugins : <mono>{{names}}</mono>. Leurs connexions et réglages ont été gardés."
+ },
+ "log": {
+  "scan_one": "Analyse de la bibliothèque · {{count}} jeu installé",
+  "scan_other": "Analyse de la bibliothèque · {{count}} jeux installés",
+  "scanOwned_one": "Analyse de la bibliothèque · {{count}} jeu installé, {{owned}} au total",
+  "scanOwned_other": "Analyse de la bibliothèque · {{count}} jeux installés, {{owned}} au total",
+  "sources_one": "{{count}} source",
+  "sources_other": "{{count}} sources",
+  "warnLoggedOut": "{{source}} : déconnecté",
+  "warnUnavailable": "{{source}} : indisponible pour l'instant",
+  "warnLibrary": "{{source}} : bibliothèque indisponible",
+  "scanErrors": "L'analyse de la bibliothèque a rencontré des erreurs",
+  "fixData_one": "Données de compatibilité pour {{count}} titre",
+  "fixData_other": "Données de compatibilité pour {{count}} titres",
+  "fixMetaCurated_one": "{{count}} correctif suivi",
+  "fixMetaCurated_other": "{{count}} correctifs suivis",
+  "fixMetaProtondb": "protondb",
+  "sessionStarted": "{{title}} démarré",
+  "sessionStopped": "{{title}} arrêté",
+  "sessionFailed": "{{title}} n'a pas démarré",
+  "sessionPid": "pid {{pid}}",
+  "sessionMinutes": "session de {{count}} min",
+  "tweakDetail": "{{what}} · {{title}}",
+  "tweakSessionOnly": "cette session seulement",
+  "tweakDefault": "Réglages du lanceur modifiés",
+  "jobVerbInstalled": "installé",
+  "jobVerbUpdated": "mis à jour",
+  "jobVerbUninstalled": "désinstallé",
+  "jobDone": "{{title}} {{action}}",
+  "jobFailed": "{{kind}} de {{title}} a échoué",
+  "sideloaded": "{{title}} ajouté manuellement",
+  "removed": "{{title}} retiré de la bibliothèque",
+  "jobVerbBackedUp": "sauvegardé",
+  "jobVerbRestored": "restauré"
+ }
 }

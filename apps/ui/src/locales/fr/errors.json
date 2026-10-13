@@ -121,7 +121,9 @@
     },
     "folder": {
       "isFile": "« {{path}} » est un fichier, pas un dossier.",
-      "notAbsolute": "Un dossier doit être un chemin absolu, pas « {{path}} »."
+      "notAbsolute": "Un dossier doit être un chemin absolu, pas « {{path}} ».",
+      "noHome": "Impossible d’étendre ~ sans dossier personnel.",
+      "isRoot": "Le dossier de sauvegardes ne peut pas être la racine du système."
     },
     "folders": {
       "default": {
@@ -140,7 +142,20 @@
     },
     "year": {
       "invalid": "L'année de sortie doit être comprise entre 1970 et {{max}} (reçu : {{year}})."
-    }
+    },
+    "backupsMode": {
+      "invalid": "Mode de sauvegarde inconnu : {{mode}}."
+    },
+    "keepBackups": {
+      "invalid": "Gardez entre 1 et 100 sauvegardes, {{keep}} demandé."
+    },
+    "saveBackup": {
+      "invalid": "Mode de sauvegarde par jeu inconnu : {{mode}}."
+    },
+    "game": {
+      "missing": "Identifiant de jeu vide."
+    },
+    "unavailable": "Les réglages ne sont pas prêts."
   },
   "sideload": {
     "duplicate": "« {{executable}} » est déjà dans votre bibliothèque sous le nom « {{title}} ».",
@@ -193,5 +208,14 @@
       "missing": "Choisissez un canal, une version, ou tapez ce que la boutique demande."
     },
     "unsupported": "« {{name}} » n'offre pas le choix de version."
+  },
+  "savebackup": {
+    "noPaths": "Platypus ne connaît aucun chemin de sauvegarde pour {{title}} ; ajoutez-en ou supprimez sans sauvegarde.",
+    "failed": "La sauvegarde a échoué : {{error}}",
+    "running": "{{title}} est en cours d’exécution ; sauvegardez après sa fermeture.",
+    "cloudBusy": "La synchronisation cloud est occupée pour {{title}} ; sauvegardez quand elle aura fini.",
+    "clientRunning": "Fermez {{client}} d’abord : il est ouvert et écrirait les mêmes sauvegardes.",
+    "queued": "{{title}} a déjà une sauvegarde en file d’attente.",
+    "unknown": "Version de sauvegarde inconnue."
   }
 }

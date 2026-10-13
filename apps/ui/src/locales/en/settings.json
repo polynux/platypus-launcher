@@ -1,83 +1,114 @@
 {
-  "title": "Settings",
-  "subtitle": "Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.",
-  "language": {
-    "heading": "Language",
-    "description": "The language of the launcher. System follows your desktop language. Applies right away, without a restart.",
-    "label": "Language",
-    "system": "System",
-    "saved": "Language saved",
-    "pseudoNote": "Pseudo-locale for checking layouts (development only)."
+ "title": "Settings",
+ "subtitle": "Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.",
+ "language": {
+  "heading": "Language",
+  "description": "The language of the launcher. System follows your desktop language. Applies right away, without a restart.",
+  "label": "Language",
+  "system": "System",
+  "saved": "Language saved",
+  "pseudoNote": "Pseudo-locale for checking layouts (development only)."
+ },
+ "folders": {
+  "heading": "Game folders",
+  "description": "Where games install. A store's games go in their own subfolder of the default folder, for example <path>{{path}}/epic</path>. Each game's “Install to…” step offers every folder here. Steam keeps using its own library folders.",
+  "pending": "not created yet",
+  "default": "default",
+  "makeDefaultLabel": "Make {{folder}} the default folder",
+  "madeDefault": "Default game folder changed",
+  "makeDefault": "make default",
+  "removeLabel": "Remove {{folder}}",
+  "removed": "Game folder removed",
+  "error": "Platypus couldn't change the game folders.",
+  "add": "Add folder…",
+  "added": "Game folder added"
+ },
+ "prefixes": {
+  "heading": "Wine prefix folder",
+  "description": "Where new Wine prefixes are created, one folder per game. A game's own prefix setting still wins. Changing this folder does not move or delete existing prefixes. Games that already have a prefix keep it: Platypus pins it in their settings.",
+  "label": "Default Wine prefix folder",
+  "placeholder": "The default prefix folder",
+  "browse": "Browse…",
+  "save": "Save",
+  "reset": "Reset to default",
+  "browseTitle": "Choose the default Wine prefix folder",
+  "effective": "Prefixes are created in {{folder}}.",
+  "saved": "Wine prefix folder saved",
+  "resetDone": "Wine prefix folder reset to the default"
+ },
+ "cleanup": {
+  "heading": "Canceled downloads",
+  "description": "How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that time. 0 deletes it right away; a paused download is never touched.",
+  "keepFor": "Keep for",
+  "days": "days",
+  "daysLabel": "Days to keep canceled downloads' data",
+  "saved": "Download cleanup setting saved"
+ },
+ "ratings": {
+  "heading": "Ratings, protection and anti-cheat data",
+  "description": "Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.",
+  "label": "Fetch game info online",
+  "on": "Game info will be fetched online",
+  "off": "Game info stays offline",
+  "creditCompat": "Compatibility ratings: ProtonDB community reports (protondb.com).",
+  "creditWiki": "Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.",
+  "creditAnticheat": "Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet)."
+ },
+ "artwork": {
+  "heading": "Sideloaded artwork lookup",
+  "description": "Find cover and banner art online for games you added by hand, from Steam's public store. Off, Platypus keeps the placeholder and asks nothing new; art you already have stays.",
+  "label": "Find artwork online",
+  "on": "Sideloaded games will look up their art online",
+  "off": "Artwork stays offline",
+  "creditArt": "Artwork: Steam store search and CDN images (store.steampowered.com)."
+ },
+ "gameInfo": {
+  "heading": "Sideloaded game info lookup",
+  "description": "Find descriptions and details online for games you added by hand, from Steam, GOG and Lutris (IGDB). Off, Platypus keeps what it fetched before and asks nothing new.",
+  "label": "Find game info online",
+  "on": "Sideloaded games will look up their info online",
+  "off": "Game info stays offline",
+  "creditInfo": "Game info: Steam store details, GOG product descriptions and Lutris (IGDB) summaries."
+ },
+ "chat": {
+  "heading": "Chat notifications",
+  "description": "Show a desktop notification for a new chat message when the Platypus window isn't focused. Clicking it opens the conversation. Off, new messages only raise the in-app toasts.",
+  "label": "Desktop notifications for chat",
+  "on": "Chat will notify on the desktop",
+  "off": "Chat stays in the app"
+ },
+ "loadError": "Platypus couldn't load the settings.",
+ "prefixError": "Platypus couldn't change the Wine prefix folder.",
+ "cleanupError": "Platypus couldn't clean up those folders.",
+ "backups": {
+  "heading": "Save backups",
+  "description": "Platypus backs up save files before anything destructive (removing a game, deleting a prefix, uninstalling). Backups are one zip per run, kept here or in a folder of your choice — a synced folder works too.",
+  "folderLabel": "Backups folder",
+  "folderPlaceholder": "Default",
+  "keepLabel": "Versions kept per game",
+  "modeLabel": "Back up",
+  "mode": {
+   "destructive": "Before destructive actions",
+   "all": "After sessions too",
+   "off": "Off"
   },
-  "folders": {
-    "heading": "Game folders",
-    "description": "Where games install. A store's games go in their own subfolder of the default folder, for example <path>{{path}}/epic</path>. Each game's “Install to…” step offers every folder here. Steam keeps using its own library folders.",
-    "pending": "not created yet",
-    "default": "default",
-    "makeDefaultLabel": "Make {{folder}} the default folder",
-    "madeDefault": "Default game folder changed",
-    "makeDefault": "make default",
-    "removeLabel": "Remove {{folder}}",
-    "removed": "Game folder removed",
-    "error": "Platypus couldn't change the game folders.",
-    "add": "Add folder…",
-    "added": "Game folder added"
+  "modeHint": {
+   "destructive": "Back up before removing, deleting or uninstalling.",
+   "all": "Also back up after each session ends.",
+   "off": "Never back up automatically."
   },
-  "prefixes": {
-    "heading": "Wine prefix folder",
-    "description": "Where new Wine prefixes are created, one folder per game. A game's own prefix setting still wins. Changing this folder does not move or delete existing prefixes. Games that already have a prefix keep it: Platypus pins it in their settings.",
-    "label": "Default Wine prefix folder",
-    "placeholder": "The default prefix folder",
-    "browse": "Browse…",
-    "save": "Save",
-    "reset": "Reset to default",
-    "browseTitle": "Choose the default Wine prefix folder",
-    "effective": "Prefixes are created in {{folder}}.",
-    "saved": "Wine prefix folder saved",
-    "resetDone": "Wine prefix folder reset to the default"
+  "afterSessionLabel": "Back up after each session",
+  "afterSessionHint": "Take a backup when a game exits. Cloud saves sync first; the backup waits for them briefly.",
+  "manifestLabel": "Save list",
+  "manifest": {
+   "ready": "Up to date",
+   "fetching": "Updating…",
+   "stale": "Out of date",
+   "none": "No list yet"
   },
-  "cleanup": {
-    "heading": "Canceled downloads",
-    "description": "How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that time. 0 deletes it right away; a paused download is never touched.",
-    "keepFor": "Keep for",
-    "days": "days",
-    "daysLabel": "Days to keep canceled downloads' data",
-    "saved": "Download cleanup setting saved"
-  },
-  "ratings": {
-    "heading": "Ratings, protection and anti-cheat data",
-    "description": "Fetch ProtonDB ratings, PCGamingWiki protection facts and the anti-cheat list online. Off, Platypus shows what it saved before and asks nothing new.",
-    "label": "Fetch game info online",
-    "on": "Game info will be fetched online",
-    "off": "Game info stays offline",
-    "creditCompat": "Compatibility ratings: ProtonDB community reports (protondb.com).",
-    "creditWiki": "Protection facts: PCGamingWiki contributors, CC BY-NC-SA 3.0 (pcgamingwiki.com). Used for this non-commercial launcher only.",
-    "creditAnticheat": "Anti-cheat list: AreWeAntiCheatYet, MIT licence (github.com/AreWeAntiCheatYet/AreWeAntiCheatYet)."
-  },
-  "artwork": {
-    "heading": "Sideloaded artwork lookup",
-    "description": "Find cover and banner art online for games you added by hand, from Steam's public store. Off, Platypus keeps the placeholder and asks nothing new; art you already have stays.",
-    "label": "Find artwork online",
-    "on": "Sideloaded games will look up their art online",
-    "off": "Artwork stays offline",
-    "creditArt": "Artwork: Steam store search and CDN images (store.steampowered.com)."
-  },
-  "gameInfo": {
-    "heading": "Sideloaded game info lookup",
-    "description": "Find descriptions and details online for games you added by hand, from Steam, GOG and Lutris (IGDB). Off, Platypus keeps what it fetched before and asks nothing new.",
-    "label": "Find game info online",
-    "on": "Sideloaded games will look up their info online",
-    "off": "Game info stays offline",
-    "creditInfo": "Game info: Steam store details, GOG product descriptions and Lutris (IGDB) summaries."
-  },
-  "chat": {
-    "heading": "Chat notifications",
-    "description": "Show a desktop notification for a new chat message when the Platypus window isn't focused. Clicking it opens the conversation. Off, new messages only raise the in-app toasts.",
-    "label": "Desktop notifications for chat",
-    "on": "Chat will notify on the desktop",
-    "off": "Chat stays in the app"
-  },
-  "loadError": "Platypus couldn't load the settings.",
-  "prefixError": "Platypus couldn't change the Wine prefix folder.",
-  "cleanupError": "Platypus couldn't clean up those folders."
+  "update": "Update save list",
+  "updating": "Updating…",
+  "saved": "Backups settings saved.",
+  "saveError": "Couldn’t save the backups settings."
+ }
 }
