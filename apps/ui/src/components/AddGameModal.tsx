@@ -21,6 +21,8 @@ export function suggestTitle(exe: string): string {
 export interface AddGameOptions {
   workingDir: string;
   winePrefix: string;
+  /** How the game runs: "auto" (detected) by default, "native" or "wine" to override detection. */
+  runMode?: string;
   /** Release year, when the user set one (validated by core). */
   releaseYear?: number;
 }
@@ -47,6 +49,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const [exe, setExe] = useState('');
   const [workingDir, setWorkingDir] = useState('');
   const [winePrefix, setWinePrefix] = useState('');
+  const [runMode, setRunMode] = useState('auto');
   const [releaseYear, setReleaseYear] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [workError, setWorkError] = useState<string | null>(null);
@@ -58,7 +61,24 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   const [saveError, setSaveError] = useState<string | null>(null);
   const valid = title.trim() && exe.trim();
   const yearParsed = parseReleaseYear(releaseYear);
-  const advancedSet = (workingDir.trim() ? 1 : 0) + (winePrefix.trim() ? 1 : 0) + (yearParsed.year ? 1 : 0);
+  // What the executable looks like by content (issue #47): the default of the
+  // "Run with" choice. Null until it answers (or when there is no backend).
+  const [detected, setDetected] = useState<{ native: boolean; kind: string } | null>(null);
+  React.useEffect(() => {
+    const path = exe.trim();
+    if (!path) {
+      setDetected(null);
+      return;
+    }
+    let live = true;
+    Effect.runPromise(LauncherApi.detectGameExecutable(path)).then(
+      (d) => { if (live) setDetected(d); },
+      () => { if (live) setDetected(null); },
+    );
+    return () => { live = false; };
+  }, [exe]);
+  const effectiveNative = runMode === 'native' ? true : runMode === 'wine' ? false : (detected?.native ?? false);
+  const advancedSet = (workingDir.trim() ? 1 : 0) + (!effectiveNative && winePrefix.trim() ? 1 : 0) + (runMode !== 'auto' ? 1 : 0) + (yearParsed.year ? 1 : 0);
 
   const yearErrorText = (code: 'format' | 'range'): string =>
     code === 'format'
@@ -118,7 +138,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
     if (!valid || saving) return;
     let result: Promise<void> | void;
     try {
-      result = onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: prefix, ...(parsed.year ? { releaseYear: parsed.year } : {}) });
+      result = onAdd(title.trim(), exe.trim(), { workingDir: work, winePrefix: effectiveNative ? '' : prefix, ...(runMode !== 'auto' ? { runMode } : {}), ...(parsed.year ? { releaseYear: parsed.year } : {}) });
     } catch (e) {
       fail(e);
       return;
@@ -187,6 +207,20 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
           </button>
           <div hidden={!advancedOpen} className="mt-4 space-y-5">
             <div>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.runWith')}</MonoLabel>
+              <select
+                aria-label={t('library:addDialog.runWith')}
+                value={runMode}
+                onChange={(e) => setRunMode(e.target.value)}
+                className="w-full rounded-lg bg-white/[0.06] px-3 py-2 text-[13px] text-white/90 outline-none ring-1 ring-white/10 focus:ring-amber-300/40"
+              >
+                <option value="auto">{detected == null ? t('library:addDialog.runAutoUnknown') : detected.native ? t('library:addDialog.runAutoNative') : t('library:addDialog.runAutoWine')}</option>
+                <option value="native">{t('library:addDialog.runNative')}</option>
+                <option value="wine">{t('library:addDialog.runWine')}</option>
+              </select>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.runHelp')}</p>
+            </div>
+            <div>
               <MonoLabel className="mb-1.5">{t('library:addDialog.workDir')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
               <div className="flex items-center gap-2">
                 <Input
@@ -203,6 +237,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
               <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.workHelp')}</p>
               {workError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{workError}</p>}
             </div>
+            {!effectiveNative && (
             <div>
               <MonoLabel className="mb-1.5">{t('library:addDialog.prefix')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
               <div className="flex items-center gap-2">
@@ -220,6 +255,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
               <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.prefixHelp')}</p>
               {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{prefixError}</p>}
             </div>
+            )}
             <div>
               <MonoLabel className="mb-1.5">{t('library:addDialog.year')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
               <Input

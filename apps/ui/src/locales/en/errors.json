@@ -174,6 +174,9 @@
     "game": {
       "missing": "Game id is empty."
     },
+    "runMode": {
+      "invalid": "Run mode must be auto, native or wine, got {{value}}."
+    },
     "unavailable": "Settings are not ready."
   },
   "sideload": {
@@ -183,6 +186,7 @@
       "notFile": "{{executable}} is not a file.",
       "unreadable": "Couldn't read the executable {{executable}}."
     },
+    "notExecutable": "{{executable}} is not executable; make it executable or it can't start.",
     "title": {
       "missing": "The game needs a title."
     },

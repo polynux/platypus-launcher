@@ -186,6 +186,16 @@ export const LauncherApi = {
   // A sideloaded game's release year (0 clears it: unknown).
   setCustomGameYear: (id: string, year: number) =>
     call<Game>('SetCustomGameYear', () => App.SetCustomGameYear(id, year)),
+  // Native games (issue #47): how the executable runs by default (content
+  // detection), pointing it at a new file (re-detected), and the execute bit.
+  detectGameExecutable: (path: string) =>
+    call<{ native: boolean; kind: string }>('DetectGameExecutable', () => App.DetectGameExecutable(path)),
+  updateCustomGameExecutable: (id: string, executable: string) =>
+    call<Game>('UpdateCustomGameExecutable', () => App.UpdateCustomGameExecutable(id, executable)),
+  isGameExecutable: (gameId: string) =>
+    call<boolean>('IsGameExecutable', () => App.IsGameExecutable(gameId)),
+  makeGameExecutable: (gameId: string) =>
+    call<Game>('MakeGameExecutable', () => App.MakeGameExecutable(gameId)),
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
 

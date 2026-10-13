@@ -31,6 +31,7 @@ export interface CoreApi {
   ClearFinishedJobs(): Promise<void>;
   CreateSaveBackup(game: types.Game): Promise<types.Job>;
   DeleteSaveBackup(gameID: string, backupID: string): Promise<void>;
+  DetectGameExecutable(path: string): Promise<types.DetectResult>;
   DiscardJob(id: string): Promise<void>;
   DismissMigrationNotice(): Promise<void>;
   ForceStopGame(gameID: string): Promise<void>;
@@ -66,6 +67,7 @@ export interface CoreApi {
   InstallGameWithOptions(game: types.Game, options: Record<string, unknown>): Promise<types.Job>;
   InstallGameWithOptionsTo(game: types.Game, options: Record<string, unknown>, folder: string): Promise<types.Job>;
   InvalidateLibrary(source: string): Promise<void>;
+  IsGameExecutable(gameID: string): Promise<boolean>;
   LaunchGame(game: types.Game): Promise<string>;
   LaunchGameAnyway(game: types.Game, prompt: string): Promise<string>;
   LaunchGameViaClient(game: types.Game): Promise<string>;
@@ -76,6 +78,7 @@ export interface CoreApi {
   ListStorePlugins(): Promise<types.StorePlugin[]>;
   Locale(): Promise<string>;
   MakeDefaultGameFolder(path: string): Promise<types.GameFolder[]>;
+  MakeGameExecutable(gameID: string): Promise<types.Game>;
   MigrationNotice(): Promise<types.MigrationNotice | null>;
   MoveGame(game: types.Game, parent: string): Promise<types.Job>;
   OpenPluginsFolder(): Promise<void>;
@@ -145,6 +148,7 @@ export interface CoreApi {
   UninstallGameWithoutBackup(game: types.Game): Promise<types.Job>;
   UnlockVersionChannel(game: types.Game, channel: string, password: string): Promise<boolean>;
   UnpinGameVersion(gameID: string): Promise<void>;
+  UpdateCustomGameExecutable(id: string, executable: string): Promise<types.Game>;
   UpdateGame(game: types.Game): Promise<types.Job>;
   UpdateGameVersion(game: types.Game, target: types.VersionTarget): Promise<types.Job>;
   UpdateGameWithOptions(game: types.Game, options: Record<string, unknown>): Promise<types.Job>;
@@ -177,6 +181,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ClearFinishedJobs',
   'CreateSaveBackup',
   'DeleteSaveBackup',
+  'DetectGameExecutable',
   'DiscardJob',
   'DismissMigrationNotice',
   'ForceStopGame',
@@ -212,6 +217,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'InstallGameWithOptions',
   'InstallGameWithOptionsTo',
   'InvalidateLibrary',
+  'IsGameExecutable',
   'LaunchGame',
   'LaunchGameAnyway',
   'LaunchGameViaClient',
@@ -222,6 +228,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ListStorePlugins',
   'Locale',
   'MakeDefaultGameFolder',
+  'MakeGameExecutable',
   'MigrationNotice',
   'MoveGame',
   'OpenPluginsFolder',
@@ -291,6 +298,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'UninstallGameWithoutBackup',
   'UnlockVersionChannel',
   'UnpinGameVersion',
+  'UpdateCustomGameExecutable',
   'UpdateGame',
   'UpdateGameVersion',
   'UpdateGameWithOptions',

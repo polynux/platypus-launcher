@@ -26,21 +26,24 @@ export function addGameFlow(
   return deps.addCustomGame(title, executable).then((game) => {
     const work = opts?.workingDir?.trim();
     const prefix = opts?.winePrefix?.trim();
+    const runMode = opts?.runMode?.trim();
+    const keepRunMode = runMode && runMode !== 'auto' ? runMode : '';
     const year = opts?.releaseYear;
-    if (!work && !prefix && !year) return { game, settings: null };
+    if (!work && !prefix && !keepRunMode && !year) return { game, settings: null };
     const next: GameSettings = {
       ...game.settings,
       ...(work ? { working_dir: work } : {}),
       ...(prefix ? { wine_prefix: prefix } : {}),
+      ...(keepRunMode ? { run_mode: keepRunMode } : {}),
     };
     const saveSettings =
-      work || prefix
+      work || prefix || keepRunMode
         ? deps.saveGameSettings(game.id, next).then(() => ({ ...game, settings: next }))
         : Promise.resolve(game);
     return saveSettings.then((g) =>
       year
-        ? deps.setCustomGameYear(g.id, year).then((withYear) => ({ game: withYear, settings: work || prefix ? next : null }))
-        : { game: g, settings: work || prefix ? next : null },
+        ? deps.setCustomGameYear(g.id, year).then((withYear) => ({ game: withYear, settings: work || prefix || keepRunMode ? next : null }))
+        : { game: g, settings: work || prefix || keepRunMode ? next : null },
     ).then(
       (r) => r,
       (err: unknown) =>
