@@ -3,7 +3,7 @@
 // message to the main process, which checks it.
 import { contextBridge, ipcRenderer } from 'electron';
 
-type Reply = { ok: true; result: unknown } | { ok: false; error: string };
+type Reply = { ok: true; result: unknown } | { ok: false; error: string; data?: { code: string; params?: Record<string, string> } };
 type StoreReply = { ok: true } | { ok: false; error: string };
 
 export interface StoreBounds {
@@ -60,7 +60,13 @@ ipcRenderer.on('platypus:store-event', (_e, ev: StoreEvent) => {
 contextBridge.exposeInMainWorld('platypus', {
   async invoke(method: string, args: unknown[]): Promise<unknown> {
     const reply = (await ipcRenderer.invoke('platypus:invoke', method, args)) as Reply;
-    if (!reply.ok) throw new Error(reply.error);
+    // A coded core error (issue #39, phase 3) travels with its translatable
+    // payload on the thrown error's `data`, so the UI can look it up.
+    if (!reply.ok) {
+      const err = new Error(reply.error) as Error & { data?: unknown };
+      if (reply.data !== undefined) err.data = reply.data;
+      throw err;
+    }
     return reply.result;
   },
   // The shell session for i18n (issue #39): the OS language list behind the
