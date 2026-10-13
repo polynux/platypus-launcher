@@ -116,6 +116,7 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Native:          lg.Native,
 		Offline:         normalizeOffline(lg.Offline, s.speaksOffline()),
 		CloudSync:       lg.CloudSync && s.speaksOffline(),
+		LastPlayed:      max(lg.LastPlayed, 0),
 		Features:        s.gameFeatures(lg.Features),
 		Settings:        types.GameSettings{UseGameMode: true},
 	}
@@ -293,12 +294,30 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 		return nil, err
 	}
 	folders := s.folders()
+	if override, ok := params["executable"].(string); ok && sameFile(spec.Exe, override) {
+		// The user picked this executable for the game: its folder is theirs
+		// to launch from, even outside the plugin's install folders.
+		folders = append(slices.Clip(folders), filepath.Dir(override))
+	}
 	if rel, ok := s.relocation(game.ID); ok {
 		// The plugin may still name the folder core moved the game from.
 		spec = rebaseSpec(spec, rel.From, rel.To)
 		folders = append(slices.Clip(folders), rel.To)
 	}
 	return ValidateSpec(spec, s.p.Manifest, folders)
+}
+
+// sameFile says whether a and b name the same file, after resolving symlinks.
+func sameFile(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	ra, err := filepath.EvalSymlinks(a)
+	if err != nil {
+		return false
+	}
+	rb, err := filepath.EvalSymlinks(b)
+	return err == nil && ra == rb
 }
 
 // rebaseSpec points the paths of a launch spec that are inside from at to.

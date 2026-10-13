@@ -67,6 +67,10 @@ type LibraryGame struct {
 	// 1.15, issue #44). gameHasCloudSync uses it for plugin games, alongside
 	// the cloud-saves capability rule.
 	CloudSync bool `json:"cloudSync,omitempty"`
+	// LastPlayed is when the store last saw the game run, in unix seconds
+	// (protocol 1.15): the library's "last played" for stores whose client
+	// launches games outside Platypus. 0 means unknown.
+	LastPlayed int64 `json:"lastPlayed,omitempty"`
 	// Features narrows the capabilities the plugin offers for this game
 	// (names from the registry). Absent (nil) means all of them; an empty
 	// list means none. Names the plugin doesn't offer at runtime are ignored.

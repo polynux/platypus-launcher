@@ -179,6 +179,9 @@ func library() (any, error) {
 		if g.InstallDir != "" {
 			e["installPath"] = g.InstallDir
 		}
+		if g.LastPlayed > 0 {
+			e["lastPlayed"] = g.LastPlayed
+		}
 		if has, ok := c.CachedHasSteamCloud(g.StoreAppID); ok && has {
 			e["cloudSync"] = true
 		}

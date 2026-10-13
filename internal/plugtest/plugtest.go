@@ -832,7 +832,7 @@ func (s *Session) checkHandshake(t *testing.T) {
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
+		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "lastPlayed", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",
 		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos"}

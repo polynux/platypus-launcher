@@ -139,6 +139,15 @@ func TestLibraryMatchesBuiltinScan(t *testing.T) {
 		if wire["offline"] != "ok" {
 			t.Errorf("%s offline = %q, want ok", g.StoreAppID, wire["offline"])
 		}
+		// Last played reaches the library as before (the built-in source set it).
+		if g.LastPlayed > 0 {
+			if v, _ := wire["lastPlayed"].(float64); int64(v) != g.LastPlayed {
+				t.Errorf("%s lastPlayed = %v, want %d", g.StoreAppID, wire["lastPlayed"], g.LastPlayed)
+			}
+		}
+		if g.StoreAppID == "440" && g.LastPlayed == 0 {
+			t.Error("fixture 440 should carry LastPlayed from localconfig.vdf")
+		}
 		// Art names the same files: local cache as file://, else the CDN
 		// fallback the built-in source used.
 		for _, kind := range []string{"coverUrl", "heroUrl", "bannerUrl"} {
