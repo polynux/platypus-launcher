@@ -114,6 +114,22 @@ type file struct {
 	// Platypus's game id (issue #38): "gog:<product id>" or
 	// "lutris:<slug>". Steam info uses the compat AppID instead.
 	InfoSources map[string]string `json:"info_sources,omitempty"`
+	// BackupsFolder is the user's save-backups folder (issue #42). Empty
+	// means the default (<dataDir>/backups).
+	BackupsFolder string `json:"backups_folder,omitempty"`
+	// KeepBackups is the versions kept per game (issue #42). 0 means the
+	// default (10).
+	KeepBackups int `json:"keep_backups,omitempty"`
+	// BackupsMode is the global save-backup mode (issue #42): "destructive"
+	// (default), "all" or "off". Empty means the default.
+	BackupsMode string `json:"backups_mode,omitempty"`
+	// BackupAfterSession runs a backup after each session (issue #42).
+	BackupAfterSession bool `json:"backup_after_session,omitempty"`
+	// GameSaveBackup is each game's backup override by Platypus game id
+	// (issue #42): "" follows the global mode, "on" or "off".
+	GameSaveBackup map[string]string `json:"game_save_backup,omitempty"`
+	// GameSavePaths are each game's user-set save paths (issue #42).
+	GameSavePaths map[string][]string `json:"game_save_paths,omitempty"`
 }
 
 // CustomGame is a game the user added by hand: an executable on disk. Platypus
