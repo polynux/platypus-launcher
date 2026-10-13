@@ -697,9 +697,14 @@ func (a *App) ListSessions() []types.SessionEvent {
 }
 
 // selectRunner resolves the game's runner; "auto" or empty picks the best
-// installed one (see runner.PickAuto).
+// installed one (see runner.PickAuto). Issue #48: with no explicit runner,
+// an installed umu-launcher is preferred and wraps the auto Proton pick
+// (PROTONPATH is that Proton's folder); explicit "umu" picks it directly.
 func (a *App) selectRunner(game types.Game) (types.ProtonVersion, error) {
 	runners := runner.ScanProtonVersionsFor(a.homeDir())
+	if u, _, ok := runner.SelectUmu(game.Settings.RunnerID, runners); ok {
+		return u, nil
+	}
 	if r, ok := runner.Resolve(game.Settings.RunnerID, runners); ok {
 		return r, nil
 	}
@@ -746,6 +751,17 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 			if r, err = a.selectRunner(game); err != nil {
 				return nil, err
 			}
+			if runner.IsUmu(r) {
+				args, env, err := a.umuCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview)
+				if err != nil {
+					return nil, err
+				}
+				dir := d.Dir
+				if game.Settings.WorkingDir != "" {
+					dir = game.Settings.WorkingDir
+				}
+				return &prepared{args: args, env: env, dir: dir, redact: d.Redact, runner: r}, nil
+			}
 		}
 		args, env, err := runner.BuildCommandFor(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview, a.prefixesFolder(), a.homeDir())
 		if err != nil {
@@ -761,6 +777,17 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 	r, err := a.selectRunner(game)
 	if err != nil {
 		return nil, err
+	}
+	if runner.IsUmu(r) {
+		args, env, err := a.umuCommand(game, r, runner.Target{Exe: game.Executable}, preview)
+		if err != nil {
+			return nil, err
+		}
+		dir := game.Settings.WorkingDir
+		if dir == "" && game.Executable != "" {
+			dir = filepath.Dir(game.Executable)
+		}
+		return &prepared{args: args, env: env, dir: dir, runner: r}, nil
 	}
 	args, env, err := runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
 	if err != nil {

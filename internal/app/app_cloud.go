@@ -79,6 +79,11 @@ func (a *App) cloudContext(game types.Game, windows bool, r types.ProtonVersion,
 		if strings.HasSuffix(r.Path, "proton") {
 			// Proton keeps the Wine prefix in a pfx folder of its compat data.
 			prefix, user = filepath.Join(prefix, "pfx"), "steamuser"
+		} else if runner.IsUmu(r) {
+			// umu runs with the pfx dir itself; a prefix made by a direct
+			// Proton launch keeps working (see EffectiveUmuPrefix, #48).
+			// The user inside is still Proton's steamuser.
+			prefix, user = runner.EffectiveUmuPrefix(prefix), "steamuser"
 		}
 	}
 	return cloudsync.ContextFor(a.homeDir(), windows, game.InstallDir, prefix, user)
