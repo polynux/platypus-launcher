@@ -100,6 +100,72 @@ containers; a normal desktop does not need it.)
   games get only 0/1/2 in turn — Go's os/exec closes the rest, and nothing in
   internal/ passes ExtraFiles). Remote debugging exists only in development.
 
+## Minimize to tray while a game runs (issue #49)
+
+Launcher setting "Minimize to tray while a game runs" (`minimize_to_tray`
+in settings.json, off by default; Settings → Minimize to tray, en/fr). The
+shell reads it at startup and re-reads it on every session event, so a
+change applies from the next launch.
+
+- First session start with the switch on: the window hides to a tray icon
+  (`new Tray()` on `packaging/icons/appicon.png`). The menu is Show
+  Platypus, one Stop row per running game, Quit. Clicking the icon or Show
+  brings the window back and focuses it.
+- Last session end: the tray icon is destroyed and the window shows again
+  with `showInactive()` — it never steals focus (the user may be in the game
+  that just exited, or in another app).
+- The icon exists only while hidden, never permanently: no panel clutter, no
+  stale icon, and GNOME users without a tray host never get a dead one.
+- No tray host (GNOME without the AppIndicator extension, a throwing Tray
+  constructor, `PLATYPUS_NO_TRAY=1`): the window minimizes instead of hiding,
+  so it is never unreachable. Launching Platypus again (the single-instance
+  lock) shows a hidden window too (`restoreWindow` in
+  `apps/desktop/src/tray.ts`: show, then restore, then focus — `restore()`
+  alone never unhides a hidden window).
+- Closing the window (X) still quits, stopping games through the core's
+  shutdown; only session starts hide.
+
+## Use less while hidden or unfocused (issue #49)
+
+- Renderer: `backgroundThrottling` stays on. While `document.hidden`
+  (minimized, tray-hidden, another desktop) — or blurred while a game runs —
+  the UI pauses (`usePauseWhileGameRuns` in
+  `apps/ui/src/lib/pauseWhileHidden.ts`): the `platypus-paused` class freezes
+  animations and stops transitions, videos pause (the Lightbox pauses its
+  trailer too). The QR login poll already backs off to ≥ 15 s when hidden;
+  the family-warning countdown stops its 1 s timer while hidden and resumes
+  on show.
+- Core: one game-running gate (`deferWhileGameRuns` in
+  `internal/app/app_tray.go`): the auto artwork lookup after an add and the
+  save-list manifest refresh wait for the last session to end, then run in
+  order. Everything the user asks for (rescans, searches, applies, game
+  pages) runs right away; library listings are already on-demand, so there
+  is no rescan timer to gate.
+
+### Measurements
+
+Xvfb 1280×800 with software rendering (no GPU: absolute RSS is higher than
+on a real desktop; the deltas are what matter), scratch HOME, the echo
+plugin's Echo Tiny with `ECHO_GAME_SECONDS=300`, mean of 10 rounds 2 s
+apart after ~8 s settle:
+
+| state | Electron CPU / RSS | core CPU / RSS |
+|---|---|---|
+| idle, focused, before (1e174d8, fresh HOME) | 0.74% / 680 MB | 1.96% / 126 MB |
+| idle, focused, after (switch off, fresh HOME) | 0.40% / 676 MB | 1.07% / 98 MB |
+| idle, unfocused (xterm focused) | 0.50% / 692 MB | 0.87% / 47 MB |
+| game running, window open | 0.31% / 693 MB | 0.74% / 47 MB |
+| game running, hidden to tray | 0.50% / 925 MB | 0.61% / 39 MB |
+| after exit, window back | 0.45% / 696 MB | 0.50% / 39 MB |
+
+Idle is at parity with before when the switch is off; CPU stays flat in
+every state. The hidden window's +230 MB sits in the browser process and is
+released when the window shows again (696 MB after exit, no leak) — under
+SwiftShader this looks like a software-compositing artifact; worth
+re-checking on real GPU hardware, where hiding should release surfaces
+instead. Core RSS differences between runs are Go scavenger age (the longer
+a core has run, the lower), not workload.
+
 ## What the shell does not do yet
 
 - Types: the bridge is typed by `go run ./cmd/gen-ts` (or `bun run gen-ts`
@@ -109,10 +175,11 @@ containers; a normal desktop does not need it.)
 - Desktop polish: the window remembers size/position/maximized
   (`window-state.json` in userData, clamped to the displays now attached), the
   window and the AppImage/`.desktop` use `packaging/icons`, a second launch
-  focuses the running window (single instance), and quitting (or SIGTERM/
+  shows the running window even when it hides in the tray (single instance),
+  and quitting (or SIGTERM/
   SIGINT) shuts the core down first so its games and plugin helpers die with
-  it. There is deliberately no app menu and no tray icon (follow-up if asked
-  for); reload and DevTools keys are disabled in production.
+  it. There is deliberately no app menu, and the tray icon exists only while
+  hidden for a running game (see above); reload and DevTools keys are disabled in production.
 - Store view: each embedded store view and store popup answers F12 /
   Ctrl+Shift+I with DevTools for its own contents (detached), under the same
   conditions as the main window (development with `PLATYPUS_DEVTOOLS=1`).
