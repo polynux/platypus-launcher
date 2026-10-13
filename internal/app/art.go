@@ -115,6 +115,13 @@ func PluginGameArt(a *App, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Only a known plugin offering local-art owns its id here: custom art
+		// (/platypus-art/<hash>/cover.jpg) has the same shape and must reach
+		// the next handler (issue #58).
+		if a.plugins == nil || !a.plugins.Has(id, "local-art") {
+			next.ServeHTTP(w, r)
+			return
+		}
 		path := stores.DecodeGameArt(id, encoded)
 		if path == "" {
 			http.NotFound(w, r)

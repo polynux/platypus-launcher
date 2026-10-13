@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"platypus/internal/plugins"
@@ -139,5 +140,35 @@ func TestPluginGameArtServesFromTheDataFolder(t *testing.T) {
 	PluginGameArt(a, http.NotFoundHandler()).ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+// The art handlers run as one chain in the core (cmd/platypus-core): custom
+// art, plugin local art and plugin logos each reach their own handler. Custom
+// art paths (/platypus-art/<hash>/cover.png) have the same shape as local-art
+// ones and were swallowed by PluginGameArt once (issue #58).
+func TestArtHandlerChainServesEveryKind(t *testing.T) {
+	t.Parallel()
+	a := customApp(t)
+	artdir := t.TempDir()
+	local := filepath.Join(artdir, "cover.png")
+	if err := os.WriteFile(local, []byte("\x89PNG\r\n\x1a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a.plugins = artTestManager(t, artdir)
+	c, err := a.SetCustomArt("g1", "cover", writePNG(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain := PluginArt(a, PluginGameArt(a, CustomArt(a, http.NotFoundHandler())))
+	for name, target := range map[string]string{
+		"custom art":       strings.SplitN(c.Art["cover"], "?", 2)[0],
+		"plugin local art": "/platypus-art/echo/" + base64.RawURLEncoding.EncodeToString([]byte(local)),
+	} {
+		rec := httptest.NewRecorder()
+		chain.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s (%s): status = %d, want 200", name, target, rec.Code)
+		}
 	}
 }
