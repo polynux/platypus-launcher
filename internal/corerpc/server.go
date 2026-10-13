@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"platypus/internal/apperr"
 )
 
 // Protocol is the core protocol version, major.minor. A minor bump is
@@ -44,10 +46,20 @@ const (
 	CodeAppError = -32000
 )
 
-// Error is an error response.
+// Error is an error response. Data carries a translatable core error
+// (issue #39, phase 3): the code and already-formatted params of the
+// outermost apperr.Error in the chain, when there is one. Message stays
+// the English text, so older shells and the logs are unchanged.
 type Error struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int        `json:"code"`
+	Message string     `json:"message"`
+	Data    *ErrorData `json:"data,omitempty"`
+}
+
+// ErrorData is the translatable payload of an Error.
+type ErrorData struct {
+	Code   string            `json:"code"`
+	Params map[string]string `json:"params,omitempty"`
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -176,14 +188,14 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 		}
 		var m message
 		if err := json.Unmarshal(line, &m); err != nil {
-			s.respond(nil, nil, &Error{CodeParseError, "parse error: " + err.Error()})
+			s.respond(nil, nil, &Error{CodeParseError, "parse error: " + err.Error(), nil})
 			continue
 		}
 		switch {
 		case m.Method == "" && m.ID != nil:
 			s.deliver(&m)
 		case m.Method == "":
-			s.respond(nil, nil, &Error{CodeInvalidRequest, "neither a method nor a response"})
+			s.respond(nil, nil, &Error{CodeInvalidRequest, "neither a method nor a response", nil})
 		case m.ID == nil:
 			// Notifications from the shell have no meaning yet.
 		case m.Method == "initialize":
@@ -206,23 +218,23 @@ func (s *Server) Serve(r io.Reader, w io.Writer) error {
 func (s *Server) initialize(m *message) {
 	var args []Hello
 	if err := json.Unmarshal(m.Params, &args); err != nil || len(args) != 1 {
-		s.respond(m.ID, nil, &Error{CodeInvalidParams, "initialize takes one argument: {protocol}"})
+		s.respond(m.ID, nil, &Error{CodeInvalidParams, "initialize takes one argument: {protocol}", nil})
 		return
 	}
 	if err := compatible(args[0].Protocol); err != nil {
-		s.respond(m.ID, nil, &Error{CodeAppError, err.Error()})
+		s.respond(m.ID, nil, &Error{CodeAppError, err.Error(), nil})
 		return
 	}
 	s.mu.Lock()
 	already := s.ready
 	s.mu.Unlock()
 	if already {
-		s.respond(m.ID, nil, &Error{CodeInvalidRequest, "already initialized"})
+		s.respond(m.ID, nil, &Error{CodeInvalidRequest, "already initialized", nil})
 		return
 	}
 	if s.OnInitialize != nil {
 		if err := s.OnInitialize(); err != nil {
-			s.respond(m.ID, nil, &Error{CodeAppError, "starting the core: " + err.Error()})
+			s.respond(m.ID, nil, &Error{CodeAppError, "starting the core: " + err.Error(), nil})
 			return
 		}
 	}
@@ -266,12 +278,12 @@ func (s *Server) handle(m *message) {
 	ready := s.ready
 	s.mu.Unlock()
 	if !ready {
-		s.respond(m.ID, nil, &Error{CodeNotInitialized, "send initialize first"})
+		s.respond(m.ID, nil, &Error{CodeNotInitialized, "send initialize first", nil})
 		return
 	}
 	fn, ok := s.methods[m.Method]
 	if !ok {
-		s.respond(m.ID, nil, &Error{CodeMethodNotFound, "unknown method " + m.Method})
+		s.respond(m.ID, nil, &Error{CodeMethodNotFound, "unknown method " + m.Method, nil})
 		return
 	}
 	result, err := invoke(fn, m.Params)
@@ -282,30 +294,36 @@ func (s *Server) handle(m *message) {
 func invoke(fn reflect.Value, params json.RawMessage) (result any, rerr *Error) {
 	defer func() {
 		if p := recover(); p != nil {
-			result, rerr = nil, &Error{CodeInternalError, fmt.Sprintf("panic: %v", p)}
+			result, rerr = nil, &Error{CodeInternalError, fmt.Sprintf("panic: %v", p), nil}
 		}
 	}()
 	t := fn.Type()
 	var raw []json.RawMessage
 	if len(params) > 0 {
 		if err := json.Unmarshal(params, &raw); err != nil {
-			return nil, &Error{CodeInvalidParams, "params must be a JSON array of the arguments"}
+			return nil, &Error{CodeInvalidParams, "params must be a JSON array of the arguments", nil}
 		}
 	}
 	if len(raw) != t.NumIn() {
-		return nil, &Error{CodeInvalidParams, fmt.Sprintf("takes %d arguments, got %d", t.NumIn(), len(raw))}
+		return nil, &Error{CodeInvalidParams, fmt.Sprintf("takes %d arguments, got %d", t.NumIn(), len(raw)), nil}
 	}
 	in := make([]reflect.Value, len(raw))
 	for i, r := range raw {
 		v := reflect.New(t.In(i))
 		if err := json.Unmarshal(r, v.Interface()); err != nil {
-			return nil, &Error{CodeInvalidParams, fmt.Sprintf("argument %d: %v", i+1, err)}
+			return nil, &Error{CodeInvalidParams, fmt.Sprintf("argument %d: %v", i+1, err), nil}
 		}
 		in[i] = v.Elem()
 	}
 	out := fn.Call(in)
 	if n := len(out); n > 0 && t.Out(n-1) == errorType && !out[n-1].IsNil() {
-		return nil, &Error{CodeAppError, out[n-1].Interface().(error).Error()}
+		err := out[n-1].Interface().(error)
+		rerr := &Error{CodeAppError, err.Error(), nil}
+		var ae *apperr.Error
+		if errors.As(err, &ae) {
+			rerr.Data = &ErrorData{Code: ae.Code, Params: ae.Params}
+		}
+		return nil, rerr
 	}
 	if len(out) == 0 || t.Out(0) == errorType {
 		return nil, nil
@@ -382,7 +400,7 @@ func (s *Server) respond(id *json.RawMessage, result any, rerr *Error) {
 	if rerr == nil {
 		b, err := json.Marshal(result)
 		if err != nil {
-			m.Error = &Error{CodeInternalError, "encoding the result: " + err.Error()}
+			m.Error = &Error{CodeInternalError, "encoding the result: " + err.Error(), nil}
 		} else {
 			m.Result = b
 		}
