@@ -47,6 +47,18 @@ func (c *cloudEvents) find(kind string) *types.CloudEvent {
 	return nil
 }
 
+// await is find, waiting up to 2 s: some events are emitted just after the
+// step that causes them returns.
+func (c *cloudEvents) await(kind string) *types.CloudEvent {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if e := c.find(kind); e != nil || time.Now().After(deadline) {
+			return e
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // cloudApp is an App wired to the real echo plugin and a real cloud orchestrator.
 func cloudApp(t *testing.T, protocols []plugins.Version, env map[string]string) (*App, *cloudEvents) {
 	t.Helper()
@@ -336,7 +348,7 @@ func TestCancelStopsAPullInEcho(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("cancel didn't end the launch step")
 	}
-	if ev.find(types.CloudEvCanceled) == nil {
+	if ev.await(types.CloudEvCanceled) == nil {
 		t.Fatal("no canceled event")
 	}
 	// Echo stopped: nothing was downloaded.
