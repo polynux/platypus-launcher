@@ -17,6 +17,7 @@ import (
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/sanitize"
+	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -117,6 +118,8 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Offline:         normalizeOffline(lg.Offline, s.speaksOffline()),
 		CloudSync:       lg.CloudSync && s.speaksOffline(),
 		LastPlayed:      max(lg.LastPlayed, 0),
+		StoreStatus:     storeStatus(lg.Status, s.speaksStatus()),
+		StoreNotes:      storeNotes(lg.UserNotes, s.speaksStatus()),
 		Features:        s.gameFeatures(lg.Features),
 		Settings:        types.GameSettings{UseGameMode: true},
 	}
@@ -411,6 +414,34 @@ func normalizeOffline(raw string, offline bool) string {
 	default:
 		return "unknown"
 	}
+}
+
+// speaksStatus reports whether the plugin negotiated protocol 1.16 or later,
+// so the status and notes hints (LibraryGame.status/userNotes) are read.
+// Older plugins keep no hint: only the user's own values show.
+func (s *Plugin) speaksStatus() bool {
+	return s.m.Runtime(s.ID()).Speaks(plugins.StatusVersion)
+}
+
+// storeStatus normalizes a plugin's status hint (protocol 1.16, issue #51):
+// one of the game statuses, "" meaning no suggestion. Anything else is "":
+// the conformance suite rejects it, but the library never breaks on it.
+// Plugins older than 1.16 always read "".
+func storeStatus(raw string, speaks bool) string {
+	if !speaks || !types.ValidGameStatus(raw) {
+		return ""
+	}
+	return raw
+}
+
+// storeNotes normalizes a plugin's notes hint: one within the cap, else no
+// suggestion — dropped like an art URL the core refuses: the library never
+// breaks on what a plugin sends. Plugins older than 1.16 always read "".
+func storeNotes(raw string, speaks bool) string {
+	if !speaks || raw == "" || len(raw) > settings.MaxGameNotes {
+		return ""
+	}
+	return raw
 }
 
 // Bounds for the media and richer facts (protocol 1.12) of game.details.

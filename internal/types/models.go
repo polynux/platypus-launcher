@@ -134,6 +134,11 @@ type Game struct {
 	// UserNotes are the user's own notes on the game, plain text. They are
 	// not Note: that is the store's install note ("Needs the EA app").
 	UserNotes string `json:"user_notes,omitempty"`
+	// StoreStatus/StoreNotes are the store's status and notes suggestions
+	// (protocol 1.16, issue #51), carried to applyGameStatus and kept off
+	// the wire: the UI sees the merged Status/UserNotes above.
+	StoreStatus string `json:"-"`
+	StoreNotes  string `json:"-"`
 	// SharedBy is the family member who lends the game (the `family`
 	// capability). Nil for the user's own games.
 	SharedBy *SharedBy `json:"shared_by,omitempty"`

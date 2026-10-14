@@ -29,19 +29,23 @@ func (a *App) SetGameNotes(gameID, notes string) (types.GameStatusInfo, error) {
 	return a.GetGameStatus(gameID)
 }
 
-// applyGameStatus puts the user's own status and notes on the library's
-// games. One snapshot read, never a call per game.
+// applyGameStatus puts the status and notes on the library's games: the
+// user's own values (settings rows) always win; a store's hint — the store's
+// suggestion, carried on Game.StoreStatus/StoreNotes and never sent to the
+// UI — fills a field the user left empty. One snapshot read, never a call
+// per game.
 func (a *App) applyGameStatus(games []types.Game) {
 	statuses, notes := a.settings.GameStatusNotes()
-	if len(statuses) == 0 && len(notes) == 0 {
-		return
-	}
 	for i := range games {
 		if st, ok := statuses[games[i].ID]; ok {
 			games[i].Status = st
+		} else {
+			games[i].Status = games[i].StoreStatus
 		}
 		if n, ok := notes[games[i].ID]; ok {
 			games[i].UserNotes = n
+		} else {
+			games[i].UserNotes = games[i].StoreNotes
 		}
 	}
 }

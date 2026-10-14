@@ -51,8 +51,12 @@ func TestGameStatusSetAndGet(t *testing.T) {
 func TestGameStatusLibraryCarriesValuesAfterRescan(t *testing.T) {
 	t.Parallel()
 	src := &fakeSource{id: "echo", games: []types.Game{
-		{ID: "p.echo.tiny", Source: "echo", Title: "Tiny"},
-		{ID: "p.echo.huge", Source: "echo", Title: "Huge"},
+		// Both user values and hints on this game: the user's own win.
+		{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", StoreStatus: types.GameStatusPlaying, StoreNotes: "store's hint"},
+		// Only hints here: the hint fills.
+		{ID: "p.echo.huge", Source: "echo", Title: "Huge", StoreStatus: types.GameStatusBacklog, StoreNotes: "huge's hint"},
+		// Neither: nothing shows.
+		{ID: "p.echo.slow", Source: "echo", Title: "Slow"},
 	}}
 	a := libraryApp(t, src)
 	all := []stores.Store{src}
@@ -68,10 +72,14 @@ func TestGameStatusLibraryCarriesValuesAfterRescan(t *testing.T) {
 			t.Fatal(err)
 		}
 		if lib.Games[0].Status != types.GameStatusBacklog || lib.Games[0].UserNotes != "play after the DLC" {
-			t.Fatalf("tiny carries %+v", lib.Games[0])
+			t.Fatalf("the user's values lost to the store's hints: %+v", lib.Games[0])
 		}
-		if lib.Games[1].Status != "" || lib.Games[1].UserNotes != "" {
-			t.Fatalf("another game picked up values: %+v", lib.Games[1])
+		g := lib.Games[1]
+		if g.Status != types.GameStatusBacklog || g.UserNotes != "huge's hint" {
+			t.Fatalf("empty fields didn't take the hints: %+v", g)
+		}
+		if lib.Games[2].Status != "" || lib.Games[2].UserNotes != "" {
+			t.Fatalf("hints leaked onto untouched games: %+v", lib.Games[2])
 		}
 	}
 }

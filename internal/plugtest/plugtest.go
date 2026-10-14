@@ -392,13 +392,23 @@ func (s Suite) Conformance(t *testing.T) {
 	for _, g := range rawLib.Games {
 		checkKeys(t, "library.list game", g, LibraryKeys)
 		var wire struct {
-			Offline string `json:"offline"`
+			Offline   string `json:"offline"`
+			Status    string `json:"status"`
+			UserNotes string `json:"userNotes"`
 		}
 		if err := json.Unmarshal(g, &wire); err == nil {
 			switch wire.Offline {
 			case "", "ok", "network", "unknown":
 			default:
 				t.Errorf("library.list game has offline %q, want ok/network/unknown", wire.Offline)
+			}
+			switch wire.Status {
+			case "", "backlog", "playing", "finished", "abandoned":
+			default:
+				t.Errorf("library.list game has status %q, want backlog/playing/finished/abandoned", wire.Status)
+			}
+			if len(wire.UserNotes) > maxUserNotes {
+				t.Errorf("library.list game's userNotes is %d bytes, want at most %d", len(wire.UserNotes), maxUserNotes)
 			}
 		}
 		if has("family") {
@@ -831,8 +841,12 @@ func (s *Session) checkHandshake(t *testing.T) {
 // The keys docs/plugins/protocol.md defines for each payload. Extending one
 // means documenting it there first.
 var (
+	// maxUserNotes caps LibraryGame.userNotes (protocol 1.16).
+	maxUserNotes = 8192
+
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "lastPlayed", "features", "coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy"}
+		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "lastPlayed", "features",
+		"coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy", "status", "userNotes"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",
 		"descriptionHtml", "website", "storeUrl", "languages", "controller", "requirements", "ageRating", "tags", "videos"}

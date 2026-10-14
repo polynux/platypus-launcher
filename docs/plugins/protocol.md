@@ -1,4 +1,4 @@
-# Store plugin protocol (1.15, draft)
+# Store plugin protocol (1.16, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -465,7 +465,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -500,10 +500,12 @@ that doesn't know it.
   [Chat](#chat-19)). 1.14: the user's locale (`initialize` `{locale}`, the `locale.changed` notification;
   see [Locale](#locale-114)). 1.15: offline launches (`offline`, `cloudSync`, the `local-art` capability,
   `gameIdPrefix`, the `executable` param of `game.launchSpec`, optional `requires`; see
-  [Offline launches](#offline-launches-115)).
+  [Offline launches](#offline-launches-115)). 1.16: per-game status and notes
+  (`LibraryGame.status`, `LibraryGame.userNotes`, a store's suggestion only; see
+  [Per-game status and notes](#per-game-status-and-notes-116)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14 or 1.15 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15 or 1.16 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -1211,6 +1213,21 @@ never stand in the way (issue #44).
   listing is kept in memory and in `<data>/library-snapshots/<source>.json`,
   so a failed source serves its games with a stale warning instead of hiding
   the library.
+
+## Per-game status and notes (1.16)
+
+A store may suggest where its users stand with a game, but only the user owns
+their status and notes: Platypus stores both keyed by game id (issue #51) and
+never writes them back — no `settings.apply` equivalent exists for them.
+
+- **`library.list`'s `status`** (optional): the store's suggestion for the
+  game, one of `"backlog"`, `"playing"`, `"finished"` or `"abandoned"`.
+  Absent or anything else means no suggestion: Platypus drops unknown values.
+- **`library.list`'s `userNotes`** (optional): the store's suggested notes,
+  plain text (no markdown), at most 8192 bytes. Platypus drops longer ones.
+- A hint only fills a field the user left empty: the user's own value or
+  cleared field always wins. The conformance suite checks the vocabulary and
+  the cap.
 
 ## Out of scope
 
