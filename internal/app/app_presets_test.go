@@ -27,6 +27,23 @@ func presetApp(t *testing.T) (*App, string) {
 	return &App{settings: st, optHome: home}, home
 }
 
+// presetExeGame adds a sideloaded Windows game and returns its id.
+func presetExeGame(t *testing.T, a *App, home, title string) string {
+	t.Helper()
+	exe := filepath.Join(home, title, title+".exe")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, []byte("MZ\x90\x00"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	g, err := a.settings.AddCustomGame(title, exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g.ID
+}
+
 // The three built-ins list with their exact content and can't be deleted or
 // saved over.
 func TestPrefixPresetsBuiltins(t *testing.T) {
@@ -174,8 +191,9 @@ func TestPrefixPresetsUserRoundTrip(t *testing.T) {
 func TestApplyPrefixPresetMerges(t *testing.T) {
 	t.Parallel()
 	a, home := presetApp(t)
+	id := presetExeGame(t, a, home, "Gem")
 
-	if err := a.settings.SetGameSettings("g1", map[string]any{
+	if err := a.settings.SetGameSettings(id, map[string]any{
 		"env_vars": map[string]any{
 			"FOO":              "user",
 			"WINEDLLOVERRIDES": "dxgi=n,b",
@@ -197,7 +215,7 @@ func TestApplyPrefixPresetMerges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := a.ApplyPrefixPreset("g1", saved.ID)
+	res, err := a.ApplyPrefixPreset(id, saved.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +240,7 @@ func TestApplyPrefixPresetMerges(t *testing.T) {
 		t.Fatalf("windows version = %q, want win8", res.WindowsVersion)
 	}
 
-	m := a.settings.GameSettings()["g1"]
+	m := a.settings.GameSettings()[id]
 	if m["prefix_preset"] != saved.ID {
 		t.Fatalf("recorded preset = %v, want %s", m["prefix_preset"], saved.ID)
 	}
@@ -233,7 +251,7 @@ func TestApplyPrefixPresetMerges(t *testing.T) {
 		t.Fatalf("launch args = %v, present tokens not duplicated", m["launch_arguments"])
 	}
 	// The prefix folder was created, although nothing ran.
-	wantPrefix := filepath.Join(home, ".local/share/platypus", "prefixes", "g1")
+	wantPrefix := filepath.Join(home, ".local/share/platypus", "prefixes", id)
 	if st, err := os.Stat(wantPrefix); err != nil || !st.IsDir() {
 		t.Fatalf("prefix folder %s: %v", wantPrefix, err)
 	}
@@ -242,28 +260,29 @@ func TestApplyPrefixPresetMerges(t *testing.T) {
 // Re-applying the same preset changes nothing; an empty version records win10.
 func TestApplyPrefixPresetIdempotent(t *testing.T) {
 	t.Parallel()
-	a, _ := presetApp(t)
+	a, home := presetApp(t)
+	id := presetExeGame(t, a, home, "Gem")
 
 	saved, err := a.SavePrefixPreset(types.PrefixPreset{Name: "Mine"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := a.ApplyPrefixPreset("g1", saved.ID)
+	first, err := a.ApplyPrefixPreset(id, saved.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.WindowsVersion != "win10" {
 		t.Fatalf("version = %q, want the win10 default", first.WindowsVersion)
 	}
-	snap, err := json.Marshal(a.settings.GameSettings()["g1"])
+	snap, err := json.Marshal(a.settings.GameSettings()[id])
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := a.ApplyPrefixPreset("g1", saved.ID)
+	second, err := a.ApplyPrefixPreset(id, saved.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := json.Marshal(a.settings.GameSettings()["g1"])
+	again, err := json.Marshal(a.settings.GameSettings()[id])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,5 +291,101 @@ func TestApplyPrefixPresetIdempotent(t *testing.T) {
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("re-apply result differs:\n%+v\n%+v", first, second)
+	}
+}
+
+// Unknown games are refused before anything is created: a gameID like
+// "../x" never reaches the filesystem (issue #52).
+func TestApplyPrefixPresetUnknownGame(t *testing.T) {
+	t.Parallel()
+	a, _ := presetApp(t)
+
+	for _, id := range []string{"g-nope", "../x"} {
+		if _, err := a.ApplyPrefixPreset(id, "builtin:vc-fonts"); apperr.CodeOf(err) != "game.notFound" {
+			t.Fatalf("apply to %q err = %v, want game.notFound", id, err)
+		}
+	}
+	if got := a.settings.GameSettings(); len(got) != 0 {
+		t.Fatalf("refused applies left settings: %v", got)
+	}
+}
+
+// A pinned prefix resolves like a launch: the pin wins over the default folder.
+func TestApplyPrefixPresetUsesPinnedPrefix(t *testing.T) {
+	t.Parallel()
+	a, home := presetApp(t)
+	id := presetExeGame(t, a, home, "Pinned")
+
+	pin := filepath.Join(home, "elsewhere", "pfx")
+	if err := a.settings.SetGameSettings(id, map[string]any{"wine_prefix": pin}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.ApplyPrefixPreset(id, "builtin:vc-fonts"); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(pin); err != nil || !st.IsDir() {
+		t.Fatalf("pinned prefix %s: %v", pin, err)
+	}
+}
+
+// Games without a Platypus prefix refuse presets, like PrefixUsage skips
+// them: native builds and games their store client launches (issue #52).
+func TestApplyPrefixPresetRefusesPrefixlessGames(t *testing.T) {
+	t.Parallel()
+	a, home := presetApp(t)
+
+	nativeExe := filepath.Join(home, "Native", "native")
+	if err := os.MkdirAll(filepath.Dir(nativeExe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nativeExe, []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01, 0x01, 0x00}, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	native, err := a.settings.AddCustomGame("Native", nativeExe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.library.set("echo", []types.Game{
+		{ID: "p.echo.native", Source: "echo", Store: types.StoreGOG, Title: "Echo Native", IsInstalled: true, Native: true},
+		{ID: "steam_440", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "440", Title: "Client Game", IsInstalled: true},
+	}, nil)
+
+	if _, err := a.ApplyPrefixPreset(native.ID, "builtin:vc-fonts"); apperr.CodeOf(err) != "settings.preset.native" {
+		t.Fatalf("native sideload err = %v, want settings.preset.native", err)
+	}
+	if _, err := a.ApplyPrefixPreset("p.echo.native", "builtin:vc-fonts"); apperr.CodeOf(err) != "settings.preset.native" {
+		t.Fatalf("native store game err = %v, want settings.preset.native", err)
+	}
+	if _, err := a.ApplyPrefixPreset("steam_440", "builtin:vc-fonts"); apperr.CodeOf(err) != "settings.preset.clientLaunch" {
+		t.Fatalf("client launch err = %v, want settings.preset.clientLaunch", err)
+	}
+	if got := a.settings.GameSettings(); len(got) != 0 {
+		t.Fatalf("refused applies left settings: %v", got)
+	}
+}
+
+// The game's own Windows version always wins: a preset only fills a missing
+// one, and the result reports what is recorded.
+func TestApplyPrefixPresetKeepsUserWindowsVersion(t *testing.T) {
+	t.Parallel()
+	a, home := presetApp(t)
+	id := presetExeGame(t, a, home, "Seven")
+
+	if err := a.settings.SetGameSettings(id, map[string]any{"windows_version": "win7"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := a.ApplyPrefixPreset(id, "builtin:dotnet48")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.WindowsVersion != "win7" {
+		t.Fatalf("result version = %q, want the user's win7", res.WindowsVersion)
+	}
+	if got := a.settings.GameSettings()[id]["windows_version"]; got != "win7" {
+		t.Fatalf("recorded version = %v, want win7", got)
+	}
+	// The preset still applied otherwise: its verbs are recorded.
+	if !reflect.DeepEqual(res.Verbs, []string{"dotnet48", "corefonts"}) {
+		t.Fatalf("verbs = %v, want the preset's verbs", res.Verbs)
 	}
 }

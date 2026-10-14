@@ -3,11 +3,12 @@ package app
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"platypus/internal/apperr"
+	"platypus/internal/runner"
+	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -83,6 +84,39 @@ func (a *App) DeletePrefixPreset(id string) error {
 	return a.settings.DeletePrefixPreset(id)
 }
 
+// presetGame returns the game as launches see it: sideloaded games carry
+// their saved settings, and store games from the current library get their
+// prefix pin overlaid. Anything else is unknown.
+func (a *App) presetGame(id string) (types.Game, error) {
+	for _, g := range a.customGames() {
+		if g.ID == id {
+			return g, nil
+		}
+	}
+	var saved map[string]map[string]any
+	if a.settings != nil {
+		saved = a.settings.GameSettings()
+	}
+	a.library.mu.Lock()
+	defer a.library.mu.Unlock()
+	for _, e := range a.library.entries {
+		for _, g := range e.games {
+			if g.ID != id {
+				continue
+			}
+			if m, ok := saved[id]; ok {
+				if s, _ := m["wine_prefix"].(string); strings.TrimSpace(s) != "" {
+					g.Settings.WinePrefix = s
+				}
+			}
+			return g, nil
+		}
+	}
+	return types.Game{}, apperr.New("game.notFound",
+		fmt.Sprintf("unknown game %q", id),
+		map[string]string{"id": id})
+}
+
 // presetEnv reads the game's env_vars as strings: the settings map holds
 // whatever JSON decoded (usually map[string]any).
 func presetEnv(m map[string]any) map[string]string {
@@ -153,18 +187,35 @@ func composeOverrides(existing string, dlls map[string]string) (string, bool) {
 	return strings.Join(parts, ";"), added
 }
 
-// ApplyPrefixPreset merges a preset into a game's settings: its prefix folder
-// is created when missing, its env vars fill the gaps the game's own values
-// leave (reported as skipped), its DLL overrides join WINEDLLOVERRIDES
-// without touching the game's entries, its launch tokens append when absent,
-// and the preset id, its verbs and its Windows version are recorded as
-// ordinary per-game settings. Nothing is executed. Re-applying the same
-// preset changes nothing.
+// ApplyPrefixPreset merges a preset into a game's settings: the game is
+// looked up first (unknown ids are refused), and so are games without a
+// Platypus prefix: native builds and store-client launches. The prefix folder
+// resolves exactly like a launch and is created when missing, env vars fill
+// the gaps the game's own values leave (reported as skipped), DLL overrides
+// join WINEDLLOVERRIDES without touching the game's entries, launch tokens
+// append when absent, and the preset id, its verbs and the Windows version
+// are recorded as ordinary per-game settings (the version only when the game
+// has none yet: the user's own always wins). Nothing is executed.
+// Re-applying the same preset changes nothing.
 func (a *App) ApplyPrefixPreset(gameID, presetID string) (types.PrefixApplyResult, error) {
 	res := types.PrefixApplyResult{Env: map[string]string{}, Skipped: []string{}, Verbs: []string{}}
 	p, err := a.findPrefixPreset(presetID)
 	if err != nil {
 		return res, err
+	}
+	game, err := a.presetGame(gameID)
+	if err != nil {
+		return res, err
+	}
+	if game.Native {
+		return res, apperr.New("settings.preset.native",
+			fmt.Sprintf("presets don't apply to %s: it runs natively, without a Wine prefix", game.Title),
+			map[string]string{"title": game.Title})
+	}
+	if steam.IsClientLaunch(game) {
+		return res, apperr.New("settings.preset.clientLaunch",
+			fmt.Sprintf("presets don't apply to %s: its store client launches it and owns its prefix", game.Title),
+			map[string]string{"title": game.Title})
 	}
 	cur := a.settings.GameSettings()[gameID]
 	next := make(map[string]any, len(cur)+8)
@@ -174,11 +225,7 @@ func (a *App) ApplyPrefixPreset(gameID, presetID string) (types.PrefixApplyResul
 	changed := false
 
 	// The prefix folder exists before anything records it: launches assume it.
-	prefix, _ := cur["wine_prefix"].(string)
-	if strings.TrimSpace(prefix) == "" {
-		prefix = filepath.Join(a.effectivePrefixesFolder(), gameID)
-	}
-	if err := os.MkdirAll(prefix, 0o755); err != nil {
+	if err := os.MkdirAll(runner.PrefixPath(game, a.homeDir(), a.effectivePrefixesFolder()), 0o755); err != nil {
 		return res, err
 	}
 
@@ -240,30 +287,33 @@ func (a *App) ApplyPrefixPreset(gameID, presetID string) (types.PrefixApplyResul
 	for _, w := range verbs {
 		seen[w] = true
 	}
+	verbsChanged := false
 	for _, w := range p.Winetricks {
 		if !seen[w] {
 			verbs = append(verbs, w)
 			seen[w] = true
-			changed = true
+			verbsChanged = true
 		}
 	}
-	if changed {
+	if verbsChanged {
 		next["winetricks"] = verbs
+		changed = true
 	}
 	if res.Verbs = verbs; res.Verbs == nil {
 		res.Verbs = []string{}
 	}
 
-	// An empty version means win10, like everywhere the version is read.
+	// An empty version means win10, like everywhere the version is read. The
+	// game's own version always wins: a preset only fills a missing one.
 	version := p.WindowsVersion
 	if version == "" {
 		version = "win10"
 	}
-	if cur, _ := next["windows_version"].(string); cur != version {
+	if cur, _ := next["windows_version"].(string); cur == "" {
 		next["windows_version"] = version
 		changed = true
 	}
-	res.WindowsVersion = version
+	res.WindowsVersion, _ = next["windows_version"].(string)
 
 	if cur, _ := next["prefix_preset"].(string); cur != p.ID {
 		next["prefix_preset"] = p.ID

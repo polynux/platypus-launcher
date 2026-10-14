@@ -184,7 +184,9 @@
       "badOverride": "Le remplacement DLL {{dll}} : {{mode}} du préréglage n'est pas un remplacement DLL.",
       "badWindowsVersion": "La version de Windows doit être win7, win8, win81, win10 ou win11, pas « {{value}} ».",
       "builtin": "Le préréglage intégré {{id}} est en lecture seule.",
-      "notFound": "Préréglage inconnu : {{id}}."
+      "notFound": "Préréglage inconnu : {{id}}.",
+      "native": "Les préréglages ne s'appliquent pas à {{title}} : il tourne en natif, sans préfixe Wine.",
+      "clientLaunch": "Les préréglages ne s'appliquent pas à {{title}} : son client le lance et possède son préfixe."
     },
     "unavailable": "Les réglages ne sont pas prêts."
   },
