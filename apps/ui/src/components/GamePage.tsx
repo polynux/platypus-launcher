@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
-import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
+import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CopyPicker } from './CopyPicker';
@@ -36,6 +36,8 @@ import { useInstallSize, type InstallSize } from '../lib/installSize';
 import type { GameSettingsTab } from '../lib/gameSettingsTabs';
 import { ErrorNotice } from './ErrorNotice';
 import { Input } from '@/components/ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
+import { Textarea } from '@/components/ds/textarea';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -469,6 +471,8 @@ export function GamePage(p: GamePageProps) {
             {info && <CompatFacts compat={info} />}
           </Panel>
 
+          <StatusNotesSection game={game} onChanged={p.onCustomized} />
+
           {isPluginGame(game) && game.is_installed && plugin && (
             <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} sourceLogos={p.sourceLogos} />
           )}
@@ -828,6 +832,102 @@ function infoCandidateDetail(t: (key: string, vars?: Record<string, unknown>) =>
 }
 
 /** The Unlink control next to a linked game's attribution. */
+function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () => void }) {
+  const { t } = useTranslation('game');
+  const [status, setStatus] = useState(game.status ?? '');
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [notes, setNotes] = useState(game.user_notes ?? '');
+  const [notesState, setNotesState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const queued = useRef<string | null>(null);
+  const saving = useRef(false);
+  // Bumped on navigation: a save of the previous game never touches this
+  // game's state or its queue.
+  const epoch = useRef(0);
+
+  useEffect(() => {
+    epoch.current++;
+    clearTimeout(timer.current);
+    queued.current = null;
+    setStatus(game.status ?? '');
+    setNotes(game.user_notes ?? '');
+    setStatusError(null);
+    setNotesState('idle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+
+  const saveStatus = (next: GameStatus) => {
+    setStatusError(null);
+    const myEpoch = epoch.current;
+    Effect.runPromise(LauncherApi.setGameStatus(game.id, next)).then(
+      (info) => { if (epoch.current === myEpoch) setStatus(info.status); onChanged?.(); },
+      (e) => { if (epoch.current === myEpoch) setStatusError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+
+  // One notes write in flight at a time: a text typed while one runs saves
+  // right after it, so a slow write can never overwrite a newer one.
+  const pump = () => {
+    if (saving.current || queued.current == null) return;
+    const text = queued.current;
+    queued.current = null;
+    saving.current = true;
+    const myEpoch = epoch.current;
+    setNotesState('saving');
+    const settle = (ok: boolean) => {
+      if (epoch.current !== myEpoch) return; // another game's section now
+      saving.current = false;
+      if (queued.current != null) pump();
+      else setNotesState(ok ? 'saved' : 'failed');
+    };
+    Effect.runPromise(LauncherApi.setGameNotes(game.id, text)).then(() => settle(true), () => settle(false));
+  };
+  const requestNotesSave = (text: string, delay: number) => {
+    queued.current = text;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(pump, delay);
+  };
+
+  return (
+    <Panel className="bg-white/[0.05]" data-testid="status-notes">
+      <h2 className="mb-2 text-[15px] font-bold">{t('game:status.heading')}</h2>
+      <Select value={status || 'none'} onValueChange={(v) => saveStatus((v === 'none' ? '' : v) as GameStatus)}>
+        <SelectTrigger aria-label={t('game:status.aria')} className="w-full" data-testid="status-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(['none', 'backlog', 'playing', 'finished', 'abandoned'] as const).map((v) => (
+            <SelectItem key={v} value={v}>
+              {t(`game:status.${v}`)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {statusError && (
+        <p role="alert" className="mt-1.5 text-[12px] text-red-300/80">
+          {statusError}
+        </p>
+      )}
+      <MonoLabel className="mb-1.5 mt-4">{t('game:status.notesLabel')}</MonoLabel>
+      <Textarea
+        value={notes}
+        rows={4}
+        aria-label={t('game:status.notesLabel')}
+        placeholder={t('game:status.notesPlaceholder')}
+        data-testid="notes-input"
+        onChange={(e) => {
+          setNotes(e.target.value);
+          requestNotesSave(e.target.value, 500);
+        }}
+        onBlur={() => requestNotesSave(notes, 0)}
+      />
+      <MonoLabel className={cx('mt-1.5 text-right', notesState === 'failed' && 'text-red-300/80')}>
+        {notesState === 'saving' ? t('game:status.saving') : notesState === 'saved' ? t('game:status.saved') : notesState === 'failed' ? t('game:status.failed') : ''}
+      </MonoLabel>
+    </Panel>
+  );
+}
+
 function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }) {
   const { t } = useTranslation('game');
   const [busy, setBusy] = useState(false);

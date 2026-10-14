@@ -314,5 +314,19 @@
     "today": "today",
     "yesterday": "yesterday",
     "daysAgo": "{{count}}d ago"
+  },
+  "status": {
+    "heading": "Status & notes",
+    "aria": "Status",
+    "none": "None",
+    "backlog": "Backlog",
+    "playing": "Playing",
+    "finished": "Finished",
+    "abandoned": "Abandoned",
+    "notesLabel": "Your notes",
+    "notesPlaceholder": "Notes about this game, kept on this machine.",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "failed": "Failed"
   }
 }

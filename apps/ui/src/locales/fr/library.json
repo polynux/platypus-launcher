@@ -130,5 +130,15 @@
     "runWine": "Wine / Proton",
     "submit": "Ajouter le jeu"
   },
-  "offline": "Hors ligne — bibliothèque connue affichée"
+  "offline": "Hors ligne — bibliothèque connue affichée",
+  "statusFilter": {
+    "label": "statut",
+    "all": "tous",
+    "none": "sans statut",
+    "backlog": "à jouer",
+    "playing": "en cours",
+    "finished": "terminé",
+    "abandoned": "abandonné"
+  },
+  "statusFilterAria": "Filtrer par statut"
 }

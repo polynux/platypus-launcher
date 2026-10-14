@@ -185,6 +185,65 @@ function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (
   );
 }
 
+/** The status the user gave a game (issue #51): 'all' and 'none' are filter
+ *  values only; the rest are the game statuses. */
+type StatusFilter = 'all' | 'none' | 'backlog' | 'playing' | 'finished' | 'abandoned';
+const STATUS_FILTERS: StatusFilter[] = ['all', 'none', 'backlog', 'playing', 'finished', 'abandoned'];
+
+function statusOptionLabel(t: T, v: StatusFilter): string {
+  switch (v) {
+    case 'all':
+      return t('library:statusFilter.all');
+    case 'none':
+      return t('library:statusFilter.none');
+    case 'backlog':
+      return t('library:statusFilter.backlog');
+    case 'playing':
+      return t('library:statusFilter.playing');
+    case 'finished':
+      return t('library:statusFilter.finished');
+    case 'abandoned':
+      return t('library:statusFilter.abandoned');
+  }
+}
+
+/** The status badge label of a game card: null when it has no status, so the
+ *  card shows no badge (issue #51). */
+function statusBadgeLabel(t: T, status: string | undefined): string | null {
+  switch (status) {
+    case 'backlog':
+      return t('library:statusFilter.backlog');
+    case 'playing':
+      return t('library:statusFilter.playing');
+    case 'finished':
+      return t('library:statusFilter.finished');
+    case 'abandoned':
+      return t('library:statusFilter.abandoned');
+    default:
+      return null;
+  }
+}
+
+/** Filters the library by the user's own status (issue #51): all games, only
+ *  the ones without one, or only one status. */
+function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChange: (v: StatusFilter) => void }) {
+  const { t } = useTranslation('library');
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as StatusFilter)}>
+      <SelectTrigger aria-label={t('library:statusFilterAria')} className="w-40 uppercase tracking-wider">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {STATUS_FILTERS.map((v) => (
+          <SelectItem key={v} value={v}>
+            {statusOptionLabel(t, v)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function jobLabel(t: T, j: Job): string {
   if (j.state === 'queued') return t('library:job.queued', { kind: j.kind });
   if (j.percent >= 0) {
@@ -231,6 +290,7 @@ const TABLE_ROW_HEIGHT = 44;
 const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; job?: Job; onOpen: (id: string) => void }) {
   const { t } = useTranslation('library');
   const hours = hoursPlayed(g);
+  const statusLabel = statusBadgeLabel(t, g.status);
   const meta = [hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ');
   return (
     <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}>
@@ -248,10 +308,19 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
             </div>
           </div>
         ) : (
-          !g.is_installed && (
-            <Badge variant="neutral" className="absolute bottom-2 left-2 gap-1 bg-black/65 text-white/70">
-              {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? t('library:cardNotInstalled') : t('library:cardOwned')}
-            </Badge>
+          (g.status || !g.is_installed) && (
+            <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
+              {statusLabel && (
+                <Badge variant="neutral" className="bg-black/65 text-white/70" data-testid="status-badge">
+                  {statusLabel}
+                </Badge>
+              )}
+              {!g.is_installed && (
+                <Badge variant="neutral" className="gap-1 bg-black/65 text-white/70">
+                  {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? t('library:cardNotInstalled') : t('library:cardOwned')}
+                </Badge>
+              )}
+            </div>
           )
         )}
       </div>
@@ -287,6 +356,8 @@ export function LibraryView(p: LibraryProps) {
   const { t } = useTranslation(['library', 'nav']);
   const [sort, setSort] = useState<Sort | null>(null);
   const [tier, setTier] = useState<TierFilter>('all');
+  // The user's own per-game status (issue #51): all games, none, or one.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   // Family: the games borrowed from a family member, when the library has any.
   const [lending, setLending] = useState<'all' | 'with-me'>('all');
   const hasBorrowed = p.games.some((g) => g.shared_by != null);
@@ -295,7 +366,7 @@ export function LibraryView(p: LibraryProps) {
   const lendingFilter = hasBorrowed ? lending : 'all';
   // The less-used filters sit behind the Filters toggle; the toggle counts the ones that are in effect.
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const extraFilters = [p.ownership === 'owned', lendingFilter !== 'all', tier !== 'all', sort !== null].filter(Boolean).length;
+  const extraFilters = [p.ownership === 'owned', lendingFilter !== 'all', tier !== 'all', statusFilter !== 'all', sort !== null].filter(Boolean).length;
   // Typing in the search box paints the box first and filters the library after.
   const q = useDeferredValue(p.search).trim().toLowerCase();
   const owned = p.games.length;
@@ -311,9 +382,10 @@ export function LibraryView(p: LibraryProps) {
           (source === 'all' || g.store === source) &&
           (lendingFilter === 'all' || g.shared_by != null) &&
           (tier === 'all' || tierFilterValue(g) === tier) &&
+          (statusFilter === 'all' || (statusFilter === 'none' ? !g.status : g.status === statusFilter)) &&
           g.title.toLowerCase().includes(q)
       ),
-    [p.games, p.ownership, source, lendingFilter, tier, q]
+    [p.games, p.ownership, source, lendingFilter, tier, statusFilter, q]
   );
   const jobs = useMemo(() => new Map(p.jobs.map((j) => [j.game_id, j])), [p.jobs]);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
@@ -438,6 +510,9 @@ export function LibraryView(p: LibraryProps) {
             )}
             <FilterGroup label={t('library:tier')} labelClass="w-14">
               <TierFilterControl value={tier} onChange={setTier} />
+            </FilterGroup>
+            <FilterGroup label={t('library:statusFilter.label')} labelClass="w-14">
+              <StatusFilterControl value={statusFilter} onChange={setStatusFilter} />
             </FilterGroup>
             <FilterGroup label={t('library:sort')} labelClass="w-14">
               <SortControl sort={sort} onChange={setSort} />
