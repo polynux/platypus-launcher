@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -31,7 +30,7 @@ func TestStoreNotesNormalize(t *testing.T) {
 	if got := storeNotes("a suggestion", true); got != "a suggestion" {
 		t.Errorf("storeNotes = %q, want it kept", got)
 	}
-	if got := storeNotes(strings.Repeat("x", settings.MaxGameNotes+1), true); got != "" {
+	if got := storeNotes(strings.Repeat("x", types.MaxGameNotes+1), true); got != "" {
 		t.Error("overlong notes were kept")
 	}
 	if got := storeNotes("", true); got != "" {

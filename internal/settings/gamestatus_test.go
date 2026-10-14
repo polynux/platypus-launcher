@@ -86,7 +86,7 @@ func TestSetGameNotesRejectsNonsense(t *testing.T) {
 	if err := s.SetGameNotes("", "hi"); err == nil {
 		t.Fatal("accepted an empty game id")
 	}
-	if err := s.SetGameNotes("g", strings.Repeat("x", MaxGameNotes+1)); err == nil {
+	if err := s.SetGameNotes("g", strings.Repeat("x", types.MaxGameNotes+1)); err == nil {
 		t.Fatal("accepted notes over the cap")
 	}
 	if err := s.SetGameNotes("g", "a\x00b"); err == nil {

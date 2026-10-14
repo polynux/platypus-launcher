@@ -9,6 +9,11 @@ const (
 	GameStatusAbandoned = "abandoned"
 )
 
+// MaxGameNotes caps one game's user notes in bytes: they live in
+// settings.json, which is read whole on every load, and a store's hint is
+// capped the same way (protocol 1.16).
+const MaxGameNotes = 8 << 10
+
 // ValidGameStatus reports whether s is one of the game statuses.
 func ValidGameStatus(s string) bool {
 	return s == GameStatusBacklog || s == GameStatusPlaying || s == GameStatusFinished || s == GameStatusAbandoned

@@ -407,8 +407,8 @@ func (s Suite) Conformance(t *testing.T) {
 			default:
 				t.Errorf("library.list game has status %q, want backlog/playing/finished/abandoned", wire.Status)
 			}
-			if len(wire.UserNotes) > maxUserNotes {
-				t.Errorf("library.list game's userNotes is %d bytes, want at most %d", len(wire.UserNotes), maxUserNotes)
+			if len(wire.UserNotes) > types.MaxGameNotes {
+				t.Errorf("library.list game's userNotes is %d bytes, want at most %d", len(wire.UserNotes), types.MaxGameNotes)
 			}
 		}
 		if has("family") {
@@ -841,9 +841,6 @@ func (s *Session) checkHandshake(t *testing.T) {
 // The keys docs/plugins/protocol.md defines for each payload. Extending one
 // means documenting it there first.
 var (
-	// maxUserNotes caps LibraryGame.userNotes (protocol 1.16).
-	maxUserNotes = 8192
-
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
 		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "lastPlayed", "features",
 		"coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy", "status", "userNotes"}

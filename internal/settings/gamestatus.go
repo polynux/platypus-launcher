@@ -9,10 +9,6 @@ import (
 	"platypus/internal/types"
 )
 
-// MaxGameNotes caps one game's notes in bytes: notes live in settings.json,
-// which is read whole on every load, so an unbounded field would bloat it.
-const MaxGameNotes = 8 << 10
-
 // GameStatus is the status the user gave a game, "" when none was set.
 func (s *Store) GameStatus(gameID string) string {
 	s.mu.Lock()
@@ -54,6 +50,8 @@ func (s *Store) SetGameStatus(gameID, status string) error {
 }
 
 // GameNotes are the user's own notes on a game, plain text ("" when none).
+// The cap is types.MaxGameNotes, which bounds both the stored value and a
+// store's hint (protocol 1.16).
 func (s *Store) GameNotes(gameID string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -68,8 +66,8 @@ func (s *Store) SetGameNotes(gameID, notes string) error {
 	}
 	notes = strings.TrimSpace(notes)
 	if notes != "" {
-		if len(notes) > MaxGameNotes {
-			return fmt.Errorf("notes are longer than %d bytes", MaxGameNotes)
+		if len(notes) > types.MaxGameNotes {
+			return fmt.Errorf("notes are longer than %d bytes", types.MaxGameNotes)
 		}
 		for _, r := range notes {
 			if unicode.IsControl(r) && r != '\n' && r != '\t' {

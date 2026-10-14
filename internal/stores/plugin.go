@@ -17,7 +17,6 @@ import (
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/sanitize"
-	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
@@ -438,7 +437,7 @@ func storeStatus(raw string, speaks bool) string {
 // suggestion — dropped like an art URL the core refuses: the library never
 // breaks on what a plugin sends. Plugins older than 1.16 always read "".
 func storeNotes(raw string, speaks bool) string {
-	if !speaks || raw == "" || len(raw) > settings.MaxGameNotes {
+	if !speaks || raw == "" || len(raw) > types.MaxGameNotes {
 		return ""
 	}
 	return raw
