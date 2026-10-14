@@ -1,0 +1,20 @@
+{
+  "intro": "L'espace occupé par vos jeux sur chaque disque.",
+  "about": "Platypus mesure les jeux qu'il connaît et ne parc jamais le reste du disque : la barre montre ce qui vous appartient, le reste et l'espace libre.",
+  "rescan": "Réanalyser toutes les tailles",
+  "scanning": "Mesure en cours…",
+  "drivesTitle": "disques",
+  "gamesTitle": "jeux par taille",
+  "emptyTitle": "aucun jeu à mesurer",
+  "emptyBody": "Les jeux installés apparaissent ici avec leur taille, leur emplacement et leur préfixe Wine.",
+  "legend": {
+    "games": "Jeux Platypus",
+    "other": "Autres",
+    "free": "Libre"
+  },
+  "size": {
+    "fromStore": "depuis la boutique",
+    "scanned": "mesuré",
+    "prefix": "Préfixe Wine"
+  }
+}

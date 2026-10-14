@@ -16,6 +16,7 @@ import type {
   BackupSettings,
   Customization,
   ArtCandidate,
+  DiskUsage,
   GameFolder,
   InstallFolderCheck,
   InstallLocation,
@@ -347,6 +348,11 @@ export const LauncherApi = {
   makeDefaultGameFolder: (path: string) => call<GameFolder[]>('MakeDefaultGameFolder', async () => (await App.MakeDefaultGameFolder(path)) ?? []),
   chooseGameFolder: () => call<string>('ChooseGameFolder', () => App.ChooseGameFolder()),
 
+  // Storage view (issue #50): the last snapshot, and a forced re-measure of
+  // every size. Both return immediately; a finished pass arrives as an event.
+  getDiskUsage: () => call<DiskUsage>('GetDiskUsage', () => App.GetDiskUsage()),
+  refreshDiskUsage: () => call<DiskUsage>('RefreshDiskUsage', () => App.RefreshDiskUsage()),
+
   // Customization: the user's title and art for a game. Core only; a game's
   // plugin never sees it.
   getCustomization: (gameId: string) => call<Customization>('GetCustomization', async () => normalizeCustomization(await App.GetCustomization(gameId))),
@@ -502,6 +508,11 @@ export function onJobs(cb: (jobs: Job[]) => void): () => void {
 /** Subscribe to the partial results of a library scan: the games of the sources that have answered while others are still out. */
 export function onLibraryPartial(cb: (lib: Library) => void): () => void {
   return onEvent('library-partial', cb);
+}
+
+/** Subscribe to disk usage snapshots: a measuring pass finished (issue #50). */
+export function onDiskUsage(cb: (d: DiskUsage) => void): () => void {
+  return onEvent('diskusage', cb);
 }
 
 /** Subscribe to background library changes (issue #36): the online artwork

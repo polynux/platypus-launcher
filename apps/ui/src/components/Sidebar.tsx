@@ -12,7 +12,7 @@ import { FriendsSummary } from './FriendsSummary';
 import { PluginLogo } from './PluginLogo';
 import type { SessionEvent, SocialView, StoreType, View } from '../types';
 
-type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'settings';
+type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'storage' | 'settings';
 
 interface SidebarProps {
   view: View;
@@ -95,6 +95,7 @@ export function Sidebar(p: SidebarProps) {
     { key: 'fixes', label: t('nav:fixes'), count: p.fixCount || undefined },
     { key: 'runners', label: t('nav:runners'), count: p.runnerCount || undefined },
     { key: 'plugins', label: t('nav:plugins'), dot: p.authNeeded },
+    { key: 'storage', label: t('nav:storage') },
   ];
   // A closed Tools group still shows that a tool is active or needs attention on its header.
   const toolsHasActive = tools.some((t) => t.key === active);

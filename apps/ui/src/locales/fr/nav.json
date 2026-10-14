@@ -6,6 +6,7 @@
   "fixes": "Correctifs",
   "runners": "Exécuteurs",
   "plugins": "Extensions",
+  "storage": "Stockage",
   "settings": "Paramètres",
   "tools": "Outils",
   "sources": "Sources",
@@ -29,6 +30,7 @@
     "fixes": "Correctifs",
     "runners": "Exécuteurs",
     "plugins": "Extensions",
+    "storage": "Stockage",
     "settings": "Paramètres"
   },
   "backendUnreachable": "moteur injoignable",

@@ -12,6 +12,7 @@ import { addGameFlow } from './lib/addGame';
 import { ActivityView } from './components/ActivityView';
 import { PluginsView } from './components/PluginsView';
 import { FixesView } from './components/FixesView';
+import { StorageView } from './components/StorageView';
 import { SystemView } from './components/SystemView';
 import { LauncherSettingsView } from './components/LauncherSettingsView';
 import { DownloadsView, jobKindKey } from './components/DownloadsView';
@@ -741,6 +742,8 @@ export function App() {
             onNotify={notify}
           />
         );
+      case 'storage':
+        return <StorageView />;
       case 'downloads':
         return (
           <DownloadsView

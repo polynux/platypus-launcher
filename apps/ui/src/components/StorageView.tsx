@@ -1,0 +1,169 @@
+// i18n: converted
+import { useTranslation } from 'react-i18next';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Effect } from 'effect';
+import { Loader2, RefreshCw } from 'lucide-react';
+import type { DiskUsage } from '../types';
+import { LauncherApi, onDiskUsage } from '../effect/runtime';
+import { EmptyState, MonoLabel } from './ui';
+import { Button } from './ds/button';
+import { Badge } from './ds/badge';
+import { formatBytes, storeLabel } from '../lib/games';
+
+/** The figure for a byte count: formatBytes has no output for 0, and an
+ *  unreadable disk (-1) shows an em dash instead of a made-up size. */
+function figure(n: number): string {
+  if (n < 0) return '—';
+  return formatBytes(n) || '0 B';
+}
+
+/** Storage (issue #50): one bar per drive (Platypus games / other / free)
+ *  and every installed game by size. The core measures in the background and
+ *  emits a snapshot when a pass ends; this view only reads. */
+export function StorageView() {
+  const { t } = useTranslation(['nav', 'storage']);
+  const [usage, setUsage] = useState<DiskUsage | null>(null);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.getDiskUsage()).then(setUsage).catch(() => {});
+    return onDiskUsage(setUsage);
+  }, []);
+  const rescan = () => {
+    Effect.runPromise(LauncherApi.refreshDiskUsage()).then(setUsage).catch(() => {});
+  };
+  const scanning = usage?.scanning ?? false;
+  // Biggest first, by files + prefix: the payload comes sorted, but a later
+  // snapshot or a partial event may not.
+  const games = useMemo(
+    () =>
+      [...(usage?.games ?? [])].sort(
+        (a, b) => b.size_bytes + b.prefix_bytes - (a.size_bytes + a.prefix_bytes),
+      ),
+    [usage],
+  );
+  const drives = usage?.drives ?? [];
+  return (
+    <div className="p-7">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.storage')}</h1>
+          <p className="mt-0.5 text-[12.5px] text-white/70">{t('storage:intro')}</p>
+          <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/70">{t('storage:about')}</p>
+        </div>
+        <Button variant="neutral" onClick={rescan} disabled={scanning}>
+          {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {scanning ? t('storage:scanning') : t('storage:rescan')}
+        </Button>
+      </header>
+
+      {drives.length > 0 && (
+        <section className="mb-6">
+          <MonoLabel className="mb-2">{t('storage:drivesTitle')}</MonoLabel>
+          <div className="space-y-2">
+            {drives.map((d) => (
+              <DriveCard key={d.id} drive={d} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <MonoLabel className="mb-2">{t('storage:gamesTitle')}</MonoLabel>
+        {games.length === 0 ? (
+          scanning ? (
+            <div className="space-y-2" role="status">
+              <span className="sr-only">{t('storage:scanning')}</span>
+              <div className="h-16 animate-pulse rounded-2xl bg-white/[0.045] ring-1 ring-white/[0.07]" />
+              <div className="h-16 animate-pulse rounded-2xl bg-white/[0.045] ring-1 ring-white/[0.07]" />
+            </div>
+          ) : (
+            <EmptyState label={t('storage:emptyTitle')}>{t('storage:emptyBody')}</EmptyState>
+          )
+        ) : (
+          <ul className="space-y-2">
+            {games.map((g) => (
+              <li
+                key={g.game_id}
+                className="rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13px] font-bold">{g.title}</span>
+                      <Badge variant="neutral">{storeLabel(g.store)}</Badge>
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
+                        {g.from_plugin ? t('storage:size.fromStore') : t('storage:size.scanned')}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-hint text-white/55 select-text">
+                      {g.install_dir}
+                    </div>
+                    {g.prefix_bytes > 0 && (
+                      <div className="mt-1 text-[12px] text-white/70">
+                        {t('storage:size.prefix')}{' '}
+                        <span className="tabular-nums">{figure(g.prefix_bytes)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="flex-none text-[13px] font-bold tabular-nums">
+                    {figure(g.size_bytes)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/** One drive's card: mount, its folders, and the stacked share bar with a
+ *  legend. A drive whose totals can't be read (-1) shows an indeterminate
+ *  pulse instead of proportions. */
+function DriveCard({ drive: d }: { drive: DiskUsage['drives'][number] }) {
+  const { t } = useTranslation('storage');
+  const known = d.total_bytes > 0;
+  const gamesPct = known ? Math.min(100, (d.games_bytes / d.total_bytes) * 100) : 0;
+  const otherPct = known ? Math.min(100 - gamesPct, (d.other_bytes / d.total_bytes) * 100) : 0;
+  return (
+    <div className="rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <span className="text-[13px] font-bold">{d.mount}</span>
+        <span className="min-w-0 truncate font-mono text-hint text-white/55 select-text">
+          {d.folders.join(' · ')}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-label={d.mount}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(gamesPct)}
+        className={known ? 'mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-white/15' : 'mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/15 animate-pulse'}
+      >
+        {known && (
+          <>
+            <div className="bg-amber-300 transition-[width]" style={{ width: `${gamesPct}%` }} />
+            <div className="bg-white/25 transition-[width]" style={{ width: `${otherPct}%` }} />
+          </>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-white/70">
+        <Legend dot="bg-amber-300" label={t('storage:legend.games')} value={figure(d.games_bytes)} />
+        <Legend dot="bg-white/25" label={t('storage:legend.other')} value={figure(d.other_bytes)} />
+        <Legend dot="bg-white/15" label={t('storage:legend.free')} value={figure(d.free_bytes)} />
+      </div>
+    </div>
+  );
+}
+
+/** One legend entry: swatch, name and tabular-nums figure. */
+function Legend({ dot, label, value }: { dot: string; label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`} />
+      {label}
+      <span className="tabular-nums text-white/85">{value}</span>
+    </span>
+  );
+}
