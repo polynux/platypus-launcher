@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"platypus/internal/winetricks"
 )
 
 func load(t *testing.T, files map[string]string, listed []string) (*Data, error) {
@@ -44,6 +46,11 @@ func TestLoadErrors(t *testing.T) {
 			name:  "bad tier",
 			files: map[string]string{"fixes.json": `{"fixes":[{"title":"x","source":"s","tier":"great","description":"d"}]}`},
 			want:  "tier",
+		},
+		{
+			name:  "unknown winetricks verb",
+			files: map[string]string{"fixes.json": `{"fixes":[{"title":"x","source":"s","tier":"gold","description":"d","winetricks":["ddraw"]}]}`},
+			want:  "unknown winetricks verb",
 		},
 		{
 			name:  "fix without match key",
@@ -162,6 +169,42 @@ func TestBuiltinFixes(t *testing.T) {
 	}
 	if r.Fix("Some Other Game", "") != nil {
 		t.Fatal("matched an unknown title")
+	}
+}
+
+// Every verb the shipped fixes name must be a real winetricks verb, so a
+// bad entry like the old "ddraw" one fails here instead of at install time.
+func TestBuiltinFixVerbsAreKnown(t *testing.T) {
+	r := NewRegistry()
+	r.Add(Builtin())
+	seen := map[string]bool{}
+	for _, f := range r.fixes {
+		for _, w := range f.Winetricks {
+			seen[w] = true
+			if !winetricks.KnownVerb(w) {
+				t.Errorf("%q lists unknown winetricks verb %q", f.Title, w)
+			}
+		}
+	}
+	if !seen["d3dx9"] || !seen["faudio"] {
+		t.Fatalf("built-in verbs = %v, want the shipped d3dx9 and faudio entries covered", seen)
+	}
+}
+
+// Arcanum's fix is a ddraw DLL override, not a winetricks verb: there is
+// no "ddraw" verb, and the override is what its wrapper needs.
+func TestBuiltinArcanumFix(t *testing.T) {
+	r := NewRegistry()
+	r.Add(Builtin())
+	f := r.Fix("Arcanum: Of Steamworks and Magick Obscura", "")
+	if f == nil {
+		t.Fatal("no Arcanum fix")
+	}
+	if len(f.Winetricks) != 0 {
+		t.Fatalf("arcanum verbs = %v, want none", f.Winetricks)
+	}
+	if f.DLLOverrides["ddraw"] != "n,b" {
+		t.Fatalf("arcanum overrides = %v, want ddraw n,b", f.DLLOverrides)
 	}
 }
 

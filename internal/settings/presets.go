@@ -9,6 +9,7 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/types"
+	"platypus/internal/winetricks"
 )
 
 // Wine prefix presets (issue #52): named templates the user saves. The
@@ -19,20 +20,21 @@ const presetBuiltinPrefix = "builtin:"
 // Windows versions a preset may record. Empty means win10.
 var presetWindowsVersions = []string{"win7", "win8", "win81", "win10", "win11"}
 
-// The verb shape mirrors dataplug's winetricks rule (a verb is one token),
-// and the env key rule mirrors dataplug's and the launch spec's: a variable
-// name, nothing more.
+// The verb check shares dataplug's winetricks rule (a known verb from the
+// pinned list), and the env key rule mirrors dataplug's and the launch
+// spec's: a variable name, nothing more.
 var presetEnvKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // ValidatePrefixPreset checks a user preset the way SavePrefixPreset does:
-// a non-empty name, well-shaped verbs, variable-name env keys, non-empty DLL
-// overrides and a known Windows version (or none, meaning win10).
+// a non-empty name, known winetricks verbs, variable-name env keys,
+// non-empty DLL overrides and a known Windows version (or none, meaning
+// win10).
 func ValidatePrefixPreset(p types.PrefixPreset) error {
 	if strings.TrimSpace(p.Name) == "" {
 		return apperr.New("settings.preset.nameMissing", "the preset needs a name", nil)
 	}
 	for _, w := range p.Winetricks {
-		if strings.TrimSpace(w) == "" || strings.ContainsAny(w, " \t") {
+		if strings.TrimSpace(w) == "" || strings.ContainsAny(w, " \t") || !winetricks.KnownVerb(w) {
 			return apperr.New("settings.preset.badVerb",
 				fmt.Sprintf("preset verb %q is not a verb", w),
 				map[string]string{"verb": w})

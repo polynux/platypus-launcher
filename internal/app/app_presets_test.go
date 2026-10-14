@@ -89,8 +89,9 @@ func TestPrefixPresetsBuiltins(t *testing.T) {
 	}
 }
 
-// User presets validate on save: a name, verb-shaped verbs, variable-name
-// env keys and a known Windows version (or none, meaning win10).
+// User presets validate on save: a name, known winetricks verbs,
+// variable-name env keys and a known Windows version (or none, meaning
+// win10).
 func TestPrefixPresetsValidation(t *testing.T) {
 	t.Parallel()
 	a, _ := presetApp(t)
@@ -103,6 +104,7 @@ func TestPrefixPresetsValidation(t *testing.T) {
 		{"empty name", types.PrefixPreset{Name: "  "}, "settings.preset.nameMissing"},
 		{"blank verb", types.PrefixPreset{Name: "P", Winetricks: []string{"  "}}, "settings.preset.badVerb"},
 		{"spaced verb", types.PrefixPreset{Name: "P", Winetricks: []string{"not a verb"}}, "settings.preset.badVerb"},
+		{"unknown verb", types.PrefixPreset{Name: "P", Winetricks: []string{"ddraw"}}, "settings.preset.badVerb"},
 		{"bad env key", types.PrefixPreset{Name: "P", Env: map[string]string{"1BAD": "x"}}, "settings.preset.badEnvKey"},
 		{"dashed env key", types.PrefixPreset{Name: "P", Env: map[string]string{"HAS-DASH": "x"}}, "settings.preset.badEnvKey"},
 		{"empty dll value", types.PrefixPreset{Name: "P", DLLOverrides: map[string]string{"dxgi": " "}}, "settings.preset.badOverride"},

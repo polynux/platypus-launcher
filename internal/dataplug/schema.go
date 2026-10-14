@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"platypus/internal/winetricks"
 )
 
 // DefaultFiles are the data files a plugin uses when its manifest lists none.
@@ -139,6 +141,8 @@ func (f Fix) validate() error {
 	for i, w := range f.Winetricks {
 		if strings.TrimSpace(w) == "" || strings.ContainsAny(w, " \t") {
 			bad("winetricks[%d]: %q is not a verb", i, w)
+		} else if !winetricks.KnownVerb(w) {
+			bad("winetricks[%d]: unknown winetricks verb %q", i, w)
 		}
 	}
 	for k, v := range f.DLLOverrides {
