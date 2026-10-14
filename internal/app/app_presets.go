@@ -84,31 +84,11 @@ func (a *App) DeletePrefixPreset(id string) error {
 	return a.settings.DeletePrefixPreset(id)
 }
 
-// presetGame returns the game as launches see it: sideloaded games carry
-// their saved settings, and store games from the current library get their
-// prefix pin overlaid. Anything else is unknown.
+// presetGame returns the game presets apply to, as wineGames holds it.
+// Anything else is unknown.
 func (a *App) presetGame(id string) (types.Game, error) {
-	for _, g := range a.customGames() {
+	for _, g := range a.wineGames() {
 		if g.ID == id {
-			return g, nil
-		}
-	}
-	var saved map[string]map[string]any
-	if a.settings != nil {
-		saved = a.settings.GameSettings()
-	}
-	a.library.mu.Lock()
-	defer a.library.mu.Unlock()
-	for _, e := range a.library.entries {
-		for _, g := range e.games {
-			if g.ID != id {
-				continue
-			}
-			if m, ok := saved[id]; ok {
-				if s, _ := m["wine_prefix"].(string); strings.TrimSpace(s) != "" {
-					g.Settings.WinePrefix = s
-				}
-			}
 			return g, nil
 		}
 	}

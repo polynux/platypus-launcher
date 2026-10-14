@@ -1245,28 +1245,13 @@ func (a *App) prefixesFolder() string {
 	return a.settings.PrefixesFolder()
 }
 
-// PrefixUsage groups the Wine games by the prefix they resolve to (issue
-// #52): the picker lists these, with the games sharing each prefix. It
-// covers sideloaded games and installed store games from the current
-// library; native games have no prefix and are left out, as are games
-// their store client launches itself (Steam: steam.IsClientLaunch — the
-// client owns their compat data, not Platypus).
-func (a *App) PrefixUsage() []types.PrefixShare {
-	home := a.homeDir()
-	folder := a.effectivePrefixesFolder()
-	byPath := map[string][]types.PrefixGame{}
-	add := func(g types.Game) {
-		if g.Native || steam.IsClientLaunch(g) {
-			return
-		}
-		p := runner.PrefixPath(g, home, folder)
-		byPath[p] = append(byPath[p], types.PrefixGame{ID: g.ID, Title: g.Title})
-	}
-	for _, g := range a.customGames() {
-		add(g)
-	}
-	// The user's per-game prefix pins live in the settings, not in the
-	// cached listings, so they are overlaid before grouping.
+// wineGames returns every game Platypus launches through Wine, as launches
+// see them: the sideloaded games plus the installed games of the current
+// library, with each game's wine_prefix pin from the settings overlaid (the
+// cached listings don't carry it). Callers apply their own skips: native
+// games and store-client launches have no Platypus prefix (issue #52).
+func (a *App) wineGames() []types.Game {
+	out := a.customGames()
 	var saved map[string]map[string]any
 	if a.settings != nil {
 		saved = a.settings.GameSettings()
@@ -1287,8 +1272,27 @@ func (a *App) PrefixUsage() []types.PrefixShare {
 					g.Settings.WinePrefix = s
 				}
 			}
-			add(g)
+			out = append(out, g)
 		}
+	}
+	return out
+}
+
+// PrefixUsage groups the Wine games by the prefix they resolve to (issue
+// #52): the picker lists these, with the games sharing each prefix. Native
+// games have no prefix and are left out, as are games their store client
+// launches itself (Steam: steam.IsClientLaunch — the client owns their
+// compat data, not Platypus).
+func (a *App) PrefixUsage() []types.PrefixShare {
+	home := a.homeDir()
+	folder := a.effectivePrefixesFolder()
+	byPath := map[string][]types.PrefixGame{}
+	for _, g := range a.wineGames() {
+		if g.Native || steam.IsClientLaunch(g) {
+			continue
+		}
+		p := runner.PrefixPath(g, home, folder)
+		byPath[p] = append(byPath[p], types.PrefixGame{ID: g.ID, Title: g.Title})
 	}
 	out := make([]types.PrefixShare, 0, len(byPath))
 	for path, games := range byPath {
