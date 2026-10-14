@@ -202,7 +202,8 @@
     }
   },
   "storage": {
-    "notInstalled": "{{title}} is not installed."
+    "notInstalled": "{{title}} is not installed.",
+    "openFailed": "Couldn't open the folder of {{title}}."
   },
   "terms": {
     "acceptFirst": "Accept the terms of {{title}} first: {{terms}}.",

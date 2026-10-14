@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -464,4 +465,21 @@ func (a *App) scanDiskWith(games []types.Game, mounts []diskMount, spaceOf func(
 	}
 	a.diskUsage.scanning = false
 	return false
+}
+
+// OpenGameFolder opens the folder holding the game's files in the file
+// manager, like OpenPluginsFolder does for the plugins folder.
+func (a *App) OpenGameFolder(game types.Game) error {
+	dir := gameFilesDir(game)
+	if dir == "" {
+		return apperr.New("storage.openFailed",
+			fmt.Sprintf("%s has no folder Platypus can open", game.Title),
+			map[string]string{"title": game.Title})
+	}
+	cmd := exec.Command("xdg-open", dir)
+	if err := cmd.Start(); err != nil {
+		return apperr.Wrap("storage.openFailed", err, map[string]string{"title": game.Title})
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }

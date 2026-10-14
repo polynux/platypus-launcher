@@ -202,7 +202,8 @@
     }
   },
   "storage": {
-    "notInstalled": "« {{title}} » n'est pas installé."
+    "notInstalled": "« {{title}} » n'est pas installé.",
+    "openFailed": "Impossible d'ouvrir le dossier de « {{title}} »."
   },
   "terms": {
     "acceptFirst": "Acceptez d'abord les conditions de « {{title}} » : {{terms}}.",

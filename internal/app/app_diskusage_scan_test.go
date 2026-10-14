@@ -382,3 +382,14 @@ func TestDiskUsageNoScanBeforeFirstView(t *testing.T) {
 		t.Fatalf("library listed %d times, want 1", calls.Load())
 	}
 }
+
+// OpenGameFolder refuses a game with no folder it could open, with a code
+// the UI translates. Opening a real folder shells out to xdg-open, like
+// OpenPluginsFolder, so no test does that here.
+func TestOpenGameFolderWithoutFolderFailsCoded(t *testing.T) {
+	t.Parallel()
+	e := scanEnv(t)
+	if err := e.a.OpenGameFolder(types.Game{ID: "x", Title: "X"}); apperr.CodeOf(err) != "storage.openFailed" {
+		t.Fatalf("err = %v, want storage.openFailed", err)
+	}
+}
