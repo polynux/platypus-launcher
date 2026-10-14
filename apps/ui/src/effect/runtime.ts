@@ -41,6 +41,7 @@ import type {
   SavePath,
   RestorePreview,
   AutoBackupState,
+  PrefixShare,
   RemoveCheck,
   RemoveOptions,
   SessionEvent,
@@ -466,6 +467,10 @@ export const LauncherApi = {
   // default; changing it never moves or deletes existing prefixes.
   setPrefixesFolder: (path: string) =>
     call<LauncherSettings>('SetPrefixesFolder', () => App.SetPrefixesFolder(path)),
+
+  // Every Wine prefix Platypus resolves and the games using it (issue #52):
+  // the "use an existing prefix" picker and the "Shared with" lines.
+  prefixUsage: () => call<PrefixShare[]>('PrefixUsage', async () => (await App.PrefixUsage()) ?? []),
 
   // Friends lists of the stores that offer them (protocol 1.6).
   socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),

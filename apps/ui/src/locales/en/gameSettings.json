@@ -246,6 +246,14 @@
     "applied": "Applied \"{{title}}\"",
     "removed": "Removed \"{{title}}\""
   },
+  "prefix": {
+    "picker": "use an existing prefix",
+    "pickerDefault": "This game's own prefix (default)",
+    "games_one": "{{count}} game",
+    "games_other": "{{count}} games",
+    "sharedWith": "Shared with: {{games}}",
+    "sharedWarning": "A broken shared prefix breaks every game in it."
+  },
   "maintenance": {
     "busy": "{{title}} is busy; its files can't be changed until this finishes.",
     "removeTitle": "Remove from library",

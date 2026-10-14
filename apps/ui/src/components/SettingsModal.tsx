@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Copy, X } from 'lucide-react';
-import type { Game, GameSettings, ProtonVersion } from '../types';
+import type { Game, GameSettings, PrefixShare, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ds/select';
 import { Button } from '@/components/ds/button';
@@ -43,6 +43,9 @@ function displayResolution(): { w: number; h: number } | undefined {
   const r = window.devicePixelRatio || 1;
   return { w: Math.round(window.screen.width * r), h: Math.round(window.screen.height * r) };
 }
+
+/** Sentinel value of the prefix picker: the game's own prefix (""), since Radix forbids ''. */
+const PREFIX_OWN = '__prefix_own__';
 
 /** ds Select with an aria-label on the trigger. Radix forbids '' as an item value, so callers use sentinels. */
 function SelectField({ label, value, onChange, children, className }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode; className?: string }) {
@@ -194,6 +197,18 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
     || (prefixesFolder ? `${prefixesFolder}/${game.id}`
       : defaultPrefixes ? `${defaultPrefixes}/${game.id}`
       : `~/.local/share/platypus/prefixes/${game.id}`);
+
+  // Every prefix Platypus knows and who uses it (issue #52): the picker
+  // offers them, and the effective prefix's sharers warn below.
+  const [prefixUsage, setPrefixUsage] = useState<PrefixShare[]>([]);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.prefixUsage())
+      .then(setPrefixUsage)
+      .catch(() => {});
+  }, []);
+  const sharedWith = (prefixUsage.find((u) => u.path === effectivePrefix)?.games ?? [])
+    .filter((g) => g.id !== game.id)
+    .map((g) => g.title);
 
   const isSteamClient = game.store === 'steam' && !game.executable;
   // A native Linux build runs without Proton: no runner and no Proton-only
@@ -537,11 +552,30 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     {t('gameSettings:launch.browse')}
                   </Button>
                 </div>
+                <div className="mt-3">
+                  <MonoLabel className="mb-1.5">{t('gameSettings:prefix.picker')}</MonoLabel>
+                  <SelectField label={t('gameSettings:prefix.picker')} value={draft.wine_prefix || PREFIX_OWN} onChange={(v) => set('wine_prefix', v === PREFIX_OWN ? '' : v)}>
+                    <SelectItem value={PREFIX_OWN}>{t('gameSettings:prefix.pickerDefault')}</SelectItem>
+                    {prefixUsage.map((u) => (
+                      <SelectItem key={u.path} value={u.path}>{u.path} · {t('gameSettings:prefix.games', { count: u.games.length })}</SelectItem>
+                    ))}
+                    {/* A typed path no other game uses lists itself, so the closed picker never lies. */}
+                    {draft.wine_prefix && !prefixUsage.some((u) => u.path === draft.wine_prefix) && (
+                      <SelectItem value={draft.wine_prefix}>{draft.wine_prefix}</SelectItem>
+                    )}
+                  </SelectField>
+                </div>
                 <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
                   {draft.wine_prefix
                     ? t('gameSettings:launch.prefixCustom')
                     : t('gameSettings:launch.prefixDefault')}
                 </p>
+                {sharedWith.length > 0 && (
+                  <div className="mt-3 rounded-2xl bg-amber-300/[0.06] p-4 ring-1 ring-amber-300/25">
+                    <p className="font-mono text-hint text-amber-200/90">{t('gameSettings:prefix.sharedWith', { games: sharedWith.join(', ') })}</p>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-amber-100/85">{t('gameSettings:prefix.sharedWarning')}</p>
+                  </div>
+                )}
               </div>
             )}
 

@@ -246,6 +246,14 @@
     "applied": "« {{title}} » appliqué",
     "removed": "« {{title}} » retiré"
   },
+  "prefix": {
+    "picker": "utiliser un préfixe existant",
+    "pickerDefault": "Le préfixe propre à ce jeu (défaut)",
+    "games_one": "{{count}} jeu",
+    "games_other": "{{count}} jeux",
+    "sharedWith": "Partagé avec : {{games}}",
+    "sharedWarning": "Un préfixe partagé cassé casse tous les jeux qui l'utilisent."
+  },
   "maintenance": {
     "busy": "{{title}} est occupé ; ses fichiers ne peuvent pas être changés avant la fin.",
     "removeTitle": "Retirer de la bibliothèque",

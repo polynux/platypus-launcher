@@ -155,6 +155,8 @@ export type RestorePreview = gen.RestorePreview;
 export type RemoveOptions = gen.RemoveOptions;
 export type RemoveCheck = gen.RemoveCheck;
 export type RemoveTarget = gen.RemoveTarget;
+/** One Wine prefix and the games using it (issue #52), for the prefix picker. */
+export type PrefixShare = gen.PrefixShare;
 /** What a backup-before-delete step did (issue #42). */
 export type SaveGate = gen.SaveGate;
 /** Whether after-session automatic backups run for a game and why. */
