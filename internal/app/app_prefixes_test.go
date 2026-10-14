@@ -264,3 +264,80 @@ func TestPrefixUsageGroupsSharedPrefixes(t *testing.T) {
 		}
 	}
 }
+
+// An installed store game shares a custom game's prefix (pinned in its
+// settings, as the picker saves it); a Steam client launch, a native store
+// game and an uninstalled one stay out (issue #52).
+func TestPrefixUsageIncludesStoreGames(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(home, "Side", "side.exe")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe, []byte("MZ\x90\x00"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	side, err := st.AddCustomGame("Side", exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(home, "prefixes", "shared")
+	if err := st.SetGameSettings(side.ID, map[string]any{"wine_prefix": shared}); err != nil {
+		t.Fatal(err)
+	}
+	// The store game's pin lives in the settings, not in the cached
+	// listing — the way a picker-saved share reaches the core.
+	if err := st.SetGameSettings("p.echo.wine", map[string]any{"wine_prefix": shared}); err != nil {
+		t.Fatal(err)
+	}
+
+	a := &App{settings: st, optHome: home}
+	a.library.set("echo", []types.Game{
+		{ID: "p.echo.wine", Source: "echo", Store: types.StoreGOG, Title: "Echo Wine", IsInstalled: true},
+		{ID: "p.echo.solo", Source: "echo", Store: types.StoreGOG, Title: "Echo Solo", IsInstalled: true},
+		{ID: "steam_440", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "440", Title: "Steam Client", IsInstalled: true},
+		{ID: "p.echo.native", Source: "echo", Store: types.StoreGOG, Title: "Echo Native", IsInstalled: true, Native: true},
+		{ID: "p.echo.uninstalled", Source: "echo", Store: types.StoreGOG, Title: "Echo Uninstalled", Executable: filepath.Join(home, "echo", "game.exe")},
+	}, nil)
+
+	got := a.PrefixUsage()
+	if len(got) != 2 {
+		t.Fatalf("PrefixUsage = %+v, want the shared prefix and the solo one", got)
+	}
+	byPath := map[string][]string{}
+	for _, e := range got {
+		for _, g := range e.Games {
+			byPath[e.Path] = append(byPath[e.Path], g.ID)
+		}
+	}
+	ids := byPath[shared]
+	if len(ids) != 2 || ids[0] != side.ID || ids[1] != "p.echo.wine" {
+		t.Fatalf("shared entry = %v, want [%s p.echo.wine] sorted by id", ids, side.ID)
+	}
+	var solo string
+	for path, games := range byPath {
+		if path == shared {
+			continue
+		}
+		solo = path
+		if len(games) != 1 || games[0] != "p.echo.solo" {
+			t.Fatalf("solo entry %q = %v, want [p.echo.solo]", path, games)
+		}
+	}
+	if solo == shared {
+		t.Fatal("solo game grouped into the shared prefix")
+	}
+	for _, e := range got {
+		for _, g := range e.Games {
+			switch g.ID {
+			case "steam_440", "p.echo.native", "p.echo.uninstalled":
+				t.Fatalf("excluded game %s listed in %+v", g.ID, e)
+			}
+		}
+	}
+}

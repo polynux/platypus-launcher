@@ -1246,18 +1246,49 @@ func (a *App) prefixesFolder() string {
 }
 
 // PrefixUsage groups the Wine games by the prefix they resolve to (issue
-// #52): the picker lists these, with the games sharing each prefix. Native
-// games have no prefix and are left out.
+// #52): the picker lists these, with the games sharing each prefix. It
+// covers sideloaded games and installed store games from the current
+// library; native games have no prefix and are left out, as are games
+// their store client launches itself (Steam: steam.IsClientLaunch — the
+// client owns their compat data, not Platypus).
 func (a *App) PrefixUsage() []types.PrefixShare {
 	home := a.homeDir()
 	folder := a.effectivePrefixesFolder()
 	byPath := map[string][]types.PrefixGame{}
-	for _, g := range a.customGames() {
-		if g.Native {
-			continue
+	add := func(g types.Game) {
+		if g.Native || steam.IsClientLaunch(g) {
+			return
 		}
 		p := runner.PrefixPath(g, home, folder)
 		byPath[p] = append(byPath[p], types.PrefixGame{ID: g.ID, Title: g.Title})
+	}
+	for _, g := range a.customGames() {
+		add(g)
+	}
+	// The user's per-game prefix pins live in the settings, not in the
+	// cached listings, so they are overlaid before grouping.
+	var saved map[string]map[string]any
+	if a.settings != nil {
+		saved = a.settings.GameSettings()
+	}
+	a.library.mu.Lock()
+	entries := make([]libraryCacheEntry, 0, len(a.library.entries))
+	for _, e := range a.library.entries {
+		entries = append(entries, e)
+	}
+	a.library.mu.Unlock()
+	for _, e := range entries {
+		for _, g := range e.games {
+			if !g.IsInstalled {
+				continue
+			}
+			if m, ok := saved[g.ID]; ok {
+				if s, _ := m["wine_prefix"].(string); strings.TrimSpace(s) != "" {
+					g.Settings.WinePrefix = s
+				}
+			}
+			add(g)
+		}
 	}
 	out := make([]types.PrefixShare, 0, len(byPath))
 	for path, games := range byPath {
