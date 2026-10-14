@@ -137,26 +137,30 @@ func measureGame(game types.Game, home, prefixes string, measure func(string) (i
 
 // buildDiskUsage groups installed games by drive and sums per-drive bytes.
 // roots are the folders to attribute (game folders, install dirs, the
-// prefixes folder); overlapping roots count once. spaceOf and measure are
-// the filesystem probes (jobs.SpaceStats and relocate.TreeSize in
-// production); tests inject fakes to simulate several drives. Games come
-// out biggest first.
+// prefixes folder); overlapping roots on one drive count once, and a folder
+// shared by several games counts once. spaceOf and measure are the
+// filesystem probes (jobs.SpaceStats and relocate.TreeSize in production);
+// tests inject fakes to simulate several drives. Games come out biggest
+// first.
 func buildDiskUsage(games []types.Game, roots []string, home, prefixes string, mounts []diskMount, spaceOf func(string) (uint64, uint64, error), measure func(string) (int64, error)) types.DiskUsage {
 	out := types.DiskUsage{GeneratedAt: time.Now().Unix()}
-	seen := map[string]bool{}
+	seen := map[string]string{} // resolved root -> drive
 	byDrive := map[string][]string{}
+	// addRoot attributes a folder to its drive. Overlapping folders share
+	// one entry when they sit on the same drive; a separate mount nested
+	// inside a games folder is its own drive with its own totals.
 	addRoot := func(root string) {
 		root = filepath.Clean(resolveDiskPath(root))
 		if !filepath.IsAbs(root) {
 			return
 		}
-		for s := range seen {
-			if pathOverlaps(root, s) {
+		drive := driveOf(root, mounts)
+		for s, d := range seen {
+			if d == drive && pathOverlaps(root, s) {
 				return
 			}
 		}
-		seen[root] = true
-		drive := driveOf(root, mounts)
+		seen[root] = drive
 		byDrive[drive] = append(byDrive[drive], root)
 	}
 	for _, r := range roots {
@@ -165,6 +169,10 @@ func buildDiskUsage(games []types.Game, roots []string, home, prefixes string, m
 		}
 		addRoot(r)
 	}
+	// counted remembers which resolved folders already contributed their
+	// bytes to a drive: two games sharing one prefix (issue #52) or one
+	// install dir count it once, first wins. Every game is still listed.
+	counted := map[string]bool{}
 	driveGames := map[string]int64{}
 	for _, g := range games {
 		if !g.IsInstalled {
@@ -174,12 +182,20 @@ func buildDiskUsage(games []types.Game, roots []string, home, prefixes string, m
 		out.Games = append(out.Games, sized)
 		if dir := sized.InstallDir; dir != "" {
 			addRoot(dir)
-			driveGames[driveOf(filepath.Clean(resolveDiskPath(dir)), mounts)] += sized.SizeBytes
+			rdir := filepath.Clean(resolveDiskPath(dir))
+			if !counted[rdir] {
+				counted[rdir] = true
+				driveGames[driveOf(rdir, mounts)] += sized.SizeBytes
+			}
 		}
 		if !g.Native {
 			p := runner.PrefixPath(g, home, prefixes)
 			addRoot(p)
-			driveGames[driveOf(filepath.Clean(resolveDiskPath(p)), mounts)] += sized.PrefixBytes
+			rp := filepath.Clean(resolveDiskPath(p))
+			if !counted[rp] {
+				counted[rp] = true
+				driveGames[driveOf(rp, mounts)] += sized.PrefixBytes
+			}
 		}
 	}
 	sort.SliceStable(out.Games, func(i, j int) bool {

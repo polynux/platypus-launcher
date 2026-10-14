@@ -217,3 +217,83 @@ func TestDiskUsagePrefixInsideGameDirCountsOnce(t *testing.T) {
 		t.Fatalf("drives = %+v, want the total once", usage.Drives)
 	}
 }
+
+// Two games sharing one Wine prefix (issue #52) count it once on the drive;
+// each game's own row still shows its share.
+func TestDiskUsageSharedPrefixCountsOnce(t *testing.T) {
+	t.Parallel()
+	drive, home := evalTemp(t), evalTemp(t)
+	prefixes := filepath.Join(drive, "prefixes")
+	shared := filepath.Join(prefixes, "shared")
+	writeFileOf(t, shared, 2<<20)
+	a := filepath.Join(drive, "Games", "A")
+	writeFileOf(t, a, 1<<20)
+	b := filepath.Join(drive, "Games", "B")
+	writeFileOf(t, b, 1<<20)
+	mk := func(id, dir string) types.Game {
+		return types.Game{ID: id, Title: id, Source: "custom", Store: types.StoreCustom, InstallDir: dir, Executable: filepath.Join(dir, "run.sh"), IsInstalled: true, Settings: types.GameSettings{WinePrefix: shared}}
+	}
+	var walks walkLog
+	usage := buildDiskUsage([]types.Game{mk("a", a), mk("b", b)}, []string{filepath.Join(drive, "Games")}, home, prefixes,
+		[]diskMount{{point: drive}}, func(string) (uint64, uint64, error) { return 10 << 30, 5 << 30, nil }, walks.measure)
+	if len(usage.Drives) != 1 {
+		t.Fatalf("drives = %+v, want 1", usage.Drives)
+	}
+	// Files 1+1 MB plus the shared prefix once: 4 MB, not 6.
+	if usage.Drives[0].GamesBytes != 4<<20 {
+		t.Fatalf("games bytes = %d, want %d", usage.Drives[0].GamesBytes, 4<<20)
+	}
+	for _, g := range usage.Games {
+		if g.PrefixBytes != 2<<20 {
+			t.Fatalf("game %s prefix = %d, want its own row to keep the share", g.GameID, g.PrefixBytes)
+		}
+	}
+}
+
+// Two library entries pointing at the same install dir count it once, while
+// both entries stay listed.
+func TestDiskUsageSharedInstallDirCountsOnce(t *testing.T) {
+	t.Parallel()
+	drive, home := evalTemp(t), evalTemp(t)
+	dir := filepath.Join(drive, "Games", "Same")
+	writeFileOf(t, dir, 2<<20)
+	mk := func(id string) types.Game {
+		return types.Game{ID: id, Title: id, Source: "custom", Store: types.StoreCustom, InstallDir: dir, Executable: filepath.Join(dir, "run.sh"), IsInstalled: true, Native: true}
+	}
+	var walks walkLog
+	usage := buildDiskUsage([]types.Game{mk("a"), mk("b")}, []string{filepath.Join(drive, "Games")}, home, filepath.Join(home, "prefixes"),
+		[]diskMount{{point: drive}}, func(string) (uint64, uint64, error) { return 10 << 30, 5 << 30, nil }, walks.measure)
+	if len(usage.Games) != 2 {
+		t.Fatalf("games = %+v, want both entries listed", usage.Games)
+	}
+	if len(usage.Drives) != 1 || usage.Drives[0].GamesBytes != 2<<20 {
+		t.Fatalf("drives = %+v, want the shared folder once", usage.Drives)
+	}
+}
+
+// A separate mount nested inside a games folder keeps its own drive entry
+// with its own totals; its bytes are not lost with the parent's.
+func TestDiskUsageNestedMountKeepsItsDrive(t *testing.T) {
+	t.Parallel()
+	drive, home := evalTemp(t), evalTemp(t)
+	nested := filepath.Join(drive, "Games", "big")
+	dir := filepath.Join(nested, "Title")
+	writeFileOf(t, dir, 3<<20)
+	plain := filepath.Join(drive, "Games", "Small")
+	writeFileOf(t, plain, 1<<20)
+	mk := func(id, d string) types.Game {
+		return types.Game{ID: id, Title: id, Source: "custom", Store: types.StoreCustom, InstallDir: d, Executable: filepath.Join(d, "run.sh"), IsInstalled: true, Native: true}
+	}
+	var walks walkLog
+	usage := buildDiskUsage([]types.Game{mk("big", dir), mk("small", plain)}, []string{filepath.Join(drive, "Games")}, home, filepath.Join(home, "prefixes"),
+		[]diskMount{{point: drive}, {point: nested}}, func(string) (uint64, uint64, error) { return 10 << 30, 5 << 30, nil }, walks.measure)
+	if len(usage.Drives) != 2 {
+		t.Fatalf("drives = %+v, want the nested mount kept", usage.Drives)
+	}
+	if got := driveByID(t, usage, nested); got.GamesBytes != 3<<20 {
+		t.Fatalf("nested drive games = %d, want %d", got.GamesBytes, 3<<20)
+	}
+	if got := driveByID(t, usage, drive); got.GamesBytes != 1<<20 {
+		t.Fatalf("parent drive games = %d, want %d", got.GamesBytes, 1<<20)
+	}
+}
