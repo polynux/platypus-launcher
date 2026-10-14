@@ -351,8 +351,11 @@ func (a *App) invalidateDiskUsage() {
 func (a *App) invalidateDiskGame(gameID string) {
 	a.diskUsage.mu.Lock()
 	defer a.diskUsage.mu.Unlock()
-	kept := a.diskUsage.snap.Games[:0]
-	for _, g := range a.diskUsage.snap.Games {
+	// A fresh slice: GetDiskUsage handed the old one to callers, so
+	// filtering in place would rewrite their snapshot too.
+	old := a.diskUsage.snap.Games
+	kept := make([]types.GameSize, 0, len(old))
+	for _, g := range old {
 		if g.GameID != gameID {
 			kept = append(kept, g)
 		}

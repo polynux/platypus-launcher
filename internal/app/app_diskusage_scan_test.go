@@ -393,3 +393,17 @@ func TestOpenGameFolderWithoutFolderFailsCoded(t *testing.T) {
 		t.Fatalf("err = %v, want storage.openFailed", err)
 	}
 }
+
+// A snapshot handed out earlier is untouched by an invalidation: callers
+// keep what they were served while the cache builds a fresh list.
+func TestDiskUsageInvalidationKeepsServedSnapshots(t *testing.T) {
+	t.Parallel()
+	e := scanEnv(t, types.Game{ID: "x", Title: "X", Source: "custom", Store: types.StoreCustom, IsInstalled: true, Native: true})
+	served := e.a.GetDiskUsage()
+	waitDiskIdle(t, e.a)
+	served = e.a.GetDiskUsage()
+	e.a.jobFinished(types.Job{Kind: jobs.KindMove, Source: "custom", GameID: "x"})
+	if len(served.Games) != 1 || served.Games[0].GameID != "x" {
+		t.Fatalf("served snapshot = %+v, want it untouched", served.Games)
+	}
+}
