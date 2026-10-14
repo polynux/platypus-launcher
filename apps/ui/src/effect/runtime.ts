@@ -352,6 +352,8 @@ export const LauncherApi = {
   // every size. Both return immediately; a finished pass arrives as an event.
   getDiskUsage: () => call<DiskUsage>('GetDiskUsage', () => App.GetDiskUsage()),
   refreshDiskUsage: () => call<DiskUsage>('RefreshDiskUsage', () => App.RefreshDiskUsage()),
+  scanGameSize: (game: Game) => call<DiskUsage>('ScanGameSize', () => App.ScanGameSize(backend(game))),
+  openGameFolder: (game: Game) => call<void>('OpenGameFolder', () => App.OpenGameFolder(backend(game))),
 
   // Customization: the user's title and art for a game. Core only; a game's
   // plugin never sees it.

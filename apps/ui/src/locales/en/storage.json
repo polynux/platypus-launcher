@@ -16,5 +16,14 @@
     "fromStore": "from store",
     "scanned": "scanned",
     "prefix": "Wine prefix"
-  }
+  },
+  "action": {
+    "open": "Open the folder of {{title}}",
+    "move": "Move {{title}}",
+    "scan": "Scan {{title}} on disk",
+    "remove": "Remove {{title}} from the library",
+    "uninstall": "Uninstall {{title}}"
+  },
+  "uninstallAsk": "Uninstall {{title}}? Its files leave the disk.",
+  "uninstallGo": "Uninstall"
 }

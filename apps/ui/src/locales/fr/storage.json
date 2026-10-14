@@ -16,5 +16,14 @@
     "fromStore": "depuis la boutique",
     "scanned": "mesuré",
     "prefix": "Préfixe Wine"
-  }
+  },
+  "action": {
+    "open": "Ouvrir le dossier de {{title}}",
+    "move": "Déplacer {{title}}",
+    "scan": "Analyser {{title}} sur le disque",
+    "remove": "Retirer {{title}} de la bibliothèque",
+    "uninstall": "Désinstaller {{title}}"
+  },
+  "uninstallAsk": "Désinstaller « {{title}} » ? Ses fichiers quittent le disque.",
+  "uninstallGo": "Désinstaller"
 }

@@ -743,7 +743,14 @@ export function App() {
           />
         );
       case 'storage':
-        return <StorageView />;
+        return (
+          <StorageView
+            games={games}
+            onNotify={notify}
+            onRemove={removeGame}
+            onUninstall={(game) => runJob('uninstall', game)}
+          />
+        );
       case 'downloads':
         return (
           <DownloadsView

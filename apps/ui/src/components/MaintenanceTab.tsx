@@ -252,7 +252,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
 /** Fetches what removing a sideloaded game would delete as soon as the
  *  Maintenance tab opens, so the confirm panel shows the paths and sizes
  *  from its first frame instead of swapping them in. */
-function useRemoveCheck(game: Game, enabled: boolean, refresh: unknown) {
+export function useRemoveCheck(game: Game, enabled: boolean, refresh: unknown) {
   const [state, setState] = useState<{ id: string; check: RemoveCheck | null; error: string | null }>({ id: game.id, check: null, error: null });
   useEffect(() => {
     if (!enabled) return;
@@ -269,7 +269,7 @@ function useRemoveCheck(game: Game, enabled: boolean, refresh: unknown) {
   return state.id === game.id ? state : { check: null, error: null };
 }
 
-function RemoveFirstRow({ game, onConfirm }: { game: Game; onConfirm: () => void }) {
+export function RemoveFirstRow({ game, onConfirm }: { game: Game; onConfirm: () => void }) {
   const { t } = useTranslation(['gameSettings', 'common']);
   const stay = game.install_dir
     ? t('gameSettings:maintenance.stayWithDir', { dir: game.install_dir })
@@ -301,7 +301,7 @@ function reasonText(target: RemoveTarget): string {
  *  checkboxes, the backup line and the buttons stack below full width. The
  *  detail line reserves one line while measuring, and long paths truncate
  *  with a tooltip instead of pushing the layout. */
-function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
+export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
   game: Game;
   /** The removal check, fetched when the tab opened (useRemoveCheck), so
    *  paths and sizes are there before the panel shows. */

@@ -1,14 +1,21 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { Effect } from 'effect';
 import i18n from '../../lib/i18n';
 import { TooltipProvider } from '../ds/tooltip';
+import type { DiskUsage, Game } from '../../types';
 
 const mock = vi.hoisted(() => ({
   api: {
     getDiskUsage: vi.fn(),
     refreshDiskUsage: vi.fn(),
+    openGameFolder: vi.fn(),
+    scanGameSize: vi.fn(),
+    checkRemove: vi.fn(),
+    checkMove: vi.fn(),
+    pickMoveFolder: vi.fn(),
+    moveGame: vi.fn(),
   },
   subs: [] as ((d: unknown) => void)[],
 }));
@@ -24,8 +31,9 @@ import { StorageView } from '../StorageView';
 import { Sidebar } from '../Sidebar';
 
 const GB = 1e9;
+const noop = () => {};
 
-function usage(over: Record<string, unknown> = {}) {
+function usage(over: Partial<DiskUsage> = {}): DiskUsage {
   return {
     drives: [
       {
@@ -38,14 +46,14 @@ function usage(over: Record<string, unknown> = {}) {
         other_bytes: 30 * GB,
       },
     ],
-    games: [] as Record<string, unknown>[],
+    games: [],
     scanning: false,
     generated_at: 0,
     ...over,
   };
 }
 
-function game(over: Record<string, unknown> = {}) {
+function row(over: Partial<DiskUsage['games'][number]> = {}): DiskUsage['games'][number] {
   return {
     game_id: 'g',
     title: 'Alpha',
@@ -60,7 +68,19 @@ function game(over: Record<string, unknown> = {}) {
   };
 }
 
+const mk = (id: string, o: Partial<Game> = {}): Game =>
+  ({ id, source: 'custom', store: 'custom', store_app_id: id, title: id, cover_url: '', banner_url: '', hero_url: '', install_dir: `/mnt/a/Games/${id}`, executable: `/mnt/a/Games/${id}/run.sh`, is_installed: true, settings: {}, features: [], ...o }) as Game;
+
+function viewProps(over: Partial<Parameters<typeof StorageView>[0]> = {}) {
+  return { games: [], onNotify: noop, onRemove: noop, onUninstall: noop, ...over };
+}
+
 const wrap = (ui: React.ReactElement) => render(<TooltipProvider>{ui}</TooltipProvider>);
+const view = (over: Partial<Parameters<typeof StorageView>[0]> = {}) => wrap(<StorageView {...viewProps(over)} />);
+const emit = (d: DiskUsage) =>
+  act(() => {
+    mock.subs.forEach((cb) => cb(d));
+  });
 
 beforeEach(() => {
   mock.subs.length = 0;
@@ -70,7 +90,7 @@ beforeEach(() => {
 describe('StorageView', () => {
   it('asks for the snapshot and shows the drive bar proportions with figures', async () => {
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage()));
-    const { container } = wrap(<StorageView />);
+    const { container } = view();
     const bar = await screen.findByRole('progressbar');
     expect(mock.api.getDiskUsage).toHaveBeenCalled();
     expect(bar).toHaveAttribute('aria-valuenow', '30');
@@ -89,14 +109,14 @@ describe('StorageView', () => {
       Effect.succeed(
         usage({
           games: [
-            game({ game_id: 's', title: 'Small', install_dir: '/mnt/a/Games/Small', size_bytes: 2 * GB, prefix_bytes: 0 }),
-            game({ game_id: 'b', title: 'Big', install_dir: '/mnt/a/Games/Big', size_bytes: 9 * GB, prefix_bytes: 2 * GB, from_plugin: true, measured: false }),
-            game({ game_id: 'm', title: 'Mid', install_dir: '/mnt/a/Games/Mid', size_bytes: 5 * GB, prefix_bytes: 1 * GB }),
+            row({ game_id: 's', title: 'Small', install_dir: '/mnt/a/Games/Small', size_bytes: 2 * GB, prefix_bytes: 0 }),
+            row({ game_id: 'b', title: 'Big', install_dir: '/mnt/a/Games/Big', size_bytes: 9 * GB, prefix_bytes: 2 * GB, from_plugin: true, measured: false }),
+            row({ game_id: 'm', title: 'Mid', install_dir: '/mnt/a/Games/Mid', size_bytes: 5 * GB, prefix_bytes: 1 * GB }),
           ],
         }),
       ),
     );
-    wrap(<StorageView />);
+    view();
     const rows = await screen.findAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
       expect.stringContaining('Big'),
@@ -111,7 +131,7 @@ describe('StorageView', () => {
 
   it('pulses placeholders and disables the rescan while measuring', async () => {
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ scanning: true })));
-    const { container } = wrap(<StorageView />);
+    const { container } = view();
     expect(await screen.findByRole('status')).toBeInTheDocument();
     expect(container.querySelector('.animate-pulse')).toBeTruthy();
     const btn = screen.getByRole('button', { name: /Measuring/ });
@@ -124,7 +144,7 @@ describe('StorageView', () => {
   it('rescans all sizes on the header button', async () => {
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage()));
     mock.api.refreshDiskUsage.mockReturnValue(Effect.succeed(usage({ scanning: true })));
-    wrap(<StorageView />);
+    view();
     fireEvent.click(await screen.findByRole('button', { name: /Rescan all sizes/ }));
     expect(mock.api.refreshDiskUsage).toHaveBeenCalled();
     expect(await screen.findByRole('button', { name: /Measuring/ })).toBeDisabled();
@@ -132,14 +152,14 @@ describe('StorageView', () => {
 
   it('shows the empty state when there is nothing to measure', async () => {
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ drives: [] })));
-    wrap(<StorageView />);
+    view();
     expect(await screen.findByText('no games to measure')).toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).toBeNull();
   });
 
   it('re-renders in French without a reload', async () => {
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage()));
-    wrap(<StorageView />);
+    view();
     await screen.findByRole('progressbar');
     expect(screen.getByText('Rescan all sizes')).toBeInTheDocument();
 
@@ -157,12 +177,127 @@ describe('StorageView', () => {
 
   it('applies a finished pass pushed by the core', async () => {
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ scanning: true })));
-    wrap(<StorageView />);
+    view();
     await screen.findByRole('status');
-    act(() => {
-      mock.subs.forEach((cb) => cb(usage()));
-    });
+    emit(usage());
     expect(await screen.findByRole('progressbar')).toBeInTheDocument();
+  });
+
+  it('keeps the newer snapshot when the first answer lands late', async () => {
+    let answer!: (v: unknown) => void;
+    mock.api.getDiskUsage.mockReturnValue(Effect.promise(() => new Promise((res) => (answer = res))));
+    view();
+    // An event arrives while the first call is still out…
+    emit(usage({ generated_at: 200, games: [row({ game_id: 'new', title: 'Fresh' })] }));
+    expect(await screen.findByText('Fresh')).toBeInTheDocument();
+    // …and its older answer must not overwrite it.
+    await act(async () => {
+      answer(usage({ generated_at: 100, games: [row({ game_id: 'old', title: 'Stale' })] }));
+    });
+    expect(screen.getByText('Fresh')).toBeInTheDocument();
+    expect(screen.queryByText('Stale')).toBeNull();
+  });
+
+  it('opens the folder of a game', async () => {
+    const alpha = mk('g', { title: 'Alpha' });
+    mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ games: [row({ game_id: 'g', title: 'Alpha' })] })));
+    view({ games: [alpha] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the folder of Alpha' }));
+    await waitFor(() => expect(mock.api.openGameFolder).toHaveBeenCalledWith(alpha));
+  });
+
+  it('scans one game and spins until the next snapshot', async () => {
+    const alpha = mk('g', { title: 'Alpha' });
+    mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ games: [row({ game_id: 'g', title: 'Alpha' })] })));
+    mock.api.scanGameSize.mockReturnValue(Effect.succeed(usage({ scanning: true })));
+    view({ games: [alpha] });
+    const btn = await screen.findByRole('button', { name: 'Scan Alpha on disk' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(mock.api.scanGameSize).toHaveBeenCalledWith(alpha));
+    expect(btn.querySelector('.animate-spin')).toBeTruthy();
+    emit(usage({ generated_at: 5, games: [row({ game_id: 'g', title: 'Alpha' })] }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scan Alpha on disk' }).querySelector('.animate-spin')).toBeNull());
+  });
+
+  it('offers Scan, Move and Trash only where they apply', async () => {
+    const lib = [
+      mk('g', { title: 'Alpha' }), // sideloaded
+      mk('p', { title: 'Beta', source: 'echo', store: 'gog', is_installed: true }), // store game
+      mk('u', { title: 'Gamma', source: 'echo', store: 'gog', is_installed: false }), // not installed
+    ];
+    mock.api.getDiskUsage.mockReturnValue(
+      Effect.succeed(
+        usage({
+          games: [
+            row({ game_id: 'g', title: 'Alpha' }),
+            row({ game_id: 'p', title: 'Beta', source: 'echo', store: 'gog', install_dir: '/mnt/a/Games/Beta' }),
+            row({ game_id: 'u', title: 'Gamma', source: 'echo', store: 'gog', install_dir: '/mnt/a/Games/Gamma' }),
+          ],
+        }),
+      ),
+    );
+    view({ games: lib });
+    await screen.findByRole('list');
+    // Scan and Move need an installed game; Move also needs the store plugin
+    // core's planMove goes through.
+    expect(screen.getByRole('button', { name: 'Scan Alpha on disk' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Scan Beta on disk' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Scan Gamma on disk' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Move Alpha' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Move Beta' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move Gamma' })).toBeNull();
+    // Trash: removal for the sideloaded game, uninstall for the installed
+    // store game, nothing for the uninstalled one.
+    expect(screen.getByRole('button', { name: 'Remove Alpha from the library' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Uninstall Beta' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Uninstall Gamma' })).toBeNull();
+  });
+
+  it('removes a sideloaded game through the #43 panel', async () => {
+    const alpha = mk('g', { title: 'Alpha' });
+    const onRemove = vi.fn();
+    mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ games: [row({ game_id: 'g', title: 'Alpha' })] })));
+    mock.api.checkRemove.mockReturnValue(
+      Effect.succeed({ targets: [], saves: { off: true } } as never),
+    );
+    view({ games: [alpha], onRemove });
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Alpha from the library' }));
+    // The first row, with the check fetched as the panel opens.
+    expect(await screen.findByText('Remove from library')).toBeInTheDocument();
+    await waitFor(() => expect(mock.api.checkRemove).toHaveBeenCalledWith('g', { delete_prefix: true, delete_files: true, allow_no_saves: false }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove from library' })[0]);
+    expect(await screen.findByTestId('remove-confirm-panel')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove from library' }).at(-1)!);
+    await waitFor(() =>
+      expect(onRemove).toHaveBeenCalledWith(alpha, { delete_prefix: false, delete_files: false, allow_no_saves: false }),
+    );
+  });
+
+  it('uninstalls an installed store game after an inline confirm', async () => {
+    const beta = mk('p', { title: 'Beta', source: 'echo', store: 'gog' });
+    const onUninstall = vi.fn();
+    const onCancel = vi.fn();
+    mock.api.getDiskUsage.mockReturnValue(
+      Effect.succeed(usage({ games: [row({ game_id: 'p', title: 'Beta', source: 'echo', store: 'gog' })] })),
+    );
+    view({ games: [beta], onUninstall, onNotify: onCancel });
+    fireEvent.click(await screen.findByRole('button', { name: 'Uninstall Beta' }));
+    expect(await screen.findByText('Uninstall Beta? Its files leave the disk.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onUninstall).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall Beta' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Uninstall$/ }));
+    await waitFor(() => expect(onUninstall).toHaveBeenCalledWith(beta));
+  });
+
+  it('moves a store game through the Move dialog', async () => {
+    const beta = mk('p', { title: 'Beta', source: 'echo', store: 'gog' });
+    mock.api.getDiskUsage.mockReturnValue(
+      Effect.succeed(usage({ games: [row({ game_id: 'p', title: 'Beta', source: 'echo', store: 'gog' })] })),
+    );
+    view({ games: [beta] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Move Beta' }));
+    expect(await screen.findByText('Move Beta')).toBeInTheDocument();
   });
 });
 
