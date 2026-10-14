@@ -251,10 +251,13 @@ const diskUsageTTL = 5 * time.Minute
 // waiting for a pass. The zero value is ready to use. Forced scans and
 // measured figures stay in memory only: a restart re-trusts the stores.
 type diskUsageCache struct {
-	mu         sync.Mutex
-	now        func() time.Time // tests replace it
-	snap       types.DiskUsage
-	at         time.Time
+	mu   sync.Mutex
+	now  func() time.Time // tests replace it
+	snap types.DiskUsage
+	at   time.Time
+	// seen says a snapshot was stored this session (the view was opened):
+	// only then does invalidation start a pass, so idle sessions never walk.
+	seen       bool
 	scanning   bool
 	forceAll   bool
 	forceGames map[string]bool
@@ -330,14 +333,41 @@ func (a *App) startDiskScanLocked() {
 	go a.runDiskScan()
 }
 
-// invalidateDiskUsage drops the snapshot and starts a fresh pass, so the
-// view updates after anything that moves bytes (a finished job) or folders
-// (the game-folder settings).
+// invalidateDiskUsage drops every reused figure: the game-folder settings
+// call it, as no figure can be trusted once the folders changed. The next
+// pass re-sizes all games with measureGame.
 func (a *App) invalidateDiskUsage() {
 	a.diskUsage.mu.Lock()
 	defer a.diskUsage.mu.Unlock()
+	a.diskUsage.snap.Games = nil
+	a.staleDiskUsageLocked()
+}
+
+// invalidateDiskGame drops one game's reused figures: a finished job calls
+// it for its game, as only that game's bytes changed. The next pass
+// re-sizes it with measureGame (the store's figure, else a walk), which
+// also drops its forced "Measured" override.
+func (a *App) invalidateDiskGame(gameID string) {
+	a.diskUsage.mu.Lock()
+	defer a.diskUsage.mu.Unlock()
+	kept := a.diskUsage.snap.Games[:0]
+	for _, g := range a.diskUsage.snap.Games {
+		if g.GameID != gameID {
+			kept = append(kept, g)
+		}
+	}
+	a.diskUsage.snap.Games = kept
+	a.staleDiskUsageLocked()
+}
+
+// staleDiskUsageLocked marks the snapshot stale and starts a pass, but only
+// when the view was opened this session: idle sessions never walk, and the
+// next GetDiskUsage starts their pass. Callers hold a.diskUsage.mu.
+func (a *App) staleDiskUsageLocked() {
 	a.diskUsage.at = time.Time{}
-	a.startDiskScanLocked()
+	if a.diskUsage.seen {
+		a.startDiskScanLocked()
+	}
 }
 
 // runDiskScan measures until no forced scan is left. A pass that finds new
@@ -420,6 +450,7 @@ func (a *App) scanDiskWith(games []types.Game, mounts []diskMount, spaceOf func(
 	a.diskUsage.mu.Lock()
 	a.diskUsage.snap = snap
 	a.diskUsage.at = a.diskUsage.clock()
+	a.diskUsage.seen = true
 	a.diskUsage.mu.Unlock()
 	if a.host != nil {
 		a.host.Emit("diskusage", snap)

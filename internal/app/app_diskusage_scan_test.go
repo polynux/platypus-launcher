@@ -318,3 +318,67 @@ func TestDiskUsageEmitsWhenScanFinishes(t *testing.T) {
 		t.Fatalf("events = %v, want one diskusage", h.events)
 	}
 }
+
+// A finished job re-sizes its game only: the game's new bytes are measured
+// fresh while every other game keeps its figures.
+func TestDiskUsageJobRefreshesItsGameOnly(t *testing.T) {
+	t.Parallel()
+	drive := evalTemp(t)
+	xDir := filepath.Join(drive, "Games", "X")
+	writeFileOf(t, xDir, 1<<20)
+	yDir := filepath.Join(drive, "Games", "Y")
+	writeFileOf(t, yDir, 2<<20)
+	mk := func(id, dir string, size int64) types.Game {
+		return types.Game{ID: id, Title: id, Source: "custom", Store: types.StoreCustom, InstallDir: dir, Executable: filepath.Join(dir, "run.sh"), IsInstalled: true, SizeBytes: size, Native: true}
+	}
+	games := []types.Game{mk("x", xDir, 0), mk("y", yDir, 5<<20)}
+	e := scanEnv(t, games...)
+	e.a.GetDiskUsage()
+	snap := waitDiskIdle(t, e.a)
+	if len(snap.Games) != 2 {
+		t.Fatalf("games = %+v, want 2", snap.Games)
+	}
+	// Both games change on disk, but only x's job finished: x is re-sized,
+	// y keeps its figures.
+	writeFileOf(t, filepath.Join(xDir, "more"), 1<<20)
+	writeFileOf(t, filepath.Join(yDir, "more"), 1<<20)
+	e.a.jobFinished(types.Job{Kind: jobs.KindMove, Source: "custom", GameID: "x"})
+	snap = waitDiskIdle(t, e.a)
+	sized := map[string]types.GameSize{}
+	for _, g := range snap.Games {
+		sized[g.GameID] = g
+	}
+	if !sized["x"].Measured || sized["x"].SizeBytes != 2<<20 {
+		t.Fatalf("x = %+v, want the re-measured size", sized["x"])
+	}
+	if !sized["y"].FromPlugin || sized["y"].SizeBytes != 5<<20 {
+		t.Fatalf("y = %+v, want the kept store figure", sized["y"])
+	}
+}
+
+// Nothing walks before the view is opened: a finished job with no snapshot
+// this session only marks it stale, and the next GetDiskUsage starts the pass.
+func TestDiskUsageNoScanBeforeFirstView(t *testing.T) {
+	t.Parallel()
+	e := scanEnv(t)
+	var calls atomic.Int64
+	e.a.diskGames = func() ([]types.Game, error) { calls.Add(1); return nil, nil }
+	e.a.jobFinished(types.Job{Kind: jobs.KindMove, Source: "custom", GameID: "g"})
+	time.Sleep(200 * time.Millisecond)
+	if calls.Load() != 0 {
+		t.Fatalf("library listed %d times with the view never opened", calls.Load())
+	}
+	e.a.diskUsage.mu.Lock()
+	scanning := e.a.diskUsage.scanning
+	e.a.diskUsage.mu.Unlock()
+	if scanning {
+		t.Fatalf("a pass runs with the view never opened")
+	}
+	if got := e.a.GetDiskUsage(); !got.Scanning {
+		t.Fatalf("first view didn't start a pass")
+	}
+	waitDiskIdle(t, e.a)
+	if calls.Load() != 1 {
+		t.Fatalf("library listed %d times, want 1", calls.Load())
+	}
+}
