@@ -177,6 +177,15 @@
     "runMode": {
       "invalid": "Le mode d'exécution doit être auto, native ou wine, pas « {{value}} »."
     },
+    "preset": {
+      "nameMissing": "Le préréglage a besoin d'un nom.",
+      "badVerb": "Le verbe {{verb}} du préréglage n'est pas un verbe.",
+      "badEnvKey": "La clé d'environnement {{key}} du préréglage n'est pas un nom de variable.",
+      "badOverride": "Le remplacement DLL {{dll}} : {{mode}} du préréglage n'est pas un remplacement DLL.",
+      "badWindowsVersion": "La version de Windows doit être win7, win8, win81, win10 ou win11, pas « {{value}} ».",
+      "builtin": "Le préréglage intégré {{id}} est en lecture seule.",
+      "notFound": "Préréglage inconnu : {{id}}."
+    },
     "unavailable": "Les réglages ne sont pas prêts."
   },
   "sideload": {

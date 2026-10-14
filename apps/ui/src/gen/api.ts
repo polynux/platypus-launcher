@@ -12,6 +12,7 @@ export interface CoreApi {
   AddGameFolder(path: string): Promise<types.GameFolder[]>;
   AllowGameFolder(pluginID: string, path: string): Promise<void>;
   ApplyOnlineArt(gameID: string, source: string, id: string): Promise<types.Customization>;
+  ApplyPrefixPreset(gameID: string, presetID: string): Promise<types.PrefixApplyResult>;
   ApprovePlugin(id: string): Promise<void>;
   CancelCloudSync(gameID: string): Promise<boolean>;
   CancelJob(id: string): Promise<void>;
@@ -30,6 +31,7 @@ export interface CoreApi {
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
   CreateSaveBackup(game: types.Game): Promise<types.Job>;
+  DeletePrefixPreset(id: string): Promise<void>;
   DeleteSaveBackup(gameID: string, backupID: string): Promise<void>;
   DetectGameExecutable(path: string): Promise<types.DetectResult>;
   DiscardJob(id: string): Promise<void>;
@@ -74,6 +76,7 @@ export interface CoreApi {
   LaunchGameViaClient(game: types.Game): Promise<string>;
   LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
   ListJobs(): Promise<types.Job[]>;
+  ListPrefixPresets(): Promise<types.PrefixPreset[]>;
   ListSaveBackups(gameID: string): Promise<types.SaveBackup[]>;
   ListSessions(): Promise<types.SessionEvent[]>;
   ListStorePlugins(): Promise<types.StorePlugin[]>;
@@ -119,6 +122,7 @@ export interface CoreApi {
   SaveGameSettings(gameID: string, gameSettings: Record<string, unknown>): Promise<void>;
   SaveGameSettingsFields(game: types.Game, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
   SavePluginSettings(source: string, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
+  SavePrefixPreset(p: types.PrefixPreset): Promise<types.PrefixPreset>;
   SearchArtOnline(title: string): Promise<types.ArtCandidate[]>;
   SetArtworkOnline(on: boolean): Promise<types.LauncherSettings>;
   SetBackupSettings(folder: string, keep: number, mode: string, afterSession: boolean): Promise<types.BackupSettings>;
@@ -165,6 +169,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'AddGameFolder',
   'AllowGameFolder',
   'ApplyOnlineArt',
+  'ApplyPrefixPreset',
   'ApprovePlugin',
   'CancelCloudSync',
   'CancelJob',
@@ -183,6 +188,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ChoosePluginInstallFolder',
   'ClearFinishedJobs',
   'CreateSaveBackup',
+  'DeletePrefixPreset',
   'DeleteSaveBackup',
   'DetectGameExecutable',
   'DiscardJob',
@@ -227,6 +233,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGameViaClient',
   'LinkGameInfo',
   'ListJobs',
+  'ListPrefixPresets',
   'ListSaveBackups',
   'ListSessions',
   'ListStorePlugins',
@@ -272,6 +279,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SaveGameSettings',
   'SaveGameSettingsFields',
   'SavePluginSettings',
+  'SavePrefixPreset',
   'SearchArtOnline',
   'SetArtworkOnline',
   'SetBackupSettings',

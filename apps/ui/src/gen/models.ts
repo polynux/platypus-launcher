@@ -531,9 +531,28 @@ export namespace types {
     hint: string;
   }
 
+  export interface PrefixApplyResult {
+    env: Record<string, string>;
+    overrides: string;
+    skipped: string[];
+    verbs: string[];
+    windows_version: string;
+  }
+
   export interface PrefixGame {
     id: string;
     title: string;
+  }
+
+  export interface PrefixPreset {
+    id: string;
+    name: string;
+    builtin: boolean;
+    dll_overrides?: Record<string, string>;
+    winetricks?: string[];
+    env?: Record<string, string>;
+    windows_version?: string;
+    launch_args?: string;
   }
 
   export interface PrefixShare {
