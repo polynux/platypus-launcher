@@ -71,6 +71,13 @@ type LibraryGame struct {
 	// (protocol 1.15): the library's "last played" for stores whose client
 	// launches games outside Platypus. 0 means unknown.
 	LastPlayed int64 `json:"lastPlayed,omitempty"`
+	// Status is the store's suggested status for the game (protocol 1.16,
+	// issue #51): "backlog", "playing", "finished" or "abandoned". A
+	// suggestion only: the user's own value always wins. Absent means none.
+	Status string `json:"status,omitempty"`
+	// UserNotes is the store's suggested notes for the game: plain text, at
+	// most 8192 bytes (protocol 1.16, issue #51). A suggestion only.
+	UserNotes string `json:"userNotes,omitempty"`
 	// Features narrows the capabilities the plugin offers for this game
 	// (names from the registry). Absent (nil) means all of them; an empty
 	// list means none. Names the plugin doesn't offer at runtime are ignored.
@@ -216,6 +223,11 @@ var LocaleVersion = Version{Major: 1, Minor: 14}
 // Platypus reads those fields only from a plugin that speaks it; an older
 // plugin keeps today's behaviour.
 var OfflineVersion = Version{Major: 1, Minor: 15}
+
+// StatusVersion is the first protocol revision with a store's per-game status
+// and notes hints (LibraryGame.status/userNotes, issue #51). A suggestion
+// only: the user's own value always wins, a hint fills an empty field only.
+var StatusVersion = Version{Major: 1, Minor: 16}
 
 // DRM is what the store says about a game's protection. Every field is a
 // pointer or optional: nil (or "") means the store said nothing, and Platypus

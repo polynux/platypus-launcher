@@ -290,6 +290,8 @@ export namespace types {
     cloud_sync?: boolean;
     features: string[];
     pinned?: types.VersionPin | null;
+    status?: string;
+    user_notes?: string;
     shared_by?: types.SharedBy | null;
     copies?: types.GameCopy[];
     preferred_copy?: string;
@@ -388,6 +390,11 @@ export namespace types {
     battleye_runtime: boolean;
     working_dir: string;
     run_mode?: string;
+  }
+
+  export interface GameStatusInfo {
+    status: string;
+    user_notes: string;
   }
 
   export interface GameTerm {

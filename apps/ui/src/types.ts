@@ -49,6 +49,13 @@ export type Game = Omit<gen.Game, 'settings' | 'features'> & {
   features?: string[] | null;
 };
 
+/** The user's own status for a game (issue #51): '' means none. */
+export type GameStatus = '' | 'backlog' | 'playing' | 'finished' | 'abandoned';
+
+/** A game's status and notes as the setters answer them (issue #51): the pair
+ *  the game page shows, so a save updates it without a rescan. */
+export type GameStatusInfo = { status: GameStatus; user_notes: string };
+
 /** The kinds of art a game can be customized with. */
 export type ArtKind = 'cover' | 'banner' | 'logo' | 'icon' | 'background';
 export type Customization = gen.Customization;

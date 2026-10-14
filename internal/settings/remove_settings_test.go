@@ -41,6 +41,12 @@ func TestRemoveCustomGameDropsSettings(t *testing.T) {
 	if err := s.SetCloudGameMode(g.ID, types.CloudOff); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetGameStatus(g.ID, types.GameStatusBacklog); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetGameNotes(g.ID, "cave behind the waterfall"); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.AcceptTerms(g.ID, []types.TermAcceptance{{ID: "eula", Version: "3", At: 1}}); err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +64,12 @@ func TestRemoveCustomGameDropsSettings(t *testing.T) {
 	}
 	if mode := s.CloudGameMode(g.ID); mode != "" {
 		t.Fatalf("cloud mode for removed game %s survived: %q", g.ID, mode)
+	}
+	if status := s.GameStatus(g.ID); status != "" {
+		t.Fatalf("status for removed game %s survived: %q", g.ID, status)
+	}
+	if notes := s.GameNotes(g.ID); notes != "" {
+		t.Fatalf("notes for removed game %s survived: %q", g.ID, notes)
 	}
 	if got := s.AcceptedTerms(g.ID); len(got) != 0 {
 		t.Fatalf("accepted terms for removed game %s survived: %v", g.ID, got)

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
-import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
+import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CopyPicker } from './CopyPicker';
@@ -36,6 +36,8 @@ import { useInstallSize, type InstallSize } from '../lib/installSize';
 import type { GameSettingsTab } from '../lib/gameSettingsTabs';
 import { ErrorNotice } from './ErrorNotice';
 import { Input } from '@/components/ds/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
+import { Textarea } from '@/components/ds/textarea';
 
 /** Wide art for the hero banner: the details' hero first, then the library
  *  entry's images. Kept per game id alongside the details cache. */
@@ -469,6 +471,8 @@ export function GamePage(p: GamePageProps) {
             {info && <CompatFacts compat={info} />}
           </Panel>
 
+          <StatusNotesSection game={game} onChanged={p.onCustomized} />
+
           {isPluginGame(game) && game.is_installed && plugin && (
             <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} sourceLogos={p.sourceLogos} />
           )}
@@ -825,6 +829,124 @@ function infoCandidateKey(c: ArtCandidate): string {
 function infoCandidateDetail(t: (key: string, vars?: Record<string, unknown>) => string, c: ArtCandidate): string {
   if ((c.source || 'steam') === 'steam') return t('game:source.steamApp', { id: c.app_id || c.id });
   return c.id;
+}
+
+/** The user's own status and plain-text notes for a game (issue #51): the
+ *  select saves at once, the notes autosave on a debounce and on blur, one
+ *  write at a time so a slow save can't overwrite a newer one. */
+function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () => void }) {
+  const { t } = useTranslation('game');
+  const [status, setStatus] = useState(game.status ?? '');
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [notes, setNotes] = useState(game.user_notes ?? '');
+  const [notesState, setNotesState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Every notes write runs through one promise chain, so writes are strictly
+  // ordered and a slow save can't overwrite a newer one. The game id is
+  // captured when a write is enqueued, so a save of the previous game never
+  // touches this game's state.
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  // The text waiting on the debounce, not yet enqueued: { id, text } for the
+  // game it was typed on. null when nothing is pending.
+  const pending = useRef<{ id: string; text: string } | null>(null);
+  // The last text enqueued for the game on screen: a blur with nothing
+  // changed enqueues nothing.
+  const lastText = useRef(game.user_notes ?? '');
+  const shownId = useRef(game.id);
+
+  const enqueueNotes = (id: string, text: string) => {
+    lastText.current = text;
+    setNotesState('saving');
+    chain.current = chain.current.then(() =>
+      Effect.runPromise(LauncherApi.setGameNotes(id, text)).then(
+        () => { if (shownId.current === id) setNotesState('saved'); },
+        () => { if (shownId.current === id) setNotesState('failed'); },
+      ),
+    );
+  };
+
+  useEffect(() => {
+    // A text typed inside the debounce is flushed for the old game before it
+    // is dropped, so navigating away never loses it.
+    if (pending.current) {
+      clearTimeout(timer.current);
+      enqueueNotes(pending.current.id, pending.current.text);
+      pending.current = null;
+    }
+    shownId.current = game.id;
+    lastText.current = game.user_notes ?? '';
+    setStatus(game.status ?? '');
+    setNotes(game.user_notes ?? '');
+    setStatusError(null);
+    // The label is about the game on screen: an in-flight save's "Saving…"
+    // belongs to the game we just left.
+    setNotesState('idle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+
+  const saveStatus = (next: GameStatus) => {
+    setStatusError(null);
+    const at = game.id;
+    Effect.runPromise(LauncherApi.setGameStatus(at, next)).then(
+      (info) => { if (shownId.current === at) setStatus(info.status); onChanged?.(); },
+      (e) => { if (shownId.current === at) setStatusError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+
+  // The debounce timer: it enqueues the pending text for its own game.
+  const requestNotesSave = (text: string, delay: number) => {
+    if (text === lastText.current) { // nothing changed since the last enqueued text
+      pending.current = null;
+      clearTimeout(timer.current);
+      return;
+    }
+    const id = game.id;
+    pending.current = { id, text };
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      pending.current = null;
+      enqueueNotes(id, text);
+    }, delay);
+  };
+
+  return (
+    <Panel className="bg-white/[0.05]" data-testid="status-notes">
+      <h2 className="mb-2 text-[15px] font-bold">{t('game:status.heading')}</h2>
+      <Select value={status || 'none'} onValueChange={(v) => saveStatus((v === 'none' ? '' : v) as GameStatus)}>
+        <SelectTrigger aria-label={t('game:status.aria')} className="w-full" data-testid="status-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(['none', 'backlog', 'playing', 'finished', 'abandoned'] as const).map((v) => (
+            <SelectItem key={v} value={v}>
+              {t(`game:status.${v}`)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {statusError && (
+        <p role="alert" className="mt-1.5 text-[12px] text-red-300/80">
+          {statusError}
+        </p>
+      )}
+      <MonoLabel className="mb-1.5 mt-4">{t('game:status.notesLabel')}</MonoLabel>
+      <Textarea
+        value={notes}
+        rows={4}
+        aria-label={t('game:status.notesLabel')}
+        placeholder={t('game:status.notesPlaceholder')}
+        data-testid="notes-input"
+        onChange={(e) => {
+          setNotes(e.target.value);
+          requestNotesSave(e.target.value, 500);
+        }}
+        onBlur={() => requestNotesSave(notes, 0)}
+      />
+      <MonoLabel className={cx('mt-1.5 text-right', notesState === 'failed' && 'text-red-300/80')}>
+        {notesState === 'saving' ? t('game:status.saving') : notesState === 'saved' ? t('game:status.saved') : notesState === 'failed' ? t('game:status.failed') : ''}
+      </MonoLabel>
+    </Panel>
+  );
 }
 
 /** The Unlink control next to a linked game's attribution. */

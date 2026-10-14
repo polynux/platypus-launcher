@@ -314,5 +314,19 @@
     "today": "aujourd'hui",
     "yesterday": "hier",
     "daysAgo": "il y a {{count}} j"
+  },
+  "status": {
+    "heading": "Statut et notes",
+    "aria": "Statut",
+    "none": "Aucun",
+    "backlog": "À jouer",
+    "playing": "En cours",
+    "finished": "Terminé",
+    "abandoned": "Abandonné",
+    "notesLabel": "Vos notes",
+    "notesPlaceholder": "Vos remarques sur ce jeu, conservées sur cette machine.",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "failed": "Échec"
   }
 }

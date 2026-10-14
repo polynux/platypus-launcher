@@ -28,6 +28,7 @@ import type {
   GameFixInfo,
   Compat,
   GameSettings,
+  GameStatusInfo,
   GameOptions,
   GameTerm,
   InstallChoices,
@@ -359,6 +360,13 @@ export const LauncherApi = {
   resetCustomization: (gameId: string) =>
     call<Customization>('ResetCustomization', async () => normalizeCustomization(await App.ResetCustomization(gameId))),
   pickImage: (title: string) => call<string>('PickImage', () => App.PickImage(title)),
+
+  // Per-game status and notes (issue #51): the setters answer the saved pair
+  // (status, user_notes), so the game page updates without a rescan.
+  setGameStatus: (gameId: string, status: string) =>
+    call<GameStatusInfo>('SetGameStatus', () => App.SetGameStatus(gameId, status)),
+  setGameNotes: (gameId: string, notes: string) =>
+    call<GameStatusInfo>('SetGameNotes', () => App.SetGameNotes(gameId, notes)),
 
   // Online artwork for sideloaded games (issues #36, art fallbacks): Steam's
   // public store search first, GOG and Lutris (IGDB) as keyless fallbacks

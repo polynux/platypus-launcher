@@ -189,9 +189,9 @@ type knobs struct {
 	SettingsDelayMs int  `json:"settingsDelayMs"`
 }
 
-// defaultProtocols is what echo speaks: 1.0 to 1.15, so it meets the highest
+// defaultProtocols is what echo speaks: 1.0 to 1.16, so it meets the highest
 // revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16"}
 
 var (
 	knobMu  sync.Mutex
@@ -819,6 +819,13 @@ func library() (any, error) {
 		}
 		if art := echoArtURL(id); art != "" {
 			e["coverUrl"] = art
+		}
+		// Status and notes hints (protocol 1.16, issue #51): only tiny
+		// suggests anything, and valid, so conformance exercises both
+		// fields; the rest suggest nothing.
+		if id == "tiny" {
+			e["status"] = "playing"
+			e["userNotes"] = "Echo's own suggestion for this game."
 		}
 		if g.lentBy != "" {
 			owner := effectiveOwnerLocked(id)

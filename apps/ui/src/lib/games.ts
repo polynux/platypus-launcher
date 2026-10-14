@@ -140,11 +140,13 @@ export function mergeCopies(prev: Game[], fresh: Game[]): Game[] {
 const CUSTOM_FIELDS = [
   'title', 'store_title', 'sort_title', 'cover_url', 'banner_url', 'hero_url', 'logo_url', 'icon_url', 'background_url',
   'release_year',
+  // The user's own status and notes (issue #51), merged like their art.
+  'status', 'user_notes',
 ] as const;
 
-/** Take only what the user's customization sets (their title and art) from a
- *  fresh library read, so editing it shows without a rescan. Returns `prev`
- *  itself when nothing changed. */
+/** Take only what the user's own settings set (their title, art, status and
+ *  notes) from a fresh library read, so editing them shows without a rescan.
+ *  Returns `prev` itself when nothing changed. */
 export function mergeCustomization(prev: Game[], fresh: Game[]): Game[] {
   const byId = new Map(fresh.map((x) => [x.id, x]));
   let changed = false;

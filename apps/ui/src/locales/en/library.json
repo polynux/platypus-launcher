@@ -130,5 +130,15 @@
     "runWine": "Wine / Proton",
     "submit": "Add game"
   },
-  "offline": "Offline — showing the last known library"
+  "offline": "Offline — showing the last known library",
+  "statusFilter": {
+    "label": "status",
+    "all": "all",
+    "none": "no status",
+    "backlog": "backlog",
+    "playing": "playing",
+    "finished": "finished",
+    "abandoned": "abandoned"
+  },
+  "statusFilterAria": "Filter by status"
 }
