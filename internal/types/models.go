@@ -639,3 +639,43 @@ type GameFolder struct {
 	Exists    bool   `json:"exists"`
 	FreeBytes int64  `json:"free_bytes"` // -1 when the disk can't be read
 }
+
+// DiskUsage is the snapshot behind the Storage view (issue #50): one entry
+// per drive holding game folders, and every installed game by size. Scanning
+// says a background pass is still measuring; GeneratedAt is unix seconds.
+type DiskUsage struct {
+	Drives      []DriveUsage `json:"drives"`
+	Games       []GameSize   `json:"games"`
+	Scanning    bool         `json:"scanning"`
+	GeneratedAt int64        `json:"generated_at"`
+}
+
+// DriveUsage is one drive's share: what Platypus games use (GamesBytes, from
+// the game files and prefixes measured separately), what else is on it
+// (OtherBytes, derived from the filesystem totals, never scanned) and what
+// is free.
+type DriveUsage struct {
+	ID         string   `json:"id"`
+	Mount      string   `json:"mount"`
+	Folders    []string `json:"folders"`
+	TotalBytes int64    `json:"total_bytes"` // -1 when the disk can't be read
+	FreeBytes  int64    `json:"free_bytes"`  // -1 when the disk can't be read
+	GamesBytes int64    `json:"games_bytes"`
+	OtherBytes int64    `json:"other_bytes"`
+}
+
+// GameSize is one installed game's disk share. FromPlugin means the figure
+// is what the store reported (no walk); Measured means Platypus walked the
+// disk, which outranks the store. PrefixBytes is the Wine prefix measured
+// separately (0 for native games).
+type GameSize struct {
+	GameID      string    `json:"game_id"`
+	Title       string    `json:"title"`
+	Source      string    `json:"source"`
+	Store       StoreType `json:"store"`
+	InstallDir  string    `json:"install_dir"`
+	SizeBytes   int64     `json:"size_bytes"`
+	PrefixBytes int64     `json:"prefix_bytes"`
+	FromPlugin  bool      `json:"from_plugin"`
+	Measured    bool      `json:"measured"`
+}

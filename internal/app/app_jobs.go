@@ -173,6 +173,7 @@ func (a *App) heldByJob(game types.Game) error {
 // the new one.
 func (a *App) jobFinished(j types.Job) {
 	a.invalidateLibrary(j.Source)
+	a.invalidateDiskGame(j.GameID) // the job moved its game's bytes: installs, updates, uninstalls, moves, removals
 	if j.Kind != jobs.KindInstall && j.Kind != jobs.KindUninstall {
 		return
 	}

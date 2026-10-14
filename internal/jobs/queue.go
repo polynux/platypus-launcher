@@ -1065,6 +1065,26 @@ func newID() string {
 // game's size. path may be a folder that doesn't exist yet.
 func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
 
+// SpaceStats is the total and user-available bytes of the filesystem
+// holding path, or its nearest existing parent: FreeSpace's sibling for the
+// disk usage view (issue #50).
+func SpaceStats(path string) (total, free uint64, err error) { return spaceStats(path) }
+
+func spaceStats(path string) (uint64, uint64, error) {
+	for {
+		var st syscall.Statfs_t
+		err := syscall.Statfs(path, &st)
+		if err == nil {
+			return st.Blocks * uint64(st.Bsize), st.Bavail * uint64(st.Bsize), nil
+		}
+		parent := filepath.Dir(path)
+		if !errors.Is(err, syscall.ENOENT) || parent == path {
+			return 0, 0, err
+		}
+		path = parent
+	}
+}
+
 // freeSpace returns the bytes available to the user on the filesystem that
 // holds path, or its nearest existing parent.
 

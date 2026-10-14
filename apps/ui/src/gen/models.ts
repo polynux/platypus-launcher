@@ -251,6 +251,23 @@ export namespace types {
     kind: string;
   }
 
+  export interface DiskUsage {
+    drives: types.DriveUsage[];
+    games: types.GameSize[];
+    scanning: boolean;
+    generated_at: number;
+  }
+
+  export interface DriveUsage {
+    id: string;
+    mount: string;
+    folders: string[];
+    total_bytes: number;
+    free_bytes: number;
+    games_bytes: number;
+    other_bytes: number;
+  }
+
   export interface FamilyMember {
     id: string;
     name: string;
@@ -390,6 +407,18 @@ export namespace types {
     battleye_runtime: boolean;
     working_dir: string;
     run_mode?: string;
+  }
+
+  export interface GameSize {
+    game_id: string;
+    title: string;
+    source: string;
+    store: types.StoreType;
+    install_dir: string;
+    size_bytes: number;
+    prefix_bytes: number;
+    from_plugin: boolean;
+    measured: boolean;
   }
 
   export interface GameStatusInfo {

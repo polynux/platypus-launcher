@@ -65,6 +65,7 @@ export type ArtCandidate = gen.ArtCandidate;
 export type InstallLocation = gen.InstallLocation;
 export type InstallFolderCheck = gen.InstallFolderCheck;
 export type GameFolder = gen.GameFolder;
+export type DiskUsage = gen.DiskUsage;
 
 export type SharedBy = gen.SharedBy;
 export type GameCopy = gen.GameCopy;
@@ -201,6 +202,7 @@ export type View =
   | { name: 'activity' }
   | { name: 'fixes' }
   | { name: 'runners' }
+  | { name: 'storage' }
   | { name: 'plugins' }
   | { name: 'downloads' }
   | { name: 'settings' }

@@ -124,6 +124,11 @@ type App struct {
 	playlog *playlog.Log
 	// sizes caches what the store says an install needs (app_installsize.go).
 	sizes sizeCache
+	// diskUsage caches the disk usage snapshot (app_diskusage.go, issue
+	// #50). diskGames lists the games a scan measures; nil means the
+	// library, and tests replace it so no plugin is needed.
+	diskUsage diskUsageCache
+	diskGames func() ([]types.Game, error)
 	// library caches one listing per source; a finished job, a plugin change
 	// or a manual rescan invalidates explicitly (app_library.go, issue #27).
 	// scanMu serializes concurrent scans so the second serves the first

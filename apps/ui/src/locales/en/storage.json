@@ -1,0 +1,29 @@
+{
+  "intro": "How much space your games take on each drive.",
+  "about": "Platypus measures the games it knows and never walks the rest of the disk: the bar shows what is yours, what is not, and what is free.",
+  "rescan": "Rescan all sizes",
+  "scanning": "Measuring…",
+  "drivesTitle": "drives",
+  "gamesTitle": "games by size",
+  "emptyTitle": "no games to measure",
+  "emptyBody": "Installed games appear here with their size, their location and their Wine prefix.",
+  "legend": {
+    "games": "Platypus games",
+    "other": "Other",
+    "free": "Free"
+  },
+  "size": {
+    "fromStore": "from store",
+    "scanned": "scanned",
+    "prefix": "Wine prefix"
+  },
+  "action": {
+    "open": "Open the folder of {{title}}",
+    "move": "Move {{title}}",
+    "scan": "Scan {{title}} on disk",
+    "remove": "Remove {{title}} from the library",
+    "uninstall": "Uninstall {{title}}"
+  },
+  "uninstallAsk": "Uninstall {{title}}? Its files leave the disk.",
+  "uninstallGo": "Uninstall"
+}

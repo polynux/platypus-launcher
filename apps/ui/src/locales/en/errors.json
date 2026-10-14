@@ -201,6 +201,10 @@
       "invalid": "A Steam AppID is a number."
     }
   },
+  "storage": {
+    "notInstalled": "{{title}} is not installed.",
+    "openFailed": "Couldn't open the folder of {{title}}."
+  },
   "terms": {
     "acceptFirst": "Accept the terms of {{title}} first: {{terms}}.",
     "changed": "The terms of {{title}} changed; look at them again.",

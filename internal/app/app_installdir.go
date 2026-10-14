@@ -227,6 +227,7 @@ func (a *App) MakeDefaultGameFolder(path string) ([]types.GameFolder, error) {
 	if _, err := a.settings.SetGamesFolder(clean); err != nil {
 		return a.gameFolderList(), err
 	}
+	a.invalidateDiskUsage()
 	return a.gameFolderList(), nil
 }
 
@@ -240,6 +241,7 @@ func (a *App) AddGameFolder(path string) ([]types.GameFolder, error) {
 	if _, err := a.settings.AddGameFolder(clean); err != nil {
 		return a.gameFolderList(), err
 	}
+	a.invalidateDiskUsage()
 	return a.gameFolderList(), nil
 }
 
@@ -250,6 +252,7 @@ func (a *App) RemoveGameFolder(path string) ([]types.GameFolder, error) {
 	if _, err := a.settings.RemoveGameFolder(path); err != nil {
 		return a.gameFolderList(), err
 	}
+	a.invalidateDiskUsage()
 	return a.gameFolderList(), nil
 }
 

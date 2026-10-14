@@ -6,6 +6,7 @@
   "fixes": "Fixes",
   "runners": "Runners",
   "plugins": "Plugins",
+  "storage": "Storage",
   "settings": "Settings",
   "tools": "Tools",
   "sources": "Sources",
@@ -29,6 +30,7 @@
     "fixes": "Fixes",
     "runners": "Runners",
     "plugins": "Plugins",
+    "storage": "Storage",
     "settings": "Settings"
   },
   "backendUnreachable": "backend unreachable",
