@@ -254,6 +254,24 @@
     "sharedWith": "Partagé avec : {{games}}",
     "sharedWarning": "Un préfixe partagé cassé casse tous les jeux qui l'utilisent."
   },
+  "prefixPresets": {
+    "picker": "Appliquer un préréglage…",
+    "none": "Choisir un préréglage…",
+    "builtinGroup": "intégrés",
+    "userGroup": "mes préréglages",
+    "previewLabel": "$ aperçu du préréglage",
+    "overrides": "WINEDLLOVERRIDES={{value}}",
+    "skipped": "garde les vôtres : {{keys}}",
+    "storedHeading": "Enregistré pour plus tard, pas encore exécuté",
+    "storedVerbs": "winetricks : {{verbs}}",
+    "storedVersion": "version de Windows : {{version}}",
+    "apply": "Appliquer le préréglage",
+    "alreadyApplied": "déjà appliqué",
+    "saveName": "Nom du préréglage",
+    "saveNamePlaceholder": "Mon préréglage",
+    "save": "Enregistrer l'état actuel comme préréglage",
+    "delete": "Supprimer le préréglage {{name}}"
+  },
   "maintenance": {
     "busy": "{{title}} est occupé ; ses fichiers ne peuvent pas être changés avant la fin.",
     "removeTitle": "Retirer de la bibliothèque",

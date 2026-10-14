@@ -11,6 +11,7 @@ vi.mock('../../effect/runtime', () => ({
     getInstallSize: () => Effect.succeed(0),
     getLauncherSettings: () => Effect.succeed({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' } as never),
     prefixUsage: () => Effect.succeed([] as never),
+    listPrefixPresets: () => Effect.succeed([] as never),
     previewCommand: () => Effect.succeed('wine game.exe'),
   },
   onJobs: () => () => {},

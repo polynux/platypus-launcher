@@ -157,6 +157,9 @@ export type RemoveCheck = gen.RemoveCheck;
 export type RemoveTarget = gen.RemoveTarget;
 /** One Wine prefix and the games using it (issue #52), for the prefix picker. */
 export type PrefixShare = gen.PrefixShare;
+/** A named Wine prefix template (issue #52) and what applying it did. */
+export type PrefixPreset = gen.PrefixPreset;
+export type PrefixApplyResult = gen.PrefixApplyResult;
 /** What a backup-before-delete step did (issue #42). */
 export type SaveGate = gen.SaveGate;
 /** Whether after-session automatic backups run for a game and why. */
