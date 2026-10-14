@@ -61,6 +61,12 @@ type file struct {
 	// Pins hold a game at a version (the `versions` capability), keyed by
 	// Platypus's game id. See pins.go.
 	Pins map[string]types.VersionPin `json:"pins,omitempty"`
+	// GameStatuses are the statuses the user gave games (issue #51), keyed
+	// by Platypus's game id. See gamestatus.go.
+	GameStatuses map[string]string `json:"game_statuses,omitempty"`
+	// GameNotes are the user's own notes on games, plain text, keyed by
+	// Platypus's game id. See gamestatus.go.
+	GameNotes map[string]string `json:"game_notes,omitempty"`
 	// InstallOptions are each game's last install-option choices (the
 	// `install-options` capability), keyed by Platypus's game id. See options.go.
 	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`
@@ -416,8 +422,8 @@ func (s *Store) UpdateCustomGameExecutable(id, executable string) (CustomGame, e
 
 // RemoveCustomGame forgets a hand-added game; its files stay on disk. Its
 // per-game rows go with it (settings, compat AppID, info source, version
-// pin, install options, cloud mode and accepted terms), so no orphaned
-// entries accumulate in settings.json.
+// pin, install options, cloud mode, accepted terms, status and notes), so no
+// orphaned entries accumulate in settings.json.
 func (s *Store) RemoveCustomGame(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -431,6 +437,8 @@ func (s *Store) RemoveCustomGame(id string) error {
 			prevOptions, hadOptions := s.data.InstallOptions[id]
 			prevCloud, hadCloud := s.data.CloudGames[id]
 			prevTerms, hadTerms := s.data.Terms[id]
+			prevStatus, hadStatus := s.data.GameStatuses[id]
+			prevNotes, hadNotes := s.data.GameNotes[id]
 			s.data.CustomGames = append(s.data.CustomGames[:i], s.data.CustomGames[i+1:]...)
 			delete(s.data.Games, id)
 			delete(s.data.CompatAppIDs, id)
@@ -439,6 +447,8 @@ func (s *Store) RemoveCustomGame(id string) error {
 			delete(s.data.InstallOptions, id)
 			delete(s.data.CloudGames, id)
 			delete(s.data.Terms, id)
+			delete(s.data.GameStatuses, id)
+			delete(s.data.GameNotes, id)
 			if err := s.save(); err != nil {
 				s.data.CustomGames = prev
 				if hadSettings {
@@ -482,6 +492,18 @@ func (s *Store) RemoveCustomGame(id string) error {
 						s.data.Terms = map[string][]types.TermAcceptance{}
 					}
 					s.data.Terms[id] = prevTerms
+				}
+				if hadStatus {
+					if s.data.GameStatuses == nil {
+						s.data.GameStatuses = map[string]string{}
+					}
+					s.data.GameStatuses[id] = prevStatus
+				}
+				if hadNotes {
+					if s.data.GameNotes == nil {
+						s.data.GameNotes = map[string]string{}
+					}
+					s.data.GameNotes[id] = prevNotes
 				}
 				return err
 			}

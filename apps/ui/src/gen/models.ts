@@ -290,6 +290,8 @@ export namespace types {
     cloud_sync?: boolean;
     features: string[];
     pinned?: types.VersionPin | null;
+    status?: string;
+    user_notes?: string;
     shared_by?: types.SharedBy | null;
     copies?: types.GameCopy[];
     preferred_copy?: string;

@@ -127,6 +127,13 @@ type Game struct {
 	// Pinned is the version the user holds the game at (the `versions`
 	// capability): its update prompt is off and updates install this.
 	Pinned *VersionPin `json:"pinned,omitempty"`
+	// Status is where the user stands with the game (issue #51): "backlog",
+	// "playing", "finished" or "abandoned", "" for none. It is the user's
+	// own, never the store's.
+	Status string `json:"status,omitempty"`
+	// UserNotes are the user's own notes on the game, plain text. They are
+	// not Note: that is the store's install note ("Needs the EA app").
+	UserNotes string `json:"user_notes,omitempty"`
 	// SharedBy is the family member who lends the game (the `family`
 	// capability). Nil for the user's own games.
 	SharedBy *SharedBy `json:"shared_by,omitempty"`
