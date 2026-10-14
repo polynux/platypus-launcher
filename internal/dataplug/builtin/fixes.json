@@ -11,8 +11,8 @@
       "title": "Arcanum: Of Steamworks and Magick Obscura",
       "source": "clarity",
       "tier": "platinum",
-      "description": "Bypass incompatible legacy Windows helper wrapper script on Linux.",
-      "winetricks": ["ddraw"]
+      "description": "Prefer the game's own ddraw wrapper (Unofficial/HighRes patch) as native,builtin; fixes black screen and extremely slow rendering under Wine/Proton.",
+      "dllOverrides": { "ddraw": "n,b" }
     },
     {
       "title": "Fallout: London",
