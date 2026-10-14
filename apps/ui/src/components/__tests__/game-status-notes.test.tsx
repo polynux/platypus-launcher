@@ -36,7 +36,11 @@ const props = {
 
 const pair = (o: Partial<GameStatusInfo> = {}): GameStatusInfo => ({ status: 'playing', user_notes: '', ...o });
 
-const page = (g: Game, onChanged?: () => void) => render(<GamePage game={g} {...props} onCustomized={onChanged} />);
+const page = (g: Game, onChanged?: () => void) => (mounted = render(<GamePage game={g} {...props} onCustomized={onChanged} />));
+
+/** Re-render the mounted GamePage with a different game (navigation). */
+let mounted: ReturnType<typeof render> | null = null;
+const navigateTo = (g: Game) => mounted!.rerender(<GamePage game={g} {...props} />);
 
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
@@ -127,5 +131,55 @@ describe('game notes autosave', () => {
     await screen.findByTestId('notes-input');
     expect(screen.getByText('Your notes')).toBeInTheDocument();
     expect(screen.getByLabelText('Your notes')).toBe(screen.getByTestId('notes-input'));
+  });
+
+  it('blur writes nothing when the text is unchanged', async () => {
+    api.setGameNotes.mockReturnValue(ok(pair({ status: '', user_notes: 'kept' })));
+    page(game({ user_notes: 'kept' }));
+    const notes = await screen.findByTestId('notes-input');
+    expect((notes as HTMLTextAreaElement).value).toBe('kept');
+    fireEvent.blur(notes);
+    await new Promise((r) => setTimeout(r, 700));
+    expect(api.setGameNotes).not.toHaveBeenCalled();
+  });
+
+  it('still saves after a save of a previous game settles (never sticks on saving)', async () => {
+    let releaseFirst: (v: GameStatusInfo) => void = () => {};
+    api.setGameNotes
+      .mockImplementationOnce(() => Effect.promise(() => new Promise((r) => { releaseFirst = r; })))
+      .mockImplementation(() => ok(pair({ status: '', user_notes: 'again' })));
+    page(game());
+    const notes = await screen.findByTestId('notes-input');
+    fireEvent.change(notes, { target: { value: 'first' } });
+    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(1), { timeout: 2000 });
+
+    // Navigate away while that write is still in flight.
+    navigateTo(game({ id: 'p.echo.huge', user_notes: '' }));
+    const hugeNotes = await screen.findByTestId('notes-input');
+    expect(api.setGameNotes).toHaveBeenCalledTimes(1);
+
+    releaseFirst(pair({ status: '', user_notes: 'first' }));
+    await waitFor(() => expect(screen.queryByText('Saving…')).not.toBeInTheDocument());
+
+    // The new game still saves: the old write's settle freed the lock.
+    fireEvent.change(hugeNotes, { target: { value: 'again' } });
+    fireEvent.blur(hugeNotes);
+    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(api.setGameNotes).toHaveBeenLastCalledWith('p.echo.huge', 'again');
+  });
+
+  it('flushes a debounced text for the old game when the user navigates away', async () => {
+    api.setGameNotes.mockReturnValue(ok(pair({ status: '', user_notes: 'typed' })));
+    page(game());
+    const notes = await screen.findByTestId('notes-input');
+    fireEvent.change(notes, { target: { value: 'typed' } });
+    expect(api.setGameNotes).not.toHaveBeenCalled(); // still inside the debounce
+
+    navigateTo(game({ id: 'p.echo.huge', user_notes: '' }));
+    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledWith('p.echo.tiny', 'typed'), { timeout: 2000 });
+
+    // The new game shows its own notes, not the old game's text.
+    const hugeNotes = await screen.findByTestId('notes-input');
+    expect((hugeNotes as HTMLTextAreaElement).value).toBe('');
   });
 });

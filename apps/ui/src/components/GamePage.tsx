@@ -831,7 +831,9 @@ function infoCandidateDetail(t: (key: string, vars?: Record<string, unknown>) =>
   return c.id;
 }
 
-/** The Unlink control next to a linked game's attribution. */
+/** The user's own status and plain-text notes for a game (issue #51): the
+ *  select saves at once, the notes autosave on a debounce and on blur, one
+ *  write at a time so a slow save can't overwrite a newer one. */
 function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () => void }) {
   const { t } = useTranslation('game');
   const [status, setStatus] = useState(game.status ?? '');
@@ -841,14 +843,30 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const queued = useRef<string | null>(null);
   const saving = useRef(false);
-  // Bumped on navigation: a save of the previous game never touches this
-  // game's state or its queue.
-  const epoch = useRef(0);
+  // The last text this section wrote (or loaded) for the current game: a
+  // blur with nothing changed writes nothing.
+  const savedText = useRef(game.user_notes ?? '');
+  // The game the in-flight write belongs to, and the one on screen. They
+  // differ while a save of the previous game is still running: its result
+  // must not touch this game's state.
+  const savingId = useRef<string | null>(null);
+  const shownId = useRef(game.id);
 
   useEffect(() => {
-    epoch.current++;
-    clearTimeout(timer.current);
+    // A text typed inside the debounce is flushed for the old game before it
+    // is dropped, so navigating away never loses it.
+    if (queued.current != null && !saving.current) {
+      clearTimeout(timer.current);
+      Effect.runPromise(LauncherApi.setGameNotes(shownId.current, queued.current)).then(
+        () => {}, // the new game's state is about to replace this section's
+        () => {},
+      );
+    } else {
+      clearTimeout(timer.current);
+    }
     queued.current = null;
+    shownId.current = game.id;
+    savedText.current = game.user_notes ?? '';
     setStatus(game.status ?? '');
     setNotes(game.user_notes ?? '');
     setStatusError(null);
@@ -858,10 +876,10 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
 
   const saveStatus = (next: GameStatus) => {
     setStatusError(null);
-    const myEpoch = epoch.current;
-    Effect.runPromise(LauncherApi.setGameStatus(game.id, next)).then(
-      (info) => { if (epoch.current === myEpoch) setStatus(info.status); onChanged?.(); },
-      (e) => { if (epoch.current === myEpoch) setStatusError(e instanceof Error ? e.message : String(e)); },
+    const at = game.id;
+    Effect.runPromise(LauncherApi.setGameStatus(at, next)).then(
+      (info) => { if (shownId.current === at) setStatus(info.status); onChanged?.(); },
+      (e) => { if (shownId.current === at) setStatusError(e instanceof Error ? e.message : String(e)); },
     );
   };
 
@@ -872,17 +890,22 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
     const text = queued.current;
     queued.current = null;
     saving.current = true;
-    const myEpoch = epoch.current;
+    savingId.current = game.id;
     setNotesState('saving');
     const settle = (ok: boolean) => {
-      if (epoch.current !== myEpoch) return; // another game's section now
-      saving.current = false;
-      if (queued.current != null) pump();
-      else setNotesState(ok ? 'saved' : 'failed');
+      saving.current = false; // always, or the section can never save again
+      if (ok) savedText.current = text;
+      if (queued.current != null) { pump(); return; }
+      if (shownId.current === savingId.current) setNotesState(ok ? 'saved' : 'failed');
     };
-    Effect.runPromise(LauncherApi.setGameNotes(game.id, text)).then(() => settle(true), () => settle(false));
+    Effect.runPromise(LauncherApi.setGameNotes(savingId.current, text)).then(() => settle(true), () => settle(false));
   };
   const requestNotesSave = (text: string, delay: number) => {
+    if (text === savedText.current) { // nothing changed since the last write
+      queued.current = null;
+      clearTimeout(timer.current);
+      return;
+    }
     queued.current = text;
     clearTimeout(timer.current);
     timer.current = setTimeout(pump, delay);
@@ -928,6 +951,7 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
   );
 }
 
+/** The Unlink control next to a linked game's attribution. */
 function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }) {
   const { t } = useTranslation('game');
   const [busy, setBusy] = useState(false);
