@@ -392,6 +392,11 @@ export namespace types {
     run_mode?: string;
   }
 
+  export interface GameStatusInfo {
+    status: string;
+    user_notes: string;
+  }
+
   export interface GameTerm {
     id: string;
     title: string;

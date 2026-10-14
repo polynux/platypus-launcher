@@ -732,6 +732,7 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 	a.applyPlaytime(lib.Games)
 	a.applyPins(&lib)
 	a.applyCustomization(lib.Games)
+	a.applyGameStatus(lib.Games)
 	a.applyFixes(lib.Games)
 	return lib, nil
 }

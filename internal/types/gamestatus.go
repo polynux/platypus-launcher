@@ -13,3 +13,10 @@ const (
 func ValidGameStatus(s string) bool {
 	return s == GameStatusBacklog || s == GameStatusPlaying || s == GameStatusFinished || s == GameStatusAbandoned
 }
+
+// GameStatusInfo is a game's own status and notes (issue #51): what the
+// game page shows and saves. Status is "" for none; UserNotes is plain text.
+type GameStatusInfo struct {
+	Status    string `json:"status"`
+	UserNotes string `json:"user_notes"`
+}

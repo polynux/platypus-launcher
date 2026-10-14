@@ -50,6 +50,7 @@ export interface CoreApi {
   GetGameSaveBackup(gameID: string): Promise<string>;
   GetGameSettings(): Promise<Record<string, Record<string, unknown>>>;
   GetGameSettingsFields(game: types.Game): Promise<types.SettingsView>;
+  GetGameStatus(gameID: string): Promise<types.GameStatusInfo>;
   GetGameTerms(game: types.Game): Promise<types.GameTerm[]>;
   GetGameVersions(game: types.Game): Promise<types.VersionInfo>;
   GetInstallFreeSpace(game: types.Game): Promise<number>;
@@ -130,8 +131,10 @@ export interface CoreApi {
   SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
   SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
+  SetGameNotes(gameID: string, notes: string): Promise<types.GameStatusInfo>;
   SetGameSaveBackup(gameID: string, mode: string): Promise<void>;
   SetGameSavePaths(gameID: string, paths: string[]): Promise<void>;
+  SetGameStatus(gameID: string, status: string): Promise<types.GameStatusInfo>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
   SetLanguage(lang: string): Promise<types.LauncherSettings>;
   SetMinimizeToTray(on: boolean): Promise<types.LauncherSettings>;
@@ -202,6 +205,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetGameSaveBackup',
   'GetGameSettings',
   'GetGameSettingsFields',
+  'GetGameStatus',
   'GetGameTerms',
   'GetGameVersions',
   'GetInstallFreeSpace',
@@ -282,8 +286,10 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCustomGameYear',
   'SetCustomTitle',
   'SetGameInfoOnline',
+  'SetGameNotes',
   'SetGameSaveBackup',
   'SetGameSavePaths',
+  'SetGameStatus',
   'SetGameSteamAppID',
   'SetLanguage',
   'SetMinimizeToTray',
