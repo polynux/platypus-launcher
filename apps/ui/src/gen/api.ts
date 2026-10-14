@@ -40,6 +40,7 @@ export interface CoreApi {
   GetCloudInfo(game: types.Game): Promise<types.CloudInfo>;
   GetCloudSettings(): Promise<types.CloudSettings>;
   GetCustomization(gameID: string): Promise<types.Customization>;
+  GetDiskUsage(): Promise<types.DiskUsage>;
   GetFamilyMembers(source: string): Promise<types.FamilyMember[]>;
   GetGameAchievements(game: types.Game): Promise<types.AchievementProgress | null>;
   GetGameCompat(game: types.Game): Promise<types.Compat>;
@@ -98,6 +99,7 @@ export interface CoreApi {
   PreviewLaunchCommand(game: types.Game): Promise<string>;
   PreviewRestoreSaveBackup(game: types.Game, backupID: string): Promise<types.RestorePreview>;
   RedeemCode(source: string, code: string): Promise<types.RedeemResult>;
+  RefreshDiskUsage(): Promise<types.DiskUsage>;
   RefreshSaveManifest(): Promise<void>;
   RefreshSavePaths(game: types.Game): Promise<types.SavePath[]>;
   RemoveCustomGame(id: string): Promise<void>;
@@ -118,6 +120,7 @@ export interface CoreApi {
   SaveGameSettings(gameID: string, gameSettings: Record<string, unknown>): Promise<void>;
   SaveGameSettingsFields(game: types.Game, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
   SavePluginSettings(source: string, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
+  ScanGameSize(game: types.Game): Promise<types.DiskUsage>;
   SearchArtOnline(title: string): Promise<types.ArtCandidate[]>;
   SetArtworkOnline(on: boolean): Promise<types.LauncherSettings>;
   SetBackupSettings(folder: string, keep: number, mode: string, afterSession: boolean): Promise<types.BackupSettings>;
@@ -192,6 +195,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetCloudInfo',
   'GetCloudSettings',
   'GetCustomization',
+  'GetDiskUsage',
   'GetFamilyMembers',
   'GetGameAchievements',
   'GetGameCompat',
@@ -250,6 +254,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'PreviewLaunchCommand',
   'PreviewRestoreSaveBackup',
   'RedeemCode',
+  'RefreshDiskUsage',
   'RefreshSaveManifest',
   'RefreshSavePaths',
   'RemoveCustomGame',
@@ -270,6 +275,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SaveGameSettings',
   'SaveGameSettingsFields',
   'SavePluginSettings',
+  'ScanGameSize',
   'SearchArtOnline',
   'SetArtworkOnline',
   'SetBackupSettings',
