@@ -1245,6 +1245,29 @@ func (a *App) prefixesFolder() string {
 	return a.settings.PrefixesFolder()
 }
 
+// PrefixUsage groups the Wine games by the prefix they resolve to (issue
+// #52): the picker lists these, with the games sharing each prefix. Native
+// games have no prefix and are left out.
+func (a *App) PrefixUsage() []types.PrefixShare {
+	home := a.homeDir()
+	folder := a.effectivePrefixesFolder()
+	byPath := map[string][]types.PrefixGame{}
+	for _, g := range a.customGames() {
+		if g.Native {
+			continue
+		}
+		p := runner.PrefixPath(g, home, folder)
+		byPath[p] = append(byPath[p], types.PrefixGame{ID: g.ID, Title: g.Title})
+	}
+	out := make([]types.PrefixShare, 0, len(byPath))
+	for path, games := range byPath {
+		sort.Slice(games, func(i, j int) bool { return games[i].ID < games[j].ID })
+		out = append(out, types.PrefixShare{Path: path, Games: games})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
 // SetLanguage saves the UI language ("" for System, issue #39). When the
 // effective locale changes it notifies plugins that speak protocol 1.14 and
 // drops the localized store-data caches, so the next game page fetches in

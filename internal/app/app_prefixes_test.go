@@ -182,3 +182,85 @@ func TestSetPrefixesFolderWithoutOldFolder(t *testing.T) {
 		t.Fatalf("nothing to keep, but settings gained %v", st.GameSettings())
 	}
 }
+
+// Games sharing one wine_prefix resolve to one entry naming both; a game
+// with its own prefix gets its own entry; a native game with wine_prefix
+// set is left out (issue #52).
+func TestPrefixUsageGroupsSharedPrefixes(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	st, err := settings.OpenWithHome(filepath.Join(t.TempDir(), "settings.json"), home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addWine := func(title string) string {
+		exe := filepath.Join(home, title, title+".exe")
+		if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(exe, []byte("MZ\x90\x00"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		g, err := st.AddCustomGame(title, exe)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g.ID
+	}
+	pin := func(id, dir string) {
+		if err := st.SetGameSettings(id, map[string]any{"wine_prefix": dir}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := addWine("First")
+	second := addWine("Second")
+	third := addWine("Third")
+	shared := filepath.Join(home, "prefixes", "shared")
+	own := filepath.Join(home, "prefixes", "own")
+	pin(first, shared)
+	pin(second, shared)
+	pin(third, own)
+	// A native game with wine_prefix set has no prefix and stays out.
+	nativeExe := filepath.Join(home, "Native", "native")
+	if err := os.MkdirAll(filepath.Dir(nativeExe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nativeExe, []byte{0x7f, 'E', 'L', 'F', 0x02, 0x01, 0x01, 0x00}, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	native, err := st.AddCustomGame("Native", nativeExe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin(native.ID, filepath.Join(home, "prefixes", "native-pinned"))
+
+	a := &App{settings: st, optHome: home}
+	got := a.PrefixUsage()
+	if len(got) != 2 {
+		t.Fatalf("PrefixUsage = %+v, want the shared and the own prefix", got)
+	}
+	byPath := map[string][]string{}
+	titles := map[string]string{}
+	for _, e := range got {
+		for _, g := range e.Games {
+			byPath[e.Path] = append(byPath[e.Path], g.ID)
+			titles[g.ID] = g.Title
+		}
+	}
+	if ids := byPath[shared]; len(ids) != 2 || ids[0] != first || ids[1] != second {
+		t.Fatalf("shared entry = %v, want [%s %s] sorted by id", ids, first, second)
+	}
+	if ids := byPath[own]; len(ids) != 1 || ids[0] != third {
+		t.Fatalf("own entry = %v, want [%s]", ids, third)
+	}
+	if titles[first] != "First" || titles[second] != "Second" || titles[third] != "Third" {
+		t.Fatalf("titles = %v, want the game titles", titles)
+	}
+	for _, e := range got {
+		for _, g := range e.Games {
+			if g.ID == native.ID {
+				t.Fatalf("native game listed in %+v", e)
+			}
+		}
+	}
+}

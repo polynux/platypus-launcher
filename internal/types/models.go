@@ -575,6 +575,19 @@ type RemoveCheck struct {
 	Saves   SaveGate       `json:"saves"`
 }
 
+// PrefixGame is one game using a Wine prefix (issue #52): its id and title.
+type PrefixGame struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// PrefixShare is one Wine prefix and the games using it (issue #52): the
+// picker lists these, and the remove dialog names the sharers.
+type PrefixShare struct {
+	Path  string       `json:"path"`
+	Games []PrefixGame `json:"games"`
+}
+
 // Relocation says core moved a game's folder: the folder the plugin reports
 // (From) and where the game is now (To). It is kept until the plugin reports
 // the new folder itself (game.relocated) or the game is moved again.

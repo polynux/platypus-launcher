@@ -95,6 +95,7 @@ export interface CoreApi {
   PluginAuthComplete(id: string, fields: Record<string, string>): Promise<types.AuthStatus>;
   PluginAuthStatus(id: string): Promise<types.AuthStatus>;
   PluginLogout(id: string): Promise<types.AuthStatus>;
+  PrefixUsage(): Promise<types.PrefixShare[]>;
   PreviewLaunchCommand(game: types.Game): Promise<string>;
   PreviewRestoreSaveBackup(game: types.Game, backupID: string): Promise<types.RestorePreview>;
   RedeemCode(source: string, code: string): Promise<types.RedeemResult>;
@@ -247,6 +248,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'PluginAuthComplete',
   'PluginAuthStatus',
   'PluginLogout',
+  'PrefixUsage',
   'PreviewLaunchCommand',
   'PreviewRestoreSaveBackup',
   'RedeemCode',

@@ -531,6 +531,16 @@ export namespace types {
     hint: string;
   }
 
+  export interface PrefixGame {
+    id: string;
+    title: string;
+  }
+
+  export interface PrefixShare {
+    path: string;
+    games: types.PrefixGame[];
+  }
+
   export interface ProgressAchievement {
     id: string;
     name: string;
