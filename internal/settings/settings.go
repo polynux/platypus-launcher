@@ -107,6 +107,9 @@ type file struct {
 	// PrefixesFolder is where Wine prefixes are created (issue #37). Empty
 	// means the default (<data>/prefixes).
 	PrefixesFolder string `json:"prefixes_folder,omitempty"`
+	// PrefixPresets are the user's Wine prefix presets by id (issue #52).
+	// The built-in presets live in the backend, not here.
+	PrefixPresets map[string]types.PrefixPreset `json:"prefix_presets,omitempty"`
 	// Language is the UI language the user picked (issue #39): "" means
 	// System, resolved in the shell from the OS languages.
 	Language string `json:"language,omitempty"`

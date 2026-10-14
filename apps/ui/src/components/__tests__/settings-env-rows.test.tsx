@@ -8,6 +8,8 @@ vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
     previewCommand: () => Effect.succeed('cmd' as never),
     getLauncherSettings: () => Effect.succeed({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' } as never),
+    prefixUsage: () => Effect.succeed([] as never),
+    listPrefixPresets: () => Effect.succeed([] as never),
     detectGameExecutable: () => Effect.succeed({ native: false, kind: 'windows-exe' } as never),
     isGameExecutable: () => Effect.succeed(true as never),
     pickGameExecutable: () => Effect.succeed('' as never),

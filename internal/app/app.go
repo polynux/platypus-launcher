@@ -1251,6 +1251,64 @@ func (a *App) prefixesFolder() string {
 	return a.settings.PrefixesFolder()
 }
 
+// wineGames returns every game Platypus launches through Wine, as launches
+// see them: the sideloaded games plus the installed games of the current
+// library, with each game's wine_prefix pin from the settings overlaid (the
+// cached listings don't carry it). Callers apply their own skips: native
+// games and store-client launches have no Platypus prefix (issue #52).
+func (a *App) wineGames() []types.Game {
+	out := a.customGames()
+	var saved map[string]map[string]any
+	if a.settings != nil {
+		saved = a.settings.GameSettings()
+	}
+	a.library.mu.Lock()
+	entries := make([]libraryCacheEntry, 0, len(a.library.entries))
+	for _, e := range a.library.entries {
+		entries = append(entries, e)
+	}
+	a.library.mu.Unlock()
+	for _, e := range entries {
+		for _, g := range e.games {
+			if !g.IsInstalled {
+				continue
+			}
+			if m, ok := saved[g.ID]; ok {
+				if s, _ := m["wine_prefix"].(string); strings.TrimSpace(s) != "" {
+					g.Settings.WinePrefix = s
+				}
+			}
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// PrefixUsage groups the Wine games by the prefix they resolve to (issue
+// #52): the picker lists these, with the games sharing each prefix. Native
+// games have no prefix and are left out, as are games their store client
+// launches itself (Steam: steam.IsClientLaunch — the client owns their
+// compat data, not Platypus).
+func (a *App) PrefixUsage() []types.PrefixShare {
+	home := a.homeDir()
+	folder := a.effectivePrefixesFolder()
+	byPath := map[string][]types.PrefixGame{}
+	for _, g := range a.wineGames() {
+		if g.Native || steam.IsClientLaunch(g) {
+			continue
+		}
+		p := runner.PrefixPath(g, home, folder)
+		byPath[p] = append(byPath[p], types.PrefixGame{ID: g.ID, Title: g.Title})
+	}
+	out := make([]types.PrefixShare, 0, len(byPath))
+	for path, games := range byPath {
+		sort.Slice(games, func(i, j int) bool { return games[i].ID < games[j].ID })
+		out = append(out, types.PrefixShare{Path: path, Games: games})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
 // SetLanguage saves the UI language ("" for System, issue #39). When the
 // effective locale changes it notifies plugins that speak protocol 1.14 and
 // drops the localized store-data caches, so the next game page fetches in

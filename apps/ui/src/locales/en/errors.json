@@ -177,6 +177,17 @@
     "runMode": {
       "invalid": "Run mode must be auto, native or wine, got {{value}}."
     },
+    "preset": {
+      "nameMissing": "The preset needs a name.",
+      "badVerb": "Preset verb {{verb}} is not a verb.",
+      "badEnvKey": "Preset env key {{key}} is not a variable name.",
+      "badOverride": "Preset DLL override {{dll}}: {{mode}} is not a DLL override.",
+      "badWindowsVersion": "Windows version must be win7, win8, win81, win10 or win11, got {{value}}.",
+      "builtin": "The built-in preset {{id}} is read-only.",
+      "notFound": "Unknown preset {{id}}.",
+      "native": "Presets don't apply to {{title}}: it runs natively, without a Wine prefix.",
+      "clientLaunch": "Presets don't apply to {{title}}: its store client launches it and owns its prefix."
+    },
     "unavailable": "Settings are not ready."
   },
   "sideload": {

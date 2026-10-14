@@ -2,8 +2,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Copy, X } from 'lucide-react';
-import type { Game, GameSettings, ProtonVersion } from '../types';
+import { ChevronDown, Copy, Trash2, X } from 'lucide-react';
+import type { Game, GameSettings, PrefixPreset, PrefixShare, ProtonVersion } from '../types';
 import { Modal } from './Modal';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ds/select';
 import { Button } from '@/components/ds/button';
@@ -42,6 +42,44 @@ function displayResolution(): { w: number; h: number } | undefined {
   if (typeof window === 'undefined' || !window.screen?.width) return undefined;
   const r = window.devicePixelRatio || 1;
   return { w: Math.round(window.screen.width * r), h: Math.round(window.screen.height * r) };
+}
+
+/** Sentinel value of the prefix picker: the game's own prefix (""), since Radix forbids ''. */
+const PREFIX_OWN = '__prefix_own__';
+
+/** Sentinel value of the preset picker: no preset chosen (Radix forbids ''). */
+const PRESET_NONE = '__preset_none__';
+
+/** The WINEDLLOVERRIDES value a preset composes: the game's own entries first
+ *  (kept verbatim, any case), then the DLLs it doesn't name yet — the same
+ *  rule the core applies, so the preview matches what Apply writes. */
+function composeOverrides(existing: string, dlls: Record<string, string>): string {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  for (const part of existing.split(';')) {
+    const s = part.trim();
+    if (!s) continue;
+    parts.push(s);
+    seen.add(s.split('=')[0].trim().toLowerCase());
+  }
+  for (const k of Object.keys(dlls).sort()) {
+    if (seen.has(k.toLowerCase())) continue;
+    parts.push(`${k}=${dlls[k]}`);
+    seen.add(k.toLowerCase());
+  }
+  return parts.join(';');
+}
+
+/** A WINEDLLOVERRIDES value parsed back into a preset's dll_overrides map. */
+function parseOverrides(value: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of value.split(';')) {
+    const s = part.trim();
+    const i = s.indexOf('=');
+    if (i <= 0) continue;
+    out[s.slice(0, i).trim()] = s.slice(i + 1).trim();
+  }
+  return out;
 }
 
 /** ds Select with an aria-label on the trigger. Radix forbids '' as an item value, so callers use sentinels. */
@@ -176,7 +214,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
   const { t } = useTranslation(['gameSettings', 'common']);
   const fallback = useGameSettingsDraft(game);
   const shared = draftState ?? fallback;
-  const { draft, setDraft, envRows, setEnvRows, nextRowId, current, dirty, markClean } = shared;
+  const { draft, setDraft, envRows, setEnvRows, nextRowId, current, dirty, markClean, applySaved } = shared;
   useEffect(() => { onDirty?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   const [preview, setPreview] = useState<{ cmd?: string; err?: string }>({});
   const set = <K extends keyof GameSettings>(k: K, v: GameSettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
@@ -194,6 +232,18 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
     || (prefixesFolder ? `${prefixesFolder}/${game.id}`
       : defaultPrefixes ? `${defaultPrefixes}/${game.id}`
       : `~/.local/share/platypus/prefixes/${game.id}`);
+
+  // Every prefix Platypus knows and who uses it (issue #52): the picker
+  // offers them, and the effective prefix's sharers warn below.
+  const [prefixUsage, setPrefixUsage] = useState<PrefixShare[]>([]);
+  useEffect(() => {
+    Effect.runPromise(LauncherApi.prefixUsage())
+      .then(setPrefixUsage)
+      .catch(() => {});
+  }, []);
+  const sharedWith = (prefixUsage.find((u) => u.path === effectivePrefix)?.games ?? [])
+    .filter((g) => g.id !== game.id)
+    .map((g) => g.title);
 
   const isSteamClient = game.store === 'steam' && !game.executable;
   // A native Linux build runs without Proton: no runner and no Proton-only
@@ -537,11 +587,36 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     {t('gameSettings:launch.browse')}
                   </Button>
                 </div>
+                <div className="mt-3">
+                  <MonoLabel className="mb-1.5">{t('gameSettings:prefix.picker')}</MonoLabel>
+                  <SelectField label={t('gameSettings:prefix.picker')} value={draft.wine_prefix || PREFIX_OWN} onChange={(v) => set('wine_prefix', v === PREFIX_OWN ? '' : v)}>
+                    <SelectItem value={PREFIX_OWN}>{t('gameSettings:prefix.pickerDefault')}</SelectItem>
+                    {prefixUsage.map((u) => (
+                      <SelectItem key={u.path} value={u.path}>{u.path} · {t('gameSettings:prefix.games', { count: u.games.length })}</SelectItem>
+                    ))}
+                    {/* A typed path no other game uses lists itself, so the closed picker never lies. */}
+                    {draft.wine_prefix && !prefixUsage.some((u) => u.path === draft.wine_prefix) && (
+                      <SelectItem value={draft.wine_prefix}>{draft.wine_prefix}</SelectItem>
+                    )}
+                  </SelectField>
+                </div>
                 <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
                   {draft.wine_prefix
                     ? t('gameSettings:launch.prefixCustom')
                     : t('gameSettings:launch.prefixDefault')}
                 </p>
+                {sharedWith.length > 0 && (
+                  <div className="mt-3 rounded-2xl bg-amber-300/[0.06] p-4 ring-1 ring-amber-300/25">
+                    <p className="font-mono text-hint text-amber-200/90">{t('gameSettings:prefix.sharedWith', { games: sharedWith.join(', ') })}</p>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-amber-100/85">{t('gameSettings:prefix.sharedWarning')}</p>
+                  </div>
+                )}
+                <PrefixPresets
+                  game={game}
+                  current={current}
+                  dirty={dirty}
+                  onApplied={(saved) => applySaved({ ...game.settings, ...saved })}
+                />
               </div>
             )}
 
@@ -618,6 +693,178 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The presets area of the Wine prefix section (issue #52): pick a preset to
+ *  preview and apply it, or save the game's current settings as a user
+ *  preset (which can then be deleted; built-ins are read-only). It lives
+ *  inside the prefix block, which is hidden for native games and store
+ *  client launches — exactly the games core refuses. */
+function PrefixPresets({ game, current, dirty, onApplied }: {
+  game: Game;
+  /** The form's current settings: what a preview compares the preset with. */
+  current: GameSettings;
+  /** The form has unsaved edits: applying would write core's answer over
+   *  them (the core merges into the saved settings), so Apply waits. */
+  dirty: boolean;
+  /** A preset applied and saved by core: the form refreshes from it. */
+  onApplied: (saved: GameSettings) => void;
+}) {
+  const { t } = useTranslation(['gameSettings', 'common']);
+  const [presets, setPresets] = useState<PrefixPreset[]>([]);
+  const [chosen, setChosen] = useState('');
+  const [saveName, setSaveName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [applied, setApplied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // What the game has recorded: the applied preset, its verbs and its
+  // Windows version. These ride in settings_extra until a refresh folds
+  // core's answer in after an apply.
+  const [recorded, setRecorded] = useState<Record<string, unknown>>(() => ({ ...game.settings, ...(game.settings_extra ?? {}) }));
+
+  const load = () => Effect.runPromise(LauncherApi.listPrefixPresets()).then(setPresets, () => setPresets([]));
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const preset = presets.find((p) => p.id === chosen);
+  const builtins = presets.filter((p) => p.builtin);
+  const users = presets.filter((p) => !p.builtin);
+  const fail = (e: unknown) => { setBusy(false); setError(e instanceof Error ? e.message : String(e)); };
+
+  // The preview, computed the way the core merges: additions are the preset
+  // env keys the game doesn't set, the rest it keeps (skipped), and the
+  // composed overrides keep the game's own DLL entries.
+  const env = current.env_vars ?? {};
+  const additions = Object.entries(preset?.env ?? {}).filter(([k]) => !(k in env)).sort(([a], [b]) => a.localeCompare(b));
+  const skipped = Object.keys(preset?.env ?? {}).filter((k) => k in env).sort();
+  const overrideDLLs = preset?.dll_overrides ?? {};
+  const overrides = Object.keys(overrideDLLs).length > 0 ? composeOverrides(env.WINEDLLOVERRIDES ?? '', overrideDLLs) : '';
+  const verbs = preset?.winetricks ?? [];
+  const version = (typeof recorded.windows_version === 'string' && recorded.windows_version)
+    || preset?.windows_version || 'win10';
+  const alreadyApplied = !!preset && (applied || recorded.prefix_preset === preset.id);
+
+  const applyPreset = () => {
+    if (!preset || busy || dirty) return;
+    setBusy(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.applyPrefixPreset(game.id, preset.id)).then(() => {
+      setApplied(true);
+      setBusy(false);
+      // Refresh what the form shows from core's own answer (issue #52).
+      Effect.runPromise(LauncherApi.getGameSettings()).then((all) => {
+        const saved = all[game.id];
+        if (!saved) return;
+        setRecorded({ ...game.settings, ...(game.settings_extra ?? {}), ...saved });
+        onApplied(saved);
+      }, () => {});
+    }, fail);
+  };
+
+  const deletePreset = () => {
+    if (!preset || preset.builtin || busy) return;
+    setBusy(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.deletePrefixPreset(preset.id)).then(() => {
+      setBusy(false);
+      setChosen('');
+      setApplied(false);
+      load();
+    }, fail);
+  };
+
+  const savePreset = () => {
+    const name = saveName.trim();
+    if (!name || busy) return;
+    const envVars = { ...env };
+    const composed = envVars.WINEDLLOVERRIDES ?? '';
+    delete envVars.WINEDLLOVERRIDES;
+    setBusy(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.savePrefixPreset({
+      id: '', builtin: false, name,
+      env: envVars,
+      dll_overrides: parseOverrides(composed),
+      winetricks: [...new Set([
+        ...(Array.isArray(recorded.winetricks) ? recorded.winetricks.filter((v): v is string => typeof v === 'string') : []),
+        ...(current.winetricks ?? []),
+      ])],
+      windows_version: typeof recorded.windows_version === 'string' ? recorded.windows_version : '',
+    })).then(() => {
+      setBusy(false);
+      setSaveName('');
+      load();
+    }, fail);
+  };
+
+  return (
+    <div className="mt-3">
+      <MonoLabel className="mb-1.5">{t('gameSettings:prefixPresets.picker')}</MonoLabel>
+      <div className="flex items-center gap-2">
+        <SelectField
+          label={t('gameSettings:prefixPresets.picker')}
+          value={chosen || PRESET_NONE}
+          onChange={(v) => { setChosen(v === PRESET_NONE ? '' : v); setApplied(false); setError(null); }}
+        >
+          <SelectItem value={PRESET_NONE}>{t('gameSettings:prefixPresets.none')}</SelectItem>
+          {builtins.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>{t('gameSettings:prefixPresets.builtinGroup')}</SelectLabel>
+              {builtins.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectGroup>
+          )}
+          {users.length > 0 && (
+            <SelectGroup>
+              <SelectLabel>{t('gameSettings:prefixPresets.userGroup')}</SelectLabel>
+              {users.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+            </SelectGroup>
+          )}
+        </SelectField>
+        {preset && !preset.builtin && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('gameSettings:prefixPresets.delete', { name: preset.name })}
+            disabled={busy}
+            onClick={deletePreset}
+            className="flex-none"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        )}
+      </div>
+      {preset && (
+        <div className="mt-2.5 rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-white/[0.07]">
+          <div className="mb-1 text-white/55">{t('gameSettings:prefixPresets.previewLabel')}</div>
+          {additions.map(([k, v]) => <div key={k} className="break-all text-amber-200/80">{k}={v}</div>)}
+          {overrides && <div className="break-all text-amber-200/80">{t('gameSettings:prefixPresets.overrides', { value: overrides })}</div>}
+          {skipped.length > 0 && <div className="text-white/60">{t('gameSettings:prefixPresets.skipped', { keys: skipped.join(', ') })}</div>}
+          <div className="mt-2 text-white/55">{t('gameSettings:prefixPresets.storedHeading')}</div>
+          {verbs.length > 0 && <div className="text-white/70">{t('gameSettings:prefixPresets.storedVerbs', { verbs: verbs.join(' · ') })}</div>}
+          <div className="text-white/70">{t('gameSettings:prefixPresets.storedVersion', { version })}</div>
+          <div className="mt-2 flex items-center gap-2">
+            <Button variant="primary" size="sm" disabled={busy || dirty} onClick={applyPreset}>{t('gameSettings:prefixPresets.apply')}</Button>
+            {alreadyApplied && <span className="text-[12px] text-emerald-200/85">{t('gameSettings:prefixPresets.alreadyApplied')}</span>}
+          </div>
+          {/* The core merges into the saved settings: unsaved edits would be
+              replaced by the refresh after applying, so save them first. */}
+          {dirty && <div className="mt-1 text-[12px] text-white/60">{t('gameSettings:prefixPresets.saveFirst')}</div>}
+        </div>
+      )}
+      <div className="mt-2.5 flex items-center gap-2">
+        <Input
+          aria-label={t('gameSettings:prefixPresets.saveName')}
+          value={saveName}
+          onChange={(e) => setSaveName(e.target.value)}
+          placeholder={t('gameSettings:prefixPresets.saveNamePlaceholder')}
+          spellCheck={false}
+          className="min-w-0 flex-1"
+        />
+        <Button variant="neutral" size="sm" disabled={!saveName.trim() || busy} onClick={savePreset} className="flex-none">
+          {t('gameSettings:prefixPresets.save')}
+        </Button>
+      </div>
+      {error && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{error}</p>}
     </div>
   );
 }

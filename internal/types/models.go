@@ -587,6 +587,49 @@ type RemoveCheck struct {
 	Saves   SaveGate       `json:"saves"`
 }
 
+// PrefixGame is one game using a Wine prefix (issue #52): its id and title.
+type PrefixGame struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// PrefixShare is one Wine prefix and the games using it (issue #52): the
+// picker lists these, and the remove dialog names the sharers.
+type PrefixShare struct {
+	Path  string       `json:"path"`
+	Games []PrefixGame `json:"games"`
+}
+
+// PrefixPreset is a named template for a Wine prefix (issue #52): DLL
+// overrides, winetricks verbs, environment variables, a Windows version and
+// launch arguments. Applying one merges the env and DLL overrides into the
+// game's settings (the game's own values always win) and records the rest
+// as ordinary per-game settings; winetricks verbs and the Windows version
+// are stored and shown, never executed.
+type PrefixPreset struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Builtin marks the hardcoded read-only presets: they live in the
+	// backend, not in settings.json, and can't be saved over or deleted.
+	Builtin        bool              `json:"builtin"`
+	DLLOverrides   map[string]string `json:"dll_overrides,omitempty"`   // e.g. {"xaudio2_7": "n,b"}
+	Winetricks     []string          `json:"winetricks,omitempty"`      // e.g. ["d3dx9", "corefonts"]
+	Env            map[string]string `json:"env,omitempty"`             // e.g. {"PROTON_ENABLE_NVAPI": "1"}
+	WindowsVersion string            `json:"windows_version,omitempty"` // win7/win8/win81/win10/win11, "" means win10
+	LaunchArgs     string            `json:"launch_args,omitempty"`     // e.g. "-novid"
+}
+
+// PrefixApplyResult is what applying a preset did (issue #52): the merged
+// env vars and DLL overrides, the preset env keys the game's own values
+// kept, and the recorded pending winetricks verbs and Windows version.
+type PrefixApplyResult struct {
+	Env            map[string]string `json:"env"`
+	Overrides      string            `json:"overrides"`
+	Skipped        []string          `json:"skipped"`
+	Verbs          []string          `json:"verbs"`
+	WindowsVersion string            `json:"windows_version"`
+}
+
 // Relocation says core moved a game's folder: the folder the plugin reports
 // (From) and where the game is now (To). It is kept until the plugin reports
 // the new folder itself (game.relocated) or the game is moved again.

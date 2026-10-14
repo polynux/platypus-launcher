@@ -43,6 +43,9 @@ import type {
   SavePath,
   RestorePreview,
   AutoBackupState,
+  PrefixApplyResult,
+  PrefixPreset,
+  PrefixShare,
   RemoveCheck,
   RemoveOptions,
   SessionEvent,
@@ -482,6 +485,17 @@ export const LauncherApi = {
   // default; changing it never moves or deletes existing prefixes.
   setPrefixesFolder: (path: string) =>
     call<LauncherSettings>('SetPrefixesFolder', () => App.SetPrefixesFolder(path)),
+
+  // Every Wine prefix Platypus resolves and the games using it (issue #52):
+  // the "use an existing prefix" picker and the "Shared with" lines.
+  prefixUsage: () => call<PrefixShare[]>('PrefixUsage', async () => (await App.PrefixUsage()) ?? []),
+
+  // Wine prefix presets (issue #52): the list (built-ins then the user's),
+  // the user's own saves and deletes, and applying one to a game.
+  listPrefixPresets: () => call<PrefixPreset[]>('ListPrefixPresets', async () => (await App.ListPrefixPresets()) ?? []),
+  savePrefixPreset: (p: PrefixPreset) => call<PrefixPreset>('SavePrefixPreset', () => App.SavePrefixPreset(p)),
+  deletePrefixPreset: (id: string) => call<void>('DeletePrefixPreset', () => App.DeletePrefixPreset(id)),
+  applyPrefixPreset: (gameID: string, presetID: string) => call<PrefixApplyResult>('ApplyPrefixPreset', () => App.ApplyPrefixPreset(gameID, presetID)),
 
   // Friends lists of the stores that offer them (protocol 1.6).
   socialViews: () => call<SocialView[]>('SocialViews', async () => (await App.SocialViews()) ?? []),

@@ -290,6 +290,34 @@ function reasonText(target: RemoveTarget): string {
   return target.reason ?? '';
 }
 
+/** The other games sharing a prefix whose deletion is refused (remove.shared,
+ *  issue #52), named from PrefixUsage. Null until it lands — and for anything
+ *  but a shared-prefix refusal, which fetches nothing. */
+function useSharers(path: string | null, gameId: string) {
+  const [sharers, setSharers] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!path) {
+      setSharers(null);
+      return;
+    }
+    let live = true;
+    Effect.runPromise(LauncherApi.prefixUsage()).then(
+      (usage) => {
+        if (live) {
+          setSharers((usage ?? []).find((u) => u.path === path)?.games.filter((g) => g.id !== gameId).map((g) => g.title) ?? []);
+        }
+      },
+      () => {
+        if (live) setSharers(null);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [path, gameId]);
+  return sharers;
+}
+
 /** The confirm panel for removing a sideloaded game: library only by
  *  default, with unchecked boxes for deleting the Wine prefix and the game
  *  files (native games have no prefix, so only the files box shows).
@@ -318,6 +346,9 @@ export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
   const targets = check?.targets ?? [];
   const prefix = targets.find((x) => x.kind === 'prefix');
   const files = targets.find((x) => x.kind === 'files');
+  // A prefix another game still uses may not go: name the sharers (issue #52).
+  const sharedPath = prefix && !prefix.allowed && prefix.reason_code === 'remove.shared' ? prefix.path : null;
+  const sharers = useSharers(sharedPath, game.id);
   const deleting = deletePrefix || deleteFiles;
   const noPaths = check?.saves?.no_paths ?? false;
   const cloudNoSaves = check?.saves?.cloud ?? false;
@@ -348,13 +379,20 @@ export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
       <div className="mt-3 flex min-w-0 flex-col gap-2.5">
         {/* Native games have no Wine prefix (issue #47): no box to check. */}
         {!game.native && (
-        <TargetBox
-          label={t('gameSettings:maintenance.removePrefix')}
-          target={prefix}
-          measuring={t('gameSettings:maintenance.removeMeasuring')}
-          checked={deletePrefix}
-          onChange={setDeletePrefix}
-        />
+          <>
+            <TargetBox
+              label={t('gameSettings:maintenance.removePrefix')}
+              target={prefix}
+              measuring={t('gameSettings:maintenance.removeMeasuring')}
+              checked={deletePrefix}
+              onChange={setDeletePrefix}
+            />
+            {sharedPath && sharers && sharers.length > 0 && (
+              <p role="status" className="text-[12px] leading-snug text-amber-200/85">
+                {t('gameSettings:prefix.sharedWith', { games: sharers.join(', ') })}
+              </p>
+            )}
+          </>
         )}
         <TargetBox
           label={t('gameSettings:maintenance.removeFiles')}
