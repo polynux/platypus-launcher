@@ -841,35 +841,45 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
   const [notes, setNotes] = useState(game.user_notes ?? '');
   const [notesState, setNotesState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const queued = useRef<string | null>(null);
-  const saving = useRef(false);
-  // The last text this section wrote (or loaded) for the current game: a
-  // blur with nothing changed writes nothing.
-  const savedText = useRef(game.user_notes ?? '');
-  // The game the in-flight write belongs to, and the one on screen. They
-  // differ while a save of the previous game is still running: its result
-  // must not touch this game's state.
-  const savingId = useRef<string | null>(null);
+  // Every notes write runs through one promise chain, so writes are strictly
+  // ordered and a slow save can't overwrite a newer one. The game id is
+  // captured when a write is enqueued, so a save of the previous game never
+  // touches this game's state.
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  // The text waiting on the debounce, not yet enqueued: { id, text } for the
+  // game it was typed on. null when nothing is pending.
+  const pending = useRef<{ id: string; text: string } | null>(null);
+  // The last text enqueued for the game on screen: a blur with nothing
+  // changed enqueues nothing.
+  const lastText = useRef(game.user_notes ?? '');
   const shownId = useRef(game.id);
+
+  const enqueueNotes = (id: string, text: string) => {
+    lastText.current = text;
+    setNotesState('saving');
+    chain.current = chain.current.then(() =>
+      Effect.runPromise(LauncherApi.setGameNotes(id, text)).then(
+        () => { if (shownId.current === id) setNotesState('saved'); },
+        () => { if (shownId.current === id) setNotesState('failed'); },
+      ),
+    );
+  };
 
   useEffect(() => {
     // A text typed inside the debounce is flushed for the old game before it
     // is dropped, so navigating away never loses it.
-    if (queued.current != null && !saving.current) {
+    if (pending.current) {
       clearTimeout(timer.current);
-      Effect.runPromise(LauncherApi.setGameNotes(shownId.current, queued.current)).then(
-        () => {}, // the new game's state is about to replace this section's
-        () => {},
-      );
-    } else {
-      clearTimeout(timer.current);
+      enqueueNotes(pending.current.id, pending.current.text);
+      pending.current = null;
     }
-    queued.current = null;
     shownId.current = game.id;
-    savedText.current = game.user_notes ?? '';
+    lastText.current = game.user_notes ?? '';
     setStatus(game.status ?? '');
     setNotes(game.user_notes ?? '');
     setStatusError(null);
+    // The label is about the game on screen: an in-flight save's "Saving…"
+    // belongs to the game we just left.
     setNotesState('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game.id]);
@@ -883,32 +893,20 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
     );
   };
 
-  // One notes write in flight at a time: a text typed while one runs saves
-  // right after it, so a slow write can never overwrite a newer one.
-  const pump = () => {
-    if (saving.current || queued.current == null) return;
-    const text = queued.current;
-    queued.current = null;
-    saving.current = true;
-    savingId.current = game.id;
-    setNotesState('saving');
-    const settle = (ok: boolean) => {
-      saving.current = false; // always, or the section can never save again
-      if (ok) savedText.current = text;
-      if (queued.current != null) { pump(); return; }
-      if (shownId.current === savingId.current) setNotesState(ok ? 'saved' : 'failed');
-    };
-    Effect.runPromise(LauncherApi.setGameNotes(savingId.current, text)).then(() => settle(true), () => settle(false));
-  };
+  // The debounce timer: it enqueues the pending text for its own game.
   const requestNotesSave = (text: string, delay: number) => {
-    if (text === savedText.current) { // nothing changed since the last write
-      queued.current = null;
+    if (text === lastText.current) { // nothing changed since the last enqueued text
+      pending.current = null;
       clearTimeout(timer.current);
       return;
     }
-    queued.current = text;
+    const id = game.id;
+    pending.current = { id, text };
     clearTimeout(timer.current);
-    timer.current = setTimeout(pump, delay);
+    timer.current = setTimeout(() => {
+      pending.current = null;
+      enqueueNotes(id, text);
+    }, delay);
   };
 
   return (

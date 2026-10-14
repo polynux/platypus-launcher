@@ -143,31 +143,6 @@ describe('game notes autosave', () => {
     expect(api.setGameNotes).not.toHaveBeenCalled();
   });
 
-  it('still saves after a save of a previous game settles (never sticks on saving)', async () => {
-    let releaseFirst: (v: GameStatusInfo) => void = () => {};
-    api.setGameNotes
-      .mockImplementationOnce(() => Effect.promise(() => new Promise((r) => { releaseFirst = r; })))
-      .mockImplementation(() => ok(pair({ status: '', user_notes: 'again' })));
-    page(game());
-    const notes = await screen.findByTestId('notes-input');
-    fireEvent.change(notes, { target: { value: 'first' } });
-    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(1), { timeout: 2000 });
-
-    // Navigate away while that write is still in flight.
-    navigateTo(game({ id: 'p.echo.huge', user_notes: '' }));
-    const hugeNotes = await screen.findByTestId('notes-input');
-    expect(api.setGameNotes).toHaveBeenCalledTimes(1);
-
-    releaseFirst(pair({ status: '', user_notes: 'first' }));
-    await waitFor(() => expect(screen.queryByText('Saving…')).not.toBeInTheDocument());
-
-    // The new game still saves: the old write's settle freed the lock.
-    fireEvent.change(hugeNotes, { target: { value: 'again' } });
-    fireEvent.blur(hugeNotes);
-    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(2), { timeout: 2000 });
-    expect(api.setGameNotes).toHaveBeenLastCalledWith('p.echo.huge', 'again');
-  });
-
   it('flushes a debounced text for the old game when the user navigates away', async () => {
     api.setGameNotes.mockReturnValue(ok(pair({ status: '', user_notes: 'typed' })));
     page(game());
@@ -180,6 +155,49 @@ describe('game notes autosave', () => {
 
     // The new game shows its own notes, not the old game's text.
     const hugeNotes = await screen.findByTestId('notes-input');
+    expect((hugeNotes as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('flushes the queued text for the old game when a write is already in flight', async () => {
+    let releaseFirst: (v: GameStatusInfo) => void = () => {};
+    api.setGameNotes
+      .mockImplementationOnce(() => Effect.promise(() => new Promise((r) => { releaseFirst = r; })))
+      .mockImplementation(() => ok(pair({ status: '', user_notes: '' })));
+    page(game());
+    const notes = await screen.findByTestId('notes-input');
+    // Type and let the debounce fire: the first write is now in flight.
+    fireEvent.change(notes, { target: { value: 'first' } });
+    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    // Type newer text but navigate before its debounce fires.
+    fireEvent.change(notes, { target: { value: 'newer' } });
+    navigateTo(game({ id: 'p.echo.huge', user_notes: '' }));
+    await screen.findByTestId('notes-input');
+
+    // The queued text is enqueued behind the in-flight write, not dropped.
+    releaseFirst(pair({ status: '', user_notes: 'first' }));
+    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    expect(api.setGameNotes).toHaveBeenLastCalledWith('p.echo.tiny', 'newer');
+  });
+
+  it("a settling write for the old game doesn't mark the new game's notes saved", async () => {
+    let releaseFirst: (v: GameStatusInfo) => void = () => {};
+    api.setGameNotes.mockImplementationOnce(() => Effect.promise(() => new Promise((r) => { releaseFirst = r; })));
+    page(game());
+    const notes = await screen.findByTestId('notes-input');
+    fireEvent.change(notes, { target: { value: 'first' } });
+    await waitFor(() => expect(api.setGameNotes).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(await screen.findByText('Saving…')).toBeInTheDocument();
+
+    // Navigate away: the new game's label starts fresh.
+    navigateTo(game({ id: 'p.echo.huge', user_notes: '' }));
+    const hugeNotes = await screen.findByTestId('notes-input');
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+    expect(screen.queryByText('Saving…')).not.toBeInTheDocument();
+
+    // The old game's write settles: it must not stamp "Saved" on the new game.
+    releaseFirst(pair({ status: '', user_notes: 'first' }));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(screen.queryByText('Saved')).not.toBeInTheDocument();
     expect((hugeNotes as HTMLTextAreaElement).value).toBe('');
   });
 });
