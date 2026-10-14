@@ -267,6 +267,7 @@
     "storedVersion": "windows version: {{version}}",
     "apply": "Apply preset",
     "alreadyApplied": "already applied",
+    "saveFirst": "Save your changes first.",
     "saveName": "Preset name",
     "saveNamePlaceholder": "My preset",
     "save": "Save current as preset",

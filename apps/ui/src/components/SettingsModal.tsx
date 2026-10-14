@@ -614,6 +614,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                 <PrefixPresets
                   game={game}
                   current={current}
+                  dirty={dirty}
                   onApplied={(saved) => applySaved({ ...game.settings, ...saved })}
                 />
               </div>
@@ -701,10 +702,13 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
  *  preset (which can then be deleted; built-ins are read-only). It lives
  *  inside the prefix block, which is hidden for native games and store
  *  client launches — exactly the games core refuses. */
-function PrefixPresets({ game, current, onApplied }: {
+function PrefixPresets({ game, current, dirty, onApplied }: {
   game: Game;
   /** The form's current settings: what a preview compares the preset with. */
   current: GameSettings;
+  /** The form has unsaved edits: applying would write core's answer over
+   *  them (the core merges into the saved settings), so Apply waits. */
+  dirty: boolean;
   /** A preset applied and saved by core: the form refreshes from it. */
   onApplied: (saved: GameSettings) => void;
 }) {
@@ -741,7 +745,7 @@ function PrefixPresets({ game, current, onApplied }: {
   const alreadyApplied = !!preset && (applied || recorded.prefix_preset === preset.id);
 
   const applyPreset = () => {
-    if (!preset || busy) return;
+    if (!preset || busy || dirty) return;
     setBusy(true);
     setError(null);
     Effect.runPromise(LauncherApi.applyPrefixPreset(game.id, preset.id)).then(() => {
@@ -839,9 +843,12 @@ function PrefixPresets({ game, current, onApplied }: {
           {verbs.length > 0 && <div className="text-white/70">{t('gameSettings:prefixPresets.storedVerbs', { verbs: verbs.join(' · ') })}</div>}
           <div className="text-white/70">{t('gameSettings:prefixPresets.storedVersion', { version })}</div>
           <div className="mt-2 flex items-center gap-2">
-            <Button variant="primary" size="sm" disabled={busy} onClick={applyPreset}>{t('gameSettings:prefixPresets.apply')}</Button>
+            <Button variant="primary" size="sm" disabled={busy || dirty} onClick={applyPreset}>{t('gameSettings:prefixPresets.apply')}</Button>
             {alreadyApplied && <span className="text-[12px] text-emerald-200/85">{t('gameSettings:prefixPresets.alreadyApplied')}</span>}
           </div>
+          {/* The core merges into the saved settings: unsaved edits would be
+              replaced by the refresh after applying, so save them first. */}
+          {dirty && <div className="mt-1 text-[12px] text-white/60">{t('gameSettings:prefixPresets.saveFirst')}</div>}
         </div>
       )}
       <div className="mt-2.5 flex items-center gap-2">

@@ -267,6 +267,7 @@
     "storedVersion": "version de Windows : {{version}}",
     "apply": "Appliquer le préréglage",
     "alreadyApplied": "déjà appliqué",
+    "saveFirst": "Enregistrez d'abord vos modifications.",
     "saveName": "Nom du préréglage",
     "saveNamePlaceholder": "Mon préréglage",
     "save": "Enregistrer l'état actuel comme préréglage",

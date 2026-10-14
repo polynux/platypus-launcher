@@ -180,3 +180,26 @@ describe('Games presets never apply to', () => {
     expect(api.listPrefixPresets).not.toHaveBeenCalled(); // core refuses them: never even asked
   });
 });
+
+describe('Unsaved edits hold Apply back', () => {
+  it('disables Apply with a save-first hint until the form is saved', async () => {
+    open(game());
+    openPresets();
+    fireEvent.click(await screen.findByRole('option', { name: 'My preset' }));
+    const apply = screen.getByRole('button', { name: 'Apply preset' });
+    expect(apply).toBeEnabled();
+    expect(screen.queryByText('Save your changes first.')).toBeNull();
+
+    // An unsaved edit: the core would merge into the saved settings, so the
+    // refresh after applying would replace what the user is typing.
+    fireEvent.change(screen.getByLabelText('wine prefix'), { target: { value: '/mnt/pfx' } });
+    expect(apply).toBeDisabled();
+    expect(screen.getByText('Save your changes first.')).toBeTruthy();
+
+    // Saving the form clears the way.
+    fireEvent.click(screen.getByRole('button', { name: 'Save config' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply preset' })).toBeEnabled());
+    expect(screen.queryByText('Save your changes first.')).toBeNull();
+    expect(api.applyPrefixPreset).not.toHaveBeenCalled();
+  });
+});
