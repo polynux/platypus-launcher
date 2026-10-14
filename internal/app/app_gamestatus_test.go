@@ -84,6 +84,43 @@ func TestGameStatusLibraryCarriesValuesAfterRescan(t *testing.T) {
 	}
 }
 
+func TestGameStatusExplicitNoneBeatsHints(t *testing.T) {
+	t.Parallel()
+	src := &fakeSource{id: "echo", games: []types.Game{
+		// The user picked none and cleared the notes: both hints stay off.
+		{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", StoreStatus: types.GameStatusPlaying, StoreNotes: "store's hint"},
+		// No rows at all: the hints still fill.
+		{ID: "p.echo.huge", Source: "echo", Title: "Huge", StoreStatus: types.GameStatusBacklog, StoreNotes: "huge's hint"},
+	}}
+	a := libraryApp(t, src)
+	all := []stores.Store{src}
+	if err := a.settings.SetGameNotes("p.echo.tiny", "play after the DLC"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SetGameStatus("p.echo.tiny", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.SetGameNotes("p.echo.tiny", "  "); err != nil {
+		t.Fatal(err)
+	}
+	// The setters answer the user's own pair: none reads "" on the wire.
+	if got, _ := a.GetGameStatus("p.echo.tiny"); got != (types.GameStatusInfo{}) {
+		t.Fatalf("explicit none reads %+v", got)
+	}
+	for range 2 { // the scan and the rescan agree
+		lib, err := a.assembleLibrary(all, [][]types.Game{src.games}, []error{nil}, []bool{true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lib.Games[0].Status != "" || lib.Games[0].UserNotes != "" {
+			t.Fatalf("a hint came back over the user's none: %+v", lib.Games[0])
+		}
+		if lib.Games[1].Status != types.GameStatusBacklog || lib.Games[1].UserNotes != "huge's hint" {
+			t.Fatalf("empty fields didn't take the hints: %+v", lib.Games[1])
+		}
+	}
+}
+
 func TestGameStatusMissingGameKeepsRows(t *testing.T) {
 	t.Parallel()
 	src := &fakeSource{id: "echo", games: []types.Game{{ID: "p.echo.tiny", Source: "echo", Title: "Tiny"}}}

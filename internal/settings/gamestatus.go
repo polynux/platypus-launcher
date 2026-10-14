@@ -9,32 +9,39 @@ import (
 	"platypus/internal/types"
 )
 
-// GameStatus is the status the user gave a game, "" when none was set.
+// GameStatus is the status the user gave a game, "" when none was chosen.
+// A stored "none" row means the user picked none over a store's hint (issue
+// #51): it reads "" like a game that was never given one, but its presence
+// keeps applyGameStatus from filling the hint back in.
 func (s *Store) GameStatus(gameID string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.data.GameStatuses[gameID] == "none" {
+		return ""
+	}
 	return s.data.GameStatuses[gameID]
 }
 
-// SetGameStatus saves a game's status; "" clears it (back to none).
+// SetGameStatus saves a game's status; "" (or "none") stores an explicit
+// none row, so a store's hint never comes back for it. The row reads "".
 func (s *Store) SetGameStatus(gameID, status string) error {
 	if gameID == "" {
 		return errors.New("game id is empty")
 	}
-	if status != "" && !types.ValidGameStatus(status) {
+	if status != "" && status != "none" && !types.ValidGameStatus(status) {
 		return fmt.Errorf("game status must be backlog, playing, finished or abandoned, got %q", status)
+	}
+	store := status
+	if store == "" {
+		store = "none"
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	prev, had := s.data.GameStatuses[gameID]
-	if status == "" {
-		delete(s.data.GameStatuses, gameID)
-	} else {
-		if s.data.GameStatuses == nil {
-			s.data.GameStatuses = map[string]string{}
-		}
-		s.data.GameStatuses[gameID] = status
+	if s.data.GameStatuses == nil {
+		s.data.GameStatuses = map[string]string{}
 	}
+	s.data.GameStatuses[gameID] = store
 	if err := s.save(); err != nil {
 		if had {
 			if s.data.GameStatuses == nil {
@@ -58,8 +65,9 @@ func (s *Store) GameNotes(gameID string) string {
 	return s.data.GameNotes[gameID]
 }
 
-// SetGameNotes saves a game's notes; blank clears them. Notes are plain
-// text: control characters other than newline and tab are refused.
+// SetGameNotes saves a game's notes; blank stores an explicit empty row,
+// so a store's hint never comes back for it. Notes are plain text: control
+// characters other than newline and tab are refused.
 func (s *Store) SetGameNotes(gameID, notes string) error {
 	if gameID == "" {
 		return errors.New("game id is empty")
@@ -78,14 +86,10 @@ func (s *Store) SetGameNotes(gameID, notes string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	prev, had := s.data.GameNotes[gameID]
-	if notes == "" {
-		delete(s.data.GameNotes, gameID)
-	} else {
-		if s.data.GameNotes == nil {
-			s.data.GameNotes = map[string]string{}
-		}
-		s.data.GameNotes[gameID] = notes
+	if s.data.GameNotes == nil {
+		s.data.GameNotes = map[string]string{}
 	}
+	s.data.GameNotes[gameID] = notes
 	if err := s.save(); err != nil {
 		if had {
 			if s.data.GameNotes == nil {

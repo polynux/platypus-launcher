@@ -33,9 +33,20 @@ func TestGameStatusPersistsAndClears(t *testing.T) {
 	if err := again.SetGameStatus("g", ""); err != nil {
 		t.Fatal(err)
 	}
-	third, _ := Open(path)
-	if third.GameStatus("g") != "" {
-		t.Fatal("status survived the clear")
+	if third, _ := Open(path); third.GameStatus("g") != "" {
+		t.Fatal("explicit none reads back non-empty")
+	} else if statuses, _ := third.GameStatusNotes(); statuses["g"] != "none" {
+		t.Fatalf("none left no explicit row after reload: %v", statuses)
+	}
+	// "none" is accepted literally and means the same explicit choice.
+	if err := again.SetGameStatus("h", "none"); err != nil {
+		t.Fatal(err)
+	}
+	if again.GameStatus("h") != "" {
+		t.Fatalf("literal none reads back %q", again.GameStatus("h"))
+	}
+	if statuses, _ := again.GameStatusNotes(); statuses["h"] != "none" {
+		t.Fatalf("literal none stored %v", statuses)
 	}
 }
 
@@ -77,7 +88,11 @@ func TestGameNotesPersistAndClear(t *testing.T) {
 	}
 	third, _ := Open(path)
 	if third.GameNotes("g") != "" {
-		t.Fatal("notes survived the clear")
+		t.Fatal("cleared notes read back non-empty")
+	}
+	_, notes = third.GameStatusNotes()
+	if n, ok := notes["g"]; !ok || n != "" {
+		t.Fatalf("cleared notes left no explicit empty row after reload: %v", notes)
 	}
 }
 
