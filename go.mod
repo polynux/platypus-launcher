@@ -9,4 +9,4 @@ require (
 	github.com/ulikunitz/xz v0.5.17
 )
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require gopkg.in/yaml.v3 v3.0.1
