@@ -186,6 +186,15 @@ export namespace types {
     client?: types.CloudClient | null;
   }
 
+  export interface Collection {
+    id: string;
+    name: string;
+    builtin?: boolean;
+    pinned?: boolean;
+    games?: string[];
+    smart?: types.SmartFilter | null;
+  }
+
   export interface Compat {
     steam_app_id?: string;
     steam_app_id_source?: string;
@@ -734,6 +743,20 @@ export namespace types {
   export interface SharedBy {
     id: string;
     name: string;
+  }
+
+  export interface SmartFilter {
+    store?: string;
+    installed?: boolean | null;
+    played?: boolean | null;
+    played_within_days?: number;
+    min_playtime_minutes?: number;
+    tier?: string;
+    deck?: string;
+    year_from?: number;
+    year_to?: number;
+    status?: string;
+    collection?: string;
   }
 
   export interface SourceWarning {
