@@ -37,6 +37,7 @@ export interface CoreApi {
   DiscardJob(id: string): Promise<void>;
   DismissMigrationNotice(): Promise<void>;
   ForceStopGame(gameID: string): Promise<void>;
+  GameCrashHints(game: types.Game): Promise<types.CrashHints | null>;
   GetAutoBackupState(game: types.Game): Promise<types.AutoBackupState>;
   GetBackupSettings(): Promise<types.BackupSettings>;
   GetCloudInfo(game: types.Game): Promise<types.CloudInfo>;
@@ -87,6 +88,7 @@ export interface CoreApi {
   MakeGameExecutable(gameID: string): Promise<types.Game>;
   MigrationNotice(): Promise<types.MigrationNotice | null>;
   MoveGame(game: types.Game, parent: string): Promise<types.Job>;
+  OpenCrashLog(game: types.Game): Promise<void>;
   OpenGameFolder(game: types.Game): Promise<void>;
   OpenPluginsFolder(): Promise<void>;
   PauseAllJobs(): Promise<void>;
@@ -123,6 +125,7 @@ export interface CoreApi {
   ResumeJob(id: string): Promise<void>;
   RetryJob(id: string): Promise<void>;
   RetryPlugin(id: string): Promise<void>;
+  RunWinetricksVerb(game: types.Game, verb: string): Promise<void>;
   SaveGameSettings(gameID: string, gameSettings: Record<string, unknown>): Promise<void>;
   SaveGameSettingsFields(game: types.Game, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
   SavePluginSettings(source: string, patch: Record<string, unknown>): Promise<types.SettingsSaved>;
@@ -201,6 +204,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'DiscardJob',
   'DismissMigrationNotice',
   'ForceStopGame',
+  'GameCrashHints',
   'GetAutoBackupState',
   'GetBackupSettings',
   'GetCloudInfo',
@@ -251,6 +255,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'MakeGameExecutable',
   'MigrationNotice',
   'MoveGame',
+  'OpenCrashLog',
   'OpenGameFolder',
   'OpenPluginsFolder',
   'PauseAllJobs',
@@ -287,6 +292,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ResumeJob',
   'RetryJob',
   'RetryPlugin',
+  'RunWinetricksVerb',
   'SaveGameSettings',
   'SaveGameSettingsFields',
   'SavePluginSettings',
