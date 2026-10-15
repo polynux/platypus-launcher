@@ -1,0 +1,5 @@
+=== 2026-10-15T10:02:11+02:00 · /games/Foo/Foo.exe
+fixme:ntdll:NtQuerySystemInformation info_class SYSTEM_PERFORMANCE_INFORMATION
+err:module:import_dll Library vcruntime140_1.dll (which is needed by L"C:\\games\\Foo\\Foo.exe") not found
+err:module:import_dll Library MSVCP140.dll (which is needed by L"C:\\games\\Foo\\Foo.exe") not found
+err:module:LdrInitializeThunk Importing dlls for L"C:\\games\\Foo\\Foo.exe" failed, status c0000135

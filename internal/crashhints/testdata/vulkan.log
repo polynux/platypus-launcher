@@ -1,0 +1,3 @@
+=== 2026-10-15T10:13:00+02:00 · /games/Gfx/Gfx.exe
+info:dxvk: Found no compatible Vulkan device
+err:d3d11:d3d11_create_device Failed to create device

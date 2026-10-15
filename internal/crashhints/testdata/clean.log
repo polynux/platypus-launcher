@@ -1,0 +1,5 @@
+=== 2026-10-15T10:20:00+02:00 · /games/Fine/Fine.exe
+fixme:ntdll:NtQuerySystemInformation info_class SYSTEM_PERFORMANCE_INFORMATION
+trace:loaddll:load_dll Loaded L"C:\\windows\\system32\\vcruntime140.dll" at 0x7b000000
+trace:mfplat:MFStartup
+info:d3d:d3d_init Using Vulkan

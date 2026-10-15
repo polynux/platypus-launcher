@@ -1,0 +1,3 @@
+=== 2026-10-15T10:15:00+02:00 · /games/Shooter/Shooter.exe
+info:EasyAntiCheat: EAC launcher started, waiting for the game
+err:module:import_dll Library EasyAntiCheat_EOS.dll (which is needed by L"C:\\games\\Shooter\\Shooter.exe") not found

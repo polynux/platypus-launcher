@@ -1,0 +1,5 @@
+=== 2026-10-15T10:05:00+02:00 · /games/Bar/Bar.exe
+fixme:d3d:wined3d_init Unhandled feature
+err:module:import_dll Library d3dx9_43.dll (which is needed by L"C:\\games\\Bar\\Bar.exe") not found
+err:module:import_dll Library D3DCOMPILER_47.dll (which is needed by L"C:\\games\\Bar\\Bar.exe") not found
+err:module:import_dll Library d3dx9_43.dll (which is needed by L"C:\\games\\Bar\\Bar.exe") not found
