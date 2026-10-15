@@ -188,6 +188,8 @@ export type ProtonRating = gen.ProtonRating;
 export type CompatBadge = gen.CompatBadge;
 export type WikiCredit = gen.WikiCredit;
 export type Compat = gen.Compat;
+export type CrashHint = gen.CrashHint;
+export type CrashHints = gen.CrashHints;
 
 export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'remove' | 'tweak' | 'cloud';
 

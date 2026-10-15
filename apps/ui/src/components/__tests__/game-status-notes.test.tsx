@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getGameCompat: vi.fn(),
   setGameStatus: vi.fn(),
   setGameNotes: vi.fn(),
+  getCrashHints: vi.fn(),
 }));
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: new Proxy({}, { get: (_t, k: string) => (...a: unknown[]) => (api as Record<string, (...x: unknown[]) => unknown>)[k](...a) }),
@@ -47,6 +48,7 @@ beforeEach(() => {
   api.getGameDetails.mockReturnValue(ok({ summary: '', screenshots: [], genres: [], developers: [], publishers: [], release_date: '', achievements: null } as never));
   api.getNetState.mockReturnValue(ok({ online: true, since: 0 } as never));
   api.getGameCompat.mockReturnValue(ok({} as never));
+  api.getCrashHints.mockReturnValue(ok(null));
 });
 
 describe('game status select', () => {

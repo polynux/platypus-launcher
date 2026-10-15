@@ -8,6 +8,26 @@
   "copied": "Copié dans le presse-papiers",
   "refreshing": "actualisation de la bibliothèque…",
   "session": "cette session",
+  "crash": {
+    "heading": "Le dernier lancement s'est arrêté tôt",
+    "intro": "Platypus a lu le journal du jeu. Rien n'a été envoyé ailleurs.",
+    "rule": {
+      "vcredist": "{{dll}} manque : le runtime Visual C++ n'est pas installé dans ce préfixe.",
+      "directx": "{{dll}} manque : un composant DirectX n'est pas installé dans ce préfixe.",
+      "media": "Windows Media Foundation a échoué, souvent à cause d'un codec vidéo manquant. Proton-GE ou umu peuvent fournir les codecs.",
+      "dotnet": "Le chargement de .NET (mscoree) a échoué : le jeu a besoin du runtime .NET.",
+      "vulkan": "DXVK ou VKD3D ne trouve aucun périphérique Vulkan : le pilote graphique ou son ICD Vulkan manque.",
+      "anticheat": "Ce jeu utilise un anti-triche, qui peut refuser de tourner sous Wine. Son état est affiché plus haut.",
+      "missingDll": "Wine n'a pas pu charger {{dll}}."
+    },
+    "action": {
+      "winetricks": "Installer {{verb}} avec winetricks",
+      "runner": "Changer de runner",
+      "openLog": "Ouvrir le journal"
+    },
+    "manual": "Exécuter : winetricks {{verb}}",
+    "started": "Installation de {{verb}} dans le préfixe du jeu. Cela peut prendre quelques minutes."
+  },
   "play": {
     "play": "Jouer",
     "launching": "Lancement",

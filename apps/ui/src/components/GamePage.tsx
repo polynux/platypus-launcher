@@ -16,6 +16,8 @@ import { GameSettingsModal } from './GameSettingsModal';
 import { JobProgress } from './JobProgress';
 import { CompatFacts, deckLabel, ratingText, tierLabel, tierMeaning } from './CompatBadges';
 import { useCompat } from '../lib/useCompat';
+import { useCrashHints } from '../lib/useCrashHints';
+import { CrashHintsPanel } from './CrashHints';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
@@ -181,6 +183,8 @@ export function GamePage(p: GamePageProps) {
   const { details, error, loading, reload } = useDetails(game);
   // ProtonDB, native, DRM and anti-cheat facts (internal/compat); null while loading.
   const { compat: info } = useCompat(game);
+  // What the last launch's log says went wrong (issue #46); null while it runs.
+  const crash = useCrashHints(game, !!session || p.launching);
   // Offline (issue #44): a "network" game shows a needs-connection chip while
   // offline. Play stays enabled — only the store plugin can refuse the launch.
   const { online } = useNetState();
@@ -470,6 +474,8 @@ export function GamePage(p: GamePageProps) {
             </div>
             {info && <CompatFacts compat={info} />}
           </Panel>
+
+          {crash && <CrashHintsPanel game={game} hints={crash} onNotify={p.onNotify} onRunner={() => setSettingsTab('general')} />}
 
           <StatusNotesSection game={game} onChanged={p.onCustomized} />
 
