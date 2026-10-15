@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"platypus/internal/app"
@@ -23,6 +24,13 @@ import (
 )
 
 func main() {
+	// Close everything the shell leaked before the runtime opens its own
+	// fds (netpoll's epoll, signal pipes): at this point only 0/1/2 plus
+	// inherited fds exist (verified with fifty held open). No close_range:
+	// /proc is a given on Linux and keeps this portable across arches and
+	// older kernels.
+	closeInheritedFds()
+
 	// Stdout carries the protocol and nothing else: keep our own handle on it
 	// and point fd 1 at stderr, so a stray print can't corrupt the stream.
 	// Close-on-exec on the duplicate: plugins and games the core spawns must
@@ -78,6 +86,27 @@ func main() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, "core:", err)
 	os.Exit(1)
+}
+
+// closeInheritedFds closes every fd but stdin/stdout/stderr: Chromium leaves
+// files and sockets without close-on-exec and libuv does not close them at
+// spawn, so the core would otherwise hold the GPU cache, Local Storage, even
+// the remote debugger's socket (and its own plugins and games would inherit
+// them in turn).
+func closeInheritedFds() {
+	fds, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		return
+	}
+	for _, fd := range fds {
+		name := fd.Name()
+		if name == "0" || name == "1" || name == "2" {
+			continue
+		}
+		if n, err := strconv.Atoi(name); err == nil {
+			syscall.Close(n)
+		}
+	}
 }
 
 // coreHost is the host of the Electron shell: events are notifications, the

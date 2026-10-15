@@ -53,20 +53,6 @@ export function errorData(err: unknown): CoreErrorData | undefined {
 
 type RequestHandler = (params: unknown) => Promise<unknown>;
 
-/**
- * Closes every inherited file descriptor but stdin/stdout/stderr, then execs
- * the core (`$0` is its path, `$@` its arguments). Runs inside `sh -c`, so no
- * script file of its own can leak. Deliberately no redirections inside the
- * loop: redirecting stderr (`2>/dev/null`) makes the shell stash stderr in a
- * spare fd, and the loop then closes that very fd — stderr stays pointed at
- * /dev/null for the core. Single-threaded there is no race to guard against,
- * so every listed fd still exists when closed; the existence check only keeps
- * dash honest. The loop is POSIX (dash-safe) and /proc is a given on Linux.
- */
-export const CLOSE_FDS =
-  'for fd in /proc/self/fd/*; do n=${fd##*/}; ' +
-  'case $n in 0|1|2) ;; *) if [ -e /proc/self/fd/"$n" ]; then eval "exec $n>&-"; fi;; esac; done; ';
-
 /** The Go core as a child process, spoken to in JSON-RPC 2.0, one object per line (internal/corerpc). */
 export class Core {
   private child: ChildProcessByStdio<Writable, Readable, Readable>;
@@ -91,13 +77,15 @@ export class Core {
     // The core must not inherit anything the shell holds: Chromium opens
     // files and sockets without close-on-exec (verified: the core once held
     // the GPU cache, Local Storage, even the remote debugger's socket), and
-    // libuv does not close them at spawn. So the core is started through a
-    // shell one-liner that closes every fd but 0/1/2 and only then execs it;
-    // the loop is POSIX (dash-safe) and /proc is a given on Linux. The core's
-    // own children (plugins, games) get only 0/1/2 in turn: Go's os/exec
-    // closes the rest, and nothing in internal/ passes ExtraFiles.
+    // libuv does not close them at spawn. The core closes every fd but 0/1/2
+    // itself at the very start of main, before the Go runtime opens its own
+    // (netpoll's epoll, signal pipes), so no shell wrapper: dash only allows
+    // single-digit fds in redirections ([n] is 0-9), and `exec 14>&-` dies
+    // with `exec: 14: not found`. The core's own children (plugins, games)
+    // get only 0/1/2 in turn: Go's os/exec closes the rest, and nothing in
+    // internal/ passes ExtraFiles.
     // Env is inherited explicitly (issue #41): PLATYPUS_* reaches the core.
-    this.child = spawn('sh', ['-c', `${CLOSE_FDS}exec "$0" "$@"`, binary, ...args], {
+    this.child = spawn(binary, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...env },
     });
@@ -110,8 +98,8 @@ export class Core {
         resolve(null);
       });
       this.child.once('exit', (code) => {
-        // Through the sh wrapper a missing binary surfaces as exit 127, not
-        // a spawn error: say what failed to start.
+        // A missing binary surfaces as a spawn error above; an early exit
+        // still says what failed to start.
         this.failAll(this.started ? new Error('the core stopped') : new Error(`the core exited during startup (exit ${code}): ${binary}`));
         if (!this.closing) this.onCrash(code);
         resolve(code);
