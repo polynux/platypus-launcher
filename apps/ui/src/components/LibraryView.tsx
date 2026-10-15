@@ -2,7 +2,7 @@
 import { useTranslation, Trans } from 'react-i18next';
 import React, { memo, useDeferredValue, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, WifiOff, X } from 'lucide-react';
-import type { ActivityEvent, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
+import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
 import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
@@ -14,6 +14,7 @@ import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
+import { collectionPredicate, missingFrom } from '../lib/collections';
 import { formatCount } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { runnerShort } from '../lib/settings';
@@ -49,6 +50,12 @@ interface LibraryProps {
   onOpenGame: (id: string) => void;
   onAddGame: () => void;
   onNavigate: (v: View) => void;
+  /** The collection the library shows (issue #45); absent: all games. */
+  collection?: string;
+  onCollection?: (id: string | undefined) => void;
+  collections?: Collection[];
+  /** Right-click on a game: its collections dialog. */
+  onManageCollections?: (gameId: string) => void;
 }
 
 const CORE_SOURCES: StoreType[] = ['steam', 'gog', 'epic'];
@@ -287,13 +294,17 @@ const CARD_MIN_WIDTH = 140;
 const cardRowHeight = (width: number) => width * 1.5 + CARD_FOOTER;
 const TABLE_ROW_HEIGHT = 44;
 
-const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; job?: Job; onOpen: (id: string) => void }) {
+const GameCard = memo(function GameCard({ game: g, job, onOpen, onManage }: { game: Game; job?: Job; onOpen: (id: string) => void; onManage?: (id: string) => void }) {
   const { t } = useTranslation('library');
   const hours = hoursPlayed(g);
   const statusLabel = statusBadgeLabel(t, g.status);
   const meta = [hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ');
   return (
-    <button onClick={() => onOpen(g.id)} className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}>
+    <button
+      onClick={() => onOpen(g.id)}
+      onContextMenu={onManage ? (e) => { e.preventDefault(); onManage(g.id); } : undefined}
+      className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}
+    >
       <div className="relative flex-none">
         <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
         {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
@@ -329,11 +340,16 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen }: { game: Game; 
   );
 });
 
-const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { game: Game; index: number; runners: ProtonVersion[]; onOpen: (id: string) => void }) {
+const TableRow = memo(function TableRow({ game: g, index, runners, onOpen, onManage }: { game: Game; index: number; runners: ProtonVersion[]; onOpen: (id: string) => void; onManage?: (id: string) => void }) {
   const { t } = useTranslation('library');
   const tier = g.native ? 'native' : g.fix_info?.tier;
   return (
-    <div role="row" aria-rowindex={index + 2} className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-amber-300/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}>
+    <div
+      role="row"
+      aria-rowindex={index + 2}
+      onContextMenu={onManage ? (e) => { e.preventDefault(); onManage(g.id); } : undefined}
+      className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-amber-300/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}
+    >
       <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />
       <span role="cell" className="min-w-0">
         <button onClick={() => onOpen(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
@@ -353,7 +369,7 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen }: { g
 });
 
 export function LibraryView(p: LibraryProps) {
-  const { t } = useTranslation(['library', 'nav']);
+  const { t } = useTranslation(['library', 'nav', 'collections']);
   const [sort, setSort] = useState<Sort | null>(null);
   const [tier, setTier] = useState<TierFilter>('all');
   // The user's own per-game status (issue #51): all games, none, or one.
@@ -366,7 +382,13 @@ export function LibraryView(p: LibraryProps) {
   const lendingFilter = hasBorrowed ? lending : 'all';
   // The less-used filters sit behind the Filters toggle; the toggle counts the ones that are in effect.
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const extraFilters = [p.ownership === 'owned', lendingFilter !== 'all', tier !== 'all', statusFilter !== 'all', sort !== null].filter(Boolean).length;
+  // The collection the library shows (issue #45), evaluated on the loaded games only.
+  const activeCollection = p.collections?.find((c) => c.id === p.collection);
+  const inCollection = useMemo(
+    () => collectionPredicate(p.collections ?? [], p.collection ?? '', Math.floor(Date.now() / 1000)),
+    [p.collections, p.collection]
+  );
+  const extraFilters = [p.ownership === 'owned', lendingFilter !== 'all', tier !== 'all', statusFilter !== 'all', inCollection != null, sort !== null].filter(Boolean).length;
   // Typing in the search box paints the box first and filters the library after.
   const q = useDeferredValue(p.search).trim().toLowerCase();
   const owned = p.games.length;
@@ -383,10 +405,13 @@ export function LibraryView(p: LibraryProps) {
           (lendingFilter === 'all' || g.shared_by != null) &&
           (tier === 'all' || tierFilterValue(g) === tier) &&
           (statusFilter === 'all' || (statusFilter === 'none' ? !g.status : g.status === statusFilter)) &&
+          (!inCollection || inCollection(g)) &&
           g.title.toLowerCase().includes(q)
       ),
-    [p.games, p.ownership, source, lendingFilter, tier, statusFilter, q]
+    [p.games, p.ownership, source, lendingFilter, tier, statusFilter, inCollection, q]
   );
+  // A manual collection's games that left the library: listed, not shown as cards.
+  const missing = useMemo(() => (activeCollection && !activeCollection.smart ? missingFrom(activeCollection, p.games) : []), [activeCollection, p.games]);
   const jobs = useMemo(() => new Map(p.jobs.map((j) => [j.game_id, j])), [p.jobs]);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
   // The Last played strip belongs to the default order; an explicit sort shows one ordered grid.
@@ -412,6 +437,26 @@ export function LibraryView(p: LibraryProps) {
               {owned > installedCount ? t('library:ownedSuffix', { owned: formatCount(owned) }) : ''}
               {p.lastScan ? t('library:scannedSuffix', { time: clock(p.lastScan) }) : ''}
             </p>
+            {activeCollection && (
+              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-white/70">
+                <Badge variant="accent" className="gap-1.5" data-testid="collection-chip">
+                  {activeCollection.builtin ? t(`collections:builtin.${activeCollection.id}`) : activeCollection.name}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" aria-label={t('collections:clearCollection')} onClick={() => p.onCollection?.(undefined)} className="rounded-full hover:text-white">
+                        <X className="h-3 w-3" aria-hidden />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{t('collections:clearCollection')}</TooltipContent>
+                  </Tooltip>
+                </Badge>
+                {missing.length > 0 && (
+                  <span className="text-amber-200" title={missing.join(', ')} data-testid="collection-missing">
+                    {t('collections:missing', { count: missing.length })}
+                  </span>
+                )}
+              </p>
+            )}
             {!online && (
               <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-white/80 ring-1 ring-white/[0.1]">
                 <WifiOff className="h-3.5 w-3.5" aria-hidden />
@@ -514,6 +559,23 @@ export function LibraryView(p: LibraryProps) {
             <FilterGroup label={t('library:statusFilter.label')} labelClass="w-14">
               <StatusFilterControl value={statusFilter} onChange={setStatusFilter} />
             </FilterGroup>
+            {p.collections && p.onCollection && (
+              <FilterGroup label={t('collections:filterLabel')} labelClass="w-14">
+                <Select value={activeCollection?.id ?? 'all'} onValueChange={(v) => p.onCollection?.(v === 'all' ? undefined : v)}>
+                  <SelectTrigger aria-label={t('collections:filterAria')} className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('collections:allGames')}</SelectItem>
+                    {p.collections.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterGroup>
+            )}
             <FilterGroup label={t('library:sort')} labelClass="w-14">
               <SortControl sort={sort} onChange={setSort} />
             </FilterGroup>
@@ -607,7 +669,7 @@ export function LibraryView(p: LibraryProps) {
               gap={CARD_GAP}
               rowHeight={cardRowHeight}
               className="cover-grid-sm"
-              renderItem={(g) => <GameCard game={g} job={jobs.get(g.id)} onOpen={p.onOpenGame} />}
+              renderItem={(g) => <GameCard game={g} job={jobs.get(g.id)} onOpen={p.onOpenGame} onManage={p.onManageCollections} />}
             />
           </section>
 
@@ -637,7 +699,7 @@ export function LibraryView(p: LibraryProps) {
               items={tableRows}
               itemKey={(g) => g.id}
               rowHeight={TABLE_ROW_HEIGHT}
-              renderRow={(g, i) => <TableRow game={g} index={i} runners={p.runners} onOpen={p.onOpenGame} />}
+              renderRow={(g, i) => <TableRow game={g} index={i} runners={p.runners} onOpen={p.onOpenGame} onManage={p.onManageCollections} />}
             />
           </div>
         </section>
