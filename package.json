@@ -12,6 +12,8 @@
   "scripts": {
     "dev": "node apps/desktop/scripts/run.mjs dev",
     "start": "node apps/desktop/scripts/run.mjs start",
+    "dev:headless": "bash apps/desktop/scripts/headless.sh dev",
+    "dev:vnc": "bash apps/desktop/scripts/headless.sh --vnc dev",
     "build:ui": "bun --filter platypus-ui build",
     "build:desktop": "bun --filter platypus-desktop build",
     "typecheck": "bun --filter platypus-ui typecheck && bun --filter platypus-desktop typecheck",

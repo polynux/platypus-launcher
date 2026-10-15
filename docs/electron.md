@@ -45,6 +45,39 @@ debugging in production.
 
 The core alone: `go build -o platypus-core ./cmd/platypus-core` (no GUI toolkit linked).
 
+## Headless dev on a server
+
+No display there: `bun run dev:headless` starts Xvfb on a free display and
+runs `bun run dev` on it (extra args pass through,
+`PLATYPUS_DATA_DIR` and friends work as usual). `bun run dev:vnc` adds
+x11vnc on that display and the noVNC web client, so the app opens from a
+LAN browser: the script prints the `http://<host>.local:<port>/vnc.html`
+URL (also reachable over the Tailscale address). Both pick a free display
+and free ports per run (web from 6090, VNC from 5910, never 6080), log
+everything to one file under /tmp (its path prints first), and stop all
+they started on Ctrl-C or app exit — several worktrees can run side by
+side. Overrides: `PLATYPUS_XVFB_DISPLAY`, `PLATYPUS_VNC_PORT`,
+`PLATYPUS_WEB_PORT` (exact values; a busy one is refused).
+
+One-time VNC setup: `x11vnc -storepasswd` (without `~/.vnc/passwd` the
+script refuses to run unprotected).
+
+Ubuntu 24.04 restricts unprivileged user namespaces, so Electron under
+~/dev needs an AppArmor profile with `userns`, e.g.
+`/etc/apparmor.d/platypus-electron`:
+
+```
+abi <abi/4.0>,
+include <tunables/global>
+
+profile platypus-electron /home/*/dev/**/electron/dist/electron flags=(unconfined) {
+  userns,
+  include if exists <local/platypus-electron>
+}
+```
+
+loaded with `sudo apparmor_parser -r /etc/apparmor.d/platypus-electron`.
+
 ## Packaging
 
 ```sh
