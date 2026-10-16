@@ -13,7 +13,7 @@ package main
 //   - mode "run" (default): say hello, then sleep until stopped
 //     (ECHO_GAME_SECONDS, default 300 s).
 //   - mode "exit0": exit 0 at once (a clean, very short run).
-//   - mode "fail": sleep afterMs (default 500), then exit with code
+//   - mode "fail": sleep afterMs (if set), then exit with code
 //     (default 1).
 //   - mode "crash": sleep afterMs, write the Wine-style stderr named by log,
 //     then exit with code (default 1). The lines mirror
