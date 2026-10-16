@@ -91,7 +91,9 @@ process.on('SIGINT', stopAll);
 process.on('SIGTERM', stopAll);
 
 if (mode === 'dev') {
-  const port = await freePort();
+  // PLATYPUS_VITE_PORT pins the port (the sandbox uses 5193 so parallel
+  // runs don't fight over the default); otherwise a free one is picked.
+  const port = Number(process.env.PLATYPUS_VITE_PORT) || await freePort();
   console.log(`» starting Vite on ${port}`);
   const vite = spawn('bunx', ['vite', '--port', String(port), '--strictPort', '--host', '127.0.0.1'], {
     cwd: frontend,
