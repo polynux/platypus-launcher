@@ -227,6 +227,39 @@ export const SCENARIOS = [
           await new Promise((r) => setTimeout(r, 1200));
           const shown = await driver.evaluate(() => document.body.innerText);
           if (!shown.includes('shown')) throw new Error('library counts line missing after filtering');
+          const initialCount = await driver.evaluate(() => document.body.innerText.match(/(\d+) shown/)?.[1] ?? null);
+          if (initialCount == null) throw new Error('could not read the initial filtered library count');
+          // Edit the saved condition in the manager. Changing played=true to
+          // false must update the currently selected collection immediately.
+          await driver.clickText('Manage');
+          await driver.click('[aria-label="Edit conditions for e2e-played"]');
+          await driver.evaluate(() => {
+            const editor = [...document.querySelectorAll('[data-testid="smart-fields"]')].at(-1);
+            const played = [...(editor?.querySelectorAll('select') ?? [])].find((x) => x.closest('label')?.innerText.includes('Played'));
+            if (!played) throw new Error('played condition control missing');
+            const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+            set.call(played, 'no');
+            played.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+          await driver.clickText('Save changes');
+          await driver.waitFor((before) => {
+            const count = document.body.innerText.match(/(\d+) shown/)?.[1];
+            return count && count !== before;
+          }, [initialCount], { label: 'edited smart collection count changes' });
+          // Restore played=true so the existing fixture exclusion assertions
+          // below still exercise the original filter.
+          await driver.clickText('Manage');
+          await driver.click('[aria-label="Edit conditions for e2e-played"]');
+          await driver.evaluate(() => {
+            const editor = [...document.querySelectorAll('[data-testid="smart-fields"]')].at(-1);
+            const played = [...(editor?.querySelectorAll('select') ?? [])].find((x) => x.closest('label')?.innerText.includes('Played'));
+            if (!played) throw new Error('played condition control missing');
+            const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+            set.call(played, 'yes');
+            played.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+          await driver.clickText('Save changes');
+          await driver.waitFor((before) => document.body.innerText.match(/(\d+) shown/)?.[1] === before, [initialCount], { label: 'restored smart collection count' });
           // The smart collection must match something and exclude something:
           // fixtures never played, so at least one is hidden when filtered.
           if (shown.includes('Echo sandbox-run') && shown.includes('Echo sandbox-ok')

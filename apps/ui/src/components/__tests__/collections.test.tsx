@@ -6,7 +6,7 @@ import type { Collection, Game } from '../../types';
 import { TooltipProvider } from '../ds/tooltip';
 import { LibraryView } from '../LibraryView';
 import { Sidebar } from '../Sidebar';
-import { CollectionsDialog, EMPTY_DRAFT, smartFromDraft } from '../CollectionsDialog';
+import { CollectionsDialog, EMPTY_DRAFT, smartFromDraft, draftFromSmart } from '../CollectionsDialog';
 
 const h = vi.hoisted(() => ({
   api: {} as Record<string, ReturnType<typeof vi.fn>>,
@@ -160,6 +160,11 @@ describe('smartFromDraft', () => {
   it('ignores values that are not positive numbers', () => {
     expect(smartFromDraft({ ...EMPTY_DRAFT, minHours: 'many', yearTo: '-3' })).toEqual({});
   });
+
+  it('round-trips every supported condition into the editor draft', () => {
+    const filter = { store: 'steam', installed: false, played: true, tier: 'native', deck: 'verified', status: 'playing', min_playtime_minutes: 90, year_from: 2001, year_to: 2010, collection: 'couch' };
+    expect(smartFromDraft(draftFromSmart(filter))).toEqual(filter);
+  });
 });
 
 describe('collections dialog', () => {
@@ -205,5 +210,19 @@ describe('collections dialog', () => {
     fireEvent.change(screen.getByLabelText('Installed'), { target: { value: 'yes' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(h.api.createCollection).toHaveBeenCalledWith('Night', { installed: true }));
+  });
+
+  it('edits and saves a smart collection with the shared condition controls', async () => {
+    const smartCollection: Collection = { id: 'played', name: 'Played', pinned: true, smart: { played: true } };
+    const after = [INSTALLED, smartCollection, COUCH, HIDDEN];
+    h.api.updateCollection = vi.fn(() => Effect.succeed(after));
+    const onChanged = vi.fn();
+    render(<CollectionsDialog collections={[INSTALLED, smartCollection, COUCH, HIDDEN]} games={games} onChanged={onChanged} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit conditions for Played' }));
+    expect(screen.getByTestId('smart-fields')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Played'), { target: { value: 'no' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(h.api.updateCollection).toHaveBeenCalledWith('played', 'Played', { played: false }));
+    expect(onChanged).toHaveBeenCalledWith(after);
   });
 });

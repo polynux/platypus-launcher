@@ -46,11 +46,28 @@ export function smartFromDraft(d: SmartDraft): SmartFilter {
   if (d.tier) f.tier = d.tier;
   if (d.deck) f.deck = d.deck;
   if (d.status) f.status = d.status;
-  if (positive(d.minHours)) f.min_playtime_minutes = positive(d.minHours) * 60;
+  const hours = Number(d.minHours);
+  if (Number.isFinite(hours) && hours > 0) f.min_playtime_minutes = Math.round(hours * 60);
   if (positive(d.yearFrom)) f.year_from = positive(d.yearFrom);
   if (positive(d.yearTo)) f.year_to = positive(d.yearTo);
   if (d.collection) f.collection = d.collection;
   return f;
+}
+
+export function draftFromSmart(f: SmartFilter): SmartDraft {
+  return {
+    ...EMPTY_DRAFT,
+    store: f.store ?? '',
+    installed: f.installed === undefined ? '' : f.installed ? 'yes' : 'no',
+    played: f.played === undefined ? '' : f.played ? 'yes' : 'no',
+    tier: f.tier ?? '',
+    deck: f.deck ?? '',
+    status: f.status ?? '',
+    minHours: f.min_playtime_minutes === undefined ? '' : String(f.min_playtime_minutes / 60),
+    yearFrom: f.year_from === undefined ? '' : String(f.year_from),
+    yearTo: f.year_to === undefined ? '' : String(f.year_to),
+    collection: f.collection ?? '',
+  };
 }
 
 const STATUSES = ['none', 'backlog', 'playing', 'finished', 'abandoned'] as const;
@@ -82,6 +99,9 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
   const [name, setName] = useState('');
   const [smart, setSmart] = useState(false);
   const [draft, setDraft] = useState<SmartDraft>(EMPTY_DRAFT);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<SmartDraft>(EMPTY_DRAFT);
+  const [editName, setEditName] = useState('');
   const game = gameId ? games.find((g) => g.id === gameId) : undefined;
   const nowSec = Math.floor(Date.now() / 1000);
   const counts = useMemo(() => collectionCounts(collections, games, nowSec), [collections, games, nowSec]);
@@ -124,6 +144,7 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
       : created;
     run(call, () => {
       setName('');
+      setSmart(false);
       setDraft(EMPTY_DRAFT);
     });
   };
@@ -146,6 +167,25 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
     const clean = next.trim();
     if (!clean || clean === c.name) return;
     void run(LauncherApi.updateCollection(c.id, clean, c.smart ?? {}));
+  };
+
+  const edit = (c: Collection) => {
+    if (!c.smart) return;
+    setEditingId(c.id);
+    setEditName(c.name);
+    setEditDraft(draftFromSmart(c.smart));
+    setError(null);
+  };
+
+  const saveEdit = (c: Collection) => {
+    const clean = editName.trim();
+    const f = smartFromDraft(editDraft);
+    if (!clean || busy) return;
+    if (Object.keys(f).length === 0) {
+      setError(t('collections:smart.needOne'));
+      return;
+    }
+    void run(LauncherApi.updateCollection(c.id, clean, f), () => setEditingId(null));
   };
 
   const pickable = collections.filter((c) => !c.smart);
@@ -178,16 +218,20 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
             {collections.map((c, i) => {
               const missing = missingFrom(c, games).length;
               return (
-                <li key={c.id} className="flex flex-wrap items-center gap-2.5 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.05]">
+                <React.Fragment key={c.id}>
+                <li className="flex flex-wrap items-center gap-2.5 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.05]">
                   {c.builtin ? (
                     <span className="min-w-0 flex-1 text-[14px] font-semibold">{label(c)}</span>
                   ) : (
                     <Input
-                      key={c.name}
-                      defaultValue={c.name}
+                      key={`${c.name}-${editingId === c.id}`}
+                      defaultValue={editingId === c.id ? undefined : c.name}
+                      maxLength={80}
                       aria-label={t('collections:renameAria', { name: c.name })}
                       disabled={busy}
-                      onBlur={(e) => rename(c, e.target.value)}
+                      onChange={editingId === c.id ? (e) => setEditName(e.target.value) : undefined}
+                      onBlur={(e) => { if (editingId !== c.id) rename(c, e.target.value); }}
+                      value={editingId === c.id ? editName : undefined}
                       className="min-w-0 flex-1"
                     />
                   )}
@@ -206,11 +250,27 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
                     {t('collections:moveDown')}
                   </Button>
                   {!c.builtin && (
+                    c.smart ? (
+                      <Button variant="neutral" size="sm" disabled={busy} aria-label={t(editingId === c.id ? 'collections:cancelEditAria' : 'collections:editAria', { name: label(c) })} onClick={() => editingId === c.id ? setEditingId(null) : edit(c)}>
+                        {t(editingId === c.id ? 'collections:cancelEdit' : 'collections:edit')}
+                      </Button>
+                    ) : null
+                  )}
+                  {!c.builtin && (
                     <Button variant="ghost" size="sm" disabled={busy} aria-label={t('collections:deleteAria', { name: c.name })} onClick={() => void run(LauncherApi.deleteCollection(c.id))} className="text-red-200/85">
                       {t('collections:delete')}
                     </Button>
                   )}
                 </li>
+                {editingId === c.id && c.smart && (
+                  <li className="rounded-xl bg-white/[0.03] p-3">
+                    <SmartFields draft={editDraft} setDraft={setEditDraft} games={games} collections={collections} disabled={busy} />
+                    <div className="mt-3 flex justify-end">
+                      <Button variant="primary" size="sm" disabled={busy || !editName.trim()} onClick={() => saveEdit(c)}>{t('collections:save')}</Button>
+                    </div>
+                  </li>
+                )}
+                </React.Fragment>
               );
             })}
           </ul>
