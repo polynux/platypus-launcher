@@ -151,11 +151,13 @@ console.log(`test:e2e: sandbox dir ${sandboxDir}`);
 
 let failures = 0;
 let sandbox = null;
+const groups = []; // process groups we started (one per sandbox start)
 let driver = null;
 const t0 = Date.now();
 
 try {
   sandbox = await startSandbox(sandboxDir);
+  groups.push(sandbox.child.pid);
   console.log(`test:e2e: CDP on :${sandbox.debugPort}`);
   driver = await Cdp.connect(sandbox.debugPort, { timeoutMs: 180000 });
 
@@ -176,6 +178,7 @@ try {
   sandbox = null;
   console.log('test:e2e: restarted sandbox on the same dir');
   sandbox = await startSandbox(sandboxDir);
+  groups.push(sandbox.child.pid);
   console.log(`test:e2e: CDP on :${sandbox.debugPort}`);
   driver = await Cdp.connect(sandbox.debugPort, { timeoutMs: 180000 });
 
@@ -188,10 +191,25 @@ try {
 } finally {
   try { driver?.close(); } catch {}
   if (sandbox) await stopSandbox(sandbox.child, 'last', sandboxDir);
-  // Leftover check: list what we started (should be none).
+  // Leftover check: live processes still in the groups we started. The
+  // leader exits first and Vite/esbuild drain after it, so wait up to 10 s,
+  // then SIGKILL the groups (zombies are skipped, their parent reaps them).
+  const leftovers = () => execSync('ps -eo pid=,pgid=,stat=,args=').toString().split('\n')
+    .map((l) => l.trim().split(/\s+/))
+    .filter((f) => groups.includes(Number(f[1])) && !f[2]?.startsWith('Z'))
+    .map((f) => `${f[0]} ${f.slice(3).join(' ')}`);
   try {
-    const ps = execSync('ps -eo pid,args | grep -E "platypus|Xvfb|electron" | grep -v grep || true').toString().trim();
-    console.log(`test:e2e: leftover platypus/Xvfb/electron processes:\n${ps || '(none)'}`);
+    let left = leftovers();
+    for (let i = 0; i < 20 && left.length; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      left = leftovers();
+    }
+    if (left.length) {
+      for (const g of groups) try { process.kill(-g, 'SIGKILL'); } catch {}
+      console.log(`test:e2e: killed leftover processes after 10 s:\n${left.join('\n')}`);
+    } else {
+      console.log('test:e2e: leftover processes: none');
+    }
   } catch {}
 }
 
