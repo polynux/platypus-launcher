@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Collection, Game } from '../types';
-import { collectionCounts, collectionPredicate, matchesSmart, missingFrom, moveCollection } from './collections';
+import { collectionCounts, collectionPredicate, matchesSmart, missingFrom, missingNames, moveCollection, staleTitles } from './collections';
 
 const NOW = 1_800_000_000;
 const DAY = 86400;
@@ -99,6 +99,28 @@ describe('missingFrom', () => {
 
   it('is empty for a smart collection', () => {
     expect(missingFrom({ id: 's', name: 'S', smart: { installed: true } }, [])).toEqual([]);
+  });
+});
+
+describe('staleTitles', () => {
+  it('asks to remember only the titles of library games that are out of date', () => {
+    const list: Collection[] = [
+      { id: 'couch', name: 'Couch', games: ['a', 'b', 'gone'], titles: { a: 'Old A', gone: 'Gone' } },
+      { id: 'installed', name: 'Installed', smart: { installed: true } },
+    ];
+    expect(staleTitles(list, [mk('a', { title: 'Alpha' }), mk('b', { title: '' })])).toEqual({ a: 'Alpha' });
+  });
+
+  it('is empty once every title is current', () => {
+    const list: Collection[] = [{ id: 'couch', name: 'Couch', games: ['a'], titles: { a: 'Alpha' } }];
+    expect(staleTitles(list, [mk('a', { title: 'Alpha' })])).toEqual({});
+  });
+});
+
+describe('missingNames', () => {
+  it('gives each missing game its last known title, or its id', () => {
+    const c: Collection = { id: 'couch', name: 'Couch', games: ['a', 'gone', 'lost'], titles: { gone: 'Gone Game' } };
+    expect(missingNames(c, [mk('a')])).toEqual(['Gone Game', 'lost']);
   });
 });
 

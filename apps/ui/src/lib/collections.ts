@@ -61,6 +61,28 @@ export function missingFrom(c: Collection, games: Game[]): string[] {
   return (c.games ?? []).filter((id) => !have.has(id));
 }
 
+/** The names of the games a manual collection holds that aren't in the library:
+ *  each one's last known title, its id only when no title was ever remembered. */
+export function missingNames(c: Collection, games: Game[]): string[] {
+  return missingFrom(c, games).map((id) => c.titles?.[id] || id);
+}
+
+/** The titles the core should remember: each library game a manual collection
+ *  holds whose remembered title is out of date, by game id. Empty once every
+ *  title is current, which is what stops the sync. */
+export function staleTitles(collections: Collection[], games: Game[]): Record<string, string> {
+  const byId = new Map(games.map((g) => [g.id, g]));
+  const out: Record<string, string> = {};
+  for (const c of collections) {
+    if (c.smart) continue;
+    for (const id of c.games ?? []) {
+      const title = byId.get(id)?.title;
+      if (title && c.titles?.[id] !== title) out[id] = title;
+    }
+  }
+  return out;
+}
+
 /** How many library games each collection holds, by id. */
 export function collectionCounts(collections: Collection[], games: Game[], nowSec: number): Record<string, number> {
   const out: Record<string, number> = {};

@@ -14,7 +14,7 @@ import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
-import { collectionPredicate, missingFrom } from '../lib/collections';
+import { collectionPredicate, missingNames } from '../lib/collections';
 import { formatCount } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { runnerShort } from '../lib/settings';
@@ -411,7 +411,7 @@ export function LibraryView(p: LibraryProps) {
     [p.games, p.ownership, source, lendingFilter, tier, statusFilter, inCollection, q]
   );
   // A manual collection's games that left the library: listed, not shown as cards.
-  const missing = useMemo(() => (activeCollection && !activeCollection.smart ? missingFrom(activeCollection, p.games) : []), [activeCollection, p.games]);
+  const missing = useMemo(() => (activeCollection && !activeCollection.smart ? missingNames(activeCollection, p.games) : []), [activeCollection, p.games]);
   const jobs = useMemo(() => new Map(p.jobs.map((j) => [j.game_id, j])), [p.jobs]);
   const pluginName = (id: string) => p.plugins.find((x) => x.id === id)?.name ?? id;
   // The Last played strip belongs to the default order; an explicit sort shows one ordered grid.

@@ -19,10 +19,11 @@ vi.mock('../../effect/runtime', () => ({
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
 
-const COUCH: Collection = { id: 'couch', name: 'Couch', pinned: true, games: ['a', 'gone'] };
+const COUCH: Collection = { id: 'couch', name: 'Couch', pinned: true, games: ['a', 'gone'], titles: { gone: 'Gone Game' } };
+const OLD: Collection = { id: 'old', name: 'Old', pinned: true, games: ['a', 'untitled'] };
 const INSTALLED: Collection = { id: 'installed', name: 'Installed', builtin: true, pinned: true, smart: { installed: true } };
 const HIDDEN: Collection = { id: 'hidden', name: 'Hidden list', pinned: false, games: [] };
-const LIST = [INSTALLED, COUCH, HIDDEN];
+const LIST = [INSTALLED, COUCH, HIDDEN, OLD];
 
 const games = [mk('a'), mk('b'), mk('c', { is_installed: false })];
 
@@ -76,7 +77,12 @@ describe('library collection filter', () => {
   it('lists the games a manual collection holds that left the library as missing', () => {
     library({ collection: 'couch' });
     expect(screen.getByTestId('collection-missing')).toHaveTextContent('1 not in the library');
-    expect(screen.getByTestId('collection-missing')).toHaveAttribute('title', 'gone');
+    expect(screen.getByTestId('collection-missing')).toHaveAttribute('title', 'Gone Game');
+  });
+
+  it('falls back to the id for a missing game whose title was never remembered', () => {
+    library({ collection: 'old' });
+    expect(screen.getByTestId('collection-missing')).toHaveAttribute('title', 'untitled');
   });
 
   it('shows every game when no collection is active', () => {

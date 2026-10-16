@@ -404,6 +404,8 @@ export const LauncherApi = {
     call<Collection[]>('AddCollectionGame', () => App.AddCollectionGame(id, gameId)),
   removeCollectionGame: (id: string, gameId: string) =>
     call<Collection[]>('RemoveCollectionGame', () => App.RemoveCollectionGame(id, gameId)),
+  rememberCollectionTitles: (titles: Record<string, string>) =>
+    call<Collection[]>('RememberCollectionTitles', () => App.RememberCollectionTitles(titles)),
 
   // Online artwork for sideloaded games (issues #36, art fallbacks): Steam's
   // public store search first, GOG and Lutris (IGDB) as keyless fallbacks

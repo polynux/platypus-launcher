@@ -65,6 +65,48 @@ func TestCollectionsPersistAndKeepMissingGames(t *testing.T) {
 	}
 }
 
+func TestMissingCollectionGameKeepsItsLastKnownTitle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	s, _ := Open(path)
+	list, _ := s.CreateCollection("Couch", types.SmartFilter{})
+	id := list[len(list)-1].ID
+	_, _ = s.AddCollectionGame(id, "steam-440")
+	_, _ = s.AddCollectionGame(id, "steam-730")
+	// The library knows both games: their titles are remembered, a game with
+	// no title is skipped.
+	if _, err := s.RememberCollectionTitles(map[string]string{"steam-440": "Team Fortress 2", "steam-730": "Counter-Strike 2", "other": "Other"}); err != nil {
+		t.Fatal(err)
+	}
+	// steam-730 leaves the library (its plugin is disabled): it stays listed, with its title.
+	again, _ := Open(path)
+	var got types.Collection
+	for _, c := range again.Collections() {
+		if c.ID == id {
+			got = c
+		}
+	}
+	if strings.Join(got.Games, ",") != "steam-440,steam-730" {
+		t.Fatalf("games after reload = %v", got.Games)
+	}
+	if got.Titles["steam-730"] != "Counter-Strike 2" || got.Titles["steam-440"] != "Team Fortress 2" {
+		t.Fatalf("titles after reload = %v", got.Titles)
+	}
+	if _, ok := got.Titles["other"]; ok {
+		t.Fatalf("a title for a game the collection doesn't hold was kept: %v", got.Titles)
+	}
+	// Removing a game forgets its title.
+	if _, err := again.RemoveCollectionGame(id, "steam-730"); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range again.Collections() {
+		if c.ID == id {
+			if _, ok := c.Titles["steam-730"]; ok {
+				t.Fatalf("a removed game kept its title: %v", c.Titles)
+			}
+		}
+	}
+}
+
 func TestCollectionsSurviveRescansByLeavingSettingsAlone(t *testing.T) {
 	s, _ := Open(filepath.Join(t.TempDir(), "settings.json"))
 	list, _ := s.CreateCollection("Backlog night", types.SmartFilter{})

@@ -115,6 +115,7 @@ export interface CoreApi {
   RefreshDiskUsage(): Promise<types.DiskUsage>;
   RefreshSaveManifest(): Promise<void>;
   RefreshSavePaths(game: types.Game): Promise<types.SavePath[]>;
+  RememberCollectionTitles(titles: Record<string, string>): Promise<types.Collection[]>;
   RemoveCollectionGame(id: string, gameID: string): Promise<types.Collection[]>;
   RemoveCustomGame(id: string): Promise<void>;
   RemoveGame(gameID: string, opts: types.RemoveOptions): Promise<types.Job>;
@@ -290,6 +291,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'RefreshDiskUsage',
   'RefreshSaveManifest',
   'RefreshSavePaths',
+  'RememberCollectionTitles',
   'RemoveCollectionGame',
   'RemoveCustomGame',
   'RemoveGame',

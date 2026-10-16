@@ -192,6 +192,7 @@ export namespace types {
     builtin?: boolean;
     pinned?: boolean;
     games?: string[];
+    titles?: Record<string, string>;
     smart?: types.SmartFilter | null;
   }
 
