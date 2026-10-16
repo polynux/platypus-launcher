@@ -566,8 +566,7 @@ export function onDiskUsage(cb: (d: DiskUsage) => void): () => void {
   return onEvent('diskusage', cb);
 }
 
-/** Subscribe to background library changes (issue #36): the online artwork
- *  lookup applied art to a game, so the library should reload its entry. */
+/** Subscribe to background library changes: an empty id broadcasts a batch change. */
 export function onLibrary(cb: (gameId: string) => void): () => void {
   return onEvent('library', cb);
 }

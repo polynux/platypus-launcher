@@ -13,8 +13,10 @@ import (
 	"platypus/internal/types"
 )
 
+// compatFactRetry avoids asking a failing provider on every library load.
 const compatFactRetry = 5 * time.Minute
 
+// compatFactsCache stores provider answers per plugin and game, with in-flight batches.
 type compatFactsCache struct {
 	mu       sync.Mutex
 	path     string
@@ -23,6 +25,7 @@ type compatFactsCache struct {
 	pending  map[string]map[string]plugins.CompatLookupGame
 }
 
+// compatFactEntry keeps an answer's app id and expiry so overrides don't reuse stale ratings.
 type compatFactEntry struct {
 	Fact       plugins.CompatFact `json:"fact"`
 	SteamAppID string             `json:"steamAppId,omitempty"`
@@ -30,6 +33,7 @@ type compatFactEntry struct {
 	RetryAt    time.Time          `json:"retryAt,omitempty"`
 }
 
+// compatFactFresh reports whether an answer or retry delay still covers this app id.
 func compatFactFresh(e compatFactEntry, appID string, now time.Time) bool {
 	if e.SteamAppID != appID {
 		return false
@@ -37,6 +41,7 @@ func compatFactFresh(e compatFactEntry, appID string, now time.Time) bool {
 	return (e.Fact.ID != "" && now.Before(e.Expires)) || now.Before(e.RetryAt)
 }
 
+// openCompatFactsCache loads the persisted facts cache, falling back to an empty cache.
 func openCompatFactsCache(path string) *compatFactsCache {
 	c := &compatFactsCache{path: path, facts: map[string]map[string]compatFactEntry{}, inFlight: map[string]bool{}, pending: map[string]map[string]plugins.CompatLookupGame{}}
 	b, err := os.ReadFile(path)
@@ -46,6 +51,7 @@ func openCompatFactsCache(path string) *compatFactsCache {
 	return c
 }
 
+// cachedCompatFact returns one provider's saved answer without starting a lookup.
 func (a *App) cachedCompatFact(pluginID, gameID string) (plugins.CompatFact, bool) {
 	if a.compatFacts == nil {
 		return plugins.CompatFact{}, false
@@ -56,6 +62,7 @@ func (a *App) cachedCompatFact(pluginID, gameID string) (plugins.CompatFact, boo
 	return e.Fact, ok && len(e.Fact.ID) != 0
 }
 
+// cachedProviderFact combines current-app-id answers across compatibility providers.
 func (a *App) cachedProviderFact(gameID, appID string) (plugins.CompatFact, bool) {
 	combined := plugins.CompatFact{ID: gameID, Badges: []plugins.CompatBadge{}}
 	found := false
@@ -80,6 +87,7 @@ func (a *App) cachedProviderFact(gameID, appID string) (plugins.CompatFact, bool
 	return combined, found
 }
 
+// requestCompatFacts queues stale games in one background batch per provider.
 func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *types.GameDetails) {
 	if len(games) == 0 || a.compatFacts == nil || a.plugins == nil || !a.netOnline() || (a.settings != nil && !a.settings.RatingsOnline()) {
 		return
@@ -134,6 +142,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 	}
 }
 
+// refreshCompatFacts fetches a batch, persists answers, and notifies the UI once.
 func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGame) {
 	defer func() {
 		a.compatFacts.mu.Lock()
@@ -169,14 +178,9 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 	err := a.plugins.Call(ctx, pluginID, "compat.lookup", map[string]any{"games": games}, &result)
 	now := time.Now()
 	a.compatFacts.mu.Lock()
-	updated := false
 	defer func() {
 		a.compatFacts.mu.Unlock()
-		if updated {
-			for _, game := range games {
-				a.host.Emit("library", game.ID)
-			}
-		}
+		a.host.Emit("library", "")
 	}()
 	if a.compatFacts.facts[pluginID] == nil {
 		a.compatFacts.facts[pluginID] = map[string]compatFactEntry{}
@@ -184,6 +188,10 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 	if err != nil {
 		for _, g := range games {
 			e := a.compatFacts.facts[pluginID][g.ID]
+			if e.SteamAppID != g.SteamAppID {
+				e.Fact = plugins.CompatFact{}
+				e.Expires = time.Time{}
+			}
 			e.SteamAppID = g.SteamAppID
 			e.RetryAt = now.Add(compatFactRetry)
 			a.compatFacts.facts[pluginID][g.ID] = e
@@ -191,12 +199,20 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 		a.saveCompatFactsLocked()
 		return
 	}
+	a.cacheCompatFactResultLocked(pluginID, games, result.Facts, now)
+}
+
+// cacheCompatFactResultLocked saves returned facts and backs off games omitted from a partial answer.
+// The caller holds compatFacts.mu; stale facts survive an error only for their original AppID.
+func (a *App) cacheCompatFactResultLocked(pluginID string, games []plugins.CompatLookupGame, facts []plugins.CompatFact, now time.Time) {
 	appIDs := make(map[string]string, len(games))
+	returned := make(map[string]bool, len(facts))
 	for _, g := range games {
 		appIDs[g.ID] = g.SteamAppID
 	}
-	for _, fact := range result.Facts {
-		if fact.ID == "" {
+	for _, fact := range facts {
+		appID, requested := appIDs[fact.ID]
+		if fact.ID == "" || !requested {
 			continue
 		}
 		ttl := time.Duration(fact.TTLSeconds) * time.Second
@@ -206,12 +222,26 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 		if fact.Badges == nil {
 			fact.Badges = []plugins.CompatBadge{}
 		}
-		a.compatFacts.facts[pluginID][fact.ID] = compatFactEntry{Fact: fact, SteamAppID: appIDs[fact.ID], Expires: now.Add(ttl)}
-		updated = true
+		a.compatFacts.facts[pluginID][fact.ID] = compatFactEntry{Fact: fact, SteamAppID: appID, Expires: now.Add(ttl)}
+		returned[fact.ID] = true
+	}
+	for _, g := range games {
+		if returned[g.ID] {
+			continue
+		}
+		e := a.compatFacts.facts[pluginID][g.ID]
+		if e.SteamAppID != g.SteamAppID {
+			e.Fact = plugins.CompatFact{}
+			e.Expires = time.Time{}
+		}
+		e.SteamAppID = g.SteamAppID
+		e.RetryAt = now.Add(compatFactRetry)
+		a.compatFacts.facts[pluginID][g.ID] = e
 	}
 	a.saveCompatFactsLocked()
 }
 
+// saveCompatFactsLocked atomically persists the cache while its mutex is held.
 func (a *App) saveCompatFactsLocked() {
 	b, err := json.MarshalIndent(a.compatFacts.facts, "", "  ")
 	if err != nil {
@@ -226,6 +256,7 @@ func (a *App) saveCompatFactsLocked() {
 	}
 }
 
+// factBadges converts wire badges to the public compatibility model.
 func factBadges(f plugins.CompatFact) []types.CompatBadge {
 	out := make([]types.CompatBadge, 0, len(f.Badges))
 	for _, b := range f.Badges {
@@ -234,6 +265,7 @@ func factBadges(f plugins.CompatFact) []types.CompatBadge {
 	return out
 }
 
+// factNotes removes empty provider notes before exposing them to the game page.
 func factNotes(f plugins.CompatFact) []string {
 	out := make([]string, 0, len(f.Notes))
 	for _, note := range f.Notes {

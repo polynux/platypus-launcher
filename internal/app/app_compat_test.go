@@ -91,6 +91,31 @@ func seedCompatRating(a *App, gameID, appID, tier string) {
 	a.compatFacts.mu.Unlock()
 }
 
+func TestPartialCompatFactAnswerBacksOffMissingGames(t *testing.T) {
+	now := time.Now()
+	a := &App{compatFacts: &compatFactsCache{
+		path:  t.TempDir() + "/compat-facts-cache.json",
+		facts: map[string]map[string]compatFactEntry{"provider": {}},
+	}}
+	games := []plugins.CompatLookupGame{
+		{ID: "answered", SteamAppID: "620"},
+		{ID: "missing", SteamAppID: "730"},
+	}
+	a.compatFacts.mu.Lock()
+	a.cacheCompatFactResultLocked("provider", games, []plugins.CompatFact{{
+		ID: "answered", Badges: []plugins.CompatBadge{{Kind: "rating", Label: "Platinum"}}, TTLSeconds: 3600,
+	}}, now)
+	a.compatFacts.mu.Unlock()
+	answered := a.compatFacts.facts["provider"]["answered"]
+	if answered.Fact.ID != "answered" || answered.SteamAppID != "620" {
+		t.Fatalf("answered entry = %+v", answered)
+	}
+	missing := a.compatFacts.facts["provider"]["missing"]
+	if missing.Fact.ID != "" || missing.SteamAppID != "730" || !now.Before(missing.RetryAt) || !compatFactFresh(missing, "730", now) {
+		t.Fatalf("missing entry = %+v, want an AppID-scoped retry delay", missing)
+	}
+}
+
 func kinds(bs []types.CompatBadge) map[string]bool {
 	out := map[string]bool{}
 	for _, b := range bs {

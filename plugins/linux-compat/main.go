@@ -56,7 +56,7 @@ type fact struct {
 	TTLSeconds int      `json:"ttlSeconds"`
 }
 
-var proton = &compat.ProtonDB{Fetch: compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")}
+var proton compat.RatingSource = &compat.ProtonDB{Fetch: compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")}
 
 func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 	var p lookupParams
@@ -64,9 +64,15 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 		return nil, &rpcError{Code: -32602, Message: "games is required"}
 	}
 	facts := make([]fact, 0, len(p.Games))
+	sourceDown := false
+	stopped := false
 	for _, g := range p.Games {
 		if g.ID == "" {
 			return nil, &rpcError{Code: -32602, Message: "game id is required"}
+		}
+		if ctx.Err() != nil {
+			stopped = true
+			break
 		}
 		id := g.SteamAppID
 		if id == "" && g.Store == "steam" {
@@ -75,8 +81,13 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 		f := fact{ID: g.ID, Badges: []badge{}, Links: []any{}, TTLSeconds: int((7 * 24 * time.Hour).Seconds())}
 		if id != "" {
 			summary, err := proton.Summary(ctx, id)
+			if errors.Is(err, compat.ErrPaused) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (err != nil && ctx.Err() != nil) {
+				stopped = true
+				break
+			}
 			if err != nil && !errors.Is(err, compat.ErrNotFound) {
-				return nil, &rpcError{Code: -32002, Message: "ProtonDB is temporarily unavailable"}
+				sourceDown = true
+				continue
 			}
 			if err == nil {
 				if tier := compat.ShownTier(summary); tier != "" {
@@ -86,6 +97,9 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 		}
 		facts = append(facts, f)
+	}
+	if len(facts) == 0 && sourceDown && !stopped {
+		return nil, &rpcError{Code: -32002, Message: "ProtonDB is temporarily unavailable"}
 	}
 	return map[string]any{"facts": facts}, nil
 }

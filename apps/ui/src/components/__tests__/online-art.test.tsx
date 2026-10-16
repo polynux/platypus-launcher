@@ -168,6 +168,8 @@ describe('OnlineArtFinder (issue #36)', () => {
     libraryCbs.list.forEach((cb) => cb('other-game'));
     await new Promise((r) => setTimeout(r, 50));
     expect(api.getCustomization).not.toHaveBeenCalled();
+    libraryCbs.list.forEach((cb) => cb(''));
+    await waitFor(() => expect(api.getCustomization).toHaveBeenCalledWith('custom-1'));
   });
 });
 
