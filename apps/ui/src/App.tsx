@@ -20,7 +20,7 @@ import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
 import { RedeemDialog } from './components/RedeemDialog';
 import { CollectionsDialog } from './components/CollectionsDialog';
-import { collectionCounts } from './lib/collections';
+import { collectionCounts, staleTitles } from './lib/collections';
 import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
 import { TermsHost } from './components/TermsHost';
@@ -603,6 +603,13 @@ export function App() {
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const collectionTotals = useMemo(() => collectionCounts(collections, games, Math.floor(Date.now() / 1000)), [collections, games]);
+  // Manual collections remember each game's title (issue #77), so a game that
+  // leaves the library still has a name. Titles are sent only when out of date.
+  useEffect(() => {
+    const stale = staleTitles(collections, games);
+    if (Object.keys(stale).length === 0) return;
+    Effect.runPromise(LauncherApi.rememberCollectionTitles(stale)).then((l) => setCollections(l ?? [])).catch(() => {});
+  }, [collections, games]);
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
   // Enabled plugins that declare a storefront: the sidebar's Store section
   // and the embedded store view (issue #17).

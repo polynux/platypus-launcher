@@ -25,16 +25,19 @@ const (
 
 // Collection is a named list of games. Games holds a manual collection's
 // game ids in the order they were added; it keeps ids of games that are no
-// longer in the library, which the UI lists as missing. Smart is set on a
-// smart collection (and only then): its games are the library games the
-// filter matches.
+// longer in the library, which the UI lists as missing. Titles keeps each
+// game's last known title (by game id), so a missing game still has a name;
+// settings written before titles existed have none, and the UI falls back to
+// the id. Smart is set on a smart collection (and only then): its games are
+// the library games the filter matches.
 type Collection struct {
-	ID      string       `json:"id"`
-	Name    string       `json:"name"`
-	Builtin bool         `json:"builtin,omitempty"`
-	Pinned  bool         `json:"pinned,omitempty"`
-	Games   []string     `json:"games,omitempty"`
-	Smart   *SmartFilter `json:"smart,omitempty"`
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	Builtin bool              `json:"builtin,omitempty"`
+	Pinned  bool              `json:"pinned,omitempty"`
+	Games   []string          `json:"games,omitempty"`
+	Titles  map[string]string `json:"titles,omitempty"`
+	Smart   *SmartFilter      `json:"smart,omitempty"`
 }
 
 // SmartFilter is a saved query over library facts. Every set field must

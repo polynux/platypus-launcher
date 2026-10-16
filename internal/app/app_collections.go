@@ -46,3 +46,9 @@ func (a *App) AddCollectionGame(id, gameID string) ([]types.Collection, error) {
 func (a *App) RemoveCollectionGame(id, gameID string) ([]types.Collection, error) {
 	return a.settings.RemoveCollectionGame(id, gameID)
 }
+
+// RememberCollectionTitles records the last known title of games held in
+// manual collections (issue #77): the UI sends the titles that changed.
+func (a *App) RememberCollectionTitles(titles map[string]string) ([]types.Collection, error) {
+	return a.settings.RememberCollectionTitles(titles)
+}

@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -183,6 +184,32 @@ func (s *Store) RemoveCollectionGame(id, gameID string) ([]types.Collection, err
 			return nil, err
 		}
 		list[i].Games = slices.DeleteFunc(list[i].Games, func(g string) bool { return g == gameID })
+		delete(list[i].Titles, gameID)
+		return list, nil
+	})
+}
+
+// RememberCollectionTitles records the last known title of each game in
+// titles, in every manual collection that holds it. The UI sends the titles of
+// the library games whose remembered title is out of date; a game without a
+// title is skipped.
+func (s *Store) RememberCollectionTitles(titles map[string]string) ([]types.Collection, error) {
+	return s.changeCollections(func(list []types.Collection) ([]types.Collection, error) {
+		for i := range list {
+			if list[i].Smart != nil {
+				continue
+			}
+			for _, gameID := range list[i].Games {
+				title := titles[gameID]
+				if title == "" {
+					continue
+				}
+				if list[i].Titles == nil {
+					list[i].Titles = map[string]string{}
+				}
+				list[i].Titles[gameID] = title
+			}
+		}
 		return list, nil
 	})
 }
@@ -288,6 +315,7 @@ func copyCollections(in []types.Collection) []types.Collection {
 	out := make([]types.Collection, len(in))
 	for i, c := range in {
 		c.Games = slices.Clone(c.Games)
+		c.Titles = maps.Clone(c.Titles)
 		if c.Smart != nil {
 			f := *c.Smart
 			c.Smart = &f
