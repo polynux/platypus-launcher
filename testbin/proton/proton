@@ -14,4 +14,31 @@ fi
 if [ -n "${PLATYPUS_TESTBIN_SLEEP:-}" ]; then
   sleep "$PLATYPUS_TESTBIN_SLEEP"
 fi
-exit "${PLATYPUS_TESTBIN_EXIT:-0}"
+# An explicit exit override wins (tests driving the fake directly).
+if [ -n "${PLATYPUS_TESTBIN_EXIT+x}" ]; then
+  exit "${PLATYPUS_TESTBIN_EXIT:-0}"
+fi
+# Otherwise run the game like real Proton does (issue #69): the first arg
+# that is an existing executable file is the target (after `run`), and it
+# runs with the args that follow it, so its output and exit reach the core's
+# session log. With no such arg this stays a no-op success.
+found=""
+found_index=0
+i=0
+for a in "$@"; do
+  i=$((i + 1))
+  if [ -z "$found" ] && [ -f "$a" ] && [ -x "$a" ]; then
+    found="$a"
+    found_index=$i
+  fi
+done
+if [ -n "$found" ]; then
+  # Real Proton creates the compat data's pfx on first run; the winetricks
+  # fix (#46) needs <prefix>/pfx to exist, so make it here too.
+  _pfx="${STEAM_COMPAT_DATA_PATH:-$WINEPREFIX}"
+  if [ -n "$_pfx" ]; then mkdir -p "$_pfx/pfx" 2>/dev/null; fi
+  shift "$found_index"
+  # "$found" is arg 1 after shifting past it; "$@" is what followed it.
+  exec "$found" "$@"
+fi
+exit 0

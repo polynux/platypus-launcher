@@ -1027,13 +1027,19 @@ func launchSpec(p params) (any, error) {
 	if !p.Preview {
 		token = fmt.Sprintf("s3cret-%d", time.Now().UnixNano())
 	}
-	return map[string]any{
+	out := map[string]any{
 		"exe":    filepath.Join(dir, "game.sh"),
 		"args":   []string{"--from-echo", "-AUTH_PASSWORD=" + token},
 		"cwd":    dir,
 		"env":    map[string]string{"ECHO_GAME": "1"},
 		"redact": []string{"-AUTH_PASSWORD="},
-	}, nil
+	}
+	// A wine fixture launches through the runner so the core creates a
+	// prefix for it (issue #69); native fixtures run directly as before.
+	if spec, ok := fixtureSpecs[p.ID]; ok && spec.Wine {
+		out["needsWine"] = true
+	}
+	return out, nil
 }
 
 // echoScreenshots are the screenshots a game page shows for an echo game: six
