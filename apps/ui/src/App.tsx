@@ -710,7 +710,7 @@ export function App() {
             game={currentGame}
             runners={runners}
             activity={activity}
-            backLabel={view.from}
+            backLabel={t(`nav:${view.from}`)}
             onBack={() => setView({ name: view.from } as View)}
             onPlay={() => launch(currentGame)}
             onStop={() => stop(currentGame.id, false)}

@@ -35,4 +35,19 @@ describe('sidebar live language switching', () => {
     await i18n.changeLanguage('en');
     expect(screen.getByPlaceholderText('Search…')).toBeDefined();
   });
+
+  it('labels every view a game page can return to, in English and French (#71)', async () => {
+    // App passes t(`nav:${view.from}`) as the game page back link, where from
+    // is one of these: each must be a translated sidebar string, never the id.
+    for (const from of ['dashboard', 'library', 'fixes']) {
+      await i18n.changeLanguage('en');
+      const en = i18n.t(`nav:${from}`);
+      await i18n.changeLanguage('fr');
+      const fr = i18n.t(`nav:${from}`);
+      expect(en).not.toBe(from);
+      expect(fr).not.toBe(from);
+      expect(fr).not.toBe(en);
+    }
+    await i18n.changeLanguage('en');
+  });
 });
