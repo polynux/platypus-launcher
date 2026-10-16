@@ -5,6 +5,11 @@ package types
 // badge names its source and when it was checked; a fact nobody reported is
 // left out, never guessed.
 type Compat struct {
+	// Badges are compatibility facts supplied by provider plugins.
+	Badges []CompatBadge `json:"badges"`
+	// Notes and Links accompany provider facts on the game page.
+	Notes []string     `json:"notes,omitempty"`
+	Links []CompatLink `json:"links,omitempty"`
 	// SteamAppID is the ID the ratings use, "" when the game has none.
 	SteamAppID string `json:"steam_app_id,omitempty"`
 	// SteamAppIDSource says where it came from: "user", "plugin" or "steam".
@@ -72,6 +77,13 @@ type CompatBadge struct {
 	Kind      string `json:"kind"`
 	Label     string `json:"label"`
 	Detail    string `json:"detail"`
+	Tone      string `json:"tone,omitempty"`
+	Link      string `json:"link,omitempty"`
 	Source    string `json:"source"`
 	CheckedAt int64  `json:"checked_at"`
+}
+
+type CompatLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
 }

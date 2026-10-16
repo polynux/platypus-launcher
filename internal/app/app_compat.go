@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -45,9 +44,8 @@ func newCompatService(dataDir string, st *settings.Store) (*compat.Service, erro
 	cache, err := compat.OpenCache(filepath.Join(dataDir, "compat-cache.json"))
 	fetch := compat.NewFetcher("Platypus/1.0 (Linux; compatibility metadata)")
 	svc := &compat.Service{
-		Cache:   cache,
-		Ratings: &compat.ProtonDB{Fetch: fetch},
-		Deck:    &compat.SteamDeck{Fetch: fetch},
+		Cache: cache,
+		Deck:  &compat.SteamDeck{Fetch: fetch},
 		AntiCheat: &compat.AntiCheatStore{
 			Path:  filepath.Join(dataDir, "compat-awacy.json"),
 			URL:   compat.AWACYURL,
@@ -146,24 +144,21 @@ func (a *App) compatCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(a.baseCtx(), time.Second)
 }
 
-// GetGameFix returns the curated fix from data plugins, or the game's ProtonDB
-// tier when it has one worth showing (a Steam AppID and enough reports).
-// Steam's Deck verdict rides along either way, when Steam has one.
-// Plugin games get their ProtonDB tier only through a Steam AppID hint or one
-// the user set; nothing is matched by title.
+// GetGameFix returns a curated fix or a cached rating fact. Provider lookups
+// are queued in the background and never delay rendering.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
-	ctx, cancel := a.compatCtx()
-	defer cancel()
-	return a.gameFix(game, a.pluginHints(game), func(appID string) (compat.Rating, bool) {
-		return a.compat.ProtonDB(ctx, appID)
-	}, func(appID string) (compat.DeckResult, bool) {
-		return a.compat.DeckRating(ctx, appID)
-	})
+	hints := a.pluginHints(game)
+	a.requestCompatFacts([]types.Game{game}, func(types.Game) *types.GameDetails { return hints })
+	var deckDB func(string) (compat.DeckResult, bool)
+	if a.compat != nil {
+		ctx, cancel := a.compatCtx()
+		defer cancel()
+		deckDB = func(appID string) (compat.DeckResult, bool) { return a.compat.DeckRating(ctx, appID) }
+	}
+	return a.gameFix(game, hints, deckDB)
 }
 
-// gameFix is GetGameFix with the rating lookups chosen by the caller: the
-// library asks without waiting.
-func (a *App) gameFix(game types.Game, hints *types.GameDetails, protonDB func(appID string) (compat.Rating, bool), deckDB func(appID string) (compat.DeckResult, bool)) *types.GameFixInfo {
+func (a *App) gameFix(game types.Game, hints *types.GameDetails, deckDB func(appID string) (compat.DeckResult, bool)) *types.GameFixInfo {
 	storeAppID := ""
 	if game.Source == types.SourceSteam {
 		storeAppID = game.StoreAppID
@@ -172,31 +167,22 @@ func (a *App) gameFix(game types.Game, hints *types.GameDetails, protonDB func(a
 		a.attachDeck(fix, game, hints, deckDB)
 		return fix
 	}
-	if a.compat == nil {
-		return nil
-	}
-	appID, _ := a.ratingAppID(game, hints)
-	if appID == "" {
-		return nil
-	}
 	var fix *types.GameFixInfo
-	if r, ok := protonDB(appID); ok {
-		if tier := compat.ShownTier(r.Summary); tier != "" {
-			fix = &types.GameFixInfo{
-				Source:      "protondb",
-				Tier:        tier,
-				Description: fmt.Sprintf("ProtonDB Tier: %s (Confidence: %s, %d reports, as of %s)", tier, r.Summary.Confidence, r.Summary.Total, r.FetchedAt.UTC().Format("2006-01-02")),
+	appID, _ := a.ratingAppID(game, hints)
+	if fact, ok := a.cachedProviderFact(game.ID, appID); ok {
+		for _, b := range fact.Badges {
+			if b.Source == "ProtonDB" && b.Kind == "rating" && b.Tone != "" {
+				fix = &types.GameFixInfo{Source: "protondb", Tier: b.Tone, Description: "ProtonDB Tier: " + b.Label}
+				break
 			}
 		}
 	}
 	if fix == nil {
-		// No tier worth showing, but a Deck verdict alone still earns a note:
-		// the library cards read it.
 		fix = &types.GameFixInfo{}
 	}
 	a.attachDeck(fix, game, hints, deckDB)
 	if fix.Source == "" && fix.Tier == "" && fix.Deck == "" {
-		return nil // too few reports for a tier, and no Deck verdict either
+		return nil
 	}
 	if fix.Source == "" {
 		fix.Source = "steamdeck"
@@ -224,6 +210,7 @@ func (a *App) attachDeck(fix *types.GameFixInfo, game types.Game, hints *types.G
 func (a *App) GetGameCompat(game types.Game) types.Compat {
 	c := types.Compat{
 		RatingsOnline: a.settings.RatingsOnline(),
+		Badges:        []types.CompatBadge{},
 		DRM:           []types.CompatBadge{},
 		AntiCheat:     []types.CompatBadge{},
 	}
@@ -231,15 +218,20 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 		return c
 	}
 	hints := a.pluginHints(game)
+	a.requestCompatFacts([]types.Game{game}, func(types.Game) *types.GameDetails { return hints })
 	now := time.Now()
 	ctx, cancel := a.compatCtx()
 	defer cancel()
 	c.Native = game.Native || (hints != nil && slices.Contains(hints.Platforms, "linux"))
 	c.SteamAppID, c.SteamAppIDSource = a.ratingAppID(game, hints)
-	if c.SteamAppID != "" {
-		if r, ok := a.compat.ProtonDB(ctx, c.SteamAppID); ok {
-			c.ProtonDB = protonRating(r, c.SteamAppID)
+	if f, ok := a.cachedProviderFact(game.ID, c.SteamAppID); ok {
+		c.Badges = factBadges(f)
+		c.Notes = factNotes(f)
+		for _, link := range f.Links {
+			c.Links = append(c.Links, types.CompatLink{Label: link.Label, URL: link.URL})
 		}
+	}
+	if c.SteamAppID != "" {
 		if d, ok := a.compat.DeckRating(ctx, c.SteamAppID); ok && d.Found {
 			c.Deck = deckRating(d, c.SteamAppID)
 		}
@@ -359,21 +351,6 @@ func (a *App) pluginName(game types.Game) string {
 		return p.Manifest.Name
 	}
 	return game.Source
-}
-
-// protonRating is the UI's view of a ProtonDB answer.
-func protonRating(r compat.Rating, appID string) *types.ProtonRating {
-	tier := compat.ShownTier(r.Summary)
-	return &types.ProtonRating{
-		Tier:       tier,
-		Confidence: r.Summary.Confidence,
-		Total:      r.Summary.Total,
-		FetchedAt:  r.FetchedAt.Unix(),
-		Stale:      r.Stale,
-		NoReports:  !r.Found,
-		FewReports: r.Found && tier == "",
-		URL:        compat.ProtonDBPage(appID),
-	}
 }
 
 // newAntiCheat keeps the badges of add whose name isn't already in have

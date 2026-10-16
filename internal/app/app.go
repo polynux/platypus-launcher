@@ -57,6 +57,7 @@ type App struct {
 	// compat is the ProtonDB, anti-cheat and install-marker metadata (app_compat.go).
 	compat      *compat.Service
 	compatHints compatHintCache
+	compatFacts *compatFactsCache
 	stores      *stores.Registry
 	sessions    *session.Tracker
 	cloud       *cloudsync.Orchestrator
@@ -324,6 +325,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	dataDir := resolved.DataDir
 	a.dataDir = dataDir
+	a.compatFacts = openCompatFactsCache(filepath.Join(dataDir, "compat-facts-cache.json"))
 	a.cacheDir = resolved.CacheDir
 	a.library.snapDir = librarySnapshotDir(dataDir)
 	a.sessions.SetLogDir(filepath.Join(dataDir, "logs"))
@@ -747,14 +749,13 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 // cards and filters read it). Ratings come from the cache: a game with none yet
 // gets one on a later scan, when its fetch has finished.
 func (a *App) applyFixes(games []types.Game) {
+	a.requestCompatFacts(games, func(game types.Game) *types.GameDetails {
+		hints, _ := a.cachedPluginHints(game)
+		return hints
+	})
 	for i := range games {
 		hints, _ := a.cachedPluginHints(games[i]) // never a plugin call per game here
-		games[i].FixInfo = a.gameFix(games[i], hints, func(appID string) (compat.Rating, bool) {
-			if a.compat == nil {
-				return compat.Rating{}, false
-			}
-			return a.compat.ProtonDBCached(appID)
-		}, func(appID string) (compat.DeckResult, bool) {
+		games[i].FixInfo = a.gameFix(games[i], hints, func(appID string) (compat.DeckResult, bool) {
 			if a.compat == nil {
 				return compat.DeckResult{}, false
 			}
