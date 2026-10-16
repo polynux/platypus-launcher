@@ -4,12 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"platypus/internal/compat"
 	"platypus/internal/dataplug"
+	"platypus/internal/plugins"
 	"platypus/internal/types"
 )
 
@@ -68,7 +70,50 @@ func compatEnv(t *testing.T, protocols string) (*versionsEnv, *fakeRatingSource)
 		Scan:      func(string) ([]compat.LocalHit, bool) { return nil, false },
 		AntiCheat: &compat.AntiCheatStore{URL: srv.URL, Fetch: compat.NewFetcher("platypus-test")},
 	}
+	seedCompatRating(env.a, env.game.ID, "620", "platinum")
 	return env, src
+}
+
+func seedCompatRating(a *App, gameID, appID, tier string) {
+	if a.compatFacts == nil {
+		a.compatFacts = &compatFactsCache{facts: map[string]map[string]compatFactEntry{}, inFlight: map[string]bool{}}
+	}
+	badges := []plugins.CompatBadge{}
+	if tier != "" {
+		label := strings.ToUpper(tier[:1]) + tier[1:]
+		badges = append(badges, plugins.CompatBadge{Kind: "rating", Label: label, Tone: tier, Link: "https://www.protondb.com/app/" + appID, Source: "ProtonDB", CheckedAt: time.Now().Unix()})
+	}
+	a.compatFacts.mu.Lock()
+	if a.compatFacts.facts["linux-compat"] == nil {
+		a.compatFacts.facts["linux-compat"] = map[string]compatFactEntry{}
+	}
+	a.compatFacts.facts["linux-compat"][gameID] = compatFactEntry{Fact: plugins.CompatFact{ID: gameID, Badges: badges}, SteamAppID: appID, Expires: time.Now().Add(time.Hour)}
+	a.compatFacts.mu.Unlock()
+}
+
+func TestPartialCompatFactAnswerBacksOffMissingGames(t *testing.T) {
+	now := time.Now()
+	a := &App{compatFacts: &compatFactsCache{
+		path:  t.TempDir() + "/compat-facts-cache.json",
+		facts: map[string]map[string]compatFactEntry{"provider": {}},
+	}}
+	games := []plugins.CompatLookupGame{
+		{ID: "answered", SteamAppID: "620"},
+		{ID: "missing", SteamAppID: "730"},
+	}
+	a.compatFacts.mu.Lock()
+	a.cacheCompatFactResultLocked("provider", games, []plugins.CompatFact{{
+		ID: "answered", Badges: []plugins.CompatBadge{{Kind: "rating", Label: "Platinum"}}, TTLSeconds: 3600,
+	}}, now)
+	a.compatFacts.mu.Unlock()
+	answered := a.compatFacts.facts["provider"]["answered"]
+	if answered.Fact.ID != "answered" || answered.SteamAppID != "620" {
+		t.Fatalf("answered entry = %+v", answered)
+	}
+	missing := a.compatFacts.facts["provider"]["missing"]
+	if missing.Fact.ID != "" || missing.SteamAppID != "730" || !now.Before(missing.RetryAt) || !compatFactFresh(missing, "730", now) {
+		t.Fatalf("missing entry = %+v, want an AppID-scoped retry delay", missing)
+	}
 }
 
 func kinds(bs []types.CompatBadge) map[string]bool {
@@ -86,7 +131,7 @@ func TestCompatBelow110ReadsNoPluginFacts(t *testing.T) {
 		t.Fatalf("negotiated %q, want 1.9", got)
 	}
 	c := env.a.GetGameCompat(env.game)
-	if c.SteamAppID != "" || c.Native || len(c.DRM) != 0 || c.DRMNotes != "" || c.ProtonDB != nil {
+	if c.SteamAppID != "" || c.Native || len(c.DRM) != 0 || c.DRMNotes != "" || len(c.Badges) != 0 {
 		t.Fatalf("a 1.9 plugin's facts were read: %+v", c)
 	}
 	if src.asks() != 0 {
@@ -107,8 +152,8 @@ func TestCompatAt110ReadsHintPlatformsAndDRM(t *testing.T) {
 	if !c.Native {
 		t.Fatal("platforms with linux should show a native game")
 	}
-	if c.ProtonDB == nil || c.ProtonDB.Tier != "platinum" || c.ProtonDB.URL != "https://www.protondb.com/app/620" {
-		t.Fatalf("ProtonDB %+v", c.ProtonDB)
+	if len(c.Badges) != 1 || c.Badges[0].Tone != "platinum" || c.Badges[0].Link != "https://www.protondb.com/app/620" {
+		t.Fatalf("compat badges %+v", c.Badges)
 	}
 	got := kinds(c.DRM)
 	for _, k := range []string{"online", "launcher", "denuvo"} {
@@ -139,11 +184,13 @@ func TestUserAppIDBeatsPluginHint(t *testing.T) {
 	if c.SteamAppID != "730" || c.SteamAppIDSource != "user" {
 		t.Fatalf("AppID %q from %q, want the user's 730", c.SteamAppID, c.SteamAppIDSource)
 	}
-	if c.ProtonDB == nil || !c.ProtonDB.FewReports {
-		t.Fatalf("730 has two reports: want few reports, got %+v", c.ProtonDB)
+	seedCompatRating(env.a, env.game.ID, "730", "")
+	c = env.a.GetGameCompat(env.game)
+	if len(c.Badges) != 0 {
+		t.Fatalf("730 has two reports: want no rating badge, got %+v", c.Badges)
 	}
-	if src.asks() == 0 {
-		t.Fatal("the user's AppID wasn't asked of ProtonDB")
+	if src.asks() != 0 {
+		t.Fatalf("core asked ProtonDB directly %d times", src.asks())
 	}
 	// Clearing it falls back to the plugin's hint.
 	c, err = env.a.SetGameSteamAppID(env.game, "")
@@ -153,6 +200,7 @@ func TestUserAppIDBeatsPluginHint(t *testing.T) {
 	if c.SteamAppID != "620" || c.SteamAppIDSource != "plugin" {
 		t.Fatalf("after clearing: %q from %q", c.SteamAppID, c.SteamAppIDSource)
 	}
+	seedCompatRating(env.a, env.game.ID, "620", "platinum")
 }
 
 // fakeDeckSource answers Steam Deck verdicts from a table and counts the asks.
@@ -195,8 +243,11 @@ func TestCompatDeckVerdictShownAndCached(t *testing.T) {
 	}
 	// The verdict rides on the library fix too, beside the ProtonDB tier.
 	fix := env.a.GetGameFix(env.game)
-	if fix == nil || fix.Tier != "platinum" || fix.Deck != "verified" {
-		t.Fatalf("fix %+v, want the platinum tier with the verified Deck verdict", fix)
+	if fix == nil || fix.Deck != "verified" {
+		t.Fatalf("fix %+v, want the verified Deck verdict", fix)
+	}
+	if c := env.a.GetGameCompat(env.game); len(c.Badges) != 1 || c.Badges[0].Tone != "platinum" {
+		t.Fatalf("provider badges %+v, want a generic platinum badge", c.Badges)
 	}
 	// A second look is served from the cache: no new ask.
 	env.a.GetGameCompat(env.game)
@@ -237,7 +288,7 @@ func TestNoTitleMatchWithoutAnAppID(t *testing.T) {
 	game := env.game
 	game.Store = types.StoreEpic
 	game.StoreAppID = "echo-tiny-epic"
-	if c := env.a.GetGameCompat(game); c.SteamAppID != "" || c.ProtonDB != nil {
+	if c := env.a.GetGameCompat(game); c.SteamAppID != "" || len(c.Badges) != 0 {
 		t.Fatalf("matched by title: %+v", c)
 	}
 	if src.asks() != 0 {
@@ -251,15 +302,16 @@ func TestNoTitleMatchWithoutAnAppID(t *testing.T) {
 func TestGameFixShowsOnlyEnoughReports(t *testing.T) {
 	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
-	fix := env.a.GetGameFix(env.game)
-	if fix == nil || fix.Source != "protondb" || fix.Tier != "platinum" {
-		t.Fatalf("fix %+v, want the platinum tier of 620", fix)
+	compat := env.a.GetGameCompat(env.game)
+	if len(compat.Badges) != 1 || compat.Badges[0].Tone != "platinum" {
+		t.Fatalf("badges %+v, want the platinum rating of 620", compat.Badges)
 	}
 	if _, err := env.a.SetGameSteamAppID(env.game, "730"); err != nil {
 		t.Fatal(err)
 	}
-	if fix := env.a.GetGameFix(env.game); fix != nil {
-		t.Fatalf("two reports shown as a tier: %+v", fix)
+	seedCompatRating(env.a, env.game.ID, "730", "")
+	if c := env.a.GetGameCompat(env.game); len(c.Badges) != 0 {
+		t.Fatalf("two reports shown as a rating badge: %+v", c.Badges)
 	}
 }
 
@@ -274,8 +326,8 @@ func TestRatingsSwitchOffMakesNoRequests(t *testing.T) {
 		t.Fatal("settings still say online")
 	}
 	c := env.a.GetGameCompat(env.game)
-	if c.RatingsOnline || c.ProtonDB != nil {
-		t.Fatalf("offline with an empty cache got %+v", c.ProtonDB)
+	if c.RatingsOnline || len(c.Badges) != 1 {
+		t.Fatalf("offline cached facts got %+v", c.Badges)
 	}
 	if src.asks() != 0 {
 		t.Fatalf("asked the network with the switch off (%d asks)", src.asks())

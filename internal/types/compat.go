@@ -1,18 +1,23 @@
 package types
 
 // Compat is what the launcher shows about a game's compatibility and
-// protection: ProtonDB rating, native Linux build, DRM and anti-cheat. Every
+// protection: community ratings, native Linux build, DRM and anti-cheat. Every
 // badge names its source and when it was checked; a fact nobody reported is
 // left out, never guessed.
 type Compat struct {
+	// Badges are compatibility facts supplied by provider plugins.
+	Badges []CompatBadge `json:"badges"`
+	// Notes and Links accompany provider facts on the game page.
+	Notes []string     `json:"notes,omitempty"`
+	Links []CompatLink `json:"links,omitempty"`
+	// Report summarizes the provider's community reports, when available.
+	Report *CompatReport `json:"report,omitempty"`
 	// SteamAppID is the ID the ratings use, "" when the game has none.
 	SteamAppID string `json:"steam_app_id,omitempty"`
 	// SteamAppIDSource says where it came from: "user", "plugin" or "steam".
 	SteamAppIDSource string `json:"steam_app_id_source,omitempty"`
-	// Native marks a Linux build: shown instead of a ProtonDB tier.
+	// Native marks a Linux build: shown instead of a community rating.
 	Native bool `json:"native"`
-	// ProtonDB is the community rating, nil when there is none to show.
-	ProtonDB *ProtonRating `json:"protondb,omitempty"`
 	// Deck is Steam's Deck verdict, nil when there is none to show.
 	Deck *DeckRating `json:"deck,omitempty"`
 	// RatingsOnline says whether Platypus may fetch ratings from the network
@@ -39,21 +44,6 @@ type WikiCredit struct {
 	LicenceURL string `json:"licence_url"`
 }
 
-// ProtonRating is a ProtonDB summary. FetchedAt is when ProtonDB answered, so
-// the UI can say "as of"; Stale means a newer answer is being fetched.
-type ProtonRating struct {
-	Tier       string `json:"tier"`
-	Confidence string `json:"confidence"`
-	Total      int    `json:"total"`
-	FetchedAt  int64  `json:"fetched_at"` // unix seconds
-	Stale      bool   `json:"stale,omitempty"`
-	// NoReports is set when ProtonDB has no reports for the app; FewReports
-	// when it has some, too few or too unsure to show as a tier.
-	NoReports  bool   `json:"no_reports,omitempty"`
-	FewReports bool   `json:"few_reports,omitempty"`
-	URL        string `json:"url"`
-}
-
 // DeckRating is Steam's Deck verdict for an app. FetchedAt is when Steam
 // answered, so the UI can say "as of"; Stale means a newer answer is being
 // fetched. Notes are the short caveats worth showing, if any.
@@ -65,13 +55,26 @@ type DeckRating struct {
 	URL       string   `json:"url"`
 }
 
-// CompatBadge is one DRM or anti-cheat fact. Kind is the badge's type
-// ("drm-free", "online", "launcher", "denuvo", "anticheat", "eos", ...),
-// Source names where it came from and CheckedAt (unix seconds) when.
+// CompatBadge is one compatibility or protection fact. Kind identifies the
+// badge type, Source names where it came from, and CheckedAt is when (unix seconds).
 type CompatBadge struct {
 	Kind      string `json:"kind"`
 	Label     string `json:"label"`
-	Detail    string `json:"detail"`
+	Detail    string `json:"detail,omitempty"`
+	Tone      string `json:"tone,omitempty"`
+	Link      string `json:"link,omitempty"`
 	Source    string `json:"source"`
 	CheckedAt int64  `json:"checked_at"`
+}
+
+// CompatReport is a provider's report count and rating summary for one game.
+type CompatReport struct {
+	Count int    `json:"count"`
+	State string `json:"state"`
+	Tier  string `json:"tier,omitempty"`
+}
+
+type CompatLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
 }

@@ -39,7 +39,14 @@ func bundledPluginsDir() string {
 // ensureBundledSteam installs or updates the bundled steam plugin and
 // returns the plugins to list. When nothing needs doing it returns found.
 func (a *App) ensureBundledSteam(found []plugins.Plugin) []plugins.Plugin {
-	const id = "steam"
+	return a.ensureBundledPlugin(found, "steam")
+}
+
+func (a *App) ensureBundledLinuxCompat(found []plugins.Plugin) []plugins.Plugin {
+	return a.ensureBundledPlugin(found, "linux-compat")
+}
+
+func (a *App) ensureBundledPlugin(found []plugins.Plugin, id string) []plugins.Plugin {
 	bundledDir := bundledPluginsDir()
 	if bundledDir == "" {
 		return found
@@ -47,11 +54,11 @@ func (a *App) ensureBundledSteam(found []plugins.Plugin) []plugins.Plugin {
 	src := filepath.Join(bundledDir, id)
 	bundled, err := plugins.LoadManifest(src)
 	if err != nil {
-		a.host.Warnf("bundled steam plugin: %v", err)
+		a.host.Warnf("bundled %s plugin: %v", id, err)
 		return found
 	}
 	if bundled.ID != id {
-		a.host.Warnf("bundled steam plugin has id %q, want %q", bundled.ID, id)
+		a.host.Warnf("bundled plugin has id %q, want %q", bundled.ID, id)
 		return found
 	}
 	cur, haveCur := a.plugins.Plugin(id)
@@ -59,42 +66,42 @@ func (a *App) ensureBundledSteam(found []plugins.Plugin) []plugins.Plugin {
 		// Something sits where the plugin goes but the manager doesn't
 		// know it as steam: never touch a different folder.
 		if _, err := os.Stat(filepath.Join(a.plugins.Dir(), id)); err == nil {
-			a.host.Warnf("bundled steam plugin: %s exists but isn't the steam plugin, leaving it alone", filepath.Join(a.plugins.Dir(), id))
+			a.host.Warnf("bundled plugin: %s exists but isn't %s, leaving it alone", filepath.Join(a.plugins.Dir(), id), id)
 			return found
 		}
 		if err := installBundledDir(a.plugins.Dir(), id, src); err != nil {
-			a.host.Warnf("bundled steam plugin: %v", err)
+			a.host.Warnf("bundled %s plugin: %v", id, err)
 			return found
 		}
 		updated, err := a.plugins.Discover()
 		if err != nil {
-			a.host.Warnf("bundled steam plugin: %v", err)
+			a.host.Warnf("bundled %s plugin: %v", id, err)
 			return found
 		}
 		if err := a.plugins.Approve(id); err != nil {
-			a.host.Warnf("bundled steam plugin: %v", err)
+			a.host.Warnf("bundled %s plugin: %v", id, err)
 			return updated
 		}
-		a.host.Infof("installed the bundled Steam plugin (v%s)", bundled.Version)
+		a.host.Infof("installed the bundled %s plugin (v%s)", id, bundled.Version)
 		updated, _ = a.plugins.Discover()
 		return updated
 	}
 	installed, err := plugins.LoadManifest(cur.Dir)
 	if err != nil || installed.ID != id {
 		// Not the same plugin folder: never touch it.
-		a.host.Warnf("bundled steam plugin: %s is not the steam plugin, leaving it alone", cur.Dir)
+		a.host.Warnf("bundled plugin: %s is not %s, leaving it alone", cur.Dir, id)
 		return found
 	}
 	if compareVersions(bundled.Version, installed.Version) <= 0 {
 		return found // up to date, or newer (a user install from install.sh): leave it alone
 	}
 	if err := installBundledDir(a.plugins.Dir(), id, src); err != nil {
-		a.host.Warnf("bundled steam plugin: %v", err)
+		a.host.Warnf("bundled %s plugin: %v", id, err)
 		return found
 	}
 	updated, err := a.plugins.Discover()
 	if err != nil {
-		a.host.Warnf("bundled steam plugin: %v", err)
+		a.host.Warnf("bundled %s plugin: %v", id, err)
 		return found
 	}
 	// Re-pin the new hash, keeping the user's choices (issue #54): an
@@ -107,12 +114,12 @@ func (a *App) ensureBundledSteam(found []plugins.Plugin) []plugins.Plugin {
 			state.Enabled = true
 		}
 		if err := a.settings.SetPluginState(id, state); err != nil {
-			a.host.Warnf("bundled steam plugin: %v", err)
+			a.host.Warnf("bundled %s plugin: %v", id, err)
 			return updated
 		}
 		updated, _ = a.plugins.Discover()
 	}
-	a.host.Infof("updated the bundled Steam plugin (v%s -> v%s)", installed.Version, bundled.Version)
+	a.host.Infof("updated the bundled %s plugin (v%s -> v%s)", id, installed.Version, bundled.Version)
 	return updated
 }
 

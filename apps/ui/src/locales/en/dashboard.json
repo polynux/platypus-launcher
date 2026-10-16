@@ -28,14 +28,14 @@
     "statFixes": "fixes"
   },
   "reason": {
-    "borked": "ProtonDB reports this title as borked. Try a different runner or check the reports.",
-    "bronze": "ProtonDB rates this title bronze. It may need tweaks to run well."
+    "borked": "{{source}} reports this title as borked. Try a different runner or check the reports.",
+    "bronze": "{{source}} rates this title bronze. It may need tweaks to run well."
   },
   "continuePlaying": "Continue playing",
   "yourGames": "Your games",
   "fullLibrary": "full library →",
   "waiting": "Waiting on you",
-  "waitingEmpty": "Nothing needs attention. Curated fixes and low ProtonDB ratings show up here.",
+  "waitingEmpty": "Nothing needs attention. Curated fixes and low compatibility ratings show up here.",
   "moreInFixes_one": "+{{count}} more in fixes →",
   "moreInFixes_other": "+{{count}} more in fixes →",
   "recentlyAdded": "Recently added",

@@ -118,6 +118,51 @@ type LibraryList struct {
 	Games []LibraryGame `json:"games"`
 }
 
+// CompatLookupGame is one game in a batched compat.lookup request (1.17).
+type CompatLookupGame struct {
+	ID         string   `json:"id"`
+	Store      string   `json:"store"`
+	StoreAppID string   `json:"storeAppId"`
+	SteamAppID string   `json:"steamAppId,omitempty"`
+	Platforms  []string `json:"platforms,omitempty"`
+	InstallDir string   `json:"installDir,omitempty"`
+}
+
+// CompatBadge is a provider supplied compatibility badge.
+type CompatBadge struct {
+	Kind      string `json:"kind"`
+	Label     string `json:"label"`
+	Tone      string `json:"tone,omitempty"`
+	Link      string `json:"link,omitempty"`
+	Source    string `json:"source"`
+	CheckedAt int64  `json:"checkedAt"`
+}
+
+// CompatFact is one game's answer and its refresh interval.
+type CompatFact struct {
+	ID     string        `json:"id"`
+	Badges []CompatBadge `json:"badges"`
+	Report *CompatReport `json:"report,omitempty"`
+	Links  []struct {
+		Label string `json:"label"`
+		URL   string `json:"url"`
+	} `json:"links,omitempty"`
+	Notes      []string `json:"notes,omitempty"`
+	TTLSeconds int      `json:"ttlSeconds"`
+}
+
+// CompatReport is a provider's report count and rating summary for one game.
+type CompatReport struct {
+	Count int    `json:"count"`
+	State string `json:"state"` // "rated" | "few" | "none"
+	Tier  string `json:"tier,omitempty"`
+}
+
+// CompatLookupResult is the compat.lookup batch response.
+type CompatLookupResult struct {
+	Facts []CompatFact `json:"facts"`
+}
+
 // LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its
 // runner pipeline, or (Delegate == "store-client") Platypus runs Command, which
 // asks the store's own client to start the game, and follows the game through

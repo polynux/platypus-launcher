@@ -149,11 +149,12 @@ describe('sidebar collections', () => {
 describe('smartFromDraft', () => {
   it('sets only the fields the user chose', () => {
     expect(smartFromDraft(EMPTY_DRAFT)).toEqual({});
-    expect(smartFromDraft({ ...EMPTY_DRAFT, installed: 'no', minHours: '2', yearFrom: '2000', tier: 'native' })).toEqual({
+    expect(smartFromDraft({ ...EMPTY_DRAFT, installed: 'no', minHours: '2', yearFrom: '2000', badgeKind: 'rating', badgeValue: 'native' })).toEqual({
       installed: false,
       min_playtime_minutes: 120,
       year_from: 2000,
-      tier: 'native',
+      badge_kind: 'rating',
+      badge_value: 'native',
     });
   });
 
@@ -162,7 +163,7 @@ describe('smartFromDraft', () => {
   });
 
   it('round-trips every supported condition into the editor draft', () => {
-    const filter = { store: 'steam', installed: false, played: true, tier: 'native', deck: 'verified', status: 'playing', min_playtime_minutes: 90, year_from: 2001, year_to: 2010, collection: 'couch' };
+    const filter = { store: 'steam', installed: false, played: true, badge_kind: 'rating', badge_value: 'native', deck: 'verified', status: 'playing', min_playtime_minutes: 90, year_from: 2001, year_to: 2010, collection: 'couch' };
     expect(smartFromDraft(draftFromSmart(filter))).toEqual(filter);
   });
 });

@@ -14,7 +14,7 @@ import { InstallOptionsDialog } from './InstallOptionsDialog';
 import { InstallDialog } from './InstallDialog';
 import { GameSettingsModal } from './GameSettingsModal';
 import { JobProgress } from './JobProgress';
-import { CompatFacts, deckLabel, ratingText, tierLabel, tierMeaning } from './CompatBadges';
+import { CompatFacts, deckLabel, tierLabel, tierMeaning } from './CompatBadges';
 import { useCompat } from '../lib/useCompat';
 import { useCrashHints } from '../lib/useCrashHints';
 import { CrashHintsPanel } from './CrashHints';
@@ -221,6 +221,7 @@ export function GamePage(p: GamePageProps) {
   const job = p.job;
   const active = job && (job.state === 'queued' || job.state === 'running');
   const fix = game.fix_info;
+  const ratingBadge = info?.badges?.find((b) => b.kind === 'rating');
   const shots = details?.screenshots ?? [];
   const videos = (details as unknown as { videos?: { url: string; thumbnail?: string; title?: string; mime?: string }[] | null } | null)?.videos ?? [];
   const media: MediaItem[] = useMemo(() => toMediaItems(shots, videos ?? []), [details]);
@@ -258,16 +259,8 @@ export function GamePage(p: GamePageProps) {
     [t('game:facts.wrappers'), [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || t('game:facts.noWrappers')],
     [t('game:facts.launchVia'), viaSteam ? t('game:facts.steamClient') : plugin ? t('game:facts.viaPlatypus', { name: plugin.name }) : 'Platypus'],
     [
-      t('game:facts.protondb'),
-      !info
-        ? t('game:facts.pending')
-        : info.protondb
-          ? ratingText(t, info.protondb)
-          : info.native
-            ? t('game:facts.protondbNative')
-            : info.steam_app_id
-              ? t('game:facts.protondbPending')
-              : t('game:facts.protondbNoAppId'),
+      t('game:facts.compatibility'),
+      !info ? t('game:facts.pending') : ratingBadge ? `${ratingBadge.source} · ${ratingBadge.label}` : info.steam_app_id ? t('game:facts.protondbPending') : t('game:facts.protondbNoAppId'),
     ],
     [
       t('game:facts.deck'),
@@ -280,19 +273,9 @@ export function GamePage(p: GamePageProps) {
             : t('game:facts.deckNoAppId'),
     ],
   ];
-  const compat = fix
-    ? needsAttention(game)
-      ? fix.source !== 'protondb'
-        ? fix.description
-        : fix.tier === 'borked'
-          ? t('game:compat.borkedNote')
-          : t('game:compat.bronzeNote')
-      : fix.description
-    : info?.protondb?.tier
-      ? t('game:compat.rated', { tier: tierLabel(t, info.protondb.tier) })
-      : info?.protondb?.no_reports
-        ? t('game:compat.noReports')
-        : t('game:compat.noneLoaded');
+  const compat = fix?.description || (ratingBadge
+    ? `${ratingBadge.source} · ${ratingBadge.label}`
+    : t('game:compat.noneLoaded'));
 
   return (
     <TooltipProvider>
@@ -315,7 +298,7 @@ export function GamePage(p: GamePageProps) {
         <div className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4 px-8 pb-6 pt-16">
           <div className="min-w-0 flex-1 basis-72">
             <div className="mb-2.5 flex flex-wrap gap-2">
-              {fix?.tier && <TierBadge tier={fix.tier} suffix={fix.source === 'protondb' ? t('game:tierBadge.protondb') : t('game:tierBadge.curated')} title={tierMeaning(t, fix.tier)} />}
+              {fix?.tier && <TierBadge tier={fix.tier} suffix={t('game:tierBadge.curated')} title={tierMeaning(t, fix.tier)} />}
               <Badge className="bg-black/50 text-white/75" data-testid="store-badge">
                 <span className="inline-flex items-center gap-1.5">
                   <PluginLogo src={storeLogo} name={storeName} size="xs" />
@@ -454,7 +437,7 @@ export function GamePage(p: GamePageProps) {
             details={details}
             loading={loading}
             error={error}
-            compatUrls={{ protondb: info?.protondb?.url, wiki: info?.wiki?.url }}
+            compatUrls={{ protondb: ratingBadge?.link, wiki: info?.wiki?.url }}
             onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
             onReload={reload}
           />

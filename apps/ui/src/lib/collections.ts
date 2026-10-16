@@ -1,5 +1,5 @@
 import type { Collection, Game, SmartFilter } from '../types';
-import { tierFilterValue } from './compat';
+import { hasBadgeValue } from './compat';
 
 /** Collections (issue #45): smart filters are evaluated here, on the library
  *  already loaded; the core only stores them. Membership of a manual collection
@@ -19,7 +19,7 @@ export function matchesSmart(g: Game, f: SmartFilter, members: (collectionId: st
   if (f.played != null && hasPlayed(g) !== f.played) return false;
   if (f.played_within_days && (g.last_played_at ?? 0) < nowSec - f.played_within_days * 86400) return false;
   if (f.min_playtime_minutes && (g.playtime_minutes ?? 0) < f.min_playtime_minutes) return false;
-  if (f.tier && tierFilterValue(g) !== f.tier) return false;
+  if (f.badge_kind && !hasBadgeValue(g, f.badge_kind, f.badge_value ?? '')) return false;
   if (f.deck && g.fix_info?.deck !== f.deck) return false;
   // A game with no known year matches no year range: it can't be shown to be in it.
   if (f.year_from || f.year_to) {

@@ -110,7 +110,8 @@
     "noneLoaded": "No compatibility reports loaded for this title yet.",
     "borkedNote": "ProtonDB reports this title as borked. Try a different runner or check the reports.",
     "bronzeNote": "ProtonDB rates this title bronze. It may need tweaks to run well.",
-    "recipe": "recipe: winetricks {{mods}}"
+    "recipe": "recipe: winetricks {{mods}}",
+    "providerLabel": "Provider badges"
   },
   "deck": {
     "badge": "Deck · {{verdict}}",
@@ -137,7 +138,6 @@
     "dx": "DX layer",
     "wrappers": "Wrappers",
     "launchVia": "Launch via",
-    "protondb": "ProtonDB",
     "deck": "Steam Deck",
     "nativeRunner": "none · native Linux build",
     "steamRunner": "chosen in Steam",
@@ -155,7 +155,8 @@
     "protondbNoAppId": "no Steam AppID",
     "deckPending": "not rated yet",
     "deckNoAppId": "no Steam AppID",
-    "pending": "…"
+    "pending": "…",
+    "compatibility": "Compatibility"
   },
   "about": {
     "heading": "About",

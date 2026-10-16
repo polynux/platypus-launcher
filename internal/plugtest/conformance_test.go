@@ -149,6 +149,16 @@ func TestHandshakeEchoOlderPlugin(t *testing.T) {
 	s.Handshake(t)
 }
 
+func TestConformanceLinuxCompat(t *testing.T) {
+	testenv.RequireSlow(t)
+	plugtest.Suite{
+		ID:       "linux-compat",
+		CopyDir:  "../../plugins/linux-compat",
+		BuildCmd: []string{"go", "build", "-o", "plugins/linux-compat/bin/platypus-linux-compat", "platypus/plugins/linux-compat"},
+		BuildOut: "plugins/linux-compat/bin/platypus-linux-compat",
+	}.Handshake(t)
+}
+
 func pick(t *testing.T, games []types.Game, storeID string) types.Game {
 	t.Helper()
 	for _, g := range games {

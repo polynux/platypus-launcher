@@ -188,7 +188,6 @@ export type VersionInfo = gen.VersionInfo;
 
 /** Platypus-wide settings, persisted in ~/.local/share/platypus/settings.json. */
 export type LauncherSettings = gen.LauncherSettings;
-export type ProtonRating = gen.ProtonRating;
 export type CompatBadge = gen.CompatBadge;
 export type WikiCredit = gen.WikiCredit;
 export type Compat = gen.Compat;

@@ -40,6 +40,7 @@ const (
 	rev17  = "1.7"  // achievements, playtime and redeem (docs/plans/launcher-parity.md §2.4)
 	rev18  = "1.8"  // family and plugin settings (docs/plans/launcher-parity.md §2.5, Q-OVERLAY)
 	rev19  = "1.9"  // chat with friends (docs/plugins/protocol.md, "Chat")
+	rev117 = "1.17" // compatibility facts providers (docs/plugins/protocol.md, "Compat facts")
 	rev111 = "1.11" // terms to accept before an install (docs/plugins/protocol.md, "Terms")
 )
 
@@ -97,6 +98,8 @@ var registry = []Capability{
 	{Name: "local-art", Since: "1.15", Orchestrated: true,
 		Methods:  []string{},
 		Surfaces: []string{"library", "game-page"}},
+	{Name: "compat-facts", Since: rev117, Orchestrated: true,
+		Methods: []string{"compat.lookup"}, Surfaces: []string{"library", "game-page", "dashboard"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:

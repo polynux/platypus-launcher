@@ -15,9 +15,9 @@ export function useCompat(game: Game): { compat: Compat | null; update: (c: Comp
     return () => {
       live = false;
     };
-    // Reload when the game or its Steam AppID changes, not on other edits.
+    // Reload when the game or its Steam AppID/provider badges change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game.id, game.store_app_id, game.native, game.is_installed]);
+  }, [game.id, game.store_app_id, game.native, game.is_installed, game.compat_badges]);
   // Another view of the same game may save a new answer (the Steam AppID in
   // the settings modal); this view takes it too.
   useEffect(() => {

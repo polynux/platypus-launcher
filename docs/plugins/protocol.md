@@ -1,4 +1,4 @@
-# Store plugin protocol (1.16, draft)
+# Store plugin protocol (1.17, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -45,6 +45,7 @@ layout with `"kind": "data"` and need no approval; see
   its own major only, never the next major); `transport` defaults to `jsonrpc-stdio`.
   The legacy `"api": 1` still works and means protocol `1.0` over
   `jsonrpc-stdio`.
+- `store` is required when the plugin declares store capabilities (`library`, `install`, `launch`, etc.). It may be omitted by a plugin that provides no store capabilities, such as a compatibility facts provider.
 - `capabilities` lists what the plugin can do, as names from the
   [capability registry](#capabilities). It is the promise the user approves;
   `initialize` says what is really on (see below). `needs` lists the capabilities
@@ -465,7 +466,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -502,10 +503,12 @@ that doesn't know it.
   `gameIdPrefix`, the `executable` param of `game.launchSpec`, optional `requires`; see
   [Offline launches](#offline-launches-115)). 1.16: per-game status and notes
   (`LibraryGame.status`, `LibraryGame.userNotes`, a store's suggestion only; see
-  [Per-game status and notes](#per-game-status-and-notes-116)).
+  [Per-game status and notes](#per-game-status-and-notes-116)). 1.17: the
+  `compat-facts` capability (`compat.lookup`, batched compatibility facts; see
+  [Compat facts](#compat-facts-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
-  1.10, 1.11, 1.12, 1.13, 1.14, 1.15 or 1.16 method.
+  1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 or 1.17 method.
 - **Transport.** Today the only transport is `jsonrpc-stdio` (this document). It
   is an interface in `internal/plugins`: a future transport is a new
   implementation selected by `protocol.transport`, with the same methods,
@@ -539,6 +542,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `chat` | 1.9 | `chat.history`, `chat.send`, `chat.markRead` | `chat.unreadCounts` (1.13) | yes |
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
+| `compat-facts` | 1.17 | `compat.lookup` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -1059,6 +1063,35 @@ Mapping hints for plugins, from their own store fields:
   `game.details` is read as before, and its compat fields are ignored.
 - **Anti-cheat** is not sent by plugins. Platypus gets it from the AreWeAntiCheatYet catalogue (MIT, credited in the
   About view) and from the markers it finds in an installed game's folder.
+
+## Compat facts (1.17)
+
+The `compat-facts` capability supplies store-independent compatibility facts in
+batches. The core owns caching and background refresh; rendering never waits for
+the plugin.
+
+```json
+compat.lookup { "games": [{ "id": "game-id", "store": "steam",
+  "storeAppId": "620", "steamAppId": "620", "platforms": ["windows"] }] }
+  -> { "facts": [{ "id": "game-id", "badges": [{ "kind": "rating",
+    "label": "Platinum", "tone": "platinum", "link": "https://example.test/",
+    "source": "ProtonDB", "checkedAt": 1791589136 }], "links": [],
+    "report": { "count": 343, "state": "rated", "tier": "platinum" },
+    "notes": [], "ttlSeconds": 604800 }] }
+```
+
+Each input has a stable game `id`, its store and store app id, and optional
+Steam AppID, platforms and install directory. Results correspond by `id`.
+Badges carry a kind (`rating`, `verdict`, `protection` or `note`), label,
+optional tone, link, source and checked date. Providers may return links and
+notes without badges. `ttlSeconds` controls how long the core waits before
+refreshing that game's answer. Matching to ProtonDB is by Steam AppID only;
+titles are never used.
+
+An optional `report` summarizes the provider's report count: `state` is
+`rated`, `few` or `none`; `count` is the number of reports when known, and
+`tier` is the provider's rating when `state` is `rated`. The core preserves
+these fields in its cache so the UI can localize the summary.
 
 ## Media (1.12)
 

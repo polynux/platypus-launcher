@@ -11,7 +11,7 @@ type Filter = 'attention' | 'all';
 export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
   const { t } = useTranslation(['nav', 'fixes']);
   const [filter, setFilter] = useState<Filter>('attention');
-  const withData = games.filter((g) => g.fix_info);
+  const withData = games.filter((g) => g.fix_info || g.compat_badges?.some((b) => b.kind === 'rating'));
   const shown = filter === 'attention' ? withData.filter(needsAttention) : withData;
 
   return (
@@ -43,7 +43,8 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
       ) : (
         <div className="space-y-3">
           {shown.map((g) => {
-            const f = g.fix_info!;
+            const f = g.fix_info;
+            const rating = g.compat_badges?.find((b) => b.kind === 'rating');
             return (
               <button key={g.id} onClick={() => onOpenGame(g.id)} className="flex w-full gap-4 rounded-2xl bg-white/[0.045] p-4 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40">
                 <Cover src={coverImages(g)} title={g.title} className="h-24 w-16 flex-none rounded-xl ring-1 ring-white/10" />
@@ -51,14 +52,14 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
                   <div className="flex flex-wrap items-center gap-2.5">
                     {needsAttention(g) && <TweakDot />}
                     <span className="truncate text-[14px] font-bold">{g.title}</span>
-                    <TierBadge tier={f.tier} />
-                    <Badge variant="neutral">{storeLabel(g.store)} · {f.source}</Badge>
+                    {(rating?.tone || f?.tier) && <TierBadge tier={rating?.tone || f!.tier} />}
+                    <Badge variant="neutral">{storeLabel(g.store)} · {rating?.source || f?.source}</Badge>
                   </div>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{needsAttention(g) ? attentionReason(g) : f.description}</p>
-                  {(f.winetricks?.length || f.dll_overrides) && (
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">{needsAttention(g) ? attentionReason(g) : f?.description}</p>
+                  {(f?.winetricks?.length || f?.dll_overrides) && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {f.winetricks?.map((t) => <Badge key={t} variant="info" className="normal-case tracking-normal">{t}</Badge>)}
-                      {f.dll_overrides && Object.entries(f.dll_overrides).map(([k, v]) => <Badge key={k} variant="neutral" className="normal-case tracking-normal">{k}={v}</Badge>)}
+                      {f?.winetricks?.map((t) => <Badge key={t} variant="info" className="normal-case tracking-normal">{t}</Badge>)}
+                      {f?.dll_overrides && Object.entries(f.dll_overrides).map(([k, v]) => <Badge key={k} variant="neutral" className="normal-case tracking-normal">{k}={v}</Badge>)}
                     </div>
                   )}
                 </div>

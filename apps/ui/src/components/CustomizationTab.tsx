@@ -116,13 +116,11 @@ export function CustomizationTab({ game, onChanged }: {
     return () => { live = false; };
   }, [game.id]);
 
-  // The background artwork lookup (an exact-title match or a Steam AppID
-  // change) applied art while this panel was open: reload it for this game
-  // when the "library" event arrives, like the library card does.
+  // Reload for this game on a targeted library event or an empty-id batch broadcast.
   useEffect(() => {
     if (typeof onLibrary !== 'function') return;
     return onLibrary((id: string) => {
-      if (id !== game.id) return;
+      if (id !== '' && id !== game.id) return;
       Effect.runPromise(LauncherApi.getCustomization(game.id)).then(
         (c) => apply(c),
         () => {},

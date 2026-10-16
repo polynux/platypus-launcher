@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -125,7 +126,7 @@ func TestSmartCollectionsValidateTheirFilter(t *testing.T) {
 	manualID := manual[len(manual)-1].ID
 	yes := true
 	cases := map[string]types.SmartFilter{
-		"unknown tier":       {Tier: "diamond"},
+		"unknown badge":      {BadgeKind: "rating", BadgeValue: "diamond"},
 		"unknown deck":       {Deck: "great"},
 		"unknown status":     {Status: "dropped"},
 		"negative playtime":  {MinPlaytimeMinutes: -1},
@@ -137,7 +138,7 @@ func TestSmartCollectionsValidateTheirFilter(t *testing.T) {
 			t.Errorf("%s: a smart collection was created", name)
 		}
 	}
-	if _, err := s.CreateCollection("Good", types.SmartFilter{Installed: &yes, Tier: "native", YearFrom: 1990, YearTo: 2000, Collection: manualID}); err != nil {
+	if _, err := s.CreateCollection("Good", types.SmartFilter{Installed: &yes, BadgeKind: "rating", BadgeValue: "native", YearFrom: 1990, YearTo: 2000, Collection: manualID}); err != nil {
 		t.Fatalf("a valid smart filter was refused: %v", err)
 	}
 	smartList, _ := s.CreateCollection("Smart", types.SmartFilter{Installed: &yes})
@@ -208,7 +209,7 @@ func TestManualAndSmartDoNotSwitchKinds(t *testing.T) {
 	s, _ := Open(filepath.Join(t.TempDir(), "settings.json"))
 	list, _ := s.CreateCollection("Plain", types.SmartFilter{})
 	id := list[len(list)-1].ID
-	if _, err := s.UpdateCollection(id, "Plain", types.SmartFilter{Tier: "gold"}); err == nil {
+	if _, err := s.UpdateCollection(id, "Plain", types.SmartFilter{BadgeKind: "rating", BadgeValue: "gold"}); err == nil {
 		t.Fatal("a manual collection became smart")
 	}
 	if _, err := s.AddCollectionGame(types.CollectionInstalled, "steam-1"); err == nil {
@@ -225,5 +226,36 @@ func TestCollectionsReturnedAreCopies(t *testing.T) {
 	got[len(got)-1].Games[0] = "changed"
 	if s.Collections()[len(got)-1].Games[0] != "steam-1" {
 		t.Fatal("a caller changed the store through the list it was given")
+	}
+}
+
+func TestSavedTierSmartFilterMigratesToRatingBadge(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	body := `{"version":2,"collections":[{"id":"legacy","name":"Legacy","smart":{"tier":"platinum"}}]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenWithHome(path, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var migrated *types.SmartFilter
+	for _, c := range s.Collections() {
+		if c.ID == "legacy" {
+			migrated = c.Smart
+		}
+	}
+	if migrated == nil || migrated.BadgeKind != "rating" || migrated.BadgeValue != "platinum" {
+		t.Fatalf("migrated filter = %+v", migrated)
+	}
+	if err := s.SetRatingsOnline(false); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(saved), `"tier": "platinum"`) || !strings.Contains(string(saved), `"badge_kind": "rating"`) {
+		t.Fatalf("saved migration = %s", saved)
 	}
 }

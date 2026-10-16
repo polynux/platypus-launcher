@@ -12,7 +12,7 @@ const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvi
 
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
-const pdb = (tier: string) => ({ source: 'protondb', tier, description: '' }) as Game['fix_info'];
+const pdb = (tier: string) => [{ kind: 'rating', label: tier[0].toUpperCase() + tier.slice(1), tone: tier, source: 'ProtonDB', checked_at: 1791589136, link: 'https://www.protondb.com/app/620' }] as Game['compat_badges'];
 
 const lib = (games: Game[], mode: 'cards' | 'table' = 'cards') =>
   render(
@@ -22,9 +22,9 @@ const lib = (games: Game[], mode: 'cards' | 'table' = 'cards') =>
 
 describe('CompatChip', () => {
   it('shows Native for a Linux build, the tier otherwise, and nothing when unknown', () => {
-    const { getByText, rerender, container } = render(<CompatChip game={mk('a', { native: true, fix_info: pdb('gold') })} />);
+    const { getByText, rerender, container } = render(<CompatChip game={mk('a', { native: true, compat_badges: pdb('gold') })} />);
     expect(getByText('Native')).toBeTruthy();
-    rerender(<CompatChip game={mk('b', { fix_info: pdb('platinum') })} />);
+    rerender(<CompatChip game={mk('b', { compat_badges: pdb('platinum') })} />);
     expect(getByText('ProtonDB · Platinum')).toBeTruthy();
     rerender(<CompatChip game={mk('c')} />);
     expect(container.textContent).toBe('');
@@ -57,7 +57,7 @@ describe('CompatFacts', () => {
     steam_app_id_source: 'plugin',
     native: true,
     ratings_online: true,
-    protondb: { tier: 'platinum', confidence: 'strong', total: 343, fetched_at: 1791589136, url: 'https://www.protondb.com/app/620' },
+    badges: pdb('platinum')!,
     drm: [{ kind: 'online', label: 'Online required', detail: 'The store says it needs the network.', source: 'Epic', checked_at: 1791589136 }],
     drm_notes: 'Echo fixture notes',
     anticheat: [{ kind: 'anticheat', label: 'Easy Anti-Cheat', detail: 'Linux: supported.', source: 'AreWeAntiCheatYet (MIT)', checked_at: 1791589136 }],
@@ -65,13 +65,22 @@ describe('CompatFacts', () => {
 
   it('shows the rating with its link and date, the DRM and anti-cheat badges, and the AppID', () => {
     const { getByText, getByRole, getByLabelText } = render(<CompatFacts compat={full} />);
-    expect(getByText(/Platinum · 343 reports/)).toBeTruthy();
-    expect(getByText(/as of 2026-10-09/)).toBeTruthy();
-    expect(getByRole('link', { name: /protondb/i }).getAttribute('href')).toBe('https://www.protondb.com/app/620');
+    expect(getByText('Platinum').getAttribute('title')).toContain('checked 2026-10-09');
+    expect(getByRole('link', { name: 'Platinum' }).getAttribute('href')).toBe('https://www.protondb.com/app/620');
+    expect(getByRole('link', { name: 'Platinum' }).getAttribute('href')).toBe('https://www.protondb.com/app/620');
     expect(within(getByLabelText('DRM')).getByText('Online required')).toBeTruthy();
     expect(within(getByLabelText('Anti-cheat')).getByText('Easy Anti-Cheat')).toBeTruthy();
     expect(getByText('Echo fixture notes')).toBeTruthy();
     expect(getByText(/Steam AppID 620 \(from the store\)/)).toBeTruthy();
+  });
+
+  it('shows report counts and the no/few report messages from generic provider facts', () => {
+    const { getByText, rerender } = render(<CompatFacts compat={{ ...full, report: { state: 'rated', count: 343, tier: 'platinum' } }} />);
+    expect(getByText('Platinum · 343 reports')).toBeTruthy();
+    rerender(<CompatFacts compat={{ ...full, report: { state: 'few', count: 2 } }} />);
+    expect(getByText('Few ProtonDB reports (2)')).toBeTruthy();
+    rerender(<CompatFacts compat={{ ...full, report: { state: 'none', count: 0 } }} />);
+    expect(getByText('No ProtonDB reports')).toBeTruthy();
   });
 
   it('shows the Deck verdict with its link and date beside the ProtonDB rating', () => {
@@ -81,7 +90,7 @@ describe('CompatFacts', () => {
     };
     const { getByText, getAllByText, getByRole } = render(<CompatFacts compat={decked} />);
     expect(getByText('Deck · Playable')).toBeTruthy();
-    expect(getAllByText(/as of 2026-10-09/)).toHaveLength(2);
+    expect(getAllByText(/2026-10-09/)).toHaveLength(1);
     expect(getByRole('link', { name: /steam/i }).getAttribute('href')).toBe('https://store.steampowered.com/app/620');
   });
 
@@ -109,7 +118,7 @@ describe('CompatFacts', () => {
   });
 
   it('says so when nothing is reported, and leaves out a rating that was never asked for', () => {
-    const { getByText, queryByText } = render(<CompatFacts compat={{ native: false, ratings_online: false, drm: [], anticheat: [] }} />);
+    const { getByText, queryByText } = render(<CompatFacts compat={{ native: false, ratings_online: false, badges: [], drm: [], anticheat: [] }} />);
     expect(getByText('No DRM or anti-cheat reported for this game.')).toBeTruthy();
     expect(queryByText(/reports/)).toBeNull();
   });
@@ -117,10 +126,10 @@ describe('CompatFacts', () => {
 
 describe('Library tier filter', () => {
   const games = [
-    mk('plat', { fix_info: pdb('platinum') }),
+    mk('plat', { compat_badges: pdb('platinum') }),
     mk('nat', { native: true }),
     mk('none'),
-    mk('bork', { fix_info: pdb('borked') }),
+    mk('bork', { compat_badges: pdb('borked') }),
   ];
   const shown = (container: HTMLElement) => [...container.querySelectorAll('.cover-grid-sm > button')].map((b) => b.querySelector('.truncate')?.textContent);
 

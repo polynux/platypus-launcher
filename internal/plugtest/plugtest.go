@@ -754,7 +754,7 @@ func (s *Session) checkVersions(t *testing.T, game types.Game, doneJob string, u
 
 // probeSkip are the capabilities whose methods the rest of the suite already
 // drives with real params (probing them with {} could start work).
-var probeSkip = []string{"library", "install", "launch", "auth", "discard"}
+var probeSkip = []string{"library", "install", "launch", "auth", "discard", "compat-facts"}
 
 // checkHandshake holds the plugin to docs/plugins/protocol.md's rules for
 // initialize: it answers a protocol version Platypus offered and the manifest
@@ -834,6 +834,29 @@ func (s *Session) checkHandshake(t *testing.T) {
 			if errors.As(err, &re) && re.Code == jsonrpc.CodeMethodNotFound {
 				t.Errorf("%s offers %s but doesn't implement %s (-32601)", s.id, name, m)
 			}
+		}
+	}
+	if slices.Contains(rt.Capabilities, "compat-facts") {
+		s.checkCompatFacts(t)
+	}
+}
+
+func (s *Session) checkCompatFacts(t *testing.T) {
+	t.Helper()
+	s.wantCode("compat.lookup", map[string]any{}, jsonrpc.CodeInvalidParams)
+	var result struct {
+		Facts []struct {
+			ID         string `json:"id"`
+			TTLSeconds int    `json:"ttlSeconds"`
+		} `json:"facts"`
+	}
+	params := map[string]any{"games": []any{map[string]any{"id": "fixture", "store": "echo", "storeAppId": "fixture"}}}
+	if err := s.call("compat.lookup", params, &result); err != nil {
+		t.Fatalf("compat.lookup: %v", err)
+	}
+	for _, fact := range result.Facts {
+		if fact.ID == "" || fact.TTLSeconds < 0 {
+			t.Errorf("compat.lookup returned invalid fact: %+v", fact)
 		}
 	}
 }

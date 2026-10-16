@@ -65,7 +65,7 @@ type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 /** ProtonDB quality order, best first. Unknown or missing tiers have no rank and sort last. */
 export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver: 3, bronze: 2, borked: 1 };
 const sortValue = (g: Game, k: SortKey): string | number =>
-  k === 'tier' ? TIER_RANK[g.fix_info?.tier ?? ''] ?? -1 : k === 'title' ? sortKey(g) : k === 'year' ? g.release_year ?? -1 : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
+  k === 'tier' ? TIER_RANK[tierFilterValue(g)] ?? -1 : k === 'title' ? sortKey(g) : k === 'year' ? g.release_year ?? -1 : k === 'hours' ? hoursPlayed(g) ?? -1 : k === 'size' ? (g.is_installed ? g.size_bytes ?? -1 : -1) : g.last_played_at ?? -1;
 
 /** Source chips come from what the library really holds: no chip for a store with zero games. Sideloaded games get their chip last. */
 export function sourceChips(games: Game[]): (StoreType | 'all')[] {
@@ -342,7 +342,7 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen, onManage }: { ga
 
 const TableRow = memo(function TableRow({ game: g, index, runners, onOpen, onManage }: { game: Game; index: number; runners: ProtonVersion[]; onOpen: (id: string) => void; onManage?: (id: string) => void }) {
   const { t } = useTranslation('library');
-  const tier = g.native ? 'native' : g.fix_info?.tier;
+  const tier = tierFilterValue(g);
   return (
     <div
       role="row"

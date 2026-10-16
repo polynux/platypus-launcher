@@ -13,14 +13,13 @@ const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvi
 
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
-const pdb = (tier: string, extra: Partial<Game['fix_info']> = {}) =>
-  ({ source: 'protondb', tier, description: '', ...extra }) as Game['fix_info'];
-const two = (tier: string, deck: string) => pdb(tier, { deck, deck_notes: [] });
+const pdb = (tier: string) => ({ kind: 'rating', label: tier[0].toUpperCase() + tier.slice(1), tone: tier, source: 'ProtonDB', checked_at: 1791589136 });
+const two = (tier: string, deck: string) => ({ compat_badges: [pdb(tier)], fix_info: { source: 'steamdeck', tier: '', description: '', winetricks: [], dll_overrides: {}, launch_args: '', deck, deck_notes: [] } } as Partial<Game>);
 
 const dashGames = () => [
   mk('plain', { title: 'No badges' }),
-  mk('one', { title: 'One badge', fix_info: pdb('gold') }),
-  mk('two', { title: 'Two badges', fix_info: two('platinum', 'verified') }),
+  mk('one', { title: 'One badge', compat_badges: [pdb('gold')] }),
+  mk('two', { title: 'Two badges', ...two('platinum', 'verified') }),
 ];
 
 const dash = (games: Game[]) =>
@@ -75,7 +74,7 @@ describe('card layout (#61, #62)', () => {
   });
 
   it('badges wrap, never overflow, and carry a compact label for narrow cards', () => {
-    const { getByText, container } = render(<CompatChip game={mk('x', { fix_info: two('platinum', 'verified') })} />);
+    const { getByText, container } = render(<CompatChip game={mk('x', { ...two('platinum', 'verified') })} />);
     const row = container.firstElementChild as HTMLElement;
     expect(row.className).toContain('flex-wrap');
     expect(row.className).toContain('max-w-full');
@@ -92,7 +91,7 @@ describe('card layout (#61, #62)', () => {
     expect(getByText('Deck · Verified')).toBeTruthy();
     expect(getByText('Verified').className).toContain('badge-short');
     // The full text stays in the tooltips.
-    expect(container.querySelector('[title="ProtonDB: Platinum"]')).toBeTruthy();
+    expect(container.querySelector('[title="ProtonDB · Platinum · 2026-10-09"]')).toBeTruthy();
   });
 
   it('deck badge alone clips inside the card instead of overflowing', () => {
