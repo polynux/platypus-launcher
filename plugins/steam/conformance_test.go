@@ -22,6 +22,9 @@ import (
 
 func TestConformanceSteam(t *testing.T) {
 	testenv.RequireSlow(t)
+	// Fake programs on PATH (issue #66): the launch spec runs `steam`, else
+	// falls back to xdg-open.
+	testenv.SetupTestBin(t)
 	fakeHome(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("appids") == "440" {
