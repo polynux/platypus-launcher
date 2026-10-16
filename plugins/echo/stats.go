@@ -74,12 +74,20 @@ func achievementsList(p params) (any, error) {
 	return map[string]any{"total": len(list), "unlocked": unlocked, "list": list}, nil
 }
 
-// playtimeList answers playtime.list for the whole library in one call.
+// playtimeList answers playtime.list for the whole library in one call,
+// plus the seeded bulk minutes when ECHO_SEED is on (seeded.go).
 func playtimeList() (any, error) {
 	list := []map[string]any{}
 	for _, id := range order {
 		if minutes, ok := playtimeMinutes[id]; ok {
 			list = append(list, map[string]any{"id": id, "minutes": minutes})
+		}
+	}
+	if seed, ok := seededSeed(); ok {
+		for i := 0; i < bulkCount(); i++ {
+			if minutes, report := seededBulkMinutes(seed, i); report {
+				list = append(list, map[string]any{"id": bulkID(i), "minutes": minutes})
+			}
 		}
 	}
 	return map[string]any{"games": list}, nil
