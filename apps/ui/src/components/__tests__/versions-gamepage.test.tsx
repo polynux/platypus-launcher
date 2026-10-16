@@ -6,6 +6,7 @@ import { Effect } from 'effect';
 const getGameVersions = vi.hoisted(() => vi.fn());
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getCrashHints: () => Effect.succeed(null),
     getGameDetails: () => Effect.succeed({ summary: '', screenshots: [], genres: [], developers: [], publishers: [], release_date: '', achievements: null } as never),
     getGameVersions: (g: unknown) => Effect.promise(() => getGameVersions(g)),
     getInstallSize: () => Effect.succeed(0),

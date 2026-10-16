@@ -1,0 +1,3 @@
+=== 2026-10-15T10:09:00+02:00 · /games/Cut/Cut.exe
+trace:mfplat:MFStartup
+err:mfplat:MFCreateSourceReaderFromURL Failed to create source reader, hr 0xc00d36b4

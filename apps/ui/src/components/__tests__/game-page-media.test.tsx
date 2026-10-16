@@ -24,6 +24,7 @@ const details = {
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getCrashHints: () => Effect.succeed(null),
     getGameDetails: () => Effect.succeed(details as never),
   },
   onJobs: () => () => {},

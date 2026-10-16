@@ -212,6 +212,16 @@
       "invalid": "Un AppID Steam est un nombre."
     }
   },
+  "crash": {
+    "badVerb": "« {{verb}} » n'est pas un verbe winetricks connu de Platypus.",
+    "noWinetricks": "Installez winetricks pour lancer ce correctif en un clic.",
+    "noPrefix": "« {{title}} » n'a pas encore de préfixe Wine : lancez-le une fois d'abord.",
+    "noLog": "« {{title}} » n'a pas de lancement en échec à afficher.",
+    "openLogFailed": "Impossible d'ouvrir le journal de « {{title}} ».",
+    "winetricksFailed": "Impossible de lancer winetricks pour {{verb}}.",
+    "noProtonWine": "Le Proton de « {{title}} » n'a pas de binaires Wine utilisables par winetricks.",
+    "umuUnsupported": "« {{title}} » se lance avec umu, que winetricks ne peut pas encore atteindre."
+  },
   "storage": {
     "notInstalled": "« {{title}} » n'est pas installé.",
     "openFailed": "Impossible d'ouvrir le dossier de « {{title}} »."

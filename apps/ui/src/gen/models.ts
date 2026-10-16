@@ -222,6 +222,19 @@ export namespace types {
     soundtracks_shared: number;
   }
 
+  export interface CrashHint {
+    rule: string;
+    param?: string;
+    verb?: string;
+    action?: string;
+  }
+
+  export interface CrashHints {
+    log: string;
+    winetricks: boolean;
+    hints: types.CrashHint[];
+  }
+
   export interface Customization {
     title: string;
     sort_title: string;

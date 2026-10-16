@@ -5,6 +5,7 @@ import { Effect } from 'effect';
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getCrashHints: () => Effect.succeed(null),
     getGameDetails: () =>
       Effect.succeed({
         summary: 's', screenshots: ['a.png', 'b.png', 'c.png'], genres: [], developers: [], publishers: [], release_date: '', achievements: null,

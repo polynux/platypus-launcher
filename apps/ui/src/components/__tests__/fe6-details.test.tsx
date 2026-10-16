@@ -7,6 +7,7 @@ let calls = 0;
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getCrashHints: () => Effect.succeed(null),
     getGameDetails: (_g: unknown) => {
       calls += 1;
       return Effect.succeed({

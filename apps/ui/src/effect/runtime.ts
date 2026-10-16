@@ -28,6 +28,7 @@ import type {
   RedeemResult,
   GameFixInfo,
   Compat,
+  CrashHints,
   GameSettings,
   GameStatusInfo,
   GameOptions,
@@ -150,6 +151,14 @@ export const LauncherApi = {
   // anti-cheat (internal/compat). Lists are normalized to [] at the edge.
   getGameCompat: (game: Game) =>
     call<Compat>('GetGameCompat', async () => normalizeCompat(await App.GetGameCompat(backend(game)))),
+
+  // Suggestions for the game's last abnormal run (issue #46); null when there are none.
+  getCrashHints: (game: Game) => call<CrashHints | null>('GameCrashHints', async () => (await App.GameCrashHints(backend(game))) ?? null),
+
+  // Installs a winetricks verb into the game's prefix, in the background (issue #46).
+  runWinetricksVerb: (game: Game, verb: string) => call<void>('RunWinetricksVerb', () => App.RunWinetricksVerb(backend(game), verb)),
+
+  openCrashLog: (game: Game) => call<void>('OpenCrashLog', () => App.OpenCrashLog(backend(game))),
 
   // Saves the Steam AppID the user chose for a game's ratings ("" clears it).
   setGameSteamAppID: (game: Game, appId: string) =>

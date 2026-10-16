@@ -1,0 +1,4 @@
+=== 2026-10-15T10:17:00+02:00 · /games/Mod/Mod.exe
+err:module:import_dll Library libfoo-7.dll (which is needed by L"C:\\games\\Mod\\Mod.exe") not found
+err:module:import_dll Library libfoo-7.dll (which is needed by L"C:\\games\\Mod\\Mod.exe") not found
+err:module:import_dll Library bar.dll not found

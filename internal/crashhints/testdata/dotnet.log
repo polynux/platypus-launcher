@@ -1,0 +1,2 @@
+=== 2026-10-15T10:11:00+02:00 · /games/Net/Net.exe
+err:module:import_dll Library mscoree.dll (which is needed by L"C:\\games\\Net\\Net.exe") not found

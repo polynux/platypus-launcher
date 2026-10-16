@@ -8,6 +8,26 @@
   "copied": "Copied to clipboard",
   "refreshing": "refreshing library…",
   "session": "this session",
+  "crash": {
+    "heading": "The last launch ended early",
+    "intro": "Platypus read the game's log. Nothing was sent anywhere.",
+    "rule": {
+      "vcredist": "{{dll}} is missing: the Visual C++ runtime isn't installed in this prefix.",
+      "directx": "{{dll}} is missing: a DirectX component isn't installed in this prefix.",
+      "media": "Windows Media Foundation failed, which usually means a video codec is missing. Proton-GE or umu can ship the codecs.",
+      "dotnet": ".NET (mscoree) failed to load: the game needs the .NET runtime.",
+      "vulkan": "DXVK or VKD3D found no Vulkan device: the GPU driver or its Vulkan ICD is missing.",
+      "anticheat": "This game uses an anti-cheat, which may refuse to run under Wine. Its status is shown above.",
+      "missingDll": "Wine couldn't load {{dll}}."
+    },
+    "action": {
+      "winetricks": "Install {{verb}} with winetricks",
+      "runner": "Switch runner",
+      "openLog": "Open the log"
+    },
+    "manual": "Run: winetricks {{verb}}",
+    "started": "Installing {{verb}} into the game's prefix. This can take a few minutes."
+  },
   "play": {
     "play": "Play",
     "launching": "Launching",

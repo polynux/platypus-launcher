@@ -44,6 +44,9 @@ type Tracker struct {
 	// logDir overrides the session-log folder (issue #41: the App passes
 	// <data>/logs so tests need no HOME). Empty means the default.
 	logDir string
+	// crashed maps a game to the log of its last direct run when that run
+	// ended abnormally (issue #46). A clean run or a new launch clears it.
+	crashed map[string]string
 }
 
 // entry is one tracked launch. cmd is the direct-launch process (nil for
@@ -65,7 +68,16 @@ type entry struct {
 }
 
 func NewTracker(emit Emit) *Tracker {
-	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}}
+	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}, crashed: map[string]string{}}
+}
+
+// CrashLog returns the log file of gameID's last direct launch when that run
+// ended abnormally (a non-zero exit or a very short run, issue #46), "" otherwise.
+// The file holds one session: the next launch replaces it.
+func (t *Tracker) CrashLog(gameID string) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.crashed[gameID]
 }
 
 // SetLogDir overrides the folder session logs are written to (issue #41).
@@ -251,6 +263,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 	for _, o := range opts {
 		o(e)
 	}
+	delete(t.crashed, gameID)
 	t.mu.Unlock()
 	prepareForStop(cmd, e)
 	tail := &tailBuffer{}
@@ -260,7 +273,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 	if len(redact) == 0 {
 		if logErr == nil {
 			fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
-			out = io.MultiWriter(log, tail)
+			out = io.MultiWriter(&limitWriter{w: log, left: maxSessionLog}, tail)
 		} else {
 			out = tail
 		}
@@ -268,7 +281,7 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		var lw, tw *redactWriter
 		if logErr == nil {
 			fmt.Fprintf(log, "\n=== %s · %s\n", time.Now().Format(time.RFC3339), shown)
-			lw = &redactWriter{w: log, prefixes: redact}
+			lw = &redactWriter{w: &limitWriter{w: log, left: maxSessionLog}, prefixes: redact}
 			tw = &redactWriter{w: tail, prefixes: redact}
 			out = io.MultiWriter(lw, tw)
 		} else {
@@ -320,6 +333,13 @@ func (t *Tracker) StartDirect(gameID string, cmd *exec.Cmd, shown string, redact
 		stoppedByUser := t.userStopped(e)
 		t.clearEntry(gameID, e)
 		failed := !stoppedByUser && err != nil && time.Since(started) < quickExit
+		// Abnormal for the crash hints (issue #46): a non-zero exit or a very
+		// short run that the user didn't stop.
+		if abnormal := !stoppedByUser && (err != nil || time.Since(started) < quickExit); abnormal && logPath != "" {
+			t.mu.Lock()
+			t.crashed[gameID] = logPath
+			t.mu.Unlock()
+		}
 		t.mu.Lock()
 		hooks := append([]func(ExitInfo){}, e.onExits...)
 		t.mu.Unlock()
@@ -515,11 +535,45 @@ func (t *Tracker) openLog(gameID string) (*os.File, string, error) {
 	return openLogIn(dir, gameID)
 }
 
+// maxSessionLog bounds one session's log (issue #46). Wine's stderr can grow
+// without limit; the crash hints read the whole file, so it stays small.
+const maxSessionLog = 4 << 20
+
+// limitWriter passes writes to w until left bytes are written, then drops the
+// rest and says so once.
+type limitWriter struct {
+	w    io.Writer
+	left int64
+	cut  bool
+}
+
+func (l *limitWriter) Write(p []byte) (int, error) {
+	if l.left <= 0 {
+		if !l.cut {
+			l.cut = true
+			fmt.Fprintln(l.w, "[log truncated]")
+		}
+		return len(p), nil
+	}
+	chunk := p
+	if int64(len(chunk)) > l.left {
+		chunk = chunk[:l.left]
+	}
+	n, err := l.w.Write(chunk)
+	l.left -= int64(n)
+	if err != nil {
+		return n, err
+	}
+	return len(p), nil
+}
+
+// openLogIn opens gameID's log for one session: it starts empty, so the file
+// is the last launch's output only (issue #46).
 func openLogIn(dir, gameID string) (*os.File, string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, "", err
 	}
 	path := filepath.Join(dir, gameID+".log")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	return f, path, err
 }

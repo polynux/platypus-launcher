@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
+    getCrashHints: () => Effect.succeed(null),
     getGameAchievements: (g: unknown) => mocks.getGameAchievements(g),
     getGameDetails: (g: unknown) => mocks.getGameDetails(g),
   },
