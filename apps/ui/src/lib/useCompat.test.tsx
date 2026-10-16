@@ -12,7 +12,7 @@ import { useCompat } from './useCompat';
 import { clearCompatCache, setGameCompat } from './compat';
 
 const game = { id: 'g1', store_app_id: 'x', native: false, is_installed: true } as unknown as Game;
-const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, badges: [], drm: [], anticheat: [], ...o });
+const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, badges: [], ...o });
 
 describe('useCompat', () => {
   it('takes a new answer saved by another view of the same game', async () => {

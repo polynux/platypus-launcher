@@ -31,11 +31,13 @@ type compatFactEntry struct {
 	SteamAppID string             `json:"steamAppId,omitempty"`
 	Expires    time.Time          `json:"expires"`
 	RetryAt    time.Time          `json:"retryAt,omitempty"`
+	Online     bool               `json:"online"`
+	InstallDir string             `json:"installDir,omitempty"`
 }
 
 // compatFactFresh reports whether an answer or retry delay still covers this app id.
-func compatFactFresh(e compatFactEntry, appID string, now time.Time) bool {
-	if e.SteamAppID != appID {
+func compatFactFresh(e compatFactEntry, appID, installDir string, online bool, now time.Time) bool {
+	if e.SteamAppID != appID || e.InstallDir != installDir || (online && !e.Online) {
 		return false
 	}
 	return (e.Fact.ID != "" && now.Before(e.Expires)) || now.Before(e.RetryAt)
@@ -86,15 +88,19 @@ func (a *App) cachedProviderFact(gameID, appID string) (plugins.CompatFact, bool
 		if entry.Fact.Report != nil {
 			combined.Report = entry.Fact.Report
 		}
+		if entry.Fact.Wiki != nil {
+			combined.Wiki = entry.Fact.Wiki
+		}
 	}
 	return combined, found
 }
 
 // requestCompatFacts queues stale games in one background batch per provider.
 func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *types.GameDetails) {
-	if len(games) == 0 || a.compatFacts == nil || a.plugins == nil || !a.netOnline() || (a.settings != nil && !a.settings.RatingsOnline()) {
+	if len(games) == 0 || a.compatFacts == nil || a.plugins == nil {
 		return
 	}
+	online := a.netOnline() && (a.settings == nil || a.settings.RatingsOnline())
 	now := time.Now()
 	for _, plugin := range a.plugins.Plugins() {
 		if plugin.Manifest.IsData() || !slices.Contains(plugin.Manifest.Capabilities, "compat-facts") {
@@ -110,7 +116,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			appID, _ := a.ratingAppID(g, d)
 			a.compatFacts.mu.Lock()
 			e := a.compatFacts.facts[pluginID][g.ID]
-			fresh := compatFactFresh(e, appID, now)
+			fresh := compatFactFresh(e, appID, g.InstallDir, online, now)
 			a.compatFacts.mu.Unlock()
 			if fresh {
 				continue
@@ -119,9 +125,10 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			if store == "" {
 				store = sourceOf(g)
 			}
-			item := plugins.CompatLookupGame{ID: g.ID, Store: store, StoreAppID: g.StoreAppID, SteamAppID: appID, InstallDir: g.InstallDir}
+			item := plugins.CompatLookupGame{ID: g.ID, Store: store, StoreAppID: g.StoreAppID, SteamAppID: appID, InstallDir: g.InstallDir, Online: online}
 			if d != nil {
 				item.Platforms = d.Platforms
+				item.StoreDRM = d.DRM != nil
 			}
 			batch = append(batch, item)
 		}
@@ -160,7 +167,7 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 			for _, game := range pending {
 				a.compatFacts.mu.Lock()
 				e := a.compatFacts.facts[pluginID][game.ID]
-				fresh := compatFactFresh(e, game.SteamAppID, time.Now())
+				fresh := compatFactFresh(e, game.SteamAppID, game.InstallDir, game.Online, time.Now())
 				a.compatFacts.mu.Unlock()
 				if !fresh {
 					batch = append(batch, game)
@@ -190,12 +197,25 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 	}
 	if err != nil {
 		for _, g := range games {
+			if !g.Online {
+				continue
+			}
 			e := a.compatFacts.facts[pluginID][g.ID]
 			if e.SteamAppID != g.SteamAppID {
 				e.Fact = plugins.CompatFact{}
 				e.Expires = time.Time{}
 			}
 			e.SteamAppID = g.SteamAppID
+			if e.InstallDir != g.InstallDir {
+				badges := e.Fact.Badges[:0]
+				for _, b := range e.Fact.Badges {
+					if b.Source != "Installed files" {
+						badges = append(badges, b)
+					}
+				}
+				e.Fact.Badges = badges
+			}
+			e.InstallDir = g.InstallDir
 			e.RetryAt = now.Add(compatFactRetry)
 			a.compatFacts.facts[pluginID][g.ID] = e
 		}
@@ -209,13 +229,15 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 // The caller holds compatFacts.mu; stale facts survive an error only for their original AppID.
 func (a *App) cacheCompatFactResultLocked(pluginID string, games []plugins.CompatLookupGame, facts []plugins.CompatFact, now time.Time) {
 	appIDs := make(map[string]string, len(games))
+	requested := make(map[string]plugins.CompatLookupGame, len(games))
 	returned := make(map[string]bool, len(facts))
 	for _, g := range games {
 		appIDs[g.ID] = g.SteamAppID
+		requested[g.ID] = g
 	}
 	for _, fact := range facts {
-		appID, requested := appIDs[fact.ID]
-		if fact.ID == "" || !requested {
+		appID, known := appIDs[fact.ID]
+		if fact.ID == "" || !known {
 			continue
 		}
 		ttl := time.Duration(fact.TTLSeconds) * time.Second
@@ -225,11 +247,42 @@ func (a *App) cacheCompatFactResultLocked(pluginID string, games []plugins.Compa
 		if fact.Badges == nil {
 			fact.Badges = []plugins.CompatBadge{}
 		}
-		a.compatFacts.facts[pluginID][fact.ID] = compatFactEntry{Fact: fact, SteamAppID: appID, Expires: now.Add(ttl)}
+		old := a.compatFacts.facts[pluginID][fact.ID]
+		request := requested[fact.ID]
+		sameApp := old.SteamAppID == appID
+		for _, b := range old.Fact.Badges {
+			if !sameApp || (b.Source == "Installed files" && old.InstallDir != request.InstallDir) {
+				continue
+			}
+			keep := b.Source == "Installed files" || (!request.Online && b.Source != "Installed files")
+			if keep {
+				duplicate := false
+				for _, current := range fact.Badges {
+					if current.Kind == b.Kind && current.Label == b.Label && current.Source == b.Source {
+						duplicate = true
+						break
+					}
+				}
+				if !duplicate {
+					fact.Badges = append(fact.Badges, b)
+				}
+			}
+		}
+		if fact.Wiki == nil && !request.Online && sameApp {
+			fact.Wiki = old.Fact.Wiki
+		}
+		expires := now.Add(ttl)
+		if !request.Online && old.Fact.ID != "" && sameApp {
+			expires = old.Expires
+		}
+		a.compatFacts.facts[pluginID][fact.ID] = compatFactEntry{Fact: fact, SteamAppID: appID, Expires: expires, Online: request.Online, InstallDir: request.InstallDir}
 		returned[fact.ID] = true
 	}
 	for _, g := range games {
 		if returned[g.ID] {
+			continue
+		}
+		if !g.Online {
 			continue
 		}
 		e := a.compatFacts.facts[pluginID][g.ID]
@@ -263,7 +316,7 @@ func (a *App) saveCompatFactsLocked() {
 func factBadges(f plugins.CompatFact) []types.CompatBadge {
 	out := make([]types.CompatBadge, 0, len(f.Badges))
 	for _, b := range f.Badges {
-		out = append(out, types.CompatBadge{Kind: b.Kind, Label: b.Label, Tone: b.Tone, Link: b.Link, Source: b.Source, CheckedAt: b.CheckedAt})
+		out = append(out, types.CompatBadge{Kind: b.Kind, Label: b.Label, Detail: b.Detail, Tone: b.Tone, Link: b.Link, Source: b.Source, CheckedAt: b.CheckedAt})
 	}
 	return out
 }

@@ -44,7 +44,7 @@ describe('DeckBadge', () => {
   });
 
   it('shows the Deck verdict beside the tier on a card, even with no tier', () => {
-    const deckOnly = mk('d', { fix_info: { source: 'steamdeck', tier: '', description: '', winetricks: [], dll_overrides: {}, launch_args: '', deck: 'playable', deck_notes: [] } });
+    const deckOnly = mk('d', { compat_badges: [{ kind: 'verdict', label: 'Playable', tone: 'playable', source: 'Steam Deck', checked_at: 1 }] });
     const { getByText, queryByText } = render(<CompatChip game={deckOnly} />);
     expect(getByText('Deck · Playable')).toBeTruthy();
     expect(queryByText(/ProtonDB/)).toBeNull();
@@ -57,10 +57,8 @@ describe('CompatFacts', () => {
     steam_app_id_source: 'plugin',
     native: true,
     ratings_online: true,
-    badges: pdb('platinum')!,
-    drm: [{ kind: 'online', label: 'Online required', detail: 'The store says it needs the network.', source: 'Epic', checked_at: 1791589136 }],
-    drm_notes: 'Echo fixture notes',
-    anticheat: [{ kind: 'anticheat', label: 'Easy Anti-Cheat', detail: 'Linux: supported.', source: 'AreWeAntiCheatYet (MIT)', checked_at: 1791589136 }],
+    badges: [...pdb('platinum')!, { kind: 'online', label: 'Online required', detail: 'The store says it needs the network.', source: 'Epic', checked_at: 1791589136 }, { kind: 'anticheat', label: 'Easy Anti-Cheat', detail: 'Linux: supported.', source: 'AreWeAntiCheatYet (MIT)', checked_at: 1791589136 }],
+    notes: ['Echo fixture notes'],
   };
 
   it('shows the rating with its link and date, the DRM and anti-cheat badges, and the AppID', () => {
@@ -86,7 +84,7 @@ describe('CompatFacts', () => {
   it('shows the Deck verdict with its link and date beside the ProtonDB rating', () => {
     const decked: Compat = {
       ...full,
-      deck: { rating: 'playable', notes: ['Some text is too small to read on the Deck.'], fetched_at: 1791589136, url: 'https://store.steampowered.com/app/620' },
+      steam_app_id: '620', badges: [{ kind: 'verdict', label: 'Playable', tone: 'playable', source: 'Steam Deck', checked_at: 1791589136, link: 'https://store.steampowered.com/app/620' }, { kind: 'note', label: 'Some text is too small to read on the Deck.', source: 'Steam Deck', checked_at: 1791589136 }],
     };
     const { getByText, getAllByText, getByRole } = render(<CompatFacts compat={decked} />);
     expect(getByText('Deck · Playable')).toBeTruthy();
@@ -97,8 +95,7 @@ describe('CompatFacts', () => {
   it('credits PCGamingWiki under the facts it gave: the page, the licence and the day read', () => {
     const wiki: Compat = {
       ...full,
-      drm: [{ kind: 'drm-removed', label: 'Denuvo removed', detail: 'Removed.', source: 'PCGamingWiki', checked_at: 1791589136 }],
-      anticheat: [],
+      badges: [{ kind: 'drm-removed', label: 'Denuvo removed', detail: 'Removed.', source: 'PCGamingWiki', checked_at: 1791589136 }],
       wiki: { title: 'Portal 2', url: 'https://www.pcgamingwiki.com/wiki/Portal_2', fetched_at: 1791589136, licence_url: 'https://creativecommons.org/licenses/by-nc-sa/3.0/' },
     };
     const { getByLabelText, getByRole, getByText } = render(<CompatFacts compat={wiki} />);
@@ -107,7 +104,7 @@ describe('CompatFacts', () => {
     expect(credit.textContent).toContain('read 2026-10-09');
     expect(getByRole('link', { name: 'Portal 2 on PCGamingWiki ↗' }).getAttribute('href')).toBe('https://www.pcgamingwiki.com/wiki/Portal_2');
     expect(getByRole('link', { name: 'licence ↗' }).getAttribute('href')).toBe('https://creativecommons.org/licenses/by-nc-sa/3.0/');
-    expect(getByText('Denuvo removed')).toBeTruthy();
+    expect(within(getByLabelText('DRM')).getByText('Denuvo removed')).toBeTruthy();
   });
 
   it('shows no PCGamingWiki credit when the wiki gave no facts', () => {
@@ -118,7 +115,7 @@ describe('CompatFacts', () => {
   });
 
   it('says so when nothing is reported, and leaves out a rating that was never asked for', () => {
-    const { getByText, queryByText } = render(<CompatFacts compat={{ native: false, ratings_online: false, badges: [], drm: [], anticheat: [] }} />);
+    const { getByText, queryByText } = render(<CompatFacts compat={{ native: false, ratings_online: false, badges: [] }} />);
     expect(getByText('No DRM or anti-cheat reported for this game.')).toBeTruthy();
     expect(queryByText(/reports/)).toBeNull();
   });

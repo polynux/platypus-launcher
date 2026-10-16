@@ -22,7 +22,6 @@ export interface SmartDraft {
   played: '' | 'yes' | 'no';
   badgeKind: string;
   badgeValue: string;
-  deck: string;
   status: string;
   minHours: string;
   yearFrom: string;
@@ -30,7 +29,7 @@ export interface SmartDraft {
   collection: string;
 }
 
-export const EMPTY_DRAFT: SmartDraft = { store: '', installed: '', played: '', badgeKind: '', badgeValue: '', deck: '', status: '', minHours: '', yearFrom: '', yearTo: '', collection: '' };
+export const EMPTY_DRAFT: SmartDraft = { store: '', installed: '', played: '', badgeKind: '', badgeValue: '', status: '', minHours: '', yearFrom: '', yearTo: '', collection: '' };
 
 const positive = (s: string): number => {
   const n = Math.floor(Number(s));
@@ -46,7 +45,6 @@ export function smartFromDraft(d: SmartDraft): SmartFilter {
   if (d.played) f.played = d.played === 'yes';
   if (d.badgeKind) f.badge_kind = d.badgeKind;
   if (d.badgeValue) f.badge_value = d.badgeValue;
-  if (d.deck) f.deck = d.deck;
   if (d.status) f.status = d.status;
   const hours = Number(d.minHours);
   if (Number.isFinite(hours) && hours > 0) f.min_playtime_minutes = Math.round(hours * 60);
@@ -64,7 +62,6 @@ export function draftFromSmart(f: SmartFilter): SmartDraft {
     played: f.played === undefined ? '' : f.played ? 'yes' : 'no',
     badgeKind: f.badge_kind ?? '',
     badgeValue: f.badge_value ?? '',
-    deck: f.deck ?? '',
     status: f.status ?? '',
     minHours: f.min_playtime_minutes === undefined ? '' : String(f.min_playtime_minutes / 60),
     yearFrom: f.year_from === undefined ? '' : String(f.year_from),
@@ -74,7 +71,6 @@ export function draftFromSmart(f: SmartFilter): SmartDraft {
 }
 
 const STATUSES = ['none', 'backlog', 'playing', 'finished', 'abandoned'] as const;
-const DECKS = ['verified', 'playable', 'unsupported'] as const;
 
 /** A tier filter value's label: the library's own words for native and unrated games. */
 function tierLabel(t: (key: string) => string, v: string): string {
@@ -347,7 +343,6 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
           <Input value={draft.badgeValue} onChange={set('badgeValue')} disabled={disabled} className="mt-1.5" />
         </label>
       ) : null}
-      {select('deck', t('collections:smart.deck'), DECKS.map((v) => ({ value: v, label: t(`collections:smart.deckName.${v}`) })))}
       {select('status', t('collections:smart.status'), STATUSES.map((v) => ({ value: v, label: t(`library:statusFilter.${v}`) })))}
       {select('collection', t('collections:smart.collection'), collections.filter((c) => !c.smart).map((c) => ({ value: c.id, label: c.builtin ? t(`collections:builtin.${c.id}`) : c.name })))}
       <label className="text-[13px] text-white/70">

@@ -266,8 +266,8 @@ export function GamePage(p: GamePageProps) {
       t('game:facts.deck'),
       !info
         ? t('game:facts.pending')
-        : info.deck?.rating
-          ? deckLabel(t, info.deck.rating)
+        : info.badges?.find((b) => b.kind === 'verdict')
+          ? deckLabel(t, info.badges.find((b) => b.kind === 'verdict')?.tone || info.badges.find((b) => b.kind === 'verdict')!.label.toLowerCase())
           : info.steam_app_id
             ? t('game:facts.deckPending')
             : t('game:facts.deckNoAppId'),

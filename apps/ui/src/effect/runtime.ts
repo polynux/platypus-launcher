@@ -92,7 +92,7 @@ const backend = (g: Game) => toBackendGame(g) as gen.Game;
 
 /** A compat answer with its lists present, whatever Go sent (nil slices arrive as null). */
 function normalizeCompat(c: Compat): Compat {
-  return { ...c, badges: c.badges ?? [], notes: c.notes ?? [], links: c.links ?? [], drm: c.drm ?? [], anticheat: c.anticheat ?? [] };
+  return { ...c, badges: c.badges ?? [], notes: c.notes ?? [], links: c.links ?? [] };
 }
 
 /** A customization with every field present, whatever Go sent. */

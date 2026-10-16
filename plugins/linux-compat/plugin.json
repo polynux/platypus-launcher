@@ -3,11 +3,11 @@
   "name": "Linux Compatibility Facts",
   "version": "0.1.0",
   "author": "Platypus",
-  "description": "ProtonDB compatibility ratings for games with a Steam AppID.",
+  "description": "ProtonDB, Steam Deck, AreWeAntiCheatYet, PCGamingWiki and local anti-cheat facts.",
   "manifestVersion": 1,
   "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"], "transport": "jsonrpc-stdio" },
   "exec": "bin/platypus-linux-compat",
   "capabilities": ["compat-facts"],
   "needs": ["compat-facts"],
-  "permissions": { "network": ["www.protondb.com"] }
+  "permissions": { "network": ["www.protondb.com", "store.steampowered.com", "raw.githubusercontent.com", "www.pcgamingwiki.com"] }
 }

@@ -11,44 +11,6 @@ import (
 // Badges say only what a source said. An unknown fact gets no badge, and a
 // guess (Denuvo, say) is labelled as one.
 //
-// launcherNames are the display names of the store launchers a plugin may
-// name in drm.launcher. Any other value is shown as the plugin wrote it.
-var launcherNames = map[string]string{
-	"ubisoft-connect": "Ubisoft Connect",
-	"ea-app":          "EA app",
-	"origin":          "EA app",
-	"steam":           "Steam",
-	"gog-galaxy":      "GOG Galaxy",
-}
-
-// maxLauncher caps a launcher name a plugin sends.
-const maxLauncher = 60
-
-// StoreDRM turns a store's protection facts into badges. source names the
-// store, checked is when Platypus read the facts.
-func StoreDRM(d *types.DRM, source string, checked time.Time) []types.CompatBadge {
-	if d == nil {
-		return nil
-	}
-	out := []types.CompatBadge{}
-	add := func(kind, label, detail string) {
-		out = append(out, types.CompatBadge{Kind: kind, Label: label, Detail: detail, Source: source, CheckedAt: checked.Unix()})
-	}
-	if d.DRMFree != nil && *d.DRMFree {
-		add("drm-free", "DRM-free", "The store sells it without DRM.")
-	}
-	if d.OnlineRequired != nil && *d.OnlineRequired {
-		add("online", "Online required", "The store says the game can't run offline.")
-	}
-	if l := launcherName(d.Launcher); l != "" {
-		add("launcher", "Needs "+l, fmt.Sprintf("The store says the game runs through %s.", l))
-	}
-	if d.DenuvoLikely != nil && *d.DenuvoLikely {
-		add("denuvo", "Denuvo likely", "Inferred from the store's ownership check, not confirmed.")
-	}
-	return out
-}
-
 // wikiSource names PCGamingWiki in a badge's source.
 const wikiSource = "PCGamingWiki"
 
@@ -96,16 +58,6 @@ func WikiAntiCheatBadges(r WikiRecord, checked time.Time) []types.CompatBadge {
 		})
 	}
 	return out
-}
-
-func launcherName(raw string) string {
-	if n, ok := launcherNames[raw]; ok {
-		return n
-	}
-	if len(raw) > maxLauncher {
-		raw = raw[:maxLauncher]
-	}
-	return raw
 }
 
 // linuxStatus words an AreWeAntiCheatYet status for Linux and Proton.

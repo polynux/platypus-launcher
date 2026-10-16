@@ -127,7 +127,7 @@ func TestSmartCollectionsValidateTheirFilter(t *testing.T) {
 	yes := true
 	cases := map[string]types.SmartFilter{
 		"unknown badge":      {BadgeKind: "rating", BadgeValue: "diamond"},
-		"unknown deck":       {Deck: "great"},
+		"unknown deck":       {BadgeKind: "verdict", BadgeValue: "great"},
 		"unknown status":     {Status: "dropped"},
 		"negative playtime":  {MinPlaytimeMinutes: -1},
 		"years backwards":    {YearFrom: 2010, YearTo: 2000},

@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"platypus/internal/compat"
+	"platypus/internal/types"
 )
 
 type message struct {
@@ -35,6 +37,8 @@ type game struct {
 	SteamAppID string   `json:"steamAppId"`
 	Platforms  []string `json:"platforms,omitempty"`
 	InstallDir string   `json:"installDir,omitempty"`
+	Online     bool     `json:"online"`
+	StoreDRM   bool     `json:"storeDRM,omitempty"`
 }
 
 type lookupParams struct {
@@ -46,15 +50,23 @@ type badge struct {
 	Tone      string `json:"tone,omitempty"`
 	Link      string `json:"link,omitempty"`
 	Source    string `json:"source"`
+	Detail    string `json:"detail,omitempty"`
 	CheckedAt int64  `json:"checkedAt"`
 }
 type fact struct {
-	ID         string   `json:"id"`
-	Badges     []badge  `json:"badges"`
-	Report     *report  `json:"report,omitempty"`
-	Links      []any    `json:"links"`
-	Notes      []string `json:"notes,omitempty"`
-	TTLSeconds int      `json:"ttlSeconds"`
+	ID         string      `json:"id"`
+	Badges     []badge     `json:"badges"`
+	Report     *report     `json:"report,omitempty"`
+	Links      []any       `json:"links"`
+	Notes      []string    `json:"notes,omitempty"`
+	Wiki       *wikiCredit `json:"wiki,omitempty"`
+	TTLSeconds int         `json:"ttlSeconds"`
+}
+type wikiCredit struct {
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	FetchedAt  int64  `json:"fetchedAt"`
+	LicenceURL string `json:"licenceUrl"`
 }
 type report struct {
 	Count int    `json:"count"`
@@ -63,6 +75,42 @@ type report struct {
 }
 
 var proton compat.RatingSource = &compat.ProtonDB{Fetch: compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")}
+var svc *compat.Service
+
+func configureService() {
+	data := os.Getenv("PLATYPUS_PLUGIN_DATA")
+	cache, _ := compat.OpenCache(filepath.Join(data, "source-cache.json"))
+	fetch := compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")
+	awacyFetch := compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")
+	awacyFetch.Interval, awacyFetch.Concurrency = 0, 1
+	svc = &compat.Service{Cache: cache, Ratings: proton,
+		Deck:      &compat.SteamDeck{Fetch: fetch},
+		AntiCheat: &compat.AntiCheatStore{Path: filepath.Join(data, "awacy.json"), URL: compat.AWACYURL, Fetch: awacyFetch},
+		Wiki:      &compat.PCGW{Fetch: compat.NewPCGWFetcher()},
+	}
+}
+
+func wireBadge(b types.CompatBadge) badge {
+	return badge{Kind: b.Kind, Label: b.Label, Tone: b.Tone, Link: b.Link, Source: b.Source, CheckedAt: b.CheckedAt, Detail: b.Detail}
+}
+
+func newAntiCheat(have []badge, add []types.CompatBadge) []types.CompatBadge {
+	seen := map[string]bool{}
+	for _, b := range have {
+		if b.Kind == "anticheat" {
+			seen[strings.ToLower(b.Label)] = true
+		}
+	}
+	out := make([]types.CompatBadge, 0, len(add))
+	for _, b := range add {
+		key := strings.ToLower(b.Label)
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, b)
+		}
+	}
+	return out
+}
 
 func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 	var p lookupParams
@@ -85,7 +133,7 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			id = g.StoreAppID
 		}
 		f := fact{ID: g.ID, Badges: []badge{}, Links: []any{}, TTLSeconds: int((7 * 24 * time.Hour).Seconds())}
-		if id != "" {
+		if id != "" && g.Online {
 			summary, err := proton.Summary(ctx, id)
 			if errors.Is(err, compat.ErrPaused) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (err != nil && ctx.Err() != nil) {
 				stopped = true
@@ -93,7 +141,9 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 			if err != nil && !errors.Is(err, compat.ErrNotFound) {
 				sourceDown = true
-				continue
+				if svc == nil {
+					continue
+				}
 			}
 			if err == nil {
 				tier := compat.ShownTier(summary)
@@ -109,6 +159,57 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 			if errors.Is(err, compat.ErrNotFound) {
 				f.Report = &report{State: "none"}
+			}
+		}
+		if g.Online && svc != nil {
+			if svc.Deck != nil {
+				if d, ok := svc.DeckRating(ctx, id); ok && d.Found {
+					b := badge{Kind: "verdict", Label: d.Report.Rating, Tone: d.Report.Rating, Link: compat.DeckPage(id), Source: "Steam Deck", CheckedAt: d.FetchedAt.Unix()}
+					f.Badges = append(f.Badges, b)
+					for _, n := range d.Report.Notes {
+						f.Badges = append(f.Badges, badge{Kind: "note", Label: n, Source: "Steam Deck", CheckedAt: d.FetchedAt.Unix()})
+					}
+				}
+			}
+			var cat *compat.AntiCheatData
+			if svc.AntiCheat != nil {
+				cat = svc.AntiCheatCatalogue(ctx)
+			}
+			var entry compat.AntiCheatGame
+			var found bool
+			if cat != nil {
+				if id != "" {
+					entry, found = cat.BySteam(id)
+				}
+				if !found && g.Store == "epic" {
+					entry, found = cat.ByEpic(g.StoreAppID)
+				}
+			}
+			if found {
+				for _, b := range compat.AntiCheatBadges(entry, cat.FetchedAt) {
+					f.Badges = append(f.Badges, wireBadge(b))
+				}
+			}
+			if id != "" && svc.Wiki != nil {
+				if w, ok := svc.WikiPage(ctx, id); ok && w.Found {
+					drm := compat.WikiDRMBadges(w.Record, w.FetchedAt, g.StoreDRM)
+					ac := compat.WikiAntiCheatBadges(w.Record, w.FetchedAt)
+					for _, b := range drm {
+						f.Badges = append(f.Badges, wireBadge(b))
+					}
+					for _, b := range newAntiCheat(f.Badges, ac) {
+						f.Badges = append(f.Badges, wireBadge(b))
+					}
+					if len(drm)+len(ac) > 0 {
+						f.Wiki = &wikiCredit{Title: w.Record.Title, URL: compat.PCGWPage(w.Record.Title), FetchedAt: w.FetchedAt.Unix(), LicenceURL: compat.PCGWLicenceURL}
+					}
+				}
+			}
+		}
+		if g.InstallDir != "" && svc != nil {
+			local := svc.Local(g.InstallDir)
+			for _, b := range compat.LocalBadges(local.Hits, local.FetchedAt) {
+				f.Badges = append(f.Badges, wireBadge(b))
 			}
 		}
 		facts = append(facts, f)
@@ -143,6 +244,7 @@ func handle(ctx context.Context, req message) message {
 }
 
 func main() {
+	configureService()
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
 	writer := bufio.NewWriter(os.Stdout)

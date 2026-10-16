@@ -14,7 +14,7 @@ const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvi
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
 const pdb = (tier: string) => ({ kind: 'rating', label: tier[0].toUpperCase() + tier.slice(1), tone: tier, source: 'ProtonDB', checked_at: 1791589136 });
-const two = (tier: string, deck: string) => ({ compat_badges: [pdb(tier)], fix_info: { source: 'steamdeck', tier: '', description: '', winetricks: [], dll_overrides: {}, launch_args: '', deck, deck_notes: [] } } as Partial<Game>);
+const two = (tier: string, deck: string) => ({ compat_badges: [pdb(tier), { kind: 'verdict', label: deck, tone: deck, source: 'Steam Deck', checked_at: 1791589136 }] as Game['compat_badges'] });
 
 const dashGames = () => [
   mk('plain', { title: 'No badges' }),
@@ -95,7 +95,7 @@ describe('card layout (#61, #62)', () => {
   });
 
   it('deck badge alone clips inside the card instead of overflowing', () => {
-    const deckOnly = mk('d', { fix_info: { source: 'steamdeck', tier: '', description: '', winetricks: [], dll_overrides: {}, launch_args: '', deck: 'unsupported', deck_notes: [] } });
+    const deckOnly = mk('d', { compat_badges: [{ kind: 'verdict', label: 'Unsupported', tone: 'unsupported', source: 'Steam Deck', checked_at: 1 }] });
     const { getByText, container } = render(<CompatChip game={deckOnly} />);
     expect(getByText('Deck · Unsupported')).toBeTruthy();
     const badge = container.querySelector('[data-slot="badge"]') as HTMLElement;

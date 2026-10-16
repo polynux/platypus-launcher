@@ -282,7 +282,7 @@ func validateSmart(list []types.Collection, f types.SmartFilter) error {
 	if len(f.Store) > 64 {
 		return errors.New("a store id is at most 64 characters")
 	}
-	if f.BadgeKind != "" && !slices.Contains([]string{"rating", "verdict", "protection", "note", "platform"}, f.BadgeKind) {
+	if f.BadgeKind != "" && !slices.Contains([]string{"rating", "verdict", "protection", "note", "platform", "drm", "anticheat"}, f.BadgeKind) {
 		return fmt.Errorf("unknown badge kind %q", f.BadgeKind)
 	}
 	if f.BadgeValue != "" && (f.BadgeKind == "" || len(f.BadgeValue) > 128) {
@@ -291,8 +291,8 @@ func validateSmart(list []types.Collection, f types.SmartFilter) error {
 	if f.BadgeKind == "rating" && f.BadgeValue != "" && !slices.Contains(types.CollectionTiers, f.BadgeValue) {
 		return fmt.Errorf("unknown rating badge %q", f.BadgeValue)
 	}
-	if f.Deck != "" && !slices.Contains(types.CollectionDecks, f.Deck) {
-		return fmt.Errorf("unknown Steam Deck verdict %q", f.Deck)
+	if f.BadgeKind == "verdict" && f.BadgeValue != "" && !slices.Contains(types.CollectionDecks, f.BadgeValue) {
+		return fmt.Errorf("unknown verdict badge %q", f.BadgeValue)
 	}
 	if f.Status != "" && f.Status != "none" && !types.ValidGameStatus(f.Status) {
 		return fmt.Errorf("unknown status %q", f.Status)

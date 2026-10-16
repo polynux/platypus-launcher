@@ -146,7 +146,10 @@ Platypus is released under the [Apache License 2.0](LICENSE). Copyright 2026 Gui
 Platypus shows compatibility and protection facts it reads from other projects. Their data stays theirs:
 
 - [ProtonDB](https://www.protondb.com): community compatibility reports, read from its public pages.
+- Steam Deck compatibility verdicts, read from Steam's public compatibility report.
 - [AreWeAntiCheatYet](https://areweanticheatyet.com): anti-cheat status of games, MIT licensed.
 - [PCGamingWiki](https://www.pcgamingwiki.com): DRM and anti-cheat facts, licensed
   [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/) and used here non-commercially; the
   facts are credited in the interface where they are shown.
+- Local anti-cheat markers are detected from installed game files; the compatibility plugin keeps the downloaded
+  catalogue in its own plugin data folder.

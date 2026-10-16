@@ -71,7 +71,6 @@ func oldHome(t *testing.T) (home, oldRoot string) {
 	write(t, p("cloud.json"), fmt.Sprintf(`{"pending":{"echo:tiny":{"paths":["%s/plugin-data/echo/cloud-backups/tiny"]}}}`, oldRoot), 0o644)
 	write(t, p("custom-art/customization.json"), `{"version":1,"games":{"a":{"art":{"cover":{"file":"cover.png","v":3}}}}}`, 0o644)
 	write(t, p("custom-art/a/cover.png"), "PNG", 0o644)
-	write(t, p("compat-cache.json"), `{"version":1}`, 0o644)
 	write(t, p("plugin-data/steam-standalone/refresh.token"), "SECRET-TOKEN", 0o600)
 	write(t, p("plugin-data/steam-standalone/state.json"), fmt.Sprintf(`{"logged_in":true,"dir":"%s/plugin-data/steam-standalone/jobs"}`, oldRoot), 0o600)
 	write(t, p("plugin-data/steam-standalone/manifests/1/2_3.manifest"), "BIN"+oldRoot, 0o644)

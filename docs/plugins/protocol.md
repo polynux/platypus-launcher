@@ -1061,18 +1061,21 @@ Mapping hints for plugins, from their own store fields:
 
 - **Gating.** Platypus reads the compat fields only when the negotiated protocol is 1.10 or later. An older plugin's
   `game.details` is read as before, and its compat fields are ignored.
-- **Anti-cheat** is not sent by plugins. Platypus gets it from the AreWeAntiCheatYet catalogue (MIT, credited in the
-  About view) and from the markers it finds in an installed game's folder.
+- **Anti-cheat** is not sent by store plugins. The bundled `linux-compat`
+  compat-facts provider reads the AreWeAntiCheatYet catalogue (MIT) and scans
+  markers in an installed game's folder.
 
 ## Compat facts (1.17)
 
 The `compat-facts` capability supplies store-independent compatibility facts in
 batches. The core owns caching and background refresh; rendering never waits for
-the plugin.
+the plugin. Protocol 1.17 is unpublished, so the online-state extension below
+remains part of 1.17; it does not introduce a 1.18 version.
 
 ```json
 compat.lookup { "games": [{ "id": "game-id", "store": "steam",
-  "storeAppId": "620", "steamAppId": "620", "platforms": ["windows"] }] }
+  "storeAppId": "620", "steamAppId": "620", "platforms": ["windows"],
+  "installDir": "/games/example", "online": true }] }
   -> { "facts": [{ "id": "game-id", "badges": [{ "kind": "rating",
     "label": "Platinum", "tone": "platinum", "link": "https://example.test/",
     "source": "ProtonDB", "checkedAt": 1791589136 }], "links": [],
@@ -1082,11 +1085,26 @@ compat.lookup { "games": [{ "id": "game-id", "store": "steam",
 
 Each input has a stable game `id`, its store and store app id, and optional
 Steam AppID, platforms and install directory. Results correspond by `id`.
-Badges carry a kind (`rating`, `verdict`, `protection` or `note`), label,
-optional tone, link, source and checked date. Providers may return links and
-notes without badges. `ttlSeconds` controls how long the core waits before
+Badges carry a kind (`rating`, `verdict`, `protection`, `note`, or a more
+specific source kind such as `anticheat`, `eos`, `drm-free`, `denuvo`,
+`launcher`, `online` or `drm-removed`), label, optional detail, tone, link,
+source and checked date.
+Providers may return links and notes without badges. `wiki`, when present,
+contains the PCGamingWiki title, page URL, fetched date and licence URL so the
+UI can show the credit alongside those facts. `ttlSeconds` controls how long the core waits before
 refreshing that game's answer. Matching to ProtonDB is by Steam AppID only;
 titles are never used.
+
+- **`installDir`.** The installed game's directory, when known. Providers may
+  use it for local scans; it is not a request to read outside that directory.
+- **`storeDRM`.** True when `game.details` supplied DRM facts. A provider can
+  use it to avoid adding overlapping third-party DRM facts; removed DRM history
+  can still be reported.
+- **`online`.** Whether network sources may be queried. The core sends false
+  when offline or when "Fetch ratings online" is off. Providers must still
+  answer local sources such as installed-file detection. Offline answers do not
+  satisfy the online cache freshness check; merging them preserves the last
+  network facts, so an online lookup can run later.
 
 An optional `report` summarizes the provider's report count: `state` is
 `rated`, `few` or `none`; `count` is the number of reports when known, and

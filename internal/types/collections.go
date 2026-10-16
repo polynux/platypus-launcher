@@ -57,7 +57,6 @@ type SmartFilter struct {
 	MinPlaytimeMinutes int    `json:"min_playtime_minutes,omitempty"`
 	BadgeKind          string `json:"badge_kind,omitempty"`
 	BadgeValue         string `json:"badge_value,omitempty"`
-	Deck               string `json:"deck,omitempty"`
 	YearFrom           int    `json:"year_from,omitempty"`
 	YearTo             int    `json:"year_to,omitempty"`
 	Status             string `json:"status,omitempty"`
@@ -71,6 +70,7 @@ func (f *SmartFilter) UnmarshalJSON(data []byte) error {
 	var v struct {
 		*wire
 		Tier string `json:"tier"`
+		Deck string `json:"deck"`
 	}
 	base := wire{}
 	v.wire = &base
@@ -81,6 +81,10 @@ func (f *SmartFilter) UnmarshalJSON(data []byte) error {
 	if f.BadgeValue == "" && v.Tier != "" {
 		f.BadgeKind = "rating"
 		f.BadgeValue = v.Tier
+	}
+	if v.Deck != "" && f.BadgeKind == "" {
+		f.BadgeKind = "verdict"
+		f.BadgeValue = v.Deck
 	}
 	return nil
 }
