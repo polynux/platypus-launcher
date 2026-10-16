@@ -117,13 +117,11 @@ func TestAuthStatusSecondCallServesCache(t *testing.T) {
 	if again != st {
 		t.Fatalf("second status = %+v, want the cached %+v", again, st)
 	}
+	// Faster than the plugin's 800 ms check: the second read didn't wait on it.
+	// (Counting calls here would race the background refresh: echo counts a
+	// call when it receives it, not when it answers.)
 	if second >= 500*time.Millisecond {
 		t.Fatalf("second status took %v, want the cached answer", second)
-	}
-	// The background refresh the second read triggered must not have answered
-	// yet: nothing hit the plugin synchronously.
-	if n := authCalls(t, e); n != 1 {
-		t.Fatalf("second status hit the plugin synchronously (%d calls, want 1)", n)
 	}
 
 	// The refresh does run: the plugin is asked again in the background.

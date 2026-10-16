@@ -242,6 +242,12 @@ func TestStopRunsTheStopHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec.waitState(t, "stopped", 5*time.Second)
+	// The hook runs after the SIGTERM, off the caller's goroutine, so "stopped"
+	// can come first: wait for it.
+	deadline := time.Now().Add(5 * time.Second)
+	for graceful.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
 	if graceful.Load() != 1 || forced.Load() != 0 {
 		t.Fatalf("hook calls: graceful=%d forced=%d", graceful.Load(), forced.Load())
 	}
