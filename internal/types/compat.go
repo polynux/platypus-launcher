@@ -10,6 +10,8 @@ type Compat struct {
 	// Notes and Links accompany provider facts on the game page.
 	Notes []string     `json:"notes,omitempty"`
 	Links []CompatLink `json:"links,omitempty"`
+	// Report summarizes the provider's community reports, when available.
+	Report *CompatReport `json:"report,omitempty"`
 	// SteamAppID is the ID the ratings use, "" when the game has none.
 	SteamAppID string `json:"steam_app_id,omitempty"`
 	// SteamAppIDSource says where it came from: "user", "plugin" or "steam".
@@ -63,6 +65,13 @@ type CompatBadge struct {
 	Link      string `json:"link,omitempty"`
 	Source    string `json:"source"`
 	CheckedAt int64  `json:"checked_at"`
+}
+
+// CompatReport is a provider's report count and rating summary for one game.
+type CompatReport struct {
+	Count int    `json:"count"`
+	State string `json:"state"`
+	Tier  string `json:"tier,omitempty"`
 }
 
 type CompatLink struct {

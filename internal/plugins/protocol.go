@@ -142,12 +142,20 @@ type CompatBadge struct {
 type CompatFact struct {
 	ID     string        `json:"id"`
 	Badges []CompatBadge `json:"badges"`
+	Report *CompatReport `json:"report,omitempty"`
 	Links  []struct {
 		Label string `json:"label"`
 		URL   string `json:"url"`
 	} `json:"links,omitempty"`
 	Notes      []string `json:"notes,omitempty"`
 	TTLSeconds int      `json:"ttlSeconds"`
+}
+
+// CompatReport is a provider's report count and rating summary for one game.
+type CompatReport struct {
+	Count int    `json:"count"`
+	State string `json:"state"` // "rated" | "few" | "none"
+	Tier  string `json:"tier,omitempty"`
 }
 
 // CompatLookupResult is the compat.lookup batch response.

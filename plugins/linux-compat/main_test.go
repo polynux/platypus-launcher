@@ -17,6 +17,15 @@ func (f ratingLookupFunc) Summary(ctx context.Context, id string) (compat.Summar
 	return f(ctx, id)
 }
 
+func TestInitializeNegotiatesCompatFactsProtocol(t *testing.T) {
+	params, _ := json.Marshal(map[string]any{"protocols": []string{"1.17"}})
+	resp := handle(context.Background(), message{Method: "initialize", Params: params})
+	result := resp.Result.(map[string]any)
+	if result["protocol"] != "1.17" {
+		t.Fatalf("protocol = %v, want 1.17", result["protocol"])
+	}
+}
+
 func TestLookupReturnsProtonDBBadgeBySteamAppID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/reports/summaries/620.json" {
@@ -41,6 +50,33 @@ func TestLookupReturnsProtonDBBadgeBySteamAppID(t *testing.T) {
 	b := result[0].Badges[0]
 	if b.Kind != "rating" || b.Label != "Platinum" || b.Tone != "platinum" || b.Source != "ProtonDB" || b.Link != "https://www.protondb.com/app/620" {
 		t.Fatalf("badge = %+v", b)
+	}
+	if result[0].Report == nil || result[0].Report.State != "rated" || result[0].Report.Count != 343 || result[0].Report.Tier != "platinum" {
+		t.Fatalf("report = %+v, want rated summary with 343 reports", result[0].Report)
+	}
+}
+
+func TestLookupReportsFewAndNoReports(t *testing.T) {
+	old := proton
+	proton = ratingLookupFunc(func(_ context.Context, id string) (compat.Summary, error) {
+		if id == "620" {
+			return compat.Summary{Total: 2}, nil
+		}
+		return compat.Summary{}, compat.ErrNotFound
+	})
+	t.Cleanup(func() { proton = old })
+
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "few", SteamAppID: "620"}, {ID: "none", SteamAppID: "621"}}})
+	got, rpcErr := lookup(context.Background(), params)
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	facts := got.(map[string]any)["facts"].([]fact)
+	if len(facts) != 2 || facts[0].Report == nil || facts[0].Report.State != "few" || facts[0].Report.Count != 2 {
+		t.Fatalf("few reports = %+v", facts)
+	}
+	if facts[1].Report == nil || facts[1].Report.State != "none" {
+		t.Fatalf("no reports = %+v", facts[1])
 	}
 }
 

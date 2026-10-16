@@ -74,6 +74,15 @@ describe('CompatFacts', () => {
     expect(getByText(/Steam AppID 620 \(from the store\)/)).toBeTruthy();
   });
 
+  it('shows report counts and the no/few report messages from generic provider facts', () => {
+    const { getByText, rerender } = render(<CompatFacts compat={{ ...full, report: { state: 'rated', count: 343, tier: 'platinum' } }} />);
+    expect(getByText('Platinum · 343 reports')).toBeTruthy();
+    rerender(<CompatFacts compat={{ ...full, report: { state: 'few', count: 2 } }} />);
+    expect(getByText('Few ProtonDB reports (2)')).toBeTruthy();
+    rerender(<CompatFacts compat={{ ...full, report: { state: 'none', count: 0 } }} />);
+    expect(getByText('No ProtonDB reports')).toBeTruthy();
+  });
+
   it('shows the Deck verdict with its link and date beside the ProtonDB rating', () => {
     const decked: Compat = {
       ...full,

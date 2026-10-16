@@ -200,6 +200,7 @@ export namespace types {
     badges: types.CompatBadge[];
     notes?: string[];
     links?: types.CompatLink[];
+    report?: types.CompatReport | null;
     steam_app_id?: string;
     steam_app_id_source?: string;
     native: boolean;
@@ -224,6 +225,12 @@ export namespace types {
   export interface CompatLink {
     label: string;
     url: string;
+  }
+
+  export interface CompatReport {
+    count: number;
+    state: string;
+    tier?: string;
   }
 
   export interface CopyComparison {

@@ -215,6 +215,9 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 	if f, ok := a.cachedProviderFact(game.ID, c.SteamAppID); ok {
 		c.Badges = factBadges(f)
 		c.Notes = factNotes(f)
+		if f.Report != nil {
+			c.Report = &types.CompatReport{Count: f.Report.Count, State: f.Report.State, Tier: f.Report.Tier}
+		}
 		for _, link := range f.Links {
 			c.Links = append(c.Links, types.CompatLink{Label: link.Label, URL: link.URL})
 		}

@@ -51,9 +51,15 @@ type badge struct {
 type fact struct {
 	ID         string   `json:"id"`
 	Badges     []badge  `json:"badges"`
+	Report     *report  `json:"report,omitempty"`
 	Links      []any    `json:"links"`
 	Notes      []string `json:"notes,omitempty"`
 	TTLSeconds int      `json:"ttlSeconds"`
+}
+type report struct {
+	Count int    `json:"count"`
+	State string `json:"state"`
+	Tier  string `json:"tier,omitempty"`
 }
 
 var proton compat.RatingSource = &compat.ProtonDB{Fetch: compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")}
@@ -90,10 +96,19 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 				continue
 			}
 			if err == nil {
-				if tier := compat.ShownTier(summary); tier != "" {
+				tier := compat.ShownTier(summary)
+				state := "rated"
+				if tier == "" {
+					state = "few"
+				}
+				f.Report = &report{Count: summary.Total, State: state, Tier: tier}
+				if tier != "" {
 					label := strings.ToUpper(tier[:1]) + tier[1:]
 					f.Badges = append(f.Badges, badge{Kind: "rating", Label: label, Tone: tier, Link: compat.ProtonDBPage(id), Source: "ProtonDB", CheckedAt: time.Now().Unix()})
 				}
+			}
+			if errors.Is(err, compat.ErrNotFound) {
+				f.Report = &report{State: "none"}
 			}
 		}
 		facts = append(facts, f)

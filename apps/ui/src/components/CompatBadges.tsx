@@ -74,6 +74,13 @@ export function tierMeaning(t: T, tier: string): string | undefined {
   }
 }
 
+/** Formats a provider's community report summary using the game catalog. */
+export function reportSummaryText(t: T, report: NonNullable<Compat['report']>): string {
+  if (report.state === 'none') return t('game:compat.ratingNoReports');
+  if (report.state === 'few') return t('game:compat.ratingFew', { count: report.count });
+  return t('game:compat.rating', { count: report.count, tier: tierLabel(t, report.tier ?? '') });
+}
+
 /** The tooltip of a Steam Deck badge: the verdict, its caveats, and the source. */
 function deckTooltip(t: T, rating: string, notes?: string[] | null): string {
   const body = (notes ?? []).filter(Boolean).join(' ');
@@ -223,6 +230,7 @@ export function CompatFacts({ compat }: { compat: Compat }) {
         <p className="font-mono text-hint text-white/55">{t('game:compat.noneReported')}</p>
       )}
       {compat.notes?.map((note, i) => <p key={i} className="text-[12px] leading-relaxed text-white/70">{note}</p>)}
+      {compat.report && <p className="text-[12px] leading-relaxed text-white/70">{reportSummaryText(t, compat.report)}</p>}
       {compat.deck?.rating && compat.steam_app_id && (
         <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-hint text-white/55">
           <DeckBadge rating={compat.deck.rating} notes={compat.deck.notes} />

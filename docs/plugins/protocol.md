@@ -1076,6 +1076,7 @@ compat.lookup { "games": [{ "id": "game-id", "store": "steam",
   -> { "facts": [{ "id": "game-id", "badges": [{ "kind": "rating",
     "label": "Platinum", "tone": "platinum", "link": "https://example.test/",
     "source": "ProtonDB", "checkedAt": 1791589136 }], "links": [],
+    "report": { "count": 343, "state": "rated", "tier": "platinum" },
     "notes": [], "ttlSeconds": 604800 }] }
 ```
 
@@ -1086,6 +1087,11 @@ optional tone, link, source and checked date. Providers may return links and
 notes without badges. `ttlSeconds` controls how long the core waits before
 refreshing that game's answer. Matching to ProtonDB is by Steam AppID only;
 titles are never used.
+
+An optional `report` summarizes the provider's report count: `state` is
+`rated`, `few` or `none`; `count` is the number of reports when known, and
+`tier` is the provider's rating when `state` is `rated`. The core preserves
+these fields in its cache so the UI can localize the summary.
 
 ## Media (1.12)
 

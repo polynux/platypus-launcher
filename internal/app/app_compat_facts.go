@@ -83,6 +83,9 @@ func (a *App) cachedProviderFact(gameID, appID string) (plugins.CompatFact, bool
 		combined.Badges = append(combined.Badges, entry.Fact.Badges...)
 		combined.Notes = append(combined.Notes, entry.Fact.Notes...)
 		combined.Links = append(combined.Links, entry.Fact.Links...)
+		if entry.Fact.Report != nil {
+			combined.Report = entry.Fact.Report
+		}
 	}
 	return combined, found
 }
