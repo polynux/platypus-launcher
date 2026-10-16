@@ -63,6 +63,10 @@ REAL_HOME="$HOME"
 export ASDF_DIR="${ASDF_DIR:-$REAL_HOME/.asdf}"
 export ASDF_DATA_DIR="${ASDF_DATA_DIR:-$REAL_HOME/.asdf}"
 export ASDF_DEFAULT_TOOL_VERSIONS_FILENAME="${ASDF_DEFAULT_TOOL_VERSIONS_FILENAME:-$REAL_HOME/.tool-versions}"
+# Build caches live outside the sandbox: the sandbox stays a fresh app home
+# while go reuses the machine's warm cache (a cold HOME would recompile and
+# redownload modules on every run). Asked before HOME changes.
+export GOCACHE="$(go env GOCACHE)" GOMODCACHE="$(go env GOMODCACHE)"
 export HOME="$SANDBOX/home"
 mkdir -p "$HOME"
 export PLATYPUS_DATA_DIR="$SANDBOX/data"
@@ -70,16 +74,6 @@ export PLATYPUS_CONFIG_DIR="$SANDBOX/config"
 export PLATYPUS_CACHE_DIR="$SANDBOX/cache"
 export PLATYPUS_PLUGINS="$SANDBOX/data/plugins"
 mkdir -p "$PLATYPUS_DATA_DIR" "$PLATYPUS_CONFIG_DIR" "$PLATYPUS_CACHE_DIR" "$PLATYPUS_PLUGINS"
-
-# Build caches live outside the sandbox: the sandbox stays a fresh app home
-# while go reuses the machine's warm cache (a cold HOME would recompile and
-# redownload modules on every run).
-[ -d "$REAL_HOME/.cache/go-build" ] && export GOCACHE="$REAL_HOME/.cache/go-build"
-if [ -d "$REAL_HOME/.asdf/installs/golang/1.25.4/packages/pkg/mod" ]; then
-  export GOMODCACHE="$REAL_HOME/.asdf/installs/golang/1.25.4/packages/pkg/mod"
-elif [ -d "$REAL_HOME/go/pkg/mod" ]; then
-  export GOMODCACHE="$REAL_HOME/go/pkg/mod"
-fi
 
 # Fake programs first on PATH (issue #66): steam, winetricks, protontricks,
 # xdg-open and the fake Proton build answer instead of system packages.
