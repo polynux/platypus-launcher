@@ -9,9 +9,10 @@ var stubs = map[string]struct {
 	perGame bool
 	result  any
 }{
-	"game.options": {true, map[string]any{"groups": []any{}}},
-	"game.verify":  {true, map[string]any{}},
-	"game.move":    {true, map[string]any{}},
+	"game.options":  {true, map[string]any{"groups": []any{}}},
+	"game.verify":   {true, map[string]any{}},
+	"game.move":     {true, map[string]any{}},
+	"compat.lookup": {false, map[string]any{"facts": []any{}}},
 }
 
 func capabilityStub(method string, p params) (res any, err error, ok bool) {
@@ -21,6 +22,9 @@ func capabilityStub(method string, p params) (res any, err error, ok bool) {
 	}
 	if s.perGame && p.ID == "" {
 		return nil, &rpcError{Code: -32602, Message: "invalid params: id is required"}, true
+	}
+	if method == "compat.lookup" && len(p.Games) == 0 {
+		return nil, &rpcError{Code: -32602, Message: "invalid params: games is required"}, true
 	}
 	return s.result, nil, true
 }

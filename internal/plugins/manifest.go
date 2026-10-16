@@ -279,8 +279,19 @@ func (m Manifest) validate() error {
 	if m.API < 0 {
 		bad("api %d is not a version", m.API)
 	}
-	if !m.IsData() && !storeRe.MatchString(m.Store) {
-		bad("store %q must be lowercase letters, digits or '-'", m.Store)
+	if !m.IsData() {
+		storeCapability := false
+		for _, c := range m.Capabilities {
+			switch c {
+			case "library", "install", "launch", "auth", "discard", "cloud-saves", "install-options", "versions", "verify", "move", "social", "achievements", "playtime", "redeem", "family", "settings", "chat", "terms", "local-art":
+				storeCapability = true
+			}
+		}
+		if m.Store == "" && !storeCapability {
+			// Store-independent capabilities (for example compat-facts) need no store id.
+		} else if !storeRe.MatchString(m.Store) {
+			bad("store %q must be lowercase letters, digits or '-'", m.Store)
+		}
 	}
 	kind := m.Kind
 	if kind == "" {
