@@ -8,6 +8,7 @@ import type {
   SettingsSaved,
   SettingsView,
   SettingValue,
+  SmartFilter,
   CloudInfo,
   CloudMode,
   CloudPrompt,
@@ -23,6 +24,7 @@ import type {
   AuthStatus,
   ChatEvent,
   ChatView,
+  Collection,
   Game,
   GameDetails,
   RedeemResult,
@@ -387,6 +389,21 @@ export const LauncherApi = {
     call<GameStatusInfo>('SetGameStatus', () => App.SetGameStatus(gameId, status)),
   setGameNotes: (gameId: string, notes: string) =>
     call<GameStatusInfo>('SetGameNotes', () => App.SetGameNotes(gameId, notes)),
+
+  // Collections (issue #45): every change answers the whole list, in order.
+  listCollections: () => call<Collection[]>('ListCollections', () => App.ListCollections()),
+  createCollection: (name: string, smart: SmartFilter) =>
+    call<Collection[]>('CreateCollection', () => App.CreateCollection(name, smart)),
+  updateCollection: (id: string, name: string, smart: SmartFilter) =>
+    call<Collection[]>('UpdateCollection', () => App.UpdateCollection(id, name, smart)),
+  pinCollection: (id: string, pinned: boolean) =>
+    call<Collection[]>('PinCollection', () => App.PinCollection(id, pinned)),
+  reorderCollections: (ids: string[]) => call<Collection[]>('ReorderCollections', () => App.ReorderCollections(ids)),
+  deleteCollection: (id: string) => call<Collection[]>('DeleteCollection', () => App.DeleteCollection(id)),
+  addCollectionGame: (id: string, gameId: string) =>
+    call<Collection[]>('AddCollectionGame', () => App.AddCollectionGame(id, gameId)),
+  removeCollectionGame: (id: string, gameId: string) =>
+    call<Collection[]>('RemoveCollectionGame', () => App.RemoveCollectionGame(id, gameId)),
 
   // Online artwork for sideloaded games (issues #36, art fallbacks): Steam's
   // public store search first, GOG and Lutris (IGDB) as keyless fallbacks

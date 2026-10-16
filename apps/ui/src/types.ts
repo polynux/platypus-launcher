@@ -56,6 +56,10 @@ export type GameStatus = '' | 'backlog' | 'playing' | 'finished' | 'abandoned';
  *  the game page shows, so a save updates it without a rescan. */
 export type GameStatusInfo = { status: GameStatus; user_notes: string };
 
+/** A collection (issue #45): a manual list of game ids, or a smart filter over library facts. */
+export type Collection = gen.Collection;
+export type SmartFilter = gen.SmartFilter;
+
 /** The kinds of art a game can be customized with. */
 export type ArtKind = 'cover' | 'banner' | 'logo' | 'icon' | 'background';
 export type Customization = gen.Customization;
@@ -204,7 +208,8 @@ export interface ActivityEvent {
 
 export type View =
   | { name: 'dashboard' }
-  | { name: 'library' }
+  // collection: the library shows one collection (id), or all games when absent.
+  | { name: 'library'; collection?: string }
   | { name: 'game'; id: string; from: 'dashboard' | 'library' | 'fixes' }
   | { name: 'activity' }
   | { name: 'fixes' }

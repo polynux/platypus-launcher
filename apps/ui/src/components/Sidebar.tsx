@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { storeLabel } from '../lib/games';
 import { FriendsSummary } from './FriendsSummary';
 import { PluginLogo } from './PluginLogo';
-import type { SessionEvent, SocialView, StoreType, View } from '../types';
+import type { Collection, SessionEvent, SocialView, StoreType, View } from '../types';
 
 type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'storage' | 'settings';
 
@@ -48,6 +48,12 @@ interface SidebarProps {
   /** The store whose embedded view is shown, if any. */
   activeStore?: string | null;
   onOpenStore?: (pluginId: string) => void;
+  /** The collections (issue #45): the pinned ones show under their own heading, in the list's order. */
+  collections?: Collection[];
+  /** Library games per collection id, for the counts. */
+  collectionCounts?: Record<string, number>;
+  onOpenCollection?: (id: string) => void;
+  onManageCollections?: () => void;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -69,7 +75,7 @@ function readToolsOpen(): boolean {
 type NavItem = { key: NavKey; label: string; count?: number; dot?: boolean };
 
 export function Sidebar(p: SidebarProps) {
-  const { t } = useTranslation(['nav', 'common']);
+  const { t } = useTranslation(['nav', 'common', 'collections']);
   const active: NavKey | 'store' = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
   // Enabled plugins that declare a storefront: the embedded store section (issue #17).
   const storeEntries = p.stores ?? [];
@@ -180,6 +186,34 @@ export function Sidebar(p: SidebarProps) {
             {tools.map((n) => navButton(n, true))}
           </div>
         </nav>
+
+        {p.onManageCollections && (
+          <>
+            <div className="flex items-center justify-between px-2 pb-1.5 pt-4">
+              <span className="font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('collections:title')}</span>
+              <button type="button" onClick={p.onManageCollections} className="font-mono text-micro uppercase tracking-[0.14em] text-white/55 transition hover:text-white/80">
+                {t('collections:manage')}
+              </button>
+            </div>
+            {(p.collections ?? []).filter((c) => c.pinned).map((c) => {
+              const current = p.view.name === 'library' && p.view.collection === c.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => p.onOpenCollection?.(c.id)}
+                  aria-current={current ? 'page' : undefined}
+                  className={cx(
+                    'mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] transition',
+                    current ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.04] hover:text-white'
+                  )}
+                >
+                  <span className="truncate">{c.builtin ? t(`collections:builtin.${c.id}`) : c.name}</span>
+                  <span className="font-mono text-hint tabular-nums text-white/55">{p.collectionCounts?.[c.id] ?? '—'}</span>
+                </button>
+              );
+            })}
+          </>
+        )}
 
         <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('nav:sources')}</div>
         {[

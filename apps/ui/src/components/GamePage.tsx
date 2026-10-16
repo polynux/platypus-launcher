@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
-import type { ActivityEvent, Achievement, ArtCandidate, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
+import type { ActivityEvent, Achievement, ArtCandidate, Collection, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
 import { CopyPicker } from './CopyPicker';
@@ -92,6 +92,9 @@ interface GamePageProps {
   onCopyChanged?: () => void;
   /** Removes a sideloaded game from the library (custom games only). */
   onRemove?: (opts: RemoveOptions) => void;
+  /** The collections (issue #45) and the dialog that changes a game's ones. */
+  collections?: Collection[];
+  onManageCollections?: (gameId: string) => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -478,6 +481,8 @@ export function GamePage(p: GamePageProps) {
           {crash && <CrashHintsPanel game={game} hints={crash} onNotify={p.onNotify} onRunner={() => setSettingsTab('general')} />}
 
           <StatusNotesSection game={game} onChanged={p.onCustomized} />
+
+          <CollectionsSection game={game} collections={p.collections} onManage={p.onManageCollections} />
 
           {isPluginGame(game) && game.is_installed && plugin && (
             <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} sourceLogos={p.sourceLogos} />
@@ -951,6 +956,24 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
       <MonoLabel className={cx('mt-1.5 text-right', notesState === 'failed' && 'text-red-300/80')}>
         {notesState === 'saving' ? t('game:status.saving') : notesState === 'saved' ? t('game:status.saved') : notesState === 'failed' ? t('game:status.failed') : ''}
       </MonoLabel>
+    </Panel>
+  );
+}
+
+/** The manual collections a game is in (issue #45), and the way to change them. */
+function CollectionsSection({ game, collections = [], onManage }: { game: Game; collections?: Collection[]; onManage?: (gameId: string) => void }) {
+  const { t } = useTranslation('collections');
+  if (!onManage) return null;
+  const mine = collections.filter((c) => !c.smart && c.games?.includes(game.id));
+  return (
+    <Panel className="bg-white/[0.05]" data-testid="game-collections">
+      <h2 className="mb-2 text-[15px] font-bold">{t('collections:gameHeading')}</h2>
+      <p className="text-[13px] text-white/75">
+        {mine.length > 0 ? mine.map((c) => (c.builtin ? t(`builtin.${c.id}`) : c.name)).join(', ') : t('collections:notInCollections')}
+      </p>
+      <Button variant="neutral" className="mt-3 w-full" onClick={() => onManage(game.id)}>
+        {t('collections:addToCollection')}
+      </Button>
     </Panel>
   );
 }

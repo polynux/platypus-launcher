@@ -30,6 +30,7 @@ vi.mock('../../effect/runtime', () => ({
     getSessions: () => Effect.succeed([] as never),
     getGameFix: () => Effect.succeed(null as never),
     getTweaks: () => Effect.succeed([] as never),
+    listCollections: () => Effect.succeed([] as never),
     migrationNotice: () => Effect.succeed(null as never),
     dismissMigrationNotice: () => Effect.succeed(undefined as never),
     listJobs: () => Effect.succeed([] as never),

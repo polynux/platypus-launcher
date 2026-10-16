@@ -8,6 +8,7 @@ import type { chat, social, types } from './models';
 /** One exported method of the Go core, invoked by name over the bridge. */
 export interface CoreApi {
   AcceptGameTerms(game: types.Game, refs: types.TermRef[]): Promise<void>;
+  AddCollectionGame(id: string, gameID: string): Promise<types.Collection[]>;
   AddCustomGame(title: string, executable: string): Promise<types.Game>;
   AddGameFolder(path: string): Promise<types.GameFolder[]>;
   AllowGameFolder(pluginID: string, path: string): Promise<void>;
@@ -30,7 +31,9 @@ export interface CoreApi {
   ChooseGameFolder(): Promise<string>;
   ChoosePluginInstallFolder(id: string): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
+  CreateCollection(name: string, smart: types.SmartFilter): Promise<types.Collection[]>;
   CreateSaveBackup(game: types.Game): Promise<types.Job>;
+  DeleteCollection(id: string): Promise<types.Collection[]>;
   DeletePrefixPreset(id: string): Promise<void>;
   DeleteSaveBackup(gameID: string, backupID: string): Promise<void>;
   DetectGameExecutable(path: string): Promise<types.DetectResult>;
@@ -78,6 +81,7 @@ export interface CoreApi {
   LaunchGameAnyway(game: types.Game, prompt: string): Promise<string>;
   LaunchGameViaClient(game: types.Game): Promise<string>;
   LinkGameInfo(gameID: string, source: string, id: string): Promise<string>;
+  ListCollections(): Promise<types.Collection[]>;
   ListJobs(): Promise<types.Job[]>;
   ListPrefixPresets(): Promise<types.PrefixPreset[]>;
   ListSaveBackups(gameID: string): Promise<types.SaveBackup[]>;
@@ -98,6 +102,7 @@ export interface CoreApi {
   PickImage(title: string): Promise<string>;
   PickInstallFolder(start: string): Promise<string>;
   PickMoveFolder(start: string): Promise<string>;
+  PinCollection(id: string, pinned: boolean): Promise<types.Collection[]>;
   PinGameVersion(game: types.Game, pin: types.VersionPin): Promise<void>;
   PluginAuthBegin(id: string): Promise<types.AuthPrompt>;
   PluginAuthComplete(id: string, fields: Record<string, string>): Promise<types.AuthStatus>;
@@ -110,9 +115,11 @@ export interface CoreApi {
   RefreshDiskUsage(): Promise<types.DiskUsage>;
   RefreshSaveManifest(): Promise<void>;
   RefreshSavePaths(game: types.Game): Promise<types.SavePath[]>;
+  RemoveCollectionGame(id: string, gameID: string): Promise<types.Collection[]>;
   RemoveCustomGame(id: string): Promise<void>;
   RemoveGame(gameID: string, opts: types.RemoveOptions): Promise<types.Job>;
   RemoveGameFolder(path: string): Promise<types.GameFolder[]>;
+  ReorderCollections(ids: string[]): Promise<types.Collection[]>;
   RepairGame(game: types.Game): Promise<types.Job>;
   RescanLibrary(): Promise<types.Library>;
   RescanPlugins(): Promise<types.StorePlugin[]>;
@@ -165,6 +172,7 @@ export interface CoreApi {
   UninstallGameWithoutBackup(game: types.Game): Promise<types.Job>;
   UnlockVersionChannel(game: types.Game, channel: string, password: string): Promise<boolean>;
   UnpinGameVersion(gameID: string): Promise<void>;
+  UpdateCollection(id: string, name: string, smart: types.SmartFilter): Promise<types.Collection[]>;
   UpdateCustomGameExecutable(id: string, executable: string): Promise<types.Game>;
   UpdateGame(game: types.Game): Promise<types.Job>;
   UpdateGameVersion(game: types.Game, target: types.VersionTarget): Promise<types.Job>;
@@ -175,6 +183,7 @@ export interface CoreApi {
 /** Every method the core serves, for validating bridge calls. */
 export const coreMethods: (keyof CoreApi)[] = [
   'AcceptGameTerms',
+  'AddCollectionGame',
   'AddCustomGame',
   'AddGameFolder',
   'AllowGameFolder',
@@ -197,7 +206,9 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ChooseGameFolder',
   'ChoosePluginInstallFolder',
   'ClearFinishedJobs',
+  'CreateCollection',
   'CreateSaveBackup',
+  'DeleteCollection',
   'DeletePrefixPreset',
   'DeleteSaveBackup',
   'DetectGameExecutable',
@@ -245,6 +256,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'LaunchGameAnyway',
   'LaunchGameViaClient',
   'LinkGameInfo',
+  'ListCollections',
   'ListJobs',
   'ListPrefixPresets',
   'ListSaveBackups',
@@ -265,6 +277,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'PickImage',
   'PickInstallFolder',
   'PickMoveFolder',
+  'PinCollection',
   'PinGameVersion',
   'PluginAuthBegin',
   'PluginAuthComplete',
@@ -277,9 +290,11 @@ export const coreMethods: (keyof CoreApi)[] = [
   'RefreshDiskUsage',
   'RefreshSaveManifest',
   'RefreshSavePaths',
+  'RemoveCollectionGame',
   'RemoveCustomGame',
   'RemoveGame',
   'RemoveGameFolder',
+  'ReorderCollections',
   'RepairGame',
   'RescanLibrary',
   'RescanPlugins',
@@ -332,6 +347,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'UninstallGameWithoutBackup',
   'UnlockVersionChannel',
   'UnpinGameVersion',
+  'UpdateCollection',
   'UpdateCustomGameExecutable',
   'UpdateGame',
   'UpdateGameVersion',

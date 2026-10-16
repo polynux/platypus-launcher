@@ -67,6 +67,9 @@ type file struct {
 	// GameNotes are the user's own notes on games, plain text, keyed by
 	// Platypus's game id. See gamestatus.go.
 	GameNotes map[string]string `json:"game_notes,omitempty"`
+	// Collections are the user's game lists and smart filters, built-ins
+	// included, in the order the sidebar shows them. See collections.go.
+	Collections []types.Collection `json:"collections,omitempty"`
 	// InstallOptions are each game's last install-option choices (the
 	// `install-options` capability), keyed by Platypus's game id. See options.go.
 	InstallOptions map[string]types.InstallOptions `json:"install_options,omitempty"`

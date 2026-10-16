@@ -19,6 +19,8 @@ import { DownloadsView, jobKindKey } from './components/DownloadsView';
 import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
 import { RedeemDialog } from './components/RedeemDialog';
+import { CollectionsDialog } from './components/CollectionsDialog';
+import { collectionCounts } from './lib/collections';
 import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
 import { TermsHost } from './components/TermsHost';
@@ -34,7 +36,7 @@ import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
-import type { ActivityEvent, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
@@ -51,6 +53,9 @@ export function App() {
   const [social, setSocial] = useState<SocialView[]>([]);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
+  // Collections (issue #45): the list from settings, and the dialog (for one game, or the manager).
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [collectionsDialog, setCollectionsDialog] = useState<{ gameId?: string } | null>(null);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -294,6 +299,8 @@ export function App() {
   const started = useRef(false);
   useEffect(() => {
     Effect.runPromise(LauncherApi.getTweaks()).then(setTweaks).catch(() => {});
+    // A null list (a Go nil slice over the bridge) reads as none.
+    Effect.runPromise(LauncherApi.listCollections()).then((l) => setCollections(l ?? [])).catch(() => {});
     Effect.runPromise(LauncherApi.migrationNotice()).then(setMigration).catch(() => {});
   }, []);
 
@@ -595,6 +602,7 @@ export function App() {
   const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
+  const collectionTotals = useMemo(() => collectionCounts(collections, games, Math.floor(Date.now() / 1000)), [collections, games]);
   const socialLabels = useMemo(() => Object.fromEntries(plugins.map((p) => [p.id, p.name])), [plugins]);
   // Enabled plugins that declare a storefront: the sidebar's Store section
   // and the embedded store view (issue #17).
@@ -682,6 +690,10 @@ export function App() {
             onMode={setLibraryMode}
             ownership={ownership}
             onOwnership={setOwnership}
+            collection={view.name === 'library' ? view.collection : undefined}
+            onCollection={(id) => setView({ name: 'library', collection: id })}
+            collections={collections}
+            onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
             warnings={warnings}
             plugins={plugins}
             sourceLogos={sourceLogos}
@@ -722,6 +734,8 @@ export function App() {
             onVersionsChanged={() => loadData('update')}
             onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
             onRemove={(opts) => removeGame(currentGame, opts)}
+            collections={collections}
+            onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
           />
         ) : (
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
@@ -822,6 +836,10 @@ export function App() {
         stores={storePlugins}
         activeStore={view.name === 'store' ? view.plugin : null}
         onOpenStore={(id) => setView({ name: 'store', plugin: id })}
+        collections={collections}
+        collectionCounts={collectionTotals}
+        onOpenCollection={(id) => setView({ name: 'library', collection: id })}
+        onManageCollections={() => setCollectionsDialog({})}
       />
 
       <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
@@ -844,6 +862,15 @@ export function App() {
       <TermsHost />
 
       {redeemOpen && redeemStores.length > 0 && <RedeemDialog stores={redeemStores} onClose={() => setRedeemOpen(false)} />}
+      {collectionsDialog && (
+        <CollectionsDialog
+          collections={collections}
+          games={games}
+          gameId={collectionsDialog.gameId}
+          onChanged={setCollections}
+          onClose={() => setCollectionsDialog(null)}
+        />
+      )}
 
       {friendsOpen && (
         <FriendsModal
