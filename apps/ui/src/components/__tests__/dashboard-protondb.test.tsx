@@ -44,6 +44,18 @@ describe('Dashboard ProtonDB chips (#20)', () => {
     expect(getByText('Fix · Gold')).toBeTruthy();
   });
 
+  it('lays badges below the title, not beside it, so they cannot cover it (#72)', () => {
+    const g = mk('r-both', { store: 'custom', fix_info: { source: 'protondb', tier: 'platinum', description: '', deck: 'playable' } as Game['fix_info'] });
+    const { getByText } = render(<RecentList games={[g]} onOpenGame={() => {}} />);
+    const title = getByText('r-both');
+    // Both badges share the title's own container, on lines below it…
+    expect(title.parentElement?.textContent).toContain('ProtonDB · Platinum');
+    expect(title.parentElement?.textContent).toContain('Deck · Playable');
+    // …and the row holds only the cover and that container, so nothing
+    // competes with the title for width.
+    expect(title.closest('button')?.children.length).toBe(2);
+  });
+
   it('shows the chip in compact Recently-added rows, hidden for native and unrated', () => {
     const games = [
       mk('r-rated', { store: 'custom', fix_info: pdb('platinum') }),

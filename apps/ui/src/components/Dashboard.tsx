@@ -222,8 +222,8 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
               <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store, t)}</div>
+              {!g.native && <CompatChip game={g} className="mt-1" />}
             </div>
-            {!g.native && <CompatChip game={g} className="flex-none" />}
           </button>
         </li>
       ))}
