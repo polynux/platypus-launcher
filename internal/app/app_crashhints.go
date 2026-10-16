@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"platypus/internal/apperr"
 	"platypus/internal/crashhints"
@@ -49,9 +50,13 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 	if err != nil {
 		return apperr.New("crash.noWinetricks", "winetricks isn't installed", nil)
 	}
-	prefix := runner.PrefixPath(game, a.homeDir(), a.prefixesFolder())
-	if _, err := os.Stat(prefix); err != nil {
-		return apperr.New("crash.noPrefix", fmt.Sprintf("%s has no Wine prefix yet", game.Title), map[string]string{"title": game.Title})
+	r, err := a.selectRunner(game)
+	if err != nil {
+		return err
+	}
+	env, err := winetricksEnv(game, runner.PrefixPath(game, a.homeDir(), a.prefixesFolder()), r)
+	if err != nil {
+		return err
 	}
 	logPath := filepath.Join(a.resolvedDataDir(), "logs", "winetricks-"+game.ID+".log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
@@ -62,7 +67,10 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 		return err
 	}
 	cmd := exec.Command(bin, "--unattended", verb)
-	cmd.Env = append(os.Environ(), "WINEPREFIX="+prefix)
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 	cmd.Stdout, cmd.Stderr = out, out
 	if err := cmd.Start(); err != nil {
 		_ = out.Close()
@@ -73,6 +81,64 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 		_ = out.Close()
 	}()
 	return nil
+}
+
+// protonBinDirs are where a Proton build keeps its Wine binaries, relative to
+// its folder: newer builds ship files/, older ones dist/.
+var protonBinDirs = []string{"files/bin", "dist/bin"}
+
+// winetricksEnv is the environment winetricks runs with, so it works on the
+// prefix the game runs in (issue #46). prefix is the game's Platypus prefix. A
+// Proton build keeps its Wine prefix in <prefix>/pfx and runs with its own wine
+// and wineserver. A plain Wine runner runs with its own binary. The system Wine
+// (no path) is left to PATH. umu picks its own prefix and Proton, so it is
+// refused rather than guessed at.
+func winetricksEnv(game types.Game, prefix string, r types.ProtonVersion) (map[string]string, error) {
+	if runner.IsUmu(r) {
+		return nil, apperr.New("crash.umuUnsupported", fmt.Sprintf("%s starts through umu, which winetricks can't reach yet", game.Title), map[string]string{"title": game.Title})
+	}
+	isProton := strings.HasSuffix(r.Path, "proton")
+	wineprefix := prefix
+	if isProton {
+		wineprefix = filepath.Join(prefix, "pfx")
+	}
+	if !isDir(wineprefix) {
+		return nil, apperr.New("crash.noPrefix", fmt.Sprintf("%s has no Wine prefix yet", game.Title), map[string]string{"title": game.Title})
+	}
+	env := map[string]string{"WINEPREFIX": wineprefix}
+	switch {
+	case isProton:
+		wine, server, ok := protonWine(filepath.Dir(r.Path))
+		if !ok {
+			return nil, apperr.New("crash.noProtonWine", fmt.Sprintf("the Proton build of %s has no Wine binaries", game.Title), map[string]string{"title": game.Title})
+		}
+		env["WINE"], env["WINESERVER"] = wine, server
+	case r.Path != "":
+		env["WINE"] = r.Path
+	}
+	return env, nil
+}
+
+// protonWine finds the wine and wineserver binaries of the Proton build in
+// protonDir, in the first bin folder that has both.
+func protonWine(protonDir string) (wine, wineserver string, ok bool) {
+	for _, d := range protonBinDirs {
+		w, s := filepath.Join(protonDir, d, "wine"), filepath.Join(protonDir, d, "wineserver")
+		if isFile(w) && isFile(s) {
+			return w, s, true
+		}
+	}
+	return "", "", false
+}
+
+func isDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
+}
+
+func isFile(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
 }
 
 // OpenCrashLog opens the log of the game's last abnormal run in the default
