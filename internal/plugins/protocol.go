@@ -155,6 +155,7 @@ type CompatFact struct {
 	TTLSeconds int         `json:"ttlSeconds"`
 }
 
+// CompatWiki carries the attribution facts required for PCGamingWiki content.
 type CompatWiki struct {
 	Title      string `json:"title"`
 	URL        string `json:"url"`

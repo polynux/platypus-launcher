@@ -16,6 +16,7 @@ import { GameSettingsModal } from './GameSettingsModal';
 import { JobProgress } from './JobProgress';
 import { CompatFacts, deckLabel, tierLabel, tierMeaning } from './CompatBadges';
 import { useCompat } from '../lib/useCompat';
+import { steamDeckFact } from '../lib/compat';
 import { useCrashHints } from '../lib/useCrashHints';
 import { CrashHintsPanel } from './CrashHints';
 import { Badge } from '@/components/ds/badge';
@@ -222,6 +223,7 @@ export function GamePage(p: GamePageProps) {
   const active = job && (job.state === 'queued' || job.state === 'running');
   const fix = game.fix_info;
   const ratingBadge = info?.badges?.find((b) => b.kind === 'rating');
+  const deck = steamDeckFact(info?.badges);
   const shots = details?.screenshots ?? [];
   const videos = (details as unknown as { videos?: { url: string; thumbnail?: string; title?: string; mime?: string }[] | null } | null)?.videos ?? [];
   const media: MediaItem[] = useMemo(() => toMediaItems(shots, videos ?? []), [details]);
@@ -266,8 +268,8 @@ export function GamePage(p: GamePageProps) {
       t('game:facts.deck'),
       !info
         ? t('game:facts.pending')
-        : info.badges?.find((b) => b.kind === 'verdict')
-          ? deckLabel(t, info.badges.find((b) => b.kind === 'verdict')?.tone || info.badges.find((b) => b.kind === 'verdict')!.label.toLowerCase())
+        : deck
+          ? deckLabel(t, deck.rating)
           : info.steam_app_id
             ? t('game:facts.deckPending')
             : t('game:facts.deckNoAppId'),

@@ -1,3 +1,5 @@
+// Package app coordinates compatibility hints, cached provider facts, and
+// compatibility settings exposed to the UI.
 package app
 
 import (
@@ -11,19 +13,26 @@ import (
 	"platypus/internal/types"
 )
 
+// compatHintTTL is how long successful store detail hints remain reusable.
 const compatHintTTL = time.Hour
+
+// compatHintRetry limits retries after a failed store detail request.
 const compatHintRetry = 5 * time.Minute
 
+// compatHintCache stores short-lived store detail hints by game id.
 type compatHintCache struct {
 	mu sync.Mutex
 	m  map[string]compatHint
 }
+
+// compatHint is a cached detail answer and its success state.
 type compatHint struct {
 	at      time.Time
 	details *types.GameDetails
 	failed  bool
 }
 
+// baseCtx returns the app context, or a background context before startup.
 func (a *App) baseCtx() context.Context {
 	if a.ctx != nil {
 		return a.ctx
@@ -31,12 +40,15 @@ func (a *App) baseCtx() context.Context {
 	return context.Background()
 }
 
+// compatCtx bounds compatibility work when network access is unavailable.
 func (a *App) compatCtx() (context.Context, context.CancelFunc) {
 	if a.netOnline() {
 		return context.WithCancel(a.baseCtx())
 	}
 	return context.WithTimeout(a.baseCtx(), time.Second)
 }
+
+// pluginHints returns cached or freshly fetched store details for non-Steam games.
 func (a *App) pluginHints(game types.Game) *types.GameDetails {
 	if game.Source == types.SourceSteam || game.Source == types.SourceCustom {
 		return nil
@@ -62,6 +74,8 @@ func (a *App) pluginHints(game types.Game) *types.GameDetails {
 	a.compatHints.mu.Unlock()
 	return d
 }
+
+// cachedPluginHints returns an unexpired store detail hint without fetching it.
 func (a *App) cachedPluginHints(game types.Game) (*types.GameDetails, bool) {
 	if game.Source == types.SourceSteam || game.Source == types.SourceCustom {
 		return nil, true
@@ -81,6 +95,8 @@ func (a *App) cachedPluginHints(game types.Game) (*types.GameDetails, bool) {
 	}
 	return h.details, true
 }
+
+// ratingAppID resolves the Steam AppID and records how it was obtained.
 func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source string) {
 	if a.settings != nil {
 		if id := a.settings.CompatAppID(game.ID); id != "" {
@@ -95,12 +111,16 @@ func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source
 	}
 	return "", ""
 }
+
+// GetGameFix returns the curated fix for a game and queues compatibility facts.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
 	hints := a.pluginHints(game)
 	a.requestCompatFacts([]types.Game{game}, func(types.Game) *types.GameDetails { return hints })
-	return a.gameFix(game, hints)
+	return a.gameFix(game)
 }
-func (a *App) gameFix(game types.Game, _ *types.GameDetails) *types.GameFixInfo {
+
+// gameFix finds a curated fix using the title and, for Steam, its store AppID.
+func (a *App) gameFix(game types.Game) *types.GameFixInfo {
 	storeAppID := ""
 	if game.Source == types.SourceSteam {
 		storeAppID = game.StoreAppID
@@ -110,6 +130,8 @@ func (a *App) gameFix(game types.Game, _ *types.GameDetails) *types.GameFixInfo 
 	}
 	return nil
 }
+
+// storeDRMBadges converts DRM facts from store details into generic badges.
 func storeDRMBadges(d *types.DRM, source string, checked time.Time) []types.CompatBadge {
 	if d == nil {
 		return nil
@@ -134,6 +156,7 @@ func storeDRMBadges(d *types.DRM, source string, checked time.Time) []types.Comp
 	return out
 }
 
+// storeLauncherName expands known launcher identifiers for display.
 func storeLauncherName(raw string) string {
 	names := map[string]string{"ubisoft-connect": "Ubisoft Connect", "ea-app": "EA app", "origin": "EA app", "steam": "Steam", "gog-galaxy": "GOG Galaxy"}
 	if name, ok := names[raw]; ok {
@@ -144,6 +167,8 @@ func storeLauncherName(raw string) string {
 	}
 	return raw
 }
+
+// GetGameCompat returns compatibility facts currently cached for the game.
 func (a *App) GetGameCompat(game types.Game) types.Compat {
 	c := types.Compat{RatingsOnline: a.settings == nil || a.settings.RatingsOnline(), Badges: []types.CompatBadge{}}
 	hints := a.pluginHints(game)
@@ -172,6 +197,8 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 	}
 	return c
 }
+
+// SetGameSteamAppID saves a user AppID override and returns the refreshed facts.
 func (a *App) SetGameSteamAppID(game types.Game, appID string) (types.Compat, error) {
 	prev := ""
 	if a.settings != nil {
@@ -192,30 +219,40 @@ func (a *App) SetGameSteamAppID(game types.Game, appID string) (types.Compat, er
 	}
 	return a.GetGameCompat(game), nil
 }
+
+// SetRatingsOnline enables or disables online compatibility lookups.
 func (a *App) SetRatingsOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetRatingsOnline(on); err != nil {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil
 }
+
+// SetArtworkOnline enables or disables online artwork lookups.
 func (a *App) SetArtworkOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetArtworkOnline(on); err != nil {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil
 }
+
+// SetGameInfoOnline enables or disables online game metadata lookups.
 func (a *App) SetGameInfoOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetGameInfoOnline(on); err != nil {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil
 }
+
+// SetChatDesktopNotify enables or disables desktop notifications for chat.
 func (a *App) SetChatDesktopNotify(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetChatDesktopNotify(on); err != nil {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil
 }
+
+// pluginName returns a store plugin's display name when one is available.
 func (a *App) pluginName(game types.Game) string {
 	if p, ok := a.plugins.Plugin(game.Source); ok && p.Manifest.Name != "" {
 		return p.Manifest.Name

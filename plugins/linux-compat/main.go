@@ -1,4 +1,5 @@
-// Command platypus-linux-compat provides compatibility facts from ProtonDB.
+// Command platypus-linux-compat provides cached and live compatibility facts
+// from ProtonDB, Steam Deck, AreWeAntiCheatYet, PCGamingWiki, and local scans.
 package main
 
 import (
@@ -77,6 +78,7 @@ type report struct {
 var proton compat.RatingSource = &compat.ProtonDB{Fetch: compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")}
 var svc *compat.Service
 
+// configureService opens all plugin-owned source caches and configures fetchers.
 func configureService() {
 	data := os.Getenv("PLATYPUS_PLUGIN_DATA")
 	cache, _ := compat.OpenCache(filepath.Join(data, "source-cache.json"))
@@ -90,10 +92,12 @@ func configureService() {
 	}
 }
 
+// wireBadge converts a core compatibility badge into the protocol representation.
 func wireBadge(b types.CompatBadge) badge {
 	return badge{Kind: b.Kind, Label: b.Label, Tone: b.Tone, Link: b.Link, Source: b.Source, CheckedAt: b.CheckedAt, Detail: b.Detail}
 }
 
+// newAntiCheat removes anti-cheat names already supplied by AWACY or another source.
 func newAntiCheat(have []badge, add []types.CompatBadge) []types.CompatBadge {
 	seen := map[string]bool{}
 	for _, b := range have {
@@ -133,8 +137,32 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			id = g.StoreAppID
 		}
 		f := fact{ID: g.ID, Badges: []badge{}, Links: []any{}, TTLSeconds: int((7 * 24 * time.Hour).Seconds())}
-		if id != "" && g.Online {
-			summary, err := proton.Summary(ctx, id)
+		if id != "" {
+			var summary compat.Summary
+			var err error
+			if g.Online {
+				if svc != nil && svc.Ratings != nil {
+					var rating compat.Rating
+					var found bool
+					rating, found = svc.ProtonDB(ctx, id)
+					if found {
+						summary = rating.Summary
+						if !rating.Found {
+							err = compat.ErrNotFound
+						}
+					}
+				} else {
+					summary, err = proton.Summary(ctx, id)
+				}
+			} else if svc != nil {
+				cached, found := svc.ProtonDBCacheOnly(id)
+				if found {
+					summary = cached.Summary
+					if !cached.Found {
+						err = compat.ErrNotFound
+					}
+				}
+			}
 			if errors.Is(err, compat.ErrPaused) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (err != nil && ctx.Err() != nil) {
 				stopped = true
 				break
@@ -161,9 +189,16 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 				f.Report = &report{State: "none"}
 			}
 		}
-		if g.Online && svc != nil {
+		if svc != nil {
 			if svc.Deck != nil {
-				if d, ok := svc.DeckRating(ctx, id); ok && d.Found {
+				var d compat.DeckResult
+				var ok bool
+				if g.Online {
+					d, ok = svc.DeckRating(ctx, id)
+				} else {
+					d, ok = svc.DeckRatingCacheOnly(id)
+				}
+				if ok && d.Found {
 					b := badge{Kind: "verdict", Label: d.Report.Rating, Tone: d.Report.Rating, Link: compat.DeckPage(id), Source: "Steam Deck", CheckedAt: d.FetchedAt.Unix()}
 					f.Badges = append(f.Badges, b)
 					for _, n := range d.Report.Notes {
@@ -173,7 +208,11 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 			var cat *compat.AntiCheatData
 			if svc.AntiCheat != nil {
-				cat = svc.AntiCheatCatalogue(ctx)
+				if g.Online {
+					cat = svc.AntiCheatCatalogue(ctx)
+				} else {
+					cat = svc.AntiCheat.Load()
+				}
 			}
 			var entry compat.AntiCheatGame
 			var found bool
@@ -191,7 +230,14 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 				}
 			}
 			if id != "" && svc.Wiki != nil {
-				if w, ok := svc.WikiPage(ctx, id); ok && w.Found {
+				var w compat.WikiAnswer
+				var ok bool
+				if g.Online {
+					w, ok = svc.WikiPage(ctx, id)
+				} else {
+					w, ok = svc.WikiPageCacheOnly(id)
+				}
+				if ok && w.Found {
 					drm := compat.WikiDRMBadges(w.Record, w.FetchedAt, g.StoreDRM)
 					ac := compat.WikiAntiCheatBadges(w.Record, w.FetchedAt)
 					for _, b := range drm {
@@ -207,7 +253,15 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 		}
 		if g.InstallDir != "" && svc != nil {
-			local := svc.Local(g.InstallDir)
+			scan := svc.Scan
+			if scan == nil {
+				scan = compat.ScanInstall
+			}
+			hits, truncated := scan(g.InstallDir)
+			local := compat.LocalEntry{FetchedAt: time.Now(), Hits: hits, Truncated: truncated}
+			if svc.Cache != nil {
+				_ = svc.Cache.SetLocal(g.InstallDir, local)
+			}
 			for _, b := range compat.LocalBadges(local.Hits, local.FetchedAt) {
 				f.Badges = append(f.Badges, wireBadge(b))
 			}

@@ -746,7 +746,7 @@ func (a *App) applyFixes(games []types.Game) {
 		} else {
 			games[i].CompatBadges = []types.CompatBadge{}
 		}
-		games[i].FixInfo = a.gameFix(games[i], hints)
+		games[i].FixInfo = a.gameFix(games[i])
 	}
 }
 

@@ -17,7 +17,7 @@ func TestStoreDRMIsMappedInCore(t *testing.T) {
 	}
 }
 
-func TestOfflineFactDoesNotSatisfyOnlineAndKeepsOnlineBadges(t *testing.T) {
+func TestOfflineFactDoesNotSatisfyOnlineAndReplacesSnapshot(t *testing.T) {
 	now := time.Now()
 	a := &App{compatFacts: &compatFactsCache{path: filepath.Join(t.TempDir(), "compat-facts-cache.json"), facts: map[string]map[string]compatFactEntry{"linux-compat": {
 		"g": {Fact: plugins.CompatFact{ID: "g", Badges: []plugins.CompatBadge{{Kind: "rating", Label: "Platinum", Source: "ProtonDB"}}}, SteamAppID: "620", Expires: now.Add(time.Hour), Online: true, InstallDir: "/games/g"},
@@ -32,7 +32,7 @@ func TestOfflineFactDoesNotSatisfyOnlineAndKeepsOnlineBadges(t *testing.T) {
 	a.cacheCompatFactResultLocked("linux-compat", []plugins.CompatLookupGame{{ID: "g", SteamAppID: "620", InstallDir: "/games/g", Online: false}}, []plugins.CompatFact{{ID: "g", Badges: []plugins.CompatBadge{{Kind: "anticheat", Label: "BattlEye", Source: "Installed files"}}, TTLSeconds: 600}}, now)
 	a.compatFacts.mu.Unlock()
 	fact, _ := a.cachedProviderFact("g", "620")
-	if len(fact.Badges) != 2 {
-		t.Fatalf("merged offline facts = %+v", fact.Badges)
+	if len(fact.Badges) != 1 || fact.Badges[0].Label != "BattlEye" {
+		t.Fatalf("offline snapshot = %+v", fact.Badges)
 	}
 }

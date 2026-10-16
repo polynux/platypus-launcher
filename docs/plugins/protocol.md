@@ -1101,10 +1101,11 @@ titles are never used.
   use it to avoid adding overlapping third-party DRM facts; removed DRM history
   can still be reported.
 - **`online`.** Whether network sources may be queried. The core sends false
-  when offline or when "Fetch ratings online" is off. Providers must still
-  answer local sources such as installed-file detection. Offline answers do not
-  satisfy the online cache freshness check; merging them preserves the last
-  network facts, so an online lookup can run later.
+  when offline or when "Fetch ratings online" is off. Providers return what
+  they know without network access, including their cached network facts, and
+  refresh local sources such as installed-file detection. The core stores that
+  complete answer as an offline snapshot and asks again once online; providers
+  own their source caches and combine cached and fresh facts themselves.
 
 An optional `report` summarizes the provider's report count: `state` is
 `rated`, `few` or `none`; `count` is the number of reports when known, and

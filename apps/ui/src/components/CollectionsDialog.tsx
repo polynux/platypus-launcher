@@ -337,7 +337,7 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
       {select('installed', t('collections:smart.installed'), yesNo)}
       {select('played', t('collections:smart.played'), yesNo)}
       {select('badgeKind', t('collections:smart.badgeKind'), ['rating', 'verdict', 'protection', 'note', 'platform'].map((v) => ({ value: v, label: t(`collections:smart.badgeKinds.${v}`) })))}
-      {draft.badgeKind === 'rating' ? select('badgeValue', t('collections:smart.badgeValue'), TIER_FILTERS.filter((v) => v !== 'all').map((v) => ({ value: v, label: tierLabel(t, v) }))) : draft.badgeKind ? (
+      {draft.badgeKind === 'rating' ? select('badgeValue', t('collections:smart.badgeValue'), TIER_FILTERS.filter((v) => v !== 'all').map((v) => ({ value: v, label: tierLabel(t, v) }))) : draft.badgeKind === 'verdict' ? select('badgeValue', t('collections:smart.badgeValue'), ['verified', 'playable', 'unsupported'].map((v) => ({ value: v, label: t(`collections:smart.deckName.${v}`) }))) : draft.badgeKind ? (
         <label className="text-[13px] text-white/70">
           {t('collections:smart.badgeValue')}
           <Input value={draft.badgeValue} onChange={set('badgeValue')} disabled={disabled} className="mt-1.5" />
