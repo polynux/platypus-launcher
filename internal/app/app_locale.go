@@ -63,5 +63,5 @@ func (a *App) applyLocaleChange(loc string) {
 	// both languages can coexist; nothing to drop there. The sideloaded
 	// game-info disk cache keys on game id + link + language (see
 	// app_gameinfo.go) and refetches on a mismatch. Compat ratings
-	// (ProtonDB, Deck, wiki) are not localized and stay cached.
+	// (ProtonDB, Deck, wiki) are not localized and stay in the compat-facts cache.
 }

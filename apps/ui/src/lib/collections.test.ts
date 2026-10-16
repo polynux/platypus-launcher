@@ -28,16 +28,16 @@ describe('matchesSmart', () => {
     expect(matchesSmart(mk('n'), { played_within_days: 30 }, none, NOW)).toBe(false);
   });
 
-  it('compares the store, the playtime, and the ProtonDB and Deck facts', () => {
-    const g = mk('x', { store: 'gog', playtime_minutes: 120, compat_badges: [{ kind: 'rating', label: 'Gold', tone: 'gold', source: 'ProtonDB', checked_at: 1 }] as Game['compat_badges'], fix_info: { deck: 'verified' } as Game['fix_info'] });
+  it('compares the store, the playtime, and generic compatibility badges', () => {
+    const g = mk('x', { store: 'gog', playtime_minutes: 120, compat_badges: [{ kind: 'rating', label: 'Gold', tone: 'gold', source: 'ProtonDB', checked_at: 1 }, { kind: 'verdict', label: 'Verified', tone: 'verified', source: 'Steam Deck', checked_at: 1 }] as Game['compat_badges'] });
     expect(matchesSmart(g, { store: 'gog' }, none, NOW)).toBe(true);
     expect(matchesSmart(g, { store: 'epic' }, none, NOW)).toBe(false);
     expect(matchesSmart(g, { min_playtime_minutes: 120 }, none, NOW)).toBe(true);
     expect(matchesSmart(g, { min_playtime_minutes: 121 }, none, NOW)).toBe(false);
     expect(matchesSmart(g, { badge_kind: 'rating', badge_value: 'gold' }, none, NOW)).toBe(true);
     expect(matchesSmart(g, { badge_kind: 'rating', badge_value: 'none' }, none, NOW)).toBe(false);
-    expect(matchesSmart(g, { deck: 'verified' }, none, NOW)).toBe(true);
-    expect(matchesSmart(g, { deck: 'playable' }, none, NOW)).toBe(false);
+    expect(matchesSmart(g, { badge_kind: 'verdict', badge_value: 'verified' }, none, NOW)).toBe(true);
+    expect(matchesSmart(g, { badge_kind: 'verdict', badge_value: 'playable' }, none, NOW)).toBe(false);
   });
 
   it('treats a native build as its own tier, like the library filter does', () => {

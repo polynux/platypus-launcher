@@ -48,6 +48,19 @@ func (s *Service) WikiPage(ctx context.Context, appID string) (WikiAnswer, bool)
 	return s.cachedWiki(appID)
 }
 
+// WikiPageCacheOnly returns a saved page without starting or refreshing a fetch.
+func (s *Service) WikiPageCacheOnly(appID string) (WikiAnswer, bool) {
+	if s == nil || s.Cache == nil || !validAppID(appID) {
+		return WikiAnswer{}, false
+	}
+	e, ok := s.Cache.Wiki(appID)
+	if !ok {
+		return WikiAnswer{}, false
+	}
+	stale := s.now().Sub(e.FetchedAt) >= wikiTTL(e) || !s.online()
+	return WikiAnswer{Found: e.Found, Record: e.Record, FetchedAt: e.FetchedAt, Stale: stale}, true
+}
+
 func wikiKey(appID string) string { return "pcgw:" + appID }
 
 // cachedWiki is the saved answer of an AppID. A stale one is served at once

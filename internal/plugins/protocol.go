@@ -126,6 +126,8 @@ type CompatLookupGame struct {
 	SteamAppID string   `json:"steamAppId,omitempty"`
 	Platforms  []string `json:"platforms,omitempty"`
 	InstallDir string   `json:"installDir,omitempty"`
+	Online     bool     `json:"online"`
+	StoreDRM   bool     `json:"storeDRM,omitempty"`
 }
 
 // CompatBadge is a provider supplied compatibility badge.
@@ -135,6 +137,7 @@ type CompatBadge struct {
 	Tone      string `json:"tone,omitempty"`
 	Link      string `json:"link,omitempty"`
 	Source    string `json:"source"`
+	Detail    string `json:"detail,omitempty"`
 	CheckedAt int64  `json:"checkedAt"`
 }
 
@@ -147,8 +150,17 @@ type CompatFact struct {
 		Label string `json:"label"`
 		URL   string `json:"url"`
 	} `json:"links,omitempty"`
-	Notes      []string `json:"notes,omitempty"`
-	TTLSeconds int      `json:"ttlSeconds"`
+	Notes      []string    `json:"notes,omitempty"`
+	Wiki       *CompatWiki `json:"wiki,omitempty"`
+	TTLSeconds int         `json:"ttlSeconds"`
+}
+
+// CompatWiki carries the attribution facts required for PCGamingWiki content.
+type CompatWiki struct {
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	FetchedAt  int64  `json:"fetchedAt"`
+	LicenceURL string `json:"licenceUrl"`
 }
 
 // CompatReport is a provider's report count and rating summary for one game.

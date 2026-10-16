@@ -116,6 +116,18 @@ func (s *Service) ProtonDBCached(appID string) (Rating, bool) {
 	return Rating{}, false
 }
 
+// ProtonDBCacheOnly returns a saved answer without starting or refreshing a fetch.
+func (s *Service) ProtonDBCacheOnly(appID string) (Rating, bool) {
+	if s == nil || s.Cache == nil || !validAppID(appID) {
+		return Rating{}, false
+	}
+	e, ok := s.Cache.ProtonDB(appID)
+	if !ok {
+		return Rating{}, false
+	}
+	return e.rating(s.now().Sub(e.FetchedAt) >= protonTTL(e) || !s.online()), true
+}
+
 // cachedProton is the saved rating of an AppID. A stale one is served at once
 // and refreshed in the background when the network is on.
 func (s *Service) cachedProton(appID string) (Rating, bool) {
@@ -331,6 +343,18 @@ func (s *Service) DeckRatingCached(appID string) (DeckResult, bool) {
 		s.start(key, func(ctx context.Context) error { return s.refreshDeck(ctx, appID) })
 	}
 	return DeckResult{}, false
+}
+
+// DeckRatingCacheOnly returns a saved verdict without starting or refreshing a fetch.
+func (s *Service) DeckRatingCacheOnly(appID string) (DeckResult, bool) {
+	if s == nil || s.Cache == nil || !validAppID(appID) {
+		return DeckResult{}, false
+	}
+	e, ok := s.Cache.Deck(appID)
+	if !ok {
+		return DeckResult{}, false
+	}
+	return e.result(s.now().Sub(e.FetchedAt) >= deckTTL(e) || !s.online()), true
 }
 
 func deckKey(appID string) string { return "deck:" + appID }

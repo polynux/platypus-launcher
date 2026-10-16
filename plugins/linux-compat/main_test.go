@@ -9,11 +9,24 @@ import (
 	"testing"
 
 	"platypus/internal/compat"
+	"platypus/internal/types"
 )
 
 type ratingLookupFunc func(context.Context, string) (compat.Summary, error)
 
 func (f ratingLookupFunc) Summary(ctx context.Context, id string) (compat.Summary, error) {
+	return f(ctx, id)
+}
+
+type deckLookupFunc func(context.Context, string) (compat.DeckReport, error)
+
+func (f deckLookupFunc) Report(ctx context.Context, id string) (compat.DeckReport, error) {
+	return f(ctx, id)
+}
+
+type wikiLookupFunc func(context.Context, string) (compat.WikiRecord, error)
+
+func (f wikiLookupFunc) Lookup(ctx context.Context, id string) (compat.WikiRecord, error) {
 	return f(ctx, id)
 }
 
@@ -38,7 +51,7 @@ func TestLookupReturnsProtonDBBadgeBySteamAppID(t *testing.T) {
 	proton = &compat.ProtonDB{Fetch: compat.NewFetcher("test"), Base: srv.URL + "/api/v1/reports/summaries/"}
 	defer func() { proton = old }()
 
-	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "gog_1", Store: "gog", StoreAppID: "1", SteamAppID: "620"}}})
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "gog_1", Store: "gog", StoreAppID: "1", SteamAppID: "620", Online: true}}})
 	got, rpcErr := lookup(context.Background(), params)
 	if rpcErr != nil {
 		t.Fatal(rpcErr)
@@ -56,6 +69,86 @@ func TestLookupReturnsProtonDBBadgeBySteamAppID(t *testing.T) {
 	}
 }
 
+func TestOfflineLookupStillScansInstalledFiles(t *testing.T) {
+	old := svc
+	cache, _ := compat.OpenCache("")
+	svc = &compat.Service{Cache: cache, Scan: func(root string) ([]compat.LocalHit, bool) {
+		if root != "/games/test" {
+			t.Fatalf("scan root = %q", root)
+		}
+		return []compat.LocalHit{{Kind: "anticheat", Label: "BattlEye", Name: "BEClient_x64.dll"}}, false
+	}}
+	defer func() { svc = old }()
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "g", SteamAppID: "620", InstallDir: "/games/test", Online: false}}})
+	got, rpcErr := lookup(context.Background(), params)
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	facts := got.(map[string]any)["facts"].([]fact)
+	if len(facts) != 1 || len(facts[0].Badges) != 1 || facts[0].Badges[0].Source != "Installed files" {
+		t.Fatalf("offline facts = %+v", facts)
+	}
+}
+
+func TestLookupReturnsDeckVerdictAsGenericBadge(t *testing.T) {
+	oldSvc, oldProton := svc, proton
+	cache, _ := compat.OpenCache("")
+	svc = &compat.Service{Cache: cache, Deck: deckLookupFunc(func(_ context.Context, id string) (compat.DeckReport, error) {
+		if id != "620" {
+			t.Fatalf("Deck AppID=%q", id)
+		}
+		return compat.DeckReport{Rating: "playable", Notes: []string{"Small text"}}, nil
+	})}
+	proton = ratingLookupFunc(func(context.Context, string) (compat.Summary, error) { return compat.Summary{}, compat.ErrNotFound })
+	defer func() { svc, proton = oldSvc, oldProton }()
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "g", Store: "steam", StoreAppID: "620", SteamAppID: "620", Online: true}}})
+	got, rpcErr := lookup(context.Background(), params)
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	facts := got.(map[string]any)["facts"].([]fact)
+	if len(facts) != 1 || len(facts[0].Badges) != 2 || facts[0].Badges[0].Kind != "verdict" || facts[0].Badges[1].Kind != "note" {
+		t.Fatalf("Deck fact = %+v", facts)
+	}
+}
+
+func TestWikiAntiCheatDeduplicatesAgainstAWACY(t *testing.T) {
+	have := []badge{{Kind: "anticheat", Label: "Easy Anti-Cheat"}}
+	got := newAntiCheat(have, []types.CompatBadge{{Kind: "anticheat", Label: "easy anti-cheat"}, {Kind: "anticheat", Label: "BattlEye"}})
+	if len(got) != 1 || got[0].Label != "BattlEye" {
+		t.Fatalf("deduped wiki anti-cheat=%+v", got)
+	}
+}
+
+func TestLookupReturnsWikiCreditAndGenericProtectionBadges(t *testing.T) {
+	oldSvc, oldProton := svc, proton
+	cache, _ := compat.OpenCache("")
+	svc = &compat.Service{Cache: cache, Wiki: wikiLookupFunc(func(context.Context, string) (compat.WikiRecord, error) {
+		return compat.WikiRecord{Title: "Portal 2", DRM: []string{"Denuvo"}, Online: "always", Removed: []compat.RemovedDRM{{Name: "Old DRM", Date: "2020"}}, AntiCheat: []string{"Easy Anti-Cheat"}}, nil
+	})}
+	proton = ratingLookupFunc(func(context.Context, string) (compat.Summary, error) { return compat.Summary{}, compat.ErrNotFound })
+	defer func() { svc, proton = oldSvc, oldProton }()
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "g", SteamAppID: "620", Online: true, StoreDRM: true}}})
+	got, rpcErr := lookup(context.Background(), params)
+	if rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	facts := got.(map[string]any)["facts"].([]fact)
+	if len(facts) != 1 {
+		t.Fatalf("facts=%+v", facts)
+	}
+	if facts[0].Wiki == nil || facts[0].Wiki.Title != "Portal 2" || facts[0].Wiki.URL != compat.PCGWPage("Portal 2") || facts[0].Wiki.LicenceURL != compat.PCGWLicenceURL {
+		t.Fatalf("wiki credit=%+v", facts[0].Wiki)
+	}
+	kinds := map[string]bool{}
+	for _, b := range facts[0].Badges {
+		kinds[b.Kind] = true
+	}
+	if !kinds["drm-removed"] || !kinds["anticheat"] || kinds["denuvo"] || kinds["online"] {
+		t.Fatalf("wiki badges=%+v", facts[0].Badges)
+	}
+}
+
 func TestLookupReportsFewAndNoReports(t *testing.T) {
 	old := proton
 	proton = ratingLookupFunc(func(_ context.Context, id string) (compat.Summary, error) {
@@ -66,7 +159,7 @@ func TestLookupReportsFewAndNoReports(t *testing.T) {
 	})
 	t.Cleanup(func() { proton = old })
 
-	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "few", SteamAppID: "620"}, {ID: "none", SteamAppID: "621"}}})
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "few", SteamAppID: "620", Online: true}, {ID: "none", SteamAppID: "621", Online: true}}})
 	got, rpcErr := lookup(context.Background(), params)
 	if rpcErr != nil {
 		t.Fatal(rpcErr)
@@ -93,9 +186,9 @@ func TestLookupKeepsSuccessfulFactsWhenOneGameFails(t *testing.T) {
 	t.Cleanup(func() { proton = old })
 
 	params, _ := json.Marshal(lookupParams{Games: []game{
-		{ID: "one", SteamAppID: "620"},
-		{ID: "two", SteamAppID: "621"},
-		{ID: "three", SteamAppID: "622"},
+		{ID: "one", SteamAppID: "620", Online: true},
+		{ID: "two", SteamAppID: "621", Online: true},
+		{ID: "three", SteamAppID: "622", Online: true},
 	}})
 	got, rpcErr := lookup(context.Background(), params)
 	if rpcErr != nil {
@@ -123,9 +216,9 @@ func TestLookupStopsOnPausedFetcherAndKeepsEarlierFacts(t *testing.T) {
 	t.Cleanup(func() { proton = old })
 
 	params, _ := json.Marshal(lookupParams{Games: []game{
-		{ID: "one", SteamAppID: "620"},
-		{ID: "two", SteamAppID: "621"},
-		{ID: "three", SteamAppID: "622"},
+		{ID: "one", SteamAppID: "620", Online: true},
+		{ID: "two", SteamAppID: "621", Online: true},
+		{ID: "three", SteamAppID: "622", Online: true},
 	}})
 	got, rpcErr := lookup(context.Background(), params)
 	if rpcErr != nil {
@@ -144,7 +237,7 @@ func TestLookupReportsUnavailableWhenNoGameCouldBeFetched(t *testing.T) {
 	})
 	t.Cleanup(func() { proton = old })
 
-	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "one", SteamAppID: "620"}}})
+	params, _ := json.Marshal(lookupParams{Games: []game{{ID: "one", SteamAppID: "620", Online: true}}})
 	_, rpcErr := lookup(context.Background(), params)
 	if rpcErr == nil || rpcErr.Code != -32002 {
 		t.Fatalf("error = %+v, want -32002", rpcErr)
@@ -164,8 +257,8 @@ func TestLookupKeepsLastFactWhenContextEnds(t *testing.T) {
 	})
 
 	params, _ := json.Marshal(lookupParams{Games: []game{
-		{ID: "one", SteamAppID: "620"},
-		{ID: "two", SteamAppID: "621"},
+		{ID: "one", SteamAppID: "620", Online: true},
+		{ID: "two", SteamAppID: "621", Online: true},
 	}})
 	got, rpcErr := lookup(ctx, params)
 	if rpcErr != nil {

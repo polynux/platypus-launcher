@@ -163,7 +163,7 @@ describe('smartFromDraft', () => {
   });
 
   it('round-trips every supported condition into the editor draft', () => {
-    const filter = { store: 'steam', installed: false, played: true, badge_kind: 'rating', badge_value: 'native', deck: 'verified', status: 'playing', min_playtime_minutes: 90, year_from: 2001, year_to: 2010, collection: 'couch' };
+    const filter = { store: 'steam', installed: false, played: true, badge_kind: 'rating', badge_value: 'native', status: 'playing', min_playtime_minutes: 90, year_from: 2001, year_to: 2010, collection: 'couch' };
     expect(smartFromDraft(draftFromSmart(filter))).toEqual(filter);
   });
 });

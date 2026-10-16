@@ -20,7 +20,6 @@ export function matchesSmart(g: Game, f: SmartFilter, members: (collectionId: st
   if (f.played_within_days && (g.last_played_at ?? 0) < nowSec - f.played_within_days * 86400) return false;
   if (f.min_playtime_minutes && (g.playtime_minutes ?? 0) < f.min_playtime_minutes) return false;
   if (f.badge_kind && !hasBadgeValue(g, f.badge_kind, f.badge_value ?? '')) return false;
-  if (f.deck && g.fix_info?.deck !== f.deck) return false;
   // A game with no known year matches no year range: it can't be shown to be in it.
   if (f.year_from || f.year_to) {
     const y = g.release_year ?? 0;

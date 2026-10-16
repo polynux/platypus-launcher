@@ -17,7 +17,7 @@ import { SteamAppIdField } from '../SteamAppIdField';
 import { clearCompatCache } from '../../lib/compat';
 
 const game = { id: 'g1', source: 'echo', store: 'gog', store_app_id: 'x', title: 'Echo Tiny', is_installed: false, settings: {} } as unknown as Game;
-const answer = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, badges: [], drm: [], anticheat: [], ...o });
+const answer = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, badges: [], ...o });
 
 describe('SteamAppIdField', () => {
   beforeEach(() => {

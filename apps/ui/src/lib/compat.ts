@@ -31,6 +31,19 @@ export function ratingBadge(g: Game) {
   return g.compat_badges?.find((b) => b.kind === 'rating');
 }
 
+/** The Steam Deck verdict and its associated notes, read from generic facts. */
+export function steamDeckFact(badges?: CompatBadge[] | null) {
+  const badge = badges?.find((b) => b.kind === 'verdict' && b.source === 'Steam Deck');
+  if (!badge) return null;
+  return {
+    badge,
+    rating: badge.tone || badge.label.toLowerCase(),
+    notes: badges?.filter((b) => b.kind === 'note' && b.source === 'Steam Deck').map((b) => b.label) ?? [],
+    checkedAt: badge.checked_at,
+    link: badge.link,
+  };
+}
+
 /** Native wins over a tier: a native game runs without Proton, so its tier is secondary. */
 export function cardCompat(g: Game): CardCompat {
   if (g.native) return { kind: 'native' };

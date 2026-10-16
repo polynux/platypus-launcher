@@ -1,4 +1,5 @@
-// Command platypus-linux-compat provides compatibility facts from ProtonDB.
+// Command platypus-linux-compat provides cached and live compatibility facts
+// from ProtonDB, Steam Deck, AreWeAntiCheatYet, PCGamingWiki, and local scans.
 package main
 
 import (
@@ -8,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"platypus/internal/compat"
+	"platypus/internal/types"
 )
 
 type message struct {
@@ -35,6 +38,8 @@ type game struct {
 	SteamAppID string   `json:"steamAppId"`
 	Platforms  []string `json:"platforms,omitempty"`
 	InstallDir string   `json:"installDir,omitempty"`
+	Online     bool     `json:"online"`
+	StoreDRM   bool     `json:"storeDRM,omitempty"`
 }
 
 type lookupParams struct {
@@ -46,15 +51,23 @@ type badge struct {
 	Tone      string `json:"tone,omitempty"`
 	Link      string `json:"link,omitempty"`
 	Source    string `json:"source"`
+	Detail    string `json:"detail,omitempty"`
 	CheckedAt int64  `json:"checkedAt"`
 }
 type fact struct {
-	ID         string   `json:"id"`
-	Badges     []badge  `json:"badges"`
-	Report     *report  `json:"report,omitempty"`
-	Links      []any    `json:"links"`
-	Notes      []string `json:"notes,omitempty"`
-	TTLSeconds int      `json:"ttlSeconds"`
+	ID         string      `json:"id"`
+	Badges     []badge     `json:"badges"`
+	Report     *report     `json:"report,omitempty"`
+	Links      []any       `json:"links"`
+	Notes      []string    `json:"notes,omitempty"`
+	Wiki       *wikiCredit `json:"wiki,omitempty"`
+	TTLSeconds int         `json:"ttlSeconds"`
+}
+type wikiCredit struct {
+	Title      string `json:"title"`
+	URL        string `json:"url"`
+	FetchedAt  int64  `json:"fetchedAt"`
+	LicenceURL string `json:"licenceUrl"`
 }
 type report struct {
 	Count int    `json:"count"`
@@ -63,6 +76,45 @@ type report struct {
 }
 
 var proton compat.RatingSource = &compat.ProtonDB{Fetch: compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")}
+var svc *compat.Service
+
+// configureService opens all plugin-owned source caches and configures fetchers.
+func configureService() {
+	data := os.Getenv("PLATYPUS_PLUGIN_DATA")
+	cache, _ := compat.OpenCache(filepath.Join(data, "source-cache.json"))
+	fetch := compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")
+	awacyFetch := compat.NewFetcher("Platypus/1.0 (Linux compatibility facts)")
+	awacyFetch.Interval, awacyFetch.Concurrency = 0, 1
+	svc = &compat.Service{Cache: cache, Ratings: proton,
+		Deck:      &compat.SteamDeck{Fetch: fetch},
+		AntiCheat: &compat.AntiCheatStore{Path: filepath.Join(data, "awacy.json"), URL: compat.AWACYURL, Fetch: awacyFetch},
+		Wiki:      &compat.PCGW{Fetch: compat.NewPCGWFetcher()},
+	}
+}
+
+// wireBadge converts a core compatibility badge into the protocol representation.
+func wireBadge(b types.CompatBadge) badge {
+	return badge{Kind: b.Kind, Label: b.Label, Tone: b.Tone, Link: b.Link, Source: b.Source, CheckedAt: b.CheckedAt, Detail: b.Detail}
+}
+
+// newAntiCheat removes anti-cheat names already supplied by AWACY or another source.
+func newAntiCheat(have []badge, add []types.CompatBadge) []types.CompatBadge {
+	seen := map[string]bool{}
+	for _, b := range have {
+		if b.Kind == "anticheat" {
+			seen[strings.ToLower(b.Label)] = true
+		}
+	}
+	out := make([]types.CompatBadge, 0, len(add))
+	for _, b := range add {
+		key := strings.ToLower(b.Label)
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, b)
+		}
+	}
+	return out
+}
 
 func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 	var p lookupParams
@@ -86,14 +138,40 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 		}
 		f := fact{ID: g.ID, Badges: []badge{}, Links: []any{}, TTLSeconds: int((7 * 24 * time.Hour).Seconds())}
 		if id != "" {
-			summary, err := proton.Summary(ctx, id)
+			var summary compat.Summary
+			var err error
+			if g.Online {
+				if svc != nil && svc.Ratings != nil {
+					var rating compat.Rating
+					var found bool
+					rating, found = svc.ProtonDB(ctx, id)
+					if found {
+						summary = rating.Summary
+						if !rating.Found {
+							err = compat.ErrNotFound
+						}
+					}
+				} else {
+					summary, err = proton.Summary(ctx, id)
+				}
+			} else if svc != nil {
+				cached, found := svc.ProtonDBCacheOnly(id)
+				if found {
+					summary = cached.Summary
+					if !cached.Found {
+						err = compat.ErrNotFound
+					}
+				}
+			}
 			if errors.Is(err, compat.ErrPaused) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || (err != nil && ctx.Err() != nil) {
 				stopped = true
 				break
 			}
 			if err != nil && !errors.Is(err, compat.ErrNotFound) {
 				sourceDown = true
-				continue
+				if svc == nil {
+					continue
+				}
 			}
 			if err == nil {
 				tier := compat.ShownTier(summary)
@@ -109,6 +187,83 @@ func lookup(ctx context.Context, raw json.RawMessage) (any, *rpcError) {
 			}
 			if errors.Is(err, compat.ErrNotFound) {
 				f.Report = &report{State: "none"}
+			}
+		}
+		if svc != nil {
+			if svc.Deck != nil {
+				var d compat.DeckResult
+				var ok bool
+				if g.Online {
+					d, ok = svc.DeckRating(ctx, id)
+				} else {
+					d, ok = svc.DeckRatingCacheOnly(id)
+				}
+				if ok && d.Found {
+					b := badge{Kind: "verdict", Label: d.Report.Rating, Tone: d.Report.Rating, Link: compat.DeckPage(id), Source: "Steam Deck", CheckedAt: d.FetchedAt.Unix()}
+					f.Badges = append(f.Badges, b)
+					for _, n := range d.Report.Notes {
+						f.Badges = append(f.Badges, badge{Kind: "note", Label: n, Source: "Steam Deck", CheckedAt: d.FetchedAt.Unix()})
+					}
+				}
+			}
+			var cat *compat.AntiCheatData
+			if svc.AntiCheat != nil {
+				if g.Online {
+					cat = svc.AntiCheatCatalogue(ctx)
+				} else {
+					cat = svc.AntiCheat.Load()
+				}
+			}
+			var entry compat.AntiCheatGame
+			var found bool
+			if cat != nil {
+				if id != "" {
+					entry, found = cat.BySteam(id)
+				}
+				if !found && g.Store == "epic" {
+					entry, found = cat.ByEpic(g.StoreAppID)
+				}
+			}
+			if found {
+				for _, b := range compat.AntiCheatBadges(entry, cat.FetchedAt) {
+					f.Badges = append(f.Badges, wireBadge(b))
+				}
+			}
+			if id != "" && svc.Wiki != nil {
+				var w compat.WikiAnswer
+				var ok bool
+				if g.Online {
+					w, ok = svc.WikiPage(ctx, id)
+				} else {
+					w, ok = svc.WikiPageCacheOnly(id)
+				}
+				if ok && w.Found {
+					drm := compat.WikiDRMBadges(w.Record, w.FetchedAt, g.StoreDRM)
+					ac := compat.WikiAntiCheatBadges(w.Record, w.FetchedAt)
+					for _, b := range drm {
+						f.Badges = append(f.Badges, wireBadge(b))
+					}
+					for _, b := range newAntiCheat(f.Badges, ac) {
+						f.Badges = append(f.Badges, wireBadge(b))
+					}
+					if len(drm)+len(ac) > 0 {
+						f.Wiki = &wikiCredit{Title: w.Record.Title, URL: compat.PCGWPage(w.Record.Title), FetchedAt: w.FetchedAt.Unix(), LicenceURL: compat.PCGWLicenceURL}
+					}
+				}
+			}
+		}
+		if g.InstallDir != "" && svc != nil {
+			scan := svc.Scan
+			if scan == nil {
+				scan = compat.ScanInstall
+			}
+			hits, truncated := scan(g.InstallDir)
+			local := compat.LocalEntry{FetchedAt: time.Now(), Hits: hits, Truncated: truncated}
+			if svc.Cache != nil {
+				_ = svc.Cache.SetLocal(g.InstallDir, local)
+			}
+			for _, b := range compat.LocalBadges(local.Hits, local.FetchedAt) {
+				f.Badges = append(f.Badges, wireBadge(b))
 			}
 		}
 		facts = append(facts, f)
@@ -143,6 +298,7 @@ func handle(ctx context.Context, req message) message {
 }
 
 func main() {
+	configureService()
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
 	writer := bufio.NewWriter(os.Stdout)

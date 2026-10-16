@@ -50,12 +50,16 @@ compat.lookup { games: [{ id, store, storeAppId, steamAppId?, platforms?, instal
 - Batched: the library has hundreds of games; the core sends what changed, never one call per card.
 - The core owns the cache (per plugin, per game, with the plugin's TTL), offline behaviour and background refresh,
   as `internal/compat` does today. Rendering never waits for a plugin.
-- The UI shows badges generically: a badge has a `kind` (`rating`, `verdict`, `protection`, `note`), a label, a
+- The UI shows badges generically: a badge has a `kind` (`rating`, `verdict`, `protection`, `note`, plus source
+  kinds such as `drm`, `anticheat`, `drm-free`, `denuvo`, `launcher`, `online` and `drm-removed`), a label, a
   tone/tier for colour, a link and a source with its date; the existing `types.CompatBadge` is most of it.
 - Smart filters filter on badges (`kind` + value) instead of named ProtonDB/Deck fields. Existing smart collections
   are migrated (a filter on tier "platinum" becomes a filter on the ProtonDB plugin's `rating` badge).
 - Matching stays as today: by Steam AppID when known, never by title.
 - Order: ProtonDB first (#55), then Steam Deck, then AreWeAntiCheatYet, PCGamingWiki and local anti-cheat detection.
+- Step 4 completed (2026-10-16): all compatibility sources now run in the bundled `linux-compat` plugin; the core
+  renders generic facts and owns the per-plugin cache. Store DRM hints remain core-side because they come from
+  `game.details`.
 - One bundle for now: a single bundled `linux-compat` plugin holds every source, each still credited on its own in
   its badges. Splitting it per source later is a packaging change, not a protocol one.
 
@@ -108,6 +112,11 @@ build stops in `internal/relocate` (`syscall.Stat`) and `internal/session` (proc
 are core code that needs per-OS files (build tags), not plugins.
 
 ## Order of work
+
+| Step | Status (2026-10-16) |
+|---|---|
+| #55 ProtonDB provider | Complete; bundled in `linux-compat` |
+| #73 step 4 remaining compat sources | Complete; bundled in `linux-compat`, with facts rendered by kind |
 
 1. This ADR, reviewed and amended.
 2. Protocol: `store` optional, the `compat-facts` and `runner` capability names in the registry, conformance support.

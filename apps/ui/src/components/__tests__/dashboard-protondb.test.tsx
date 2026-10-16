@@ -45,7 +45,7 @@ describe('Dashboard ProtonDB chips (#20)', () => {
   });
 
   it('lays badges below the title, not beside it, so they cannot cover it (#72)', () => {
-    const g = mk('r-both', { store: 'custom', compat_badges: pdb('platinum'), fix_info: { source: 'steamdeck', tier: '', description: '', deck: 'playable' } as Game['fix_info'] });
+    const g = mk('r-both', { store: 'custom', compat_badges: [...pdb('platinum'), { kind: 'verdict', label: 'Playable', tone: 'playable', source: 'Steam Deck', checked_at: 1 }] as Game['compat_badges'] });
     const { getByText } = render(<RecentList games={[g]} onOpenGame={() => {}} />);
     const title = getByText('r-both');
     // Both badges share the title's own container, on lines below it…

@@ -18,7 +18,6 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/chat"
 	"platypus/internal/cloudsync"
-	"platypus/internal/compat"
 	"platypus/internal/dataplug"
 	"platypus/internal/jobs"
 	"platypus/internal/ledger"
@@ -48,14 +47,12 @@ const (
 // App struct
 type App struct {
 	// host is how the App reaches the shell it runs in: events, log, dialogs (host.go).
-	host     Host
-	ctx      context.Context
-	stop     context.CancelFunc
-	plugins  *plugins.Manager
-	settings *settings.Store
-	jobs     *jobs.Queue
-	// compat is the Steam Deck, anti-cheat, wiki and install-marker metadata.
-	compat      *compat.Service
+	host        Host
+	ctx         context.Context
+	stop        context.CancelFunc
+	plugins     *plugins.Manager
+	settings    *settings.Store
+	jobs        *jobs.Queue
 	compatHints compatHintCache
 	compatFacts *compatFactsCache
 	stores      *stores.Registry
@@ -334,18 +331,6 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		// Open still returns usable defaults.
 		a.host.Errorf("settings: %v", err)
-	}
-
-	a.compat, err = newCompatService(dataDir, a.settings)
-	if err != nil {
-		a.host.Errorf("compat: %v", err)
-	}
-	if a.compat != nil {
-		a.compat.Warn = func(format string, args ...any) { a.host.Warnf("compat: "+format, args...) }
-		// Every compat fetcher's requests feed the offline tracker (issue #44).
-		for _, f := range a.compat.Fetchers() {
-			f.Client = a.netClient(f.Client, 15*time.Second)
-		}
 	}
 
 	if err := a.openCustomization(dataDir); err != nil {
@@ -761,12 +746,7 @@ func (a *App) applyFixes(games []types.Game) {
 		} else {
 			games[i].CompatBadges = []types.CompatBadge{}
 		}
-		games[i].FixInfo = a.gameFix(games[i], hints, func(appID string) (compat.DeckResult, bool) {
-			if a.compat == nil {
-				return compat.DeckResult{}, false
-			}
-			return a.compat.DeckRatingCached(appID)
-		})
+		games[i].FixInfo = a.gameFix(games[i])
 	}
 }
 

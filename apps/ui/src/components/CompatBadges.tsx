@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ds/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ds/tooltip';
 import type { Compat, CompatBadge, Game, WikiCredit } from '../types';
-import { asOfDate, badgeTitle, cardCompat, TIER_LABEL } from '../lib/compat';
+import { asOfDate, badgeTitle, cardCompat, steamDeckFact, TIER_LABEL } from '../lib/compat';
 import { ExternalLink } from './ExternalLink';
 import { cx } from './ui';
 
@@ -100,9 +100,10 @@ export function CompatChip({ game, className, hideNative }: { game: Game; classN
   const { t } = useTranslation('game');
   if (hideNative && game.native) return null;
   const c = cardCompat(game);
-  const deck = game.fix_info?.deck;
-  if (!c && !deck) return null;
-  const deckBadge = deck ? <DeckBadge rating={deck} notes={game.fix_info?.deck_notes} /> : null;
+  const deck = steamDeckFact(game.compat_badges);
+  const deckRating = deck?.rating;
+  if (!c && !deckRating) return null;
+  const deckBadge = deckRating ? <DeckBadge rating={deckRating} notes={deck?.notes} /> : null;
   if (c?.kind === 'native') {
     return (
       <span className={cx('inline-flex min-w-0 max-w-full flex-wrap content-start items-start gap-1.5', className)}>
@@ -198,12 +199,14 @@ export function ProtectionBadge({ badge }: { badge: CompatBadge }) {
  *  nobody reported is left out, and then the block says so. */
 export function CompatFacts({ compat }: { compat: Compat }) {
   const { t } = useTranslation('game');
-  const drm = compat.drm ?? [];
-  const anticheat = compat.anticheat ?? [];
-  const badges = compat.badges ?? [];
+  const allFacts = compat.badges ?? [];
+  const badges = allFacts.filter((b) => b.kind === 'rating');
+  const drm = allFacts.filter((b) => ['drm', 'drm-free', 'launcher', 'drm-removed', 'denuvo', 'online'].includes(b.kind));
+  const anticheat = allFacts.filter((b) => b.kind === 'anticheat' || b.kind === 'eos');
+  const deck = steamDeckFact(allFacts);
   return (
     <div className="mt-4 space-y-3">
-      {(badges.length > 0 || drm.length > 0 || anticheat.length > 0) ? (
+      {(badges.length > 0 || drm.length > 0 || anticheat.length > 0) && (
         <div className="space-y-2">
           {badges.length > 0 && (
             <div className="flex flex-wrap gap-1.5" aria-label={t('game:compat.providerLabel')}>
@@ -224,23 +227,20 @@ export function CompatFacts({ compat }: { compat: Compat }) {
               {anticheat.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
             </div>
           )}
-          {compat.drm_notes && <p className="text-[12px] leading-relaxed text-white/70">{compat.drm_notes}</p>}
         </div>
-      ) : (
-        <p className="font-mono text-hint text-white/55">{t('game:compat.noneReported')}</p>
       )}
       {compat.notes?.map((note, i) => <p key={i} className="text-[12px] leading-relaxed text-white/70">{note}</p>)}
       {compat.report && <p className="text-[12px] leading-relaxed text-white/70">{reportSummaryText(t, compat.report)}</p>}
-      {compat.deck?.rating && compat.steam_app_id && (
+      {deck && compat.steam_app_id && (
         <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-hint text-white/55">
-          <DeckBadge rating={compat.deck.rating} notes={compat.deck.notes} />
-          {compat.deck.fetched_at > 0 && <span>{t('game:compat.asOf', { date: asOfDate(compat.deck.fetched_at) })}</span>}
-          {compat.deck.stale && <span>{t('game:compat.refreshing')}</span>}
-          <ExternalLink href={compat.deck.url} className="text-amber-200/80 hover:text-amber-200">
+          <DeckBadge rating={deck.rating} notes={deck.notes} />
+          {deck.checkedAt > 0 && <span>{t('game:compat.asOf', { date: asOfDate(deck.checkedAt) })}</span>}
+          <ExternalLink href={deck.link || `https://store.steampowered.com/app/${compat.steam_app_id}`} className="text-amber-200/80 hover:text-amber-200">
             {t('game:compat.steamLink')}
           </ExternalLink>
         </p>
       )}
+      {drm.length === 0 && anticheat.length === 0 && <p className="font-mono text-hint text-white/55">{t('game:compat.noneReported')}</p>}
       {compat.wiki && <WikiCreditLine credit={compat.wiki} />}
       {compat.steam_app_id && (
         <p className="font-mono text-hint text-white/55">
