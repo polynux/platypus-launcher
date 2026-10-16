@@ -30,6 +30,13 @@ type compatFactEntry struct {
 	RetryAt    time.Time          `json:"retryAt,omitempty"`
 }
 
+func compatFactFresh(e compatFactEntry, appID string, now time.Time) bool {
+	if e.SteamAppID != appID {
+		return false
+	}
+	return (e.Fact.ID != "" && now.Before(e.Expires)) || now.Before(e.RetryAt)
+}
+
 func openCompatFactsCache(path string) *compatFactsCache {
 	c := &compatFactsCache{path: path, facts: map[string]map[string]compatFactEntry{}, inFlight: map[string]bool{}, pending: map[string]map[string]plugins.CompatLookupGame{}}
 	b, err := os.ReadFile(path)
@@ -62,7 +69,7 @@ func (a *App) cachedProviderFact(gameID, appID string) (plugins.CompatFact, bool
 		if !ok || entry.Fact.ID == "" {
 			continue
 		}
-		if entry.SteamAppID != "" && entry.SteamAppID != appID {
+		if entry.SteamAppID != appID {
 			continue
 		}
 		found = true
@@ -92,7 +99,7 @@ func (a *App) requestCompatFacts(games []types.Game, hints func(types.Game) *typ
 			appID, _ := a.ratingAppID(g, d)
 			a.compatFacts.mu.Lock()
 			e := a.compatFacts.facts[pluginID][g.ID]
-			fresh := e.Fact.ID != "" && e.SteamAppID == appID && (now.Before(e.Expires) || now.Before(e.RetryAt))
+			fresh := compatFactFresh(e, appID, now)
 			a.compatFacts.mu.Unlock()
 			if fresh {
 				continue
@@ -141,7 +148,7 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 			for _, game := range pending {
 				a.compatFacts.mu.Lock()
 				e := a.compatFacts.facts[pluginID][game.ID]
-				fresh := e.Fact.ID != "" && e.SteamAppID == game.SteamAppID && (time.Now().Before(e.Expires) || time.Now().Before(e.RetryAt))
+				fresh := compatFactFresh(e, game.SteamAppID, time.Now())
 				a.compatFacts.mu.Unlock()
 				if !fresh {
 					batch = append(batch, game)
@@ -162,13 +169,22 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 	err := a.plugins.Call(ctx, pluginID, "compat.lookup", map[string]any{"games": games}, &result)
 	now := time.Now()
 	a.compatFacts.mu.Lock()
-	defer a.compatFacts.mu.Unlock()
+	updated := false
+	defer func() {
+		a.compatFacts.mu.Unlock()
+		if updated {
+			for _, game := range games {
+				a.host.Emit("library", game.ID)
+			}
+		}
+	}()
 	if a.compatFacts.facts[pluginID] == nil {
 		a.compatFacts.facts[pluginID] = map[string]compatFactEntry{}
 	}
 	if err != nil {
 		for _, g := range games {
 			e := a.compatFacts.facts[pluginID][g.ID]
+			e.SteamAppID = g.SteamAppID
 			e.RetryAt = now.Add(compatFactRetry)
 			a.compatFacts.facts[pluginID][g.ID] = e
 		}
@@ -191,6 +207,7 @@ func (a *App) refreshCompatFacts(pluginID string, games []plugins.CompatLookupGa
 			fact.Badges = []plugins.CompatBadge{}
 		}
 		a.compatFacts.facts[pluginID][fact.ID] = compatFactEntry{Fact: fact, SteamAppID: appIDs[fact.ID], Expires: now.Add(ttl)}
+		updated = true
 	}
 	a.saveCompatFactsLocked()
 }

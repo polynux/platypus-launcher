@@ -54,7 +54,7 @@ type App struct {
 	plugins  *plugins.Manager
 	settings *settings.Store
 	jobs     *jobs.Queue
-	// compat is the ProtonDB, anti-cheat and install-marker metadata (app_compat.go).
+	// compat is the Steam Deck, anti-cheat, wiki and install-marker metadata.
 	compat      *compat.Service
 	compatHints compatHintCache
 	compatFacts *compatFactsCache
@@ -745,7 +745,7 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 	return lib, nil
 }
 
-// applyFixes puts each game's curated fix or ProtonDB tier on it (the library
+// applyFixes puts each game's curated fix or cached provider badges on it (the library
 // cards and filters read it). Ratings come from the cache: a game with none yet
 // gets one on a later scan, when its fetch has finished.
 func (a *App) applyFixes(games []types.Game) {
@@ -755,6 +755,12 @@ func (a *App) applyFixes(games []types.Game) {
 	})
 	for i := range games {
 		hints, _ := a.cachedPluginHints(games[i]) // never a plugin call per game here
+		appID, _ := a.ratingAppID(games[i], hints)
+		if fact, ok := a.cachedProviderFact(games[i].ID, appID); ok {
+			games[i].CompatBadges = factBadges(fact)
+		} else {
+			games[i].CompatBadges = []types.CompatBadge{}
+		}
 		games[i].FixInfo = a.gameFix(games[i], hints, func(appID string) (compat.DeckResult, bool) {
 			if a.compat == nil {
 				return compat.DeckResult{}, false

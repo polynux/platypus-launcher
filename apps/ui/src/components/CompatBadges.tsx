@@ -2,8 +2,8 @@
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ds/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ds/tooltip';
-import type { Compat, CompatBadge, Game, ProtonRating, WikiCredit } from '../types';
-import { asOfDate, cardCompat } from '../lib/compat';
+import type { Compat, CompatBadge, Game, WikiCredit } from '../types';
+import { asOfDate, badgeTitle, cardCompat, TIER_LABEL } from '../lib/compat';
 import { ExternalLink } from './ExternalLink';
 import { cx } from './ui';
 
@@ -74,13 +74,6 @@ export function tierMeaning(t: T, tier: string): string | undefined {
   }
 }
 
-/** One line for a ProtonDB rating: the medal and how many reports, or why there is none. */
-export function ratingText(t: T, r: ProtonRating): string {
-  if (r.no_reports) return t('game:compat.ratingNoReports');
-  if (!r.tier || r.few_reports) return t('game:compat.ratingFew', { count: r.total });
-  return t('game:compat.rating', { count: r.total, tier: tierLabel(t, r.tier) });
-}
-
 /** The tooltip of a Steam Deck badge: the verdict, its caveats, and the source. */
 function deckTooltip(t: T, rating: string, notes?: string[] | null): string {
   const body = (notes ?? []).filter(Boolean).join(' ');
@@ -115,17 +108,18 @@ export function CompatChip({ game, className, hideNative }: { game: Game; classN
   }
   const tier = c?.kind === 'tier' ? c.tier : '';
   const source = c?.kind === 'tier' ? c.source : '';
-  const prefix = source === 'protondb' ? t('game:compat.protondbPrefix') : t('game:compat.fixPrefix');
-  const label = tierLabel(t, tier);
+  const prefix = source || t('game:compat.fixPrefix');
+  const label = TIER_LABEL[tier] ? tierLabel(t, tier) : tier;
   const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((x) => x === tier) ?? 'silver';
+  const chip = c && (
+    <Badge variant={variant} title={c.source ? `${c.source} · ${label}${c.checkedAt ? ` · ${asOfDate(c.checkedAt)}` : ''}` : t('game:compat.tierTitle', { prefix, tier: label })} className="min-w-0 max-w-full shrink-0 truncate">
+      <span className="badge-full truncate leading-normal">{prefix} · {label}</span>
+      <span className="badge-short truncate leading-normal">{label}</span>
+    </Badge>
+  );
   return (
     <span className={cx('inline-flex min-w-0 max-w-full flex-wrap content-start items-start gap-1.5', className)}>
-      {c && (
-        <Badge variant={variant} title={t('game:compat.tierTitle', { prefix, tier: label })} className="min-w-0 max-w-full shrink-0 truncate">
-          <span className="badge-full truncate leading-normal">{prefix} · {label}</span>
-          <span className="badge-short truncate leading-normal">{label}</span>
-        </Badge>
-      )}
+      {c?.link ? <ExternalLink href={c.link} title={c.checkedAt ? `${source} · ${label} · ${asOfDate(c.checkedAt)}` : `${source} · ${label}`}>{chip}</ExternalLink> : chip}
       {deckBadge}
     </span>
   );
@@ -187,7 +181,7 @@ export function ProtectionBadge({ badge }: { badge: CompatBadge }) {
           {badge.label}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{`${badge.detail} ${t('game:compat.badgeSource', { source: badge.source, date: asOfDate(badge.checked_at) })}`}</TooltipContent>
+      <TooltipContent className="max-w-xs">{`${badge.detail ? `${badge.detail} ` : ''}${t('game:compat.badgeSource', { source: badge.source, date: asOfDate(badge.checked_at) })}`}</TooltipContent>
     </Tooltip>
   );
 }
@@ -199,11 +193,20 @@ export function CompatFacts({ compat }: { compat: Compat }) {
   const { t } = useTranslation('game');
   const drm = compat.drm ?? [];
   const anticheat = compat.anticheat ?? [];
-  const pdb = compat.protondb;
+  const badges = compat.badges ?? [];
   return (
     <div className="mt-4 space-y-3">
-      {(drm.length > 0 || anticheat.length > 0) ? (
+      {(badges.length > 0 || drm.length > 0 || anticheat.length > 0) ? (
         <div className="space-y-2">
+          {badges.length > 0 && (
+            <div className="flex flex-wrap gap-1.5" aria-label={t('game:compat.providerLabel')}>
+              {badges.map((b) => {
+                const variant = (['platinum', 'gold', 'silver', 'bronze', 'borked'] as const).find((x) => x === b.tone) ?? 'neutral';
+                const chip = <Badge variant={variant} title={badgeTitle(b)}>{b.label}</Badge>;
+                return b.link ? <ExternalLink key={`${b.kind}-${b.source}-${b.label}`} href={b.link}>{chip}</ExternalLink> : <span key={`${b.kind}-${b.source}-${b.label}`}>{chip}</span>;
+              })}
+            </div>
+          )}
           {drm.length > 0 && (
             <div className="flex flex-wrap gap-1.5" aria-label={t('game:compat.drmLabel')}>
               {drm.map((b) => <ProtectionBadge key={`${b.kind}-${b.source}-${b.label}`} badge={b} />)}
@@ -219,17 +222,7 @@ export function CompatFacts({ compat }: { compat: Compat }) {
       ) : (
         <p className="font-mono text-hint text-white/55">{t('game:compat.noneReported')}</p>
       )}
-      {pdb && compat.steam_app_id && (
-        <p className="font-mono text-hint text-white/55">
-          {ratingText(t, pdb)}
-          {pdb.fetched_at > 0 && <>{' · '}{t('game:compat.asOf', { date: asOfDate(pdb.fetched_at) })}</>}
-          {pdb.stale && <>{' · '}{t('game:compat.refreshing')}</>}
-          {' · '}
-          <ExternalLink href={pdb.url} className="text-amber-200/80 hover:text-amber-200">
-            {t('game:compat.protondbLink')}
-          </ExternalLink>
-        </p>
-      )}
+      {compat.notes?.map((note, i) => <p key={i} className="text-[12px] leading-relaxed text-white/70">{note}</p>)}
       {compat.deck?.rating && compat.steam_app_id && (
         <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-hint text-white/55">
           <DeckBadge rating={compat.deck.rating} notes={compat.deck.notes} />

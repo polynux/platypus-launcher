@@ -30,7 +30,7 @@ describe('Dashboard truth', () => {
     expect(getByText('Recently added')).toBeTruthy();
   });
   it('D3: Later dismisses ids, Hide all dismisses every waiting game', () => {
-    const fix = { source: 'curated', tier: 'gold' } as Game['fix_info'];
+    const fix = { source: 'curated', tier: 'gold', description: 'Needs this fix' } as Game['fix_info'];
     const onDismissHero = vi.fn();
     const { getByText } = dash([mk('a', { fix_info: fix }), mk('b', { fix_info: fix })], { onDismissHero });
     fireEvent.click(getByText('Later'));

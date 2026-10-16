@@ -14,7 +14,7 @@
     "noneBody": "Les données de compatibilité se chargent en arrière-plan après une analyse. ProtonDB a besoin d'une connexion réseau."
   },
   "attention": {
-    "borked": "ProtonDB signale ce titre comme borked. Essayez un autre runner ou consultez les rapports.",
-    "bronze": "ProtonDB note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner."
+    "borked": "{{source}} signale ce titre comme borked. Essayez un autre runner ou consultez les rapports.",
+    "bronze": "{{source}} note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner."
   }
 }

@@ -15,7 +15,6 @@ import {
   clearCompatCache,
   deckTitle,
   gameCompat,
-  ratingLine,
   setGameCompat,
   tierFilterValue,
 } from './compat';
@@ -23,12 +22,12 @@ import {
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'echo', store: 'epic', store_app_id: id, title: id, is_installed: true, settings: {}, ...o }) as Game;
 
-const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, drm: [], anticheat: [], ...o });
+const compat = (o: Partial<Compat> = {}): Compat => ({ native: false, ratings_online: true, badges: [], drm: [], anticheat: [], ...o });
 
 describe('card compatibility', () => {
   it('shows a native build over a tier, and a tier when there is no native build', () => {
-    expect(cardCompat(mk('a', { native: true, fix_info: { source: 'protondb', tier: 'gold', description: '', winetricks: [], dll_overrides: {}, launch_args: '' } }))).toEqual({ kind: 'native' });
-    expect(cardCompat(mk('b', { fix_info: { source: 'protondb', tier: 'gold', description: '', winetricks: [], dll_overrides: {}, launch_args: '' } }))).toEqual({ kind: 'tier', tier: 'gold', source: 'protondb' });
+    expect(cardCompat(mk('a', { native: true, compat_badges: [{ kind: 'rating', label: 'Gold', tone: 'gold', source: 'ProtonDB', checked_at: 0 }] }))).toEqual({ kind: 'native' });
+    expect(cardCompat(mk('b', { compat_badges: [{ kind: 'rating', label: 'Gold', tone: 'gold', source: 'ProtonDB', checked_at: 0 }] }))).toEqual({ kind: 'tier', tier: 'gold', source: 'ProtonDB', checkedAt: 0 });
   });
 
   it('shows nothing for a game with no answer', () => {
@@ -37,17 +36,13 @@ describe('card compatibility', () => {
 
   it('filters by native, a tier, or none', () => {
     expect(tierFilterValue(mk('a', { native: true }))).toBe('native');
-    expect(tierFilterValue(mk('b', { fix_info: { source: 'protondb', tier: 'platinum', description: '', winetricks: [], dll_overrides: {}, launch_args: '' } }))).toBe('platinum');
+    expect(tierFilterValue(mk('b', { compat_badges: [{ kind: 'rating', label: 'Platinum', tone: 'platinum', source: 'ProtonDB', checked_at: 0 }] }))).toBe('platinum');
     expect(tierFilterValue(mk('c'))).toBe('none');
   });
 });
 
 describe('wording', () => {
-  it('says what the rating is, or why there is none', () => {
-    expect(ratingLine({ tier: 'platinum', confidence: 'strong', total: 343, fetched_at: 0, url: '' })).toBe('Platinum · 343 reports');
-    expect(ratingLine({ tier: '', confidence: 'strong', total: 2, fetched_at: 0, few_reports: true, url: '' })).toBe('Few ProtonDB reports (2)');
-    expect(ratingLine({ tier: '', confidence: '', total: 0, fetched_at: 0, no_reports: true, url: '' })).toBe('No ProtonDB reports');
-  });
+
 
   it('dates in UTC and names the source of a badge', () => {
     expect(asOfDate(1791589136)).toBe('2026-10-09');

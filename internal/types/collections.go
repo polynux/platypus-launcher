@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 // Collections (issue #45): the user's lists of games, stored in settings and
 // keyed by game id. A manual collection holds game ids; a smart one holds a
 // SmartFilter over facts the library already has and no ids of its own. The
@@ -42,7 +44,7 @@ type Collection struct {
 
 // SmartFilter is a saved query over library facts. Every set field must
 // match; an unset field matches anything. Values are the ones the library
-// already shows: a store id ("custom" for sideloaded games), a ProtonDB tier
+// already shows: a store id ("custom" for sideloaded games), a rating badge
 // ("native" and "none" too), a Steam Deck verdict, a game status ("none" for
 // no status).
 type SmartFilter struct {
@@ -53,13 +55,34 @@ type SmartFilter struct {
 	// PlayedWithinDays keeps the games played in the last N days (0: any time).
 	PlayedWithinDays   int    `json:"played_within_days,omitempty"`
 	MinPlaytimeMinutes int    `json:"min_playtime_minutes,omitempty"`
-	Tier               string `json:"tier,omitempty"`
+	BadgeKind          string `json:"badge_kind,omitempty"`
+	BadgeValue         string `json:"badge_value,omitempty"`
 	Deck               string `json:"deck,omitempty"`
 	YearFrom           int    `json:"year_from,omitempty"`
 	YearTo             int    `json:"year_to,omitempty"`
 	Status             string `json:"status,omitempty"`
 	// Collection keeps the members of a manual collection (by its id).
 	Collection string `json:"collection,omitempty"`
+}
+
+// UnmarshalJSON converts the saved tier filter into the generic badge filter.
+func (f *SmartFilter) UnmarshalJSON(data []byte) error {
+	type wire SmartFilter
+	var v struct {
+		*wire
+		Tier string `json:"tier"`
+	}
+	base := wire{}
+	v.wire = &base
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*f = SmartFilter(base)
+	if f.BadgeValue == "" && v.Tier != "" {
+		f.BadgeKind = "rating"
+		f.BadgeValue = v.Tier
+	}
+	return nil
 }
 
 // CollectionTiers are the tier values a smart filter takes, besides "".

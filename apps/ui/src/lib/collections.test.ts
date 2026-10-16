@@ -29,20 +29,20 @@ describe('matchesSmart', () => {
   });
 
   it('compares the store, the playtime, and the ProtonDB and Deck facts', () => {
-    const g = mk('x', { store: 'gog', playtime_minutes: 120, fix_info: { tier: 'gold', deck: 'verified' } as Game['fix_info'] });
+    const g = mk('x', { store: 'gog', playtime_minutes: 120, compat_badges: [{ kind: 'rating', label: 'Gold', tone: 'gold', source: 'ProtonDB', checked_at: 1 }] as Game['compat_badges'], fix_info: { deck: 'verified' } as Game['fix_info'] });
     expect(matchesSmart(g, { store: 'gog' }, none, NOW)).toBe(true);
     expect(matchesSmart(g, { store: 'epic' }, none, NOW)).toBe(false);
     expect(matchesSmart(g, { min_playtime_minutes: 120 }, none, NOW)).toBe(true);
     expect(matchesSmart(g, { min_playtime_minutes: 121 }, none, NOW)).toBe(false);
-    expect(matchesSmart(g, { tier: 'gold' }, none, NOW)).toBe(true);
-    expect(matchesSmart(g, { tier: 'none' }, none, NOW)).toBe(false);
+    expect(matchesSmart(g, { badge_kind: 'rating', badge_value: 'gold' }, none, NOW)).toBe(true);
+    expect(matchesSmart(g, { badge_kind: 'rating', badge_value: 'none' }, none, NOW)).toBe(false);
     expect(matchesSmart(g, { deck: 'verified' }, none, NOW)).toBe(true);
     expect(matchesSmart(g, { deck: 'playable' }, none, NOW)).toBe(false);
   });
 
   it('treats a native build as its own tier, like the library filter does', () => {
-    expect(matchesSmart(mk('n', { native: true }), { tier: 'native' }, none, NOW)).toBe(true);
-    expect(matchesSmart(mk('p'), { tier: 'none' }, none, NOW)).toBe(true);
+    expect(matchesSmart(mk('n', { native: true }), { badge_kind: 'rating', badge_value: 'native' }, none, NOW)).toBe(true);
+    expect(matchesSmart(mk('p'), { badge_kind: 'rating', badge_value: 'none' }, none, NOW)).toBe(true);
   });
 
   it('matches year ranges, and a game with no known year fails any range', () => {

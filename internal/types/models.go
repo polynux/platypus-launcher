@@ -92,6 +92,7 @@ type Game struct {
 	// sideloaded games don't lose them in the emitted library (CORE-9).
 	SettingsExtra map[string]any `json:"settings_extra,omitempty"`
 	FixInfo       *GameFixInfo   `json:"fix_info,omitempty"`
+	CompatBadges  []CompatBadge  `json:"compat_badges,omitempty"`
 	LastPlayed    int64          `json:"last_played_at,omitempty"` // unix seconds
 	// PlaytimeMin is the playtime shown and sorted by: max(local, store) for
 	// a plugin game with a playtime report (playtime capability, protocol 1.7),

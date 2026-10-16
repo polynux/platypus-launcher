@@ -12,6 +12,7 @@ import { byRecent, coverImages, heroImages, needsAttention, storeLabel as storeL
 import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
+import { ratingBadge } from '../lib/compat';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -59,10 +60,10 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
           <div className="absolute bottom-6 left-7 max-w-lg">
             <Badge variant="bronze" className="bg-orange-400 text-[#130f0a]">
-              {hero.fix_info?.source === 'protondb' ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
+              {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '') ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
             </Badge>
             <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
-              {hero.fix_info?.source === 'protondb'
+              {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '')
                 ? t('dashboard:hero.titleTweaks', { title: hero.title })
                 : t('dashboard:hero.titleFix', { title: hero.title })}
             </h1>
@@ -136,7 +137,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
-                      {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} />}
+                      {(ratingBadge(g)?.tone || g.fix_info?.tier) && <TierBadge tier={ratingBadge(g)?.tone || g.fix_info!.tier} />}
                     </div>
                     <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/70">{attentionReason(g, t)}</p>
                   </button>
@@ -167,13 +168,13 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
 }
 
 /** Why a game needs attention, in words. Curated recipes speak for
- *  themselves (the plugin's own description); ProtonDB tiers are rendered
- *  from the catalog so they follow the UI language. */
+ *  themselves; rating explanations name the badge's source. */
 function attentionReason(g: Game, t: TFunction): string {
   const f = g.fix_info;
-  if (!f) return '';
-  if (f.source !== 'protondb') return f.description;
-  return t(f.tier === 'borked' ? 'dashboard:reason.borked' : 'dashboard:reason.bronze');
+  if (f?.description) return f.description;
+  const badge = ratingBadge(g);
+  if (badge?.tone !== 'bronze' && badge?.tone !== 'borked') return '';
+  return t(badge.tone === 'borked' ? 'dashboard:reason.borked' : 'dashboard:reason.bronze', { source: badge.source });
 }
 
 /** The store of a game, in words. The shared helper stays as is for the

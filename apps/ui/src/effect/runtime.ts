@@ -92,7 +92,7 @@ const backend = (g: Game) => toBackendGame(g) as gen.Game;
 
 /** A compat answer with its lists present, whatever Go sent (nil slices arrive as null). */
 function normalizeCompat(c: Compat): Compat {
-  return { ...c, drm: c.drm ?? [], anticheat: c.anticheat ?? [] };
+  return { ...c, badges: c.badges ?? [], notes: c.notes ?? [], links: c.links ?? [], drm: c.drm ?? [], anticheat: c.anticheat ?? [] };
 }
 
 /** A customization with every field present, whatever Go sent. */
@@ -141,16 +141,15 @@ export const LauncherApi = {
 
   previewCommand: (game: Game) => call<string>('PreviewLaunchCommand', () => App.PreviewLaunchCommand(backend(game))),
 
-  // Curated fix first, then the ProtonDB tier (through the Steam AppID that
-  // applies to the game). Resolves null when neither has data worth showing.
+  // Curated fix recipe and Deck verdict. Compatibility provider badges arrive
+  // on the library game and in getGameCompat.
   getGameFix: (game: Game) =>
     call<GameFixInfo | null>('GetGameFix', async () => {
       const fix = await App.GetGameFix(backend(game));
       return fix && (fix.tier || fix.description) ? fix : null;
     }),
 
-  // Compatibility and protection facts: ProtonDB rating, native build, DRM and
-  // anti-cheat (internal/compat). Lists are normalized to [] at the edge.
+  // Compatibility and protection facts from providers, DRM and anti-cheat.
   getGameCompat: (game: Game) =>
     call<Compat>('GetGameCompat', async () => normalizeCompat(await App.GetGameCompat(backend(game)))),
 

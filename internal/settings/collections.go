@@ -282,8 +282,14 @@ func validateSmart(list []types.Collection, f types.SmartFilter) error {
 	if len(f.Store) > 64 {
 		return errors.New("a store id is at most 64 characters")
 	}
-	if f.Tier != "" && !slices.Contains(types.CollectionTiers, f.Tier) {
-		return fmt.Errorf("unknown tier %q", f.Tier)
+	if f.BadgeKind != "" && !slices.Contains([]string{"rating", "verdict", "protection", "note", "platform"}, f.BadgeKind) {
+		return fmt.Errorf("unknown badge kind %q", f.BadgeKind)
+	}
+	if f.BadgeValue != "" && (f.BadgeKind == "" || len(f.BadgeValue) > 128) {
+		return errors.New("a badge value needs a kind and is at most 128 characters")
+	}
+	if f.BadgeKind == "rating" && f.BadgeValue != "" && !slices.Contains(types.CollectionTiers, f.BadgeValue) {
+		return fmt.Errorf("unknown rating badge %q", f.BadgeValue)
 	}
 	if f.Deck != "" && !slices.Contains(types.CollectionDecks, f.Deck) {
 		return fmt.Errorf("unknown Steam Deck verdict %q", f.Deck)

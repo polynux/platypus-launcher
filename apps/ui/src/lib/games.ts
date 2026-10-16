@@ -1,22 +1,24 @@
 import type { Game, GameSettings } from '../types';
 import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 import i18n from './i18n';
+import { ratingBadge } from './compat';
 
-/** A game "needs attention" when it has a curated fix recipe or a poor ProtonDB tier. */
+/** A game "needs attention" when it has a curated fix recipe or a poor rating badge. */
 export function needsAttention(g: Game): boolean {
   const f = g.fix_info;
-  if (!f) return false;
-  if (f.source !== 'protondb') return true;
-  return f.tier === 'bronze' || f.tier === 'borked';
+  if (f && f.description) return true;
+  const tier = ratingBadge(g)?.tone;
+  return tier === 'bronze' || tier === 'borked';
 }
 
 export function attentionReason(g: Game): string {
   const f = g.fix_info;
-  if (!f) return '';
-  if (f.source !== 'protondb') return f.description;
-  return f.tier === 'borked'
-    ? i18n.t('fixes:attention.borked')
-    : i18n.t('fixes:attention.bronze');
+  if (f?.description) return f.description;
+  const badge = ratingBadge(g);
+  if (badge?.tone !== 'bronze' && badge?.tone !== 'borked') return '';
+  return badge.tone === 'borked'
+    ? i18n.t('fixes:attention.borked', { source: badge.source })
+    : i18n.t('fixes:attention.bronze', { source: badge.source });
 }
 
 /** Portrait images to try in order. Older Steam titles 404 on the portrait
@@ -75,7 +77,7 @@ export function byRecent(a: Game, b: Game): number {
 
 /** Merge a fresh backend scan into the current list (FE-5). Edited settings
  *  are kept across rescans like before; `fix_info` is carried over too
- *  because the backend list never carries it (enrichment is frontend-side).
+ *  so curated recipes and Deck verdicts survive a rescan.
  *  Fresh backend `fix_info`, when present, wins. */
 export function mergeRescannedGames(
   prev: Game[],

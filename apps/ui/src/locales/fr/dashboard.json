@@ -28,14 +28,14 @@
     "statFixes": "correctifs"
   },
   "reason": {
-    "borked": "ProtonDB déclare ce titre cassé. Essayez un autre runner ou consultez les rapports.",
-    "bronze": "ProtonDB note ce titre bronze. Il lui faudra peut-être des réglages pour bien tourner."
+    "borked": "{{source}} déclare ce titre cassé. Essayez un autre runner ou consultez les rapports.",
+    "bronze": "{{source}} note ce titre bronze. Il lui faudra peut-être des réglages pour bien tourner."
   },
   "continuePlaying": "Continuer à jouer",
   "yourGames": "Vos jeux",
   "fullLibrary": "bibliothèque complète →",
   "waiting": "En attente de vous",
-  "waitingEmpty": "Rien à signaler. Les correctifs suivis et les basses notes ProtonDB apparaissent ici.",
+  "waitingEmpty": "Rien à signaler. Les correctifs suivis et les notes de compatibilité faibles apparaissent ici.",
   "moreInFixes_one": "+{{count}} autre dans les correctifs →",
   "moreInFixes_other": "+{{count}} autres dans les correctifs →",
   "recentlyAdded": "Ajoutés récemment",

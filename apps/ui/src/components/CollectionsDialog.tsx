@@ -20,7 +20,8 @@ export interface SmartDraft {
   store: string;
   installed: '' | 'yes' | 'no';
   played: '' | 'yes' | 'no';
-  tier: string;
+  badgeKind: string;
+  badgeValue: string;
   deck: string;
   status: string;
   minHours: string;
@@ -29,7 +30,7 @@ export interface SmartDraft {
   collection: string;
 }
 
-export const EMPTY_DRAFT: SmartDraft = { store: '', installed: '', played: '', tier: '', deck: '', status: '', minHours: '', yearFrom: '', yearTo: '', collection: '' };
+export const EMPTY_DRAFT: SmartDraft = { store: '', installed: '', played: '', badgeKind: '', badgeValue: '', deck: '', status: '', minHours: '', yearFrom: '', yearTo: '', collection: '' };
 
 const positive = (s: string): number => {
   const n = Math.floor(Number(s));
@@ -43,7 +44,8 @@ export function smartFromDraft(d: SmartDraft): SmartFilter {
   if (d.store) f.store = d.store;
   if (d.installed) f.installed = d.installed === 'yes';
   if (d.played) f.played = d.played === 'yes';
-  if (d.tier) f.tier = d.tier;
+  if (d.badgeKind) f.badge_kind = d.badgeKind;
+  if (d.badgeValue) f.badge_value = d.badgeValue;
   if (d.deck) f.deck = d.deck;
   if (d.status) f.status = d.status;
   const hours = Number(d.minHours);
@@ -60,7 +62,8 @@ export function draftFromSmart(f: SmartFilter): SmartDraft {
     store: f.store ?? '',
     installed: f.installed === undefined ? '' : f.installed ? 'yes' : 'no',
     played: f.played === undefined ? '' : f.played ? 'yes' : 'no',
-    tier: f.tier ?? '',
+    badgeKind: f.badge_kind ?? '',
+    badgeValue: f.badge_value ?? '',
     deck: f.deck ?? '',
     status: f.status ?? '',
     minHours: f.min_playtime_minutes === undefined ? '' : String(f.min_playtime_minutes / 60),
@@ -337,7 +340,13 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
       {select('store', t('collections:smart.store'), stores.map((s) => ({ value: s, label: storeLabel(s) })))}
       {select('installed', t('collections:smart.installed'), yesNo)}
       {select('played', t('collections:smart.played'), yesNo)}
-      {select('tier', t('collections:smart.tier'), TIER_FILTERS.filter((v) => v !== 'all').map((v) => ({ value: v, label: tierLabel(t, v) })))}
+      {select('badgeKind', t('collections:smart.badgeKind'), ['rating', 'verdict', 'protection', 'note', 'platform'].map((v) => ({ value: v, label: t(`collections:smart.badgeKinds.${v}`) })))}
+      {draft.badgeKind === 'rating' ? select('badgeValue', t('collections:smart.badgeValue'), TIER_FILTERS.filter((v) => v !== 'all').map((v) => ({ value: v, label: tierLabel(t, v) }))) : draft.badgeKind ? (
+        <label className="text-[13px] text-white/70">
+          {t('collections:smart.badgeValue')}
+          <Input value={draft.badgeValue} onChange={set('badgeValue')} disabled={disabled} className="mt-1.5" />
+        </label>
+      ) : null}
       {select('deck', t('collections:smart.deck'), DECKS.map((v) => ({ value: v, label: t(`collections:smart.deckName.${v}`) })))}
       {select('status', t('collections:smart.status'), STATUSES.map((v) => ({ value: v, label: t(`library:statusFilter.${v}`) })))}
       {select('collection', t('collections:smart.collection'), collections.filter((c) => !c.smart).map((c) => ({ value: c.id, label: c.builtin ? t(`collections:builtin.${c.id}`) : c.name })))}

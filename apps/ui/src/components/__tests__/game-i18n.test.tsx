@@ -10,7 +10,7 @@ import type { Game } from '../../types';
 const noop = () => {};
 const mk = (id: string, o: Partial<Game> = {}): Game =>
   ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
-const pdb = (tier: string) => ({ source: 'protondb', tier, description: '' }) as Game['fix_info'];
+const pdb = (tier: string) => [{ kind: 'rating', label: tier[0].toUpperCase() + tier.slice(1), tone: tier, source: 'ProtonDB', checked_at: 0 }] as Game['compat_badges'];
 
 describe('game area live language switching', () => {
   it('re-renders the play button in French without a reload', async () => {
@@ -23,7 +23,7 @@ describe('game area live language switching', () => {
   });
 
   it('re-renders compat chips in French without a reload', async () => {
-    const { unmount } = render(<CompatChip game={mk('a', { fix_info: pdb('platinum') })} />, { wrapper: TooltipProvider });
+    const { unmount } = render(<CompatChip game={mk('a', { compat_badges: pdb('platinum') })} />, { wrapper: TooltipProvider });
     expect(screen.getByText('ProtonDB · Platinum')).toBeTruthy();
     await i18n.changeLanguage('fr');
     expect(screen.getByText('ProtonDB · Platine')).toBeTruthy();
@@ -32,7 +32,7 @@ describe('game area live language switching', () => {
     expect(screen.getByText('Deck · Vérifié')).toBeTruthy();
     unmount2();
     await i18n.changeLanguage('en');
-    const { unmount: unmount3 } = render(<CompatChip game={mk('a', { fix_info: pdb('platinum') })} />, { wrapper: TooltipProvider });
+    const { unmount: unmount3 } = render(<CompatChip game={mk('a', { compat_badges: pdb('platinum') })} />, { wrapper: TooltipProvider });
     expect(screen.getByText('ProtonDB · Platinum')).toBeTruthy();
     unmount3();
   });

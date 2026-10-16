@@ -310,40 +310,6 @@ export function App() {
     loadData('startup');
   }, [loadData]);
 
-  // Enrich with fix/tier data (curated first, then the ProtonDB tier) in the background.
-  // A game is asked at most once per session, except when it had no answer
-  // yet: the first ProtonDB fetch can outlast the wait, and it fills the cache
-  // meanwhile, so those are asked again (three tries at most).
-  const fixFetched = useRef(new Set<string>());
-  const fixTries = useRef(new Map<string, number>());
-  const [fixRetry, setFixRetry] = useState(0);
-  useEffect(() => {
-    const todo = games.filter((g) => g.is_installed && !g.fix_info && g.store !== 'custom' && !fixFetched.current.has(g.id));
-    if (todo.length === 0) return;
-    todo.forEach((g) => fixFetched.current.add(g.id));
-    const program = Effect.forEach(
-      todo,
-      (g) => LauncherApi.getGameFix(g).pipe(Effect.map((fix) => [g.id, fix] as const), Effect.orElseSucceed(() => [g.id, null] as const)),
-      { concurrency: 6 }
-    );
-    Effect.runPromise(program).then((results) => {
-      const found = new Map(results.filter(([, f]) => f).map(([id, f]) => [id, f!]));
-      let again = false;
-      for (const [id] of results.filter(([, f]) => !f)) {
-        const tries = (fixTries.current.get(id) ?? 0) + 1;
-        fixTries.current.set(id, tries);
-        if (tries < 3) {
-          fixFetched.current.delete(id);
-          again = true;
-        }
-      }
-      if (again) setTimeout(() => setFixRetry((n) => n + 1), 20000);
-      if (found.size === 0) return;
-      setGames((prev) => prev.map((g) => (found.has(g.id) && !g.fix_info ? { ...g, fix_info: found.get(g.id) } : g)));
-      const curated = [...found.values()].filter((f) => f.source !== 'protondb').length;
-      log({ type: 'fix', detail: t('activity:log.fixData', { count: found.size }), meta: curated ? t('activity:log.fixMetaCurated', { count: curated }) : t('activity:log.fixMetaProtondb') });
-    });
-  }, [games, log, fixRetry]);
 
   const launch = (game: Game) => {
     if (launchingId || sessions[game.id]) return;

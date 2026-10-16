@@ -49,7 +49,6 @@
     "store": "Boutique",
     "installed": "Installé",
     "played": "Joué",
-    "tier": "Compatibilité",
     "deck": "Steam Deck",
     "deckName": {
       "verified": "Vérifié",
@@ -60,7 +59,16 @@
     "minHours": "Heures jouées (min.)",
     "yearFrom": "Année à partir de",
     "yearTo": "Année jusqu'à",
-    "collection": "Dans la collection"
+    "collection": "Dans la collection",
+    "badgeKind": "Type de badge",
+    "badgeValue": "Valeur du badge",
+    "badgeKinds": {
+      "rating": "Évaluation",
+      "verdict": "Verdict",
+      "protection": "Protection",
+      "note": "Note",
+      "platform": "Plateforme"
+    }
   },
   "inCollections_one": "Dans {{count}} collection",
   "inCollections_other": "Dans {{count}} collections"

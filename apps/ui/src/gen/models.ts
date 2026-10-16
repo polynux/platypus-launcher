@@ -197,10 +197,12 @@ export namespace types {
   }
 
   export interface Compat {
+    badges: types.CompatBadge[];
+    notes?: string[];
+    links?: types.CompatLink[];
     steam_app_id?: string;
     steam_app_id_source?: string;
     native: boolean;
-    protondb?: types.ProtonRating | null;
     deck?: types.DeckRating | null;
     ratings_online: boolean;
     drm: types.CompatBadge[];
@@ -212,9 +214,16 @@ export namespace types {
   export interface CompatBadge {
     kind: string;
     label: string;
-    detail: string;
+    detail?: string;
+    tone?: string;
+    link?: string;
     source: string;
     checked_at: number;
+  }
+
+  export interface CompatLink {
+    label: string;
+    url: string;
   }
 
   export interface CopyComparison {
@@ -315,6 +324,7 @@ export namespace types {
     release_year?: number;
     settings_extra?: Record<string, unknown>;
     fix_info?: types.GameFixInfo | null;
+    compat_badges?: types.CompatBadge[];
     last_played_at?: number;
     playtime_minutes?: number;
     playtime_local_minutes?: number | null;
@@ -630,17 +640,6 @@ export namespace types {
     global_percent?: number | null;
   }
 
-  export interface ProtonRating {
-    tier: string;
-    confidence: string;
-    total: number;
-    fetched_at: number;
-    stale?: boolean;
-    no_reports?: boolean;
-    few_reports?: boolean;
-    url: string;
-  }
-
   export interface ProtonVersion {
     id: string;
     name: string;
@@ -765,7 +764,8 @@ export namespace types {
     played?: boolean | null;
     played_within_days?: number;
     min_playtime_minutes?: number;
-    tier?: string;
+    badge_kind?: string;
+    badge_value?: string;
     deck?: string;
     year_from?: number;
     year_to?: number;

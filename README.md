@@ -77,7 +77,7 @@ data. See [docs/testing.md](docs/testing.md).
 
 Done:
 
-- [x] Plugin system: discovery, approval with the manifest shown first, versioned protocol (1.16), and a
+- [x] Plugin system: discovery, approval with the manifest shown first, versioned protocol (1.17), and a
       conformance suite every plugin runs through.
 - [x] Store plugins end to end: library, login, install, update, uninstall, launch and session
       tracking, with a download queue (progress, pause, resume, free-space checks).

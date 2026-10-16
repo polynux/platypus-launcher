@@ -110,7 +110,8 @@
     "noneLoaded": "Aucun rapport de compatibilité chargé pour ce titre pour l'instant.",
     "borkedNote": "ProtonDB déclare ce titre non fonctionnel. Essayez un autre exécuteur ou lisez les évaluations.",
     "bronzeNote": "ProtonDB évalue ce titre bronze. Il demandera peut-être des réglages pour bien tourner.",
-    "recipe": "recette : winetricks {{mods}}"
+    "recipe": "recette : winetricks {{mods}}",
+    "providerLabel": "Badges des fournisseurs"
   },
   "deck": {
     "badge": "Deck · {{verdict}}",
@@ -137,7 +138,6 @@
     "dx": "Couche DX",
     "wrappers": "Wrappers",
     "launchVia": "Lancé via",
-    "protondb": "ProtonDB",
     "deck": "Steam Deck",
     "nativeRunner": "aucun · version Linux native",
     "steamRunner": "choisi dans Steam",
@@ -155,7 +155,8 @@
     "protondbNoAppId": "pas d'AppID Steam",
     "deckPending": "pas encore évalué",
     "deckNoAppId": "pas d'AppID Steam",
-    "pending": "…"
+    "pending": "…",
+    "compatibility": "Compatibilité"
   },
   "about": {
     "heading": "À propos",

@@ -14,7 +14,7 @@ import (
 	"platypus/internal/types"
 )
 
-// Compatibility and protection: the ProtonDB rating, the native flag, DRM and
+// Compatibility and protection: provider ratings, the native flag, DRM and
 // anti-cheat (internal/compat). Plugins supply the Steam AppID hint and the
 // DRM facts through game.details (protocol 1.10); the user can set a Steam
 // AppID per game. Nothing is matched by title.
@@ -167,19 +167,7 @@ func (a *App) gameFix(game types.Game, hints *types.GameDetails, deckDB func(app
 		a.attachDeck(fix, game, hints, deckDB)
 		return fix
 	}
-	var fix *types.GameFixInfo
-	appID, _ := a.ratingAppID(game, hints)
-	if fact, ok := a.cachedProviderFact(game.ID, appID); ok {
-		for _, b := range fact.Badges {
-			if b.Source == "ProtonDB" && b.Kind == "rating" && b.Tone != "" {
-				fix = &types.GameFixInfo{Source: "protondb", Tier: b.Tone, Description: "ProtonDB Tier: " + b.Label}
-				break
-			}
-		}
-	}
-	if fix == nil {
-		fix = &types.GameFixInfo{}
-	}
+	fix := &types.GameFixInfo{}
 	a.attachDeck(fix, game, hints, deckDB)
 	if fix.Source == "" && fix.Tier == "" && fix.Deck == "" {
 		return nil

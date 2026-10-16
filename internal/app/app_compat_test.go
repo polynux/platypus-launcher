@@ -218,8 +218,11 @@ func TestCompatDeckVerdictShownAndCached(t *testing.T) {
 	}
 	// The verdict rides on the library fix too, beside the ProtonDB tier.
 	fix := env.a.GetGameFix(env.game)
-	if fix == nil || fix.Tier != "platinum" || fix.Deck != "verified" {
-		t.Fatalf("fix %+v, want the platinum tier with the verified Deck verdict", fix)
+	if fix == nil || fix.Deck != "verified" {
+		t.Fatalf("fix %+v, want the verified Deck verdict", fix)
+	}
+	if c := env.a.GetGameCompat(env.game); len(c.Badges) != 1 || c.Badges[0].Tone != "platinum" {
+		t.Fatalf("provider badges %+v, want a generic platinum badge", c.Badges)
 	}
 	// A second look is served from the cache: no new ask.
 	env.a.GetGameCompat(env.game)
@@ -274,16 +277,16 @@ func TestNoTitleMatchWithoutAnAppID(t *testing.T) {
 func TestGameFixShowsOnlyEnoughReports(t *testing.T) {
 	t.Parallel()
 	env, _ := compatEnv(t, `["1.0","1.1","1.10"]`)
-	fix := env.a.GetGameFix(env.game)
-	if fix == nil || fix.Source != "protondb" || fix.Tier != "platinum" {
-		t.Fatalf("fix %+v, want the platinum tier of 620", fix)
+	compat := env.a.GetGameCompat(env.game)
+	if len(compat.Badges) != 1 || compat.Badges[0].Tone != "platinum" {
+		t.Fatalf("badges %+v, want the platinum rating of 620", compat.Badges)
 	}
 	if _, err := env.a.SetGameSteamAppID(env.game, "730"); err != nil {
 		t.Fatal(err)
 	}
 	seedCompatRating(env.a, env.game.ID, "730", "")
-	if fix := env.a.GetGameFix(env.game); fix != nil {
-		t.Fatalf("two reports shown as a tier: %+v", fix)
+	if c := env.a.GetGameCompat(env.game); len(c.Badges) != 0 {
+		t.Fatalf("two reports shown as a rating badge: %+v", c.Badges)
 	}
 }
 
