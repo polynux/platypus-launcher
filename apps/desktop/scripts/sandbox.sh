@@ -3,7 +3,7 @@
 # fake programs (testbin/, #66) and the seeded echo library with fake games
 # (ECHO_SEED / ECHO_FIXTURES, #67).
 #
-# Usage: sandbox.sh [--vnc] [--clean] [dev|start] [args passed to `bun run`...]
+# Usage: sandbox.sh [--vnc] [--clean] [--sandbox-dir <dir>] [dev|start] [args passed to `bun run`...]
 #
 # A fresh dir under /tmp holds an isolated HOME and PLATYPUS_DATA_DIR /
 # CONFIG_DIR / CACHE_DIR / PLUGINS; echo is installed from the working tree,
@@ -20,10 +20,13 @@ set -u
 VNC=0
 CLEAN=0
 TARGET=dev
+SANDBOX_DIR=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --vnc) VNC=1;;
     --clean|--rm) CLEAN=1;;
+    --sandbox-dir) SANDBOX_DIR="$2"; shift;;
+    --sandbox-dir=*) SANDBOX_DIR="${1#--sandbox-dir=}";;
     --) ;; # bun passes `--` through; it carries no meaning here
     dev|start) TARGET="$1";;
     *) break;; # the rest passes through to `bun run`
@@ -47,8 +50,17 @@ free_port() {
   return 1
 }
 
-SANDBOX=$(mktemp -d /tmp/platypus-sandbox-XXXXXX)
-echo "sandbox: $SANDBOX"
+SANDBOX=""
+if [ -n "$SANDBOX_DIR" ]; then
+  # A given dir is reused across starts (issue #69: the restart scenario
+  # stops the app and starts it again on the same library and settings).
+  SANDBOX="$SANDBOX_DIR"
+  mkdir -p "$SANDBOX"
+  echo "sandbox: $SANDBOX (reused)"
+else
+  SANDBOX=$(mktemp -d /tmp/platypus-sandbox-XXXXXX)
+  echo "sandbox: $SANDBOX"
+fi
 HEADLESS=0
 cleanup_sandbox() {
   [ "$HEADLESS" -ne 0 ] && kill "$HEADLESS" 2>/dev/null
@@ -82,10 +94,12 @@ export PLATYPUS_TESTBIN_LOG="$SANDBOX/testbin-calls.log"
 touch "$PLATYPUS_TESTBIN_LOG"
 
 # Seeded library and fake games (issue #67): 30 deterministic bulk games plus
-# one game per launch behaviour (run / clean exit / fail / crash).
+# one game per launch behaviour (run / clean exit / fail / crash). The crash
+# game runs through the runner (wine:true, issue #69) so the core creates a
+# prefix for it and the winetricks fix applies; the others stay native.
 export ECHO_GAMES=30
 export ECHO_SEED=7
-export ECHO_FIXTURES='{"sandbox-run":{"mode":"run"},"sandbox-ok":{"mode":"exit0"},"sandbox-fail":{"mode":"fail","code":3},"sandbox-crash":{"mode":"crash","log":"vcruntime","afterMs":200}}'
+export ECHO_FIXTURES='{"sandbox-run":{"mode":"run"},"sandbox-ok":{"mode":"exit0"},"sandbox-fail":{"mode":"fail","code":3},"sandbox-crash":{"mode":"crash","log":"vcruntime","afterMs":200,"wine":true}}'
 
 # Fake Proton as a runner: a custom Proton where runner discovery looks
 # (internal/runner/scanner.go), with the real layout (proton plus

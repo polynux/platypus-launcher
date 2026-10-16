@@ -1,6 +1,7 @@
 #!/bin/sh
 # Fake Wine binary of the testbin Proton build (issue #66). Logs like the
-# other fakes; never runs real Windows code.
+# other fakes; like the proton script it runs the game when one is named
+# (issue #69), so the game's output and exit reach the core through it.
 log="${PLATYPUS_TESTBIN_LOG:-}"
 if [ -n "$log" ]; then
   printf '%s argv:%s WINEPREFIX=%s WINE=%s WINESERVER=%s STEAM_COMPAT_DATA_PATH=%s\n' 'wine' "$*" "${WINEPREFIX:-}" "${WINE:-}" "${WINESERVER:-}" "${STEAM_COMPAT_DATA_PATH:-}" >>"$log"
@@ -11,4 +12,21 @@ fi
 if [ -n "${PLATYPUS_TESTBIN_SLEEP:-}" ]; then
   sleep "$PLATYPUS_TESTBIN_SLEEP"
 fi
-exit "${PLATYPUS_TESTBIN_EXIT:-0}"
+if [ -n "${PLATYPUS_TESTBIN_EXIT+x}" ]; then
+  exit "${PLATYPUS_TESTBIN_EXIT:-0}"
+fi
+found=""
+found_index=0
+i=0
+for a in "$@"; do
+  i=$((i + 1))
+  if [ -z "$found" ] && [ -f "$a" ] && [ -x "$a" ]; then
+    found="$a"
+    found_index=$i
+  fi
+done
+if [ -n "$found" ]; then
+  shift "$found_index"
+  exec "$found" "$@"
+fi
+exit 0

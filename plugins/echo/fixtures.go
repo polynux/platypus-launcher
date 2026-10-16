@@ -5,11 +5,13 @@ package main
 // tracking and crash hints (internal/crashhints, #46) can be driven end to
 // end without a real game.
 //
-//	ECHO_FIXTURES      JSON {"<id>": {"mode", "log", "code", "afterMs", "title"}}
+//	ECHO_FIXTURES      JSON {"<id>": {"mode", "log", "code", "afterMs", "title", "wine"}}
 //	                   extra installable games, read at start (default none)
 //
 // A fixture is a regular echo game once listed (same install, launch,
-// verify and cloud paths as tiny): only its install script differs.
+// verify and cloud paths as tiny): only its install script differs, plus the
+// optional wine flag, which lists it as non-native so it launches through
+// the runner (issue #69: the crash game needs a prefix for winetricks).
 //   - mode "run" (default): say hello, then sleep until stopped
 //     (ECHO_GAME_SECONDS, default 300 s).
 //   - mode "exit0": exit 0 at once (a clean, very short run).
@@ -36,12 +38,15 @@ import (
 )
 
 // fixtureSpec is one ECHO_FIXTURES entry: how the installed game behaves.
+// wine runs it through the Proton/Wine runner (needsWine) instead of native,
+// so the core creates a prefix and crash-hint fixes apply (issue #69).
 type fixtureSpec struct {
 	Mode    string `json:"mode"`
 	Log     string `json:"log"`
 	Title   string `json:"title"`
 	Code    int    `json:"code"`
 	AfterMs int    `json:"afterMs"`
+	Wine    bool   `json:"wine"`
 }
 
 // fixtureSpecs remembers every fixture's behaviour by game id, for the
@@ -120,7 +125,7 @@ func loadFixtures() {
 		if title == "" {
 			title = "Echo " + id
 		}
-		games[id] = game{title: title, size: 3 << 20, steps: 10, stepMs: 100, native: true}
+		games[id] = game{title: title, size: 3 << 20, steps: 10, stepMs: 100, native: !spec.Wine}
 		order = append(order, id)
 		fixtureSpecs[id] = spec
 	}

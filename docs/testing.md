@@ -265,3 +265,78 @@ What it sets up (`apps/desktop/scripts/sandbox.sh`, in the style of
 
 `PLATYPUS_VITE_PORT` pins the Vite port when set (`run.mjs` honours it,
 else a free one is picked as before); the sandbox sets it per run.
+
+## End-to-end scenarios (`bun run test:e2e`, issue #69)
+
+Scripted runs of the real app in the sandbox above, driven over CDP with a
+hand-written driver (Node's built-in WebSocket, no new dependency). Slow:
+needs `PLATYPUS_TEST_SLOW=1`, like the Go and vitest slow suites; without it
+the command skips instead of failing.
+
+```sh
+PLATYPUS_TEST_SLOW=1 bun run test:e2e   # ~50 s on msi headless, all four scenarios
+```
+
+What it does (`apps/desktop/e2e/run.mjs`): owns a sandbox dir, starts
+`sandbox.sh --sandbox-dir <dir>` in its own process group, connects the
+driver (`apps/desktop/e2e/cdp.mjs`) to the printed debugging port, runs the
+scenarios (`apps/desktop/e2e/scenarios.mjs`), stops everything by PID
+(leader SIGTERM for the ordered cascade, group SIGKILL plus by-PID for
+stragglers), and lists leftover PIDs (should be none). The restart scenario
+stops the app and starts it again on the same dir (`--sandbox-dir` is the
+only sandbox.sh option added for this: a given dir is reused instead of a
+fresh mktemp, nothing else changed), so a collection added from a game page
+is still there afterwards.
+
+The four scenarios, in run order:
+
+- `library-smart`: the library loads the seeded games (30 bulk with
+  `ECHO_SEED=7` plus the four `sandbox-*` fixtures); a smart collection
+  (`played=true`, #45) filters them.
+- `collection-restart`: a manual collection takes `sandbox-ok` from its game
+  page ("Add to collection"); it still lists the game after the restart.
+- `crash-winetricks`: `sandbox-crash` (a wine fixture, so it runs through a
+  runner) is put on FakeProton-Sandbox through the app's own per-game runner
+  setting; launching it shows the vcruntime crash hints (#46); the
+  winetricks fix calls the fake with `WINEPREFIX=<prefix>/pfx` and the
+  build's own wine (`vcrun2022`). The fake Proton runs the game like real
+  Proton does (first executable arg is exec'd, so its output and exit reach
+  the core) and creates `<prefix>/pfx` on first run, like the real build.
+- `playtime-stop`: `sandbox-run` launches (Play shows Stop), stops, and its
+  `last_played_at` advances with a session in `play-sessions.json` (short
+  runs keep last-played but add no minutes: `playlog.MinSessionSec=10`).
+
+Each scenario is a step list; a failing step throws with its
+`scenario/step` name and keeps a screenshot at
+`$SANDBOX/e2e-<scenario>-<step>.png` (the sandbox dir path prints at the
+start, and is kept afterwards for inspection).
+
+## Writing a new scenario
+
+Append `{ name, steps: [{ name, run }] }` to `SCENARIOS` in
+`apps/desktop/e2e/scenarios.mjs`. Keep each step to one visible action plus
+one check:
+
+- Prefer words users read: `waitForText`, `clickText`, and the exact-match
+  helpers (`gotoLibrary`, `openGamePage`, `clickHero`) — text matching is
+  case-insensitive because CSS uppercases headings. Use selectors
+  (`click`, `type` with `aria-label`) only for inputs, and add a
+  `data-testid` only where nothing else is stable.
+- Exact beats includes for short words: "Install" also matches "Installed",
+  "Play" also matches "Echo Player" — the helpers match trimmed equality
+  for hero buttons for exactly this reason.
+- Setup through the page's own backend (`invoke(driver, method, args)` — the
+  same RPCs `apps/ui/src/effect/runtime.ts` uses) is fine for what the step
+  is not testing (creating a collection, saving a runner); verify the
+  feature itself through the UI. After mutating collections behind the UI's
+  back, `reloadAndGotoLibrary` so the dropdowns and game page pick it up.
+- The grid is virtualized: filter or search before asserting on a game far
+  down the list, or it is not in the DOM yet.
+- Live state the UI hides is on disk: `testbin-calls.log` (every fake call
+  with argv plus `WINEPREFIX`/`WINE`/`WINESERVER`), `data/play-sessions.json`
+  (local sessions), `readFileSync/existsSync` from `node:fs` with the
+  step's `{ sandboxDir }`.
+
+Run it the same way (`PLATYPUS_TEST_SLOW=1 bun run test:e2e`); while
+iterating, a temporary `timeoutMs: 8000` and a wrong expected string fails
+a step fast to check its name and screenshot, then revert before committing.
