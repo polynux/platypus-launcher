@@ -43,6 +43,18 @@ func TestMatchFixtures(t *testing.T) {
 			{Rule: "missingDll", Param: "bar.dll"},
 		}},
 		{"clean.log", nil},
+		// Real Wine 9 stderr, captured by the slow TestRealWineMissingImports
+		// in this package (normalized: thread ids stripped, service noise
+		// dropped). These pin the exact loader wording.
+		{"wine-vcrun.log", []types.CrashHint{
+			{Rule: "vcredist", Param: "vcruntime140.dll", Verb: "vcrun2022"},
+		}},
+		{"wine-d3dx.log", []types.CrashHint{
+			{Rule: "directx", Param: "d3dx9_43.dll", Verb: "d3dx9_43"},
+		}},
+		{"wine-dotnet.log", []types.CrashHint{
+			{Rule: "dotnet", Verb: "dotnet48"},
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {

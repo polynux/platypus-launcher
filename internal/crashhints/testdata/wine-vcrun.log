@@ -1,0 +1,3 @@
+=== real Wine 9.0 stderr, vcrun.exe (normalized: thread ids stripped, background-service noise dropped) ===
+err:module:import_dll Library vcruntime140.dll (which is needed by L"C:\\vcrun.exe") not found
+err:module:loader_init Importing dlls for L"C:\\vcrun.exe" failed, status c0000135
