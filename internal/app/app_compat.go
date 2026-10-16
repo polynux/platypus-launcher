@@ -1,5 +1,3 @@
-// Package app coordinates compatibility hints, cached provider facts, and
-// compatibility settings exposed to the UI.
 package app
 
 import (
@@ -13,13 +11,21 @@ import (
 	"platypus/internal/types"
 )
 
-// compatHintTTL is how long successful store detail hints remain reusable.
+// Compatibility and protection: the native flag, store DRM facts and the
+// facts of compat-facts plugins (ratings, verdicts, anti-cheat; see
+// app_compat_facts.go). Plugins supply the Steam AppID hint and the DRM facts
+// through game.details (protocol 1.10); the user can set a Steam AppID per
+// game. Nothing is matched by title.
+
+// compatHintTTL is how long a plugin's game.details facts are kept, so a
+// library card doesn't ask the plugin on every render.
 const compatHintTTL = time.Hour
 
-// compatHintRetry limits retries after a failed store detail request.
+// compatHintRetry is how long a failed game.details ask is remembered, so a
+// slow or failing plugin isn't asked again on every look.
 const compatHintRetry = 5 * time.Minute
 
-// compatHintCache stores short-lived store detail hints by game id.
+// compatHintCache keeps the plugin facts per game id.
 type compatHintCache struct {
 	mu sync.Mutex
 	m  map[string]compatHint
@@ -29,10 +35,10 @@ type compatHintCache struct {
 type compatHint struct {
 	at      time.Time
 	details *types.GameDetails
-	failed  bool
+	failed  bool // the ask failed; kept only for compatHintRetry
 }
 
-// baseCtx returns the app context, or a background context before startup.
+// baseCtx is the context for compat lookups: the app's while it runs.
 func (a *App) baseCtx() context.Context {
 	if a.ctx != nil {
 		return a.ctx
@@ -40,7 +46,9 @@ func (a *App) baseCtx() context.Context {
 	return context.Background()
 }
 
-// compatCtx bounds compatibility work when network access is unavailable.
+// compatCtx is the context for compat lookups: the app's while online, with
+// a 1 s deadline while offline (issue #44). Background work skips its
+// fetches while offline; on-demand lookups still try, briefly.
 func (a *App) compatCtx() (context.Context, context.CancelFunc) {
 	if a.netOnline() {
 		return context.WithCancel(a.baseCtx())
@@ -48,7 +56,8 @@ func (a *App) compatCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(a.baseCtx(), time.Second)
 }
 
-// pluginHints returns cached or freshly fetched store details for non-Steam games.
+// pluginHints returns the game.details facts of a store plugin's game, cached
+// for compatHintTTL. Steam and sideloaded games have none (nil).
 func (a *App) pluginHints(game types.Game) *types.GameDetails {
 	if game.Source == types.SourceSteam || game.Source == types.SourceCustom {
 		return nil
@@ -75,7 +84,9 @@ func (a *App) pluginHints(game types.Game) *types.GameDetails {
 	return d
 }
 
-// cachedPluginHints returns an unexpired store detail hint without fetching it.
+// cachedPluginHints is pluginHints without asking the plugin: the library scan
+// uses it, so listing a big library never waits on per-game plugin calls. ok is
+// false when nothing fresh is cached.
 func (a *App) cachedPluginHints(game types.Game) (*types.GameDetails, bool) {
 	if game.Source == types.SourceSteam || game.Source == types.SourceCustom {
 		return nil, true
@@ -96,7 +107,9 @@ func (a *App) cachedPluginHints(game types.Game) (*types.GameDetails, bool) {
 	return h.details, true
 }
 
-// ratingAppID resolves the Steam AppID and records how it was obtained.
+// ratingAppID is the Steam AppID ratings use for a game, and where it came
+// from. The user's choice wins, then the plugin's hint, then a Steam game's
+// own AppID. "" when there is none.
 func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source string) {
 	if a.settings != nil {
 		if id := a.settings.CompatAppID(game.ID); id != "" {
@@ -112,7 +125,8 @@ func (a *App) ratingAppID(game types.Game, hints *types.GameDetails) (id, source
 	return "", ""
 }
 
-// GetGameFix returns the curated fix for a game and queues compatibility facts.
+// GetGameFix returns a game's curated fix, if any. Provider lookups are
+// queued in the background and never delay rendering.
 func (a *App) GetGameFix(game types.Game) *types.GameFixInfo {
 	hints := a.pluginHints(game)
 	a.requestCompatFacts([]types.Game{game}, func(types.Game) *types.GameDetails { return hints })
@@ -168,7 +182,7 @@ func storeLauncherName(raw string) string {
 	return raw
 }
 
-// GetGameCompat returns compatibility facts currently cached for the game.
+// GetGameCompat returns the compatibility and protection facts of a game.
 func (a *App) GetGameCompat(game types.Game) types.Compat {
 	c := types.Compat{RatingsOnline: a.settings == nil || a.settings.RatingsOnline(), Badges: []types.CompatBadge{}}
 	hints := a.pluginHints(game)
@@ -198,7 +212,12 @@ func (a *App) GetGameCompat(game types.Game) types.Compat {
 	return c
 }
 
-// SetGameSteamAppID saves a user AppID override and returns the refreshed facts.
+// SetGameSteamAppID saves the Steam AppID the user chose for a game's ratings
+// ("" clears it) and returns the game's compat facts. When the game is
+// sideloaded, the "Find artwork online" switch is on, and the id is non-empty
+// and changed, it starts the art apply in the background for that app id
+// (auto semantics: missing or online-sourced kinds only, hand-picked kept).
+// The save never waits for the art; a successful apply emits "library".
 func (a *App) SetGameSteamAppID(game types.Game, appID string) (types.Compat, error) {
 	prev := ""
 	if a.settings != nil {
@@ -220,7 +239,7 @@ func (a *App) SetGameSteamAppID(game types.Game, appID string) (types.Compat, er
 	return a.GetGameCompat(game), nil
 }
 
-// SetRatingsOnline enables or disables online compatibility lookups.
+// SetRatingsOnline saves the "Fetch ratings online" switch.
 func (a *App) SetRatingsOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetRatingsOnline(on); err != nil {
 		return a.launcherSettings(), err
@@ -228,7 +247,7 @@ func (a *App) SetRatingsOnline(on bool) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
-// SetArtworkOnline enables or disables online artwork lookups.
+// SetArtworkOnline saves the "Find artwork online" switch (issue #36).
 func (a *App) SetArtworkOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetArtworkOnline(on); err != nil {
 		return a.launcherSettings(), err
@@ -236,7 +255,7 @@ func (a *App) SetArtworkOnline(on bool) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
-// SetGameInfoOnline enables or disables online game metadata lookups.
+// SetGameInfoOnline saves the "Find game info online" switch (issue #38).
 func (a *App) SetGameInfoOnline(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetGameInfoOnline(on); err != nil {
 		return a.launcherSettings(), err
@@ -244,7 +263,9 @@ func (a *App) SetGameInfoOnline(on bool) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
-// SetChatDesktopNotify enables or disables desktop notifications for chat.
+// SetChatDesktopNotify saves the "Desktop notifications for chat" switch
+// (issue #12): a system notification for a new chat message when the window
+// isn't focused.
 func (a *App) SetChatDesktopNotify(on bool) (types.LauncherSettings, error) {
 	if err := a.settings.SetChatDesktopNotify(on); err != nil {
 		return a.launcherSettings(), err
@@ -252,7 +273,7 @@ func (a *App) SetChatDesktopNotify(on bool) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
-// pluginName returns a store plugin's display name when one is available.
+// pluginName is the name a plugin's game is credited to in the UI.
 func (a *App) pluginName(game types.Game) string {
 	if p, ok := a.plugins.Plugin(game.Source); ok && p.Manifest.Name != "" {
 		return p.Manifest.Name
