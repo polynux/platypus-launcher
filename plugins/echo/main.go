@@ -43,6 +43,10 @@
 //	ECHO_COPY_IN_USE   member ids whose copy of a shared game is in use (launching it answers -32002)
 //	ECHO_COPY_UNAVAILABLE member ids whose copy of a shared game can't be picked or launched
 //	ECHO_COMPAT        JSON {"<id>": {steamAppId, platforms, drm, ...}} - game.details compat facts (compat.go, protocol 1.10)
+//	ECHO_SEED          integer seed: the ECHO_GAMES extras also carry deterministic
+//	                   lastPlayed/status/playtime/releaseDate/compat facts (seeded.go)
+//	ECHO_FIXTURES      JSON {"<id>": {mode, log, code, afterMs, title}} - extra installed
+//	                   games whose launch script runs, exits or crashes on demand (fixtures.go)
 //	ECHO_TERMS_BUMP   set: the licence term of "licensed" has its next version (terms.go)
 //	ECHO_LIBRARY_DELAY_MS  milliseconds library.list waits before it answers (a slow store)
 //	ECHO_AUTH_STATUS_DELAY_MS milliseconds auth.status waits before it answers (a slow login check)
@@ -440,6 +444,9 @@ func main() {
 	loadSocial()
 	loadChat()
 	loadCompat()
+	loadFixtures()
+	// Fixture games (fixtures.go) join the library when ECHO_FIXTURES names
+	// them; the seeded bulk facts (seeded.go) need no setup.
 	// The local test storefront (issue #17): serving it from startup means
 	// the embedded store view finds it even when no game page was opened
 	// first. A taken port only means no local storefront this run.
@@ -612,7 +619,17 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 	case "game.details":
 		g, ok := games[p.ID]
 		if !ok && strings.HasPrefix(p.ID, "bulk-") {
-			return map[string]any{}, nil // the ECHO_GAMES extras have no metadata (bulk.go)
+			// The ECHO_GAMES extras have no store metadata of their own;
+			// with ECHO_SEED they carry the seeded releaseDate/compat facts
+			// (seeded.go), overruled by explicit ECHO_COMPAT entries.
+			out := seededBulkDetails(p.ID)
+			if out == nil {
+				out = map[string]any{}
+			}
+			for k, v := range compatFor(p.ID) {
+				out[k] = v
+			}
+			return out, nil
 		}
 		if !ok {
 			return nil, fmt.Errorf("unknown game %q", p.ID)
@@ -921,6 +938,9 @@ func startInstall(p params) (any, error) {
 		}
 		dir := filepath.Join(p.InstallDir, p.ID)
 		script := "#!/bin/sh\necho \"echo game " + rec.Build + " $*\"\nsleep \"${ECHO_GAME_SECONDS:-3}\"\n"
+		if f := fixtureScript(p.ID, rec.Build); f != "" {
+			script = f // a fixture game runs, exits or crashes on demand (fixtures.go)
+		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			notify("job.failed", map[string]any{"jobId": p.JobID, "error": err.Error()})
 			return

@@ -53,12 +53,16 @@ func bulkGames() []map[string]any {
 	}
 	bulkOnce.Do(startCoverServer)
 	list := make([]map[string]any, 0, n)
+	seed, seeded := seededSeed()
 	for i := 0; i < n; i++ {
 		installed := i%4 == 0
 		e := map[string]any{
 			"id": bulkID(i), "title": fmt.Sprintf("Bulk Game %04d %s", i, bulkWords[i%len(bulkWords)]),
 			"installed": installed, "installable": !installed, "version": "1.0", "native": i%7 == 0,
 			"sizeBytes": int64(1+i%40) << 28,
+		}
+		if seeded {
+			seededBulkExtra(seed, i, e) // deterministic facts (seeded.go)
 		}
 		if bulkBase != "" {
 			e["coverUrl"] = fmt.Sprintf("%s/cover/%d.jpg", bulkBase, i%coverVariants)
