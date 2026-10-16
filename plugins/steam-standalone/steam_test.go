@@ -97,6 +97,9 @@ func setup(t *testing.T) *env {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 not installed")
 	}
+	// Fake programs on PATH (issue #66): the manifest requires `steam`,
+	// which the test machine may not have.
+	testenv.SetupTestBin(t)
 	root := t.TempDir()
 	if keep := os.Getenv("STEAM_TEST_KEEP"); keep != "" {
 		// Debugging aid: keep the plugin root so its log survives.

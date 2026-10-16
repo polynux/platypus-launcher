@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fake Wine binary of the testbin Proton build (issue #66). Logs like the
+# other fakes; never runs real Windows code.
+log="${PLATYPUS_TESTBIN_LOG:-}"
+if [ -n "$log" ]; then
+  printf '%s argv:%s WINEPREFIX=%s WINE=%s WINESERVER=%s STEAM_COMPAT_DATA_PATH=%s\n' 'wine' "$*" "${WINEPREFIX:-}" "${WINE:-}" "${WINESERVER:-}" "${STEAM_COMPAT_DATA_PATH:-}" >>"$log"
+fi
+if [ -n "${PLATYPUS_TESTBIN_STDERR_FILE:-}" ] && [ -f "$PLATYPUS_TESTBIN_STDERR_FILE" ]; then
+  cat "$PLATYPUS_TESTBIN_STDERR_FILE" >&2
+fi
+if [ -n "${PLATYPUS_TESTBIN_SLEEP:-}" ]; then
+  sleep "$PLATYPUS_TESTBIN_SLEEP"
+fi
+exit "${PLATYPUS_TESTBIN_EXIT:-0}"

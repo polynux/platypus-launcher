@@ -1,0 +1,17 @@
+#!/bin/sh
+# Fake Proton build for tests and the dev sandbox (issue #66): this script
+# stands in for the `proton` launcher, with `files/bin/wine` and
+# `files/bin/wineserver` alongside it, so runner detection and the #46 Proton
+# prefix logic see a real layout. Every call appends one line to
+# $PLATYPUS_TESTBIN_LOG. Behaviour is driven by env like the other fakes.
+log="${PLATYPUS_TESTBIN_LOG:-}"
+if [ -n "$log" ]; then
+  printf '%s argv:%s WINEPREFIX=%s WINE=%s WINESERVER=%s STEAM_COMPAT_DATA_PATH=%s\n' 'proton' "$*" "${WINEPREFIX:-}" "${WINE:-}" "${WINESERVER:-}" "${STEAM_COMPAT_DATA_PATH:-}" >>"$log"
+fi
+if [ -n "${PLATYPUS_TESTBIN_STDERR_FILE:-}" ] && [ -f "$PLATYPUS_TESTBIN_STDERR_FILE" ]; then
+  cat "$PLATYPUS_TESTBIN_STDERR_FILE" >&2
+fi
+if [ -n "${PLATYPUS_TESTBIN_SLEEP:-}" ]; then
+  sleep "$PLATYPUS_TESTBIN_SLEEP"
+fi
+exit "${PLATYPUS_TESTBIN_EXIT:-0}"
