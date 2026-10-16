@@ -400,6 +400,7 @@ func (a *App) startup(ctx context.Context) {
 		// The bundled steam plugin installs itself when missing (issue
 		// #54), before anything lists what was found.
 		found = a.ensureBundledSteam(found)
+		found = a.ensureBundledLinuxCompat(found)
 		a.forgetSettingsOfRemoved(found)
 	}
 	for _, p := range found {

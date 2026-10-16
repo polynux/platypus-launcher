@@ -45,7 +45,7 @@ var reservedIDs = map[string]bool{"custom": true}
 // BundledPluginIDs are the first-party plugin ids allowed to declare a
 // manifest gameIdPrefix (protocol 1.15, issue #54 groundwork): a
 // third-party plugin can't take over other ids.
-var BundledPluginIDs = map[string]bool{"steam": true}
+var BundledPluginIDs = map[string]bool{"steam": true, "linux-compat": true}
 
 // gameIDPrefixRe is the shape of a manifest gameIdPrefix: 1-32 word chars.
 var gameIDPrefixRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
