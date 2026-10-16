@@ -62,6 +62,30 @@ side. Overrides: `PLATYPUS_XVFB_DISPLAY`, `PLATYPUS_VNC_PORT`,
 One-time VNC setup: `x11vnc -storepasswd` (without `~/.vnc/passwd` the
 script refuses to run unprotected).
 
+## Sandbox dev run (`bun run dev:sandbox`, issue #68)
+
+The real app in a throwaway sandbox, for trying library, runners and
+game behaviours without touching your data (test layers #66–#67):
+
+```sh
+bun run dev:sandbox          # Xvfb, isolated HOME + PLATYPUS_* under /tmp
+bun run dev:sandbox --vnc    # also x11vnc + noVNC, prints the browser URL
+bun run dev:sandbox --clean  # delete the sandbox dir on exit (kept by default)
+```
+
+The sandbox (`apps/desktop/scripts/sandbox.sh`) installs echo from the
+working tree, approves it and logs it in (code `letmein`), puts `testbin/`
+first on PATH, registers the fake Proton build as a runner
+(`compatibilitytools.d/FakeProton-Sandbox`) and seeds the library
+(`ECHO_GAMES=30`, `ECHO_SEED=7`, one `ECHO_FIXTURES` game per behaviour:
+run / clean exit / fail / crash). Vite listens on 5193, remote debugging
+(loopback only) on a free port from 9233 — both print at startup, and the
+debugging port answers `/json/list` for CDP scripts. Two sandboxes started
+together claim distinct displays and ports, so both run at once. Ctrl-C or
+app exit stops everything it started, by PID; the sandbox dir stays for
+inspection unless `--clean` was given. Details (env knobs, CDP driving,
+port claiming): `docs/testing.md`.
+
 Ubuntu 24.04 restricts unprivileged user namespaces, so Electron under
 ~/dev needs an AppArmor profile with `userns`, e.g.
 `/etc/apparmor.d/platypus-electron`:

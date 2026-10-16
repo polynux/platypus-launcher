@@ -229,3 +229,39 @@ the plugtest steam conformance suite call it, so they pass on a machine
 without Steam; `TestRunWinetricksVerbRunsInTheProtonPrefix` drives
 `RunWinetricksVerb` for a Proton game and checks the log shows
 `WINEPREFIX=<prefix>/pfx` and the build's wine.
+
+## Dev sandbox (`bun run dev:sandbox`, issue #68)
+
+One command that starts the real app in a throwaway sandbox on the
+headless server, on top of `testbin/` and the echo knobs above:
+
+```sh
+bun run dev:sandbox          # the app on Xvfb, sandbox kept under /tmp afterwards
+bun run dev:sandbox --vnc    # also x11vnc + noVNC, prints the browser URL
+bun run dev:sandbox --clean  # delete the sandbox dir on exit instead of keeping it
+```
+
+What it sets up (`apps/desktop/scripts/sandbox.sh`, in the style of
+`headless.sh`, plus the tiny `sandbox-setup.mjs` next to it):
+
+- A fresh dir under /tmp with an isolated HOME and `PLATYPUS_DATA_DIR` /
+  `CONFIG_DIR` / `CACHE_DIR` / `PLUGINS`: never your library or logins.
+- `testbin/` first on PATH (every fake logs to `testbin-calls.log` in the
+  sandbox dir) and the fake Proton build registered as a runner where the
+  app discovers runners (`compatibilitytools.d/FakeProton-Sandbox`, like a
+  real custom Proton).
+- echo installed from the working tree, approved and logged in (code
+  `letmein`) through the Plugins view's own RPCs — no new core surface —
+  with `ECHO_GAMES=30`, `ECHO_SEED=7` and one `ECHO_FIXTURES` game per
+  behaviour (run / clean exit / fail / crash).
+- Vite on 5193 and remote debugging (loopback only) on a free port from
+  9233, both printed, so the app is driven over CDP with curl
+  (`/json/list`) or a small Node WebSocket script — no Playwright. Two
+  sandboxes started together claim distinct displays/ports (atomic
+  reservations under /tmp, random fallback), so both run at once.
+- Everything started stops with it, by PID; Ctrl-C (or app exit) leaves no
+  Xvfb, Electron, Vite, core or plugin behind. The dir is kept for
+  inspection unless `--clean` was given.
+
+`PLATYPUS_VITE_PORT` pins the Vite port when set (`run.mjs` honours it,
+else a free one is picked as before); the sandbox sets it per run.
