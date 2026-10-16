@@ -6,12 +6,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"platypus/internal/apperr"
 	"platypus/internal/runner"
 	"platypus/internal/session"
+	"platypus/internal/settings"
+	"platypus/internal/testenv"
 	"platypus/internal/types"
 )
 
@@ -179,5 +182,50 @@ func wantCode(t *testing.T, err error, code string) {
 	var ae *apperr.Error
 	if !errors.As(err, &ae) || ae.Code != code {
 		t.Fatalf("err = %v, want code %s", err, code)
+	}
+}
+
+// RunWinetricksVerb runs the fake winetricks in the Proton prefix with the
+// build's own wine (issue #66): the call log must show WINEPREFIX=<prefix>/pfx
+// and WINE=<proton>/files/bin/wine for a Proton game.
+func TestRunWinetricksVerbRunsInTheProtonPrefix(t *testing.T) {
+	tb := testenv.SetupTestBin(t)
+	home := t.TempDir()
+	// Install the testbin Proton build where the runner scan finds it.
+	compat := filepath.Join(home, ".local/share/Steam/compatibilitytools.d", "FakeProton")
+	if err := os.MkdirAll(filepath.Dir(compat), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("cp", "-r", tb.ProtonDir(), compat).CombinedOutput(); err != nil {
+		t.Fatalf("cp proton build: %v: %s", err, out)
+	}
+	root := t.TempDir()
+	st, err := settings.OpenWithHome(filepath.Join(root, "settings.json"), home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &App{settings: st, sessions: session.NewTracker(func(types.SessionEvent) {}),
+		dataDir: t.TempDir(), optHome: home}
+	game := types.Game{ID: "g", Title: "G", Settings: types.GameSettings{RunnerID: "compat:FakeProton"}}
+	prefix := runner.PrefixPath(game, a.homeDir(), a.prefixesFolder())
+	if err := os.MkdirAll(filepath.Join(prefix, "pfx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.RunWinetricksVerb(game, "d3dx9"); err != nil {
+		t.Fatalf("RunWinetricksVerb: %v", err)
+	}
+	wantPrefix := filepath.Join(prefix, "pfx")
+	wantWine := filepath.Join(compat, "files", "bin", "wine")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		log := tb.Read(t)
+		if strings.Contains(log, "winetricks") && strings.Contains(log, "WINEPREFIX="+wantPrefix) &&
+			strings.Contains(log, "WINE="+wantWine) && strings.Contains(log, "d3dx9") {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("winetricks log = %q, want WINEPREFIX=%s WINE=%s and d3dx9", log, wantPrefix, wantWine)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

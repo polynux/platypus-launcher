@@ -206,3 +206,26 @@ Go network guard: `internal/testenv` installs an `http.DefaultTransport`
 + dialer refusing non-loopback in `TestMain`-driven packages (or via the
 helper). Vitest network guard: `apps/ui/src/test/setup.ts` stubs
 `fetch` to refuse non-localhost.
+
+## Fake programs (testbin/, issue #66)
+
+`testbin/` holds shell fakes for `steam`, `winetricks`, `protontricks` and
+`xdg-open`, plus a fake Proton build (`proton/proton` with
+`files/bin/wine` and `files/bin/wineserver`) with a real layout, so runner
+detection and the #46 Proton prefix logic see real files. Tests and the
+later `dev:sandbox` script (#68) put it first on PATH instead of installing
+system packages.
+
+Each fake appends one line per call (argv plus `WINEPREFIX`, `WINE`,
+`WINESERVER`, `STEAM_COMPAT_DATA_PATH`) to the call log named by
+`PLATYPUS_TESTBIN_LOG`, and behaves as told by env: `PLATYPUS_TESTBIN_EXIT`
+(exit code), `PLATYPUS_TESTBIN_SLEEP` (seconds to run),
+`PLATYPUS_TESTBIN_STDERR_FILE` (canned stderr file).
+
+Go helper: `testenv.SetupTestBin(t)` puts testbin first on PATH and points
+the log at a temp file (`TestBin.Read`/`Lines` read it back,
+`ProtonDir`/`Proton` locate the fake build). The steam-standalone tests and
+the plugtest steam conformance suite call it, so they pass on a machine
+without Steam; `TestRunWinetricksVerbRunsInTheProtonPrefix` drives
+`RunWinetricksVerb` for a Proton game and checks the log shows
+`WINEPREFIX=<prefix>/pfx` and the build's wine.

@@ -273,6 +273,8 @@ func startFakeCM(t *testing.T, path string) (*exec.Cmd, string) {
 // plugin's Steam Web API calls answer from a file.
 func TestConformanceSteamStandalone(t *testing.T) {
 	testenv.RequireSlow(t)
+	// Fake programs on PATH (issue #66): the manifest requires `steam`.
+	testenv.SetupTestBin(t)
 	state := filepath.Join(t.TempDir(), "dd-state.json")
 	// Several chunks served one at a time: the download has progress steps
 	// and a window in which job.cancel can land.

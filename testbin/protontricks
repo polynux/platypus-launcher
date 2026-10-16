@@ -1,0 +1,17 @@
+#!/bin/sh
+# Fake `protontricks` for tests and the dev sandbox (issue #66).
+# Every call appends one line (argv plus the env that matters) to
+# $PLATYPUS_TESTBIN_LOG. Behaviour is driven by env: $PLATYPUS_TESTBIN_EXIT
+# (exit code), $PLATYPUS_TESTBIN_SLEEP (seconds to run),
+# $PLATYPUS_TESTBIN_STDERR_FILE (canned stderr file).
+log="${PLATYPUS_TESTBIN_LOG:-}"
+if [ -n "$log" ]; then
+  printf '%s argv:%s WINEPREFIX=%s WINE=%s WINESERVER=%s STEAM_COMPAT_DATA_PATH=%s\n' 'protontricks' "$*" "${WINEPREFIX:-}" "${WINE:-}" "${WINESERVER:-}" "${STEAM_COMPAT_DATA_PATH:-}" >>"$log"
+fi
+if [ -n "${PLATYPUS_TESTBIN_STDERR_FILE:-}" ] && [ -f "$PLATYPUS_TESTBIN_STDERR_FILE" ]; then
+  cat "$PLATYPUS_TESTBIN_STDERR_FILE" >&2
+fi
+if [ -n "${PLATYPUS_TESTBIN_SLEEP:-}" ]; then
+  sleep "$PLATYPUS_TESTBIN_SLEEP"
+fi
+exit "${PLATYPUS_TESTBIN_EXIT:-0}"
