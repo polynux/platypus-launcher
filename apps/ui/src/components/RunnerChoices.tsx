@@ -26,7 +26,7 @@ export function RunnerChoices({ groups, ids, draft, onChange }: {
           {g.description && <p className="text-[12px] leading-relaxed text-white/70">{g.description}</p>}
           <div className="divide-y divide-white/[0.07]">
             {g.fields.map((f) => (
-              <Choice key={f.id} field={f} draft={draft} onChange={onChange} />
+              <Choice key={f.id} field={f} groupLabel={g.label} draft={draft} onChange={onChange} />
             ))}
           </div>
         </div>
@@ -35,7 +35,10 @@ export function RunnerChoices({ groups, ids, draft, onChange }: {
   );
 }
 
-function Choice({ field, draft, onChange }: { field: SettingField; draft: GameSettings; onChange: (key: string, value: boolean | string | number) => void }) {
+function Choice({ field, groupLabel, draft, onChange }: { field: SettingField; groupLabel: string; draft: GameSettings; onChange: (key: string, value: boolean | string | number) => void }) {
+  // A field named like its group (the runner's "Runner", the sync group's "Sync")
+  // doesn't repeat the heading above it: its control keeps the name for screen readers.
+  const repeatsHeading = field.label.trim().toLowerCase() === groupLabel.trim().toLowerCase();
   const { t } = useTranslation('gameSettings');
   const raw = (draft as unknown as Record<string, unknown>)[field.id];
   // An unset choice, or an empty one, is the field's default (the automatic
@@ -46,7 +49,7 @@ function Choice({ field, draft, onChange }: { field: SettingField; draft: GameSe
     return (
       <div className="flex items-start justify-between gap-4 py-2.5">
         <div className="min-w-0">
-          <div className="text-[13px] text-white/90">{field.label}</div>
+          {!repeatsHeading && <div className="text-[13px] text-white/90">{field.label}</div>}
           {field.description && <div className="mt-0.5 text-[12px] leading-relaxed text-white/60">{field.description}</div>}
         </div>
         <Switch aria-label={field.label} checked={value === true} onCheckedChange={(v) => onChange(field.id, v)} />
@@ -61,7 +64,7 @@ function Choice({ field, draft, onChange }: { field: SettingField; draft: GameSe
     const missing = field.id === 'runner_id' && !known && current !== 'auto';
     return (
       <div className="space-y-2 py-2.5">
-        <div className="text-[13px] text-white/90">{field.label}</div>
+        {!repeatsHeading && <div className="text-[13px] text-white/90">{field.label}</div>}
         {field.description && <div className="text-[12px] leading-relaxed text-white/60">{field.description}</div>}
         <Select value={current} onValueChange={(v) => onChange(field.id, v === DEFAULT_CHOICE ? '' : v)}>
           <SelectTrigger aria-label={field.label} className="w-full">
@@ -82,7 +85,7 @@ function Choice({ field, draft, onChange }: { field: SettingField; draft: GameSe
 
   return (
     <div className="space-y-2 py-2.5">
-      <div className="text-[13px] text-white/90">{field.label}</div>
+      {!repeatsHeading && <div className="text-[13px] text-white/90">{field.label}</div>}
       {field.description && <div className="text-[12px] leading-relaxed text-white/60">{field.description}</div>}
       <Input
         aria-label={field.label}

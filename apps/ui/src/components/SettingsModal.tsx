@@ -80,10 +80,10 @@ function SelectField({ label, value, onChange, children, className }: { label: s
 }
 
 /** A named group of the General form: a mono label over its controls. */
-function SettingGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function SettingGroup({ label, heading = true, children }: { label: string; heading?: boolean; children: React.ReactNode }) {
   return (
     <section aria-label={label} className="space-y-3.5">
-      <MonoLabel>{label}</MonoLabel>
+      {heading && <MonoLabel>{label}</MonoLabel>}
       {children}
     </section>
   );
@@ -288,7 +288,8 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             />
           )}
 
-          <SettingGroup label={t('gameSettings:groups.runner')}>
+          {/* The runner's own groups carry their titles (runner.options); this section only names the area. */}
+          <SettingGroup label={t('gameSettings:groups.runner')} heading={false}>
             {effectiveNative ? (
               <div className="rounded-2xl bg-emerald-300/[0.06] p-4 ring-1 ring-emerald-300/25">
                 <p className="text-[12.5px] leading-relaxed text-emerald-100/85">
@@ -318,7 +319,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
           </SettingGroup>
 
           {!effectiveNative && (
-            <SettingGroup label={t('gameSettings:groups.graphics')}>
+            <SettingGroup label={t('gameSettings:groups.graphics')} heading={false}>
               <RunnerChoices groups={runnerGroups} ids={['graphics']} draft={draft} onChange={changeChoice} />
             </SettingGroup>
           )}
