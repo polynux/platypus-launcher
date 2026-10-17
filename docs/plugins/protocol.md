@@ -274,7 +274,7 @@ runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner"
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
 ```
 
-All nine methods are required when `runner` is enabled (`runner.detectExecutable`
+All ten methods are required when `runner` is enabled (`runner.detectExecutable`
 is called for every sideloaded file, `runner.prefix` for every backup and cloud gate).
 Errors use `-32602` for a bad request and `-32003` for a runner failure, with a
 message. A failure the UI translates carries `error.data` as `{ "code": "<apperr
@@ -351,6 +351,15 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
   or is force-stopped: `launch` is that launch's `runner.wrap` result, which the
   core doesn't read (it hands it back unchanged), and the runner finds the
   wineserver from its `runner` and `env`.
+- **`runner.clientCrash`**: `{ "game": {}, "since": "2026-10-17T10:00:00Z" }` ->
+  `{ "log": "/home/u/steam-620.log", "hints": [...] }`. Asked for a game a store
+  client started that ended within a minute of being seen running (the crash
+  signal the client gives: Steam owns the process, so no exit code is known).
+  The Proton log is `steam-<appid>.log` in `PROTON_LOG_DIR` (else the home
+  folder), written when `PROTON_LOG=1` is in the game's launch options. A log
+  written since `since` gives the usual hints. Without one, the single hint
+  `{ "rule": "protonLog", "param": "<the log path>" }` tells the player to turn
+  the log on, and the game page shows the launch option to paste.
 - **`runner.crashHints`**: returns `CrashHint` entries (`rule`, and `param`,
   `verb` or `action` when the rule has them). The core adds the log path and
   whether winetricks is available.
@@ -656,7 +665,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
-| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in

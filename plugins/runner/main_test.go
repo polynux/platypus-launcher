@@ -232,3 +232,55 @@ func TestRunnerPrefixFollowsTheLaunchLayout(t *testing.T) {
 		t.Fatalf("native: %+v, %+v; want an empty result", resp.Result, resp.Error)
 	}
 }
+
+// A game a store client started that ended too soon: the Proton log decides the
+// hints. Without a log since the launch, the one hint names where it appears.
+func TestClientCrashReadsTheProtonLog(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PROTON_LOG_DIR", "")
+	game := types.Game{ID: "steam_620", Source: "steam", Store: "steam", StoreAppID: "620"}
+	since := time.Now()
+	logPath := filepath.Join(home, "steam-620.log")
+	answer := func() (string, []types.CrashHint) {
+		t.Helper()
+		resp := handle(request("runner.clientCrash", map[string]any{"game": game, "since": since}))
+		if resp.Error != nil {
+			t.Fatalf("runner.clientCrash: %+v", resp.Error)
+		}
+		raw, _ := json.Marshal(resp.Result)
+		var out struct {
+			Log   string            `json:"log"`
+			Hints []types.CrashHint `json:"hints"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.Log, out.Hints
+	}
+
+	// No log yet: the hint says to turn it on, and where it will appear.
+	if log, hints := answer(); log != logPath || len(hints) != 1 || hints[0].Rule != "protonLog" || hints[0].Param != logPath {
+		t.Fatalf("no log: %q, %+v; want the protonLog hint for %s", log, hints, logPath)
+	}
+
+	// A log from before the launch is not this run's.
+	if err := os.WriteFile(logPath, []byte("err:module:import_dll Library vcruntime140_1.dll not found"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := since.Add(-time.Hour)
+	if err := os.Chtimes(logPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, hints := answer(); len(hints) != 1 || hints[0].Rule != "protonLog" {
+		t.Fatalf("a log from before the launch was read: %+v", hints)
+	}
+
+	// A log written since the launch is read like any other, with the usual hints.
+	if err := os.Chtimes(logPath, since.Add(time.Second), since.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, hints := answer(); len(hints) == 0 || hints[0].Verb != "vcrun2022" {
+		t.Fatalf("the Proton log's hints = %+v, want the vcrun2022 fix", hints)
+	}
+}

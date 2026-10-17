@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"platypus/internal/apperr"
 	"platypus/internal/types"
@@ -26,6 +27,11 @@ func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
 	}
 	path := a.sessions.CrashLog(game.ID)
 	if path == "" {
+		// A game a store client started has no log of Platypus's own: its
+		// Proton log, or the hint to turn that log on, answers instead.
+		if since, ok := a.sessions.ClientCrash(game.ID); ok {
+			return a.clientCrashHints(game, since)
+		}
 		return nil
 	}
 	raw, err := os.ReadFile(path)
@@ -55,6 +61,22 @@ func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
 		}
 	}
 	return &types.CrashHints{Log: path, Winetricks: winetricks, Hints: hints}
+}
+
+// clientCrashHints asks the runner plugin for a store-client launch that ended
+// too soon: the hints of its Proton log written since the launch, or the one
+// hint to turn that log on. Winetricks isn't offered: the prefix is the client's.
+func (a *App) clientCrashHints(game types.Game, since time.Time) *types.CrashHints {
+	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
+	defer cancel()
+	var out struct {
+		Log   string            `json:"log"`
+		Hints []types.CrashHint `json:"hints"`
+	}
+	if err := a.plugins.Call(ctx, "runner", "runner.clientCrash", map[string]any{"game": game, "since": since}, &out); err != nil || len(out.Hints) == 0 {
+		return nil
+	}
+	return &types.CrashHints{Log: out.Log, Winetricks: false, Hints: out.Hints}
 }
 
 // RunWinetricksVerb installs a winetricks verb into the game's prefix: the

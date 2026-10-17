@@ -57,7 +57,17 @@ export function CrashHintsPanel({ game, hints, onNotify, onRunner }: CrashHintsP
       <ul className="space-y-3">
         {hints.hints.map((h, i) => (
           <li key={`${h.rule}-${h.param ?? ''}-${h.verb ?? ''}-${i}`} className="text-[13px] leading-relaxed text-white/75">
-            <p>{ruleText(t, h.rule, h.param ?? '')}</p>
+            {h.rule === 'protonLog' ? (
+              // No Proton log yet: say how to turn it on, with the exact launch option.
+              <>
+                <p>{t('game:crash.protonLog.title')}</p>
+                <p className="mt-1 text-[12.5px] text-white/65">{t('game:crash.protonLog.paste')}</p>
+                <code className="mt-1 block rounded-lg bg-black/35 px-3 py-2 font-mono text-hint text-sky-100/90 select-text">{t('game:crash.protonLog.option')}</code>
+                <p className="mt-1 text-[12.5px] text-white/65">{t('game:crash.protonLog.where', { path: h.param ?? '' })}</p>
+              </>
+            ) : (
+              <p>{ruleText(t, h.rule, h.param ?? '')}</p>
+            )}
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
               {h.verb && hints.winetricks && (
                 <Button variant="link" size="none" onClick={() => install(h.verb ?? '')} className="font-mono text-[12px] underline underline-offset-2">
@@ -74,9 +84,11 @@ export function CrashHintsPanel({ game, hints, onNotify, onRunner }: CrashHintsP
           </li>
         ))}
       </ul>
-      <Button variant="link" size="none" onClick={openLog} className="mt-3 font-mono text-[12px] underline underline-offset-2">
-        {t('game:crash.action.openLog')}
-      </Button>
+      {!hints.hints.some((h) => h.rule === 'protonLog') && (
+        <Button variant="link" size="none" onClick={openLog} className="mt-3 font-mono text-[12px] underline underline-offset-2">
+          {t('game:crash.action.openLog')}
+        </Button>
+      )}
     </section>
   );
 }

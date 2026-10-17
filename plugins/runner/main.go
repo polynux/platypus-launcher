@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -279,6 +280,16 @@ func handle(req message) message {
 		default:
 			resp.Error = &rpcError{Code: -32602, Message: "unknown runner action"}
 		}
+	case "runner.clientCrash":
+		var p struct {
+			Game  types.Game `json:"game"`
+			Since time.Time  `json:"since"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "game.id is required"}
+			break
+		}
+		resp.Result = clientCrash(p.Game, p.Since, os.Getenv("HOME"), os.Getenv("PROTON_LOG_DIR"))
 	case "runner.crashHints":
 		var p hintsParams
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Log == "" {
@@ -290,6 +301,36 @@ func handle(req message) message {
 		resp.Error = &rpcError{Code: -32601, Message: "method not found: " + req.Method}
 	}
 	return resp
+}
+
+// maxClientLog bounds how much of a Proton log is read (the hints scan it all).
+const maxClientLog = 4 << 20
+
+// clientCrash answers for a game a store client started that ended too soon
+// (the session layer decides that). Proton writes steam-<appid>.log to
+// PROTON_LOG_DIR, else to the home folder, when PROTON_LOG=1 was set in the
+// game's launch options. A log written since the launch is read like any other;
+// without one the answer is a single hint naming the log to turn on.
+func clientCrash(game types.Game, since time.Time, home, logDir string) map[string]any {
+	if game.StoreAppID == "" {
+		return map[string]any{"log": "", "hints": []types.CrashHint{}}
+	}
+	dir := logDir
+	if dir == "" {
+		dir = home
+	}
+	path := filepath.Join(dir, "steam-"+game.StoreAppID+".log")
+	st, err := os.Stat(path)
+	if err != nil || st.IsDir() || st.ModTime().Before(since) {
+		return map[string]any{"log": path, "hints": []types.CrashHint{{Rule: "protonLog", Param: path}}}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return map[string]any{"log": path, "hints": []types.CrashHint{}}
+	}
+	defer f.Close()
+	raw, _ := io.ReadAll(io.LimitReader(f, maxClientLog))
+	return map[string]any{"log": path, "hints": crashhints.Match(string(raw))}
 }
 
 func runnerInfo(r types.ProtonVersion) plugins.RunnerInfo {

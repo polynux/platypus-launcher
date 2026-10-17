@@ -32,6 +32,10 @@ const (
 	clientStartTimeout = 3 * time.Minute
 	// A direct launch that exits faster than this is reported as a failure.
 	quickExit = 5 * time.Second
+	// clientQuickExit is how soon a game a store client started must end, once
+	// seen running, to count as a crash. The client owns the process, so no
+	// exit code reaches Platypus; a run this short is the signal it has (#46).
+	clientQuickExit = time.Minute
 )
 
 type Emit func(types.SessionEvent)
@@ -47,6 +51,10 @@ type Tracker struct {
 	// crashed maps a game to the log of its last direct run when that run
 	// ended abnormally (issue #46). A clean run or a new launch clears it.
 	crashed map[string]string
+	// clientCrashed maps a game a store client started to when that launch was
+	// asked for, if the run ended within clientQuick. A clean run clears it.
+	clientCrashed map[string]time.Time
+	clientQuick   time.Duration
 }
 
 // entry is one tracked launch. cmd is the direct-launch process (nil for
@@ -68,7 +76,8 @@ type entry struct {
 }
 
 func NewTracker(emit Emit) *Tracker {
-	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}, crashed: map[string]string{}}
+	return &Tracker{emit: emit, grace: defaultGrace, active: map[string]*entry{}, crashed: map[string]string{},
+		clientCrashed: map[string]time.Time{}, clientQuick: clientQuickExit}
 }
 
 // CrashLog returns the log file of gameID's last direct launch when that run
@@ -78,6 +87,15 @@ func (t *Tracker) CrashLog(gameID string) string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.crashed[gameID]
+}
+
+// ClientCrash reports when the launch of gameID that a store client started was
+// asked for, if that run ended too soon to be a success (see clientQuickExit).
+func (t *Tracker) ClientCrash(gameID string) (time.Time, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	asked, ok := t.clientCrashed[gameID]
+	return asked, ok
 }
 
 // SetLogDir overrides the folder session logs are written to (issue #41).
@@ -198,10 +216,12 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 	if e == nil {
 		return false
 	}
+	asked := time.Now()
 	t.mu.Lock()
 	for _, o := range opts {
 		o(e)
 	}
+	delete(t.clientCrashed, gameID)
 	t.mu.Unlock()
 	msg := "Waiting for " + client + " to start the game"
 	t.setMessage(gameID, msg)
@@ -210,6 +230,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 		defer t.clearEntry(gameID, e)
 		deadline := time.Now().Add(startTimeout)
 		pid := 0
+		var started time.Time
 		for pid == 0 {
 			if pid = find(); pid != 0 {
 				break
@@ -224,6 +245,7 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 			}
 			time.Sleep(pollEvery)
 		}
+		started = time.Now()
 		if t.setRunning(gameID, pid) {
 			// Stop was requested while the client was still starting the game.
 			t.emit(types.SessionEvent{GameID: gameID, State: "stopping", PID: pid})
@@ -235,6 +257,13 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 			time.Sleep(pollEvery)
 		}
 		stoppedByUser := t.userStopped(e)
+		t.mu.Lock()
+		if !stoppedByUser && time.Since(started) < t.clientQuick {
+			t.clientCrashed[gameID] = asked
+		} else {
+			delete(t.clientCrashed, gameID)
+		}
+		t.mu.Unlock()
 		t.mu.Lock()
 		hooks := append([]func(ExitInfo){}, e.onExits...)
 		t.mu.Unlock()
