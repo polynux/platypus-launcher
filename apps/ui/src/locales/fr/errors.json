@@ -4,6 +4,11 @@
   "launchFailedText": "le lancement a échoué",
   "notPersisted": "Non enregistré sur le disque, vaut pour cette session : {{error}}",
   "retry": "Réessayer",
+  "runner": {
+    "unavailable": "Le module d'exécution fourni est indisponible.",
+    "wrapFailed": "Le module d'exécution n'a pas pu préparer {{title}} : {{error}}",
+    "invalidSpec": "Le module d'exécution a renvoyé une commande invalide pour {{title}}."
+  },
   "noticeFallback": "Platypus n'a pas pu aller au bout. Réessayez.",
   "art": {
     "gog": {

@@ -4,6 +4,11 @@
   "launchFailedText": "launch failed",
   "notPersisted": "Not saved to disk, applies this session: {{error}}",
   "retry": "Try again",
+  "runner": {
+    "unavailable": "The bundled runner plugin is unavailable.",
+    "wrapFailed": "The runner couldn't prepare {{title}}: {{error}}",
+    "invalidSpec": "The runner returned an invalid launch command for {{title}}."
+  },
   "noticeFallback": "Platypus couldn't finish that. Try again.",
   "art": {
     "gog": {
