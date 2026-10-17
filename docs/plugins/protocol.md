@@ -275,10 +275,24 @@ runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule":
 ```
 
 All eight methods are required when `runner` is enabled (`runner.detectExecutable`
-is called for every sideloaded file, `runner.prefix` for every backup and cloud gate). Errors use `-32602` for a bad request and
-`-32003` with a message for a runner failure: a missing runner, an unreadable
-file, a winetricks run that can't start. Platypus shows the message with
-`runner.wrapFailed` (launch) or the action's own error.
+is called for every sideloaded file, `runner.prefix` for every backup and cloud gate).
+Errors use `-32602` for a bad request and `-32003` for a runner failure, with a
+message. A failure the UI translates carries `error.data` as `{ "code": "<apperr
+code>", "params": { … } }`, and the core shows its own translated text for it:
+
+| `code` | When | `params` |
+|---|---|---|
+| `game.noRunner` | a Wine or Proton game and no runner is installed (`runner.wrap`) | none |
+| `game.runnerMissing` | the game's runner isn't installed (`runner.wrap`, `winetricks`) | `id` |
+| `crash.badVerb` | `winetricks` names a verb the runner doesn't know (`-32602`) | `verb` |
+| `crash.noWinetricks` | winetricks isn't installed | none |
+| `crash.noPrefix` | the game has no prefix yet | `title` |
+| `crash.umuUnsupported` | umu's Proton build isn't there to run winetricks with | `title` |
+| `crash.noProtonWine` | the Proton build has no Wine binaries winetricks can use | `title` |
+
+The core accepts only these codes. Any other failure, or one without `data`,
+shows the message under the call's generic code: `runner.wrapFailed` for a launch,
+`crash.winetricksFailed` for a winetricks run.
 
 - **`runner.list`**: each runner has `id`, `name`, `kind` (`proton`, `umu`,
   `wine`, `custom` or `system`), `version`, `default`, and optionally `path`,

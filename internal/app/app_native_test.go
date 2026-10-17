@@ -159,8 +159,8 @@ func TestCustomLaunchWindowsNeedsRunner(t *testing.T) {
 	p, err := a.prepareLaunch(g, true)
 	if err != nil {
 		var ae *apperr.Error
-		if ok := errors.As(err, &ae); !ok || ae.Code != "runner.wrapFailed" || !strings.Contains(err.Error(), "no Proton or Wine runner is installed") {
-			t.Fatalf("err = %v, want runner.wrapFailed when no runner is installed", err)
+		if ok := errors.As(err, &ae); !ok || ae.Code != "game.noRunner" {
+			t.Fatalf("err = %v, want game.noRunner when no runner is installed", err)
 		}
 		return
 	}

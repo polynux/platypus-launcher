@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -100,8 +99,8 @@ func TestRunnerMissingFailsLaunchWithItsMessage(t *testing.T) {
 	g := a.customGames()[0]
 	_, err = a.prepareLaunch(g, true)
 	var ae *apperr.Error
-	if ok := errors.As(err, &ae); err == nil || !ok || ae.Code != "runner.wrapFailed" || !strings.Contains(err.Error(), `"no-such-runner" is not installed`) {
-		t.Fatalf("err = %v, want runner.wrapFailed naming the missing runner", err)
+	if ok := errors.As(err, &ae); err == nil || !ok || ae.Code != "game.runnerMissing" || ae.Params["id"] != "no-such-runner" {
+		t.Fatalf("err = %v, want game.runnerMissing naming the missing runner", err)
 	}
 }
 

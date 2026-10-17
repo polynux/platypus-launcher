@@ -71,7 +71,7 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 		"runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder(),
 	}
 	if err := a.plugins.Call(ctx, "runner", "runner.runAction", params, nil); err != nil {
-		return apperr.Wrap("crash.winetricksFailed", err, map[string]string{"verb": verb})
+		return runnerFailure(err, "crash.winetricksFailed", map[string]string{"verb": verb})
 	}
 	return nil
 }

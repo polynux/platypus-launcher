@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
 
 	"platypus/internal/apperr"
+	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
 	"platypus/internal/savebackup"
 	"platypus/internal/types"
@@ -78,7 +81,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 	}
 	var result runnerWrapResult
 	if err := a.plugins.Call(ctx, "runner", "runner.wrap", params, &result); err != nil {
-		return nil, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
+		return nil, runnerFailure(err, "runner.wrapFailed", map[string]string{"title": game.Title})
 	}
 	if len(result.Command) == 0 {
 		return nil, apperr.New("runner.invalidSpec", "the runner plugin returned an empty command", map[string]string{"title": game.Title})
@@ -116,6 +119,31 @@ func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
 		return savebackup.Prefix{}, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
 	}
 	return result, nil
+}
+
+// runnerCodes are the apperr codes a runner plugin may attach to a failure, with
+// their params (protocol.md, Runner). The core shows them translated; other
+// codes from the plugin are not trusted and fall back to the generic one.
+var runnerCodes = map[string]bool{
+	"game.noRunner": true, "game.runnerMissing": true,
+	"crash.badVerb": true, "crash.noWinetricks": true, "crash.noPrefix": true,
+	"crash.umuUnsupported": true, "crash.noProtonWine": true,
+}
+
+// runnerFailure is the core's error for a runner plugin failure: the plugin's
+// own code when it names a known one, else fallback with params.
+func runnerFailure(err error, fallback string, params map[string]string) error {
+	var rpc *jsonrpc.Error
+	if errors.As(err, &rpc) && len(rpc.Data) > 0 {
+		var d struct {
+			Code   string            `json:"code"`
+			Params map[string]string `json:"params"`
+		}
+		if json.Unmarshal(rpc.Data, &d) == nil && runnerCodes[d.Code] {
+			return apperr.New(d.Code, rpc.Message, d.Params)
+		}
+	}
+	return apperr.Wrap(fallback, err, params)
 }
 
 // runnerList is the installed runners, or none without a runner plugin.

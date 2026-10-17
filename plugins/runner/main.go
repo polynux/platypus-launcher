@@ -4,6 +4,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -28,8 +29,30 @@ type message struct {
 }
 
 type rpcError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+// codedError is a runner failure the core shows with its own translated
+// message: code is the apperr code and params its values (protocol.md, Runner).
+type codedError struct {
+	code   string
+	params map[string]string
+	msg    string
+}
+
+func (e *codedError) Error() string { return e.msg }
+
+// rpcFailure answers err with code num. A coded failure carries its apperr code
+// and params in error.data; any other failure is only its message.
+func rpcFailure(num int, err error) *rpcError {
+	out := &rpcError{Code: num, Message: err.Error()}
+	var ce *codedError
+	if errors.As(err, &ce) {
+		out.Data, _ = json.Marshal(map[string]any{"code": ce.code, "params": ce.params})
+	}
+	return out
 }
 
 type wrapParams struct {
@@ -135,9 +158,10 @@ func handle(req message) message {
 		}
 		if selected.ID == "" {
 			if runner.IsAuto(p.RunnerID) {
-				resp.Error = &rpcError{Code: -32003, Message: "no Proton or Wine runner is installed"}
+				resp.Error = rpcFailure(-32003, &codedError{code: "game.noRunner", msg: "no Proton or Wine runner is installed"})
 			} else {
-				resp.Error = &rpcError{Code: -32003, Message: fmt.Sprintf("runner %q is not installed", p.RunnerID)}
+				resp.Error = rpcFailure(-32003, &codedError{code: "game.runnerMissing", params: map[string]string{"id": p.RunnerID},
+					msg: fmt.Sprintf("runner %q is not installed", p.RunnerID)})
 			}
 			break
 		}
@@ -219,11 +243,12 @@ func handle(req message) message {
 			}
 		case "winetricks":
 			if !winetricks.KnownVerb(p.Verb) {
-				resp.Error = &rpcError{Code: -32602, Message: fmt.Sprintf("%q is not a known winetricks verb", p.Verb)}
+				resp.Error = rpcFailure(-32602, &codedError{code: "crash.badVerb", params: map[string]string{"verb": p.Verb},
+					msg: fmt.Sprintf("%q is not a known winetricks verb", p.Verb)})
 				break
 			}
 			if err := runWinetricks(p); err != nil {
-				resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+				resp.Error = rpcFailure(-32003, err)
 			} else {
 				resp.Result = map[string]any{}
 			}
@@ -305,7 +330,7 @@ func prefixUser(r types.ProtonVersion) string {
 func runWinetricks(p actionParams) error {
 	bin, err := exec.LookPath("winetricks")
 	if err != nil {
-		return fmt.Errorf("winetricks isn't installed")
+		return &codedError{code: "crash.noWinetricks", msg: "winetricks isn't installed"}
 	}
 	home := os.Getenv("HOME")
 	runners := runner.ScanProtonVersionsFor(home)
@@ -314,7 +339,8 @@ func runWinetricks(p actionParams) error {
 		var ok bool
 		selected, ok = runner.Resolve(p.RunnerID, runners)
 		if !ok {
-			return fmt.Errorf("runner %q is not installed", p.RunnerID)
+			return &codedError{code: "game.runnerMissing", params: map[string]string{"id": p.RunnerID},
+				msg: fmt.Sprintf("runner %q is not installed", p.RunnerID)}
 		}
 	}
 	prefix := runner.PrefixPath(p.Game, home, p.PrefixesFolder)
@@ -323,15 +349,17 @@ func runWinetricks(p actionParams) error {
 		if proton.Path != "" {
 			wineRunner = proton
 		} else {
-			return fmt.Errorf("umu's Proton build isn't available for winetricks")
+			return &codedError{code: "crash.umuUnsupported", params: map[string]string{"title": p.Game.Title},
+				msg: "umu's Proton build isn't available for winetricks"}
 		}
 	}
-	env, err := winetricksEnv(prefix, wineRunner, useUmu)
+	env, err := winetricksEnv(p.Game.Title, prefix, wineRunner, useUmu)
 	if err != nil {
 		return err
 	}
 	if st, err := os.Stat(env["WINEPREFIX"]); err != nil || !st.IsDir() {
-		return fmt.Errorf("%s has no Wine prefix yet", p.Game.Title)
+		return &codedError{code: "crash.noPrefix", params: map[string]string{"title": p.Game.Title},
+			msg: fmt.Sprintf("%s has no Wine prefix yet", p.Game.Title)}
 	}
 	data := os.Getenv("PLATYPUS_PLUGIN_DATA")
 	if data == "" {
@@ -410,7 +438,7 @@ func protonPrefix(prefix string) string {
 	return filepath.Join(prefix, "pfx")
 }
 
-func winetricksEnv(prefix string, wineRunner types.ProtonVersion, umu bool) (map[string]string, error) {
+func winetricksEnv(title, prefix string, wineRunner types.ProtonVersion, umu bool) (map[string]string, error) {
 	env := map[string]string{"WINEPREFIX": prefix}
 	if umu {
 		env["WINEPREFIX"] = runner.EffectiveUmuPrefix(prefix)
@@ -421,7 +449,8 @@ func winetricksEnv(prefix string, wineRunner types.ProtonVersion, umu bool) (map
 		}
 		wine, server, ok := protonWine(filepath.Dir(wineRunner.Path))
 		if !ok {
-			return nil, fmt.Errorf("the selected Proton build has no Wine binaries for winetricks")
+			return nil, &codedError{code: "crash.noProtonWine", params: map[string]string{"title": title},
+				msg: "the selected Proton build has no Wine binaries for winetricks"}
 		}
 		env["WINE"], env["WINESERVER"] = wine, server
 	} else if wineRunner.Path != "" {
