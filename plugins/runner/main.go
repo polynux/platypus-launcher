@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"platypus/internal/crashhints"
 	"platypus/internal/runner"
 	"platypus/internal/types"
+	"platypus/internal/winetricks"
 )
 
 type message struct {
@@ -42,9 +44,11 @@ type wrapParams struct {
 }
 
 type actionParams struct {
-	ID       string     `json:"id"`
-	Game     types.Game `json:"game"`
-	RunnerID string     `json:"runnerId"`
+	ID             string     `json:"id"`
+	Verb           string     `json:"verb"`
+	Game           types.Game `json:"game"`
+	RunnerID       string     `json:"runnerId"`
+	PrefixesFolder string     `json:"prefixesFolder"`
 }
 
 type hintsParams struct {
@@ -127,29 +131,43 @@ func handle(req message) message {
 			resp.Error = &rpcError{Code: -32602, Message: "game.id is required"}
 			break
 		}
-		prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), "")
+		prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), p.PrefixesFolder)
+		actions := []any{}
 		if _, err := os.Stat(prefix); err == nil {
-			resp.Result = map[string]any{"actions": []any{map[string]any{"id": "open-prefix", "label": "Open prefix"}}}
-		} else {
-			resp.Result = map[string]any{"actions": []any{}}
+			actions = append(actions, map[string]any{"id": "open-prefix", "label": "Open prefix"})
+			if _, err := exec.LookPath("winetricks"); err == nil {
+				actions = append(actions, map[string]any{"id": "winetricks", "label": "Run winetricks"})
+			}
 		}
+		resp.Result = map[string]any{"actions": actions}
 	case "runner.runAction":
 		var p actionParams
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" || p.ID == "" {
 			resp.Error = &rpcError{Code: -32602, Message: "id and game.id are required"}
 			break
 		}
-		if p.ID != "open-prefix" {
+		switch p.ID {
+		case "open-prefix":
+			prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), p.PrefixesFolder)
+			cmd := exec.Command("xdg-open", prefix)
+			if err := cmd.Start(); err != nil {
+				resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+			} else {
+				go func() { _ = cmd.Wait() }()
+				resp.Result = map[string]any{}
+			}
+		case "winetricks":
+			if !winetricks.KnownVerb(p.Verb) {
+				resp.Error = &rpcError{Code: -32602, Message: fmt.Sprintf("%q is not a known winetricks verb", p.Verb)}
+				break
+			}
+			if err := runWinetricks(p); err != nil {
+				resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+			} else {
+				resp.Result = map[string]any{}
+			}
+		default:
 			resp.Error = &rpcError{Code: -32602, Message: "unknown runner action"}
-			break
-		}
-		prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), "")
-		cmd := exec.Command("xdg-open", prefix)
-		if err := cmd.Start(); err != nil {
-			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
-		} else {
-			go func() { _ = cmd.Wait() }()
-			resp.Result = map[string]any{}
 		}
 	case "runner.crashHints":
 		var p hintsParams
@@ -173,6 +191,103 @@ func runnerOptions() []any {
 		out = append(out, map[string]any{"id": r.ID, "label": r.Name})
 	}
 	return out
+}
+
+func runWinetricks(p actionParams) error {
+	bin, err := exec.LookPath("winetricks")
+	if err != nil {
+		return fmt.Errorf("winetricks isn't installed")
+	}
+	home := os.Getenv("HOME")
+	runners := runner.ScanProtonVersionsFor(home)
+	selected, proton, useUmu := runner.SelectUmu(p.RunnerID, runners)
+	if !useUmu {
+		var ok bool
+		selected, ok = runner.Resolve(p.RunnerID, runners)
+		if !ok {
+			return fmt.Errorf("runner %q is not installed", p.RunnerID)
+		}
+	}
+	prefix := runner.PrefixPath(p.Game, home, p.PrefixesFolder)
+	wineRunner := selected
+	if useUmu {
+		if proton.Path != "" {
+			wineRunner = proton
+		} else {
+			return fmt.Errorf("umu's Proton build isn't available for winetricks")
+		}
+	}
+	env, err := winetricksEnv(prefix, wineRunner, useUmu)
+	if err != nil {
+		return err
+	}
+	if st, err := os.Stat(env["WINEPREFIX"]); err != nil || !st.IsDir() {
+		return fmt.Errorf("%s has no Wine prefix yet", p.Game.Title)
+	}
+	data := os.Getenv("PLATYPUS_PLUGIN_DATA")
+	if data == "" {
+		return fmt.Errorf("plugin data folder is unavailable")
+	}
+	logDir := filepath.Join(data, "logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return err
+	}
+	fileID := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, p.Game.ID)
+	log, err := os.OpenFile(filepath.Join(logDir, "winetricks-"+fileID+".log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(bin, "--unattended", p.Verb)
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.Stdout, cmd.Stderr = log, log
+	if err := cmd.Start(); err != nil {
+		_ = log.Close()
+		return err
+	}
+	go func() { _ = cmd.Wait(); _ = log.Close() }()
+	return nil
+}
+
+var protonBinDirs = []string{"files/bin", "dist/bin"}
+
+func winetricksEnv(prefix string, wineRunner types.ProtonVersion, umu bool) (map[string]string, error) {
+	env := map[string]string{"WINEPREFIX": prefix}
+	if umu {
+		env["WINEPREFIX"] = runner.EffectiveUmuPrefix(prefix)
+	}
+	if strings.HasSuffix(wineRunner.Path, "proton") {
+		if !umu {
+			env["WINEPREFIX"] = filepath.Join(prefix, "pfx")
+		}
+		wine, server, ok := protonWine(filepath.Dir(wineRunner.Path))
+		if !ok {
+			return nil, fmt.Errorf("the selected Proton build has no Wine binaries for winetricks")
+		}
+		env["WINE"], env["WINESERVER"] = wine, server
+	} else if wineRunner.Path != "" {
+		env["WINE"] = wineRunner.Path
+	}
+	return env, nil
+}
+
+func protonWine(protonDir string) (wine, server string, ok bool) {
+	for _, d := range protonBinDirs {
+		w, s := filepath.Join(protonDir, d, "wine"), filepath.Join(protonDir, d, "wineserver")
+		if wi, e := os.Stat(w); e == nil && !wi.IsDir() {
+			if si, e := os.Stat(s); e == nil && !si.IsDir() {
+				return w, s, true
+			}
+		}
+	}
+	return "", "", false
 }
 
 func main() {

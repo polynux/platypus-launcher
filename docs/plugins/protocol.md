@@ -259,9 +259,9 @@ launch or settings preview; runner environment keys (`WINE*`, `PROTON_*`,
 runner.list {} -> { "runners": [{ "id": "auto", "name": "Automatic", "kind": "proton", "version": "", "default": true }] }
 runner.options {} -> { "groups": [{ "id": "runner", "label": "Runner", "fields": [{ "id": "runner_id", "kind": "select", "label": "Runner", "default": "auto", "options": [{ "id": "auto", "label": "Automatic" }] }] }] }
 runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games" }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/games/a"], "env": {}, "cwd": "/games" }
-runner.actions { "game": {}, "runnerId": "auto" } -> { "actions": [{ "id": "open-prefix", "label": "Open prefix" }] }
-runner.runAction { "id": "open-prefix", "game": {}, "runnerId": "auto" } -> {}
-runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> { "log": "/data/logs/game.log", "winetricks": true, "hints": [] }
+runner.actions { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> { "actions": [{ "id": "open-prefix", "label": "Open prefix" }, { "id": "winetricks", "label": "Run winetricks" }] }
+runner.runAction { "id": "winetricks", "verb": "vcrun2022", "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> {}
+runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
 ```
 
 `runner.options` uses the same group/field schema as `settings.schema` (1.8);
@@ -269,7 +269,10 @@ the core stores its values per game and supplies them as `options` on `wrap`.
 `runner.wrap` receives a `spec` with `command`, `env` and optional `cwd`, and
 may return those plus optional process-finding metadata. `runner.actions` lists
 the prefix actions available for that game; `runner.runAction` executes one.
-Crash hint entries use the `CrashHint` shape. These six methods are required
+The `winetricks` action takes a `verb`, validated by the runner against its
+known verb list. `runner.crashHints` returns `CrashHint` entries; the core
+combines them with the local log path and available action list for display.
+These six methods are required
 when `runner` is enabled. With no runner plugin the direct command is launched
 unchanged.
 

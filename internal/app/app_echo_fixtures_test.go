@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -161,6 +162,7 @@ func TestFixtureCrashGameProducesHintsThroughTheApp(t *testing.T) {
 		}
 	}
 failed:
+	installTestRunnerPlugin(t, e.a)
 	got := e.a.GameCrashHints(g)
 	if got == nil || len(got.Hints) == 0 {
 		t.Fatalf("GameCrashHints = %+v, want the crash hints", got)
@@ -170,6 +172,29 @@ failed:
 	}
 	if got.Log == "" {
 		t.Fatal("hints name no log")
+	}
+}
+
+func installTestRunnerPlugin(t *testing.T, a *App) {
+	t.Helper()
+	dir := filepath.Join(a.plugins.Dir(), "runner")
+	bin := filepath.Join(dir, "bin", "platypus-runner")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-o", bin, "./plugins/runner")
+	cmd.Dir = repoPath("")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build runner plugin: %v: %s", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), mustRead(t, repoPath("plugins/runner/plugin.json")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.plugins.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.plugins.Approve("runner"); err != nil {
+		t.Fatal(err)
 	}
 }
 
