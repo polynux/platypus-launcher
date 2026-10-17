@@ -880,12 +880,9 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 
 	switch {
 	case launch != nil && launch.Client != nil:
-		p, err := a.wrapLaunch(game, launch.Client.Command, map[string]string{}, "", false, preview, nil)
-		if err != nil {
-			return nil, err
-		}
-		p.client = launch.Client
-		return p, nil
+		// The store client starts the game, so the command runs as it is: a
+		// runner wrapper would wrap the client, not the game.
+		return &prepared{args: launch.Client.Command, env: map[string]string{}, client: launch.Client}, nil
 	case launch != nil && launch.Direct != nil:
 		d := launch.Direct
 		dir := d.Dir

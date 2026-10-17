@@ -255,8 +255,10 @@ Wine/Proton crash hints. It is restricted to bundled/first-party plugin ids.
 Runner environment keys (`WINE*`, `PROTON_*`, `STEAM_COMPAT_*`) are reserved to
 this capability.
 
-The core sends one `runner.wrap` request per launch or settings preview, native
-games included. With no runner plugin installed, the store's direct spec runs as
+The core sends one `runner.wrap` request per launch Platypus starts itself or
+settings preview, native games included. Store-client launches aren't wrapped:
+the store-client command (its `command`, see [Launching](#launching)) runs as it
+is, so no wrapper goes around the client, and the runner isn't asked. With no runner plugin installed, the store's direct spec runs as
 it is. With one installed but not ready (changed on disk, or crashed past its
 restart limit), a launch stops with `runner.unavailable` before any process starts.
 
@@ -380,8 +382,10 @@ only forgets the job and tells the user what may remain on disk.
 ## Launching
 
 The core owns session tracking and process start/stop. When a bundled runner
-plugin is available, it wraps each launch spec (including native launches) and
-returns the command; without one, Platypus runs the store's direct spec as-is.
+plugin is available, it wraps each launch spec Platypus starts itself (including
+native launches) and returns the command; without one, Platypus runs the store's
+direct spec as-is. Store-client launches aren't wrapped: their `command` runs as
+it is, so no wrapper goes around the store's client.
 A plugin returns a spec; it never starts the game itself.
 
 Direct launch:
