@@ -117,7 +117,7 @@ are core code that needs per-OS files (build tags), not plugins.
 |---|---|
 | #55 ProtonDB provider | Complete; bundled in `linux-compat` |
 | #73 step 4 remaining compat sources | Complete; bundled in `linux-compat`, with facts rendered by kind |
-| #74 runner plugin | In progress; protocol 1.17 registry and method shapes recorded |
+| #74 runner plugin | In progress (2026-10-17): the core has no runner, crash-hint or winetricks imports; `runner.options` covers every per-game runner setting; the settings panel still hand-made (open question in #74) |
 
 1. This ADR, reviewed and amended.
 2. Protocol: `store` optional, the `compat-facts` and `runner` capability names in the registry, conformance support.

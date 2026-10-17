@@ -249,32 +249,73 @@ store view when the plugin declares a `storefront`.
 
 ## Runner (1.17)
 
-The bundled `runner` capability owns Wine, Proton, umu, native launch wrappers,
-prefix actions, winetricks and Wine/Proton crash hints. It is restricted to
-bundled/first-party plugin ids. The core sends one `runner.wrap` request per
-launch or settings preview; runner environment keys (`WINE*`, `PROTON_*`,
-`STEAM_COMPAT_*`) are reserved to this capability.
+The bundled `runner` capability owns Wine, Proton, umu, the native launch
+wrappers (GameMode, gamescope, MangoHud), prefix actions, winetricks and
+Wine/Proton crash hints. It is restricted to bundled/first-party plugin ids.
+Runner environment keys (`WINE*`, `PROTON_*`, `STEAM_COMPAT_*`) are reserved to
+this capability.
+
+The core sends one `runner.wrap` request per launch or settings preview, native
+games included. With no runner plugin installed, the store's direct spec runs as
+it is. With one installed but not ready (changed on disk, or crashed past its
+restart limit), a launch stops with `runner.unavailable` before any process starts.
 
 ```json
 runner.list {} -> { "runners": [{ "id": "auto", "name": "Automatic", "kind": "proton", "version": "", "default": true }] }
-runner.options {} -> { "groups": [{ "id": "runner", "label": "Runner", "fields": [{ "id": "runner_id", "kind": "select", "label": "Runner", "default": "auto", "options": [{ "id": "auto", "label": "Automatic" }] }] }] }
-runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games" }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/games/a"], "env": {}, "cwd": "/games" }
+runner.options {} -> { "groups": [{ "id": "runner", "label": "Runner", "fields": [{ "id": "runner_id", "kind": "select", "label": "Runner", "scope": "game", "default": "auto", "options": [{ "id": "auto", "label": "Automatic" }] }] }] }
+runner.detectExecutable { "path": "/home/u/Games/goose.exe" } -> { "native": false, "kind": "windows-exe" }
+runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games", "needsWine": true }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/usr/bin/wine", "/games/a"], "env": { "WINEPREFIX": "/data/prefixes/g" }, "cwd": "/games", "runner": { "id": "system:wine", "name": "System Wine (/usr/bin/wine)", "kind": "system", "path": "/usr/bin/wine", "system": true }, "prefixDir": "/data/prefixes/g" }
 runner.actions { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> { "actions": [{ "id": "open-prefix", "label": "Open prefix" }, { "id": "winetricks", "label": "Run winetricks" }] }
 runner.runAction { "id": "winetricks", "verb": "vcrun2022", "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> {}
+runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner": {} } } -> {}
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
 ```
 
-`runner.options` uses the same group/field schema as `settings.schema` (1.8);
-the core stores its values per game and supplies them as `options` on `wrap`.
-`runner.wrap` receives a `spec` with `command`, `env` and optional `cwd`, and
-may return those plus optional process-finding metadata. `runner.actions` lists
-the prefix actions available for that game; `runner.runAction` executes one.
-The `winetricks` action takes a `verb`, validated by the runner against its
-known verb list. `runner.crashHints` returns `CrashHint` entries; the core
-combines them with the local log path and available action list for display.
-These six methods are required
-when `runner` is enabled. With no runner plugin the direct command is launched
-unchanged.
+All seven methods are required when `runner` is enabled (`runner.detectExecutable`
+is called for every sideloaded file). Errors use `-32602` for a bad request and
+`-32003` with a message for a runner failure: a missing runner, an unreadable
+file, a winetricks run that can't start. Platypus shows the message with
+`runner.wrapFailed` (launch) or the action's own error.
+
+- **`runner.list`**: each runner has `id`, `name`, `kind` (`proton`, `umu`,
+  `wine`, `custom` or `system`), `version`, `default`, and optionally `path`,
+  `system` and `custom`.
+- **`runner.options`**: the same group and field schema as `settings.schema`
+  (1.8), every field with `"scope": "game"`. The fields are the per-game settings
+  the runner reads: `runner_id`, `wine_prefix`, `use_gamemode`, `use_mangohud`,
+  `use_gamescope`, `gamescope_w`, `gamescope_h`, `gamescope_r`, `gamescope_args`,
+  `eac_runtime` and `battleye_runtime`. The core stores their values in the game's
+  settings and sends the game as `game`; `launch_arguments`, `env_vars`,
+  `working_dir` and `run_mode` stay with the core. A test fails when a settings
+  field is neither offered here nor core-owned, so a new field is classed on
+  purpose.
+- **`runner.detectExecutable`**: `kind` is `elf`, `appimage`, `script`,
+  `windows-exe`, `windows-installer`, `windows-script`, `windows-shortcut` or
+  `unknown`; `native` is true for the Linux kinds. The core uses it for the
+  default of "Run with" and for launch decisions.
+- **`runner.wrap`**: `spec` is the store's direct spec (`command`, `env`, `cwd`,
+  `needsWine`); `game` is the game as the core knows it, with its settings;
+  `options` holds the game's other saved settings keys; `tweaks` holds the enabled
+  data-plugin tweaks, which the bundled runner doesn't apply yet; `prefixesFolder`
+  is the effective data folder. The result has `command`, `env`, optional `cwd`,
+  and for a Wine or Proton launch `runner` (the runner picked), `prefixDir` (the
+  Wine prefix folder the game runs in; for Proton, its `pfx` folder) and
+  `prefixUser` (`steamuser` for Proton and umu, empty for system Wine). A native
+  game's result has only `command`, `env` and `cwd`: no runner and no prefix.
+  Cloud saves and backups read `prefixDir` and `prefixUser`; the core doesn't
+  compute the prefix layout.
+- **`runner.actions`**: `open-prefix` when the prefix exists, and `winetricks`
+  when winetricks is installed and the prefix exists.
+- **`runner.runAction`**: `winetricks` runs `verb`, which the runner validates
+  against its catalogue (`-32602` when unknown); the verb runs with the game's
+  prefix in the background, and its output goes to the plugin's data folder.
+  `open-prefix` opens the prefix. `stop` is sent by the core when a launch ends
+  or is force-stopped: `launch` is that launch's `runner.wrap` result, which the
+  core doesn't read (it hands it back unchanged), and the runner finds the
+  wineserver from its `runner` and `env`.
+- **`runner.crashHints`**: returns `CrashHint` entries (`rule`, and `param`,
+  `verb` or `action` when the rule has them). The core adds the log path and
+  whether winetricks is available.
 
 ## Jobs
 
@@ -575,7 +616,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
-| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in

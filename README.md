@@ -27,6 +27,9 @@ where games live. Platypus wants to be the one place for all of them:
   or ownership; games that need their launcher at runtime still use it.
 - **Per-game runners**: Proton, Proton-GE or Wine per game, with DXVK/VKD3D, wrappers such as gamemode,
   compatibility facts from ProtonDB and the Steam Deck rating, and fix suggestions when a game crashes.
+  Linux builds run Wine and Proton through the bundled runner plugin (`plugins/runner`). A game with no
+  runner plugin launches as its store gives it. The plugin's protocol is in
+  [docs/plugins/protocol.md](docs/plugins/protocol.md#runner-117).
 - **Stores as plugins**: each store is a small program that speaks a versioned JSON-RPC protocol
   ([docs/plugins/protocol.md](docs/plugins/protocol.md)). Anyone can add a store without touching the
   core, and a store's features live in its plugin.
