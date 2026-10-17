@@ -101,8 +101,10 @@ func handle(req message) message {
 	case "initialize":
 		var p struct {
 			Protocols []string `json:"protocols"`
+			Locale    string   `json:"locale"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
+		setLocale(p.Locale)
 		chosen := "1.0"
 		for _, v := range p.Protocols {
 			if v == "1.17" {
@@ -119,6 +121,23 @@ func handle(req message) message {
 		resp.Result = map[string]any{"runners": out}
 	case "runner.options":
 		resp.Result = runnerSchema()
+	case "runner.env":
+		var p struct {
+			Game types.Game `json:"game"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "game.id is required"}
+			break
+		}
+		s := effectiveSettings(p.Game.Settings)
+		var wrappers []string
+		if s.UseGameMode {
+			wrappers = append(wrappers, "gamemode")
+		}
+		if s.UseMangoHud {
+			wrappers = append(wrappers, "mangohud")
+		}
+		resp.Result = map[string]any{"env": s.EnvVars, "wrappers": wrappers}
 	case "runner.detectExecutable":
 		var p struct {
 			Path string `json:"path"`
@@ -139,6 +158,7 @@ func handle(req message) message {
 			resp.Error = &rpcError{Code: -32602, Message: "spec.command is required"}
 			break
 		}
+		p.Game.Settings = effectiveSettings(p.Game.Settings)
 		home := os.Getenv("HOME")
 		target := runner.Target{Exe: p.Spec.Command[0], Args: p.Spec.Command[1:], Env: p.Spec.Env, Native: !p.Spec.NeedsWine}
 		if target.Native {
@@ -270,43 +290,6 @@ func handle(req message) message {
 		resp.Error = &rpcError{Code: -32601, Message: "method not found: " + req.Method}
 	}
 	return resp
-}
-
-// runnerSchema is the per-game runner settings, shown by the game settings UI.
-// Each key is a GameSettings field, so saved settings keep their names.
-func runnerSchema() map[string]any {
-	return map[string]any{"groups": []any{
-		map[string]any{"id": "runner", "label": "Runner", "fields": []any{
-			map[string]any{"id": "runner_id", "kind": "select", "label": "Runner", "scope": "game", "default": "auto", "options": runnerOptions()},
-			map[string]any{"id": "wine_prefix", "kind": "text", "label": "Wine prefix", "scope": "game", "default": ""},
-		}},
-		map[string]any{"id": "wrappers", "label": "Wrappers", "fields": []any{
-			map[string]any{"id": "use_gamemode", "kind": "bool", "label": "GameMode", "scope": "game", "default": true},
-			map[string]any{"id": "use_mangohud", "kind": "bool", "label": "MangoHud", "scope": "game", "default": false},
-			map[string]any{"id": "use_gamescope", "kind": "bool", "label": "Gamescope", "scope": "game", "default": false},
-		}},
-		map[string]any{"id": "gamescope", "label": "Gamescope", "fields": []any{
-			map[string]any{"id": "gamescope_w", "kind": "number", "label": "Width", "scope": "game", "default": 0, "min": 0},
-			map[string]any{"id": "gamescope_h", "kind": "number", "label": "Height", "scope": "game", "default": 0, "min": 0},
-			map[string]any{"id": "gamescope_r", "kind": "number", "label": "Refresh rate", "scope": "game", "default": 0, "min": 0},
-			map[string]any{"id": "gamescope_args", "kind": "text", "label": "Arguments", "scope": "game", "default": ""},
-		}},
-		map[string]any{"id": "anticheat", "label": "Anti-cheat", "fields": []any{
-			map[string]any{"id": "eac_runtime", "kind": "bool", "label": "EasyAntiCheat runtime", "scope": "game", "default": false},
-			map[string]any{"id": "battleye_runtime", "kind": "bool", "label": "BattlEye runtime", "scope": "game", "default": false},
-		}},
-	}}
-}
-
-func runnerOptions() []any {
-	out := []any{map[string]any{"id": "auto", "label": "Automatic"}}
-	for _, r := range runner.ScanProtonVersionsFor(os.Getenv("HOME")) {
-		if strings.EqualFold(r.ID, "auto") {
-			continue
-		}
-		out = append(out, map[string]any{"id": r.ID, "label": r.Name})
-	}
-	return out
 }
 
 func runnerInfo(r types.ProtonVersion) plugins.RunnerInfo {
@@ -497,7 +480,18 @@ func main() {
 	defer writer.Flush()
 	for scanner.Scan() {
 		var req message
-		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil || req.ID == nil {
+		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+			continue
+		}
+		if req.Method == "locale.changed" {
+			var p struct {
+				Locale string `json:"locale"`
+			}
+			_ = json.Unmarshal(req.Params, &p)
+			setLocale(p.Locale)
+			continue
+		}
+		if req.ID == nil {
 			continue
 		}
 		resp := handle(req)

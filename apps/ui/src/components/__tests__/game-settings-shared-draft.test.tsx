@@ -131,7 +131,6 @@ describe('the shared settings draft (issue #59)', () => {
     // …and General still shows both the edit and the tweak's env var.
     fireEvent.click(generalTab());
     expect((screen.getByPlaceholderText('-novid -fullscreen') as HTMLInputElement).value).toBe('-windowed');
-    for (const advanced of screen.getAllByRole('button', { name: /^Advanced/ })) fireEvent.click(advanced);
     expect(screen.getByDisplayValue('DXVK_ASYNC')).toBeInTheDocument();
     expect(screen.queryByText(/Unsaved changes/)).toBeNull();
   });

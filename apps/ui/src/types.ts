@@ -10,24 +10,12 @@ export type StoreType = 'steam' | 'epic' | 'gog' | 'ubisoft' | 'custom' | (strin
 
 export type ProtonVersion = gen.ProtonVersion;
 
-export type SyncMode = 'default' | 'esync' | 'fsync' | 'ntsync' | 'off';
-export type DxLayer = 'dxvk' | 'wined3d';
-export type Upscaler = 'native' | 'fsr1';
-export type HudPreset = 'off' | 'fps only' | 'minimal' | 'full';
-
 export type GameSettings = gen.GameSettings & {
-  // Frontend-side Proton controls (DESIGN §5). The backend has no fields for
-  // these yet; they are folded into env_vars before preview/launch
-  // (see lib/settings.ts), so the Go side receives real, honest env vars.
-  proton_flags?: string[];
-  sync_mode?: SyncMode;
-  dx_layer?: DxLayer;
-  upscaler?: Upscaler;
-  mangohud_preset?: HudPreset;
-  shader_cache?: 'on' | 'off';
+  // The UI's own list: the winetricks verbs ticked for the game (not a runner choice).
   winetricks?: string[];
 };
 
+export type RunnerEnv = gen.RunnerEnv;
 export type GameFixInfo = gen.GameFixInfo;
 export type Achievement = gen.Achievement;
 export type Achievements = gen.Achievements;

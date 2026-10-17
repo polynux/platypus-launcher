@@ -10,6 +10,8 @@ vi.mock('../../effect/runtime', () => ({
     getGameDetails: () => Effect.succeed({ summary: '', screenshots: [], genres: [], developers: [], publishers: [], release_date: '', achievements: null } as never),
     getGameVersions: (g: unknown) => Effect.promise(() => getGameVersions(g)),
     getInstallSize: () => Effect.succeed(0),
+    getRunnerOptions: () => Effect.succeed([] as never),
+    getRunnerEnv: () => Effect.succeed({ env: {}, wrappers: [] } as never),
     getLauncherSettings: () => Effect.succeed({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' } as never),
     prefixUsage: () => Effect.succeed([] as never),
     listPrefixPresets: () => Effect.succeed([] as never),

@@ -433,6 +433,28 @@ export namespace types {
     battleye_runtime: boolean;
     working_dir: string;
     run_mode?: string;
+    proton_enable_nvapi?: boolean;
+    proton_hide_nvidia_gpu?: boolean;
+    proton_enable_wayland?: boolean;
+    proton_no_d3d11?: boolean;
+    proton_no_d3d12?: boolean;
+    proton_force_large_address_aware?: boolean;
+    proton_old_gl_string?: boolean;
+    proton_log?: boolean;
+    sync_mode?: string;
+    dx_layer?: string;
+    upscaler?: string;
+    mangohud_preset?: string;
+    shader_cache?: string;
+    gamescope_resolution?: string;
+    gamescope_rate?: string;
+    gamescope_filter?: string;
+    gamescope_fullscreen?: boolean;
+    gamescope_borderless?: boolean;
+    gamescope_grab_cursor?: boolean;
+    gamescope_hdr?: boolean;
+    gamescope_vrr?: boolean;
+    gamescope_wayland?: boolean;
   }
 
   export interface GameSize {
@@ -677,6 +699,11 @@ export namespace types {
     bytes: number;
   }
 
+  export interface RunnerEnv {
+    env: Record<string, string>;
+    wrappers: string[];
+  }
+
   export interface SaveBackup {
     id: string;
     game_id: string;
@@ -739,6 +766,10 @@ export namespace types {
   export interface SettingsSaved {
     applied: boolean;
     message?: string;
+  }
+
+  export interface SettingsSchema {
+    groups: types.SettingGroup[];
   }
 
   export interface SettingsView {

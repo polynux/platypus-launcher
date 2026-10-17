@@ -134,12 +134,14 @@ func TestBuiltinFixVerbsAreKnown(t *testing.T) {
 	}
 }
 
-// Every GameSettings field is either a runner setting, which the runner's
-// options must offer so the game settings UI shows it, or a launch setting the
-// core owns. A new field has to be classed here, so none is left out silently.
+// Every GameSettings field is a runner choice that runner.options offers, a
+// value the runner derives from those choices, or a launch setting the core
+// owns (the wine prefix is a core section). A new field has to be classed here,
+// so none is left out silently; every offered key has to be a real field.
 func TestRunnerOptionsCoverEveryRunnerSetting(t *testing.T) {
 	t.Parallel()
-	coreOwned := map[string]bool{"launch_arguments": true, "env_vars": true, "working_dir": true, "run_mode": true}
+	coreOwned := map[string]bool{"wine_prefix": true, "launch_arguments": true, "env_vars": true, "working_dir": true, "run_mode": true}
+	derived := map[string]bool{"use_mangohud": true, "gamescope_w": true, "gamescope_h": true, "gamescope_r": true}
 	offered := map[string]bool{}
 	for _, g := range runnerSchema()["groups"].([]any) {
 		for _, f := range g.(map[string]any)["fields"].([]any) {
@@ -147,13 +149,18 @@ func TestRunnerOptionsCoverEveryRunnerSetting(t *testing.T) {
 		}
 	}
 	gs := reflect.TypeOf(types.GameSettings{})
+	fields := map[string]bool{}
 	for i := range gs.NumField() {
 		key := strings.Split(gs.Field(i).Tag.Get("json"), ",")[0]
-		if coreOwned[key] {
+		fields[key] = true
+		if coreOwned[key] || derived[key] || offered[key] {
 			continue
 		}
-		if !offered[key] {
-			t.Errorf("GameSettings.%s (%q) is neither a runner setting offered by runner.options nor core-owned", gs.Field(i).Name, key)
+		t.Errorf("GameSettings.%s (%q) is neither a runner choice offered by runner.options, derived, nor core-owned", gs.Field(i).Name, key)
+	}
+	for key := range offered {
+		if !fields[key] {
+			t.Errorf("runner.options offers %q, which is not a GameSettings field", key)
 		}
 	}
 }

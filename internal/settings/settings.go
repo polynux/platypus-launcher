@@ -226,6 +226,7 @@ func OpenWithHome(path, home string) (*Store, error) {
 		return s, fmt.Errorf("settings file is corrupt, moved to %s: %w", bad, err)
 	}
 	s.migrate()
+	s.migrateRunnerGames()
 	return s, nil
 }
 
@@ -304,6 +305,7 @@ func (s *Store) SetGameSettings(gameID string, settings map[string]any) error {
 		s.data.Games = map[string]map[string]any{}
 	}
 	prev, had := s.data.Games[gameID]
+	migrateRunnerSettings(settings)
 	s.data.Games[gameID] = settings
 	if err := s.save(); err != nil {
 		if had {

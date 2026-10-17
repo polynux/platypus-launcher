@@ -9,7 +9,7 @@ import (
 )
 
 // CORE-9: sideloaded games must keep settings keys the backend struct
-// doesn't model (e.g. sync_mode), which settings.json preserves on disk.
+// doesn't model, which settings.json preserves on disk.
 func TestCustomGamesPreserveUnknownSettings(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -25,7 +25,7 @@ func TestCustomGamesPreserveUnknownSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved := map[string]any{"runner_id": "auto", "sync_mode": "ntsync"}
+	saved := map[string]any{"runner_id": "auto", "sync_mode": "ntsync", "some_future_key": "kept"}
 	if err := st.SetGameSettings(g.ID, saved); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,10 @@ func TestCustomGamesPreserveUnknownSettings(t *testing.T) {
 	if got.Settings.RunnerID != "auto" {
 		t.Fatalf("runner_id = %q, want auto", got.Settings.RunnerID)
 	}
-	if got.SettingsExtra["sync_mode"] != "ntsync" {
-		t.Fatalf("sync_mode lost: extra = %v", got.SettingsExtra)
+	if got.Settings.SyncMode != "ntsync" {
+		t.Fatalf("sync_mode = %q, want the typed ntsync", got.Settings.SyncMode)
+	}
+	if got.SettingsExtra["some_future_key"] != "kept" {
+		t.Fatalf("an unknown key was lost: extra = %v", got.SettingsExtra)
 	}
 }

@@ -162,3 +162,36 @@ func (a *App) runnerList() ([]plugins.RunnerInfo, error) {
 	}
 	return result.Runners, nil
 }
+
+// GetRunnerOptions is the per-game runner choices the game settings show
+// (runner.options). Without a runner plugin there are none.
+func (a *App) GetRunnerOptions() (types.SettingsSchema, error) {
+	present, err := a.runnerPlugin()
+	if err != nil || !present {
+		return types.SettingsSchema{}, err
+	}
+	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
+	defer cancel()
+	var raw json.RawMessage
+	if err := a.plugins.Call(ctx, "runner", "runner.options", map[string]any{}, &raw); err != nil {
+		return types.SettingsSchema{}, err
+	}
+	return types.ParseSettingsSchema(raw)
+}
+
+// GetRunnerEnv is the env and wrappers a game's runner choices add. Steam starts
+// a Steam game itself, so Platypus can't pass them: the game page shows them for
+// the Steam launch options instead.
+func (a *App) GetRunnerEnv(game types.Game) (types.RunnerEnv, error) {
+	present, err := a.runnerPlugin()
+	if err != nil || !present {
+		return types.RunnerEnv{Env: map[string]string{}, Wrappers: []string{}}, err
+	}
+	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
+	defer cancel()
+	var out types.RunnerEnv
+	if err := a.plugins.Call(ctx, "runner", "runner.env", map[string]any{"game": game}, &out); err != nil {
+		return types.RunnerEnv{}, err
+	}
+	return out, nil
+}

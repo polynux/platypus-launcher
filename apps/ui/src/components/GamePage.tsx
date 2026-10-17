@@ -29,7 +29,6 @@ import { formatBytes, heroImages, hoursPlayed, isPluginGame, needsAttention, sto
 import { useNetState } from './useNetState';
 import { formatCount, formatDate, formatHours, formatPercentValue } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
-import { normalizeSettings } from '../lib/settings';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
 import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
@@ -214,7 +213,9 @@ export function GamePage(p: GamePageProps) {
     return () => el.removeEventListener('wheel', onWheel);
   }, [details]);
 
-  const s = normalizeSettings(game.settings);
+  const s = game.settings;
+  // A game that never saved a MangoHud preset takes use_mangohud's old meaning.
+  const mangohudOn = s.mangohud_preset ? s.mangohud_preset !== 'off' : !!s.use_mangohud;
   const autoRunner = runners.find((r) => r.is_default);
   const runner = runners.find((r) => r.id === s.runner_id || r.name === s.runner_id);
   const viaSteam = game.source === 'steam' && !game.executable;
@@ -258,7 +259,7 @@ export function GamePage(p: GamePageProps) {
           : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? t('game:facts.autoRunner', { name: autoRunner?.name ?? t('game:facts.noRunner') }) : t('game:facts.missingRunner', { id: s.runner_id })),
     ],
     [t('game:facts.dx'), game.native ? t('game:facts.dxUnused') : s.dx_layer === 'wined3d' ? t('game:facts.dxWined3d') : t('game:facts.dxBundled')],
-    [t('game:facts.wrappers'), [s.use_gamemode && 'gamemode', s.mangohud_preset !== 'off' && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || t('game:facts.noWrappers')],
+    [t('game:facts.wrappers'), [s.use_gamemode && 'gamemode', mangohudOn && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || t('game:facts.noWrappers')],
     [t('game:facts.launchVia'), viaSteam ? t('game:facts.steamClient') : plugin ? t('game:facts.viaPlatypus', { name: plugin.name }) : 'Platypus'],
     [
       t('game:facts.compatibility'),

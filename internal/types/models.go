@@ -38,6 +38,31 @@ type GameSettings struct {
 	// the detected value (ELF/shebang/AppImage = native, MZ/.msi/.bat/.lnk =
 	// Wine), "native" forces a Linux run, "wine" forces Wine/Proton.
 	RunMode string `json:"run_mode,omitempty"`
+
+	// The runner's own choices (runner.options, protocol.md). The runner turns
+	// them into env vars and gamescope arguments; an empty string is the default.
+	ProtonEnableNvapi            bool   `json:"proton_enable_nvapi,omitempty"`
+	ProtonHideNvidiaGpu          bool   `json:"proton_hide_nvidia_gpu,omitempty"`
+	ProtonEnableWayland          bool   `json:"proton_enable_wayland,omitempty"`
+	ProtonNoD3d11                bool   `json:"proton_no_d3d11,omitempty"`
+	ProtonNoD3d12                bool   `json:"proton_no_d3d12,omitempty"`
+	ProtonForceLargeAddressAware bool   `json:"proton_force_large_address_aware,omitempty"`
+	ProtonOldGlString            bool   `json:"proton_old_gl_string,omitempty"`
+	ProtonLog                    bool   `json:"proton_log,omitempty"`
+	SyncMode                     string `json:"sync_mode,omitempty"`            // fsync (default), esync, ntsync, off
+	DxLayer                      string `json:"dx_layer,omitempty"`             // dxvk (default), wined3d
+	Upscaler                     string `json:"upscaler,omitempty"`             // native (default), fsr1
+	MangoHudPreset               string `json:"mangohud_preset,omitempty"`      // off, fps only, minimal, full
+	ShaderCache                  string `json:"shader_cache,omitempty"`         // on (default), off
+	GamescopeResolution          string `json:"gamescope_resolution,omitempty"` // "1920x1080"; "" = the game's own
+	GamescopeRate                string `json:"gamescope_rate,omitempty"`       // "144"; "" = the game's own
+	GamescopeFilter              string `json:"gamescope_filter,omitempty"`     // "", linear, nearest, fsr, nis, pixel
+	GamescopeFullscreen          bool   `json:"gamescope_fullscreen,omitempty"`
+	GamescopeBorderless          bool   `json:"gamescope_borderless,omitempty"`
+	GamescopeGrabCursor          bool   `json:"gamescope_grab_cursor,omitempty"`
+	GamescopeHDR                 bool   `json:"gamescope_hdr,omitempty"`
+	GamescopeVRR                 bool   `json:"gamescope_vrr,omitempty"`
+	GamescopeWayland             bool   `json:"gamescope_wayland,omitempty"`
 }
 
 type GameFixInfo struct {

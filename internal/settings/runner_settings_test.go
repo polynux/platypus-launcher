@@ -1,0 +1,140 @@
+package settings
+
+import (
+	"reflect"
+	"testing"
+)
+
+// The old UI's saved shape: its choices folded into env_vars and gamescope_args,
+// with the gamescope size and rate ints it wrote.
+func legacyGame() map[string]any {
+	return map[string]any{
+		"use_mangohud":     true,
+		"use_gamescope":    true,
+		"gamescope_w":      float64(1920),
+		"gamescope_h":      float64(1080),
+		"gamescope_r":      float64(144),
+		"gamescope_args":   "-f -F fsr --foo --bar=1",
+		"proton_flags":     []any{"PROTON_ENABLE_NVAPI"},
+		"launch_arguments": "-novid",
+		"env_vars": map[string]any{
+			"PROTON_USE_NTSYNC":   "1",
+			"WINE_FULLSCREEN_FSR": "1",
+			"MANGOHUD_CONFIG":     "preset=2",
+			"DXVK_STATE_CACHE":    "0",
+			"PROTON_USE_WINED3D":  "1",
+			"FOO":                 "bar",
+		},
+	}
+}
+
+// The old UI's choices become typed keys, its env vars are gone, and the user's
+// own env var stays.
+func TestMigrateLegacyRecordIntoTypedKeys(t *testing.T) {
+	m := legacyGame()
+	if !migrateRunnerSettings(m) {
+		t.Fatal("a legacy record reported no change")
+	}
+	want := map[string]any{
+		"proton_enable_nvapi":  true,
+		"sync_mode":            "ntsync",
+		"upscaler":             "fsr1",
+		"mangohud_preset":      "minimal",
+		"shader_cache":         "off",
+		"dx_layer":             "wined3d",
+		"gamescope_fullscreen": true,
+		"gamescope_filter":     "fsr",
+		"gamescope_args":       "--foo --bar=1",
+		"gamescope_resolution": "1920x1080",
+		"gamescope_rate":       "144",
+		"gamescope_w":          float64(0),
+		"gamescope_h":          float64(0),
+		"gamescope_r":          float64(0),
+		"env_vars":             map[string]any{"FOO": "bar"},
+		"use_mangohud":         true,
+		"use_gamescope":        true,
+		"launch_arguments":     "-novid",
+	}
+	if _, ok := m["proton_flags"]; ok {
+		t.Fatal("the legacy proton_flags list is still there")
+	}
+	for k, v := range want {
+		if !reflect.DeepEqual(m[k], v) {
+			t.Errorf("%s = %#v, want %#v", k, m[k], v)
+		}
+	}
+}
+
+// A value the user typed by hand is never taken over, even where a legacy
+// key with the same name exists.
+func TestMigrationKeepsHandTypedEnv(t *testing.T) {
+	m := map[string]any{
+		"env_vars": map[string]any{
+			"PROTON_NO_ESYNC":   "1", // with ntsync: not what the old UI wrote, so it stays
+			"PROTON_USE_NTSYNC": "1",
+			"MANGOHUD_CONFIG":   "cpu_temp", // a custom config, not a preset
+			"DXVK_STATE_CACHE":  "1",
+			"PROTON_LOG":        "2", // not the flag's 1, so it stays
+		},
+		"use_mangohud": true,
+	}
+	migrateRunnerSettings(m)
+	env := m["env_vars"].(map[string]any)
+	for k, v := range map[string]string{"PROTON_NO_ESYNC": "1", "MANGOHUD_CONFIG": "cpu_temp", "DXVK_STATE_CACHE": "1", "PROTON_LOG": "2"} {
+		if env[k] != v {
+			t.Errorf("%s = %v, want the hand-typed %q kept", k, env[k], v)
+		}
+	}
+	if _, ok := env["PROTON_USE_NTSYNC"]; ok {
+		t.Error("the ntsync value the old UI wrote was not taken over")
+	}
+	// No config preset was taken over, so the preset stays unset: the runner
+	// then takes it from use_mangohud, which is what the old UI showed.
+	if m["sync_mode"] != "ntsync" {
+		t.Errorf("sync_mode = %v, want ntsync", m["sync_mode"])
+	}
+	if _, ok := m["mangohud_preset"]; ok {
+		t.Errorf("mangohud_preset = %v was written for a hand-typed config", m["mangohud_preset"])
+	}
+}
+
+// A record saved by the new UI is left as it is, and migrating again changes
+// nothing.
+func TestMigrationIsIdempotentAndLeavesTypedRecordsAlone(t *testing.T) {
+	m := legacyGame()
+	migrateRunnerSettings(m)
+	before := map[string]any{}
+	for k, v := range m {
+		before[k] = v
+	}
+	if migrateRunnerSettings(m) {
+		t.Fatal("a second migration changed a migrated record")
+	}
+	if !reflect.DeepEqual(before, m) {
+		t.Fatal("a second migration changed the record")
+	}
+
+	typed := map[string]any{"sync_mode": "off", "env_vars": map[string]any{"PROTON_USE_NTSYNC": "1"}}
+	migrateRunnerSettings(typed)
+	if typed["sync_mode"] != "off" {
+		t.Errorf("a typed sync_mode was overwritten: %v", typed["sync_mode"])
+	}
+	if got := typed["env_vars"].(map[string]any)["PROTON_USE_NTSYNC"]; got != "1" {
+		t.Errorf("env var of a typed record was taken over: %v", got)
+	}
+}
+
+// Saving a legacy record migrates it, and the store then returns the typed form.
+func TestSetGameSettingsMigratesLegacyRecords(t *testing.T) {
+	s, err := OpenWithHome(t.TempDir()+"/settings.json", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetGameSettings("g1", legacyGame()); err != nil {
+		t.Fatal(err)
+	}
+	got := s.GameSettings()["g1"]
+	if got["sync_mode"] != "ntsync" || got["gamescope_resolution"] != "1920x1080" {
+		t.Fatalf("saved record = %v, want the typed keys", got)
+	}
+}

@@ -274,7 +274,7 @@ runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner"
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
 ```
 
-All eight methods are required when `runner` is enabled (`runner.detectExecutable`
+All nine methods are required when `runner` is enabled (`runner.detectExecutable`
 is called for every sideloaded file, `runner.prefix` for every backup and cloud gate).
 Errors use `-32602` for a bad request and `-32003` for a runner failure, with a
 message. A failure the UI translates carries `error.data` as `{ "code": "<apperr
@@ -298,14 +298,30 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
   `wine`, `custom` or `system`), `version`, `default`, and optionally `path`,
   `system` and `custom`.
 - **`runner.options`**: the same group and field schema as `settings.schema`
-  (1.8), every field with `"scope": "game"`. The fields are the per-game settings
-  the runner reads: `runner_id`, `wine_prefix`, `use_gamemode`, `use_mangohud`,
-  `use_gamescope`, `gamescope_w`, `gamescope_h`, `gamescope_r`, `gamescope_args`,
-  `eac_runtime` and `battleye_runtime`. The core stores their values in the game's
-  settings and sends the game as `game`; `launch_arguments`, `env_vars`,
-  `working_dir` and `run_mode` stay with the core. A test fails when a settings
-  field is neither offered here nor core-owned, so a new field is classed on
-  purpose.
+  (1.8), every field with `"scope": "game"`, labels and descriptions in the
+  language the core sent at `initialize` (`locale`, or `locale.changed`; English
+  when the runner has no catalogue for it). The fields are typed game settings:
+  `runner_id`, `use_gamemode`, `use_gamescope`, `dx_layer`, `upscaler`,
+  `shader_cache`, `mangohud_preset`, `sync_mode`, the eight `proton_*` switches
+  (`proton_enable_nvapi`, `proton_hide_nvidia_gpu`, `proton_enable_wayland`,
+  `proton_no_d3d11`, `proton_no_d3d12`, `proton_force_large_address_aware`,
+  `proton_old_gl_string`, `proton_log`), `gamescope_resolution` and
+  `gamescope_rate` (selects with common values), `gamescope_filter`, the gamescope
+  switches (`gamescope_fullscreen`, `gamescope_borderless`, `gamescope_grab_cursor`,
+  `gamescope_hdr`, `gamescope_vrr`, `gamescope_wayland`), `gamescope_args` (other
+  arguments), `eac_runtime` and `battleye_runtime`. The wine prefix is a core
+  section, not offered here. Every field is a `GameSettings` key, so the saved
+  names don't change; a test fails when a settings field is neither offered,
+  derived, nor core-owned.
+- **Choices become env and arguments in the runner.** `runner.wrap` and
+  `runner.env` turn the choices into the env vars the old settings UI used to
+  write (`PROTON_*`, `MANGOHUD_CONFIG`, `WINE_FULLSCREEN_FSR`, `DXVK_STATE_CACHE`)
+  and the gamescope arguments (switches, then `-F`, then `gamescope_args`). The
+  user's own `env_vars` win over a derived value. The core doesn't build them.
+- **`runner.env`**: `{ "game": {} }` -> `{ "env": { "PROTON_LOG": "1" }, "wrappers": ["gamemode", "mangohud"] }`.
+  The env (the choices plus `env_vars`) and the wrappers a launch would add. The
+  game page uses it for the Steam launch options, since Steam starts Steam games
+  itself and Platypus can't pass them.
 - **`runner.detectExecutable`**: `kind` is `elf`, `appimage`, `script`,
   `windows-exe`, `windows-installer`, `windows-script`, `windows-shortcut` or
   `unknown`; `native` is true for the Linux kinds. The core uses it for the
@@ -640,7 +656,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
-| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
