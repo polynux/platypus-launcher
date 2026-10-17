@@ -116,7 +116,7 @@ describe('the game settings dialog', () => {
     expect(await screen.findByRole('dialog', { name: 'Settings for Echo Tiny' })).toBeTruthy();
     expect(tabNames()).toEqual(['General', 'Cloud saves', 'Versions', 'Add-ons & options', 'Plugin settings', 'Suggested tweaks', 'Customization', 'Maintenance']);
     expect(screen.getByRole('tab', { name: 'General', selected: true })).toBeTruthy();
-    expect(screen.getByText('runner')).toBeTruthy(); // the general form
+    expect(screen.getByRole('region', { name: 'runner' })).toBeTruthy(); // the general form
   });
 
   it('shows only the tabs the plugin and the game offer', () => {
