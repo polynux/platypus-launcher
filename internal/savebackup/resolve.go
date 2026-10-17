@@ -35,43 +35,6 @@ type Context struct {
 	OSUser string
 }
 
-// prefixFor is the Wine identity shared with cloudContext (app_cloud.go):
-// Proton prefixes use the pfx/ folder and the steamuser account, plain Wine
-// uses the prefix itself and the login name. A custom wine_prefix already
-// pointing at the pfx dir is normalised once, never <prefix>/pfx/pfx
-// (issue #60).
-func prefixFor(prefixPath, login string, proton bool) (string, string) {
-	if proton {
-		if login == "" {
-			login = "steamuser"
-		}
-		if filepath.Base(filepath.Clean(prefixPath)) == "pfx" {
-			return prefixPath, "steamuser"
-		}
-		return filepath.Join(prefixPath, "pfx"), "steamuser"
-	}
-	return prefixPath, login
-}
-
-// isUmuPath mirrors runner.IsUmuPath (kept local so savebackup doesn't grow
-// a dependency on runner): a runner path that is the umu launcher.
-func isUmuPath(path string) bool {
-	return strings.HasSuffix(path, "/umu-run") || strings.HasSuffix(path, "/umu_run.py") || path == "umu-run" || path == "umu_run.py"
-}
-
-// effectiveUmuPrefix mirrors runner.EffectiveUmuPrefix: the WINEPREFIX umu
-// runs with. A <compat>/pfx layout (made by a direct Proton launch) is
-// reused as is, otherwise the prefix itself.
-func effectiveUmuPrefix(prefixPath string) string {
-	if prefixPath == "" {
-		return ""
-	}
-	if st, err := os.Stat(filepath.Join(prefixPath, "pfx")); err == nil && st.IsDir() {
-		return filepath.Join(prefixPath, "pfx")
-	}
-	return prefixPath
-}
-
 // isSteamGame reports built-in Steam (local client) games: they have no
 // plugin and run through the Steam client, with their Proton prefix at
 // <steam library>/steamapps/compatdata/<appid>/pfx.
@@ -79,18 +42,23 @@ func isSteamGame(game types.Game) bool {
 	return (game.Source == types.SourceSteam || game.Store == types.StoreSteam) && game.StoreAppID != ""
 }
 
-// NewContextFor builds the resolution context for a game. runnerPath != ""
-// means the game runs through Wine/Proton; a path ending in "proton" is a
-// Proton runner (the pfx/ + steamuser rule). prefixesFolder is where Wine
-// prefixes are created ("" = the default under dataDir). steamRoot is the
-// Steam client folder ("" = ~/.local/share/Steam).
+// Prefix is a game's Wine or Proton prefix as the runner plugin reported it
+// for the launch: Dir is the prefix folder the game runs in, User the login
+// inside it (Proton and umu name steamuser). Dir is "" for a native game, a
+// game with no runner, or one launched through its store client.
+type Prefix struct {
+	Dir  string
+	User string
+}
+
+// NewContextFor builds the resolution context for a game. The runner plugin
+// decides the prefix (see Prefix); this package only maps it to save roots.
+// steamRoot is the Steam client folder ("" = ~/.local/share/Steam).
 //
-// Built-in Steam games ignore runnerPath: their prefix is the Steam
-// compatdata folder when it exists (Proton + steamuser), otherwise they are
-// native (no prefix). Plugin games use exactly the prefix the runner and
-// cloudContext use (PrefixPathFor + the pfx/steamuser rule); an umu-run
-// path uses the effective umu prefix instead (issue #48).
-func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, steamRoot string) Context {
+// Built-in Steam games ignore prefix: their prefix is the Steam compatdata
+// folder when it exists (Proton + steamuser), otherwise they are native (no
+// prefix). Plugin games use the prefix the runner reported for the launch.
+func NewContextFor(game types.Game, home, steamRoot string, prefix Prefix) Context {
 	if steamRoot == "" {
 		steamRoot = filepath.Join(home, ".local", "share", "Steam")
 	}
@@ -114,25 +82,16 @@ func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, s
 		}
 		return ctx
 	}
-	windows := runnerPath != ""
-	native := game.Native
-	if native {
-		windows = false
-	}
-	umu := windows && isUmuPath(runnerPath)
-	proton := windows && (strings.HasSuffix(runnerPath, "proton") || umu)
+	windows := prefix.Dir != "" && !game.Native
+	// A prefix with a user is a Proton or umu prefix: the runner names steamuser.
+	proton := windows && prefix.User != ""
 	login := currentLogin()
-	prefix := ""
+	if proton {
+		login = prefix.User
+	}
+	prefixDir := ""
 	if windows {
-		prefix = PrefixPathFor(game, home, prefixesFolder, dataDir)
-		if umu {
-			// umu runs with the pfx dir itself (issue #48): a prefix made
-			// by a direct Proton launch keeps working, no migration.
-			prefix = effectiveUmuPrefix(prefix)
-			login = "steamuser"
-		} else {
-			prefix, login = prefixFor(prefix, login, proton)
-		}
+		prefixDir = prefix.Dir
 	}
 	roots := map[string]string{
 		"home":      home,
@@ -143,25 +102,13 @@ func NewContextFor(game types.Game, home, prefixesFolder, dataDir, runnerPath, s
 	if game.InstallDir != "" {
 		roots["install"] = game.InstallDir
 	}
-	if prefix != "" {
-		roots["prefix"] = prefix
+	if prefixDir != "" {
+		roots["prefix"] = prefixDir
 	}
 	return Context{
 		Roots: roots, Windows: windows, Proton: proton, WinUser: login,
 		OSUser: currentLogin(),
 	}
-}
-
-// PrefixPathFor is the game's Wine prefix: the one set for it, else a folder
-// of its own under the prefixes folder (the user's choice, or <data>/prefixes).
-func PrefixPathFor(game types.Game, home, prefixesFolder, dataDir string) string {
-	if game.Settings.WinePrefix != "" {
-		return game.Settings.WinePrefix
-	}
-	if prefixesFolder != "" {
-		return filepath.Join(prefixesFolder, game.ID)
-	}
-	return filepath.Join(dataDir, "prefixes", game.ID)
 }
 
 func currentLogin() string {

@@ -7,13 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"platypus/internal/apperr"
 	"platypus/internal/cloudsync"
-	"platypus/internal/runner"
 	"platypus/internal/session"
 	"platypus/internal/stores"
 	"platypus/internal/types"
@@ -68,32 +66,20 @@ func (a *App) cloudGame(game types.Game) (cloudsync.Game, bool) {
 	return cloudsync.Game{ID: game.ID, PluginID: game.Source, StoreID: game.StoreAppID, Title: game.OriginalTitle()}, true
 }
 
-// cloudContext describes a launch to the plugin. windows says the game runs
-// through Wine or Proton; r is the runner then. prefixesFolder is where Wine
-// prefixes are created ("" for the default); the runner package is never
-// asked to read settings itself.
-func (a *App) cloudContext(game types.Game, windows bool, r types.ProtonVersion, prefixesFolder string) types.CloudContext {
-	prefix, user := "", ""
-	if windows {
-		prefix = runner.PrefixPath(game, a.homeDir(), prefixesFolder)
-		if strings.HasSuffix(r.Path, "proton") {
-			// Proton keeps the Wine prefix in a pfx folder of its compat data.
-			prefix, user = filepath.Join(prefix, "pfx"), "steamuser"
-		} else if runner.IsUmu(r) {
-			// umu runs with the pfx dir itself; a prefix made by a direct
-			// Proton launch keeps working (see EffectiveUmuPrefix, #48).
-			// The user inside is still Proton's steamuser.
-			prefix, user = runner.EffectiveUmuPrefix(prefix), "steamuser"
-		}
-	}
-	return cloudsync.ContextFor(a.homeDir(), windows, game.InstallDir, prefix, user)
+// cloudContext describes a launch using the prefix facts returned by the
+// runner plugin. The core does not interpret Wine/Proton prefix layouts.
+func (a *App) cloudContext(game types.Game, prefix, user string) types.CloudContext {
+	return cloudsync.ContextFor(a.homeDir(), prefix != "", game.InstallDir, prefix, user)
 }
 
 // cloudContextOf is the context for a launch that runs with runner r: through
 // Wine or Proton when the runner is set, natively otherwise. Every cloud step
 // uses this one rule, so a check and a launch of a game agree on its paths.
-func (a *App) cloudContextOf(game types.Game, r types.ProtonVersion, prefixesFolder string) types.CloudContext {
-	return a.cloudContext(game, r.Path != "", r, prefixesFolder)
+func (a *App) cloudContextOf(game types.Game, p *prepared) types.CloudContext {
+	if p == nil {
+		return a.cloudContext(game, "", "")
+	}
+	return a.cloudContext(game, p.prefixDir, p.prefixUser)
 }
 
 // cloudContextFor is the context for a game that isn't being launched (Check
@@ -107,14 +93,10 @@ func (a *App) cloudContextFor(game types.Game) (types.CloudContext, error) {
 	}
 	game.InstallDir = folder
 	if p, err := a.prepareLaunch(game, true); err == nil && p.client == nil {
-		return a.cloudContextOf(game, p.runner, a.prefixesFolder()), nil
+		return a.cloudContextOf(game, p), nil
 	}
-	// The launch can't be prepared: use the runner it would pick.
-	var r types.ProtonVersion
-	if !game.Native {
-		r, _ = a.selectRunner(game)
-	}
-	return a.cloudContextOf(game, r, a.prefixesFolder()), nil
+	// The launch can't be prepared, so there are no runner facts to pass.
+	return a.cloudContext(game, "", ""), nil
 }
 
 // lockGame serializes the launch and cloud steps of one game, so that a second
@@ -188,7 +170,7 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 	if !a.netOnline() {
 		return nil, "cloud saves not checked: offline", false
 	}
-	cc := a.cloudContextOf(game, p.runner, a.prefixesFolder())
+	cc := a.cloudContextOf(game, p)
 	ctx, cancel := context.WithTimeout(a.ctx, cloudLaunchTimeout)
 	defer cancel()
 	d := a.cloud.BeforeLaunch(ctx, g, cc, anyway)

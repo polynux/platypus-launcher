@@ -5,12 +5,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"platypus/internal/runner"
+	"platypus/internal/paths"
 	"platypus/internal/settings"
 	"platypus/internal/types"
 )
 
-// gameWithID is a game carrying the store's pinned prefix, so runner.PrefixPath
+// gameDataPath is where a game's data folder lives: its own override, else
+// folder/<id>.
+func gameDataPath(g types.Game, folder string) string {
+	return paths.GameDataDir(g.ID, g.Settings.WinePrefix, folder)
+}
+
+// gameWithID is a game carrying the store's pinned prefix, so gameDataPath
 // resolves it the way a launch would.
 func gameWithID(id string, st *settings.Store) types.Game {
 	g := types.Game{ID: id}
@@ -69,7 +75,7 @@ func TestSetPrefixesFolderPinsExistingPrefixes(t *testing.T) {
 	if !ok || pinned != g1dir {
 		t.Fatalf("g1 wine_prefix = %v, want %q", pinned, g1dir)
 	}
-	if got := runner.PrefixPath(gameWithID("g1", st), home, next); got != g1dir {
+	if got := gameDataPath(gameWithID("g1", st), next); got != g1dir {
 		t.Fatalf("g1 resolves to %q, want its old prefix %q", got, g1dir)
 	}
 	// g2's own prefix is untouched.
@@ -77,7 +83,7 @@ func TestSetPrefixesFolderPinsExistingPrefixes(t *testing.T) {
 		t.Fatalf("g2 wine_prefix = %v, want %q", got, own)
 	}
 	// g3 never had a prefix: it gets the new folder.
-	if got := runner.PrefixPath(gameWithID("g3", st), home, next); got != filepath.Join(next, "g3") {
+	if got := gameDataPath(gameWithID("g3", st), next); got != filepath.Join(next, "g3") {
 		t.Fatalf("g3 resolves to %q, want the new folder", got)
 	}
 	// Nothing was moved or deleted.
@@ -157,10 +163,10 @@ func TestSetPrefixesFolderChainingKeepsEarlierPrefixes(t *testing.T) {
 	if pinned := st.GameSettings()["g2"]["wine_prefix"]; pinned != filepath.Join(folderB, "g2") {
 		t.Fatalf("g2 wine_prefix = %v, want the B path", pinned)
 	}
-	if got := runner.PrefixPath(gameWithID("g1", st), home, folderC); got != filepath.Join(folderA, "g1") {
+	if got := gameDataPath(gameWithID("g1", st), folderC); got != filepath.Join(folderA, "g1") {
 		t.Fatalf("g1 resolves to %q, want A", got)
 	}
-	if got := runner.PrefixPath(gameWithID("g2", st), home, folderC); got != filepath.Join(folderB, "g2") {
+	if got := gameDataPath(gameWithID("g2", st), folderC); got != filepath.Join(folderB, "g2") {
 		t.Fatalf("g2 resolves to %q, want B", got)
 	}
 }
@@ -235,6 +241,7 @@ func TestPrefixUsageGroupsSharedPrefixes(t *testing.T) {
 	pin(native.ID, filepath.Join(home, "prefixes", "native-pinned"))
 
 	a := &App{settings: st, optHome: home}
+	withTestRunnerPlugin(t, a, home)
 	got := a.PrefixUsage()
 	if len(got) != 2 {
 		t.Fatalf("PrefixUsage = %+v, want the shared and the own prefix", got)

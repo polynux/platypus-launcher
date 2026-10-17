@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"platypus/internal/apperr"
-	"platypus/internal/runner"
+	"platypus/internal/dataplug"
+	"platypus/internal/plugins"
 	"platypus/internal/settings"
 	"platypus/internal/stores"
 	"platypus/internal/types"
@@ -21,7 +22,26 @@ func nativeTestApp(t *testing.T, home string) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
+	a := &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
+	withTestRunnerPlugin(t, a, home)
+	return a
+}
+
+// withTestRunnerPlugin installs the bundled runner plugin on a, so detection
+// and launch wrapping run as they do in the app. The plugin reads HOME from its
+// environment, so it gets the test's home.
+func withTestRunnerPlugin(t *testing.T, a *App, home string) {
+	t.Helper()
+	root := t.TempDir()
+	if a.data == nil {
+		a.data = dataplug.NewRegistry()
+	}
+	a.plugins = plugins.NewManager(plugins.Options{
+		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"),
+		Settings: a.settings, Home: home, Env: map[string]string{"HOME": home}, OnNotify: a.pluginNotify,
+	})
+	t.Cleanup(a.plugins.Shutdown)
+	installTestRunnerPlugin(t, a)
 }
 
 func writeExe(t *testing.T, path string, data []byte, exec bool) string {
@@ -216,7 +236,7 @@ func TestMakeGameExecutable(t *testing.T) {
 	if st, _ := os.Stat(sib); st.Mode().Perm()&0o111 != 0 {
 		t.Fatal("the sibling must stay non-executable")
 	}
-	if _, err := runner.DetectExecutable(exe); err != nil {
+	if _, err := a.DetectGameExecutable(exe); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -343,7 +363,7 @@ func TestDetectGameExecutable(t *testing.T) {
 	a := nativeTestApp(t, home)
 	exe := writeExe(t, filepath.Join(home, "game"), elfBytes, true)
 	res, err := a.DetectGameExecutable(exe)
-	if err != nil || !res.Native || res.Kind != string(runner.ExecELF) {
+	if err != nil || !res.Native || res.Kind != "elf" {
 		t.Fatalf("DetectGameExecutable = %+v, %v", res, err)
 	}
 	if _, err := a.DetectGameExecutable(filepath.Join(home, "missing")); err == nil {

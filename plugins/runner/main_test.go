@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"platypus/internal/dataplug"
 	"platypus/internal/testenv"
 	"platypus/internal/types"
+	"platypus/internal/winetricks"
 )
 
 func request(method string, params any) message {
@@ -75,4 +77,57 @@ func TestRunWinetricksActionForUmuGame(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("testbin call log = %q, want umu winetricks to use %s and %s", bin.Read(t), wantPrefix, wantWine)
+}
+
+// A native game runs with no runner and no prefix: the wrap result must not
+// name one, or cloud saves would treat the game as Windows.
+func TestWrapNativeGameHasNoRunnerOrPrefix(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	resp := handle(request("runner.wrap", map[string]any{
+		"spec": map[string]any{"command": []string{"/games/a"}, "env": map[string]string{}, "cwd": "/games", "needsWine": false},
+		"game": map[string]any{"id": "g", "title": "G"}, "runnerId": "auto",
+	}))
+	if resp.Error != nil {
+		t.Fatalf("wrap: %+v", resp.Error)
+	}
+	out, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("result = %T, want an object", resp.Result)
+	}
+	for _, k := range []string{"runner", "prefixDir", "prefixUser"} {
+		if _, ok := out[k]; ok {
+			t.Errorf("native wrap result has %q: %v", k, out[k])
+		}
+	}
+}
+
+// protonPrefix is the pfx folder of a Proton prefix; a prefix already named
+// pfx is used as it is (issue #60).
+func TestProtonPrefixNormalisesOnce(t *testing.T) {
+	t.Parallel()
+	if got := protonPrefix("/x"); got != "/x/pfx" {
+		t.Errorf("protonPrefix(/x) = %q, want /x/pfx", got)
+	}
+	if got := protonPrefix("/x/pfx"); got != "/x/pfx" {
+		t.Errorf("protonPrefix(/x/pfx) = %q, want /x/pfx", got)
+	}
+}
+
+// Every verb the shipped fixes name must be a real winetricks verb, so a bad
+// entry fails here instead of at install time. The data loader only checks a
+// verb's shape: the runner owns the catalogue.
+func TestBuiltinFixVerbsAreKnown(t *testing.T) {
+	t.Parallel()
+	seen := map[string]bool{}
+	for _, f := range dataplug.Builtin().Fixes {
+		for _, w := range f.Winetricks {
+			seen[w] = true
+			if !winetricks.KnownVerb(w) {
+				t.Errorf("%q lists unknown winetricks verb %q", f.Title, w)
+			}
+		}
+	}
+	if !seen["d3dx9"] || !seen["faudio"] {
+		t.Fatalf("built-in verbs = %v, want the shipped d3dx9 and faudio entries covered", seen)
+	}
 }

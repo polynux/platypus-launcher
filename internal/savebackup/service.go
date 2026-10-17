@@ -199,9 +199,9 @@ func isGogSource(game types.Game) bool {
 
 // ResolveFor resolves a game's save locations: user paths first, then the
 // manifest match. steamID/gogID are the game's store ids (see GameIDs);
-// runnerPath/prefixesFolder/steamRoot tune the context.
-func (s *Service) ResolveFor(game types.Game, steamID, gogID, runnerPath, prefixesFolder, steamRoot string, userPaths []string) ([]types.SavePath, []resolvedPattern, *GameEntry, Context, int) {
-	ctx := NewContextFor(game, s.home, prefixesFolder, s.dataDir, runnerPath, steamRoot)
+// prefix and steamRoot tune the context.
+func (s *Service) ResolveFor(game types.Game, steamID, gogID string, prefix Prefix, steamRoot string, userPaths []string) ([]types.SavePath, []resolvedPattern, *GameEntry, Context, int) {
+	ctx := NewContextFor(game, s.home, steamRoot, prefix)
 	ctx.SteamID, ctx.GogID = steamID, gogID
 	var entry *GameEntry
 	if idx := LoadIndex(s.cacheDir); idx != nil {
@@ -213,14 +213,13 @@ func (s *Service) ResolveFor(game types.Game, steamID, gogID, runnerPath, prefix
 
 // BackupOptions tunes one backup run.
 type BackupOptions struct {
-	RunnerPath     string
-	PrefixesFolder string
-	SteamRoot      string
-	UserPaths      []string
-	SteamID        string
-	GogID          string
-	ManifestTag    string // ETag override for tests; "" uses the stored one
-	Now            time.Time
+	Prefix      Prefix
+	SteamRoot   string
+	UserPaths   []string
+	SteamID     string
+	GogID       string
+	ManifestTag string // ETag override for tests; "" uses the stored one
+	Now         time.Time
 }
 
 // Backup backs up a game's saves under trigger. It returns the backup (with
@@ -236,7 +235,7 @@ func (s *Service) Backup(game types.Game, trigger string, o BackupOptions) (*typ
 	if now.IsZero() {
 		now = s.now()
 	}
-	ctx := NewContextFor(game, s.home, o.PrefixesFolder, s.dataDir, o.RunnerPath, o.SteamRoot)
+	ctx := NewContextFor(game, s.home, o.SteamRoot, o.Prefix)
 	ctx.SteamID, ctx.GogID = o.SteamID, o.GogID
 	var entry *GameEntry
 	if idx := LoadIndex(s.cacheDir); idx != nil {

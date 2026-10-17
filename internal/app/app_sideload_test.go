@@ -241,6 +241,7 @@ func TestCustomGameLaunchHonoursWorkingDirAndPrefix(t *testing.T) {
 	}
 
 	a := &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
+	withTestRunnerPlugin(t, a, home)
 	games := a.customGames()
 	if len(games) != 1 {
 		t.Fatalf("customGames = %d games, want 1", len(games))

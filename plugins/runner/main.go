@@ -9,8 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"platypus/internal/crashhints"
+	"platypus/internal/plugins"
 	"platypus/internal/runner"
 	"platypus/internal/types"
 	"platypus/internal/winetricks"
@@ -49,6 +51,13 @@ type actionParams struct {
 	Game           types.Game `json:"game"`
 	RunnerID       string     `json:"runnerId"`
 	PrefixesFolder string     `json:"prefixesFolder"`
+	Force          bool       `json:"force"`
+	// Launch is the runner.wrap result of the launch being stopped, handed back
+	// unread by the core. Only the stop action reads it.
+	Launch struct {
+		Env    map[string]string  `json:"env"`
+		Runner plugins.RunnerInfo `json:"runner"`
+	} `json:"launch"`
 }
 
 type hintsParams struct {
@@ -74,7 +83,11 @@ func handle(req message) message {
 		resp.Result = map[string]any{"protocol": chosen, "capabilities": []string{"runner"}}
 	case "runner.list":
 		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
-		resp.Result = map[string]any{"runners": rs}
+		out := make([]plugins.RunnerInfo, 0, len(rs))
+		for _, r := range rs {
+			out = append(out, runnerInfo(r))
+		}
+		resp.Result = map[string]any{"runners": out}
 	case "runner.options":
 		resp.Result = map[string]any{"groups": []any{
 			map[string]any{"id": "runner", "label": "Runner", "fields": []any{
@@ -87,44 +100,74 @@ func handle(req message) message {
 				map[string]any{"id": "use_gamescope", "kind": "bool", "label": "Gamescope", "default": false},
 			}},
 		}}
+	case "runner.detectExecutable":
+		var p struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Path == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "path is required"}
+			break
+		}
+		d, err := runner.DetectExecutable(p.Path)
+		if err != nil {
+			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+			break
+		}
+		resp.Result = map[string]any{"native": d.Native, "kind": string(d.Kind)}
 	case "runner.wrap":
 		var p wrapParams
 		if err := json.Unmarshal(req.Params, &p); err != nil || len(p.Spec.Command) == 0 {
 			resp.Error = &rpcError{Code: -32602, Message: "spec.command is required"}
 			break
 		}
-		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
+		home := os.Getenv("HOME")
+		target := runner.Target{Exe: p.Spec.Command[0], Args: p.Spec.Command[1:], Env: p.Spec.Env, Native: !p.Spec.NeedsWine}
+		if target.Native {
+			// A native game runs with no runner and no prefix; the wrappers still apply.
+			command, env, err := runner.BuildCommandFor(p.Game, types.ProtonVersion{}, target, p.Preview, p.PrefixesFolder, home)
+			if err != nil {
+				resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+				break
+			}
+			resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd}
+			break
+		}
+		rs := runner.ScanProtonVersionsFor(home)
 		selected, proton, useUmu := runner.SelectUmu(p.RunnerID, rs)
 		if !useUmu {
 			selected, _ = runner.Resolve(p.RunnerID, rs)
 		}
-		ok := selected.ID != ""
-		if !ok && !runner.IsAuto(p.RunnerID) {
-			resp.Error = &rpcError{Code: -32003, Message: fmt.Sprintf("runner %q is not installed", p.RunnerID)}
+		if selected.ID == "" {
+			if runner.IsAuto(p.RunnerID) {
+				resp.Error = &rpcError{Code: -32003, Message: "no Proton or Wine runner is installed"}
+			} else {
+				resp.Error = &rpcError{Code: -32003, Message: fmt.Sprintf("runner %q is not installed", p.RunnerID)}
+			}
 			break
 		}
-		if p.Spec.NeedsWine && !ok {
-			resp.Error = &rpcError{Code: -32003, Message: "no Proton or Wine runner is installed"}
-			break
-		}
-		target := runner.Target{Exe: p.Spec.Command[0], Args: p.Spec.Command[1:], Env: p.Spec.Env, Native: !p.Spec.NeedsWine}
 		var command []string
 		var env map[string]string
 		var err error
-		if useUmu && p.Spec.NeedsWine {
+		if useUmu {
 			compatID := ""
 			if p.Game.Store == "steam" {
 				compatID = p.Game.StoreAppID
 			}
-			command, env, err = runner.BuildUmuCommandFor(p.Game, proton, selected.Path, compatID, target, p.Preview, p.PrefixesFolder, os.Getenv("HOME"))
+			command, env, err = runner.BuildUmuCommandFor(p.Game, proton, selected.Path, compatID, target, p.Preview, p.PrefixesFolder, home)
 		} else {
-			command, env, err = runner.BuildCommandFor(p.Game, selected, target, p.Preview, p.PrefixesFolder, os.Getenv("HOME"))
+			command, env, err = runner.BuildCommandFor(p.Game, selected, target, p.Preview, p.PrefixesFolder, home)
 		}
 		if err != nil {
 			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
 			break
 		}
-		resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd, "runner": selected}
+		prefix := runner.PrefixPath(p.Game, home, p.PrefixesFolder)
+		if useUmu {
+			prefix = runner.EffectiveUmuPrefix(prefix)
+		} else if strings.HasSuffix(selected.Path, "proton") {
+			prefix = protonPrefix(prefix)
+		}
+		resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd, "runner": runnerInfo(selected), "prefixDir": prefix, "prefixUser": prefixUser(selected)}
 	case "runner.actions":
 		var p actionParams
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
@@ -142,11 +185,27 @@ func handle(req message) message {
 		resp.Result = map[string]any{"actions": actions}
 	case "runner.runAction":
 		var p actionParams
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" || p.ID == "" {
-			resp.Error = &rpcError{Code: -32602, Message: "id and game.id are required"}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.ID == "" || (p.ID != "stop" && p.Game.ID == "") {
+			resp.Error = &rpcError{Code: -32602, Message: "id is required, and game.id unless the action is stop"}
 			break
 		}
 		switch p.ID {
+		case "stop":
+			cmd := runner.WineserverStopCommand(types.ProtonVersion{ID: p.Launch.Runner.ID, Path: p.Launch.Runner.Path}, p.Launch.Env, p.Force)
+			if cmd != nil {
+				if err := cmd.Start(); err != nil {
+					resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+					break
+				}
+				done := make(chan struct{})
+				go func() { _ = cmd.Wait(); close(done) }()
+				select {
+				case <-done:
+				case <-time.After(5 * time.Second):
+					_ = cmd.Process.Kill()
+				}
+			}
+			resp.Result = map[string]any{}
 		case "open-prefix":
 			prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), p.PrefixesFolder)
 			cmd := exec.Command("xdg-open", prefix)
@@ -191,6 +250,28 @@ func runnerOptions() []any {
 		out = append(out, map[string]any{"id": r.ID, "label": r.Name})
 	}
 	return out
+}
+
+func runnerInfo(r types.ProtonVersion) plugins.RunnerInfo {
+	kind := "wine"
+	switch {
+	case runner.IsUmu(r):
+		kind = "umu"
+	case strings.HasSuffix(r.Path, "proton"):
+		kind = "proton"
+	case r.IsCustom:
+		kind = "custom"
+	case r.IsSystem:
+		kind = "system"
+	}
+	return plugins.RunnerInfo{ID: r.ID, Name: r.Name, Kind: kind, Version: r.Name, Default: r.IsDefault, Path: r.Path, System: r.IsSystem, Custom: r.IsCustom}
+}
+
+func prefixUser(r types.ProtonVersion) string {
+	if runner.IsUmu(r) || strings.HasSuffix(r.Path, "proton") {
+		return "steamuser"
+	}
+	return ""
 }
 
 func runWinetricks(p actionParams) error {
@@ -258,6 +339,16 @@ func runWinetricks(p actionParams) error {
 
 var protonBinDirs = []string{"files/bin", "dist/bin"}
 
+// protonPrefix is the folder Proton runs a prefix in: the pfx folder of its
+// compat data. A prefix already named pfx (a custom wine_prefix pointing at
+// it) is used as it is, never pfx/pfx (issue #60).
+func protonPrefix(prefix string) string {
+	if filepath.Base(filepath.Clean(prefix)) == "pfx" {
+		return prefix
+	}
+	return filepath.Join(prefix, "pfx")
+}
+
 func winetricksEnv(prefix string, wineRunner types.ProtonVersion, umu bool) (map[string]string, error) {
 	env := map[string]string{"WINEPREFIX": prefix}
 	if umu {
@@ -265,7 +356,7 @@ func winetricksEnv(prefix string, wineRunner types.ProtonVersion, umu bool) (map
 	}
 	if strings.HasSuffix(wineRunner.Path, "proton") {
 		if !umu {
-			env["WINEPREFIX"] = filepath.Join(prefix, "pfx")
+			env["WINEPREFIX"] = protonPrefix(prefix)
 		}
 		wine, server, ok := protonWine(filepath.Dir(wineRunner.Path))
 		if !ok {

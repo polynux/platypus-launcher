@@ -12,9 +12,10 @@ import (
 	"time"
 
 	"platypus/internal/apperr"
+	"platypus/internal/datadir"
 	"platypus/internal/jobs"
+	"platypus/internal/paths"
 	"platypus/internal/relocate"
-	"platypus/internal/runner"
 	"platypus/internal/types"
 )
 
@@ -112,6 +113,13 @@ func gameFilesDir(game types.Game) string {
 	return ""
 }
 
+func gameDataDir(game types.Game, home, root string) string {
+	if root == "" {
+		root = filepath.Join(datadir.Path(home), "prefixes")
+	}
+	return paths.GameDataDir(game.ID, game.Settings.WinePrefix, root)
+}
+
 // measureGame sizes one installed game. The store's figure wins when it has
 // one (FromPlugin, no walk); otherwise the game files are walked. The Wine
 // prefix is always measured separately: plugins never know it, and native
@@ -132,7 +140,7 @@ func measureGame(game types.Game, home, prefixes string, measure func(string) (i
 		}
 	}
 	if !game.Native {
-		p := runner.PrefixPath(game, home, prefixes)
+		p := gameDataDir(game, home, prefixes)
 		if !walked || !pathOverlaps(filepath.Clean(resolveDiskPath(p)), filepath.Clean(resolveDiskPath(dir))) {
 			if n, err := measure(p); err == nil {
 				out.PrefixBytes = n
@@ -205,7 +213,7 @@ func buildDiskUsageWith(games []types.Game, roots []string, home, prefixes strin
 			}
 		}
 		if !g.Native {
-			p := runner.PrefixPath(g, home, prefixes)
+			p := gameDataDir(g, home, prefixes)
 			addRoot(p)
 			rp := filepath.Clean(resolveDiskPath(p))
 			if !counted[rp] {

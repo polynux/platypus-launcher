@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
-
-	"platypus/internal/winetricks"
 )
 
 func load(t *testing.T, files map[string]string, listed []string) (*Data, error) {
@@ -48,9 +46,9 @@ func TestLoadErrors(t *testing.T) {
 			want:  "tier",
 		},
 		{
-			name:  "unknown winetricks verb",
-			files: map[string]string{"fixes.json": `{"fixes":[{"title":"x","source":"s","tier":"gold","description":"d","winetricks":["ddraw"]}]}`},
-			want:  "unknown winetricks verb",
+			name:  "malformed winetricks identifier",
+			files: map[string]string{"fixes.json": `{"fixes":[{"title":"x","source":"s","tier":"gold","description":"d","winetricks":["bad verb"]}]}`},
+			want:  "not a verb",
 		},
 		{
 			name:  "fix without match key",
@@ -169,25 +167,6 @@ func TestBuiltinFixes(t *testing.T) {
 	}
 	if r.Fix("Some Other Game", "") != nil {
 		t.Fatal("matched an unknown title")
-	}
-}
-
-// Every verb the shipped fixes name must be a real winetricks verb, so a
-// bad entry like the old "ddraw" one fails here instead of at install time.
-func TestBuiltinFixVerbsAreKnown(t *testing.T) {
-	r := NewRegistry()
-	r.Add(Builtin())
-	seen := map[string]bool{}
-	for _, f := range r.fixes {
-		for _, w := range f.Winetricks {
-			seen[w] = true
-			if !winetricks.KnownVerb(w) {
-				t.Errorf("%q lists unknown winetricks verb %q", f.Title, w)
-			}
-		}
-	}
-	if !seen["d3dx9"] || !seen["faudio"] {
-		t.Fatalf("built-in verbs = %v, want the shipped d3dx9 and faudio entries covered", seen)
 	}
 }
 

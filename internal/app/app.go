@@ -27,7 +27,6 @@ import (
 	"platypus/internal/paths"
 	"platypus/internal/playlog"
 	"platypus/internal/plugins"
-	"platypus/internal/runner"
 	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/settings"
@@ -514,7 +513,16 @@ func (a *App) isRunning(gameID string) bool {
 
 // GetProtonVersions returns all discovered Proton, GE-Proton, Wine runners on the system.
 func (a *App) GetProtonVersions() []types.ProtonVersion {
-	return runner.ScanProtonVersionsFor(a.homeDir())
+	infos, err := a.runnerList()
+	if err != nil {
+		return []types.ProtonVersion{}
+	}
+	out := make([]types.ProtonVersion, 0, len(infos))
+	for _, r := range infos {
+		out = append(out, types.ProtonVersion{ID: r.ID, Name: r.Name, Path: r.Path,
+			IsSystem: r.System, IsCustom: r.Custom, IsDefault: r.Default})
+	}
+	return out
 }
 
 // gameSettingsFields are the settings keys types.GameSettings models.
@@ -580,11 +588,22 @@ func (a *App) customGames() []types.Game {
 func (a *App) customNative(executable, runMode string) bool {
 	detected := false
 	if executable != "" {
-		if d, err := runner.DetectExecutable(executable); err == nil {
+		if d, err := a.detectExecutable(executable); err == nil {
 			detected = d.Native
 		}
 	}
-	return runner.ResolveNative(detected, runMode)
+	return resolveCustomNative(detected, runMode)
+}
+
+func resolveCustomNative(detected bool, runMode string) bool {
+	switch strings.ToLower(strings.TrimSpace(runMode)) {
+	case "native":
+		return true
+	case "wine":
+		return false
+	default:
+		return detected
+	}
 }
 
 // AddCustomGame saves a game the user added by hand: title plus the path of
@@ -616,7 +635,7 @@ func (a *App) AddCustomGame(title, executable string) (types.Game, error) {
 // default (issue #47): content detection, before the per-game override. The
 // UI shows it as the default of the "Run with" choice.
 func (a *App) DetectGameExecutable(path string) (types.DetectResult, error) {
-	d, err := runner.DetectExecutable(path)
+	d, err := a.detectExecutable(path)
 	if err != nil {
 		return types.DetectResult{}, apperr.Wrap("sideload.executable.unreadable",
 			fmt.Errorf("executable: %w", err), map[string]string{"executable": path})
@@ -651,12 +670,12 @@ func (a *App) IsGameExecutable(gameID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	ok, err := runner.IsExecutable(game.Executable)
+	st, err := os.Stat(game.Executable)
 	if err != nil {
 		return false, apperr.Wrap("sideload.executable.unreadable",
 			fmt.Errorf("executable: %w", err), map[string]string{"executable": game.Executable})
 	}
-	return ok, nil
+	return st.Mode().Perm()&0o111 != 0, nil
 }
 
 // MakeGameExecutable sets the execute bit on the sideloaded game's own file
@@ -667,7 +686,11 @@ func (a *App) MakeGameExecutable(gameID string) (types.Game, error) {
 	if err != nil {
 		return types.Game{}, err
 	}
-	if err := runner.MakeExecutable(game.Executable); err != nil {
+	st, err := os.Stat(game.Executable)
+	if err == nil && st.Mode().Perm()&0o100 == 0 {
+		err = os.Chmod(game.Executable, st.Mode().Perm()|0o100)
+	}
+	if err != nil {
 		return types.Game{}, apperr.Wrap("sideload.executable.unreadable",
 			fmt.Errorf("executable: %w", err), map[string]string{"executable": game.Executable})
 	}
@@ -826,32 +849,17 @@ func (a *App) ListSessions() []types.SessionEvent {
 	return a.sessions.Snapshot()
 }
 
-// selectRunner resolves the game's runner; "auto" or empty picks the best
-// installed one (see runner.PickAuto). Issue #48: with no explicit runner,
-// an installed umu-launcher is preferred and wraps the auto Proton pick
-// (PROTONPATH is that Proton's folder); explicit "umu" picks it directly.
-func (a *App) selectRunner(game types.Game) (types.ProtonVersion, error) {
-	runners := runner.ScanProtonVersionsFor(a.homeDir())
-	if u, _, ok := runner.SelectUmu(game.Settings.RunnerID, runners); ok {
-		return u, nil
-	}
-	if r, ok := runner.Resolve(game.Settings.RunnerID, runners); ok {
-		return r, nil
-	}
-	if runner.IsAuto(game.Settings.RunnerID) {
-		return types.ProtonVersion{}, apperr.New("game.noRunner", "no Proton or Wine runner installed", nil)
-	}
-	return types.ProtonVersion{}, apperr.New("game.runnerMissing", fmt.Sprintf("runner %q is not installed", game.Settings.RunnerID), map[string]string{"id": game.Settings.RunnerID})
-}
-
 // prepared is a launch ready to run.
 type prepared struct {
-	args   []string
-	env    map[string]string
-	dir    string
-	client *stores.ClientLaunch // set when a store client starts the game
-	redact []string             // argument prefixes hidden in previews and logs
-	runner types.ProtonVersion  // the Wine/Proton runner, when the game uses one
+	args       []string
+	env        map[string]string
+	dir        string
+	client     *stores.ClientLaunch // set when a store client starts the game
+	redact     []string             // argument prefixes hidden in previews and logs
+	runner     plugins.RunnerInfo   // the runner the plugin picked, when the game uses one
+	prefixDir  string               // the Wine prefix folder, as the runner plugin names it
+	prefixUser string               // the user inside that prefix
+	stop       func(force bool)
 }
 
 // prepareLaunch asks the game's store how to launch it and builds the command.
@@ -930,17 +938,18 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 		}
 		return a.wrapLaunch(game, []string{game.Executable}, nil, dir, true, preview, nil)
 	}
-	kind := runner.ExecUnknown
-	if d, err := runner.DetectExecutable(game.Executable); err == nil {
-		kind = d.Kind
-	}
-	exec, err := runner.IsExecutable(game.Executable)
+	st, err := os.Stat(game.Executable)
 	if err != nil {
 		return nil, apperr.Wrap("sideload.executable.unreadable",
 			fmt.Errorf("executable: %w", err), map[string]string{"executable": game.Executable})
 	}
-	target := runner.NativeTarget(game.Executable, kind, exec)
-	if !exec && target.Exe == game.Executable {
+	executable := st.Mode().Perm()&0o111 != 0
+	command := game.Executable
+	args := []string{}
+	if !executable && strings.EqualFold(filepath.Ext(game.Executable), ".sh") {
+		command = "/bin/sh"
+		args = append(args, game.Executable)
+	} else if !executable {
 		return nil, apperr.New("sideload.notExecutable",
 			fmt.Sprintf("%s is not executable; make it executable or it can't start", game.Executable),
 			map[string]string{"executable": game.Executable})
@@ -949,7 +958,7 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return a.wrapLaunch(game, append([]string{target.Exe}, target.Args...), target.Env, dir, false, preview, nil)
+	return a.wrapLaunch(game, append([]string{command}, args...), nil, dir, false, preview, nil)
 }
 
 // shown is the command line with env, redacted for previews and logs.
@@ -970,22 +979,10 @@ func (p *prepared) shown() string {
 // wineserver daemonizes, so it outlives the launch's process group. Native
 // games have none.
 func (p *prepared) stopHook() func(force bool) {
-	return func(force bool) {
-		cmd := runner.WineserverStopCommand(p.runner, p.env, force)
-		if cmd == nil {
-			return
-		}
-		done := make(chan struct{})
-		if err := cmd.Start(); err != nil {
-			return
-		}
-		go func() { _ = cmd.Wait(); close(done) }()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
-		}
+	if p.stop == nil {
+		return func(bool) {}
 	}
+	return p.stop
 }
 
 // PreviewLaunchCommand returns the exact command line that will be used.
@@ -1177,8 +1174,8 @@ func (a *App) pinExistingPrefixes(old string) error {
 	return nil
 }
 
-// prefixesFolder is where Wine prefixes are created: the user's choice, or
-// "" for the default (see runner.PrefixPath).
+// prefixesFolder is the user's chosen per-game data root, or "" for its
+// default location.
 func (a *App) prefixesFolder() string {
 	if a.settings == nil {
 		return ""
@@ -1225,14 +1222,13 @@ func (a *App) wineGames() []types.Game {
 // launches itself (Steam: steam.IsClientLaunch — the client owns their
 // compat data, not Platypus).
 func (a *App) PrefixUsage() []types.PrefixShare {
-	home := a.homeDir()
 	folder := a.effectivePrefixesFolder()
 	byPath := map[string][]types.PrefixGame{}
 	for _, g := range a.wineGames() {
 		if g.Native || steam.IsClientLaunch(g) {
 			continue
 		}
-		p := runner.PrefixPath(g, home, folder)
+		p := paths.GameDataDir(g.ID, g.Settings.WinePrefix, folder)
 		byPath[p] = append(byPath[p], types.PrefixGame{ID: g.ID, Title: g.Title})
 	}
 	out := make([]types.PrefixShare, 0, len(byPath))
@@ -1310,7 +1306,7 @@ func (a *App) cleanGameSettingsPaths(gameSettings map[string]any) error {
 		}
 	}
 	if v, ok := gameSettings["run_mode"]; ok {
-		if s, _ := v.(string); strings.TrimSpace(s) != "" && !runner.ValidRunMode(s) {
+		if s, _ := v.(string); strings.TrimSpace(s) != "" && !validRunMode(s) {
 			return apperr.New("settings.runMode.invalid",
 				fmt.Sprintf("run mode must be auto, native or wine, got %q", s),
 				map[string]string{"value": s})
@@ -1324,6 +1320,15 @@ func (a *App) cleanGameSettingsPaths(gameSettings map[string]any) error {
 		}
 	}
 	return nil
+}
+
+func validRunMode(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "auto", "native", "wine":
+		return true
+	default:
+		return false
+	}
 }
 
 // SaveGameSettings persists one game's settings as the UI holds them.
