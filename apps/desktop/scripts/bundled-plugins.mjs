@@ -20,7 +20,7 @@ const repo = path.resolve(import.meta.dirname, '..', '..', '..');
 const run = (cmd, args, cwd, env = {}) =>
   execFileSync(cmd, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } });
 
-for (const [id, command] of [['steam', 'platypus-steam'], ['linux-compat', 'platypus-linux-compat']]) {
+for (const [id, command] of [['steam', 'platypus-steam'], ['linux-compat', 'platypus-linux-compat'], ['runner', 'platypus-runner']]) {
   const dest = path.join(path.resolve(outdir), id);
   mkdirSync(path.join(dest, 'bin'), { recursive: true });
   const bin = path.join(dest, 'bin', command);

@@ -247,6 +247,32 @@ game's page on the store's website (an https link; anything else is dropped):
 the game page offers it as "Open in store", which deep-links into the embedded
 store view when the plugin declares a `storefront`.
 
+## Runner (1.17)
+
+The bundled `runner` capability owns Wine, Proton, umu, native launch wrappers,
+prefix actions, winetricks and Wine/Proton crash hints. It is restricted to
+bundled/first-party plugin ids. The core sends one `runner.wrap` request per
+launch or settings preview; runner environment keys (`WINE*`, `PROTON_*`,
+`STEAM_COMPAT_*`) are reserved to this capability.
+
+```json
+runner.list {} -> { "runners": [{ "id": "auto", "name": "Automatic", "kind": "proton", "version": "", "default": true }] }
+runner.options {} -> { "groups": [{ "id": "runner", "label": "Runner", "fields": [{ "id": "runner_id", "kind": "select", "label": "Runner", "default": "auto", "options": [{ "id": "auto", "label": "Automatic" }] }] }] }
+runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games" }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/games/a"], "env": {}, "cwd": "/games" }
+runner.actions { "game": {}, "runnerId": "auto" } -> { "actions": [{ "id": "open-prefix", "label": "Open prefix" }] }
+runner.runAction { "id": "open-prefix", "game": {}, "runnerId": "auto" } -> {}
+runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> { "log": "/data/logs/game.log", "winetricks": true, "hints": [] }
+```
+
+`runner.options` uses the same group/field schema as `settings.schema` (1.8);
+the core stores its values per game and supplies them as `options` on `wrap`.
+`runner.wrap` receives a `spec` with `command`, `env` and optional `cwd`, and
+may return those plus optional process-finding metadata. `runner.actions` lists
+the prefix actions available for that game; `runner.runAction` executes one.
+Crash hint entries use the `CrashHint` shape. These six methods are required
+when `runner` is enabled. With no runner plugin the direct command is launched
+unchanged.
+
 ## Jobs
 
 Platypus creates the `jobId`, picks `installDir` (the user's Games folder plus the
@@ -309,9 +335,10 @@ only forgets the job and tells the user what may remain on disk.
 
 ## Launching
 
-Platypus owns the runner pipeline (Proton/Wine, gamemode, gamescope, MangoHud,
-per-game settings) and session tracking. A plugin returns a spec; it never starts
-the game itself.
+The core owns session tracking and process start/stop. When a bundled runner
+plugin is available, it wraps each launch spec (including native launches) and
+returns the command; without one, Platypus runs the store's direct spec as-is.
+A plugin returns a spec; it never starts the game itself.
 
 Direct launch:
 
@@ -504,8 +531,10 @@ that doesn't know it.
   [Offline launches](#offline-launches-115)). 1.16: per-game status and notes
   (`LibraryGame.status`, `LibraryGame.userNotes`, a store's suggestion only; see
   [Per-game status and notes](#per-game-status-and-notes-116)). 1.17: the
-  `compat-facts` capability (`compat.lookup`, batched compatibility facts; see
-  [Compat facts](#compat-facts-117)).
+  `compat-facts` capability (`compat.lookup`, batched compatibility facts) and
+  the `runner` capability (`runner.list`, `runner.options`, `runner.wrap`,
+  `runner.actions`, `runner.runAction`, `runner.crashHints`; see
+  [Compat facts](#compat-facts-117) and [Runner](#runner-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
   1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 or 1.17 method.
@@ -543,6 +572,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in

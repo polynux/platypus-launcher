@@ -100,6 +100,8 @@ var registry = []Capability{
 		Surfaces: []string{"library", "game-page"}},
 	{Name: "compat-facts", Since: rev117, Orchestrated: true,
 		Methods: []string{"compat.lookup"}, Surfaces: []string{"library", "game-page", "dashboard"}},
+	{Name: "runner", Since: rev117, Orchestrated: true,
+		Methods: []string{"runner.list", "runner.options", "runner.wrap", "runner.actions", "runner.runAction", "runner.crashHints"}, Surfaces: []string{"launch", "game-settings", "crash-hints"}},
 }
 
 // capabilityFreeOptional are optional methods that belong to no capability:

@@ -45,7 +45,7 @@ var reservedIDs = map[string]bool{"custom": true}
 // BundledPluginIDs are the first-party plugin ids allowed to declare a
 // manifest gameIdPrefix (protocol 1.15, issue #54 groundwork): a
 // third-party plugin can't take over other ids.
-var BundledPluginIDs = map[string]bool{"steam": true, "linux-compat": true}
+var BundledPluginIDs = map[string]bool{"steam": true, "linux-compat": true, "runner": true}
 
 // gameIDPrefixRe is the shape of a manifest gameIdPrefix: 1-32 word chars.
 var gameIDPrefixRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
@@ -287,8 +287,8 @@ func (m Manifest) validate() error {
 				storeCapability = true
 			}
 		}
-		if m.Store == "" && !storeCapability {
-			// Store-independent capabilities (for example compat-facts) need no store id.
+		if m.Store == "" && (!storeCapability || slices.Contains(m.Capabilities, "runner") || slices.Contains(m.Capabilities, "compat-facts")) {
+			// Store-independent capabilities (for example compat-facts and runner) need no store id.
 		} else if !storeRe.MatchString(m.Store) {
 			bad("store %q must be lowercase letters, digits or '-'", m.Store)
 		}
@@ -349,6 +349,8 @@ func (m Manifest) validate() error {
 			bad("capability %q is malformed (lowercase words joined by '-')", c)
 		case slices.Contains(m.Capabilities[:i], c):
 			bad("capability %q is listed twice", c)
+		case c == "runner" && !BundledPluginIDs[m.ID]:
+			bad("runner capability is only for bundled plugins")
 		}
 	}
 	for _, c := range m.Needs {

@@ -388,6 +388,7 @@ func (a *App) startup(ctx context.Context) {
 		// #54), before anything lists what was found.
 		found = a.ensureBundledSteam(found)
 		found = a.ensureBundledLinuxCompat(found)
+		found = a.ensureBundledRunner(found)
 		a.forgetSettingsOfRemoved(found)
 	}
 	for _, p := range found {

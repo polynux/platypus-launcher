@@ -1,0 +1,12 @@
+{
+  "id": "runner",
+  "name": "Linux Runner",
+  "version": "0.1.0",
+  "author": "Platypus",
+  "description": "Wine, Proton, umu, prefix actions and Linux launch wrappers.",
+  "manifestVersion": 1,
+  "protocol": { "versions": ["1.0", "1.17"], "transport": "jsonrpc-stdio" },
+  "exec": "bin/platypus-runner",
+  "capabilities": ["runner"],
+  "needs": ["runner"]
+}
