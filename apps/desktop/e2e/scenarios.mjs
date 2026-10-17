@@ -322,7 +322,9 @@ export const SCENARIOS = [
         // dir (see run.mjs); this step only verifies the collection is still
         // there. It runs twice: before and after the restart.
         run: async ({ driver }) => {
-          const list = await collections(driver);
+          // Straight invoke, not collections(): a failing call must fail
+          // the step with its own error, not read as "no collections".
+          const list = await invoke(driver, 'ListCollections', []);
           const manual = list.find((c) => c.name === 'e2e-keep' && !c.smart);
           if (!manual) throw new Error('e2e-keep gone (before or after restart)');
           const games = await library(driver);

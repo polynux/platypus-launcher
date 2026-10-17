@@ -124,6 +124,22 @@ function stopSandbox(child, label, sandboxDir = '') {
   });
 }
 
+// Cdp.connect returns as soon as the window has a page target, which can be
+// before the preload bridge and the core answer (issue #79): a step that
+// asks the core straight away then sees errors, not the library. Wait until
+// the bridge answers a core call and the sidebar has rendered.
+async function connectReady(debugPort) {
+  const driver = await Cdp.connect(debugPort, { timeoutMs: 180000 });
+  await driver.waitFor(async () => {
+    // @ts-ignore: page global from the desktop preload
+    if (typeof window.platypus?.invoke !== 'function') return false;
+    // @ts-ignore
+    await window.platypus.invoke('ListCollections', []);
+    return document.querySelector('nav[aria-label="Main"]') != null;
+  }, [], { timeoutMs: 120000, label: 'app ready (bridge, core, sidebar)' });
+  return driver;
+}
+
 async function runSteps(driver, sandboxDir, scenarioName, steps) {
   for (const step of steps) {
     const label = `${scenarioName}/${step.name}`;
@@ -159,7 +175,7 @@ try {
   sandbox = await startSandbox(sandboxDir);
   groups.push(sandbox.child.pid);
   console.log(`test:e2e: CDP on :${sandbox.debugPort}`);
-  driver = await Cdp.connect(sandbox.debugPort, { timeoutMs: 180000 });
+  driver = await connectReady(sandbox.debugPort);
 
   const byName = Object.fromEntries(SCENARIOS.map((s) => [s.name, s]));
   const lib = byName['library-smart'];
@@ -180,7 +196,7 @@ try {
   sandbox = await startSandbox(sandboxDir);
   groups.push(sandbox.child.pid);
   console.log(`test:e2e: CDP on :${sandbox.debugPort}`);
-  driver = await Cdp.connect(sandbox.debugPort, { timeoutMs: 180000 });
+  driver = await connectReady(sandbox.debugPort);
 
   await runSteps(driver, sandboxDir, coll.name, [coll.steps[1]]);
   await runSteps(driver, sandboxDir, crash.name, crash.steps);
