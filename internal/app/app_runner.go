@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -79,7 +80,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 	}
 	var result runnerWrapResult
 	if err := a.plugins.Call(ctx, "runner", "runner.wrap", params, &result); err != nil {
-		return nil, err
+		return nil, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
 	}
 	if len(result.Command) == 0 {
 		return nil, apperr.New("runner.invalidSpec", "the runner plugin returned an empty command", map[string]string{"title": game.Title})
