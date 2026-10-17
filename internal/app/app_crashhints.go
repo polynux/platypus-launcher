@@ -41,7 +41,7 @@ func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
 		Actions []runnerAction `json:"actions"`
 	}
 	winetricks := a.plugins.Call(ctx, "runner", "runner.actions", map[string]any{
-		"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.prefixesFolder(),
+		"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder(),
 	}, &actions) == nil
 	if winetricks {
 		winetricks = false
@@ -68,7 +68,7 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 	defer cancel()
 	params := map[string]any{
 		"id": "winetricks", "verb": verb, "game": game,
-		"runnerId": game.Settings.RunnerID, "prefixesFolder": a.prefixesFolder(),
+		"runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder(),
 	}
 	if err := a.plugins.Call(ctx, "runner", "runner.runAction", params, nil); err != nil {
 		return apperr.Wrap("crash.winetricksFailed", err, map[string]string{"verb": verb})
