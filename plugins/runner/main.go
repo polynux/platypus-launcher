@@ -45,6 +45,12 @@ type wrapParams struct {
 	Preview        bool       `json:"preview"`
 }
 
+type prefixParams struct {
+	Game           types.Game `json:"game"`
+	RunnerID       string     `json:"runnerId"`
+	PrefixesFolder string     `json:"prefixesFolder"`
+}
+
 type actionParams struct {
 	ID             string     `json:"id"`
 	Verb           string     `json:"verb"`
@@ -151,13 +157,19 @@ func handle(req message) message {
 			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
 			break
 		}
-		prefix := runner.PrefixPath(p.Game, home, p.PrefixesFolder)
-		if useUmu {
-			prefix = runner.EffectiveUmuPrefix(prefix)
-		} else if strings.HasSuffix(selected.Path, "proton") {
-			prefix = protonPrefix(prefix)
+		resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd, "runner": runnerInfo(selected)}
+	case "runner.prefix":
+		var p prefixParams
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "game.id is required"}
+			break
 		}
-		resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd, "runner": runnerInfo(selected), "prefixDir": prefix, "prefixUser": prefixUser(selected)}
+		if p.Game.Native {
+			resp.Result = map[string]any{}
+			break
+		}
+		dir, user := gamePrefix(p.Game, p.RunnerID, p.PrefixesFolder, os.Getenv("HOME"))
+		resp.Result = map[string]any{"dir": dir, "user": user}
 	case "runner.actions":
 		var p actionParams
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
@@ -351,6 +363,39 @@ func runWinetricks(p actionParams) error {
 	}
 	go func() { _ = cmd.Wait(); _ = log.Close() }()
 	return nil
+}
+
+// gamePrefix is the Windows side of a game's prefix, the folder its saves are
+// read from, and the login inside it, for the runner it launches with. It reads
+// the runner list and the disk only. With no runner installed, a pfx folder
+// (Proton's layout) decides.
+func gamePrefix(game types.Game, runnerID, prefixesFolder, home string) (dir, user string) {
+	prefix := runner.PrefixPath(game, home, prefixesFolder)
+	rs := runner.ScanProtonVersionsFor(home)
+	selected, _, useUmu := runner.SelectUmu(runnerID, rs)
+	if !useUmu {
+		selected, _ = runner.Resolve(runnerID, rs)
+	}
+	if selected.ID == "" {
+		if st, err := os.Stat(filepath.Join(prefix, "pfx")); err == nil && st.IsDir() {
+			return protonPrefix(prefix), "steamuser"
+		}
+		return prefix, ""
+	}
+	return prefixOf(prefix, selected, useUmu)
+}
+
+// prefixOf is the Windows side of prefix for the runner selected: umu runs the
+// pfx dir itself when there is one, Proton keeps it in pfx, system Wine has none.
+func prefixOf(prefix string, selected types.ProtonVersion, umu bool) (dir, user string) {
+	switch {
+	case umu:
+		return runner.EffectiveUmuPrefix(prefix), prefixUser(selected)
+	case strings.HasSuffix(selected.Path, "proton"):
+		return protonPrefix(prefix), prefixUser(selected)
+	default:
+		return prefix, ""
+	}
 }
 
 var protonBinDirs = []string{"files/bin", "dist/bin"}

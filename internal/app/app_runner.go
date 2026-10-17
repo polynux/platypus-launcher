@@ -8,18 +8,16 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/plugins"
+	"platypus/internal/savebackup"
 	"platypus/internal/types"
 )
 
-// runnerWrapResult is what runner.wrap returns. The prefix facts are what cloud
-// saves and backups need; the core doesn't read the prefix layout itself.
+// runnerWrapResult is what runner.wrap returns.
 type runnerWrapResult struct {
-	Command    []string           `json:"command"`
-	Env        map[string]string  `json:"env"`
-	Cwd        string             `json:"cwd"`
-	Runner     plugins.RunnerInfo `json:"runner"`
-	PrefixDir  string             `json:"prefixDir"`
-	PrefixUser string             `json:"prefixUser"`
+	Command []string           `json:"command"`
+	Env     map[string]string  `json:"env"`
+	Cwd     string             `json:"cwd"`
+	Runner  plugins.RunnerInfo `json:"runner"`
 }
 
 type runnerDetectResult struct {
@@ -85,8 +83,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 	if len(result.Command) == 0 {
 		return nil, apperr.New("runner.invalidSpec", "the runner plugin returned an empty command", map[string]string{"title": game.Title})
 	}
-	p := &prepared{args: result.Command, env: result.Env, dir: result.Cwd, redact: redact,
-		runner: result.Runner, prefixDir: result.PrefixDir, prefixUser: result.PrefixUser}
+	p := &prepared{args: result.Command, env: result.Env, dir: result.Cwd, redact: redact, runner: result.Runner}
 	// The stop hook hands the wrap result back unread: the runner plugin
 	// finds the wineserver from it.
 	p.stop = func(force bool) {
@@ -97,6 +94,28 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 		}, nil)
 	}
 	return p, nil
+}
+
+// gamePrefix is the Windows side of the game's Wine or Proton prefix: the folder
+// its saves are read from, and the login inside it. It is empty for a native
+// game and with no runner plugin. The plugin reads the disk and the runner list
+// only, so backups and cloud saves can ask for it without the store.
+func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
+	if game.Native {
+		return savebackup.Prefix{}, nil
+	}
+	present, err := a.runnerPlugin()
+	if err != nil || !present {
+		return savebackup.Prefix{}, err
+	}
+	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
+	defer cancel()
+	var result savebackup.Prefix
+	params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder()}
+	if err := a.plugins.Call(ctx, "runner", "runner.prefix", params, &result); err != nil {
+		return savebackup.Prefix{}, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
+	}
+	return result, nil
 }
 
 // runnerList is the installed runners, or none without a runner plugin.

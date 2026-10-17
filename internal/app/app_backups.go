@@ -160,19 +160,6 @@ func (a *App) startSavebackups(ctx context.Context) {
 	}()
 }
 
-// backupPrefix is the Wine or Proton prefix the game would launch with, as the
-// runner plugin reports it. It is empty when the game runs natively, through
-// its store client, or with no runner.
-func (a *App) backupPrefix(game types.Game) savebackup.Prefix {
-	if a.stores == nil {
-		return savebackup.Prefix{}
-	}
-	if p, err := a.prepareLaunch(game, true); err == nil && p.client == nil {
-		return savebackup.Prefix{Dir: p.prefixDir, User: p.prefixUser}
-	}
-	return savebackup.Prefix{}
-}
-
 // backupIDs are the game's Steam/GOG ids for manifest matching: the compat
 // AppID or info_source gog:<id> for sideloaded games, the store id otherwise.
 func (a *App) backupIDs(game types.Game) (string, string) {
@@ -190,13 +177,14 @@ func (a *App) backupSteamRoot() string {
 	return steam.RootFor(a.homeDir())
 }
 
-// backupCtx builds the resolution context for a game.
-func (a *App) backupCtx(game types.Game, steamID, gogID string) savebackup.Context {
+// backupCtx builds the resolution context for a game, with the prefix its
+// runner plugin reported.
+func (a *App) backupCtx(game types.Game, steamID, gogID string, prefix savebackup.Prefix) savebackup.Context {
 	folder, err := a.currentFolder(game)
 	if err == nil {
 		game.InstallDir = folder
 	}
-	ctx := savebackup.NewContextFor(game, a.homeDir(), a.backupSteamRoot(), a.backupPrefix(game))
+	ctx := savebackup.NewContextFor(game, a.homeDir(), a.backupSteamRoot(), prefix)
 	ctx.SteamID, ctx.GogID = steamID, gogID
 	return ctx
 }
@@ -227,7 +215,11 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	if ferr == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, a.backupPrefix(game), a.backupSteamRoot(), userPaths)
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		return types.SaveGate{}, err
+	}
+	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, prefix, a.backupSteamRoot(), userPaths)
 	if len(patterns) == 0 {
 		// Cloud games with no known save paths pass without the
 		// "delete without a save backup" confirmation: the cloud holds
@@ -246,7 +238,7 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	// The backup takes every known save of the game, a superset of what the
 	// action deletes: simpler, and never less safe.
 	b, warned, skippedOut, unresolvedOut, err := svc.Backup(game, trigger, savebackup.BackupOptions{
-		Prefix:    a.backupPrefix(game),
+		Prefix:    prefix,
 		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
@@ -271,9 +263,9 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 // savesPreview is what the gate would do, without backing anything up: off,
 // no known save paths, cloud (a cloud game with no known paths passes without
 // confirmation), or how many save files exist now (CheckRemove).
-func (a *App) savesPreview(game types.Game) types.SaveGate {
+func (a *App) savesPreview(game types.Game) (types.SaveGate, error) {
 	if a.settings != nil && !savebackup.BackupsApplies(a.settings, game.ID) {
-		return types.SaveGate{Off: true}
+		return types.SaveGate{Off: true}, nil
 	}
 	steamID, gogID := a.backupIDs(game)
 	var userPaths []string
@@ -283,19 +275,23 @@ func (a *App) savesPreview(game types.Game) types.SaveGate {
 	if folder, err := a.currentFolder(game); err == nil {
 		game.InstallDir = folder
 	}
-	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupPrefix(game), a.backupSteamRoot(), userPaths)
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		return types.SaveGate{}, err
+	}
+	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, prefix, a.backupSteamRoot(), userPaths)
 	if len(patterns) == 0 {
 		if a.gameHasCloudSync(game) {
-			return types.SaveGate{Cloud: true}
+			return types.SaveGate{Cloud: true}, nil
 		}
-		return types.SaveGate{NoPaths: true}
+		return types.SaveGate{NoPaths: true}, nil
 	}
 	files, _, _, _, _ := savebackup.Enumerate(patterns, rctx)
 	g := types.SaveGate{Files: len(files)}
 	for _, f := range files {
 		g.Bytes += f.Size
 	}
-	return g
+	return g, nil
 }
 
 // gameHasCloudSync reports whether the game's store syncs its saves to the
@@ -418,7 +414,11 @@ func (a *App) GetSavePaths(game types.Game) ([]types.SavePath, error) {
 	if err == nil {
 		game.InstallDir = folder
 	}
-	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, a.backupPrefix(game), a.backupSteamRoot(), userPaths)
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		return nil, err
+	}
+	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, prefix, a.backupSteamRoot(), userPaths)
 	if roots == nil {
 		return []types.SavePath{}, nil
 	}
@@ -481,7 +481,11 @@ func (a *App) RestoreSaveBackup(game types.Game, backupID string) (types.Job, er
 // added and kept counts. Only files in the backup are considered.
 func (a *App) PreviewRestoreSaveBackup(game types.Game, backupID string) (types.RestorePreview, error) {
 	steamID, gogID := a.backupIDs(game)
-	pv, err := a.saveService().RestorePreview(game.ID, backupID, a.backupCtx(game, steamID, gogID))
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		return types.RestorePreview{}, err
+	}
+	pv, err := a.saveService().RestorePreview(game.ID, backupID, a.backupCtx(game, steamID, gogID, prefix))
 	if err != nil {
 		return types.RestorePreview{}, apperr.Wrap("savebackup.unknown", err, nil)
 	}
@@ -653,11 +657,14 @@ func (a *App) runCoreBackup(ctx context.Context, j types.Job) {
 	if a.settings != nil {
 		userPaths = a.settings.GameSavePaths(game.ID)
 	}
-	_, _, _, _, err := a.saveService().Backup(game, trigger, savebackup.BackupOptions{
-		Prefix:    a.backupPrefix(game),
-		SteamRoot: a.backupSteamRoot(),
-		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
-	})
+	prefix, err := a.gamePrefix(game)
+	if err == nil {
+		_, _, _, _, err = a.saveService().Backup(game, trigger, savebackup.BackupOptions{
+			Prefix:    prefix,
+			SteamRoot: a.backupSteamRoot(),
+			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
+		})
+	}
 	if errors.Is(err, savebackup.ErrNothingFound) {
 		err = fmt.Errorf("no save files of %s were found on disk; nothing was backed up", game.Title)
 	}
@@ -699,7 +706,12 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 		return
 	}
 	steamID, gogID := a.backupIDs(game)
-	rctx := a.backupCtx(game, steamID, gogID)
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		a.jobs.Notify(j.Source, "job.failed", plugins.JobUpdate{JobID: j.ID, Error: err.Error()})
+		return
+	}
+	rctx := a.backupCtx(game, steamID, gogID, prefix)
 	svc := a.saveService()
 	// Every restore takes a before-restore backup first; when that fails
 	// the restore is blocked and nothing is written.
@@ -709,7 +721,7 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 			userPaths = a.settings.GameSavePaths(game.ID)
 		}
 		_, _, _, _, err := svc.Backup(game, triggerBeforeRestore, savebackup.BackupOptions{
-			Prefix:    a.backupPrefix(game),
+			Prefix:    prefix,
 			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
@@ -756,11 +768,14 @@ func (a *App) backupAfterSession(game types.Game) {
 	if a.settings != nil {
 		userPaths = a.settings.GameSavePaths(game.ID)
 	}
-	_, _, _, _, err := a.saveService().Backup(game, triggerAfterSession, savebackup.BackupOptions{
-		Prefix:    a.backupPrefix(game),
-		SteamRoot: a.backupSteamRoot(),
-		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
-	})
+	prefix, err := a.gamePrefix(game)
+	if err == nil {
+		_, _, _, _, err = a.saveService().Backup(game, triggerAfterSession, savebackup.BackupOptions{
+			Prefix:    prefix,
+			SteamRoot: a.backupSteamRoot(),
+			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
+		})
+	}
 	if err != nil && !errors.Is(err, savebackup.ErrNothingFound) {
 		a.host.Emit("backups", savebackup.Event{Kind: savebackup.EvFailed, GameID: game.ID, Trigger: triggerAfterSession, Message: err.Error()})
 	}

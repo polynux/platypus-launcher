@@ -266,15 +266,16 @@ restart limit), a launch stops with `runner.unavailable` before any process star
 runner.list {} -> { "runners": [{ "id": "auto", "name": "Automatic", "kind": "proton", "version": "", "default": true }] }
 runner.options {} -> { "groups": [{ "id": "runner", "label": "Runner", "fields": [{ "id": "runner_id", "kind": "select", "label": "Runner", "scope": "game", "default": "auto", "options": [{ "id": "auto", "label": "Automatic" }] }] }] }
 runner.detectExecutable { "path": "/home/u/Games/goose.exe" } -> { "native": false, "kind": "windows-exe" }
-runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games", "needsWine": true }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/usr/bin/wine", "/games/a"], "env": { "WINEPREFIX": "/data/prefixes/g" }, "cwd": "/games", "runner": { "id": "system:wine", "name": "System Wine (/usr/bin/wine)", "kind": "system", "path": "/usr/bin/wine", "system": true }, "prefixDir": "/data/prefixes/g" }
+runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games", "needsWine": true }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/usr/bin/wine", "/games/a"], "env": { "WINEPREFIX": "/data/prefixes/g" }, "cwd": "/games", "runner": { "id": "system:wine", "name": "System Wine (/usr/bin/wine)", "kind": "system", "path": "/usr/bin/wine", "system": true } }
+runner.prefix { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> { "dir": "/data/prefixes/g", "user": "" }
 runner.actions { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> { "actions": [{ "id": "open-prefix", "label": "Open prefix" }, { "id": "winetricks", "label": "Run winetricks" }] }
 runner.runAction { "id": "winetricks", "verb": "vcrun2022", "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> {}
 runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner": {} } } -> {}
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
 ```
 
-All seven methods are required when `runner` is enabled (`runner.detectExecutable`
-is called for every sideloaded file). Errors use `-32602` for a bad request and
+All eight methods are required when `runner` is enabled (`runner.detectExecutable`
+is called for every sideloaded file, `runner.prefix` for every backup and cloud gate). Errors use `-32602` for a bad request and
 `-32003` with a message for a runner failure: a missing runner, an unreadable
 file, a winetricks run that can't start. Platypus shows the message with
 `runner.wrapFailed` (launch) or the action's own error.
@@ -300,12 +301,17 @@ file, a winetricks run that can't start. Platypus shows the message with
   `options` holds the game's other saved settings keys; `tweaks` holds the enabled
   data-plugin tweaks, which the bundled runner doesn't apply yet; `prefixesFolder`
   is the effective data folder. The result has `command`, `env`, optional `cwd`,
-  and for a Wine or Proton launch `runner` (the runner picked), `prefixDir` (the
-  Wine prefix folder the game runs in; for Proton, its `pfx` folder) and
-  `prefixUser` (`steamuser` for Proton and umu, empty for system Wine). A native
-  game's result has only `command`, `env` and `cwd`: no runner and no prefix.
-  Cloud saves and backups read `prefixDir` and `prefixUser`; the core doesn't
-  compute the prefix layout.
+  and for a Wine or Proton launch `runner`, the runner picked. A native game's
+  result has only `command`, `env` and `cwd`.
+- **`runner.prefix`**: the Windows side of the game's prefix, for the runner it
+  would launch with: `dir` is the folder its saves are read from (for Proton, the
+  `pfx` folder; for umu, the effective umu prefix), and `user` the login inside it
+  (`steamuser` for Proton and umu, empty for system Wine or no runner). It is
+  pure: it reads the game, its settings, the runner list and the disk, and never
+  asks the store or starts a process, so backups and cloud saves don't depend on
+  the store being reachable. A native game's result is empty (`{}`), and so is a
+  result with no `dir`. With no installed runner, a `pfx` folder in the prefix
+  still means Proton's layout. Cloud saves and backups call it once per gate.
 - **`runner.actions`**: `open-prefix` when the prefix exists, and `winetricks`
   when winetricks is installed and the prefix exists.
 - **`runner.runAction`**: `winetricks` runs `verb`, which the runner validates
@@ -620,7 +626,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
-| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in

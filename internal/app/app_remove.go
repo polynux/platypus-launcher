@@ -459,7 +459,11 @@ func (a *App) CheckRemove(gameID string, opts types.RemoveOptions) (types.Remove
 		}
 		check.Targets = append(check.Targets, rt)
 	}
-	check.Saves = a.savesPreview(game)
+	saves, err := a.savesPreview(game)
+	if err != nil {
+		return check, err
+	}
+	check.Saves = saves
 	return check, nil
 }
 

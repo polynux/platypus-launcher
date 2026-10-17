@@ -123,7 +123,7 @@ func TestCloudSkippedWhileOffline(t *testing.T) {
 	a.net = netstate.New()
 	a.net.ObserveError(&net.OpError{Op: "dial", Err: errors.New("no route")}, "127.0.0.1:9")
 	g := echoGame(t, a)
-	push, msg, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
+	push, msg, blocked := a.cloudBeforeLaunch(g, false)
 	if blocked || push != nil {
 		t.Fatalf("blocked %v, push %v: offline must skip the cloud step", blocked, push)
 	}
@@ -189,7 +189,7 @@ func TestLaunchBoundWhileOnline(t *testing.T) {
 	a.net = netstate.New() // online: the check runs, bounded by cloudLaunchTimeout
 	g := echoGame(t, a)
 	start := time.Now()
-	_, _, blocked := a.cloudBeforeLaunch(g, &prepared{}, false)
+	_, _, blocked := a.cloudBeforeLaunch(g, false)
 	if blocked {
 		t.Fatal("a pending cloud must sync, not block")
 	}

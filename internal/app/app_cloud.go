@@ -12,6 +12,7 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/cloudsync"
+	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/stores"
 	"platypus/internal/types"
@@ -66,37 +67,27 @@ func (a *App) cloudGame(game types.Game) (cloudsync.Game, bool) {
 	return cloudsync.Game{ID: game.ID, PluginID: game.Source, StoreID: game.StoreAppID, Title: game.OriginalTitle()}, true
 }
 
-// cloudContext describes a launch using the prefix facts returned by the
-// runner plugin. The core does not interpret Wine/Proton prefix layouts.
-func (a *App) cloudContext(game types.Game, prefix, user string) types.CloudContext {
-	return cloudsync.ContextFor(a.homeDir(), prefix != "", game.InstallDir, prefix, user)
-}
-
-// cloudContextOf is the context for a launch that runs with runner r: through
-// Wine or Proton when the runner is set, natively otherwise. Every cloud step
-// uses this one rule, so a check and a launch of a game agree on its paths.
-func (a *App) cloudContextOf(game types.Game, p *prepared) types.CloudContext {
-	if p == nil {
-		return a.cloudContext(game, "", "")
-	}
-	return a.cloudContext(game, p.prefixDir, p.prefixUser)
+// cloudContext is the context for a game with the prefix its runner plugin
+// reports: a Windows game reads its saves from that prefix, a native one from
+// its own folders. Every cloud step uses this one rule.
+func (a *App) cloudContext(game types.Game, prefix savebackup.Prefix) types.CloudContext {
+	return cloudsync.ContextFor(a.homeDir(), prefix.Dir != "", game.InstallDir, prefix.Dir, prefix.User)
 }
 
 // cloudContextFor is the context for a game that isn't being launched (Check
-// now, resolving): the launch spec's preview says which runner it would use.
-// The folder is the library's (currentFolder); without one there is no context
-// to send, so the plugin is never asked.
+// now, resolving). The folder is the library's (currentFolder); without one
+// there is no context to send, so the plugin is never asked.
 func (a *App) cloudContextFor(game types.Game) (types.CloudContext, error) {
 	folder, err := a.currentFolder(game)
 	if err != nil {
 		return types.CloudContext{}, err
 	}
 	game.InstallDir = folder
-	if p, err := a.prepareLaunch(game, true); err == nil && p.client == nil {
-		return a.cloudContextOf(game, p), nil
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		return types.CloudContext{}, err
 	}
-	// The launch can't be prepared, so there are no runner facts to pass.
-	return a.cloudContext(game, "", ""), nil
+	return a.cloudContext(game, prefix), nil
 }
 
 // lockGame serializes the launch and cloud steps of one game, so that a second
@@ -156,7 +147,7 @@ const cloudLaunchTimeout = 5 * time.Second
 // (the bound ran out, or the machine went offline during the check) proceeds
 // with the same note. Anything else (a conflict, the store client running)
 // still waits for the user: only the network never blocks.
-func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync *cloudLaunch, msg string, blocked bool) {
+func (a *App) cloudBeforeLaunch(game types.Game, anyway bool) (sync *cloudLaunch, msg string, blocked bool) {
 	g, ok := a.cloudGame(game)
 	if !ok {
 		return nil, "", false
@@ -170,7 +161,11 @@ func (a *App) cloudBeforeLaunch(game types.Game, p *prepared, anyway bool) (sync
 	if !a.netOnline() {
 		return nil, "cloud saves not checked: offline", false
 	}
-	cc := a.cloudContextOf(game, p)
+	prefix, err := a.gamePrefix(game)
+	if err != nil {
+		return nil, cloudSkipNote(err), false
+	}
+	cc := a.cloudContext(game, prefix)
 	ctx, cancel := context.WithTimeout(a.ctx, cloudLaunchTimeout)
 	defer cancel()
 	d := a.cloud.BeforeLaunch(ctx, g, cc, anyway)

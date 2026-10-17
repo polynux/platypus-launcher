@@ -44,8 +44,8 @@ func TestStoreClientLaunchIsNotWrapped(t *testing.T) {
 	if p.client == nil {
 		t.Fatal("the launch lost its client")
 	}
-	if len(p.env) != 0 || p.runner.Path != "" || p.prefixDir != "" {
-		t.Fatalf("client launch was wrapped: env=%v runner=%+v prefix=%q", p.env, p.runner, p.prefixDir)
+	if len(p.env) != 0 || p.runner.Path != "" {
+		t.Fatalf("client launch was wrapped: env=%v runner=%+v", p.env, p.runner)
 	}
 	if a.plugins.Running("runner") != 0 {
 		t.Fatal("the runner plugin ran for a store-client launch")

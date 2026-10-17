@@ -123,7 +123,7 @@ func TestWithoutARunnerPluginTheDirectSpecRuns(t *testing.T) {
 	if len(p.args) != 1 || p.args[0] != exe {
 		t.Fatalf("args = %q, want the direct spec %q", p.args, exe)
 	}
-	if p.runner.Path != "" || p.prefixDir != "" {
+	if p.runner.Path != "" {
 		t.Fatalf("direct spec reports a runner or prefix: %+v", p)
 	}
 }

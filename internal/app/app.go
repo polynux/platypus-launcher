@@ -851,15 +851,13 @@ func (a *App) ListSessions() []types.SessionEvent {
 
 // prepared is a launch ready to run.
 type prepared struct {
-	args       []string
-	env        map[string]string
-	dir        string
-	client     *stores.ClientLaunch // set when a store client starts the game
-	redact     []string             // argument prefixes hidden in previews and logs
-	runner     plugins.RunnerInfo   // the runner the plugin picked, when the game uses one
-	prefixDir  string               // the Wine prefix folder, as the runner plugin names it
-	prefixUser string               // the user inside that prefix
-	stop       func(force bool)
+	args   []string
+	env    map[string]string
+	dir    string
+	client *stores.ClientLaunch // set when a store client starts the game
+	redact []string             // argument prefixes hidden in previews and logs
+	runner plugins.RunnerInfo   // the runner the plugin picked, when the game uses one
+	stop   func(force bool)
 }
 
 // prepareLaunch asks the game's store how to launch it and builds the command.
@@ -1041,7 +1039,7 @@ func (a *App) launchGame(game types.Game, anyway bool) (string, error) {
 		return a.startClient(game, cmd, cl)
 	}
 	opts := []session.StartOption{session.WithStopHook(p.stopHook())}
-	push, note, blocked := a.cloudBeforeLaunch(game, p, anyway)
+	push, note, blocked := a.cloudBeforeLaunch(game, anyway)
 	if blocked {
 		return note, nil
 	}

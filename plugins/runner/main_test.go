@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"platypus/internal/dataplug"
+	"platypus/internal/plugins"
 	"platypus/internal/testenv"
 	"platypus/internal/types"
 	"platypus/internal/winetricks"
@@ -154,5 +155,73 @@ func TestRunnerOptionsCoverEveryRunnerSetting(t *testing.T) {
 		if !offered[key] {
 			t.Errorf("GameSettings.%s (%q) is neither a runner setting offered by runner.options nor core-owned", gs.Field(i).Name, key)
 		}
+	}
+}
+
+// runner.prefix answers from the game, its settings and the disk: the folder
+// its saves are read from, and the login inside it.
+func TestRunnerPrefixFollowsTheLaunchLayout(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	folder := filepath.Join(home, "prefixes")
+	game := types.Game{ID: "g1", Title: "G"}
+	prefixOf := func(g types.Game, runnerID string) (string, string) {
+		t.Helper()
+		resp := handle(request("runner.prefix", map[string]any{"game": g, "runnerId": runnerID, "prefixesFolder": folder}))
+		if resp.Error != nil {
+			t.Fatalf("runner.prefix: %+v", resp.Error)
+		}
+		out := resp.Result.(map[string]any)
+		dir, _ := out["dir"].(string)
+		user, _ := out["user"].(string)
+		return dir, user
+	}
+
+	// "missing" names no installed runner, so the layout on disk decides (this
+	// host may have system wine, which "auto" would pick).
+	if dir, user := prefixOf(game, "missing"); dir != filepath.Join(folder, "g1") || user != "" {
+		t.Fatalf("no runner: %q, %q; want the folder of the game, no login", dir, user)
+	}
+
+	// A Proton-made prefix (pfx folder) with no runner installed is still Proton's.
+	if err := os.MkdirAll(filepath.Join(folder, "g1", "pfx", "drive_c"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if dir, user := prefixOf(game, "missing"); dir != filepath.Join(folder, "g1", "pfx") || user != "steamuser" {
+		t.Fatalf("pfx layout, no runner: %q, %q; want pfx and steamuser", dir, user)
+	}
+
+	// A pinned prefix that already is the pfx folder is not nested again (#60).
+	pinned := types.Game{ID: "g2", Title: "P", Settings: types.GameSettings{WinePrefix: filepath.Join(home, "pinned", "pfx")}}
+	if dir, _ := prefixOf(pinned, "auto"); dir != filepath.Join(home, "pinned", "pfx") {
+		t.Fatalf("pinned pfx = %q, want it unchanged", dir)
+	}
+
+	// An installed Proton build: its prefix is the pfx folder, run as steamuser.
+	proton := filepath.Join(home, ".local/share/Steam/compatibilitytools.d", "FakeTest")
+	if err := os.MkdirAll(proton, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(proton, "proton"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	protonID := ""
+	for _, r := range handle(request("runner.list", map[string]any{})).Result.(map[string]any)["runners"].([]plugins.RunnerInfo) {
+		if strings.HasSuffix(r.Path, "proton") {
+			protonID = r.ID
+		}
+	}
+	if protonID == "" {
+		t.Fatal("the fake Proton build is not listed")
+	}
+	if dir, user := prefixOf(game, protonID); dir != filepath.Join(folder, "g1", "pfx") || user != "steamuser" {
+		t.Fatalf("proton: %q, %q; want pfx and steamuser", dir, user)
+	}
+
+	// A native game has no prefix at all.
+	native := types.Game{ID: "g3", Title: "N", Native: true}
+	resp := handle(request("runner.prefix", map[string]any{"game": native, "runnerId": "auto", "prefixesFolder": folder}))
+	if out, _ := resp.Result.(map[string]any); resp.Error != nil || len(out) != 0 {
+		t.Fatalf("native: %+v, %+v; want an empty result", resp.Result, resp.Error)
 	}
 }
