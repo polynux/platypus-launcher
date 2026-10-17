@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"platypus/internal/apperr"
-	"platypus/internal/runner"
+	"platypus/internal/dataplug"
+	"platypus/internal/plugins"
 	"platypus/internal/settings"
 	"platypus/internal/stores"
 	"platypus/internal/types"
@@ -21,7 +22,26 @@ func nativeTestApp(t *testing.T, home string) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
+	a := &App{settings: st, stores: stores.NewRegistry(nil), optHome: home}
+	withTestRunnerPlugin(t, a, home)
+	return a
+}
+
+// withTestRunnerPlugin installs the bundled runner plugin on a, so detection
+// and launch wrapping run as they do in the app. The plugin reads HOME from its
+// environment, so it gets the test's home.
+func withTestRunnerPlugin(t *testing.T, a *App, home string) {
+	t.Helper()
+	root := t.TempDir()
+	if a.data == nil {
+		a.data = dataplug.NewRegistry()
+	}
+	a.plugins = plugins.NewManager(plugins.Options{
+		Dir: filepath.Join(root, "plugins"), LogDir: filepath.Join(root, "logs"), DataDir: filepath.Join(root, "data"),
+		Settings: a.settings, Home: home, Env: map[string]string{"HOME": home}, OnNotify: a.pluginNotify,
+	})
+	t.Cleanup(a.plugins.Shutdown)
+	installTestRunnerPlugin(t, a)
 }
 
 func writeExe(t *testing.T, path string, data []byte, exec bool) string {
@@ -121,7 +141,9 @@ func TestCustomLaunchNativeNoPrefix(t *testing.T) {
 	}
 }
 
-// A Windows sideload still needs a runner.
+// A Windows sideload still needs a runner. Without one the launch fails with
+// the runner's message before any process starts; a host with one (system
+// wine at /usr/bin/wine is found) launches through it.
 func TestCustomLaunchWindowsNeedsRunner(t *testing.T) {
 	t.Parallel()
 	home := t.TempDir()
@@ -216,7 +238,7 @@ func TestMakeGameExecutable(t *testing.T) {
 	if st, _ := os.Stat(sib); st.Mode().Perm()&0o111 != 0 {
 		t.Fatal("the sibling must stay non-executable")
 	}
-	if _, err := runner.DetectExecutable(exe); err != nil {
+	if _, err := a.DetectGameExecutable(exe); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -343,10 +365,36 @@ func TestDetectGameExecutable(t *testing.T) {
 	a := nativeTestApp(t, home)
 	exe := writeExe(t, filepath.Join(home, "game"), elfBytes, true)
 	res, err := a.DetectGameExecutable(exe)
-	if err != nil || !res.Native || res.Kind != string(runner.ExecELF) {
+	if err != nil || !res.Native || res.Kind != "elf" {
 		t.Fatalf("DetectGameExecutable = %+v, %v", res, err)
 	}
 	if _, err := a.DetectGameExecutable(filepath.Join(home, "missing")); err == nil {
 		t.Fatal("unreadable path should error")
 	}
+}
+
+// A script with a #! line runs through /bin/sh whatever its name, when it has
+// no execute bit (as on main, ExecScript).
+func TestShebangScriptWithoutExecBitRunsThroughSh(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	a := nativeTestApp(t, home)
+	script := writeExe(t, filepath.Join(home, "start"), []byte("#!/bin/sh\necho hi\n"), false)
+	if _, err := a.settings.AddCustomGame("Script", script); err != nil {
+		t.Fatal(err)
+	}
+	g := a.customGames()[0]
+	if !g.Native {
+		t.Fatal("a #! script must detect as native")
+	}
+	p, err := a.prepareLaunch(g, true)
+	if err != nil {
+		t.Fatalf("prepareLaunch: %v", err)
+	}
+	for i := 0; i+1 < len(p.args); i++ {
+		if p.args[i] == "/bin/sh" && p.args[i+1] == script {
+			return
+		}
+	}
+	t.Fatalf("args = %q, want /bin/sh %s", p.args, script)
 }

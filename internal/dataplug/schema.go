@@ -12,8 +12,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-
-	"platypus/internal/winetricks"
 )
 
 // DefaultFiles are the data files a plugin uses when its manifest lists none.
@@ -67,6 +65,7 @@ type file struct {
 
 var (
 	idRe       = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+	verbRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	envKeyRe   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	fixTiers   = []string{"platinum", "gold", "silver", "bronze", "borked"}
 	tweakKinds = []string{"recommended", "troubleshoot"}
@@ -139,10 +138,8 @@ func (f Fix) validate() error {
 		bad("description is required")
 	}
 	for i, w := range f.Winetricks {
-		if strings.TrimSpace(w) == "" || strings.ContainsAny(w, " \t") {
+		if !verbRe.MatchString(w) {
 			bad("winetricks[%d]: %q is not a verb", i, w)
-		} else if !winetricks.KnownVerb(w) {
-			bad("winetricks[%d]: unknown winetricks verb %q", i, w)
 		}
 	}
 	for k, v := range f.DLLOverrides {

@@ -677,6 +677,11 @@ export namespace types {
     bytes: number;
   }
 
+  export interface RunnerEnv {
+    env: Record<string, string>;
+    wrappers: string[];
+  }
+
   export interface SaveBackup {
     id: string;
     game_id: string;
@@ -739,6 +744,10 @@ export namespace types {
   export interface SettingsSaved {
     applied: boolean;
     message?: string;
+  }
+
+  export interface SettingsSchema {
+    groups: types.SettingGroup[];
   }
 
   export interface SettingsView {

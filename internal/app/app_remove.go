@@ -13,7 +13,6 @@ import (
 	"platypus/internal/paths"
 	"platypus/internal/plugins"
 	"platypus/internal/relocate"
-	"platypus/internal/runner"
 	"platypus/internal/settings"
 	"platypus/internal/types"
 )
@@ -62,14 +61,14 @@ func (a *App) allGameFolders() []string {
 	return append([]string{a.settings.GamesFolder()}, a.settings.GameFolders()...)
 }
 
-// removeTargets recomputes what a removal deletes: the prefix comes from
-// runner.PrefixPath (the game's own pin wins), the files are the folder of
-// its executable. A native game has no prefix (issue #47): the prefix target
-// is never offered for one, even when asked for.
+// removeTargets recomputes what a removal deletes: the prefix comes from the
+// game's data folder (its own pin wins, see paths.GameDataDir), the files are
+// the folder of its executable. A native game has no prefix (issue #47): the
+// prefix target is never offered for one, even when asked for.
 func (a *App) removeTargets(game types.Game, opts types.RemoveOptions) ([]removeTarget, error) {
 	var out []removeTarget
 	if opts.DeletePrefix && !game.Native {
-		out = append(out, removeTarget{kind: removeKindPrefix, path: runner.PrefixPath(game, a.homeDir(), a.effectivePrefixesFolder())})
+		out = append(out, removeTarget{kind: removeKindPrefix, path: paths.GameDataDir(game.ID, game.Settings.WinePrefix, a.effectivePrefixesFolder())})
 	}
 	if opts.DeleteFiles {
 		if strings.TrimSpace(game.Executable) == "" {
@@ -198,7 +197,6 @@ type otherGameDir struct {
 // store games' install folders, executable folders and prefixes. The game
 // being removed (selfID) is left out, so its own folders stay deletable.
 func (a *App) otherGameDirs(selfID string) []otherGameDir {
-	home := a.homeDir()
 	prefixes := a.effectivePrefixesFolder()
 	var out []otherGameDir
 	titles := map[string]string{}
@@ -207,7 +205,7 @@ func (a *App) otherGameDirs(selfID string) []otherGameDir {
 		if g.ID == selfID {
 			continue
 		}
-		if p := runner.PrefixPath(g, home, prefixes); p != "" {
+		if p := paths.GameDataDir(g.ID, g.Settings.WinePrefix, prefixes); p != "" {
 			out = append(out, otherGameDir{title: g.Title, path: p})
 		}
 		if g.Executable != "" {
@@ -250,7 +248,7 @@ func (a *App) otherGameDirs(selfID string) []otherGameDir {
 			if g.Executable != "" {
 				out = append(out, otherGameDir{title: g.Title, path: filepath.Dir(g.Executable)})
 			}
-			if p := runner.PrefixPath(g, home, prefixes); p != "" && g.Settings.WinePrefix != "" {
+			if p := paths.GameDataDir(g.ID, g.Settings.WinePrefix, prefixes); p != "" && g.Settings.WinePrefix != "" {
 				out = append(out, otherGameDir{title: g.Title, path: p})
 			}
 		}
@@ -461,7 +459,11 @@ func (a *App) CheckRemove(gameID string, opts types.RemoveOptions) (types.Remove
 		}
 		check.Targets = append(check.Targets, rt)
 	}
-	check.Saves = a.savesPreview(game)
+	saves, err := a.savesPreview(game)
+	if err != nil {
+		return check, err
+	}
+	check.Saves = saves
 	return check, nil
 }
 

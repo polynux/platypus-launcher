@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"platypus/internal/apperr"
-	"platypus/internal/runner"
+	"platypus/internal/paths"
 	"platypus/internal/steam"
 	"platypus/internal/types"
 )
@@ -205,7 +205,7 @@ func (a *App) ApplyPrefixPreset(gameID, presetID string) (types.PrefixApplyResul
 	changed := false
 
 	// The prefix folder exists before anything records it: launches assume it.
-	if err := os.MkdirAll(runner.PrefixPath(game, a.homeDir(), a.effectivePrefixesFolder()), 0o755); err != nil {
+	if err := os.MkdirAll(paths.GameDataDir(game.ID, game.Settings.WinePrefix, a.effectivePrefixesFolder()), 0o755); err != nil {
 		return res, err
 	}
 

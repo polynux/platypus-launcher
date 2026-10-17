@@ -247,6 +247,137 @@ game's page on the store's website (an https link; anything else is dropped):
 the game page offers it as "Open in store", which deep-links into the embedded
 store view when the plugin declares a `storefront`.
 
+## Runner (1.17)
+
+The bundled `runner` capability owns Wine, Proton, umu, the native launch
+wrappers (GameMode, gamescope, MangoHud), prefix actions, winetricks and
+Wine/Proton crash hints. It is restricted to bundled/first-party plugin ids.
+Runner environment keys (`WINE*`, `PROTON_*`, `STEAM_COMPAT_*`) are reserved to
+this capability.
+
+The core sends one `runner.wrap` request per launch Platypus starts itself or
+settings preview, native games included. Store-client launches aren't wrapped:
+the store-client command (its `command`, see [Launching](#launching)) runs as it
+is, so no wrapper goes around the client, and the runner isn't asked. With no runner plugin installed, the store's direct spec runs as
+it is. With one installed but not ready (changed on disk, or crashed past its
+restart limit), a launch stops with `runner.unavailable` before any process starts.
+
+```json
+runner.list {} -> { "runners": [{ "id": "auto", "name": "Automatic", "kind": "proton", "version": "", "default": true }] }
+runner.options {} -> { "groups": [{ "id": "runner", "label": "Runner", "fields": [{ "id": "runner_id", "kind": "select", "label": "Runner", "scope": "game", "default": "auto", "options": [{ "id": "auto", "label": "Automatic" }] }] }] }
+runner.detectExecutable { "path": "/home/u/Games/goose.exe" } -> { "native": false, "kind": "windows-exe" }
+runner.wrap { "spec": { "command": ["/games/a"], "env": {}, "cwd": "/games", "needsWine": true }, "game": {}, "runnerId": "auto", "options": {}, "tweaks": [], "prefixesFolder": "/data/prefixes", "preview": false } -> { "command": ["/usr/bin/wine", "/games/a"], "env": { "WINEPREFIX": "/data/prefixes/g" }, "cwd": "/games", "runner": { "id": "system:wine", "name": "System Wine (/usr/bin/wine)", "kind": "system", "path": "/usr/bin/wine", "system": true } }
+runner.prefix { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> { "dir": "/data/prefixes/g", "user": "" }
+runner.actions { "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> { "actions": [{ "id": "open-prefix", "label": "Open prefix" }, { "id": "winetricks", "label": "Run winetricks" }] }
+runner.runAction { "id": "winetricks", "verb": "vcrun2022", "game": {}, "runnerId": "auto", "prefixesFolder": "/data/prefixes" } -> {}
+runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner": {} } } -> {}
+runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
+```
+
+All eleven methods are required when `runner` is enabled (`runner.detectExecutable`
+is called for every sideloaded file, `runner.prefix` for every backup and cloud gate,
+`runner.migrateSettings` once per saved game at startup).
+Errors use `-32602` for a bad request and `-32003` for a runner failure, with a
+message. A failure the UI translates carries `error.data` as `{ "code": "<apperr
+code>", "params": { … } }`, and the core shows its own translated text for it:
+
+| `code` | When | `params` |
+|---|---|---|
+| `game.noRunner` | a Wine or Proton game and no runner is installed (`runner.wrap`) | none |
+| `game.runnerMissing` | the game's runner isn't installed (`runner.wrap`, `winetricks`) | `id` |
+| `crash.badVerb` | `winetricks` names a verb the runner doesn't know (`-32602`) | `verb` |
+| `crash.noWinetricks` | winetricks isn't installed | none |
+| `crash.noPrefix` | the game has no prefix yet | `title` |
+| `crash.umuUnsupported` | umu's Proton build isn't there to run winetricks with | `title` |
+| `crash.noProtonWine` | the Proton build has no Wine binaries winetricks can use | `title` |
+
+The core accepts only these codes. Any other failure, or one without `data`,
+shows the message under the call's generic code: `runner.wrapFailed` for a launch,
+`crash.winetricksFailed` for a winetricks run.
+
+- **`runner.list`**: each runner has `id`, `name`, `kind` (`proton`, `umu`,
+  `wine`, `custom` or `system`), `version`, `default`, and optionally `path`,
+  `system` and `custom`.
+- **`runner.options`**: the same group and field schema as `settings.schema`
+  (1.8), every field with `"scope": "game"`, labels and descriptions in the
+  language the core sent at `initialize` (`locale`, or `locale.changed`; English
+  when the runner has no catalogue for it). The choices are the runner's own
+  saved keys, not core settings: the core stores each value under its name, as
+  the game's settings, and hands it back in `options`. The keys are:
+  `dx_layer`, `upscaler`,
+  `shader_cache`, `mangohud_preset`, `sync_mode`, the eight `proton_*` switches
+  (`proton_enable_nvapi`, `proton_hide_nvidia_gpu`, `proton_enable_wayland`,
+  `proton_no_d3d11`, `proton_no_d3d12`, `proton_force_large_address_aware`,
+  `proton_old_gl_string`, `proton_log`), `gamescope_resolution` and
+  `gamescope_rate` (selects with common values), `gamescope_filter`, the gamescope
+  switches (`gamescope_fullscreen`, `gamescope_borderless`, `gamescope_grab_cursor`,
+  `gamescope_hdr`, `gamescope_vrr`, `gamescope_wayland`). The core's own settings
+  stay where they were: `runner_id`, `use_gamemode`, `use_gamescope`, `gamescope_args`
+  (other gamescope arguments), `eac_runtime` and `battleye_runtime` are offered
+  here too; the wine prefix is a core section, not offered. The schema's
+  defaults are the values an absent key takes.
+- **Choices become env and arguments in the runner.** `runner.wrap` and
+  `runner.env` turn the choices into the env vars the old settings UI used to
+  write (`PROTON_*`, `MANGOHUD_CONFIG`, `WINE_FULLSCREEN_FSR`, `DXVK_STATE_CACHE`)
+  and the gamescope arguments (switches, then `-F`, then `gamescope_args`). The
+  user's own `env_vars` win over a derived value. The core doesn't build them.
+- **`runner.migrateSettings`**: `{ "games": { "<game id>": {} } }` -> `{ "changed": { "<game id>": {} } }`.
+  Settings saved by the old UI folded these choices into `env_vars` and
+  `gamescope_args`, and kept `proton_flags` and the gamescope sizes as they were.
+  The method moves them to the keys above: a value moves only when it is exactly
+  what the old UI wrote for the choice it reads back, so a value the user typed
+  by hand stays where it was. The answer holds only the games that changed, with
+  their migrated settings; a game nothing changed in is left out. The core sends
+  every saved game in one request at startup, while the runner is ready, and
+  saves the games it gets back. Running it again changes nothing. Without the
+  runner, the core doesn't ask, and nothing is migrated.
+- **`runner.env`**: `{ "game": {}, "options": {} }` -> `{ "env": { "PROTON_LOG": "1" }, "wrappers": ["gamemode", "mangohud"] }`.
+  The env (the choices plus `env_vars`) and the wrappers a launch would add. The
+  game page uses it for the Steam launch options, since Steam starts Steam games
+  itself and Platypus can't pass them.
+- **`runner.detectExecutable`**: `kind` is `elf`, `appimage`, `script`,
+  `windows-exe`, `windows-installer`, `windows-script`, `windows-shortcut` or
+  `unknown`; `native` is true for the Linux kinds. The core uses it for the
+  default of "Run with" and for launch decisions.
+- **`runner.wrap`**: `spec` is the store's direct spec (`command`, `env`, `cwd`,
+  `needsWine`); `game` is the game as the core knows it, with its settings;
+  `options` holds all of the game's saved settings, as a flat map: the core's own
+  keys and the runner's choices, read as the UI holds them; `tweaks` holds the enabled
+  data-plugin tweaks, which the bundled runner doesn't apply yet; `prefixesFolder`
+  is the effective data folder. The result has `command`, `env`, optional `cwd`,
+  and for a Wine or Proton launch `runner`, the runner picked. A native game's
+  result has only `command`, `env` and `cwd`.
+- **`runner.prefix`**: the Windows side of the game's prefix, for the runner it
+  would launch with: `dir` is the folder its saves are read from (for Proton, the
+  `pfx` folder; for umu, the effective umu prefix), and `user` the login inside it
+  (`steamuser` for Proton and umu, empty for system Wine or no runner). It is
+  pure: it reads the game, its settings, the runner list and the disk, and never
+  asks the store or starts a process, so backups and cloud saves don't depend on
+  the store being reachable. A native game's result is empty (`{}`), and so is a
+  result with no `dir`. With no installed runner, a `pfx` folder in the prefix
+  still means Proton's layout. Cloud saves and backups call it once per gate.
+- **`runner.actions`**: `open-prefix` when the prefix exists, and `winetricks`
+  when winetricks is installed and the prefix exists.
+- **`runner.runAction`**: `winetricks` runs `verb`, which the runner validates
+  against its catalogue (`-32602` when unknown); the verb runs with the game's
+  prefix in the background, and its output goes to the plugin's data folder.
+  `open-prefix` opens the prefix. `stop` is sent by the core when a launch ends
+  or is force-stopped: `launch` is that launch's `runner.wrap` result, which the
+  core doesn't read (it hands it back unchanged), and the runner finds the
+  wineserver from its `runner` and `env`.
+- **`runner.clientCrash`**: `{ "game": {}, "since": "2026-10-17T10:00:00Z" }` ->
+  `{ "log": "/home/u/steam-620.log", "hints": [...] }`. Asked for a game a store
+  client started that ended within a minute of being seen running (the crash
+  signal the client gives: Steam owns the process, so no exit code is known).
+  The Proton log is `steam-<appid>.log` in `PROTON_LOG_DIR` (else the home
+  folder), written when `PROTON_LOG=1` is in the game's launch options. A log
+  written since `since` gives the usual hints. Without one, the single hint
+  `{ "rule": "protonLog", "param": "<the log path>" }` tells the player to turn
+  the log on, and the game page shows the launch option to paste.
+- **`runner.crashHints`**: returns `CrashHint` entries (`rule`, and `param`,
+  `verb` or `action` when the rule has them). The core adds the log path and
+  whether winetricks is available.
+
 ## Jobs
 
 Platypus creates the `jobId`, picks `installDir` (the user's Games folder plus the
@@ -309,9 +440,12 @@ only forgets the job and tells the user what may remain on disk.
 
 ## Launching
 
-Platypus owns the runner pipeline (Proton/Wine, gamemode, gamescope, MangoHud,
-per-game settings) and session tracking. A plugin returns a spec; it never starts
-the game itself.
+The core owns session tracking and process start/stop. When a bundled runner
+plugin is available, it wraps each launch spec Platypus starts itself (including
+native launches) and returns the command; without one, Platypus runs the store's
+direct spec as-is. Store-client launches aren't wrapped: their `command` runs as
+it is, so no wrapper goes around the store's client.
+A plugin returns a spec; it never starts the game itself.
 
 Direct launch:
 
@@ -504,8 +638,10 @@ that doesn't know it.
   [Offline launches](#offline-launches-115)). 1.16: per-game status and notes
   (`LibraryGame.status`, `LibraryGame.userNotes`, a store's suggestion only; see
   [Per-game status and notes](#per-game-status-and-notes-116)). 1.17: the
-  `compat-facts` capability (`compat.lookup`, batched compatibility facts; see
-  [Compat facts](#compat-facts-117)).
+  `compat-facts` capability (`compat.lookup`, batched compatibility facts) and
+  the `runner` capability (`runner.list`, `runner.options`, `runner.wrap`,
+  `runner.actions`, `runner.runAction`, `runner.crashHints`; see
+  [Compat facts](#compat-facts-117) and [Runner](#runner-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
   1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 or 1.17 method.
@@ -543,6 +679,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.migrateSettings`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in

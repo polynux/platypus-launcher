@@ -85,7 +85,7 @@ func TestRivageStoreConstraintMatchesCompatAppID(t *testing.T) {
 	}
 	home := t.TempDir()
 	game := types.Game{ID: "rivage", Source: types.SourceCustom, Title: "Rivage"}
-	wine := NewContextFor(game, home, "", t.TempDir(), "/runners/proton", "")
+	wine := NewContextFor(game, home, "", Prefix{Dir: filepath.Join(t.TempDir(), "pfx"), User: "steamuser"})
 	if !whenOK(fe, wine, "4094660", "") {
 		t.Error("when store steam rejected a sideloaded game with compat AppID 4094660")
 	}
@@ -108,7 +108,7 @@ func TestRivageBackupFindsSaves(t *testing.T) {
 
 	settings := newTestSettings(t, home)
 	svc := New(Options{Settings: settings, DataDir: dataDir, CacheDir: cacheDir, Home: home})
-	b, _, _, _, err := svc.Backup(game, "manual", BackupOptions{RunnerPath: "/runners/proton", SteamID: "4094660"})
+	b, _, _, _, err := svc.Backup(game, "manual", BackupOptions{Prefix: Prefix{Dir: filepath.Join(prefix, "pfx"), User: "steamuser"}, SteamID: "4094660"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestRivagePlainWineLoginLinkResolves(t *testing.T) {
 	login := currentLogin()
 	prefix := rivagePrefix(t, login)
 	game := rivageGame(prefix)
-	ctx := NewContextFor(game, home, "", filepath.Join(home, "data"), "/usr/bin/wine", "")
+	ctx := NewContextFor(game, home, "", Prefix{Dir: prefix})
 	if ctx.WinUser != login {
 		t.Fatalf("WinUser = %q, want the login %q", ctx.WinUser, login)
 	}
@@ -180,7 +180,7 @@ func TestRivageRootsListedAsFound(t *testing.T) {
 	home := t.TempDir()
 	prefix := rivagePrefix(t, "polynux")
 	game := rivageGame(prefix)
-	ctx := NewContextFor(game, home, "", filepath.Join(home, "data"), "/runners/proton", "")
+	ctx := NewContextFor(game, home, "", Prefix{Dir: filepath.Join(prefix, "pfx"), User: "steamuser"})
 	games, err := ParseManifest([]byte(rivageYAML))
 	if err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestRivageSymlinksNotFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	game := rivageGame(prefix)
-	ctx := NewContextFor(game, home, "", filepath.Join(home, "data"), "/runners/proton", "")
+	ctx := NewContextFor(game, home, "", Prefix{Dir: filepath.Join(prefix, "pfx"), User: "steamuser"})
 	games, err := ParseManifest([]byte(rivageYAML))
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +255,7 @@ func TestRivageNoDuplicateFiles(t *testing.T) {
 	saves := filepath.Join(prefix, "pfx", "drive_c", "users", "steamuser", "AppData", "Local", "Rivage", "Saved", "SaveGames")
 	linked := filepath.Join(prefix, "pfx", "drive_c", "users", "polynux", "AppData", "Local", "Rivage", "Saved", "SaveGames")
 	game := rivageGame(prefix)
-	ctx := NewContextFor(game, home, "", filepath.Join(home, "data"), "/runners/proton", "")
+	ctx := NewContextFor(game, home, "", Prefix{Dir: filepath.Join(prefix, "pfx"), User: "steamuser"})
 	patterns := []resolvedPattern{
 		{Pattern: filepath.Join(saves, "*.sav"), Root: "prefix", Origin: "manifest"},
 		{Pattern: filepath.Join(linked, "*.sav"), Root: "prefix", Origin: "manifest"},
@@ -264,19 +264,6 @@ func TestRivageNoDuplicateFiles(t *testing.T) {
 	_, _, _, n, _ := Enumerate(patterns, ctx)
 	if n != 4 {
 		t.Fatalf("files = %d, want 4 with no duplicates", n)
-	}
-}
-
-func TestPrefixForNormalisesOnce(t *testing.T) {
-	t.Parallel()
-	if p, u := prefixFor("/x/pfx", "polynux", true); p != "/x/pfx" || u != "steamuser" {
-		t.Errorf("prefixFor(/x/pfx) = %q, %q; want /x/pfx steamuser", p, u)
-	}
-	if p, u := prefixFor("/x", "polynux", true); p != "/x/pfx" || u != "steamuser" {
-		t.Errorf("prefixFor(/x) = %q, %q; want /x/pfx steamuser", p, u)
-	}
-	if p, u := prefixFor("/x", "polynux", false); p != "/x" || u != "polynux" {
-		t.Errorf("prefixFor plain = %q, %q; want /x polynux", p, u)
 	}
 }
 

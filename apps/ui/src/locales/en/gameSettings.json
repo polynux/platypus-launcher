@@ -3,11 +3,6 @@
     "title": "Launcher settings for {{title}}",
     "heading": "Launcher settings"
   },
-  "advanced": {
-    "label": "Advanced",
-    "set_one": "{{count}} set",
-    "set_other": "{{count}} set"
-  },
   "steamNotice": "Steam games start through the Steam client, which picks the Proton version and ignores Platypus's env vars. To apply these settings, paste this into Steam → Properties → Launch options:",
   "steamCopy": "Copy",
   "groups": {
@@ -16,123 +11,16 @@
     "launch": "launch"
   },
   "runner": {
-    "aria": "Runner",
     "nativeNote": "This game ships a native Linux build from the store. It runs directly, without Proton — runner, DX layer and Proton flags don't apply.",
-    "description": "The Proton or Wine build that runs this Windows game.",
-    "autoNamed": "Automatic (uses {{name}})",
-    "autoNone": "Automatic (no runner installed)",
-    "missing": "{{id}} (missing)",
     "savedMissing": "Saved runner is not installed. Pick another or the launch falls back to an error.",
-    "detail": "{{kind}} · {{path}}",
-    "autoDetail": "newest GE-Proton, then Experimental",
-    "none": "no runner installed",
     "noneInstalled": "No Proton or Wine runners detected.",
     "umuOption": "Proton via umu (recommended)"
-  },
-  "sync": {
-    "kicker": "sync",
-    "label": "Sync",
-    "description": "How Wine coordinates the game's threads. Leave the default unless a fix says otherwise.",
-    "titles": {
-      "fsync": "Proton default (fsync when the kernel supports it)",
-      "esync": "PROTON_NO_FSYNC=1",
-      "ntsync": "PROTON_USE_NTSYNC=1 (needs the ntsync kernel module)",
-      "off": "PROTON_NO_ESYNC=1 PROTON_NO_FSYNC=1"
-    }
-  },
-  "protonFlags": {
-    "kicker": "proton flags",
-    "description": "Switches Proton reads at launch. Turn one on only when a game or a fix asks for it.",
-    "descs": {
-      "PROTON_ENABLE_NVAPI": "Expose NVAPI to the game (DLSS, Reflex on NVIDIA)",
-      "PROTON_HIDE_NVIDIA_GPU": "Report NVIDIA GPUs as AMD to work around vendor checks",
-      "PROTON_ENABLE_WAYLAND": "Use the native Wayland driver (Proton 10+/GE)",
-      "PROTON_NO_D3D11": "Disable D3D11 so the game falls back to another API",
-      "PROTON_NO_D3D12": "Disable D3D12 so the game falls back to D3D11",
-      "PROTON_FORCE_LARGE_ADDRESS_AWARE": "Let 32-bit games use more than 2 GB of RAM",
-      "PROTON_OLD_GL_STRING": "Shorten the GL extension string for old games",
-      "PROTON_LOG": "Write a debug log to $HOME/steam-<appid>.log"
-    }
   },
   "winetricks": {
     "kicker": "winetricks",
     "note": "· saved, not applied yet"
   },
-  "graphics": {
-    "dxKicker": "dx layer",
-    "dxLabel": "DX layer",
-    "dxDescription": "DXVK translates DirectX 9–11 to Vulkan and is the usual choice. WineD3D uses OpenGL; try it only when a game fails with DXVK.",
-    "dxLayers": {
-      "dxvk": "DXVK (bundled)",
-      "wined3d": "WineD3D"
-    },
-    "dxTitles": {
-      "dxvk": "The DXVK build shipped with the selected runner",
-      "wined3d": "PROTON_USE_WINED3D=1"
-    },
-    "upscalerKicker": "upscaler",
-    "upscalerLabel": "Upscaler",
-    "upscalers": {
-      "native": "native",
-      "fsr1": "FSR 1"
-    },
-    "upscalerTitles": {
-      "native": "No upscaling",
-      "fsr1": "WINE_FULLSCREEN_FSR=1 (GE-Proton only)"
-    },
-    "hudKicker": "mangohud",
-    "hudLabel": "MangoHud",
-    "huds": {
-      "off": "off",
-      "fps only": "fps only",
-      "minimal": "minimal",
-      "full": "full"
-    },
-    "hudTitles": {
-      "off": "MangoHud disabled",
-      "fps only": "MANGOHUD_CONFIG=preset=1",
-      "minimal": "MANGOHUD_CONFIG=preset=2",
-      "full": "MANGOHUD_CONFIG=preset=4"
-    },
-    "shaderKicker": "dxvk shader cache",
-    "shaderLabel": "Shader cache",
-    "shaderOn": "on",
-    "shaderOff": "off",
-    "shaderOffTitle": "DXVK_STATE_CACHE=0",
-    "shaderDescription": "DXVK saves shader state between runs, so later launches stutter less. Off sets DXVK_STATE_CACHE=0."
-  },
   "launch": {
-    "pipelineKicker": "pipeline",
-    "pipelineDescription": "Each switch wraps the launch command in one more program.",
-    "gamemode": "gamemode",
-    "gamemodeHint": "Wrap the launch in gamemoderun",
-    "gamescope": "gamescope",
-    "gamescopeHint": "Run the game inside a gamescope session",
-    "eac": "eac runtime",
-    "eacHint": "For games that use EasyAntiCheat",
-    "battlEye": "battleye runtime",
-    "battlEyeHint": "For games that use BattlEye",
-    "resolutionKicker": "resolution",
-    "resolutionAria": "Gamescope resolution",
-    "gameDefault": "Game default",
-    "thisDisplay": "{{w}}×{{h}} (this display)",
-    "custom": "Custom…",
-    "customNamed": "Custom… ({{w}}×{{h}})",
-    "widthAria": "gamescope width",
-    "widthPlaceholder": "width",
-    "heightAria": "gamescope height",
-    "heightPlaceholder": "height",
-    "rateKicker": "frame rate",
-    "rateAria": "Gamescope frame rate",
-    "rateHz": "{{r}} Hz",
-    "customRateNamed": "Custom… ({{r}} Hz)",
-    "refreshAria": "gamescope refresh",
-    "refreshPlaceholder": "Hz",
-    "filterKicker": "upscale filter",
-    "filterLabel": "Gamescope upscale filter",
-    "extraGsKicker": "extra gamescope args",
-    "extraGsAria": "gamescope args",
-    "extraGsPlaceholder": "--mangoapp",
     "argsKicker": "launch arguments",
     "argsPlaceholder": "-novid -fullscreen",
     "workdirKicker": "working directory",
@@ -159,30 +47,6 @@
     "duplicateKey": "Duplicate key, this value wins",
     "notSaved": "(not saved)",
     "addVar": "+ Add variable"
-  },
-  "gsToggles": {
-    "fullscreen": "fullscreen",
-    "borderless": "borderless",
-    "grabCursor": "force grab cursor",
-    "hdr": "hdr",
-    "vrr": "adaptive sync (vrr)",
-    "wayland": "expose wayland"
-  },
-  "gsToggleTitles": {
-    "fullscreen": "-f: make the window fullscreen",
-    "borderless": "-b: make the window borderless",
-    "grabCursor": "--force-grab-cursor: always use relative mouse mode",
-    "hdr": "--hdr-enabled: enable HDR output (needs the Gamescope WSI layer)",
-    "vrr": "--adaptive-sync: variable refresh rate if available",
-    "wayland": "--expose-wayland: support Wayland clients via xdg-shell"
-  },
-  "gsFilters": {
-    "default": "default",
-    "linear": "linear",
-    "nearest": "nearest",
-    "fsr": "fsr",
-    "nis": "nis",
-    "pixel": "pixel"
   },
   "preview": {
     "label": "$ preview",
@@ -240,11 +104,11 @@
   "tweaks": {
     "title": "Suggested tweaks",
     "intro": "Based on this machine, not the game's rating: a platinum game can still need them on your GPU.",
-    "steamNote": "Steam applies these only through the game's <lo>launch options</lo>.",
     "recommended": "recommended",
     "troubleshoot": "if something breaks",
     "applied": "Applied \"{{title}}\"",
-    "removed": "Removed \"{{title}}\""
+    "removed": "Removed \"{{title}}\"",
+    "steamNote": "Steam applies these only through the game's <lo>launch options</lo>."
   },
   "prefix": {
     "picker": "use an existing prefix",
@@ -303,9 +167,6 @@
       "backingUp": "Backing up…",
       "queued": "Backup queued.",
       "empty": "No backups yet.",
-      "time": "time",
-      "trigger": "reason",
-      "size": "size",
       "files": "files",
       "restore": "Restore…",
       "restoreQueued": "Restore queued.",
@@ -339,11 +200,11 @@
       "restoreUnavailable": "Restore unavailable: the game's folders aren't on disk.",
       "pathsAdd": "Add a save folder…",
       "pathsPickTitle": "Choose the folder where this game keeps its saves",
-      "pathAdded": "Save folder added.",
-      "pathRemoved": "Save folder removed.",
       "pathRemoveShort": "Remove",
       "pathRemove": "Remove {{path}}",
-      "pathsNone": "No save folder known for this game yet. Add the folder where it keeps its saves."
+      "pathsNone": "No save folder known for this game yet. Add the folder where it keeps its saves.",
+      "pathAdded": "Save folder added.",
+      "pathRemoved": "Save folder removed."
     },
     "removePrefix": "Also delete the Wine prefix",
     "removeFiles": "Also delete the game files",

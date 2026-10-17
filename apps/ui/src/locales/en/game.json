@@ -26,7 +26,13 @@
       "openLog": "Open the log"
     },
     "manual": "Run: winetricks {{verb}}",
-    "started": "Installing {{verb}} into the game's prefix. This can take a few minutes."
+    "started": "Installing {{verb}} into the game's prefix. This can take a few minutes.",
+    "protonLog": {
+      "title": "Turn on the Proton log to find out why.",
+      "paste": "Paste this into the game's Steam launch options, then launch the game once:",
+      "where": "The log will appear at {{path}}.",
+      "option": "PROTON_LOG=1 %command%"
+    }
   },
   "play": {
     "play": "Play",

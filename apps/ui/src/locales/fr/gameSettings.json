@@ -3,11 +3,6 @@
     "title": "Paramètres du lanceur pour {{title}}",
     "heading": "Paramètres du lanceur"
   },
-  "advanced": {
-    "label": "Avancé",
-    "set_one": "{{count}} défini",
-    "set_other": "{{count}} définis"
-  },
   "steamNotice": "Les jeux Steam démarrent via le client Steam, qui choisit la version de Proton et ignore les variables d'environnement de Platypus. Pour appliquer ces réglages, collez ceci dans Steam → Propriétés → Options de lancement :",
   "steamCopy": "Copier",
   "groups": {
@@ -16,123 +11,16 @@
     "launch": "lancement"
   },
   "runner": {
-    "aria": "Runner",
     "nativeNote": "Ce jeu propose une version Linux native de la boutique. Il démarre directement, sans Proton — runner, couche DX et options Proton ne s'appliquent pas.",
-    "description": "La version de Proton ou de Wine qui fait tourner ce jeu Windows.",
-    "autoNamed": "Automatique (utilise {{name}})",
-    "autoNone": "Automatique (aucun runner installé)",
-    "missing": "{{id}} (manquant)",
     "savedMissing": "Le runner enregistré n'est pas installé. Choisissez-en un autre, sinon le lancement échouera.",
-    "detail": "{{kind}} · {{path}}",
-    "autoDetail": "le dernier GE-Proton, puis Experimental",
-    "none": "aucun runner installé",
     "noneInstalled": "Aucun runner Proton ou Wine détecté.",
     "umuOption": "Proton via umu (recommandé)"
-  },
-  "sync": {
-    "kicker": "synchro",
-    "label": "Synchro",
-    "description": "La façon dont Wine coordonne les threads du jeu. Gardez le défaut sauf si un correctif dit le contraire.",
-    "titles": {
-      "fsync": "Défaut de Proton (fsync quand le noyau le prend en charge)",
-      "esync": "PROTON_NO_FSYNC=1",
-      "ntsync": "PROTON_USE_NTSYNC=1 (nécessite le module noyau ntsync)",
-      "off": "PROTON_NO_ESYNC=1 PROTON_NO_FSYNC=1"
-    }
-  },
-  "protonFlags": {
-    "kicker": "options proton",
-    "description": "Des interrupteurs que Proton lit au lancement. N'en activez un que si un jeu ou un correctif le demande.",
-    "descs": {
-      "PROTON_ENABLE_NVAPI": "Expose NVAPI au jeu (DLSS, Reflex sur NVIDIA)",
-      "PROTON_HIDE_NVIDIA_GPU": "Présente les GPU NVIDIA comme AMD pour contourner les contrôles du vendeur",
-      "PROTON_ENABLE_WAYLAND": "Utilise le pilote Wayland natif (Proton 10+/GE)",
-      "PROTON_NO_D3D11": "Désactive D3D11 pour que le jeu se rabatte sur une autre API",
-      "PROTON_NO_D3D12": "Désactive D3D12 pour que le jeu se rabatte sur D3D11",
-      "PROTON_FORCE_LARGE_ADDRESS_AWARE": "Laisse les jeux 32 bits utiliser plus de 2 Go de RAM",
-      "PROTON_OLD_GL_STRING": "Raccourcit la liste des extensions GL pour les vieux jeux",
-      "PROTON_LOG": "Écrit un journal de débogage dans $HOME/steam-<appid>.log"
-    }
   },
   "winetricks": {
     "kicker": "winetricks",
     "note": "· enregistré, pas encore appliqué"
   },
-  "graphics": {
-    "dxKicker": "couche dx",
-    "dxLabel": "Couche DX",
-    "dxDescription": "DXVK traduit DirectX 9–11 vers Vulkan et c'est le choix habituel. WineD3D utilise OpenGL ; ne l'essayez que si un jeu échoue avec DXVK.",
-    "dxLayers": {
-      "dxvk": "DXVK (inclus)",
-      "wined3d": "WineD3D"
-    },
-    "dxTitles": {
-      "dxvk": "La version de DXVK fournie avec le runner choisi",
-      "wined3d": "PROTON_USE_WINED3D=1"
-    },
-    "upscalerKicker": "mise à l'échelle",
-    "upscalerLabel": "Mise à l'échelle",
-    "upscalers": {
-      "native": "natif",
-      "fsr1": "FSR 1"
-    },
-    "upscalerTitles": {
-      "native": "Pas de mise à l'échelle",
-      "fsr1": "WINE_FULLSCREEN_FSR=1 (GE-Proton uniquement)"
-    },
-    "hudKicker": "mangohud",
-    "hudLabel": "MangoHud",
-    "huds": {
-      "off": "désactivé",
-      "fps only": "fps seulement",
-      "minimal": "minimal",
-      "full": "complet"
-    },
-    "hudTitles": {
-      "off": "MangoHud désactivé",
-      "fps only": "MANGOHUD_CONFIG=preset=1",
-      "minimal": "MANGOHUD_CONFIG=preset=2",
-      "full": "MANGOHUD_CONFIG=preset=4"
-    },
-    "shaderKicker": "cache shader dxvk",
-    "shaderLabel": "Cache shader",
-    "shaderOn": "activé",
-    "shaderOff": "désactivé",
-    "shaderOffTitle": "DXVK_STATE_CACHE=0",
-    "shaderDescription": "DXVK garde l'état des shaders entre les lancements, pour des lancements suivants plus fluides. Désactivé définit DXVK_STATE_CACHE=0."
-  },
   "launch": {
-    "pipelineKicker": "pipeline",
-    "pipelineDescription": "Chaque interrupteur enveloppe la commande de lancement dans un programme de plus.",
-    "gamemode": "gamemode",
-    "gamemodeHint": "Enveloppe le lancement dans gamemoderun",
-    "gamescope": "gamescope",
-    "gamescopeHint": "Lance le jeu dans une session gamescope",
-    "eac": "runtime eac",
-    "eacHint": "Pour les jeux qui utilisent EasyAntiCheat",
-    "battlEye": "runtime battleye",
-    "battlEyeHint": "Pour les jeux qui utilisent BattlEye",
-    "resolutionKicker": "résolution",
-    "resolutionAria": "Résolution gamescope",
-    "gameDefault": "Défaut du jeu",
-    "thisDisplay": "{{w}}×{{h}} (cet écran)",
-    "custom": "Personnalisé…",
-    "customNamed": "Personnalisé… ({{w}}×{{h}})",
-    "widthAria": "largeur gamescope",
-    "widthPlaceholder": "largeur",
-    "heightAria": "hauteur gamescope",
-    "heightPlaceholder": "hauteur",
-    "rateKicker": "fréquence",
-    "rateAria": "Fréquence d'images gamescope",
-    "rateHz": "{{r}} Hz",
-    "customRateNamed": "Personnalisé… ({{r}} Hz)",
-    "refreshAria": "fréquence gamescope",
-    "refreshPlaceholder": "Hz",
-    "filterKicker": "filtre de mise à l'échelle",
-    "filterLabel": "Filtre de mise à l'échelle gamescope",
-    "extraGsKicker": "arguments gamescope supplémentaires",
-    "extraGsAria": "arguments gamescope",
-    "extraGsPlaceholder": "--mangoapp",
     "argsKicker": "arguments de lancement",
     "argsPlaceholder": "-novid -fullscreen",
     "workdirKicker": "répertoire de travail",
@@ -159,30 +47,6 @@
     "duplicateKey": "Clé en double, c'est cette valeur qui gagne",
     "notSaved": "(non enregistré)",
     "addVar": "+ Ajouter une variable"
-  },
-  "gsToggles": {
-    "fullscreen": "plein écran",
-    "borderless": "sans bordure",
-    "grabCursor": "capture forcée du curseur",
-    "hdr": "hdr",
-    "vrr": "synchro adaptative (vrr)",
-    "wayland": "exposer wayland"
-  },
-  "gsToggleTitles": {
-    "fullscreen": "-f : mettre la fenêtre en plein écran",
-    "borderless": "-b : mettre la fenêtre sans bordure",
-    "grabCursor": "--force-grab-cursor : toujours utiliser la souris relative",
-    "hdr": "--hdr-enabled : activer la sortie HDR (nécessite la couche WSI de Gamescope)",
-    "vrr": "--adaptive-sync : fréquence de rafraîchissement variable si disponible",
-    "wayland": "--expose-wayland : prendre en charge les clients Wayland via xdg-shell"
-  },
-  "gsFilters": {
-    "default": "par défaut",
-    "linear": "linear",
-    "nearest": "nearest",
-    "fsr": "fsr",
-    "nis": "nis",
-    "pixel": "pixel"
   },
   "preview": {
     "label": "$ aperçu",
@@ -240,11 +104,11 @@
   "tweaks": {
     "title": "Ajustements suggérés",
     "intro": "Selon cette machine, pas la note du jeu : un jeu platine peut quand même en avoir besoin sur votre GPU.",
-    "steamNote": "Steam ne les applique que via les <lo>options de lancement</lo> du jeu.",
     "recommended": "recommandés",
     "troubleshoot": "si quelque chose casse",
     "applied": "« {{title}} » appliqué",
-    "removed": "« {{title}} » retiré"
+    "removed": "« {{title}} » retiré",
+    "steamNote": "Steam ne les applique que via les <lo>options de lancement</lo> du jeu."
   },
   "prefix": {
     "picker": "utiliser un préfixe existant",
@@ -303,9 +167,6 @@
       "backingUp": "Sauvegarde…",
       "queued": "Sauvegarde en file d’attente.",
       "empty": "Pas encore de sauvegardes.",
-      "time": "date",
-      "trigger": "raison",
-      "size": "taille",
       "files": "fichiers",
       "restore": "Restaurer…",
       "restoreQueued": "Restauration en file d’attente.",
@@ -339,11 +200,11 @@
       "restoreUnavailable": "Restauration impossible : les dossiers du jeu ne sont pas sur le disque.",
       "pathsAdd": "Ajouter un dossier de sauvegarde…",
       "pathsPickTitle": "Choisissez le dossier où ce jeu garde ses sauvegardes",
-      "pathAdded": "Dossier de sauvegarde ajouté.",
-      "pathRemoved": "Dossier de sauvegarde retiré.",
       "pathRemoveShort": "Retirer",
       "pathRemove": "Retirer {{path}}",
-      "pathsNone": "Aucun dossier de sauvegarde connu pour ce jeu. Ajoutez le dossier où il garde ses sauvegardes."
+      "pathsNone": "Aucun dossier de sauvegarde connu pour ce jeu. Ajoutez le dossier où il garde ses sauvegardes.",
+      "pathAdded": "Dossier de sauvegarde ajouté.",
+      "pathRemoved": "Dossier de sauvegarde retiré."
     },
     "removePrefix": "Supprimer aussi le préfixe Wine",
     "removeFiles": "Supprimer aussi les fichiers du jeu",

@@ -26,7 +26,13 @@
       "openLog": "Ouvrir le journal"
     },
     "manual": "Exécuter : winetricks {{verb}}",
-    "started": "Installation de {{verb}} dans le préfixe du jeu. Cela peut prendre quelques minutes."
+    "started": "Installation de {{verb}} dans le préfixe du jeu. Cela peut prendre quelques minutes.",
+    "protonLog": {
+      "title": "Activez le journal Proton pour savoir pourquoi.",
+      "paste": "Collez ceci dans les options de lancement Steam du jeu, puis lancez le jeu une fois :",
+      "where": "Le journal apparaîtra dans {{path}}.",
+      "option": "PROTON_LOG=1 %command%"
+    }
   },
   "play": {
     "play": "Jouer",

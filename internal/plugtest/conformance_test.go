@@ -62,6 +62,9 @@ func echoAllCapabilities(env map[string]string) plugtest.Suite {
 		EditManifest: func(m map[string]any) {
 			var names []string
 			for _, c := range plugins.Registry() {
+				if c.Name == "runner" {
+					continue // runner is restricted to the first-party binary.
+				}
 				names = append(names, c.Name)
 			}
 			m["capabilities"] = names
@@ -83,6 +86,9 @@ func TestHandshakeEchoEveryCapabilityOn(t *testing.T) {
 	sess := echoAllCapabilities(nil).Handshake(t)
 	calls := echoCalls(t, sess)
 	for _, c := range plugins.Registry() {
+		if c.Name == "runner" {
+			continue // exercised by the runner plugin's own conformance fixture.
+		}
 		if slices.Contains([]string{"library", "install", "launch", "auth", "discard"}, c.Name) {
 			continue
 		}

@@ -167,7 +167,11 @@ func TestGateCloudNoPathsPassesWithoutConfirmation(t *testing.T) {
 	if gate.NoPaths || !gate.Cloud || gate.BackupID != "" {
 		t.Fatalf("cloud gate = %+v, want Cloud pass", gate)
 	}
-	if pv := a.savesPreview(g); pv.NoPaths || !pv.Cloud {
+	pv, err := a.savesPreview(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pv.NoPaths || !pv.Cloud {
 		t.Fatalf("cloud preview = %+v, want Cloud", pv)
 	}
 

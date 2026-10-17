@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -146,21 +147,8 @@ func TestFixtureCrashGameProducesHintsThroughTheApp(t *testing.T) {
 		"ECHO_FIXTURES": `{"crash-vcrun":{"mode":"crash","log":"vcruntime","afterMs":200}}`,
 	})
 	g := e.install(t, "crash-vcrun", "Echo crash-vcrun")
-	if _, err := e.a.LaunchGame(g); err != nil {
-		t.Fatalf("LaunchGame: %v", err)
-	}
-	deadline := time.After(20 * time.Second)
-	for {
-		select {
-		case ev := <-e.events:
-			if ev.GameID == g.ID && ev.State == "failed" {
-				goto failed
-			}
-		case <-deadline:
-			t.Fatal("timed out waiting for the failed launch")
-		}
-	}
-failed:
+	e.launchUntilFailed(t, g)
+	installTestRunnerPlugin(t, e.a)
 	got := e.a.GameCrashHints(g)
 	if got == nil || len(got.Hints) == 0 {
 		t.Fatalf("GameCrashHints = %+v, want the crash hints", got)
@@ -170,6 +158,29 @@ failed:
 	}
 	if got.Log == "" {
 		t.Fatal("hints name no log")
+	}
+}
+
+func installTestRunnerPlugin(t *testing.T, a *App) {
+	t.Helper()
+	dir := filepath.Join(a.plugins.Dir(), "runner")
+	bin := filepath.Join(dir, "bin", "platypus-runner")
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-o", bin, "./plugins/runner")
+	cmd.Dir = repoPath("")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build runner plugin: %v: %s", err, output)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), mustRead(t, repoPath("plugins/runner/plugin.json")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.plugins.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.plugins.Approve("runner"); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -291,5 +302,51 @@ func TestSeededLibraryIsStableThroughTheApp(t *testing.T) {
 	}
 	if det.ReleaseDate == "" || det.SteamAppID == "" {
 		t.Fatalf("seeded details miss facts: %s", det1)
+	}
+}
+
+// launchUntilFailed launches g and waits for its session to end abnormally.
+func (e *fixturesEnv) launchUntilFailed(t *testing.T, g types.Game) {
+	t.Helper()
+	if _, err := e.a.LaunchGame(g); err != nil {
+		t.Fatalf("LaunchGame: %v", err)
+	}
+	deadline := time.After(20 * time.Second)
+	for {
+		select {
+		case ev := <-e.events:
+			if ev.GameID == g.ID && ev.State == "failed" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for the failed launch")
+		}
+	}
+}
+
+// With no prefixes folder chosen, the runner looks for a game's prefix in the
+// default folder, the one the launch uses, so winetricks is offered (#46).
+func TestCrashHintsOfferWinetricksForTheDefaultPrefixesFolder(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "winetricks"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	e := fixturesApp(t, map[string]string{
+		"ECHO_FIXTURES": `{"crash-vcrun":{"mode":"crash","log":"vcruntime","afterMs":200}}`,
+	})
+	g := e.install(t, "crash-vcrun", "Echo crash-vcrun")
+	if e.a.prefixesFolder() != "" {
+		t.Fatalf("prefixes folder = %q, want the default", e.a.prefixesFolder())
+	}
+	prefix := filepath.Join(e.a.effectivePrefixesFolder(), g.ID)
+	if err := os.MkdirAll(prefix, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e.launchUntilFailed(t, g)
+	installTestRunnerPlugin(t, e.a)
+	got := e.a.GameCrashHints(g)
+	if got == nil || !got.Winetricks {
+		t.Fatalf("GameCrashHints = %+v, want winetricks offered for the prefix in the default folder", got)
 	}
 }

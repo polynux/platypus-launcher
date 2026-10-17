@@ -68,6 +68,8 @@ export interface CoreApi {
   GetNetState(): Promise<types.NetState>;
   GetPluginSettings(source: string): Promise<types.SettingsView>;
   GetProtonVersions(): Promise<types.ProtonVersion[]>;
+  GetRunnerEnv(game: types.Game): Promise<types.RunnerEnv>;
+  GetRunnerOptions(): Promise<types.SettingsSchema>;
   GetSavePaths(game: types.Game): Promise<types.SavePath[]>;
   GetTweaks(): Promise<types.Tweak[]>;
   InstallGame(game: types.Game): Promise<types.Job>;
@@ -244,6 +246,8 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetNetState',
   'GetPluginSettings',
   'GetProtonVersions',
+  'GetRunnerEnv',
+  'GetRunnerOptions',
   'GetSavePaths',
   'GetTweaks',
   'InstallGame',

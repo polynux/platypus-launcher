@@ -56,13 +56,14 @@ import type {
   SocialView,
   StorePlugin,
   TermRef,
+  RunnerEnv,
+  SettingGroup,
   Tweak,
   VersionInfo,
   VersionPin,
   VersionTarget,
 } from '../types';
 import type { types as gen } from '../gen/models';
-import { toBackendGame } from '../lib/settings';
 import { App, backendAvailable, onEvent } from './bridge';
 
 // The backend is the desktop shell's bridge (bridge.ts). If the frontend is
@@ -85,10 +86,11 @@ function call<T>(op: string, fn: () => Promise<unknown>): Effect.Effect<T, Error
   });
 }
 
-// Games cross to Go with their structured settings folded into env_vars. The
-// UI holds features as null when the backend listed none; Go reads that as an
-// empty list, so the handoff is a direct assertion, not a conversion.
-const backend = (g: Game) => toBackendGame(g) as gen.Game;
+// Games cross to Go as they are: the runner's choices are typed settings, and
+// the backend turns them into env vars. The UI holds features as null when the
+// backend listed none; Go reads that as an empty list, so the handoff is a
+// direct assertion, not a conversion.
+const backend = (g: Game) => g as gen.Game;
 
 /** A compat answer with its lists present, whatever Go sent (nil slices arrive as null). */
 function normalizeCompat(c: Compat): Compat {
@@ -190,6 +192,10 @@ export const LauncherApi = {
 
   // Hardware-based tweaks offered for every game.
   getTweaks: () => call<Tweak[]>('GetTweaks', async () => (await App.GetTweaks()) ?? []),
+  /** The runner's per-game choices, for the game settings form (runner.options). */
+  getRunnerOptions: () => call<SettingGroup[]>('GetRunnerOptions', async () => (await App.GetRunnerOptions()).groups ?? []),
+  /** The env and wrappers the runner's choices add, for the Steam launch options. */
+  getRunnerEnv: (game: Game) => call<RunnerEnv>('GetRunnerEnv', () => App.GetRunnerEnv(backend(game))),
 
   // Games the user added by hand, persisted in settings.json.
   addCustomGame: (title: string, executable: string) =>

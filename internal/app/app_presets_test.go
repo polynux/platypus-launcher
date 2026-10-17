@@ -24,7 +24,9 @@ func presetApp(t *testing.T) (*App, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &App{settings: st, optHome: home}, home
+	a := &App{settings: st, optHome: home}
+	withTestRunnerPlugin(t, a, home)
+	return a, home
 }
 
 // presetExeGame adds a sideloaded Windows game and returns its id.
@@ -104,7 +106,7 @@ func TestPrefixPresetsValidation(t *testing.T) {
 		{"empty name", types.PrefixPreset{Name: "  "}, "settings.preset.nameMissing"},
 		{"blank verb", types.PrefixPreset{Name: "P", Winetricks: []string{"  "}}, "settings.preset.badVerb"},
 		{"spaced verb", types.PrefixPreset{Name: "P", Winetricks: []string{"not a verb"}}, "settings.preset.badVerb"},
-		{"unknown verb", types.PrefixPreset{Name: "P", Winetricks: []string{"ddraw"}}, "settings.preset.badVerb"},
+		{"malformed verb", types.PrefixPreset{Name: "P", Winetricks: []string{"bad verb"}}, "settings.preset.badVerb"},
 		{"bad env key", types.PrefixPreset{Name: "P", Env: map[string]string{"1BAD": "x"}}, "settings.preset.badEnvKey"},
 		{"dashed env key", types.PrefixPreset{Name: "P", Env: map[string]string{"HAS-DASH": "x"}}, "settings.preset.badEnvKey"},
 		{"empty dll value", types.PrefixPreset{Name: "P", DLLOverrides: map[string]string{"dxgi": " "}}, "settings.preset.badOverride"},

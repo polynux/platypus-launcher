@@ -10,24 +10,40 @@ export type StoreType = 'steam' | 'epic' | 'gog' | 'ubisoft' | 'custom' | (strin
 
 export type ProtonVersion = gen.ProtonVersion;
 
-export type SyncMode = 'default' | 'esync' | 'fsync' | 'ntsync' | 'off';
-export type DxLayer = 'dxvk' | 'wined3d';
-export type Upscaler = 'native' | 'fsr1';
-export type HudPreset = 'off' | 'fps only' | 'minimal' | 'full';
+/** The runner's choices: plain per-game values under their own names (the core
+ *  keeps them as they were saved, and the runner reads them; runner.options
+ *  declares them). They are not in the generated GameSettings. */
+export interface RunnerChoiceValues {
+  proton_enable_nvapi?: boolean;
+  proton_hide_nvidia_gpu?: boolean;
+  proton_enable_wayland?: boolean;
+  proton_no_d3d11?: boolean;
+  proton_no_d3d12?: boolean;
+  proton_force_large_address_aware?: boolean;
+  proton_old_gl_string?: boolean;
+  proton_log?: boolean;
+  sync_mode?: string;
+  dx_layer?: string;
+  upscaler?: string;
+  mangohud_preset?: string;
+  shader_cache?: string;
+  gamescope_resolution?: string;
+  gamescope_rate?: string;
+  gamescope_filter?: string;
+  gamescope_fullscreen?: boolean;
+  gamescope_borderless?: boolean;
+  gamescope_grab_cursor?: boolean;
+  gamescope_hdr?: boolean;
+  gamescope_vrr?: boolean;
+  gamescope_wayland?: boolean;
+}
 
-export type GameSettings = gen.GameSettings & {
-  // Frontend-side Proton controls (DESIGN §5). The backend has no fields for
-  // these yet; they are folded into env_vars before preview/launch
-  // (see lib/settings.ts), so the Go side receives real, honest env vars.
-  proton_flags?: string[];
-  sync_mode?: SyncMode;
-  dx_layer?: DxLayer;
-  upscaler?: Upscaler;
-  mangohud_preset?: HudPreset;
-  shader_cache?: 'on' | 'off';
+export type GameSettings = gen.GameSettings & RunnerChoiceValues & {
+  // The UI's own list: the winetricks verbs ticked for the game (not a runner choice).
   winetricks?: string[];
 };
 
+export type RunnerEnv = gen.RunnerEnv;
 export type GameFixInfo = gen.GameFixInfo;
 export type Achievement = gen.Achievement;
 export type Achievements = gen.Achievements;

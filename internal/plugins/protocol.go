@@ -175,6 +175,18 @@ type CompatLookupResult struct {
 	Facts []CompatFact `json:"facts"`
 }
 
+// RunnerInfo is one installed entry returned by runner.list.
+type RunnerInfo struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Version string `json:"version,omitempty"`
+	Default bool   `json:"default,omitempty"`
+	Path    string `json:"path,omitempty"`
+	System  bool   `json:"system,omitempty"`
+	Custom  bool   `json:"custom,omitempty"`
+}
+
 // LaunchSpec answers game.launchSpec. Either Platypus runs Exe through its
 // runner pipeline, or (Delegate == "store-client") Platypus runs Command, which
 // asks the store's own client to start the game, and follows the game through

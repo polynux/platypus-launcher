@@ -46,6 +46,10 @@ func (a *App) ensureBundledLinuxCompat(found []plugins.Plugin) []plugins.Plugin 
 	return a.ensureBundledPlugin(found, "linux-compat")
 }
 
+func (a *App) ensureBundledRunner(found []plugins.Plugin) []plugins.Plugin {
+	return a.ensureBundledPlugin(found, "runner")
+}
+
 func (a *App) ensureBundledPlugin(found []plugins.Plugin, id string) []plugins.Plugin {
 	bundledDir := bundledPluginsDir()
 	if bundledDir == "" {
