@@ -1,4 +1,4 @@
-package settings
+package main
 
 import (
 	"reflect"
@@ -32,7 +32,7 @@ func legacyGame() map[string]any {
 // own env var stays.
 func TestMigrateLegacyRecordIntoTypedKeys(t *testing.T) {
 	m := legacyGame()
-	if !migrateRunnerSettings(m) {
+	if !migrateSettings(m) {
 		t.Fatal("a legacy record reported no change")
 	}
 	want := map[string]any{
@@ -78,7 +78,7 @@ func TestMigrationKeepsHandTypedEnv(t *testing.T) {
 		},
 		"use_mangohud": true,
 	}
-	migrateRunnerSettings(m)
+	migrateSettings(m)
 	env := m["env_vars"].(map[string]any)
 	for k, v := range map[string]string{"PROTON_NO_ESYNC": "1", "MANGOHUD_CONFIG": "cpu_temp", "DXVK_STATE_CACHE": "1", "PROTON_LOG": "2"} {
 		if env[k] != v {
@@ -102,12 +102,12 @@ func TestMigrationKeepsHandTypedEnv(t *testing.T) {
 // nothing.
 func TestMigrationIsIdempotentAndLeavesTypedRecordsAlone(t *testing.T) {
 	m := legacyGame()
-	migrateRunnerSettings(m)
+	migrateSettings(m)
 	before := map[string]any{}
 	for k, v := range m {
 		before[k] = v
 	}
-	if migrateRunnerSettings(m) {
+	if migrateSettings(m) {
 		t.Fatal("a second migration changed a migrated record")
 	}
 	if !reflect.DeepEqual(before, m) {
@@ -115,26 +115,11 @@ func TestMigrationIsIdempotentAndLeavesTypedRecordsAlone(t *testing.T) {
 	}
 
 	typed := map[string]any{"sync_mode": "off", "env_vars": map[string]any{"PROTON_USE_NTSYNC": "1"}}
-	migrateRunnerSettings(typed)
+	migrateSettings(typed)
 	if typed["sync_mode"] != "off" {
 		t.Errorf("a typed sync_mode was overwritten: %v", typed["sync_mode"])
 	}
 	if got := typed["env_vars"].(map[string]any)["PROTON_USE_NTSYNC"]; got != "1" {
 		t.Errorf("env var of a typed record was taken over: %v", got)
-	}
-}
-
-// Saving a legacy record migrates it, and the store then returns the typed form.
-func TestSetGameSettingsMigratesLegacyRecords(t *testing.T) {
-	s, err := OpenWithHome(t.TempDir()+"/settings.json", t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetGameSettings("g1", legacyGame()); err != nil {
-		t.Fatal(err)
-	}
-	got := s.GameSettings()["g1"]
-	if got["sync_mode"] != "ntsync" || got["gamescope_resolution"] != "1920x1080" {
-		t.Fatalf("saved record = %v, want the typed keys", got)
 	}
 }

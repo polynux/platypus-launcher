@@ -134,34 +134,36 @@ func TestBuiltinFixVerbsAreKnown(t *testing.T) {
 	}
 }
 
-// Every GameSettings field is a runner choice that runner.options offers, a
-// value the runner derives from those choices, or a launch setting the core
-// owns (the wine prefix is a core section). A new field has to be classed here,
-// so none is left out silently; every offered key has to be a real field.
-func TestRunnerOptionsCoverEveryRunnerSetting(t *testing.T) {
+// The core models only the settings it launches with (types.GameSettings). The
+// runner's choices are plugin keys: none of them may be a core field, so the core
+// stays free of Wine and Proton knowledge. A new core field is classed here on
+// purpose.
+func TestRunnerChoicesAreNotCoreSettings(t *testing.T) {
 	t.Parallel()
-	coreOwned := map[string]bool{"wine_prefix": true, "launch_arguments": true, "env_vars": true, "working_dir": true, "run_mode": true}
-	derived := map[string]bool{"use_mangohud": true, "gamescope_w": true, "gamescope_h": true, "gamescope_r": true}
-	offered := map[string]bool{}
-	for _, g := range runnerSchema()["groups"].([]any) {
-		for _, f := range g.(map[string]any)["fields"].([]any) {
-			offered[f.(map[string]any)["id"].(string)] = true
-		}
+	core := map[string]bool{
+		"runner_id": true, "wine_prefix": true, "launch_arguments": true, "env_vars": true,
+		"use_gamemode": true, "use_mangohud": true, "use_gamescope": true,
+		"gamescope_w": true, "gamescope_h": true, "gamescope_r": true, "gamescope_args": true,
+		"eac_runtime": true, "battleye_runtime": true, "working_dir": true, "run_mode": true,
 	}
 	gs := reflect.TypeOf(types.GameSettings{})
-	fields := map[string]bool{}
 	for i := range gs.NumField() {
 		key := strings.Split(gs.Field(i).Tag.Get("json"), ",")[0]
-		fields[key] = true
-		if coreOwned[key] || derived[key] || offered[key] {
-			continue
+		if !core[key] {
+			t.Errorf("GameSettings.%s (%q) is not a core setting: a runner choice belongs under runner.options", gs.Field(i).Name, key)
 		}
-		t.Errorf("GameSettings.%s (%q) is neither a runner choice offered by runner.options, derived, nor core-owned", gs.Field(i).Name, key)
 	}
-	for key := range offered {
-		if !fields[key] {
-			t.Errorf("runner.options offers %q, which is not a GameSettings field", key)
+	// A key the schema offers that the core models is a core setting on purpose.
+	// Every other offered key is a runner choice, stored under its own name.
+	offered := 0
+	for _, g := range runnerSchema()["groups"].([]any) {
+		for _, f := range g.(map[string]any)["fields"].([]any) {
+			offered++
+			_ = f.(map[string]any)["id"].(string)
 		}
+	}
+	if offered < 20 {
+		t.Errorf("runner.options offers %d choices, want the full set", offered)
 	}
 }
 

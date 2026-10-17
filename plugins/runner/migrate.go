@@ -1,4 +1,4 @@
-package settings
+package main
 
 import (
 	"fmt"
@@ -7,10 +7,9 @@ import (
 	"strings"
 )
 
-// Runner settings migration (#74). The UI used to fold the runner's choices
-// into env_vars and gamescope_args, and kept them out of the typed settings
-// (proton_flags, sync_mode, and so on). migrateRunnerSettings moves them into
-// the typed keys. It takes over an env var only when it is exactly what the old
+// Migration of the settings the UI used to fold into env_vars and
+// gamescope_args (#74). Those values now live under the keys runner.options
+// declares. migrateSettings moves them there. It takes over an env var only when it is exactly what the old
 // UI wrote for the choice the var reads back as, so a value the user typed by
 // hand stays where it is. It runs when settings load and when they are saved,
 // and running it again changes nothing.
@@ -43,17 +42,9 @@ var legacyGamescopeSwitches = []struct {
 
 var legacyGamescopeFilters = []string{"linear", "nearest", "fsr", "nis", "pixel"}
 
-// migrateRunnerGames applies the migration to every saved game. It changes the
-// loaded settings only; they are written back on the next save.
-func (s *Store) migrateRunnerGames() {
-	for _, g := range s.data.Games {
-		migrateRunnerSettings(g)
-	}
-}
-
-// migrateRunnerSettings converts one game's saved settings in place and reports
-// whether it changed anything.
-func migrateRunnerSettings(m map[string]any) bool {
+// migrateSettings converts one game's saved settings in place and reports
+// whether it changed anything. It is idempotent.
+func migrateSettings(m map[string]any) bool {
 	if m == nil {
 		return false
 	}
@@ -149,7 +140,7 @@ func migrateRunnerSettings(m map[string]any) bool {
 				preset = "minimal"
 			}
 		}
-		if preset != "off" && takeOver(map[string]string{"MANGOHUD_CONFIG": mangohudConfig[preset]}) {
+		if preset != "off" && takeOver(map[string]string{"MANGOHUD_CONFIG": mangohudEnv[preset]}) {
 			setTyped("mangohud_preset", preset)
 		}
 	}
@@ -197,9 +188,8 @@ func migrateRunnerSettings(m map[string]any) bool {
 	return changed
 }
 
-// mangohudConfig is the MANGOHUD_CONFIG the old UI wrote for each preset; off
-// writes none.
-var mangohudConfig = map[string]string{"off": "", "fps only": "preset=1", "minimal": "preset=2", "full": "preset=4"}
+// mangohudEnv is the MANGOHUD_CONFIG the old UI wrote for each preset; off writes none.
+var mangohudEnv = map[string]string{"off": "", "fps only": "preset=1", "minimal": "preset=2", "full": "preset=4"}
 
 // switchFor is the typed key of a gamescope switch spelled as tok.
 func switchFor(tok string) (string, bool) {

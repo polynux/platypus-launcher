@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -54,61 +55,59 @@ func text(key string) string {
 	return catalogs["en"][key]
 }
 
-// protonFlag is one Proton switch: the env var it sets to 1 and the setting that
-// turns it on.
-var protonFlags = []struct {
-	env string
-	on  func(types.GameSettings) bool
-}{
-	{"PROTON_ENABLE_NVAPI", func(s types.GameSettings) bool { return s.ProtonEnableNvapi }},
-	{"PROTON_HIDE_NVIDIA_GPU", func(s types.GameSettings) bool { return s.ProtonHideNvidiaGpu }},
-	{"PROTON_ENABLE_WAYLAND", func(s types.GameSettings) bool { return s.ProtonEnableWayland }},
-	{"PROTON_NO_D3D11", func(s types.GameSettings) bool { return s.ProtonNoD3d11 }},
-	{"PROTON_NO_D3D12", func(s types.GameSettings) bool { return s.ProtonNoD3d12 }},
-	{"PROTON_FORCE_LARGE_ADDRESS_AWARE", func(s types.GameSettings) bool { return s.ProtonForceLargeAddressAware }},
-	{"PROTON_OLD_GL_STRING", func(s types.GameSettings) bool { return s.ProtonOldGlString }},
-	{"PROTON_LOG", func(s types.GameSettings) bool { return s.ProtonLog }},
+// choiceSet is the game's saved settings as the runner reads them: the keys
+// runner.options declares, plus the modeled keys the launch reads. An absent key
+// takes the default runner.options declares.
+type choiceSet map[string]any
+
+func (c choiceSet) flag(key string) bool {
+	b, _ := c[key].(bool)
+	return b
+}
+
+func (c choiceSet) text(key string) string {
+	s, _ := c[key].(string)
+	return s
+}
+
+// or is the text of key, or def when the game has none.
+func (c choiceSet) or(key, def string) string {
+	if s := c.text(key); s != "" {
+		return s
+	}
+	return def
+}
+
+// protonFlags are the Proton switches: the setting that turns each on, and the
+// env var it sets to 1.
+var protonFlags = []struct{ key, env string }{
+	{"proton_enable_nvapi", "PROTON_ENABLE_NVAPI"},
+	{"proton_hide_nvidia_gpu", "PROTON_HIDE_NVIDIA_GPU"},
+	{"proton_enable_wayland", "PROTON_ENABLE_WAYLAND"},
+	{"proton_no_d3d11", "PROTON_NO_D3D11"},
+	{"proton_no_d3d12", "PROTON_NO_D3D12"},
+	{"proton_force_large_address_aware", "PROTON_FORCE_LARGE_ADDRESS_AWARE"},
+	{"proton_old_gl_string", "PROTON_OLD_GL_STRING"},
+	{"proton_log", "PROTON_LOG"},
 }
 
 // mangohudConfig is the MANGOHUD_CONFIG each preset writes.
 var mangohudConfig = map[string]string{"fps only": "preset=1", "minimal": "preset=2", "full": "preset=4"}
 
-// Defaults: an empty choice is the first option of its field.
-func syncMode(s types.GameSettings) string {
-	if s.SyncMode == "" {
-		return "fsync"
-	}
-	return s.SyncMode
-}
+// The defaults runner.options declares: an empty or absent choice is the first
+// option of its field.
+func syncMode(c choiceSet) string    { return c.or("sync_mode", "fsync") }
+func dxLayer(c choiceSet) string     { return c.or("dx_layer", "dxvk") }
+func upscaler(c choiceSet) string    { return c.or("upscaler", "native") }
+func shaderCache(c choiceSet) string { return c.or("shader_cache", "on") }
 
-func dxLayer(s types.GameSettings) string {
-	if s.DxLayer == "" {
-		return "dxvk"
+// mangohudPreset is the overlay the game runs with. A game with no preset saved
+// takes use_mangohud's old meaning: on is full.
+func mangohudPreset(c choiceSet) string {
+	if p := c.text("mangohud_preset"); p != "" {
+		return p
 	}
-	return s.DxLayer
-}
-
-func upscaler(s types.GameSettings) string {
-	if s.Upscaler == "" {
-		return "native"
-	}
-	return s.Upscaler
-}
-
-func shaderCache(s types.GameSettings) string {
-	if s.ShaderCache == "" {
-		return "on"
-	}
-	return s.ShaderCache
-}
-
-// mangohudPreset is the overlay the game runs with. A game with no preset
-// saved takes use_mangohud's old meaning: on is full.
-func mangohudPreset(s types.GameSettings) string {
-	switch {
-	case s.MangoHudPreset != "":
-		return s.MangoHudPreset
-	case s.UseMangoHud:
+	if c.flag("use_mangohud") {
 		return "full"
 	}
 	return "off"
@@ -116,14 +115,14 @@ func mangohudPreset(s types.GameSettings) string {
 
 // derivedEnv is the env the runner's choices set: Proton's switches, sync, the
 // DX layer, the upscaler, MangoHud and the shader cache.
-func derivedEnv(s types.GameSettings) map[string]string {
+func derivedEnv(c choiceSet) map[string]string {
 	env := map[string]string{}
 	for _, f := range protonFlags {
-		if f.on(s) {
+		if c.flag(f.key) {
 			env[f.env] = "1"
 		}
 	}
-	switch syncMode(s) {
+	switch syncMode(c) {
 	case "esync":
 		env["PROTON_NO_FSYNC"] = "1"
 	case "ntsync":
@@ -131,16 +130,16 @@ func derivedEnv(s types.GameSettings) map[string]string {
 	case "off":
 		env["PROTON_NO_ESYNC"], env["PROTON_NO_FSYNC"] = "1", "1"
 	}
-	if dxLayer(s) == "wined3d" {
+	if dxLayer(c) == "wined3d" {
 		env["PROTON_USE_WINED3D"] = "1"
 	}
-	if upscaler(s) == "fsr1" {
+	if upscaler(c) == "fsr1" {
 		env["WINE_FULLSCREEN_FSR"] = "1"
 	}
-	if p := mangohudPreset(s); p != "off" {
+	if p := mangohudPreset(c); p != "off" {
 		env["MANGOHUD_CONFIG"] = mangohudConfig[p]
 	}
-	if shaderCache(s) == "off" {
+	if shaderCache(c) == "off" {
 		env["DXVK_STATE_CACHE"] = "0"
 	}
 	return env
@@ -148,50 +147,64 @@ func derivedEnv(s types.GameSettings) map[string]string {
 
 // gamescopeArgs is the gamescope arguments the switches and filter give, then
 // the user's own gamescope_args: the order the old UI wrote them in.
-func gamescopeArgs(s types.GameSettings) string {
+func gamescopeArgs(c choiceSet, extra string) string {
 	var parts []string
 	for _, sw := range []struct {
-		on   bool
-		flag string
+		key, flag string
 	}{
-		{s.GamescopeFullscreen, "-f"},
-		{s.GamescopeBorderless, "-b"},
-		{s.GamescopeGrabCursor, "--force-grab-cursor"},
-		{s.GamescopeHDR, "--hdr-enabled"},
-		{s.GamescopeVRR, "--adaptive-sync"},
-		{s.GamescopeWayland, "--expose-wayland"},
+		{"gamescope_fullscreen", "-f"},
+		{"gamescope_borderless", "-b"},
+		{"gamescope_grab_cursor", "--force-grab-cursor"},
+		{"gamescope_hdr", "--hdr-enabled"},
+		{"gamescope_vrr", "--adaptive-sync"},
+		{"gamescope_wayland", "--expose-wayland"},
 	} {
-		if sw.on {
+		if c.flag(sw.key) {
 			parts = append(parts, sw.flag)
 		}
 	}
-	if s.GamescopeFilter != "" {
-		parts = append(parts, "-F", s.GamescopeFilter)
+	if f := c.text("gamescope_filter"); f != "" {
+		parts = append(parts, "-F", f)
 	}
-	return strings.Join(append(parts, strings.Fields(s.GamescopeArgs)...), " ")
+	return strings.Join(append(parts, strings.Fields(extra)...), " ")
+}
+
+// settingsMap is a game's typed settings as a saved-settings map.
+func settingsMap(s types.GameSettings) map[string]any {
+	out := map[string]any{}
+	if raw, err := json.Marshal(s); err == nil {
+		_ = json.Unmarshal(raw, &out)
+	}
+	return out
 }
 
 // effectiveSettings is the settings a launch uses: the runner's choices turned
-// into env vars and gamescope arguments. The user's own env_vars win over them,
-// as they always have.
-func effectiveSettings(s types.GameSettings) types.GameSettings {
-	env := derivedEnv(s)
-	for k, v := range s.EnvVars {
-		env[k] = v
-	}
-	s.EnvVars = env
-	s.UseMangoHud = mangohudPreset(s) != "off"
-	if w, h, ok := strings.Cut(s.GamescopeResolution, "x"); ok {
+// into env vars and gamescope arguments. The game's saved keys are read from opts
+// (the core sends them all); the typed settings fill in what opts lacks. Legacy
+// keys are migrated in memory first, so a game saved by the old UI launches as it
+// did before the choices moved. The user's own env_vars win over a derived value.
+func effectiveSettings(s types.GameSettings, opts map[string]any) types.GameSettings {
+	saved := settingsMap(s)
+	maps.Copy(saved, opts)
+	migrateSettings(saved)
+	c := choiceSet(saved)
+
+	env := envStrings(c["env_vars"])
+	derived := derivedEnv(c)
+	maps.Copy(derived, env)
+	s.EnvVars = derived
+	s.UseMangoHud = mangohudPreset(c) != "off"
+	if w, h, ok := strings.Cut(c.text("gamescope_resolution"), "x"); ok {
 		if wi, err1 := strconv.Atoi(w); err1 == nil {
 			if hi, err2 := strconv.Atoi(h); err2 == nil {
 				s.GamescopeW, s.GamescopeH = wi, hi
 			}
 		}
 	}
-	if r, err := strconv.Atoi(s.GamescopeRate); err == nil {
+	if r, err := strconv.Atoi(c.text("gamescope_rate")); err == nil {
 		s.GamescopeR = r
 	}
-	s.GamescopeArgs = gamescopeArgs(s)
+	s.GamescopeArgs = gamescopeArgs(c, c.text("gamescope_args"))
 	return s
 }
 
@@ -232,8 +245,7 @@ func runnerSchema() map[string]any {
 	}
 	var protonFields []any
 	for _, f := range protonFlags {
-		key := strings.ToLower(f.env)
-		protonFields = append(protonFields, field(key, "bool", false, nil))
+		protonFields = append(protonFields, field(f.key, "bool", false, nil))
 	}
 	gamescopeRates := []string{"", "60", "75", "90", "120", "144", "165", "240"}
 	rateOpts := make([]any, 0, len(gamescopeRates))

@@ -57,7 +57,10 @@ func rpcFailure(num int, err error) *rpcError {
 }
 
 type wrapParams struct {
-	Spec struct {
+	// Options are the game's saved settings, all of them (the core sends the
+	// keys it doesn't model in the game as well; see effectiveSettings).
+	Options map[string]any `json:"options"`
+	Spec    struct {
 		Command   []string          `json:"command"`
 		Env       map[string]string `json:"env"`
 		Cwd       string            `json:"cwd"`
@@ -124,13 +127,14 @@ func handle(req message) message {
 		resp.Result = runnerSchema()
 	case "runner.env":
 		var p struct {
-			Game types.Game `json:"game"`
+			Game    types.Game     `json:"game"`
+			Options map[string]any `json:"options"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
 			resp.Error = &rpcError{Code: -32602, Message: "game.id is required"}
 			break
 		}
-		s := effectiveSettings(p.Game.Settings)
+		s := effectiveSettings(p.Game.Settings, p.Options)
 		var wrappers []string
 		if s.UseGameMode {
 			wrappers = append(wrappers, "gamemode")
@@ -159,7 +163,7 @@ func handle(req message) message {
 			resp.Error = &rpcError{Code: -32602, Message: "spec.command is required"}
 			break
 		}
-		p.Game.Settings = effectiveSettings(p.Game.Settings)
+		p.Game.Settings = effectiveSettings(p.Game.Settings, p.Options)
 		home := os.Getenv("HOME")
 		target := runner.Target{Exe: p.Spec.Command[0], Args: p.Spec.Command[1:], Env: p.Spec.Env, Native: !p.Spec.NeedsWine}
 		if target.Native {
@@ -280,6 +284,18 @@ func handle(req message) message {
 		default:
 			resp.Error = &rpcError{Code: -32602, Message: "unknown runner action"}
 		}
+	case "runner.migrateSettings":
+		// Once per saved game at startup: the legacy keys move to the keys
+		// runner.options declares. Idempotent; "changed" says whether to save.
+		var p struct {
+			Settings map[string]any `json:"settings"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Settings == nil {
+			resp.Error = &rpcError{Code: -32602, Message: "settings is required"}
+			break
+		}
+		changed := migrateSettings(p.Settings)
+		resp.Result = map[string]any{"settings": p.Settings, "changed": changed}
 	case "runner.clientCrash":
 		var p struct {
 			Game  types.Game `json:"game"`

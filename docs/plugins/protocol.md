@@ -274,8 +274,9 @@ runner.runAction { "id": "stop", "force": false, "launch": { "env": {}, "runner"
 runner.crashHints { "game": {}, "runnerId": "auto", "log": "…" } -> [{ "rule": "vcredist", "param": "vcruntime140_1.dll", "verb": "vcrun2022" }]
 ```
 
-All ten methods are required when `runner` is enabled (`runner.detectExecutable`
-is called for every sideloaded file, `runner.prefix` for every backup and cloud gate).
+All eleven methods are required when `runner` is enabled (`runner.detectExecutable`
+is called for every sideloaded file, `runner.prefix` for every backup and cloud gate,
+`runner.migrateSettings` once per saved game at startup).
 Errors use `-32602` for a bad request and `-32003` for a runner failure, with a
 message. A failure the UI translates carries `error.data` as `{ "code": "<apperr
 code>", "params": { … } }`, and the core shows its own translated text for it:
@@ -300,25 +301,36 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
 - **`runner.options`**: the same group and field schema as `settings.schema`
   (1.8), every field with `"scope": "game"`, labels and descriptions in the
   language the core sent at `initialize` (`locale`, or `locale.changed`; English
-  when the runner has no catalogue for it). The fields are typed game settings:
-  `runner_id`, `use_gamemode`, `use_gamescope`, `dx_layer`, `upscaler`,
+  when the runner has no catalogue for it). The choices are the runner's own
+  saved keys, not core settings: the core stores each value under its name, as
+  the game's settings, and hands it back in `options`. The keys are:
+  `dx_layer`, `upscaler`,
   `shader_cache`, `mangohud_preset`, `sync_mode`, the eight `proton_*` switches
   (`proton_enable_nvapi`, `proton_hide_nvidia_gpu`, `proton_enable_wayland`,
   `proton_no_d3d11`, `proton_no_d3d12`, `proton_force_large_address_aware`,
   `proton_old_gl_string`, `proton_log`), `gamescope_resolution` and
   `gamescope_rate` (selects with common values), `gamescope_filter`, the gamescope
   switches (`gamescope_fullscreen`, `gamescope_borderless`, `gamescope_grab_cursor`,
-  `gamescope_hdr`, `gamescope_vrr`, `gamescope_wayland`), `gamescope_args` (other
-  arguments), `eac_runtime` and `battleye_runtime`. The wine prefix is a core
-  section, not offered here. Every field is a `GameSettings` key, so the saved
-  names don't change; a test fails when a settings field is neither offered,
-  derived, nor core-owned.
+  `gamescope_hdr`, `gamescope_vrr`, `gamescope_wayland`). The core's own settings
+  stay where they were: `runner_id`, `use_gamemode`, `use_gamescope`, `gamescope_args`
+  (other gamescope arguments), `eac_runtime` and `battleye_runtime` are offered
+  here too; the wine prefix is a core section, not offered. The schema's
+  defaults are the values an absent key takes.
 - **Choices become env and arguments in the runner.** `runner.wrap` and
   `runner.env` turn the choices into the env vars the old settings UI used to
   write (`PROTON_*`, `MANGOHUD_CONFIG`, `WINE_FULLSCREEN_FSR`, `DXVK_STATE_CACHE`)
   and the gamescope arguments (switches, then `-F`, then `gamescope_args`). The
   user's own `env_vars` win over a derived value. The core doesn't build them.
-- **`runner.env`**: `{ "game": {} }` -> `{ "env": { "PROTON_LOG": "1" }, "wrappers": ["gamemode", "mangohud"] }`.
+- **`runner.migrateSettings`**: `{ "settings": {} }` -> `{ "settings": {}, "changed": true }`.
+  Settings saved by the old UI folded these choices into `env_vars` and
+  `gamescope_args`, and kept `proton_flags` and the gamescope sizes as they were.
+  The method moves them to the keys above: a value moves only when it is exactly
+  what the old UI wrote for the choice it reads back, so a value the user typed
+  by hand stays where it was. `changed` says whether the settings differ from
+  the input. The core calls it once per saved game at startup, while the runner
+  is ready, and saves only the games reported as changed. Running it again
+  changes nothing. Without the runner, nothing is migrated.
+- **`runner.env`**: `{ "game": {}, "options": {} }` -> `{ "env": { "PROTON_LOG": "1" }, "wrappers": ["gamemode", "mangohud"] }`.
   The env (the choices plus `env_vars`) and the wrappers a launch would add. The
   game page uses it for the Steam launch options, since Steam starts Steam games
   itself and Platypus can't pass them.
@@ -328,7 +340,8 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
   default of "Run with" and for launch decisions.
 - **`runner.wrap`**: `spec` is the store's direct spec (`command`, `env`, `cwd`,
   `needsWine`); `game` is the game as the core knows it, with its settings;
-  `options` holds the game's other saved settings keys; `tweaks` holds the enabled
+  `options` holds all of the game's saved settings, as a flat map: the core's own
+  keys and the runner's choices, read as the UI holds them; `tweaks` holds the enabled
   data-plugin tweaks, which the bundled runner doesn't apply yet; `prefixesFolder`
   is the effective data folder. The result has `command`, `env`, optional `cwd`,
   and for a Wine or Proton launch `runner`, the runner picked. A native game's
@@ -665,7 +678,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `terms` | 1.11 | | `game.acceptTerms` | yes |
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
-| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.migrateSettings`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in

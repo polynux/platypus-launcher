@@ -39,10 +39,7 @@ func TestCustomGamesPreserveUnknownSettings(t *testing.T) {
 	if got.Settings.RunnerID != "auto" {
 		t.Fatalf("runner_id = %q, want auto", got.Settings.RunnerID)
 	}
-	if got.Settings.SyncMode != "ntsync" {
-		t.Fatalf("sync_mode = %q, want the typed ntsync", got.Settings.SyncMode)
-	}
-	if got.SettingsExtra["some_future_key"] != "kept" {
+	if got.SettingsExtra["sync_mode"] != "ntsync" || got.SettingsExtra["some_future_key"] != "kept" {
 		t.Fatalf("an unknown key was lost: extra = %v", got.SettingsExtra)
 	}
 }

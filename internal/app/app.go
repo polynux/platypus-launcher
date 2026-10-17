@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -408,6 +407,7 @@ func (a *App) startup(ctx context.Context) {
 	if a.stores != nil {
 		a.stores.SetLocale(a.Locale())
 	}
+	a.migrateRunnerSettings(ctx)
 	a.startCloud(ctx, dataDir)
 	a.startSavebackups(ctx)
 	a.startSocial(ctx)
@@ -528,17 +528,7 @@ func (a *App) GetProtonVersions() []types.ProtonVersion {
 
 // gameSettingsFields are the settings keys types.GameSettings models.
 // Anything else in a saved settings map rides along in Game.SettingsExtra.
-var gameSettingsFields = func() map[string]struct{} {
-	out := map[string]struct{}{}
-	t := reflect.TypeOf(types.GameSettings{})
-	for i := 0; i < t.NumField(); i++ {
-		tag := t.Field(i).Tag.Get("json")
-		if name := strings.Split(tag, ",")[0]; name != "" && name != "-" {
-			out[name] = struct{}{}
-		}
-	}
-	return out
-}()
+var gameSettingsFields = types.ModeledSettingKeys()
 
 // customGames returns the games the user added by hand, saved in settings.json.
 func (a *App) customGames() []types.Game {

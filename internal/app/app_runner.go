@@ -76,7 +76,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 	params := map[string]any{
 		"spec": map[string]any{"command": command, "env": env, "cwd": cwd, "needsWine": needsWine},
 		"game": game, "runnerId": game.Settings.RunnerID,
-		"options": game.SettingsExtra, "tweaks": a.GetTweaks(),
+		"options": gameOptions(game), "tweaks": a.GetTweaks(),
 		"prefixesFolder": a.effectivePrefixesFolder(), "preview": preview,
 	}
 	var result runnerWrapResult
@@ -190,8 +190,57 @@ func (a *App) GetRunnerEnv(game types.Game) (types.RunnerEnv, error) {
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
 	defer cancel()
 	var out types.RunnerEnv
-	if err := a.plugins.Call(ctx, "runner", "runner.env", map[string]any{"game": game}, &out); err != nil {
+	if err := a.plugins.Call(ctx, "runner", "runner.env", map[string]any{"game": game, "options": gameOptions(game)}, &out); err != nil {
 		return types.RunnerEnv{}, err
 	}
 	return out, nil
+}
+
+// gameOptions is the game's saved settings as the runner plugin reads them: the
+// modeled settings and every other key the game saved (SettingsExtra). The
+// plugin declares the keys it owns in runner.options.
+func gameOptions(game types.Game) map[string]any {
+	out := map[string]any{}
+	if raw, err := json.Marshal(game.Settings); err == nil {
+		_ = json.Unmarshal(raw, &out)
+	}
+	for k, v := range game.SettingsExtra {
+		out[k] = v
+	}
+	return out
+}
+
+// migrateRunnerSettings asks the runner plugin to move the settings of an older
+// version to the keys it declares (runner.migrateSettings). It runs once per
+// saved game at startup, while the runner plugin is ready; without the plugin
+// nothing changes and the saved values wait for it. Only games the plugin reports
+// as changed are saved. It is idempotent.
+func (a *App) migrateRunnerSettings(ctx context.Context) {
+	if a.settings == nil {
+		return
+	}
+	if present, err := a.runnerPlugin(); err != nil || !present {
+		return
+	}
+	for id, saved := range a.settings.GameSettings() {
+		if len(saved) == 0 {
+			continue
+		}
+		callCtx, cancel := context.WithTimeout(ctx, launchTimeout)
+		var out struct {
+			Settings map[string]any `json:"settings"`
+			Changed  bool           `json:"changed"`
+		}
+		err := a.plugins.Call(callCtx, "runner", "runner.migrateSettings", map[string]any{"settings": saved}, &out)
+		cancel()
+		if err != nil {
+			a.host.Warnf("runner settings of %s not migrated: %v", id, err)
+			continue
+		}
+		if out.Changed {
+			if err := a.settings.SetGameSettings(id, out.Settings); err != nil {
+				a.host.Warnf("runner settings of %s not saved: %v", id, err)
+			}
+		}
+	}
 }
