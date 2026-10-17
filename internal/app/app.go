@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -918,6 +919,19 @@ func (a *App) isCustomLaunch(game types.Game) bool {
 	return a.isCustomGameID(game.ID)
 }
 
+// hasShebang says whether the file starts with "#!", so a shell can run it
+// whatever its name.
+func hasShebang(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	buf := make([]byte, 2)
+	n, _ := io.ReadFull(f, buf)
+	return n == 2 && buf[0] == '#' && buf[1] == '!'
+}
+
 // prepareCustomLaunch builds the launch for a sideloaded game (issue #47):
 // native games run directly with no runner and no Wine prefix (GameMode,
 // MangoHud and Gamescope still wrap them), Windows games go through the
@@ -941,7 +955,7 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 	executable := st.Mode().Perm()&0o111 != 0
 	command := game.Executable
 	args := []string{}
-	if !executable && strings.EqualFold(filepath.Ext(game.Executable), ".sh") {
+	if !executable && (strings.EqualFold(filepath.Ext(game.Executable), ".sh") || hasShebang(game.Executable)) {
 		command = "/bin/sh"
 		args = append(args, game.Executable)
 	} else if !executable {

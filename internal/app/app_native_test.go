@@ -372,3 +372,29 @@ func TestDetectGameExecutable(t *testing.T) {
 		t.Fatal("unreadable path should error")
 	}
 }
+
+// A script with a #! line runs through /bin/sh whatever its name, when it has
+// no execute bit (as on main, ExecScript).
+func TestShebangScriptWithoutExecBitRunsThroughSh(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	a := nativeTestApp(t, home)
+	script := writeExe(t, filepath.Join(home, "start"), []byte("#!/bin/sh\necho hi\n"), false)
+	if _, err := a.settings.AddCustomGame("Script", script); err != nil {
+		t.Fatal(err)
+	}
+	g := a.customGames()[0]
+	if !g.Native {
+		t.Fatal("a #! script must detect as native")
+	}
+	p, err := a.prepareLaunch(g, true)
+	if err != nil {
+		t.Fatalf("prepareLaunch: %v", err)
+	}
+	for i := 0; i+1 < len(p.args); i++ {
+		if p.args[i] == "/bin/sh" && p.args[i+1] == script {
+			return
+		}
+	}
+	t.Fatalf("args = %q, want /bin/sh %s", p.args, script)
+}
