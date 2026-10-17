@@ -1183,8 +1183,8 @@ func (a *App) pinExistingPrefixes(old string) error {
 	return nil
 }
 
-// prefixesFolder is the user's chosen per-game data root, or "" for its
-// default location.
+// prefixesFolder is where Wine prefixes are created: the user's choice, or ""
+// for the default (the runner plugin's PrefixPath rule).
 func (a *App) prefixesFolder() string {
 	if a.settings == nil {
 		return ""

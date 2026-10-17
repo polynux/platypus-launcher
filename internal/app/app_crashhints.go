@@ -7,7 +7,6 @@ import (
 	"os/exec"
 
 	"platypus/internal/apperr"
-	"platypus/internal/plugins"
 	"platypus/internal/types"
 )
 
@@ -16,10 +15,13 @@ type runnerAction struct {
 	Label string `json:"label"`
 }
 
-// GameCrashHints asks the runner plugin to interpret the game's last abnormal
-// run. The session log path stays in the core; only its contents are sent.
+// GameCrashHints returns the suggestions for the game's last launch when that
+// run ended abnormally (issue #46). It is nil when the run was fine or nothing
+// in its log matches a known pattern. The log is read here and never leaves
+// the machine: the runner plugin matches it (protocol.md, Runner).
 func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
-	if a.sessions == nil || !a.runnerAvailable() {
+	present, err := a.runnerPlugin()
+	if a.sessions == nil || err != nil || !present {
 		return nil
 	}
 	path := a.sessions.CrashLog(game.ID)
@@ -55,13 +57,20 @@ func (a *App) GameCrashHints(game types.Game) *types.CrashHints {
 	return &types.CrashHints{Log: path, Winetricks: winetricks, Hints: hints}
 }
 
-// RunWinetricksVerb asks the runner plugin to install a known crash fix. The
-// core enforces the generic rule that maintenance cannot alter a running game.
+// RunWinetricksVerb installs a winetricks verb into the game's prefix: the
+// one-click fix for a crash hint (issue #46). The runner plugin runs winetricks
+// unattended in the background, with its output in its own data folder, and
+// refuses a verb outside its pinned list or a game with no prefix yet. A running
+// game is refused here: the core enforces that maintenance can't alter it.
 func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 	if a.isRunning(game.ID) {
 		return apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
-	if !a.runnerAvailable() {
+	present, err := a.runnerPlugin()
+	if err != nil {
+		return err
+	}
+	if !present {
 		return apperr.New("runner.unavailable", "the bundled runner plugin is unavailable", map[string]string{"plugin": "runner"})
 	}
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
@@ -74,22 +83,6 @@ func (a *App) RunWinetricksVerb(game types.Game, verb string) error {
 		return runnerFailure(err, "crash.winetricksFailed", map[string]string{"verb": verb})
 	}
 	return nil
-}
-
-func (a *App) runnerAvailable() bool {
-	if a.plugins == nil {
-		return false
-	}
-	p, ok := a.plugins.Plugin("runner")
-	if !ok || p.Status != plugins.StatusReady {
-		return false
-	}
-	for _, capability := range a.plugins.Runtime("runner").Capabilities {
-		if capability == "runner" {
-			return true
-		}
-	}
-	return false
 }
 
 func (a *App) ctxOrBackground() context.Context {

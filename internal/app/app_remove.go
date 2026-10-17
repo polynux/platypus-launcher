@@ -61,10 +61,10 @@ func (a *App) allGameFolders() []string {
 	return append([]string{a.settings.GamesFolder()}, a.settings.GameFolders()...)
 }
 
-// removeTargets recomputes what a removal deletes: the game data folder comes
-// from the game's own override when set, otherwise the configured root; files are the folder of
-// its executable. A native game has no prefix (issue #47): the prefix target
-// is never offered for one, even when asked for.
+// removeTargets recomputes what a removal deletes: the prefix comes from the
+// game's data folder (its own pin wins, see paths.GameDataDir), the files are
+// the folder of its executable. A native game has no prefix (issue #47): the
+// prefix target is never offered for one, even when asked for.
 func (a *App) removeTargets(game types.Game, opts types.RemoveOptions) ([]removeTarget, error) {
 	var out []removeTarget
 	if opts.DeletePrefix && !game.Native {

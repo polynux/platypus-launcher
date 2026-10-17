@@ -69,14 +69,17 @@ func (a *App) cloudGame(game types.Game) (cloudsync.Game, bool) {
 
 // cloudContext is the context for a game with the prefix its runner plugin
 // reports: a Windows game reads its saves from that prefix, a native one from
-// its own folders. Every cloud step uses this one rule.
+// its own folders. Every cloud step uses this one rule, so a check and a launch
+// of a game agree on its paths. The core doesn't interpret Wine/Proton prefix
+// layouts.
 func (a *App) cloudContext(game types.Game, prefix savebackup.Prefix) types.CloudContext {
 	return cloudsync.ContextFor(a.homeDir(), prefix.Dir != "", game.InstallDir, prefix.Dir, prefix.User)
 }
 
 // cloudContextFor is the context for a game that isn't being launched (Check
-// now, resolving). The folder is the library's (currentFolder); without one
-// there is no context to send, so the plugin is never asked.
+// now, resolving): the runner plugin says where its prefix is, without a store
+// launch. The folder is the library's (currentFolder); without one there is no
+// context to send, so the plugin is never asked.
 func (a *App) cloudContextFor(game types.Game) (types.CloudContext, error) {
 	folder, err := a.currentFolder(game)
 	if err != nil {

@@ -151,6 +151,10 @@ func handle(req message) message {
 			resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd}
 			break
 		}
+		// With no explicit runner, an installed umu-launcher is preferred and wraps
+		// the auto Proton pick (issue #48); explicit "umu" picks it directly. The
+		// runner reported is the umu entry, so cloud saves and the stop hook see
+		// umu's prefix layout.
 		rs := runner.ScanProtonVersionsFor(home)
 		selected, proton, useUmu := runner.SelectUmu(p.RunnerID, rs)
 		if !useUmu {
@@ -327,6 +331,10 @@ func prefixUser(r types.ProtonVersion) string {
 	return ""
 }
 
+// runWinetricks starts winetricks for the game's prefix, unattended and in the
+// background (issue #46). Its output goes to logs/winetricks-<id>.log in the
+// plugin's data folder. It refuses a verb outside the pinned list (checked by
+// the caller), a game with no prefix yet, and a umu build without Proton.
 func runWinetricks(p actionParams) error {
 	bin, err := exec.LookPath("winetricks")
 	if err != nil {
@@ -415,6 +423,7 @@ func gamePrefix(game types.Game, runnerID, prefixesFolder, home string) (dir, us
 
 // prefixOf is the Windows side of prefix for the runner selected: umu runs the
 // pfx dir itself when there is one, Proton keeps it in pfx, system Wine has none.
+// The user inside a Proton or umu prefix is Proton's steamuser.
 func prefixOf(prefix string, selected types.ProtonVersion, umu bool) (dir, user string) {
 	switch {
 	case umu:
@@ -426,6 +435,8 @@ func prefixOf(prefix string, selected types.ProtonVersion, umu bool) (dir, user 
 	}
 }
 
+// protonBinDirs are where a Proton build keeps its Wine binaries, relative to
+// its folder: newer builds ship files/, older ones dist/.
 var protonBinDirs = []string{"files/bin", "dist/bin"}
 
 // protonPrefix is the folder Proton runs a prefix in: the pfx folder of its
@@ -438,6 +449,12 @@ func protonPrefix(prefix string) string {
 	return filepath.Join(prefix, "pfx")
 }
 
+// winetricksEnv is the environment winetricks runs with, so it works on the
+// prefix the game runs in (issue #46). prefix is the game's prefix. A Proton
+// build keeps its Wine prefix in <prefix>/pfx and runs with its own wine and
+// wineserver. A plain Wine runner runs with its own binary. The system Wine (no
+// path) is left to PATH. With umu, winetricks uses umu's Proton build and umu's
+// prefix layout.
 func winetricksEnv(title, prefix string, wineRunner types.ProtonVersion, umu bool) (map[string]string, error) {
 	env := map[string]string{"WINEPREFIX": prefix}
 	if umu {
@@ -459,6 +476,8 @@ func winetricksEnv(title, prefix string, wineRunner types.ProtonVersion, umu boo
 	return env, nil
 }
 
+// protonWine finds the wine and wineserver binaries of the Proton build in
+// protonDir, in the first bin folder that has both.
 func protonWine(protonDir string) (wine, server string, ok bool) {
 	for _, d := range protonBinDirs {
 		w, s := filepath.Join(protonDir, d, "wine"), filepath.Join(protonDir, d, "wineserver")
