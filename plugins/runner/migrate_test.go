@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -121,5 +123,36 @@ func TestMigrationIsIdempotentAndLeavesTypedRecordsAlone(t *testing.T) {
 	}
 	if got := typed["env_vars"].(map[string]any)["PROTON_USE_NTSYNC"]; got != "1" {
 		t.Errorf("env var of a typed record was taken over: %v", got)
+	}
+}
+
+// runner.migrateSettings takes every saved game in one request and answers with
+// the games that changed only: a second request changes nothing.
+func TestMigrateSettingsIsOneBatchOfChangedGames(t *testing.T) {
+	legacy := legacyGame()
+	current := map[string]any{"sync_mode": "esync", "env_vars": map[string]any{"FOO": "bar"}}
+	resp := handle(request("runner.migrateSettings", map[string]any{"games": map[string]any{
+		"legacy": legacy, "current": current, "empty": map[string]any{},
+	}}))
+	if resp.Error != nil {
+		t.Fatalf("runner.migrateSettings: %+v", resp.Error)
+	}
+	raw, _ := json.Marshal(resp.Result)
+	var out struct {
+		Changed map[string]map[string]any `json:"changed"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Changed) != 1 || out.Changed["legacy"]["sync_mode"] != "ntsync" {
+		t.Fatalf("changed = %v, want only the legacy game, migrated", out.Changed)
+	}
+	again := handle(request("runner.migrateSettings", map[string]any{"games": map[string]any{"legacy": out.Changed["legacy"]}}))
+	raw, _ = json.Marshal(again.Result)
+	if !strings.Contains(string(raw), `"changed":{}`) {
+		t.Fatalf("a second batch changed %s, want nothing", raw)
+	}
+	if bad := handle(request("runner.migrateSettings", map[string]any{})); bad.Error == nil || bad.Error.Code != -32602 {
+		t.Fatalf("no games: %+v, want -32602", bad.Error)
 	}
 }

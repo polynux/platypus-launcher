@@ -211,10 +211,10 @@ func gameOptions(game types.Game) map[string]any {
 }
 
 // migrateRunnerSettings asks the runner plugin to move the settings of an older
-// version to the keys it declares (runner.migrateSettings). It runs once per
-// saved game at startup, while the runner plugin is ready; without the plugin
-// nothing changes and the saved values wait for it. Only games the plugin reports
-// as changed are saved. It is idempotent.
+// version to the keys it declares (runner.migrateSettings). It is one request
+// for every saved game, at startup, while the runner plugin is ready; without
+// the plugin nothing changes and the saved values wait for it. Only the games
+// the plugin reports as changed are saved. It is idempotent.
 func (a *App) migrateRunnerSettings(ctx context.Context) {
 	if a.settings == nil {
 		return
@@ -222,25 +222,27 @@ func (a *App) migrateRunnerSettings(ctx context.Context) {
 	if present, err := a.runnerPlugin(); err != nil || !present {
 		return
 	}
+	games := map[string]map[string]any{}
 	for id, saved := range a.settings.GameSettings() {
-		if len(saved) == 0 {
-			continue
+		if len(saved) > 0 {
+			games[id] = saved
 		}
-		callCtx, cancel := context.WithTimeout(ctx, launchTimeout)
-		var out struct {
-			Settings map[string]any `json:"settings"`
-			Changed  bool           `json:"changed"`
-		}
-		err := a.plugins.Call(callCtx, "runner", "runner.migrateSettings", map[string]any{"settings": saved}, &out)
-		cancel()
-		if err != nil {
-			a.host.Warnf("runner settings of %s not migrated: %v", id, err)
-			continue
-		}
-		if out.Changed {
-			if err := a.settings.SetGameSettings(id, out.Settings); err != nil {
-				a.host.Warnf("runner settings of %s not saved: %v", id, err)
-			}
+	}
+	if len(games) == 0 {
+		return
+	}
+	callCtx, cancel := context.WithTimeout(ctx, launchTimeout)
+	defer cancel()
+	var out struct {
+		Changed map[string]map[string]any `json:"changed"`
+	}
+	if err := a.plugins.Call(callCtx, "runner", "runner.migrateSettings", map[string]any{"games": games}, &out); err != nil {
+		a.host.Warnf("runner settings not migrated: %v", err)
+		return
+	}
+	for id, settings := range out.Changed {
+		if err := a.settings.SetGameSettings(id, settings); err != nil {
+			a.host.Warnf("runner settings of %s not saved: %v", id, err)
 		}
 	}
 }

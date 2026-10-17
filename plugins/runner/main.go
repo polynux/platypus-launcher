@@ -285,17 +285,22 @@ func handle(req message) message {
 			resp.Error = &rpcError{Code: -32602, Message: "unknown runner action"}
 		}
 	case "runner.migrateSettings":
-		// Once per saved game at startup: the legacy keys move to the keys
-		// runner.options declares. Idempotent; "changed" says whether to save.
+		// At startup, for every saved game at once: the legacy keys move to the
+		// keys runner.options declares. Only the games that changed come back.
 		var p struct {
-			Settings map[string]any `json:"settings"`
+			Games map[string]map[string]any `json:"games"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Settings == nil {
-			resp.Error = &rpcError{Code: -32602, Message: "settings is required"}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Games == nil {
+			resp.Error = &rpcError{Code: -32602, Message: "games is required"}
 			break
 		}
-		changed := migrateSettings(p.Settings)
-		resp.Result = map[string]any{"settings": p.Settings, "changed": changed}
+		changed := map[string]map[string]any{}
+		for id, settings := range p.Games {
+			if migrateSettings(settings) {
+				changed[id] = settings
+			}
+		}
+		resp.Result = map[string]any{"changed": changed}
 	case "runner.clientCrash":
 		var p struct {
 			Game  types.Game `json:"game"`

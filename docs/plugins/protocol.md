@@ -321,15 +321,16 @@ shows the message under the call's generic code: `runner.wrapFailed` for a launc
   write (`PROTON_*`, `MANGOHUD_CONFIG`, `WINE_FULLSCREEN_FSR`, `DXVK_STATE_CACHE`)
   and the gamescope arguments (switches, then `-F`, then `gamescope_args`). The
   user's own `env_vars` win over a derived value. The core doesn't build them.
-- **`runner.migrateSettings`**: `{ "settings": {} }` -> `{ "settings": {}, "changed": true }`.
+- **`runner.migrateSettings`**: `{ "games": { "<game id>": {} } }` -> `{ "changed": { "<game id>": {} } }`.
   Settings saved by the old UI folded these choices into `env_vars` and
   `gamescope_args`, and kept `proton_flags` and the gamescope sizes as they were.
   The method moves them to the keys above: a value moves only when it is exactly
   what the old UI wrote for the choice it reads back, so a value the user typed
-  by hand stays where it was. `changed` says whether the settings differ from
-  the input. The core calls it once per saved game at startup, while the runner
-  is ready, and saves only the games reported as changed. Running it again
-  changes nothing. Without the runner, nothing is migrated.
+  by hand stays where it was. The answer holds only the games that changed, with
+  their migrated settings; a game nothing changed in is left out. The core sends
+  every saved game in one request at startup, while the runner is ready, and
+  saves the games it gets back. Running it again changes nothing. Without the
+  runner, the core doesn't ask, and nothing is migrated.
 - **`runner.env`**: `{ "game": {}, "options": {} }` -> `{ "env": { "PROTON_LOG": "1" }, "wrappers": ["gamemode", "mangohud"] }`.
   The env (the choices plus `env_vars`) and the wrappers a launch would add. The
   game page uses it for the Steam launch options, since Steam starts Steam games
