@@ -8,7 +8,6 @@
  "group.anticheat": "Anti-triche",
  "runner_id.label": "Runner",
  "runner_id.description": "La version de Proton ou de Wine qui fait tourner ce jeu Windows.",
- "runner_id.auto": "Automatique",
  "runner_id.umu": "Proton via umu (recommandé)",
  "use_gamemode.label": "GameMode",
  "use_gamemode.description": "Feral GameMode met le processeur en mode performance pendant le jeu.",
@@ -81,5 +80,7 @@
  "eac_runtime.label": "Runtime EAC",
  "eac_runtime.description": "Lie le runtime Proton EasyAntiCheat de votre bibliothèque Steam.",
  "battleye_runtime.label": "Runtime BattlEye",
- "battleye_runtime.description": "Lie le runtime Proton BattlEye de votre bibliothèque Steam."
+ "battleye_runtime.description": "Lie le runtime Proton BattlEye de votre bibliothèque Steam.",
+ "runner_id.autoNamed": "Automatique (utilise {{name}})",
+ "runner_id.autoNone": "Automatique (aucun runner installé)"
 }

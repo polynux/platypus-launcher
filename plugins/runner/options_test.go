@@ -156,3 +156,19 @@ func TestEverySchemaLabelIsTranslated(t *testing.T) {
 		}
 	}
 }
+
+// The automatic runner names the default runner it picks, or says none is installed.
+func TestAutomaticRunnerNamesItsPick(t *testing.T) {
+	defer setLocale("en")
+	setLocale("en")
+	if got := autoLabel([]types.ProtonVersion{{ID: "a", Name: "GE-Proton 9", IsDefault: true}}); got != "Automatic (uses GE-Proton 9)" {
+		t.Errorf("with a default = %q", got)
+	}
+	if got := autoLabel(nil); got != "Automatic (no runner installed)" {
+		t.Errorf("with none = %q", got)
+	}
+	setLocale("fr")
+	if got := autoLabel(nil); got != "Automatique (aucun runner installé)" {
+		t.Errorf("fr with none = %q", got)
+	}
+}

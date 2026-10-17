@@ -38,7 +38,9 @@ export function RunnerChoices({ groups, ids, draft, onChange }: {
 function Choice({ field, draft, onChange }: { field: SettingField; draft: GameSettings; onChange: (key: string, value: boolean | string | number) => void }) {
   const { t } = useTranslation('gameSettings');
   const raw = (draft as unknown as Record<string, unknown>)[field.id];
-  const value = raw ?? field.default ?? '';
+  // An unset choice, or an empty one, is the field's default (the automatic
+  // runner, for runner_id); an option named '' is still a real choice.
+  const value = raw === undefined || raw === null || raw === '' ? (field.default ?? '') : raw;
 
   if (field.kind === 'bool') {
     return (

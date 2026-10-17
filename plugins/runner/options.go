@@ -305,8 +305,9 @@ func withDescription(g map[string]any, desc string) map[string]any {
 // runnerOptions are the runner choices: the automatic pick, then every runner
 // installed here.
 func runnerOptions() []any {
-	out := []any{map[string]any{"id": "auto", "label": text("runner_id.auto")}}
-	for _, r := range runner.ScanProtonVersionsFor(os.Getenv("HOME")) {
+	installed := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
+	out := []any{map[string]any{"id": "auto", "label": autoLabel(installed)}}
+	for _, r := range installed {
 		if strings.EqualFold(r.ID, "auto") {
 			continue
 		}
@@ -317,4 +318,15 @@ func runnerOptions() []any {
 		out = append(out, map[string]any{"id": r.ID, "label": label})
 	}
 	return out
+}
+
+// autoLabel names what the automatic pick runs with: the default runner, when
+// one is installed.
+func autoLabel(installed []types.ProtonVersion) string {
+	for _, r := range installed {
+		if r.IsDefault {
+			return strings.ReplaceAll(text("runner_id.autoNamed"), "{{name}}", r.Name)
+		}
+	}
+	return text("runner_id.autoNone")
 }
