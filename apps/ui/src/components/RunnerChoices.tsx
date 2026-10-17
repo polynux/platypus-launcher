@@ -69,6 +69,8 @@ function Choice({ field, draft, onChange }: { field: SettingField; draft: GameSe
             {(field.options ?? []).map((o) => (
               <SelectItem key={o.id || DEFAULT_CHOICE} value={o.id || DEFAULT_CHOICE}>{o.label}</SelectItem>
             ))}
+            {/* A saved value the schema doesn't list (a custom size, say) stays visible and kept. */}
+            {!known && current !== DEFAULT_CHOICE && <SelectItem value={current}>{current}</SelectItem>}
           </SelectContent>
         </Select>
         {missing && <p role="status" className="font-mono text-hint text-orange-300">{t('runner.savedMissing')}</p>}

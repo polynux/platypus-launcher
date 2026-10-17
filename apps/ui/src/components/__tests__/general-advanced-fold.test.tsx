@@ -49,6 +49,12 @@ describe('general settings groups', () => {
     expect(screen.getByLabelText('Sync').textContent).toContain('esync');
   });
 
+  it('keeps a saved value the schema does not list visible', async () => {
+    open(game({ use_gamescope: true, gamescope_rate: '100' }));
+    await screen.findByLabelText('Refresh rate');
+    expect(screen.getByLabelText('Refresh rate').textContent).toContain('100');
+  });
+
   it('shows the gamescope choices only while gamescope is on', async () => {
     const off = open(game({ use_gamescope: false }));
     await screen.findByLabelText('GameMode');
