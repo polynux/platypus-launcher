@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -129,5 +130,29 @@ func TestBuiltinFixVerbsAreKnown(t *testing.T) {
 	}
 	if !seen["d3dx9"] || !seen["faudio"] {
 		t.Fatalf("built-in verbs = %v, want the shipped d3dx9 and faudio entries covered", seen)
+	}
+}
+
+// Every GameSettings field is either a runner setting, which the runner's
+// options must offer so the game settings UI shows it, or a launch setting the
+// core owns. A new field has to be classed here, so none is left out silently.
+func TestRunnerOptionsCoverEveryRunnerSetting(t *testing.T) {
+	t.Parallel()
+	coreOwned := map[string]bool{"launch_arguments": true, "env_vars": true, "working_dir": true, "run_mode": true}
+	offered := map[string]bool{}
+	for _, g := range runnerSchema()["groups"].([]any) {
+		for _, f := range g.(map[string]any)["fields"].([]any) {
+			offered[f.(map[string]any)["id"].(string)] = true
+		}
+	}
+	gs := reflect.TypeOf(types.GameSettings{})
+	for i := range gs.NumField() {
+		key := strings.Split(gs.Field(i).Tag.Get("json"), ",")[0]
+		if coreOwned[key] {
+			continue
+		}
+		if !offered[key] {
+			t.Errorf("GameSettings.%s (%q) is neither a runner setting offered by runner.options nor core-owned", gs.Field(i).Name, key)
+		}
 	}
 }
