@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
+	"platypus/internal/crashhints"
 	"platypus/internal/runner"
 	"platypus/internal/types"
 )
@@ -27,14 +30,27 @@ type rpcError struct {
 
 type wrapParams struct {
 	Spec struct {
-		Command []string          `json:"command"`
-		Env     map[string]string `json:"env"`
-		Cwd     string            `json:"cwd"`
+		Command   []string          `json:"command"`
+		Env       map[string]string `json:"env"`
+		Cwd       string            `json:"cwd"`
+		NeedsWine bool              `json:"needsWine"`
 	} `json:"spec"`
 	Game           types.Game `json:"game"`
 	RunnerID       string     `json:"runnerId"`
 	PrefixesFolder string     `json:"prefixesFolder"`
 	Preview        bool       `json:"preview"`
+}
+
+type actionParams struct {
+	ID       string     `json:"id"`
+	Game     types.Game `json:"game"`
+	RunnerID string     `json:"runnerId"`
+}
+
+type hintsParams struct {
+	Game     types.Game `json:"game"`
+	RunnerID string     `json:"runnerId"`
+	Log      string     `json:"log"`
 }
 
 func handle(req message) message {
@@ -55,6 +71,18 @@ func handle(req message) message {
 	case "runner.list":
 		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
 		resp.Result = map[string]any{"runners": rs}
+	case "runner.options":
+		resp.Result = map[string]any{"groups": []any{
+			map[string]any{"id": "runner", "label": "Runner", "fields": []any{
+				map[string]any{"id": "runner_id", "kind": "select", "label": "Runner", "default": "auto", "options": runnerOptions()},
+				map[string]any{"id": "wine_prefix", "kind": "text", "label": "Wine prefix", "default": ""},
+			}},
+			map[string]any{"id": "wrappers", "label": "Wrappers", "fields": []any{
+				map[string]any{"id": "use_gamemode", "kind": "bool", "label": "GameMode", "default": true},
+				map[string]any{"id": "use_mangohud", "kind": "bool", "label": "MangoHud", "default": false},
+				map[string]any{"id": "use_gamescope", "kind": "bool", "label": "Gamescope", "default": false},
+			}},
+		}}
 	case "runner.wrap":
 		var p wrapParams
 		if err := json.Unmarshal(req.Params, &p); err != nil || len(p.Spec.Command) == 0 {
@@ -62,26 +90,89 @@ func handle(req message) message {
 			break
 		}
 		rs := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
-		selected, ok := runner.Resolve(p.RunnerID, rs)
+		selected, proton, useUmu := runner.SelectUmu(p.RunnerID, rs)
+		if !useUmu {
+			selected, _ = runner.Resolve(p.RunnerID, rs)
+		}
+		ok := selected.ID != ""
 		if !ok && !runner.IsAuto(p.RunnerID) {
 			resp.Error = &rpcError{Code: -32003, Message: fmt.Sprintf("runner %q is not installed", p.RunnerID)}
 			break
 		}
-		if !ok && !p.Game.Native {
+		if p.Spec.NeedsWine && !ok {
 			resp.Error = &rpcError{Code: -32003, Message: "no Proton or Wine runner is installed"}
 			break
 		}
-		target := runner.Target{Exe: p.Spec.Command[0], Args: p.Spec.Command[1:], Env: p.Spec.Env, Native: p.Game.Native}
-		command, env, err := runner.BuildCommandFor(p.Game, selected, target, p.Preview, p.PrefixesFolder, os.Getenv("HOME"))
+		target := runner.Target{Exe: p.Spec.Command[0], Args: p.Spec.Command[1:], Env: p.Spec.Env, Native: !p.Spec.NeedsWine}
+		var command []string
+		var env map[string]string
+		var err error
+		if useUmu && p.Spec.NeedsWine {
+			compatID := ""
+			if p.Game.Store == "steam" {
+				compatID = p.Game.StoreAppID
+			}
+			command, env, err = runner.BuildUmuCommandFor(p.Game, proton, selected.Path, compatID, target, p.Preview, p.PrefixesFolder, os.Getenv("HOME"))
+		} else {
+			command, env, err = runner.BuildCommandFor(p.Game, selected, target, p.Preview, p.PrefixesFolder, os.Getenv("HOME"))
+		}
 		if err != nil {
 			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
 			break
 		}
-		resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd}
+		resp.Result = map[string]any{"command": command, "env": env, "cwd": p.Spec.Cwd, "runner": selected}
+	case "runner.actions":
+		var p actionParams
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "game.id is required"}
+			break
+		}
+		prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), "")
+		if _, err := os.Stat(prefix); err == nil {
+			resp.Result = map[string]any{"actions": []any{map[string]any{"id": "open-prefix", "label": "Open prefix"}}}
+		} else {
+			resp.Result = map[string]any{"actions": []any{}}
+		}
+	case "runner.runAction":
+		var p actionParams
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Game.ID == "" || p.ID == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "id and game.id are required"}
+			break
+		}
+		if p.ID != "open-prefix" {
+			resp.Error = &rpcError{Code: -32602, Message: "unknown runner action"}
+			break
+		}
+		prefix := runner.PrefixPath(p.Game, os.Getenv("HOME"), "")
+		cmd := exec.Command("xdg-open", prefix)
+		if err := cmd.Start(); err != nil {
+			resp.Error = &rpcError{Code: -32003, Message: err.Error()}
+		} else {
+			go func() { _ = cmd.Wait() }()
+			resp.Result = map[string]any{}
+		}
+	case "runner.crashHints":
+		var p hintsParams
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Log == "" {
+			resp.Error = &rpcError{Code: -32602, Message: "log is required"}
+			break
+		}
+		resp.Result = crashhints.Match(p.Log)
 	default:
 		resp.Error = &rpcError{Code: -32601, Message: "method not found: " + req.Method}
 	}
 	return resp
+}
+
+func runnerOptions() []any {
+	out := []any{map[string]any{"id": "auto", "label": "Automatic"}}
+	for _, r := range runner.ScanProtonVersionsFor(os.Getenv("HOME")) {
+		if strings.EqualFold(r.ID, "auto") {
+			continue
+		}
+		out = append(out, map[string]any{"id": r.ID, "label": r.Name})
+	}
+	return out
 }
 
 func main() {

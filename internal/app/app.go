@@ -872,65 +872,29 @@ func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
 
 	switch {
 	case launch != nil && launch.Client != nil:
-		return &prepared{args: launch.Client.Command, env: map[string]string{}, client: launch.Client}, nil
-	case launch != nil && launch.Direct != nil:
-		d := launch.Direct
-		var r types.ProtonVersion
-		if d.NeedsWine {
-			var err error
-			if r, err = a.selectRunner(game); err != nil {
-				return nil, err
-			}
-			if runner.IsUmu(r) {
-				args, env, err := a.umuCommand(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview)
-				if err != nil {
-					return nil, err
-				}
-				dir := d.Dir
-				if game.Settings.WorkingDir != "" {
-					dir = game.Settings.WorkingDir
-				}
-				return &prepared{args: args, env: env, dir: dir, redact: d.Redact, runner: r}, nil
-			}
-		}
-		args, env, err := runner.BuildCommandFor(game, r, runner.Target{Exe: d.Exe, Args: d.Args, Env: d.Env, Native: !d.NeedsWine}, preview, a.prefixesFolder(), a.homeDir())
+		p, err := a.wrapLaunch(game, launch.Client.Command, map[string]string{}, "", false, preview, nil)
 		if err != nil {
 			return nil, err
 		}
+		p.client = launch.Client
+		return p, nil
+	case launch != nil && launch.Direct != nil:
+		d := launch.Direct
 		dir := d.Dir
 		if game.Settings.WorkingDir != "" {
 			dir = game.Settings.WorkingDir
 		}
-		return &prepared{args: args, env: env, dir: dir, redact: d.Redact, runner: r}, nil
+		return a.wrapLaunch(game, append([]string{d.Exe}, d.Args...), d.Env, dir, d.NeedsWine, preview, d.Redact)
 	}
 
 	if a.isCustomLaunch(game) {
 		return a.prepareSideload(game, preview)
 	}
-	r, err := a.selectRunner(game)
-	if err != nil {
-		return nil, err
-	}
-	if runner.IsUmu(r) {
-		args, env, err := a.umuCommand(game, r, runner.Target{Exe: game.Executable}, preview)
-		if err != nil {
-			return nil, err
-		}
-		dir := game.Settings.WorkingDir
-		if dir == "" && game.Executable != "" {
-			dir = filepath.Dir(game.Executable)
-		}
-		return &prepared{args: args, env: env, dir: dir, runner: r}, nil
-	}
-	args, env, err := runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
-	if err != nil {
-		return nil, err
-	}
 	dir := game.Settings.WorkingDir
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return &prepared{args: args, env: env, dir: dir, runner: r}, nil
+	return a.wrapLaunch(game, []string{game.Executable}, nil, dir, !game.Native, preview, nil)
 }
 
 func (a *App) prepareSideload(game types.Game, preview bool) (*prepared, error) {
@@ -960,25 +924,11 @@ func (a *App) isCustomLaunch(game types.Game) bool {
 // failure (the UI offers to set the bit first).
 func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, error) {
 	if !game.Native {
-		r, err := a.selectRunner(game)
-		if err != nil {
-			return nil, err
-		}
-		var args []string
-		var env map[string]string
-		if runner.IsUmu(r) {
-			args, env, err = a.umuCommand(game, r, runner.Target{Exe: game.Executable}, preview)
-		} else {
-			args, env, err = runner.BuildLaunchCommandFor(game, r, preview, a.prefixesFolder(), a.homeDir())
-		}
-		if err != nil {
-			return nil, err
-		}
 		dir := game.Settings.WorkingDir
 		if dir == "" && game.Executable != "" {
 			dir = filepath.Dir(game.Executable)
 		}
-		return &prepared{args: args, env: env, dir: dir, runner: r}, nil
+		return a.wrapLaunch(game, []string{game.Executable}, nil, dir, true, preview, nil)
 	}
 	kind := runner.ExecUnknown
 	if d, err := runner.DetectExecutable(game.Executable); err == nil {
@@ -995,15 +945,11 @@ func (a *App) prepareCustomLaunch(game types.Game, preview bool) (*prepared, err
 			fmt.Sprintf("%s is not executable; make it executable or it can't start", game.Executable),
 			map[string]string{"executable": game.Executable})
 	}
-	args, env, err := runner.BuildCommandFor(game, types.ProtonVersion{}, target, preview, a.prefixesFolder(), a.homeDir())
-	if err != nil {
-		return nil, err
-	}
 	dir := game.Settings.WorkingDir
 	if dir == "" && game.Executable != "" {
 		dir = filepath.Dir(game.Executable)
 	}
-	return &prepared{args: args, env: env, dir: dir}, nil
+	return a.wrapLaunch(game, append([]string{target.Exe}, target.Args...), target.Env, dir, false, preview, nil)
 }
 
 // shown is the command line with env, redacted for previews and logs.
