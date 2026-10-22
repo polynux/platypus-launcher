@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"platypus/internal/datadir"
@@ -196,7 +195,7 @@ func (t *Tracker) StopAll() {
 	defer t.mu.Unlock()
 	for _, e := range t.active {
 		if e.cmd != nil && e.cmd.Process != nil {
-			killGroup(e.cmd.Process.Pid, syscall.SIGKILL)
+			killProcesses(e.cmd.Process.Pid, true, "", true)
 			_ = e.cmd.Process.Kill()
 		}
 	}

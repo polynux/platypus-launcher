@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
-	"syscall"
 	"time"
 
 	"platypus/internal/jsonrpc"
@@ -1070,41 +1069,11 @@ func FreeSpace(path string) (uint64, error) { return freeSpace(path) }
 // disk usage view (issue #50).
 func SpaceStats(path string) (total, free uint64, err error) { return spaceStats(path) }
 
-func spaceStats(path string) (uint64, uint64, error) {
-	for {
-		var st syscall.Statfs_t
-		err := syscall.Statfs(path, &st)
-		if err == nil {
-			return st.Blocks * uint64(st.Bsize), st.Bavail * uint64(st.Bsize), nil
-		}
-		parent := filepath.Dir(path)
-		if !errors.Is(err, syscall.ENOENT) || parent == path {
-			return 0, 0, err
-		}
-		path = parent
-	}
-}
-
 // freeSpace returns the bytes available to the user on the filesystem that
 // holds path, or its nearest existing parent.
 
 // HumanBytes writes a size the way the queue's messages do: 1.2 GB.
 func HumanBytes(b int64) string { return human(b) }
-
-func freeSpace(path string) (uint64, error) {
-	for {
-		var st syscall.Statfs_t
-		err := syscall.Statfs(path, &st)
-		if err == nil {
-			return st.Bavail * uint64(st.Bsize), nil
-		}
-		parent := filepath.Dir(path)
-		if !errors.Is(err, syscall.ENOENT) || parent == path {
-			return 0, err
-		}
-		path = parent
-	}
-}
 
 // human formats bytes in decimal units, like the UI and file managers.
 func human(b int64) string {

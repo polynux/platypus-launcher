@@ -113,6 +113,35 @@ are core code that needs per-OS files (build tags), not plugins.
 
 ## Order of work
 
+## Audit: remaining Steam and Linux specifics in the core (#75)
+
+Checked against `go list -deps ./cmd/platypus-core` and the imports/call sites
+listed below (2026-10-22). “Plugin” means the owning store/runner plugin;
+“generic capability” means a reusable core or desktop host boundary.
+
+| Item | Files and verified use | Destination and reason |
+|---|---|---|
+| Steam client, install roots, library metadata, and artwork | `internal/steam/*`; imported/called by `internal/app/app_gameinfo.go` (`sideloadSteamClient`, Steam app IDs), `app_presets.go` (`IsClientLaunch`), `app_library_snapshot.go` (Steam art URL mapping), `app_artwork.go` (Steam art lookup), and `app_backups.go` (`RootFor`); save discovery in `internal/savebackup/resolve.go` also imports it | **Plugin**: Steam-owned client details, metadata, artwork, and user paths belong to the Steam plugin; expose save locations/art through plugin results instead of core imports. |
+| Steam URI launch fallback | `internal/steam/launch.go` returns `xdg-open steam://rungameid/...`; the steam plugin owns this launch spec | **Plugin**: the URI scheme and desktop opener are Steam launch behavior. |
+| Cloud sync orchestration | `internal/cloudsync/*`; `internal/app/app_cloud.go` sends `cloud.*` calls to any ready store plugin with `cloud-sync`, while app code owns conflict state, launch gate, jobs, and user modes | **Keep**: generic capability fed by per-store plugins, not Steam-shaped. |
+| Friends/social orchestration | `internal/social/*`; `internal/app/app_social.go` enumerates ready plugins declaring `social`, sends `social.*` calls, and scopes state by plugin ID | **Keep**: generic capability fed by store plugins. |
+| Chat orchestration | `internal/chat/*`; `internal/app/app_chat.go` sends `chat.*` calls to capability providers and validates friends through `social` | **Keep**: generic capability fed by store plugins. |
+| Launcher data/config/cache paths | `internal/paths/paths.go` applies `PLATYPUS_*`, XDG variables, and Linux `~/.local/share`, `~/.config`, `~/.cache` defaults; consumed by core startup, `cloudsync/context.go`, and save backup path resolution | **Generic capability**: retain central path resolution but add OS-native defaults behind the resolver for Windows/macOS; XDG compatibility remains Linux-specific. |
+| Steam save roots and XDG save contexts | `internal/paths/SteamRoots`; `internal/savebackup/resolve.go` recognizes Steam and XDG roots; `internal/cloudsync/context.go` and `internal/savebackup` resolve XDG save locations | **Plugin** for Steam roots (above); **generic capability** for user save locations, with OS-specific known-folder providers. |
+| Native executable detection and Linux scripts | Runner plugin `plugins/runner/main.go` handles `runner.detectExecutable`; its runner implementation uses `internal/runner/native.go` to identify ELF, MZ/PE, AppImage, and script formats. Core `internal/app/app.go` still invokes `/bin/sh` for non-executable scripts and shebang files | **Plugin** for detection; **generic capability** for launching a script through a host-provided shell. `/bin/sh` is Linux-specific and currently blocks portable direct launches. |
+| Linux mount accounting | `internal/app/app_diskusage.go` reads `/proc/self/mountinfo` to group game folders; `internal/jobs/space_unix.go` uses `syscall.Statfs` for free/total bytes | **Generic capability**: provide disk-volume enumeration and space queries per OS; Windows space reporting currently returns an explicit unavailable error. |
+| Linux process discovery and teardown | `internal/session/session.go` discovers client launches by scanning `/proc/<pid>/cmdline`; `internal/session/stop_unix.go` walks `/proc` for descendants and launch tokens and signals process groups | **Generic capability**: retain session tracking in core but implement process enumeration, group/job cleanup, and stop signals per OS. Windows currently kills only the tracked process. |
+| Filesystem root and protected system directories | `internal/app/app_remove.go`, `app_discard.go`, `app_installdir.go`, and `internal/plugins/manager.go` reject `/`, Linux system directories, and `/usr` paths in destructive/install/plugin checks | **Generic capability**: safety checks should use platform roots and protected locations, not `/` string prefixes. |
+| Open file/folder and external links | `internal/app/app_plugins.go` and `app_crashhints.go` execute `xdg-open`; `internal/steam/launch.go` does likewise; `apps/desktop/src/main.ts` already routes web URLs through Electron `shell.openExternal` | **Generic capability**: use the desktop host's open-file/open-directory/open-URL interface across OSes; core `xdg-open` calls are Linux-only. |
+| Desktop tray | `apps/desktop/src/main.ts`, `tray.ts`, and tray locales create an Electron `Tray`; code detects creation failure and minimizes instead of hiding | **Keep**: Electron supplies the cross-platform host integration and the existing fallback handles systems without a tray host. |
+| Desktop keyboard shortcut policy | `apps/desktop/src/main.ts`, `shortcuts.ts` suppress reload/inspect shortcuts in production; no global OS shortcut registration is present | **Keep**: generic shell behavior, with platform-independent Electron input handling. |
+| Desktop data directory | `apps/desktop/src/userdata.ts` resolves Electron `userData` from XDG config conventions and sets it in `main.ts` | **Generic capability**: keep the desktop shell owner, but use Electron's native default on non-Linux platforms (currently the helper specifically mirrors XDG behavior). |
+| Windows build boundaries | `internal/relocate`, `internal/session`, `internal/plugins/process`, `internal/jobs`, `internal/app` writability checks, and `cmd/platypus-core` required OS-specific implementations. `plugins/...` now cross-builds too. | **Keep**: these are generic core mechanisms; per-OS files preserve Unix behavior and provide Windows fallbacks. Windows job-object/descendant stopping, ACL-aware writable checks, volume space reporting, handle inheritance/protocol stdout separation remain missing. |
+
+The Windows check now builds both the core and Go plugins. `plugins/...` succeeds
+with the current tree; it is included in `check:windows` so future plugin build
+failures are caught with the core.
+
 | Step | Status (2026-10-16) |
 |---|---|
 | #55 ProtonDB provider | Complete; bundled in `linux-compat` |

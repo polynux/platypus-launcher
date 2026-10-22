@@ -22,7 +22,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // StageSuffix names the temporary copy: "<destination>.platypus-move".
@@ -340,18 +339,6 @@ func checkPaths(from, to string) error {
 		return fmt.Errorf("%s contains the game's folder", to)
 	}
 	return nil
-}
-
-// sameDevice compares the filesystems of two existing paths.
-func sameDevice(a, b string) (bool, error) {
-	var sa, sb syscall.Stat_t
-	if err := syscall.Stat(a, &sa); err != nil {
-		return false, err
-	}
-	if err := syscall.Stat(b, &sb); err != nil {
-		return false, err
-	}
-	return sa.Dev == sb.Dev, nil
 }
 
 // copier copies a tree, reporting progress and honoring cancellation between

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 
 	"platypus/internal/apperr"
 	"platypus/internal/jobs"
@@ -89,7 +88,7 @@ func (a *App) checkInstallFolder(folder string) (string, error) {
 	if data := a.resolvedDataDir(); data != "" && (resolved == data || strings.HasPrefix(resolved, data+string(filepath.Separator))) {
 		return "", apperr.New("install.folder.ownData", fmt.Sprintf("refusing to install into Platypus's own data folder (%s)", data), map[string]string{"path": data})
 	}
-	if err := syscall.Access(anc, 2); err != nil { // W_OK
+	if err := checkDirectoryWritable(anc); err != nil {
 		return "", apperr.New("install.folder.notWritable", fmt.Sprintf("you can't write to %s", anc), map[string]string{"path": anc})
 	}
 	return clean, nil

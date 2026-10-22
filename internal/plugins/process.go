@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"platypus/internal/jsonrpc"
@@ -348,7 +347,7 @@ func (p *process) start() (Conn, error) {
 	}
 	// Own process group, so the plugin's helpers (legendary, …) die with it,
 	// and SIGKILL if Platypus dies without a clean shutdown.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	configurePluginProcess(cmd)
 	err = cmd.Start()
 	inR.Close()
 	outW.Close()
@@ -376,7 +375,7 @@ func (p *process) start() (Conn, error) {
 		// here on ensure() must not hand out this conn.
 		close(dead)
 		// The leader is gone; take any helpers it left behind with it.
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		killPluginProcess(cmd)
 		// Let the reader drain what the plugin wrote before exiting.
 		select {
 		case <-conn.Done():
@@ -461,7 +460,7 @@ func (p *process) initialize(conn Conn) {
 	}
 	if err != nil {
 		p.initErr = fmt.Errorf("initialize: %w", err)
-		_ = syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
+		killPluginProcess(p.cmd)
 		return
 	}
 	res, dropped := resolveInit(p.declared, res)
@@ -546,7 +545,7 @@ func (p *process) stop() {
 	select {
 	case <-exited:
 	case <-time.After(p.t.stopGrace):
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		killPluginProcess(cmd)
 		<-exited
 	}
 }
