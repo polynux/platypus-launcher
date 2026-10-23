@@ -8,7 +8,6 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/paths"
-	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 

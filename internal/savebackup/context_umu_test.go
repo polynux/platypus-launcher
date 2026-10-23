@@ -15,7 +15,7 @@ func TestContextForUmuGame(t *testing.T) {
 	home := t.TempDir()
 	game := types.Game{ID: "p.umu.two", Source: "echo", StoreAppID: "two", Title: "Umu Two"}
 	want := filepath.Join(home, "prefixes", "p.umu.two", "pfx")
-	ctx := NewContextFor(game, home, "", Prefix{Dir: want, User: "steamuser"})
+	ctx := NewContextFor(game, home, Prefix{Dir: want, User: "steamuser"})
 	if !ctx.Windows || !ctx.Proton || ctx.WinUser != "steamuser" || ctx.Roots["prefix"] != want {
 		t.Fatalf("umu ctx = %+v, want prefix %q with steamuser", ctx, want)
 	}

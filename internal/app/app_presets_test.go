@@ -351,7 +351,7 @@ func TestApplyPrefixPresetRefusesPrefixlessGames(t *testing.T) {
 	}
 	a.library.set("echo", []types.Game{
 		{ID: "p.echo.native", Source: "echo", Store: types.StoreGOG, Title: "Echo Native", IsInstalled: true, Native: true},
-		{ID: "steam_440", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "440", Title: "Client Game", IsInstalled: true},
+		{ID: "steam_440", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "440", Title: "Client Game", IsInstalled: true, ClientLaunch: true},
 	}, nil)
 
 	if _, err := a.ApplyPrefixPreset(native.ID, "builtin:vc-fonts"); apperr.CodeOf(err) != "settings.preset.native" {

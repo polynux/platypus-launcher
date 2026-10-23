@@ -23,6 +23,13 @@ func TestRegistryHoldsTheExistingCapabilities(t *testing.T) {
 	}
 }
 
+func TestSaveContextIsAProtocol117Capability(t *testing.T) {
+	c, ok := LookupCapability("save-context")
+	if !ok || c.Since != "1.17" || !c.Orchestrated || !slices.Equal(c.Methods, []string{"game.saveContext"}) {
+		t.Fatalf("save-context capability = %+v, found=%v", c, ok)
+	}
+}
+
 func TestRegistryMarksTheCoreCapabilitiesOrchestrated(t *testing.T) {
 	for _, name := range []string{"library", "install", "launch", "auth", "discard", "versions", "verify", "move", "install-options", "social", "achievements", "playtime", "redeem", "family", "settings"} {
 		if c, _ := LookupCapability(name); !c.Orchestrated {

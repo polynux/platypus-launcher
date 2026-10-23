@@ -865,7 +865,7 @@ func (s *Session) checkCompatFacts(t *testing.T) {
 // means documenting it there first.
 var (
 	LibraryKeys = []string{"id", "title", "installed", "installPath", "installable", "note",
-		"version", "updateAvailable", "sizeBytes", "native", "offline", "cloudSync", "lastPlayed", "features",
+		"version", "updateAvailable", "sizeBytes", "native", "clientLaunch", "offline", "cloudSync", "lastPlayed", "features",
 		"coverUrl", "heroUrl", "bannerUrl", "sharedBy", "copies", "preferredCopy", "status", "userNotes"}
 	DetailsKeys = []string{"summary", "screenshots", "genres", "developers", "publishers",
 		"releaseDate", "heroUrl", "achievements", "steamAppId", "platforms", "drm", "terms",

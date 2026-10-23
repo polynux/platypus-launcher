@@ -307,7 +307,7 @@ func TestPrefixUsageIncludesStoreGames(t *testing.T) {
 	a.library.set("echo", []types.Game{
 		{ID: "p.echo.wine", Source: "echo", Store: types.StoreGOG, Title: "Echo Wine", IsInstalled: true},
 		{ID: "p.echo.solo", Source: "echo", Store: types.StoreGOG, Title: "Echo Solo", IsInstalled: true},
-		{ID: "steam_440", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "440", Title: "Steam Client", IsInstalled: true},
+		{ID: "steam_440", Source: types.SourceSteam, Store: types.StoreSteam, StoreAppID: "440", Title: "Steam Client", IsInstalled: true, ClientLaunch: true},
 		{ID: "p.echo.native", Source: "echo", Store: types.StoreGOG, Title: "Echo Native", IsInstalled: true, Native: true},
 		{ID: "p.echo.uninstalled", Source: "echo", Store: types.StoreGOG, Title: "Echo Uninstalled", Executable: filepath.Join(home, "echo", "game.exe")},
 	}, nil)

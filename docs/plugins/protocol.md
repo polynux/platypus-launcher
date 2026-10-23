@@ -126,6 +126,7 @@ other errors can contain.
 | `auth.logout` | | `{ loggedIn }` |
 | `library.list` | | `{ games: [LibraryGame] }` |
 | `game.details` | `{ id }` | `GameDetails` (with `terms` from 1.11, media from 1.12) |
+| `game.saveContext` | `{ id }` | `{ roots?, storeUserId?, prefix?, windows?, proton?, winUser? }` |
 | `game.installSize` | `{ id, target?, options? }` | `{ downloadBytes, diskBytes }` |
 | `game.install` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
 | `game.update` | `{ id, installDir, jobId, title?, target?, options? }` | `{}` once started |
@@ -640,8 +641,10 @@ that doesn't know it.
   [Per-game status and notes](#per-game-status-and-notes-116)). 1.17: the
   `compat-facts` capability (`compat.lookup`, batched compatibility facts) and
   the `runner` capability (`runner.list`, `runner.options`, `runner.wrap`,
-  `runner.actions`, `runner.runAction`, `runner.crashHints`; see
-  [Compat facts](#compat-facts-117) and [Runner](#runner-117)).
+  `runner.actions`, `runner.runAction`, `runner.crashHints`), the
+  `save-context` capability (`game.saveContext`), and
+  `LibraryGame.clientLaunch`; see [Compat facts](#compat-facts-117),
+  [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,
   1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 1.16 or 1.17 method.
@@ -680,6 +683,7 @@ plugin read the same table. Names are lowercase words joined by `-`.
 | `local-art` | 1.15 | | | yes |
 | `compat-facts` | 1.17 | `compat.lookup` | | yes |
 | `runner` | 1.17 | `runner.list`, `runner.options`, `runner.detectExecutable`, `runner.prefix`, `runner.env`, `runner.migrateSettings`, `runner.clientCrash`, `runner.wrap`, `runner.actions`, `runner.runAction`, `runner.crashHints` | | yes |
+| `save-context` | 1.17 | `game.saveContext` | | yes |
 
 "Not yet" means Platypus recognises the name (no warning, usable in `needs`) but
 has no code that calls it. The shapes of the 1.1 methods are proposals in
@@ -1417,6 +1421,34 @@ never writes them back — no `settings.apply` equivalent exists for them.
 - A hint only fills a field the user left empty: the user's own value or
   cleared field always wins. The conformance suite checks the vocabulary and
   the cap.
+
+## Save context (1.17)
+
+The `save-context` capability lets a store supply filesystem roots and the
+Windows identity needed to expand save-backup paths. The core combines these
+with its generic home, XDG, and install roots; savebackup itself has no
+store-specific filesystem discovery.
+
+```json
+game.saveContext { "id": "store-game-id" } ->
+  { "roots": { "steam": "/home/user/.local/share/Steam" },
+    "storeUserId": "1234", "prefix": "/path/to/compatdata/123/pfx",
+    "windows": true, "proton": true, "winUser": "steamuser" }
+```
+
+All fields are optional. Root values and the prefix must be absolute paths.
+Return the store's user id only when it can be resolved unambiguously. The
+core validates paths before expanding or serving them.
+
+`clientLaunch` (`LibraryGame.clientLaunch`, 1.17) is an optional boolean saying the store
+client must launch this game and owns its compatibility data. The core uses
+this generic fact to omit client-owned prefixes from its prefix picker and
+refuse prefix presets. It is persisted in library snapshots.
+
+For backward compatibility, the local-art route also accepts relative
+slash-separated paths from older snapshots. The path must be local and resolve
+under a declared `permissions.read` folder; traversal and absolute paths are
+rejected.
 
 ## Out of scope
 

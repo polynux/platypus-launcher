@@ -7,7 +7,6 @@ import (
 	"strings"
 	"unicode"
 
-	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -35,79 +34,77 @@ type Context struct {
 	OSUser string
 }
 
-// isSteamGame reports built-in Steam (local client) games: they have no
-// plugin and run through the Steam client, with their Proton prefix at
-// <steam library>/steamapps/compatdata/<appid>/pfx.
-func isSteamGame(game types.Game) bool {
-	return (game.Source == types.SourceSteam || game.Store == types.StoreSteam) && game.StoreAppID != ""
-}
-
 // Prefix is a game's Wine or Proton prefix as the runner plugin reported it
 // for the launch: Dir is the prefix folder the game runs in, User the login
 // inside it (Proton and umu name steamuser). Dir is "" for a native game, a
 // game with no runner, or one launched through its store client.
 type Prefix struct {
-	Dir  string
-	User string
+	Dir   string
+	User  string
+	Store *StoreContext
 }
 
-// NewContextFor builds the resolution context for a game. The runner plugin
-// decides the prefix (see Prefix); this package only maps it to save roots.
-// steamRoot is the Steam client folder ("" = ~/.local/share/Steam).
-//
-// Built-in Steam games ignore prefix: their prefix is the Steam compatdata
-// folder when it exists (Proton + steamuser), otherwise they are native (no
-// prefix). Plugin games use the prefix the runner reported for the launch.
-func NewContextFor(game types.Game, home, steamRoot string, prefix Prefix) Context {
-	if steamRoot == "" {
-		steamRoot = filepath.Join(home, ".local", "share", "Steam")
-	}
-	if isSteamGame(game) {
-		roots := map[string]string{
-			"home":      home,
-			"xdgData":   xdgDirFor("XDG_DATA_HOME", home, ".local/share"),
-			"xdgConfig": xdgDirFor("XDG_CONFIG_HOME", home, ".config"),
-			"steam":     steamRoot,
-		}
-		if game.InstallDir != "" {
-			roots["install"] = game.InstallDir
-		}
-		ctx := Context{
-			Roots: roots, OSUser: currentLogin(),
-			StoreUserID: steam.SingleUserID(steamRoot),
-		}
-		if prefix, ok := steam.CompatPrefix(steamRoot, game.StoreAppID); ok {
-			ctx.Windows, ctx.Proton, ctx.WinUser = true, true, "steamuser"
-			ctx.Roots["prefix"] = prefix
-		}
-		return ctx
-	}
-	windows := prefix.Dir != "" && !game.Native
-	// A prefix with a user is a Proton or umu prefix: the runner names steamuser.
-	proton := windows && prefix.User != ""
-	login := currentLogin()
-	if proton {
-		login = prefix.User
-	}
-	prefixDir := ""
-	if windows {
-		prefixDir = prefix.Dir
-	}
+// StoreContext is the owning store plugin's filesystem context for saves.
+type StoreContext struct {
+	Roots       map[string]string
+	StoreUserID string
+	Prefix      string
+	Windows     bool
+	Proton      bool
+	WinUser     string
+}
+
+// NewContextFor builds the generic path context from the home, game and
+// filesystem details reported by its runner and store plugins.
+func NewContextFor(game types.Game, home string, prefix Prefix) Context {
 	roots := map[string]string{
 		"home":      home,
 		"xdgData":   xdgDirFor("XDG_DATA_HOME", home, ".local/share"),
 		"xdgConfig": xdgDirFor("XDG_CONFIG_HOME", home, ".config"),
-		"steam":     steamRoot,
+	}
+	if prefix.Store != nil {
+		for label, root := range prefix.Store.Roots {
+			if label != "" && filepath.IsAbs(root) {
+				roots[label] = root
+			}
+		}
 	}
 	if game.InstallDir != "" {
 		roots["install"] = game.InstallDir
 	}
-	if prefixDir != "" {
-		roots["prefix"] = prefixDir
+	resolvedPrefix := prefix.Dir
+	if resolvedPrefix == "" && prefix.Store != nil {
+		resolvedPrefix = prefix.Store.Prefix
+	}
+	if game.Native && (prefix.Store == nil || prefix.Store.Prefix == "") {
+		resolvedPrefix = ""
+	}
+	if resolvedPrefix != "" && !filepath.IsAbs(resolvedPrefix) {
+		resolvedPrefix = ""
+	}
+	if resolvedPrefix != "" {
+		roots["prefix"] = resolvedPrefix
+	}
+	windows, proton, winUser := false, false, ""
+	if prefix.Store != nil {
+		windows, proton, winUser = prefix.Store.Windows, prefix.Store.Proton, prefix.Store.WinUser
+	}
+	windows = windows || resolvedPrefix != "" && !game.Native
+	proton = proton || windows && prefix.User != ""
+	if proton && prefix.User != "" {
+		winUser = prefix.User
+	}
+	if winUser == "" && windows {
+		winUser = currentLogin()
+	}
+	storeUserID := ""
+	if prefix.Store != nil {
+		storeUserID = prefix.Store.StoreUserID
 	}
 	return Context{
-		Roots: roots, Windows: windows, Proton: proton, WinUser: login,
-		OSUser: currentLogin(),
+		Roots: roots, Windows: windows, Proton: proton, WinUser: winUser,
+		StoreUserID: storeUserID,
+		OSUser:      currentLogin(),
 	}
 }
 

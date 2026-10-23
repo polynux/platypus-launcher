@@ -2050,9 +2050,34 @@ def job_discard(params):
 
 def initialize(params):
     set_locale((params or {}).get("locale") or "en")
+    offered = (params or {}).get("protocols") or []
+    protocol = "1.17" if "1.17" in offered else "1.14"
     return {"name": "Steam (standalone)", "version": "0.3.0", "api": API,
-            "protocol": "1.14",
-            "capabilities": ["library", "install", "launch", "auth", "discard"], "missing": []}
+            "protocol": protocol,
+            "capabilities": ["library", "install", "launch", "auth", "discard", "save-context"], "missing": []}
+
+
+def game_save_context(params):
+    app = str((params or {}).get("id") or "")
+    home = os.path.expanduser("~")
+    root = next((p for p in (os.path.join(home, ".local/share/Steam"),
+                             os.path.join(home, ".steam/steam"),
+                             os.path.join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam"))
+                 if os.path.isdir(os.path.join(p, "steamapps"))), "")
+    result = {"roots": {"steam": root} if root else {}}
+    if not root:
+        return result
+    userdata = os.path.join(root, "userdata")
+    try:
+        users = [p for p in os.listdir(userdata) if p.isdigit() and os.path.isdir(os.path.join(userdata, p))]
+        if len(users) == 1:
+            result["storeUserId"] = users[0]
+    except OSError:
+        pass
+    prefix = os.path.join(root, "steamapps", "compatdata", app, "pfx")
+    if app and os.path.isdir(prefix):
+        result.update({"prefix": prefix, "windows": True, "proton": True, "winUser": "steamuser"})
+    return result
 
 
 METHODS = {
@@ -2070,6 +2095,7 @@ METHODS = {
     "job.cancel": job_cancel,
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,
+    "game.saveContext": game_save_context,
 }
 
 

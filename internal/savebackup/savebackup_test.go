@@ -166,7 +166,7 @@ func TestPlaceholdersInFakePrefixes(t *testing.T) {
 			facts.User = "steamuser"
 		}
 		game := types.Game{ID: "g", Title: "T", InstallDir: t.TempDir()}
-		ctx := NewContextFor(game, t.TempDir(), "", facts)
+		ctx := NewContextFor(game, t.TempDir(), facts)
 		// Point the prefix at the fake one.
 		ctx.Roots["prefix"] = prefix
 		if proton {
@@ -214,7 +214,7 @@ func TestHomeXdgBaseGameRootPlaceholders(t *testing.T) {
 		}
 	}
 	game := types.Game{ID: "g", Title: "T", InstallDir: install}
-	ctx := NewContextFor(game, home, "", Prefix{})
+	ctx := NewContextFor(game, home, Prefix{})
 	for pattern := range map[string]bool{
 		"<home>/.local/share/t/s.sav": true,
 		"<xdgData>/t/s.sav":           true,
@@ -250,7 +250,7 @@ func TestWhenFilter(t *testing.T) {
 	home := t.TempDir()
 	game := types.Game{ID: "g", Title: "Tést Game ☆", InstallDir: home}
 	// Native game: only the linux entry applies.
-	native := NewContextFor(game, home, "", Prefix{})
+	native := NewContextFor(game, home, Prefix{})
 	var linux, windows int
 	for _, fe := range main.Files {
 		if whenOK(fe, native, "12345", "") {
@@ -258,7 +258,7 @@ func TestWhenFilter(t *testing.T) {
 		}
 	}
 	// Windows game: the unfiltered + windows entries apply.
-	wine := NewContextFor(game, home, "", Prefix{Dir: t.TempDir()})
+	wine := NewContextFor(game, home, Prefix{Dir: t.TempDir()})
 	for _, fe := range main.Files {
 		if whenOK(fe, wine, "12345", "") {
 			windows++
@@ -295,7 +295,7 @@ func TestSymlinksAndEscapesSkipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	game := types.Game{ID: "g", Title: "T", InstallDir: home}
-	ctx := NewContextFor(game, home, "", Prefix{})
+	ctx := NewContextFor(game, home, Prefix{})
 	patterns := []resolvedPattern{
 		{Pattern: filepath.Join(saves, "*.sav"), Root: "home", Origin: "user"},
 		{Pattern: outside, Root: "", Origin: "user"},
@@ -356,7 +356,7 @@ func TestRoundTripDedupeRetention(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(saves, "slot.sav"), []byte("clobbered!!"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ctx := NewContextFor(game, home, "", Prefix{})
+	ctx := NewContextFor(game, home, Prefix{})
 	if _, _, err := svc.Restore(game, b3.ID, ctx, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +432,7 @@ func TestZipSlipRefused(t *testing.T) {
 	// A backup whose embedded metadata names an escaping path refuses the
 	// restore outright: rewrite the zip's metadata in place.
 	poison(t, filepath.Join(svc.backupsRoot(), "g", b.ID+".zip"))
-	ctx := NewContextFor(game, home, "", Prefix{})
+	ctx := NewContextFor(game, home, Prefix{})
 	if _, _, err := Restore(svc.backupsRoot(), "g", b.ID, ctx); err == nil {
 		t.Fatal("restore of a zip-slip backup succeeded, want refusal")
 	}
@@ -459,7 +459,7 @@ func TestBeforeRestoreBackupBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := NewContextFor(game, home, "", Prefix{})
+	ctx := NewContextFor(game, home, Prefix{})
 	before, _ := os.ReadFile(filepath.Join(saves, "a.sav"))
 	if _, _, err := svc.Restore(game, b.ID, ctx, func() error {
 		return errTestSafety
@@ -673,7 +673,7 @@ func TestRestoreFollowsAMovedInstallFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	game.InstallDir = newDir
-	ctx := NewContextFor(game, home, "", Prefix{})
+	ctx := NewContextFor(game, home, Prefix{})
 	if _, added, err := svc.Restore(game, b.ID, ctx, nil); err != nil || added != 1 {
 		t.Fatalf("restore added %d, %v; want 1 file", added, err)
 	}

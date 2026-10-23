@@ -120,6 +120,16 @@ type LibraryList struct {
 	Games []LibraryGame `json:"games"`
 }
 
+// GameSaveContext supplies store-owned save roots and Wine identity (1.17).
+type GameSaveContext struct {
+	Roots       map[string]string `json:"roots,omitempty"`
+	StoreUserID string            `json:"storeUserId,omitempty"`
+	Prefix      string            `json:"prefix,omitempty"`
+	Windows     bool              `json:"windows,omitempty"`
+	Proton      bool              `json:"proton,omitempty"`
+	WinUser     string            `json:"winUser,omitempty"`
+}
+
 // CompatLookupGame is one game in a batched compat.lookup request (1.17).
 type CompatLookupGame struct {
 	ID         string   `json:"id"`

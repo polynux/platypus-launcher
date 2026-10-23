@@ -269,6 +269,37 @@ func (e *env) find(games []types.Game, appID string) *types.Game {
 	return nil
 }
 
+func TestClientLaunchFactComesFromInstalledLaunchMode(t *testing.T) {
+	e := setup(t)
+	e.login()
+	installed := map[string]map[string]any{
+		"4321": {"path": filepath.Join(e.folder, "Standalone_Game"), "title": "Standalone Game", "mode": "client"},
+	}
+	data, _ := json.Marshal(installed)
+	if err := os.WriteFile(filepath.Join(e.pluginData(), "installed.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if game := e.find(e.library(), "4321"); !game.ClientLaunch {
+		t.Fatalf("clientLaunch = %v, want true for client mode", game.ClientLaunch)
+	}
+	e.setLaunchMode("4321", "none")
+	if game := e.find(e.library(), "4321"); game.ClientLaunch {
+		t.Fatalf("clientLaunch = true for direct mode")
+	}
+}
+
+func TestSaveContextWithNoSteamClientIsEmpty(t *testing.T) {
+	e := setup(t)
+	e.login()
+	var result map[string]any
+	if err := e.m.Call(context.Background(), id, "game.saveContext", map[string]any{"id": "4321"}, &result); err != nil {
+		t.Fatal(err)
+	}
+	if roots, _ := result["roots"].(map[string]any); len(roots) != 0 {
+		t.Fatalf("roots = %v without a Steam install, want empty", roots)
+	}
+}
+
 func (e *env) waitJob(jobID string) types.Job {
 	e.t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
