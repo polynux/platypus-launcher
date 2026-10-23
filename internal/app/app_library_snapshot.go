@@ -1,14 +1,11 @@
 package app
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"platypus/internal/steam"
-	"platypus/internal/stores"
 	"platypus/internal/types"
 )
 
@@ -74,42 +71,5 @@ func loadLibrarySnapshot(snapDir, source string) []types.Game {
 	if err := json.Unmarshal(data, &games); err != nil || len(games) == 0 {
 		return nil
 	}
-	mapSteamArtURLs(games)
 	return games
-}
-
-// mapSteamArtURLs rewrites the built-in Steam source's art URLs
-// (/platypus-art/steam/<rel>, issue #54) to the bundled steam plugin's
-// local-art form (/platypus-art/steam/<base64url(abs path)>), so snapshots
-// written before the move keep serving the same files. Customization never
-// stored those URLs (it copies the images), and fresh listings already carry
-// the new form; without a Steam install the old URLs stay as they are (they
-// 404, as before when Steam was missing).
-func mapSteamArtURLs(games []types.Game) {
-	root := steam.Root()
-	if root == "" {
-		return
-	}
-	for i := range games {
-		g := &games[i]
-		g.CoverURL = mapSteamArtURL(root, g.CoverURL)
-		g.HeroURL = mapSteamArtURL(root, g.HeroURL)
-		g.BannerURL = mapSteamArtURL(root, g.BannerURL)
-	}
-}
-
-func mapSteamArtURL(root, u string) string {
-	rel, ok := strings.CutPrefix(u, steam.ArtURLPrefix)
-	if !ok || !strings.Contains(rel, "/") {
-		return u // not an old built-in URL (new form has no slash)
-	}
-	rel = filepath.FromSlash(rel)
-	if !filepath.IsLocal(rel) {
-		return u
-	}
-	abs := filepath.Join(root, "appcache/librarycache", rel)
-	if !filepath.IsAbs(abs) {
-		return u
-	}
-	return stores.GameArtURLPrefix + "steam/" + base64.RawURLEncoding.EncodeToString([]byte(abs))
 }
