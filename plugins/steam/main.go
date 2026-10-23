@@ -175,6 +175,7 @@ func library() (any, error) {
 			"installed":   true,
 			"installable": false,
 			"offline":     "ok",
+			"clientLaunch": true,
 		}
 		if g.InstallDir != "" {
 			e["installPath"] = g.InstallDir

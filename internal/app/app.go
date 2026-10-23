@@ -31,7 +31,6 @@ import (
 	"platypus/internal/session"
 	"platypus/internal/settings"
 	"platypus/internal/social"
-	"platypus/internal/steam"
 	"platypus/internal/stores"
 	"platypus/internal/types"
 )
@@ -1224,7 +1223,7 @@ func (a *App) PrefixUsage() []types.PrefixShare {
 	folder := a.effectivePrefixesFolder()
 	byPath := map[string][]types.PrefixGame{}
 	for _, g := range a.wineGames() {
-		if g.Native || steam.IsClientLaunch(g) {
+		if g.Native || g.ClientLaunch {
 			continue
 		}
 		p := paths.GameDataDir(g.ID, g.Settings.WinePrefix, folder)

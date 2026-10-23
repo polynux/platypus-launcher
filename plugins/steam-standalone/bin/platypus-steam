@@ -1295,6 +1295,8 @@ def library_list(_params):
             if ig.get("native"):
                 entry["native"] = True
             entry["note"] = mode_note(ig.get("mode") or "none")
+            if ig.get("mode") == "client":
+                entry["clientLaunch"] = True
         # Art needs no Store lookup: always set it, so games past the Store
         # budget (or with no Store entry at all) still show covers.
         entry.update(art_urls(app))
@@ -1314,6 +1316,8 @@ def library_list(_params):
                 "native": True if ig.get("native") else False,
                 "note": mode_note(ig.get("mode") or "none"),
             }
+            if ig.get("mode") == "client":
+                missing["clientLaunch"] = True
             missing.update(art_urls(app))
             out.append(missing)
     # Newer apps only have hashed asset paths: resolve the real cover/hero/

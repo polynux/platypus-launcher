@@ -114,6 +114,7 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		Installable:     lg.Installable && s.has("install"),
 		Note:            lg.Note,
 		Native:          lg.Native,
+		ClientLaunch:    lg.ClientLaunch,
 		Offline:         normalizeOffline(lg.Offline, s.speaksOffline()),
 		CloudSync:       lg.CloudSync && s.speaksOffline(),
 		LastPlayed:      max(lg.LastPlayed, 0),
