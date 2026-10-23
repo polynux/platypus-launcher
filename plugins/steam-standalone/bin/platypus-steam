@@ -2060,9 +2060,13 @@ def initialize(params):
 def game_save_context(params):
     app = str((params or {}).get("id") or "")
     home = os.path.expanduser("~")
-    root = next((p for p in (os.path.join(home, ".local/share/Steam"),
-                             os.path.join(home, ".steam/steam"),
-                             os.path.join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam"))
+    candidates = [os.path.join(home, ".local/share/Steam")]
+    xdg_data = os.environ.get("XDG_DATA_HOME", "")
+    if xdg_data and os.path.isabs(xdg_data):
+        candidates.append(os.path.join(xdg_data, "Steam"))
+    candidates.extend((os.path.join(home, ".steam/steam"),
+                      os.path.join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam")))
+    root = next((p for p in candidates
                  if os.path.isdir(os.path.join(p, "steamapps"))), "")
     result = {"roots": {"steam": root} if root else {}}
     if not root:
