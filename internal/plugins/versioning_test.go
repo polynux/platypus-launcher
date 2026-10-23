@@ -103,7 +103,7 @@ func TestPluginNeedingOnlyANewerProtocolNeedsANewerPlatypus(t *testing.T) {
 }
 
 func TestPluginWithTooNewMinorOfTheSameMajor(t *testing.T) {
-	_, p := approvedEnv(t, nil, useProtocol(map[string]any{"min": "1.18"}, ""))
+	_, p := approvedEnv(t, nil, useProtocol(map[string]any{"min": "1.19"}, ""))
 	if p.Status != StatusNeedsNewer {
 		t.Fatalf("%+v", p)
 	}

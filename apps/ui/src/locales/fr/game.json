@@ -41,7 +41,15 @@
     "starting": "Démarrage",
     "stop": "Arrêter",
     "stopping": "Arrêt en cours…",
-    "forceStop": "Forcer l'arrêt"
+    "forceStop": "Forcer l'arrêt",
+    "client": {
+      "updating": "mise à jour",
+      "shaders": "traitement des shaders",
+      "downloading": "téléchargement des dépôts",
+      "validating": "vérification des fichiers",
+      "launching": "démarrage du jeu"
+    },
+    "clientFinished": "{{client}} a terminé son travail sans démarrer le jeu. Relancez-le avec Jouer."
   },
   "hero": {
     "notInstalled": "non installé",

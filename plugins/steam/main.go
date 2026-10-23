@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"platypus/internal/steam"
 	"platypus/internal/types"
@@ -52,6 +53,7 @@ type params struct {
 	Executable string   `json:"executable"`
 	Protocols  []string `json:"protocols"`
 	Locale     string   `json:"locale"`
+	Since      int64    `json:"since"`
 }
 
 var (
@@ -70,7 +72,7 @@ func send(m message) {
 }
 
 // supportedProtocols is what this plugin speaks.
-var supportedProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.17"}
+var supportedProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.17", "1.18"}
 
 func negotiate(offered []string) (string, bool) {
 	best, found := "", false
@@ -458,6 +460,11 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return playtime()
 	case "game.saveContext":
 		return saveContext(p)
+	case "game.clientStatus":
+		if strings.TrimSpace(p.ID) == "" {
+			return nil, &rpcError{Code: -32602, Message: "invalid params: id is required"}
+		}
+		return steam.ClientStatus(p.ID, time.Unix(p.Since, 0)), nil
 	}
 	return nil, &rpcError{Code: -32601, Message: "method not found: " + method}
 }

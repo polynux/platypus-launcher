@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
@@ -307,7 +308,33 @@ func (s *Plugin) Launch(ctx context.Context, game types.Game, preview bool) (*La
 		spec = rebaseSpec(spec, rel.From, rel.To)
 		folders = append(slices.Clip(folders), rel.To)
 	}
-	return ValidateSpec(spec, s.p.Manifest, folders)
+	launch, err := ValidateSpec(spec, s.p.Manifest, folders)
+	if err != nil {
+		return nil, err
+	}
+	if launch.Client != nil {
+		if s.m.Runtime(s.ID()).Speaks(plugins.ClientStatusVersion) {
+			launch.Client.ClientStatus = func(since time.Time) (*types.ClientStatus, error) {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				var out types.ClientStatus
+				err := s.m.Call(ctx, s.ID(), "game.clientStatus", map[string]any{"id": game.StoreAppID, "since": since.Unix()}, &out)
+				if err != nil {
+					return nil, err
+				}
+				switch out.State {
+				case "updating", "shaders", "downloading", "validating", "launching", "idle", "running":
+				default:
+					return nil, nil
+				}
+				if out.Progress != nil && (*out.Progress < 0 || *out.Progress > 1) {
+					out.Progress = nil
+				}
+				return &out, nil
+			}
+		}
+	}
+	return launch, nil
 }
 
 // sameFile says whether a and b name the same file, after resolving symlinks.

@@ -60,10 +60,12 @@ type Tracker struct {
 // store-client launches); state/pid/message mirror the last emitted event
 // so late subscribers can hydrate via Snapshot (CORE-1).
 type entry struct {
-	cmd     *exec.Cmd
-	state   string
-	pid     int
-	message string
+	cmd            *exec.Cmd
+	state          string
+	pid            int
+	message        string
+	clientStatus   *types.ClientStatus
+	clientStatusFn func(time.Time) (*types.ClientStatus, error)
 
 	done     chan struct{} // closed when the launch is no longer tracked
 	doneOnce sync.Once
@@ -121,10 +123,11 @@ func (t *Tracker) Snapshot() []types.SessionEvent {
 	out := make([]types.SessionEvent, 0, len(t.active))
 	for gameID, e := range t.active {
 		out = append(out, types.SessionEvent{
-			GameID:  gameID,
-			State:   e.state,
-			PID:     e.pid,
-			Message: e.message,
+			GameID:       gameID,
+			State:        e.state,
+			PID:          e.pid,
+			Message:      e.message,
+			ClientStatus: e.clientStatus,
 		})
 	}
 	return out
@@ -188,6 +191,11 @@ func (t *Tracker) setMessage(gameID, message string) {
 	}
 }
 
+// WithClientStatus polls a store-neutral status source while a client launch is pending.
+func WithClientStatus(status func(time.Time) (*types.ClientStatus, error)) StartOption {
+	return func(e *entry) { e.clientStatusFn = status }
+}
+
 // StopAll kills direct-launch processes and their groups (on app shutdown).
 // Steam games are owned by the Steam client and are left alone.
 func (t *Tracker) StopAll() {
@@ -228,18 +236,46 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 	go func() {
 		defer t.clearEntry(gameID, e)
 		deadline := time.Now().Add(startTimeout)
+		capDeadline := time.Now().Add(2 * time.Hour)
 		pid := 0
 		var started time.Time
+		idleSeen := false
 		for pid == 0 {
 			if pid = find(); pid != 0 {
 				break
+			}
+			if e.clientStatusFn != nil {
+				if status, err := e.clientStatusFn(asked); err == nil && status != nil {
+					t.mu.Lock()
+					e.clientStatus = status
+					t.mu.Unlock()
+					t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: client + " is " + status.State, ClientStatus: status})
+					if status.State == "idle" {
+						idleSeen = true
+					} else if status.State != "running" {
+						next := deadline.Add(pollEvery)
+						if capDeadline.Before(next) {
+							next = capDeadline
+						}
+						deadline = next
+					}
+				}
+			}
+			if idleSeen {
+				if t.userStopped(e) {
+					t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
+				} else {
+					t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: client + " finished its work but didn't start the game. Press Play again."})
+				}
+				return
 			}
 			if time.Now().After(deadline) {
 				if t.userStopped(e) {
 					t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
 					return
 				}
-				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: client + " never started the game. Check the " + client + " window for an update, a prompt or an error."})
+				message := client + " never started the game. Check the " + client + " window for an update, a prompt or an error."
+				t.emit(types.SessionEvent{GameID: gameID, State: "failed", Message: message})
 				return
 			}
 			time.Sleep(pollEvery)

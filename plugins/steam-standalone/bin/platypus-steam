@@ -2051,11 +2051,51 @@ def job_discard(params):
 def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
-    protocol = "1.17" if "1.17" in offered else "1.14"
+    protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
     return {"name": "Steam (standalone)", "version": "0.3.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context"], "missing": []}
 
+
+def game_client_status(params):
+    app = str((params or {}).get("id") or "")
+    since = int((params or {}).get("since") or 0)
+    home = os.path.expanduser("~")
+    candidates = [os.path.join(home, ".local/share/Steam"), os.path.join(home, ".steam/steam"), os.path.join(home, ".var/app/com.valvesoftware.Steam/.local/share/Steam")]
+    root = next((p for p in candidates if os.path.isdir(os.path.join(p, "steamapps"))), "")
+    if not root or not app:
+        return {"state": "launching"}
+    status = "idle"
+    try:
+        with open(os.path.join(root, "logs", "console_log.txt"), "rb") as f:
+            f.seek(max(0, os.fstat(f.fileno()).st_size - 4 * 1024 * 1024))
+            lines = f.read().decode("utf-8", "replace").splitlines()
+        for line in lines:
+            match = re.search(r"GameAction \[AppID ([0-9]+), ActionID [0-9]+\] : LaunchApp changed task to ([A-Za-z]+)", line)
+            if match and match.group(1) == app:
+                stamp = re.match(r"^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\]", line)
+                if since and (not stamp or int(time.mktime(time.strptime(stamp.group(1), "%Y-%m-%d %H:%M:%S"))) < since - 1):
+                    continue
+                task = match.group(2)
+                status = {"CheckShaderDepotManifest": "shaders", "DownloadingDepots": "downloading", "SiteLicenseSeatCheckout": "launching", "DelayLaunch": "launching", "CreatingProcess": "launching", "WaitingGameWindow": "launching", "Completed": "idle"}.get(task, status)
+    except OSError:
+        return {"state": "launching"}
+    acf = os.path.join(root, "steamapps", "appmanifest_" + app + ".acf")
+    try:
+        with open(acf, "r", encoding="utf-8", errors="replace") as f:
+            data = f.read()
+        total = int((re.search(r'"BytesToDownload"\s+"([0-9]+)"', data) or [None, "0"])[1])
+        done = int((re.search(r'"BytesDownloaded"\s+"([0-9]+)"', data) or [None, "0"])[1])
+        flags = int((re.search(r'"StateFlags"\s+"([0-9]+)"', data) or [None, "0"])[1])
+        if flags & 131072:
+            return {"state": "validating"}
+        if total > 0 and done < total:
+            return {"state": "updating", "bytes": done, "total": total, "progress": done / total}
+        if status in ("downloading", "updating") and flags & 4 and not flags & 2:
+            status = "idle"
+    except (OSError, ValueError):
+        pass
+    return {"state": status if status != "idle" else "launching"}
 
 def game_save_context(params):
     app = str((params or {}).get("id") or "")
@@ -2100,6 +2140,7 @@ METHODS = {
     "job.discard": job_discard,
     "game.launchSpec": launch_spec,
     "game.saveContext": game_save_context,
+    "game.clientStatus": game_client_status,
 }
 
 
