@@ -182,3 +182,65 @@ func TestPluginGameSavedSettingsReachRunnerAndLibrary(t *testing.T) {
 		t.Fatalf("wrapped env = %v, want saved custom env and runner option", p.env)
 	}
 }
+
+func TestPluginGameSettingsSaveReplacesMapsWithoutInvalidatingCache(t *testing.T) {
+	home := t.TempDir()
+	a := nativeTestApp(t, home)
+	a.ctx = context.Background()
+	source := &countingSource{fakeSource: fakeSource{id: "echo", games: []types.Game{{
+		ID: "echo_123", Source: "echo", Store: "echo", Title: "Plugin game",
+		Executable:    "/bin/true",
+		Settings:      types.GameSettings{EnvVars: map[string]string{"STORE": "keep"}},
+		SettingsExtra: map[string]any{"store_extra": "keep", "nested": map[string]any{"x": "y"}},
+	}}}}
+	a.stores = stores.NewRegistry(func() []stores.Store { return []stores.Store{source} })
+	a.libraryEmit = func(types.Library) {}
+
+	if err := a.SaveGameSettings("echo_123", map[string]any{"env_vars": map[string]any{"A": "1"}, "plugin_toggle": true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.sourceLibrary("echo"); err != nil {
+		t.Fatal(err)
+	}
+	cachedBefore, _, _ := a.library.fresh("echo")
+	cacheSnapshot := append([]types.Game(nil), cachedBefore...)
+	cacheSnapshot[0].Settings.EnvVars = map[string]string{"STORE": "keep"}
+	cacheSnapshot[0].SettingsExtra = map[string]any{
+		"store_extra": "keep", "nested": cloneSettingValue(cachedBefore[0].SettingsExtra["nested"]),
+	}
+	first, err := a.GetLibrary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Games[0].Settings.EnvVars["A"] != "1" {
+		t.Fatalf("first library env = %v, want A=1", first.Games[0].Settings.EnvVars)
+	}
+	cacheAfter, _, _ := a.library.fresh("echo")
+	if !reflect.DeepEqual(cacheAfter, cacheSnapshot) {
+		t.Fatalf("cached listing changed: got %+v want %+v", cacheAfter, cacheSnapshot)
+	}
+
+	if err := a.SaveGameSettings("echo_123", map[string]any{"env_vars": map[string]any{}, "plugin_toggle": false}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := a.GetLibrary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := second.Games[0].Settings.EnvVars["A"]; ok {
+		t.Fatalf("deleted env var remains after save: %v", second.Games[0].Settings.EnvVars)
+	}
+	if source.calls.Load() != 1 {
+		t.Fatalf("source listed %d times, want 1 despite settings save", source.calls.Load())
+	}
+
+	stale := source.games[0]
+	stale.Settings.EnvVars = map[string]string{"A": "1", "STORE": "keep"}
+	p, err := a.prepareLaunch(stale, true)
+	if err != nil {
+		t.Fatalf("prepareLaunch: %v", err)
+	}
+	if _, ok := p.env["A"]; ok {
+		t.Fatalf("deleted env var reached runner: %v", p.env)
+	}
+}
