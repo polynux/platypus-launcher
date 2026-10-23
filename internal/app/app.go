@@ -545,26 +545,41 @@ func (a *App) customGames() []types.Game {
 			IsInstalled: true,
 			Settings:    types.GameSettings{UseGameMode: true},
 		}
-		// Saved per-game settings win over the defaults. Keys the backend
-		// doesn't model (UI-only controls like sync_mode) are kept
-		// opaquely so sideloaded games don't lose them (CORE-9).
-		if saved, ok := savedAll[g.ID]; ok {
-			if data, err := json.Marshal(saved); err == nil {
-				_ = json.Unmarshal(data, &g.Settings)
-			}
-			for k, v := range saved {
-				if _, known := gameSettingsFields[k]; !known {
-					if g.SettingsExtra == nil {
-						g.SettingsExtra = map[string]any{}
-					}
-					g.SettingsExtra[k] = v
-				}
-			}
-		}
+		a.applySavedGameSettings(&g, savedAll)
 		g.Native = a.customNative(g.Executable, g.Settings.RunMode)
 		out = append(out, g)
 	}
 	return out
+}
+
+// applySavedGameSettings overlays persisted settings without changing fields
+// supplied by the store. Unknown keys stay available to runner plugins.
+func (a *App) applySavedGameSettings(g *types.Game, savedAll map[string]map[string]any) {
+	if saved, ok := savedAll[g.ID]; ok {
+		// json.Unmarshal merges maps into an existing struct. These maps are
+		// user-owned snapshots, so replace them when the saved record has them.
+		if _, ok := saved["env_vars"]; ok {
+			g.Settings.EnvVars = nil
+		}
+		if data, err := json.Marshal(saved); err == nil {
+			_ = json.Unmarshal(data, &g.Settings)
+		}
+		g.SettingsExtra = nil
+		for k, v := range saved {
+			if _, known := gameSettingsFields[k]; !known {
+				if g.SettingsExtra == nil {
+					g.SettingsExtra = map[string]any{}
+				}
+				g.SettingsExtra[k] = v
+			}
+		}
+	}
+}
+
+func (a *App) applySavedSettings(g *types.Game) {
+	if a.settings != nil {
+		a.applySavedGameSettings(g, a.settings.GameSettings())
+	}
 }
 
 // customNative resolves whether a sideloaded executable runs natively
@@ -728,6 +743,37 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 			lib.Warnings = append(lib.Warnings, w)
 			continue
 		}
+		results[i] = append([]types.Game(nil), results[i]...)
+		for j := range results[i] {
+			g := results[i][j]
+			if g.Settings.EnvVars != nil {
+				env := make(map[string]string, len(g.Settings.EnvVars))
+				for k, v := range g.Settings.EnvVars {
+					env[k] = v
+				}
+				g.Settings.EnvVars = env
+			}
+			if g.SettingsExtra != nil {
+				extra := make(map[string]any, len(g.SettingsExtra))
+				for k, v := range g.SettingsExtra {
+					extra[k] = cloneSettingValue(v)
+				}
+				g.SettingsExtra = extra
+			}
+			if g.FixInfo != nil {
+				fix := *g.FixInfo
+				if fix.DLLOverrides != nil {
+					overrides := make(map[string]string, len(fix.DLLOverrides))
+					for k, v := range fix.DLLOverrides {
+						overrides[k] = v
+					}
+					fix.DLLOverrides = overrides
+				}
+				g.FixInfo = &fix
+			}
+			results[i][j] = g
+			a.applySavedSettings(&results[i][j])
+		}
 		lib.Games = append(lib.Games, results[i]...)
 		a.startPlaytimeOnce(s.ID())
 	}
@@ -738,6 +784,25 @@ func (a *App) assembleLibrary(all []stores.Store, results [][]types.Game, errs [
 	a.applyGameStatus(lib.Games)
 	a.applyFixes(lib.Games)
 	return lib, nil
+}
+
+func cloneSettingValue(v any) any {
+	switch value := v.(type) {
+	case map[string]any:
+		cloned := make(map[string]any, len(value))
+		for k, nested := range value {
+			cloned[k] = cloneSettingValue(nested)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(value))
+		for i, nested := range value {
+			cloned[i] = cloneSettingValue(nested)
+		}
+		return cloned
+	default:
+		return v
+	}
 }
 
 // applyFixes puts each game's curated fix or cached provider badges on it (the library
@@ -849,6 +914,7 @@ type prepared struct {
 // prepareLaunch asks the game's store how to launch it and builds the command.
 // preview must not cost the store anything (no launch tokens).
 func (a *App) prepareLaunch(game types.Game, preview bool) (*prepared, error) {
+	a.applySavedSettings(&game)
 	var launch *stores.Launch
 	if s, ok := a.stores.Get(sourceOf(game)); ok {
 		ctx, cancel := context.WithTimeout(a.ctx, launchTimeout)
@@ -1329,5 +1395,8 @@ func (a *App) SaveGameSettings(gameID string, gameSettings map[string]any) error
 	if err := a.cleanGameSettingsPaths(gameSettings); err != nil {
 		return err
 	}
-	return a.settings.SetGameSettings(gameID, gameSettings)
+	if err := a.settings.SetGameSettings(gameID, gameSettings); err != nil {
+		return err
+	}
+	return nil
 }

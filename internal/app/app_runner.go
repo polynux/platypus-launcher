@@ -102,6 +102,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 // gamePrefix collects the runner's Wine identity and the store's save roots.
 // Native games and store-client launches can still need store-owned roots.
 func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
+	a.applySavedSettings(&game)
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
 	defer cancel()
 	var result savebackup.Prefix
