@@ -192,8 +192,10 @@ export const LauncherApi = {
 
   // Hardware-based tweaks offered for every game.
   getTweaks: () => call<Tweak[]>('GetTweaks', async () => (await App.GetTweaks()) ?? []),
-  /** The runner's per-game choices, for the game settings form (runner.options). */
-  getRunnerOptions: () => call<SettingGroup[]>('GetRunnerOptions', async () => (await App.GetRunnerOptions()).groups ?? []),
+  /** The runner's per-game choices, for the game settings form (runner.options).
+   *  A game the store client launches gets only the choices the Steam launch
+   *  options carry (issue #88): the client picks the runner and owns the prefix. */
+  getRunnerOptions: (game: Game) => call<SettingGroup[]>('GetRunnerOptions', async () => (await App.GetRunnerOptions(backend(game))).groups ?? []),
   /** The env and wrappers the runner's choices add, for the Steam launch options. */
   getRunnerEnv: (game: Game) => call<RunnerEnv>('GetRunnerEnv', () => App.GetRunnerEnv(backend(game))),
 

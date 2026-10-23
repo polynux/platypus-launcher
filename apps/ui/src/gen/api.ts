@@ -69,7 +69,7 @@ export interface CoreApi {
   GetPluginSettings(source: string): Promise<types.SettingsView>;
   GetProtonVersions(): Promise<types.ProtonVersion[]>;
   GetRunnerEnv(game: types.Game): Promise<types.RunnerEnv>;
-  GetRunnerOptions(): Promise<types.SettingsSchema>;
+  GetRunnerOptions(game: types.Game): Promise<types.SettingsSchema>;
   GetSavePaths(game: types.Game): Promise<types.SavePath[]>;
   GetTweaks(): Promise<types.Tweak[]>;
   InstallGame(game: types.Game): Promise<types.Job>;
