@@ -339,23 +339,23 @@ func TestStopWhileClientStillStarting(t *testing.T) {
 	waitDead(t, game.Process.Pid, 2*time.Second)
 }
 
-func TestWatchClientIdleStatusFailsWithRetryReason(t *testing.T) {
+func TestWatchClientIdleWithoutWorkUsesOriginalTimeout(t *testing.T) {
 	events := make(chan types.SessionEvent, 8)
 	tr := NewTracker(func(e types.SessionEvent) { events <- e })
 	status := func(time.Time) (*types.ClientStatus, error) { return &types.ClientStatus{State: "idle"}, nil }
-	if !tr.WatchClient("g-idle", "Steam", func() int { return 0 }, time.Minute, WithClientStatus(status)) {
+	if !tr.WatchClient("g-idle", "Steam", func() int { return 0 }, 100*time.Millisecond, WithClientStatus(status)) {
 		t.Fatal("WatchClient refused")
 	}
 	for {
 		select {
 		case e := <-events:
 			if e.State == "failed" {
-				if !strings.Contains(e.Message, "Press Play again") {
+				if !strings.Contains(e.Message, "never started the game") {
 					t.Fatalf("failure message = %q", e.Message)
 				}
 				return
 			}
-		case <-time.After(time.Second):
+		case <-time.After(5 * time.Second):
 			t.Fatal("idle client status did not fail promptly")
 		}
 	}

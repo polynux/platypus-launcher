@@ -317,7 +317,7 @@ func versionLess(a, b string) bool {
 func initializeResult(p params) (map[string]any, error) {
 	knobMu.Lock()
 	defer knobMu.Unlock()
-	res := map[string]any{"name": "Echo (test plugin)", "version": "0.4.0", "api": 1, "missing": []any{}}
+	res := map[string]any{"name": "Echo (test plugin)", "version": "0.5.0", "api": 1, "missing": []any{}}
 	loc := strings.TrimSpace(p.Locale)
 	if loc == "" {
 		loc = "en"

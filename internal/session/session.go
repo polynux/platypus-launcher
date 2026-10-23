@@ -29,6 +29,7 @@ const (
 	// pre-caching and updates can take a while) before we report that nothing
 	// happened.
 	clientStartTimeout = 3 * time.Minute
+	clientIdleGrace    = 25 * time.Second
 	// A direct launch that exits faster than this is reported as a failure.
 	quickExit = 5 * time.Second
 	// clientQuickExit is how soon a game a store client started must end, once
@@ -239,7 +240,8 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 		capDeadline := time.Now().Add(2 * time.Hour)
 		pid := 0
 		var started time.Time
-		idleSeen := false
+		worked := false
+		var idleSince time.Time
 		for pid == 0 {
 			if pid = find(); pid != 0 {
 				break
@@ -247,21 +249,34 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 			if e.clientStatusFn != nil {
 				if status, err := e.clientStatusFn(asked); err == nil && status != nil {
 					t.mu.Lock()
-					e.clientStatus = status
+					changed := clientStatusChanged(e.clientStatus, status)
+					if changed {
+						e.clientStatus = status
+					}
 					t.mu.Unlock()
-					t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: client + " is " + status.State, ClientStatus: status})
-					if status.State == "idle" {
-						idleSeen = true
-					} else if status.State != "running" {
+					if changed {
+						t.emit(types.SessionEvent{GameID: gameID, State: "starting", Message: client + " is " + status.State, ClientStatus: status})
+					}
+					switch status.State {
+					case "updating", "shaders", "downloading", "validating":
+						worked = true
+						idleSince = time.Time{}
 						next := deadline.Add(pollEvery)
 						if capDeadline.Before(next) {
 							next = capDeadline
 						}
 						deadline = next
+					case "idle":
+						if worked && idleSince.IsZero() {
+							idleSince = time.Now()
+							deadline = idleSince.Add(clientIdleGrace)
+						}
+					default:
+						idleSince = time.Time{}
 					}
 				}
 			}
-			if idleSeen {
+			if worked && !idleSince.IsZero() && time.Since(idleSince) >= clientIdleGrace {
 				if t.userStopped(e) {
 					t.emit(types.SessionEvent{GameID: gameID, State: "stopped", Message: stoppedByUserMsg})
 				} else {
@@ -308,6 +323,23 @@ func (t *Tracker) WatchClient(gameID, client string, find func() int, startTimeo
 		}
 	}()
 	return true
+}
+
+func clientStatusChanged(previous, current *types.ClientStatus) bool {
+	if previous == nil || current == nil || previous.State != current.State {
+		return true
+	}
+	if previous.Progress == nil || current.Progress == nil {
+		return previous.Progress != current.Progress
+	}
+	return abs(*previous.Progress-*current.Progress) >= 0.01-1e-9
+}
+
+func abs(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // StartDirect runs cmd and follows it until exit. Output goes to a per-game

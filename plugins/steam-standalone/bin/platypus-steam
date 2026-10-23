@@ -2052,7 +2052,7 @@ def initialize(params):
     set_locale((params or {}).get("locale") or "en")
     offered = (params or {}).get("protocols") or []
     protocol = "1.18" if "1.18" in offered else ("1.17" if "1.17" in offered else "1.14")
-    return {"name": "Steam (standalone)", "version": "0.3.0", "api": API,
+    return {"name": "Steam (standalone)", "version": "0.4.0", "api": API,
             "protocol": protocol,
             "capabilities": ["library", "install", "launch", "auth", "discard", "save-context"], "missing": []}
 
@@ -2071,13 +2071,19 @@ def game_client_status(params):
             f.seek(max(0, os.fstat(f.fileno()).st_size - 4 * 1024 * 1024))
             lines = f.read().decode("utf-8", "replace").splitlines()
         for line in lines:
+            added = re.search(r"Game process added : AppID ([0-9]+)\b", line)
+            if added and added.group(1) == app:
+                stamp = re.match(r"^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\]", line)
+                if not since or (stamp and int(time.mktime(time.strptime(stamp.group(1), "%Y-%m-%d %H:%M:%S"))) >= since - 1):
+                    status = "launching"
+                continue
             match = re.search(r"GameAction \[AppID ([0-9]+), ActionID [0-9]+\] : LaunchApp changed task to ([A-Za-z]+)", line)
             if match and match.group(1) == app:
                 stamp = re.match(r"^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\]", line)
                 if since and (not stamp or int(time.mktime(time.strptime(stamp.group(1), "%Y-%m-%d %H:%M:%S"))) < since - 1):
                     continue
                 task = match.group(2)
-                status = {"CheckShaderDepotManifest": "shaders", "DownloadingDepots": "downloading", "SiteLicenseSeatCheckout": "launching", "DelayLaunch": "launching", "CreatingProcess": "launching", "WaitingGameWindow": "launching", "Completed": "idle"}.get(task, status)
+                status = {"CheckShaderDepotManifest": "shaders", "DownloadingDepots": "downloading", "SiteLicenseSeatCheckout": "launching", "DelayLaunch": "launching", "CreatingProcess": "launching", "WaitingGameWindow": "launching", "Completed": "launching"}.get(task, status)
     except OSError:
         return {"state": "launching"}
     acf = os.path.join(root, "steamapps", "appmanifest_" + app + ".acf")
@@ -2091,11 +2097,11 @@ def game_client_status(params):
             return {"state": "validating"}
         if total > 0 and done < total:
             return {"state": "updating", "bytes": done, "total": total, "progress": done / total}
-        if status in ("downloading", "updating") and flags & 4 and not flags & 2:
+        if status in ("downloading", "updating", "shaders") and flags & 4 and not flags & 2:
             status = "idle"
     except (OSError, ValueError):
         pass
-    return {"state": status if status != "idle" else "launching"}
+    return {"state": status}
 
 def game_save_context(params):
     app = str((params or {}).get("id") or "")
