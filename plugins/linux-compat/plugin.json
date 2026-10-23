@@ -1,7 +1,7 @@
 {
   "id": "linux-compat",
   "name": "Linux Compatibility Facts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Platypus",
   "description": "ProtonDB, Steam Deck, AreWeAntiCheatYet, PCGamingWiki and local anti-cheat facts.",
   "manifestVersion": 1,

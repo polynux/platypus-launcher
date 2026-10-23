@@ -1,7 +1,7 @@
 {
   "id": "steam",
   "name": "Steam",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Platypus",
   "description": "Your Steam library from the local Steam client: installed games, art from the client's cache, launches through the Steam client, playtime and Steam Cloud.",
   "manifestVersion": 1,

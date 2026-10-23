@@ -1,7 +1,7 @@
 {
   "id": "runner",
   "name": "Linux Runner",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Platypus",
   "description": "Wine, Proton, umu, prefix actions and Linux launch wrappers.",
   "manifestVersion": 1,

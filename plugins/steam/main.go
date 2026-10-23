@@ -137,7 +137,7 @@ func initializeResult(p params) (map[string]any, error) {
 	}
 	return map[string]any{
 		"name":         "Steam",
-		"version":      "1.0.0",
+		"version":      "1.1.0",
 		"api":          1,
 		"protocol":     picked,
 		"capabilities": []string{"library", "launch", "playtime", "local-art", "save-context"},
