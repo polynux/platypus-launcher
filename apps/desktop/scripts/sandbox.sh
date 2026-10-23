@@ -206,6 +206,16 @@ fi
 echo "vite: http://127.0.0.1:$VP"
 echo "debug: http://127.0.0.1:$DP/json/list (CDP over the printed websocketDebuggerUrl)"
 
+# The app runs in English on the Xvfb display, whatever the desktop session
+# says. Electron reads its language list from LANGUAGE, LC_ALL and LANG (the
+# e2e steps wait for the English UI), and picks Wayland when WAYLAND_DISPLAY
+# or XDG_SESSION_TYPE is set (ozone-platform-hint auto, main.ts): both come
+# from the user's desktop, so they are cleared here. Override the language
+# with PLATYPUS_SANDBOX_LANG (e.g. fr_FR.UTF-8) to run the app in another one.
+SANDBOX_LANG="${PLATYPUS_SANDBOX_LANG:-en_US.UTF-8}"
+export LANG="$SANDBOX_LANG" LC_ALL="$SANDBOX_LANG" LANGUAGE="${SANDBOX_LANG%%.*}"
+unset WAYLAND_DISPLAY XDG_SESSION_TYPE
+
 # The sandbox is throwaway and headless: no setuid sandbox helper is
 # configured on the server, so Electron runs unprivileged like the AppImage
 # does in containers (docs/electron.md).
