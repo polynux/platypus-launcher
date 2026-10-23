@@ -21,8 +21,8 @@ Desktop main ──spawn──> platypus-core (Go, the App without a window)
 ## Try it
 
 Needs Go, bun and node ≥ 22, and an Electron (the system one works:
-`PLATYPUS_ELECTRON=/usr/bin/electron`; otherwise the root `bun install`
-downloads one).
+`PLATYPUS_ELECTRON=/usr/bin/electron`; otherwise `bun run dev` / `start`
+repairs a missing package download by running Electron's `install.js` once).
 
 ```sh
 bun install                        # once (ELECTRON_SKIP_BINARY_DOWNLOAD=1 to use the system Electron)
