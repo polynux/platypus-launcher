@@ -141,7 +141,12 @@ func (s *Plugin) toGame(lg plugins.LibraryGame, folders []string) types.Game {
 		if r, err := filepath.EvalSymlinks(real); err == nil {
 			real = r
 		}
-		g.OutsideFolder = !insideAny(real, folders)
+		// A client launch hands the game to its store's client, which runs it
+		// from the store's own library: there is no path Platypus runs itself,
+		// so the install-folder guard has nothing to contain (issue #86).
+		if !lg.ClientLaunch {
+			g.OutsideFolder = !insideAny(real, folders)
+		}
 	}
 	return g
 }
