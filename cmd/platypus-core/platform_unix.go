@@ -8,6 +8,8 @@ import (
 	"syscall"
 )
 
+// protocolFile keeps a close-on-exec duplicate of stdout for the protocol and
+// points fd 1 at stderr.
 func protocolFile() (*os.File, error) {
 	protoFd, err := syscall.Dup(1)
 	if err != nil {
@@ -19,6 +21,12 @@ func protocolFile() (*os.File, error) {
 	}
 	return os.NewFile(uintptr(protoFd), "protocol"), nil
 }
+
+// closeInheritedFds closes every fd but stdin/stdout/stderr: Chromium leaves
+// files and sockets without close-on-exec and libuv does not close them at
+// spawn, so the core would otherwise hold the GPU cache, Local Storage, even
+// the remote debugger's socket (and its own plugins and games would inherit
+// them in turn).
 func closeInheritedFds() {
 	fds, err := os.ReadDir("/proc/self/fd")
 	if err != nil {
@@ -34,4 +42,5 @@ func closeInheritedFds() {
 		}
 	}
 }
+
 func shutdownSignals() []os.Signal { return []os.Signal{syscall.SIGTERM, syscall.SIGINT} }

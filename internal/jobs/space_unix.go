@@ -22,6 +22,8 @@ func spaceStats(path string) (uint64, uint64, error) {
 		path = parent
 	}
 }
+
+// freeSpace returns the bytes available on the filesystem that holds path.
 func freeSpace(path string) (uint64, error) {
 	_, free, err := spaceStats(path)
 	return free, err

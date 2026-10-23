@@ -11,6 +11,8 @@ import (
 	"syscall"
 )
 
+// prepareProcess starts the game in its own process group, so a stop reaches
+// everything it spawned.
 func prepareProcess(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
@@ -18,6 +20,8 @@ func prepareProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr.Setpgid = true
 }
 
+// killProcesses signals the session: its process group for a direct launch,
+// else the tree below pid; a forced stop also kills anything carrying token.
 func killProcesses(pid int, direct bool, token string, force bool) {
 	sig := syscall.SIGTERM
 	if force {
@@ -38,6 +42,8 @@ func killProcesses(pid int, direct bool, token string, force bool) {
 	}
 }
 
+// killGroup signals pid's process group, but only when pid leads its own group
+// (never Platypus's); otherwise just pid.
 func killGroup(pid int, sig syscall.Signal) {
 	if pg, err := syscall.Getpgid(pid); err == nil && pg == pid && pg != syscall.Getpgrp() {
 		_ = syscall.Kill(-pid, sig)
@@ -45,6 +51,8 @@ func killGroup(pid int, sig syscall.Signal) {
 	}
 	_ = syscall.Kill(pid, sig)
 }
+
+// parentOf reads /proc/<pid>/stat and returns the parent pid, or 0.
 func parentOf(pid int) int {
 	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
 	if err != nil {
@@ -61,6 +69,8 @@ func parentOf(pid int) int {
 	ppid, _ := strconv.Atoi(string(f[1]))
 	return ppid
 }
+
+// descendants returns every process below root, found through parent links.
 func descendants(root int) []int {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
@@ -87,6 +97,9 @@ func descendants(root int) []int {
 	}
 	return out
 }
+
+// pidsWithToken lists the processes whose environment carries this launch's
+// session token.
 func pidsWithToken(token string) []int {
 	needle := []byte(tokenEnv + "=" + token + "\x00")
 	self := os.Getpid()

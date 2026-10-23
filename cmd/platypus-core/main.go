@@ -81,11 +81,6 @@ func fatal(err error) {
 	os.Exit(1)
 }
 
-// closeInheritedFds closes every fd but stdin/stdout/stderr: Chromium leaves
-// files and sockets without close-on-exec and libuv does not close them at
-// spawn, so the core would otherwise hold the GPU cache, Local Storage, even
-// the remote debugger's socket (and its own plugins and games would inherit
-// them in turn).
 // coreHost is the host of the Electron shell: events are notifications, the
 // native dialogs are requests the shell answers, logs go to stderr (the shell
 // forwards them).
