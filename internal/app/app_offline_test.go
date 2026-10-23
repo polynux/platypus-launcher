@@ -25,7 +25,6 @@ import (
 	"platypus/internal/plugins"
 	"platypus/internal/session"
 	"platypus/internal/settings"
-	"platypus/internal/steam"
 	"platypus/internal/stores"
 	"platypus/internal/types"
 )
@@ -82,7 +81,6 @@ func offlineApp(t *testing.T, hits *atomic.Int64) (*App, types.Game) {
 	}
 	// Every outbound client fails: the launch must not need any of them.
 	a.artwork = &onlineart.Client{HTTP: fail}
-	a.sideloadSteam = &steam.StoreClient{HTTPClient: fail}
 	q, err := jobs.Open(filepath.Join(root, "jobs.json"), nil, nil)
 	if err != nil {
 		t.Fatal(err)

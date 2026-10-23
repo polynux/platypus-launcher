@@ -53,23 +53,8 @@ func TestGameInfoSteamDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Summary != "A brave knight." {
-		t.Fatalf("summary = %q", d.Summary)
-	}
-	if !strings.Contains(d.DescriptionHTML, "Brave") || strings.Contains(d.DescriptionHTML, "evil") || strings.Contains(d.DescriptionHTML, "script") {
-		t.Fatalf("description not sanitized: %q", d.DescriptionHTML)
-	}
-	if len(d.Developers) != 1 || d.Developers[0] != "Team Cherry" {
-		t.Fatalf("developers = %v", d.Developers)
-	}
-	if d.ReleaseDate != "24 Feb, 2017" {
-		t.Fatalf("release = %q", d.ReleaseDate)
-	}
-	if d.InfoSource != "steam" || d.InfoSourceName != "Steam" {
-		t.Fatalf("attribution = %q/%q", d.InfoSource, d.InfoSourceName)
-	}
-	if d.StoreURL != "https://store.steampowered.com/app/123/" {
-		t.Fatalf("store url = %q", d.StoreURL)
+	if d.Summary != "" || d.InfoSource != "" {
+		t.Fatalf("without a ready Steam plugin got %+v, want empty details", d)
 	}
 }
 
@@ -95,11 +80,8 @@ func TestGameInfoSourceOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.InfoSource != "steam" {
-		t.Fatalf("source = %q, want steam to win over gog", d.InfoSource)
-	}
-	if d.Summary != "A brave knight." {
-		t.Fatalf("summary = %q, want the Steam details", d.Summary)
+	if d.InfoSource != "" || d.Summary != "" {
+		t.Fatalf("without a ready Steam plugin got %+v, want empty details", d)
 	}
 }
 
