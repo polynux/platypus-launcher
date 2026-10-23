@@ -15,8 +15,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"syscall"
 
 	"platypus/internal/app"
 	"platypus/internal/corerpc"
@@ -37,15 +35,10 @@ func main() {
 	// not inherit the protocol fd (Go's os/exec only closes close-on-exec
 	// fds, and a child holding our stdout open would stall EOF and could
 	// inject stream lines).
-	protoFd, err := syscall.Dup(1)
+	proto, err := protocolFile()
 	if err != nil {
 		fatal(err)
 	}
-	syscall.CloseOnExec(protoFd)
-	if err := syscall.Dup3(2, 1, 0); err != nil {
-		fatal(err)
-	}
-	proto := os.NewFile(uintptr(protoFd), "protocol")
 
 	// Folders resolve once, from the environment (issue #41). The shell
 	// passes PLATYPUS_* through when it spawns the core.
@@ -71,7 +64,7 @@ func main() {
 
 	// SIGTERM/SIGINT end the stream like the shell closing our stdin does.
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(sig, shutdownSignals()...)
 	go func() {
 		<-sig
 		_ = os.Stdin.Close()
@@ -86,27 +79,6 @@ func main() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, "core:", err)
 	os.Exit(1)
-}
-
-// closeInheritedFds closes every fd but stdin/stdout/stderr: Chromium leaves
-// files and sockets without close-on-exec and libuv does not close them at
-// spawn, so the core would otherwise hold the GPU cache, Local Storage, even
-// the remote debugger's socket (and its own plugins and games would inherit
-// them in turn).
-func closeInheritedFds() {
-	fds, err := os.ReadDir("/proc/self/fd")
-	if err != nil {
-		return
-	}
-	for _, fd := range fds {
-		name := fd.Name()
-		if name == "0" || name == "1" || name == "2" {
-			continue
-		}
-		if n, err := strconv.Atoi(name); err == nil {
-			syscall.Close(n)
-		}
-	}
 }
 
 // coreHost is the host of the Electron shell: events are notifications, the
