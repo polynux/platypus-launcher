@@ -1,6 +1,7 @@
 [
   {
     "bannerUrl": "file://$HOME/.local/share/Steam/appcache/librarycache/440/header.jpg",
+    "clientLaunch": true,
     "coverUrl": "file://$HOME/.local/share/Steam/appcache/librarycache/440/library_600x900.jpg",
     "heroUrl": "file://$HOME/.local/share/Steam/appcache/librarycache/440/library_hero.jpg",
     "id": "440",
@@ -13,6 +14,7 @@
   },
   {
     "bannerUrl": "https://steamcdn-a.akamaihd.net/steam/apps/570/header.jpg",
+    "clientLaunch": true,
     "coverUrl": "https://steamcdn-a.akamaihd.net/steam/apps/570/library_600x900.jpg",
     "heroUrl": "https://steamcdn-a.akamaihd.net/steam/apps/570/library_hero.jpg",
     "id": "570",
@@ -24,6 +26,7 @@
   },
   {
     "bannerUrl": "https://steamcdn-a.akamaihd.net/steam/apps/730/header.jpg",
+    "clientLaunch": true,
     "coverUrl": "https://steamcdn-a.akamaihd.net/steam/apps/730/library_600x900.jpg",
     "heroUrl": "https://steamcdn-a.akamaihd.net/steam/apps/730/library_hero.jpg",
     "id": "730",

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -12,8 +13,9 @@ import (
 	"time"
 
 	"platypus/internal/apperr"
+	"platypus/internal/plugins"
 	"platypus/internal/sanitize"
-	"platypus/internal/steam"
+	"platypus/internal/stores"
 	"platypus/internal/types"
 )
 
@@ -81,21 +83,6 @@ func infoNames(source string) (infoSource, infoSourceName string) {
 		return "lutris", "Lutris / IGDB"
 	}
 	return "", ""
-}
-
-// sideloadSteamClient is the Steam details client for sideloaded games: the
-// injected one in tests, the live store endpoint otherwise. The client's
-// locale follows the effective locale so descriptions come back translated.
-// The live client's requests feed the offline tracker (issue #44).
-func (a *App) sideloadSteamClient() *steam.StoreClient {
-	if a.sideloadSteam != nil {
-		a.sideloadSteam.Locale = a.Locale()
-		return a.sideloadSteam
-	}
-	c := steam.NewStoreClient()
-	c.Locale = a.Locale()
-	c.HTTPClient = a.netClient(c.HTTPClient, 8*time.Second)
-	return c
 }
 
 // infoCachePath names the disk cache file (issue #41: re-fetchable data
@@ -291,7 +278,7 @@ func (a *App) fetchSideloadedDetails(link string) (*types.GameDetails, error) {
 		if id == "" {
 			return nil, apperr.New("steam.appid.invalid", "a Steam app id is a number", nil)
 		}
-		d, err := a.sideloadSteamClient().Details("", id)
+		d, err := a.sideloadedSteamDetails(id)
 		if err != nil {
 			return nil, err
 		}
@@ -307,6 +294,27 @@ func (a *App) fetchSideloadedDetails(link string) (*types.GameDetails, error) {
 	default:
 		return nil, apperr.New("info.source.unknown", fmt.Sprintf("unknown info source %q", source), map[string]string{"source": source})
 	}
+}
+
+// sideloadedSteamDetails asks a ready Steam store plugin for game.details.
+// The plugin owns its Store API client; core retains the disk cache.
+func (a *App) sideloadedSteamDetails(appID string) (*types.GameDetails, error) {
+	if a.plugins != nil {
+		for _, p := range a.plugins.Plugins() {
+			if p.Status != plugins.StatusReady || p.Manifest.Store != "steam" || !a.plugins.Has(p.Manifest.ID, "library") {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(a.ctxOrBackground(), 8*time.Second)
+			game := types.Game{ID: "sideloaded", Source: types.SourceCustom, Store: types.StoreCustom, StoreAppID: appID}
+			d, err := stores.NewPlugin(a.plugins, p, nil).Details(ctx, game)
+			cancel()
+			if err != nil {
+				return nil, apperr.Wrap("info.source.unavailable", err, map[string]string{"source": "steam"})
+			}
+			return d, nil
+		}
+	}
+	return nil, apperr.New("info.source.unavailable", "Steam game information is unavailable", map[string]string{"source": "steam"})
 }
 
 var htmlTagRe = regexp.MustCompile(`<[^>]+>`)

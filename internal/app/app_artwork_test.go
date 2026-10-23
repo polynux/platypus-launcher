@@ -18,7 +18,6 @@ import (
 	"platypus/internal/customize"
 	"platypus/internal/onlineart"
 	"platypus/internal/settings"
-	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -192,7 +191,7 @@ func newArtApp(t *testing.T, f *artFixture, title string) (*App, *artHost, strin
 		t.Fatal(err)
 	}
 	h := &artHost{}
-	a := &App{host: h, settings: st, dataDir: root, optHome: root, optCacheDir: root, artwork: &onlineart.Client{SearchBase: f.srv.URL, CDNBase: f.srv.URL, APIBase: f.srv.URL, GOGBase: f.srv.URL, GOGInfoBase: f.srv.URL, LutrisBase: f.srv.URL, IGDBBase: f.srv.URL}, sideloadSteam: &steam.StoreClient{Base: f.srv.URL, HTTPClient: f.srv.Client()}}
+	a := &App{host: h, settings: st, dataDir: root, optHome: root, optCacheDir: root, artwork: &onlineart.Client{SearchBase: f.srv.URL, CDNBase: f.srv.URL, APIBase: f.srv.URL, GOGBase: f.srv.URL, GOGInfoBase: f.srv.URL, LutrisBase: f.srv.URL, IGDBBase: f.srv.URL}}
 	a.custom.p.Store(cs)
 	return a, h, g.ID
 }

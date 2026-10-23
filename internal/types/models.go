@@ -107,6 +107,8 @@ type Game struct {
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
+	// ClientLaunch says the store client must launch the game and owns its compatibility data.
+	ClientLaunch bool `json:"client_launch,omitempty"`
 	// Offline says whether the game launches without a network (protocol
 	// 1.15, issue #44): "ok", "network" or "unknown" ("" means unknown,
 	// the pre-1.15 default). The core never disables Play because of it.

@@ -99,24 +99,34 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 	return p, nil
 }
 
-// gamePrefix is the Windows side of the game's Wine or Proton prefix: the folder
-// its saves are read from, and the login inside it. It is empty for a native
-// game and with no runner plugin. The plugin reads the disk and the runner list
-// only, so backups and cloud saves can ask for it without the store.
+// gamePrefix collects the runner's Wine identity and the store's save roots.
+// Native games and store-client launches can still need store-owned roots.
 func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
-	if game.Native {
-		return savebackup.Prefix{}, nil
-	}
-	present, err := a.runnerPlugin()
-	if err != nil || !present {
-		return savebackup.Prefix{}, err
-	}
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
 	defer cancel()
 	var result savebackup.Prefix
-	params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder()}
-	if err := a.plugins.Call(ctx, "runner", "runner.prefix", params, &result); err != nil {
-		return savebackup.Prefix{}, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
+	if !game.Native && !game.ClientLaunch {
+		present, err := a.runnerPlugin()
+		if err != nil {
+			return savebackup.Prefix{}, err
+		}
+		if present {
+			params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder()}
+			if err := a.plugins.Call(ctx, "runner", "runner.prefix", params, &result); err != nil {
+				return savebackup.Prefix{}, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
+			}
+		}
+	}
+	if a.plugins != nil && a.plugins.Has(game.Source, "save-context") {
+		var store plugins.GameSaveContext
+		// A store that can't answer leaves the generic roots: backups still
+		// find what they can rather than blocking an uninstall.
+		if err := a.plugins.Call(ctx, game.Source, "game.saveContext", map[string]any{"id": game.StoreAppID}, &store); err != nil {
+			a.warnf("save context for %s: %v", game.Title, err)
+		} else {
+			result.Store = &savebackup.StoreContext{Roots: store.Roots, StoreUserID: store.StoreUserID,
+				Prefix: store.Prefix, Windows: store.Windows, Proton: store.Proton, WinUser: store.WinUser}
+		}
 	}
 	return result, nil
 }

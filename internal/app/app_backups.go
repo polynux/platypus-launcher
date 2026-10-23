@@ -15,7 +15,6 @@ import (
 	"platypus/internal/savebackup"
 	"platypus/internal/session"
 	"platypus/internal/settings"
-	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -171,12 +170,6 @@ func (a *App) backupIDs(game types.Game) (string, string) {
 	return savebackup.GameIDs(game, compat, info)
 }
 
-// backupSteamRoot is the Steam client folder for save resolution: the real
-// install when found, else "" for the default under home.
-func (a *App) backupSteamRoot() string {
-	return steam.RootFor(a.homeDir())
-}
-
 // backupCtx builds the resolution context for a game, with the prefix its
 // runner plugin reported.
 func (a *App) backupCtx(game types.Game, steamID, gogID string, prefix savebackup.Prefix) savebackup.Context {
@@ -184,7 +177,7 @@ func (a *App) backupCtx(game types.Game, steamID, gogID string, prefix savebacku
 	if err == nil {
 		game.InstallDir = folder
 	}
-	ctx := savebackup.NewContextFor(game, a.homeDir(), a.backupSteamRoot(), prefix)
+	ctx := savebackup.NewContextFor(game, a.homeDir(), prefix)
 	ctx.SteamID, ctx.GogID = steamID, gogID
 	return ctx
 }
@@ -219,7 +212,7 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	if err != nil {
 		return types.SaveGate{}, err
 	}
-	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, prefix, a.backupSteamRoot(), userPaths)
+	_, patterns, _, _, _ := svc.ResolveFor(game, steamID, gogID, prefix, userPaths)
 	if len(patterns) == 0 {
 		// Cloud games with no known save paths pass without the
 		// "delete without a save backup" confirmation: the cloud holds
@@ -239,7 +232,6 @@ func (a *App) backupGate(ctx context.Context, game types.Game, trigger string, a
 	// action deletes: simpler, and never less safe.
 	b, warned, skippedOut, unresolvedOut, err := svc.Backup(game, trigger, savebackup.BackupOptions{
 		Prefix:    prefix,
-		SteamRoot: a.backupSteamRoot(),
 		UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 	})
 	_ = skippedOut
@@ -279,7 +271,7 @@ func (a *App) savesPreview(game types.Game) (types.SaveGate, error) {
 	if err != nil {
 		return types.SaveGate{}, err
 	}
-	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, prefix, a.backupSteamRoot(), userPaths)
+	_, patterns, _, rctx, _ := a.saveService().ResolveFor(game, steamID, gogID, prefix, userPaths)
 	if len(patterns) == 0 {
 		if a.gameHasCloudSync(game) {
 			return types.SaveGate{Cloud: true}, nil
@@ -418,7 +410,7 @@ func (a *App) GetSavePaths(game types.Game) ([]types.SavePath, error) {
 	if err != nil {
 		return nil, err
 	}
-	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, prefix, a.backupSteamRoot(), userPaths)
+	roots, _, _, _, _ := a.saveService().ResolveFor(game, steamID, gogID, prefix, userPaths)
 	if roots == nil {
 		return []types.SavePath{}, nil
 	}
@@ -661,7 +653,6 @@ func (a *App) runCoreBackup(ctx context.Context, j types.Job) {
 	if err == nil {
 		_, _, _, _, err = a.saveService().Backup(game, trigger, savebackup.BackupOptions{
 			Prefix:    prefix,
-			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
 	}
@@ -722,7 +713,6 @@ func (a *App) runCoreRestore(ctx context.Context, j types.Job) {
 		}
 		_, _, _, _, err := svc.Backup(game, triggerBeforeRestore, savebackup.BackupOptions{
 			Prefix:    prefix,
-			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
 		if errors.Is(err, savebackup.ErrNothingFound) {
@@ -772,7 +762,6 @@ func (a *App) backupAfterSession(game types.Game) {
 	if err == nil {
 		_, _, _, _, err = a.saveService().Backup(game, triggerAfterSession, savebackup.BackupOptions{
 			Prefix:    prefix,
-			SteamRoot: a.backupSteamRoot(),
 			UserPaths: userPaths, SteamID: steamID, GogID: gogID,
 		})
 	}

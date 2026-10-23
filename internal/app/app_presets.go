@@ -8,7 +8,6 @@ import (
 
 	"platypus/internal/apperr"
 	"platypus/internal/paths"
-	"platypus/internal/steam"
 	"platypus/internal/types"
 )
 
@@ -192,7 +191,7 @@ func (a *App) ApplyPrefixPreset(gameID, presetID string) (types.PrefixApplyResul
 			fmt.Sprintf("presets don't apply to %s: it runs natively, without a Wine prefix", game.Title),
 			map[string]string{"title": game.Title})
 	}
-	if steam.IsClientLaunch(game) {
+	if game.ClientLaunch {
 		return res, apperr.New("settings.preset.clientLaunch",
 			fmt.Sprintf("presets don't apply to %s: its store client launches it and owns its prefix", game.Title),
 			map[string]string{"title": game.Title})

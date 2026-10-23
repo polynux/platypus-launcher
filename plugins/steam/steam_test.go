@@ -96,6 +96,9 @@ func libGames(t *testing.T, raw any) []map[string]any {
 func TestLibraryMatchesBuiltinScan(t *testing.T) {
 	home := fakeHome(t)
 	root := filepath.Join(home, ".local", "share", "Steam")
+	if err := os.MkdirAll(filepath.Join(root, "steamapps", "compatdata", "440", "pfx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 
 	scanned, err := steam.ScanSteamLibrary()
 	if err != nil {
@@ -139,6 +142,9 @@ func TestLibraryMatchesBuiltinScan(t *testing.T) {
 		if wire["offline"] != "ok" {
 			t.Errorf("%s offline = %q, want ok", g.StoreAppID, wire["offline"])
 		}
+		if wire["clientLaunch"] != true {
+			t.Errorf("%s clientLaunch = %v, want true", g.StoreAppID, wire["clientLaunch"])
+		}
 		// Last played reaches the library as before (the built-in source set it).
 		if g.LastPlayed > 0 {
 			if v, _ := wire["lastPlayed"].(float64); int64(v) != g.LastPlayed {
@@ -170,6 +176,14 @@ func TestLibraryMatchesBuiltinScan(t *testing.T) {
 				t.Errorf("%s %s = %q, want CDN fallback %q", g.StoreAppID, kind, got, scannedURL)
 			}
 		}
+	}
+	ctxRaw, err := saveContext(params{ID: "440"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := ctxRaw.(map[string]any)
+	if ctx["storeUserId"] != "12345" || ctx["prefix"] != filepath.Join(root, "steamapps", "compatdata", "440", "pfx") || ctx["proton"] != true {
+		t.Fatalf("save context = %+v", ctx)
 	}
 	// 570 has no local art: all CDN fallbacks. 440's hero is local here.
 	if m := byID["570"]; m["coverUrl"] != "https://steamcdn-a.akamaihd.net/steam/apps/570/library_600x900.jpg" {
@@ -270,6 +284,13 @@ func TestMissingInstallListsEmpty(t *testing.T) {
 	}
 	if games := libGames(t, raw); len(games) != 0 {
 		t.Fatalf("empty HOME listed %v, want no games", games)
+	}
+	ctxRaw, err := saveContext(params{ID: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roots := ctxRaw.(map[string]any)["roots"]; len(roots.(map[string]string)) != 0 {
+		t.Fatalf("save context roots without a client = %v", roots)
 	}
 	raw, err = playtime()
 	if err != nil {

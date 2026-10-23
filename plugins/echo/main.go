@@ -617,6 +617,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 
 	case "library.list":
 		return library()
+	case "game.saveContext":
+		return map[string]any{"roots": map[string]string{}}, nil
 	case "game.details":
 		g, ok := games[p.ID]
 		if !ok && strings.HasPrefix(p.ID, "bulk-") {

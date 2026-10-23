@@ -69,7 +69,8 @@
     "sideloadOnly": "Info linking is for sideloaded games.",
     "source": {
       "invalid": "An info source is gog or lutris.",
-      "unknown": "Unknown info source {{source}}."
+      "unknown": "Unknown info source {{source}}.",
+      "unavailable": "Steam game information is unavailable. Enable a Steam plugin and try again."
     }
   },
   "install": {

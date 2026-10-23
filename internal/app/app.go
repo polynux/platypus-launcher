@@ -31,7 +31,6 @@ import (
 	"platypus/internal/session"
 	"platypus/internal/settings"
 	"platypus/internal/social"
-	"platypus/internal/steam"
 	"platypus/internal/stores"
 	"platypus/internal/types"
 )
@@ -105,10 +104,6 @@ type App struct {
 	optPluginsDir string
 	// cacheDir is the resolved cache folder (only re-fetchable data).
 	cacheDir string
-	// sideloadSteam fetches Steam details for sideloaded games with a compat
-	// AppID (issue #38). Nil means the live store endpoint; tests inject an
-	// httptest client.
-	sideloadSteam *steam.StoreClient
 	// infoCacheMu guards infoCache.
 	infoCacheMu sync.Mutex
 	// infoCache is the disk-backed GameDetails of sideloaded games by game
@@ -1218,13 +1213,12 @@ func (a *App) wineGames() []types.Game {
 // PrefixUsage groups the Wine games by the prefix they resolve to (issue
 // #52): the picker lists these, with the games sharing each prefix. Native
 // games have no prefix and are left out, as are games their store client
-// launches itself (Steam: steam.IsClientLaunch — the client owns their
-// compat data, not Platypus).
+// launches itself (the client owns their compat data, not Platypus).
 func (a *App) PrefixUsage() []types.PrefixShare {
 	folder := a.effectivePrefixesFolder()
 	byPath := map[string][]types.PrefixGame{}
 	for _, g := range a.wineGames() {
-		if g.Native || steam.IsClientLaunch(g) {
+		if g.Native || g.ClientLaunch {
 			continue
 		}
 		p := paths.GameDataDir(g.ID, g.Settings.WinePrefix, folder)

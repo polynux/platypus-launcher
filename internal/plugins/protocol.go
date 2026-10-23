@@ -55,10 +55,12 @@ type LibraryGame struct {
 	Note        string `json:"note,omitempty"`
 	// Native marks games with a Linux build: Platypus runs them directly, with
 	// no Proton runner and none of the Proton-only settings.
-	Native    bool   `json:"native,omitempty"`
-	CoverURL  string `json:"coverUrl,omitempty"`  // portrait
-	HeroURL   string `json:"heroUrl,omitempty"`   // wide background
-	BannerURL string `json:"bannerUrl,omitempty"` // wide card
+	Native bool `json:"native,omitempty"`
+	// ClientLaunch says the store client owns launch and compatibility data (1.17).
+	ClientLaunch bool   `json:"clientLaunch,omitempty"`
+	CoverURL     string `json:"coverUrl,omitempty"`  // portrait
+	HeroURL      string `json:"heroUrl,omitempty"`   // wide background
+	BannerURL    string `json:"bannerUrl,omitempty"` // wide card
 	// Offline says whether the game launches without a network (protocol
 	// 1.15, issue #44): "ok", "network" or "unknown". Absent means
 	// "unknown". The conformance suite rejects other values.
@@ -116,6 +118,16 @@ type LibraryDLC struct {
 
 type LibraryList struct {
 	Games []LibraryGame `json:"games"`
+}
+
+// GameSaveContext supplies store-owned save roots and Wine identity (1.17).
+type GameSaveContext struct {
+	Roots       map[string]string `json:"roots,omitempty"`
+	StoreUserID string            `json:"storeUserId,omitempty"`
+	Prefix      string            `json:"prefix,omitempty"`
+	Windows     bool              `json:"windows,omitempty"`
+	Proton      bool              `json:"proton,omitempty"`
+	WinUser     string            `json:"winUser,omitempty"`
 }
 
 // CompatLookupGame is one game in a batched compat.lookup request (1.17).

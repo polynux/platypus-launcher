@@ -69,7 +69,8 @@
     "sideloadOnly": "Lier des infos en ligne est réservé aux jeux ajoutés.",
     "source": {
       "invalid": "Une source d'infos, c'est gog ou lutris.",
-      "unknown": "Source d'infos inconnue : « {{source}} »."
+      "unknown": "Source d'infos inconnue : « {{source}} ».",
+      "unavailable": "Les informations du jeu Steam sont indisponibles. Activez un module Steam et réessayez."
     }
   },
   "install": {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -107,7 +108,7 @@ func PluginGameArt(a *App, next http.Handler) http.Handler {
 			return
 		}
 		id, encoded, found := strings.Cut(rest, "/")
-		if !found || id == "" || encoded == "" || strings.Contains(encoded, "/") {
+		if !found || id == "" || encoded == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -123,6 +124,29 @@ func PluginGameArt(a *App, next http.Handler) http.Handler {
 			return
 		}
 		path := stores.DecodeGameArt(id, encoded)
+		if path == "" && strings.Contains(encoded, "/") {
+			// Older library snapshots stored local-art paths relative to a
+			// plugin-readable folder. Resolve them under those folders; never
+			// allow an absolute or parent-relative path.
+			rel := filepath.FromSlash(encoded)
+			if filepath.IsLocal(rel) {
+				if p, ok := a.plugins.Plugin(id); ok {
+					home, _ := os.UserHomeDir()
+					for _, base := range p.Manifest.Permissions.Read {
+						if base == "~" {
+							base = home
+						} else if strings.HasPrefix(base, "~/") {
+							base = filepath.Join(home, strings.TrimPrefix(base, "~/"))
+						}
+						candidate := filepath.Join(base, rel)
+						if filepath.IsAbs(candidate) && a.pluginGameArtAllowed(id, candidate) {
+							path = candidate
+							break
+						}
+					}
+				}
+			}
+		}
 		if path == "" {
 			http.NotFound(w, r)
 			return

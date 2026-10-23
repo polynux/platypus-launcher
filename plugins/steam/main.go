@@ -69,8 +69,8 @@ func send(m message) {
 	_ = out.Encode(m)
 }
 
-// supportedProtocols is what this plugin speaks: 1.0 to 1.15.
-var supportedProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"}
+// supportedProtocols is what this plugin speaks.
+var supportedProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.17"}
 
 func negotiate(offered []string) (string, bool) {
 	best, found := "", false
@@ -140,7 +140,7 @@ func initializeResult(p params) (map[string]any, error) {
 		"version":      "1.0.0",
 		"api":          1,
 		"protocol":     picked,
-		"capabilities": []string{"library", "launch", "playtime", "local-art"},
+		"capabilities": []string{"library", "launch", "playtime", "local-art", "save-context"},
 	}, nil
 }
 
@@ -170,11 +170,12 @@ func library() (any, error) {
 			continue
 		}
 		e := map[string]any{
-			"id":          g.StoreAppID,
-			"title":       g.Title,
-			"installed":   true,
-			"installable": false,
-			"offline":     "ok",
+			"id":           g.StoreAppID,
+			"title":        g.Title,
+			"installed":    true,
+			"installable":  false,
+			"offline":      "ok",
+			"clientLaunch": true,
 		}
 		if g.InstallDir != "" {
 			e["installPath"] = g.InstallDir
@@ -423,6 +424,22 @@ func playtime() (any, error) {
 	return map[string]any{"games": list}, nil
 }
 
+func saveContext(p params) (any, error) {
+	root := steam.Root()
+	result := map[string]any{"roots": map[string]string{}}
+	if root == "" {
+		return result, nil
+	}
+	result["roots"] = map[string]string{"steam": root}
+	if id := steam.SingleUserID(root); id != "" {
+		result["storeUserId"] = id
+	}
+	if prefix, ok := steam.CompatPrefix(root, p.ID); ok {
+		result["prefix"], result["windows"], result["proton"], result["winUser"] = prefix, true, true, "steamuser"
+	}
+	return result, nil
+}
+
 func dispatch(method string, raw json.RawMessage) (any, error) {
 	var p params
 	if len(raw) > 0 {
@@ -439,6 +456,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return launchSpec(p)
 	case "playtime.list":
 		return playtime()
+	case "game.saveContext":
+		return saveContext(p)
 	}
 	return nil, &rpcError{Code: -32601, Message: "method not found: " + method}
 }

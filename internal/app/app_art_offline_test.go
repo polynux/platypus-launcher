@@ -79,6 +79,34 @@ func TestPluginGameArtServesInsideReadFolders(t *testing.T) {
 	}
 }
 
+func TestPluginGameArtServesLegacyRelativeSnapshotPath(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	rel := filepath.Join("appcache", "librarycache", "440", "cover.jpg")
+	art := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(art), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(art, []byte("legacy-art"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{plugins: artTestManager(t, root)}
+	req := httptest.NewRequest("GET", "/platypus-art/echo/"+filepath.ToSlash(rel), nil)
+	rec := httptest.NewRecorder()
+	PluginGameArt(a, http.NotFoundHandler()).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "legacy-art" {
+		t.Fatalf("legacy art response = %d %q", rec.Code, rec.Body.String())
+	}
+	for _, bad := range []string{"../secret.png", "/etc/passwd"} {
+		req := httptest.NewRequest("GET", "/platypus-art/echo/"+bad, nil)
+		rec := httptest.NewRecorder()
+		PluginGameArt(a, http.NotFoundHandler()).ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("unsafe legacy path %q status = %d, want 404", bad, rec.Code)
+		}
+	}
+}
+
 func TestPluginGameArtRefusesOutsideReadFolders(t *testing.T) {
 	t.Parallel()
 	a := &App{plugins: artTestManager(t, t.TempDir())}

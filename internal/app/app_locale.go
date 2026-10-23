@@ -59,7 +59,7 @@ func (a *App) applyLocaleChange(loc string) {
 	a.compatHints.mu.Lock()
 	a.compatHints.m = nil
 	a.compatHints.mu.Unlock()
-	// Steam store metadata is cached per language (see internal/steam), so
+	// Steam store metadata is cached per language by the Steam plugin, so
 	// both languages can coexist; nothing to drop there. The sideloaded
 	// game-info disk cache keys on game id + link + language (see
 	// app_gameinfo.go) and refetches on a mismatch. Compat ratings

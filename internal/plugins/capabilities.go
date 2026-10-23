@@ -100,6 +100,8 @@ var registry = []Capability{
 		Surfaces: []string{"library", "game-page"}},
 	{Name: "compat-facts", Since: rev117, Orchestrated: true,
 		Methods: []string{"compat.lookup"}, Surfaces: []string{"library", "game-page", "dashboard"}},
+	{Name: "save-context", Since: rev117, Orchestrated: true,
+		Methods: []string{"game.saveContext"}, Surfaces: []string{"save-backups"}},
 	{Name: "runner", Since: rev117, Orchestrated: true,
 		Methods: []string{"runner.list", "runner.options", "runner.detectExecutable", "runner.prefix", "runner.env", "runner.migrateSettings", "runner.clientCrash", "runner.wrap", "runner.actions", "runner.runAction", "runner.crashHints"}, Surfaces: []string{"launch", "game-settings", "crash-hints"}},
 }

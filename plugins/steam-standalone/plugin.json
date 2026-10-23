@@ -5,11 +5,11 @@
   "author": "Platypus",
   "description": "Install and launch the Steam games you own without the Steam client, using the built-in Go depot downloader and Steam login. Games that need the Steam client at runtime still get the real client, started hidden.",
   "manifestVersion": 1,
-  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"], "transport": "jsonrpc-stdio" },
+  "protocol": { "versions": ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.17"], "transport": "jsonrpc-stdio" },
   "store": "steam",
   "exec": "bin/platypus-steam",
   "icon": "icon.svg",
-  "capabilities": ["library", "install", "launch", "auth", "discard"],
+  "capabilities": ["library", "install", "launch", "auth", "discard", "save-context"],
   "requires": [
     { "bin": "python3", "hint": "install python3 from your distribution" },
     { "bin": "steam", "hint": "only needed for games that refuse to run outside the Steam client; install it from your distribution or store.steampowered.com" }

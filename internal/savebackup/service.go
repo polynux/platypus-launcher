@@ -199,9 +199,9 @@ func isGogSource(game types.Game) bool {
 
 // ResolveFor resolves a game's save locations: user paths first, then the
 // manifest match. steamID/gogID are the game's store ids (see GameIDs);
-// prefix and steamRoot tune the context.
-func (s *Service) ResolveFor(game types.Game, steamID, gogID string, prefix Prefix, steamRoot string, userPaths []string) ([]types.SavePath, []resolvedPattern, *GameEntry, Context, int) {
-	ctx := NewContextFor(game, s.home, steamRoot, prefix)
+// prefix carries the runner and store context.
+func (s *Service) ResolveFor(game types.Game, steamID, gogID string, prefix Prefix, userPaths []string) ([]types.SavePath, []resolvedPattern, *GameEntry, Context, int) {
+	ctx := NewContextFor(game, s.home, prefix)
 	ctx.SteamID, ctx.GogID = steamID, gogID
 	var entry *GameEntry
 	if idx := LoadIndex(s.cacheDir); idx != nil {
@@ -214,7 +214,6 @@ func (s *Service) ResolveFor(game types.Game, steamID, gogID string, prefix Pref
 // BackupOptions tunes one backup run.
 type BackupOptions struct {
 	Prefix      Prefix
-	SteamRoot   string
 	UserPaths   []string
 	SteamID     string
 	GogID       string
@@ -235,7 +234,7 @@ func (s *Service) Backup(game types.Game, trigger string, o BackupOptions) (*typ
 	if now.IsZero() {
 		now = s.now()
 	}
-	ctx := NewContextFor(game, s.home, o.SteamRoot, o.Prefix)
+	ctx := NewContextFor(game, s.home, o.Prefix)
 	ctx.SteamID, ctx.GogID = o.SteamID, o.GogID
 	var entry *GameEntry
 	if idx := LoadIndex(s.cacheDir); idx != nil {
