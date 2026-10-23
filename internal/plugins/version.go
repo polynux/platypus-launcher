@@ -185,8 +185,10 @@ func (s VersionSet) MarshalJSON() ([]byte, error) {
 // 1.16 adds a store's per-game status and notes hints (LibraryGame.status/
 // userNotes, a suggestion the user's own value always wins); 1.17 adds
 // batched compatibility facts, runner and save-context capabilities, and
-// LibraryGame.clientLaunch.
-var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}}
+// LibraryGame.clientLaunch; 1.18 adds game.clientStatus.
+var SupportedProtocols = []Version{{1, 0}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6}, {1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12}, {1, 13}, {1, 14}, {1, 15}, {1, 16}, {1, 17}, {1, 18}}
+
+var ClientStatusVersion = Version{1, 18}
 
 // Negotiate picks the highest version both sides speak.
 func Negotiate(offered VersionSet, supported []Version) (Version, bool) {

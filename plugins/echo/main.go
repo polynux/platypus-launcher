@@ -195,7 +195,7 @@ type knobs struct {
 
 // defaultProtocols is what echo speaks: 1.0 to 1.17, so it meets the highest
 // revision Platypus offers (the negotiation picks the best both speak).
-var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"}
+var defaultProtocols = []string{"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18"}
 
 var (
 	knobMu  sync.Mutex
@@ -317,7 +317,7 @@ func versionLess(a, b string) bool {
 func initializeResult(p params) (map[string]any, error) {
 	knobMu.Lock()
 	defer knobMu.Unlock()
-	res := map[string]any{"name": "Echo (test plugin)", "version": "0.4.0", "api": 1, "missing": []any{}}
+	res := map[string]any{"name": "Echo (test plugin)", "version": "0.5.0", "api": 1, "missing": []any{}}
 	loc := strings.TrimSpace(p.Locale)
 	if loc == "" {
 		loc = "en"
@@ -619,6 +619,8 @@ func dispatch(method string, raw json.RawMessage) (any, error) {
 		return library()
 	case "game.saveContext":
 		return map[string]any{"roots": map[string]string{}}, nil
+	case "game.clientStatus":
+		return map[string]any{"state": "updating", "label": "Echo client: updating"}, nil
 	case "game.details":
 		g, ok := games[p.ID]
 		if !ok && strings.HasPrefix(p.ID, "bulk-") {

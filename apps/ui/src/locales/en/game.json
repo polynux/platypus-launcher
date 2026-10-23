@@ -41,7 +41,15 @@
     "starting": "Starting",
     "stop": "Stop",
     "stopping": "Stopping…",
-    "forceStop": "Force stop"
+    "forceStop": "Force stop",
+    "client": {
+      "updating": "updating",
+      "shaders": "processing shaders",
+      "downloading": "downloading depots",
+      "validating": "validating files",
+      "launching": "starting the game"
+    },
+    "clientFinished": "{{client}} finished its work but didn’t start the game. Press Play again."
   },
   "hero": {
     "notInstalled": "not installed",

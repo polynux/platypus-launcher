@@ -35,6 +35,17 @@ describe('PlayButton', () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a store client activity and known progress while starting', () => {
+    setup({ game_id: 'g', state: 'starting', client_status: { state: 'updating', progress: 0.45 } });
+    expect(screen.getByRole('button', { name: /updating 45%/i })).toBeTruthy();
+  });
+
+  it('shows the client failure reason and leaves Play available for retry', () => {
+    setup({ game_id: 'g', state: 'failed', message: "Steam finished its work but didn't start the game. Press Play again." });
+    expect(screen.getByRole('status').textContent).toMatch(/press play again/i);
+    expect(screen.getByRole('button', { name: /^play$/i })).toBeTruthy();
+  });
+
   it('running: Playing indicator and a Stop button that stops', () => {
     const { onStop, onPlay } = setup(ev('running'));
     expect(screen.getByText(/playing/i)).toBeTruthy();

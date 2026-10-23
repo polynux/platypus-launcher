@@ -74,6 +74,7 @@ export function App() {
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   // Games Platypus launched that are starting or running, keyed by game id.
   const [sessions, setSessions] = useState<Record<string, SessionEvent>>({});
+  const [sessionFailures, setSessionFailures] = useState<Record<string, SessionEvent>>({});
   // Use less while hidden or unfocused (issue #49): animations, transitions
   // and videos pause while the page is hidden, or while blurred with a game
   // running. Polling loops check document.hidden before scheduling (see
@@ -333,6 +334,7 @@ export function App() {
       onSession((e) => {
         const title = gamesRef.current.find((g) => g.id === e.game_id)?.title ?? e.game_id;
         if (isLiveState(e.state)) {
+          setSessionFailures((prev) => { const { [e.game_id]: _, ...rest } = prev; return rest; });
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
@@ -346,6 +348,7 @@ export function App() {
           return rest;
         });
         if (e.state === 'failed') {
+          setSessionFailures((prev) => ({ ...prev, [e.game_id]: e }));
           notify(t('errors:gameFailed', { title, error: e.message ?? t('errors:launchFailedText') }), 'err');
           log({ type: 'session', game: title, detail: t('activity:log.sessionFailed', { title }), meta: e.message?.slice(0, 80) });
         } else {
@@ -689,7 +692,7 @@ export function App() {
             onStop={() => stop(currentGame.id, false)}
             onForceStop={() => stop(currentGame.id, true)}
             launching={launchingId === currentGame.id}
-            session={sessions[currentGame.id]}
+            session={sessions[currentGame.id] ?? sessionFailures[currentGame.id]}
             refreshing={scanning}
             tweaks={tweaks}
             onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}

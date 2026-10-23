@@ -1,4 +1,4 @@
-# Store plugin protocol (1.17, draft)
+# Store plugin protocol (1.18, draft)
 
 A store plugin is a folder in `~/.local/share/platypus/plugins/<id>/` with a
 `plugin.json` and an executable. Platypus starts the executable on demand and talks
@@ -137,6 +137,7 @@ other errors can contain.
 | `job.cancel` | `{ jobId }` | `{}` |
 | `job.discard` | `{ jobId, id, installDir }` | `{}` |
 | `game.launchSpec` | `{ id, preview, via?, executable? }` | `LaunchSpec` (`executable` 1.15, [Offline launches](#offline-launches-115)) |
+| `game.clientStatus` | `{ id, since }` (`since` is launch time, Unix seconds) | `{ state, label?, progress?, bytes?, total? }` (1.18, [Client launch status](#client-launch-status-118)) |
 | `cloud.status` | `{ id, ctx }` | `CloudStatus` (1.2, [Cloud saves](#cloud-saves-12)) |
 | `cloud.pull` | `{ id, ctx, jobId }` | `CloudStatus` |
 | `cloud.push` | `{ id, ctx, jobId }` | `CloudStatus` |
@@ -601,7 +602,7 @@ that doesn't know it.
   period.
 - **Negotiation.** The manifest declares the versions the plugin speaks
   (`protocol.versions`). `initialize` carries the versions Platypus speaks
-  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17"]`, and the legacy `api: 1`); the plugin answers with
+  (`protocols: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16", "1.17", "1.18"]`, and the legacy `api: 1`); the plugin answers with
   `protocol`, the highest it shares with Platypus. Platypus checks that the pick is one
   it offered and the manifest declares. A plugin that predates negotiation leaves
   `protocol` out and is taken to speak the highest version the manifest and Platypus
@@ -643,7 +644,7 @@ that doesn't know it.
   the `runner` capability (`runner.list`, `runner.options`, `runner.wrap`,
   `runner.actions`, `runner.runAction`, `runner.crashHints`), the
   `save-context` capability (`game.saveContext`), and
-  `LibraryGame.clientLaunch`; see [Compat facts](#compat-facts-117),
+  `LibraryGame.clientLaunch; 1.18: `game.clientStatus` (see [Client launch status](#client-launch-status-118)); see [Compat facts](#compat-facts-117),
   [Runner](#runner-117), and [Save context](#save-context-117)).
   A capability whose `since` is newer than the negotiated protocol is off for that plugin (Platypus drops it from the
   runtime set and logs it), so a plugin that only agreed to 1.1 never receives a 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9,

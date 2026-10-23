@@ -465,10 +465,20 @@ type Tweak struct {
 // SessionEvent is emitted on the "session" core event when a launched game
 // changes state.
 type SessionEvent struct {
-	GameID  string `json:"game_id"`
-	State   string `json:"state"` // "starting" | "running" | "stopped" | "failed"
-	PID     int    `json:"pid,omitempty"`
-	Message string `json:"message,omitempty"`
+	GameID       string        `json:"game_id"`
+	State        string        `json:"state"` // "starting" | "running" | "stopped" | "failed"
+	PID          int           `json:"pid,omitempty"`
+	Message      string        `json:"message,omitempty"`
+	ClientStatus *ClientStatus `json:"client_status,omitempty"`
+}
+
+// ClientStatus describes work performed by a store client before the game starts.
+type ClientStatus struct {
+	State    string   `json:"state"`
+	Label    string   `json:"label,omitempty"`
+	Progress *float64 `json:"progress,omitempty"`
+	Bytes    int64    `json:"bytes,omitempty"`
+	Total    int64    `json:"total,omitempty"`
 }
 
 // NetState is what GetNetState returns (issue #44): whether the machine

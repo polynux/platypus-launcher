@@ -1138,7 +1138,11 @@ func (a *App) startClient(game types.Game, cmd *exec.Cmd, cl *stores.ClientLaunc
 		return "", fmt.Errorf("%s client: %w", strings.ToLower(cl.Client), err)
 	}
 	go func() { _ = cmd.Wait() }()
-	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout, a.afterSessionHook(game)) {
+	opts := []session.StartOption{a.afterSessionHook(game)}
+	if cl.ClientStatus != nil {
+		opts = append(opts, session.WithClientStatus(cl.ClientStatus))
+	}
+	if !a.sessions.WatchClient(game.ID, cl.Client, cl.Find, cl.StartTimeout, opts...) {
 		return "", apperr.New("game.running", fmt.Sprintf("%s is already running", game.Title), map[string]string{"title": game.Title})
 	}
 	return "Asked " + cl.Client + " to start " + game.Title, nil
