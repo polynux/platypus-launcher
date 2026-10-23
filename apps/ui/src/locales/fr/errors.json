@@ -269,7 +269,6 @@
     "running": "{{title}} est en cours d’exécution ; sauvegardez après sa fermeture.",
     "cloudBusy": "La synchronisation cloud est occupée pour {{title}} ; sauvegardez quand elle aura fini.",
     "clientRunning": "Fermez {{client}} d’abord : il est ouvert et écrirait les mêmes sauvegardes.",
-    "contextFailed": "La boutique n'a pas pu résoudre les emplacements de sauvegarde : {{error}}",
     "queued": "{{title}} a déjà une sauvegarde en file d’attente.",
     "unknown": "Version de sauvegarde inconnue."
   }

@@ -119,11 +119,14 @@ func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
 	}
 	if a.plugins != nil && a.plugins.Has(game.Source, "save-context") {
 		var store plugins.GameSaveContext
+		// A store that can't answer leaves the generic roots: backups still
+		// find what they can rather than blocking an uninstall.
 		if err := a.plugins.Call(ctx, game.Source, "game.saveContext", map[string]any{"id": game.StoreAppID}, &store); err != nil {
-			return savebackup.Prefix{}, apperr.Wrap("savebackup.contextFailed", err, map[string]string{"title": game.Title})
+			a.warnf("save context for %s: %v", game.Title, err)
+		} else {
+			result.Store = &savebackup.StoreContext{Roots: store.Roots, StoreUserID: store.StoreUserID,
+				Prefix: store.Prefix, Windows: store.Windows, Proton: store.Proton, WinUser: store.WinUser}
 		}
-		result.Store = &savebackup.StoreContext{Roots: store.Roots, StoreUserID: store.StoreUserID,
-			Prefix: store.Prefix, Windows: store.Windows, Proton: store.Proton, WinUser: store.WinUser}
 	}
 	return result, nil
 }

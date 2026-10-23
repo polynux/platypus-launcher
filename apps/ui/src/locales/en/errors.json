@@ -269,7 +269,6 @@
     "running": "{{title}} is running; back up its saves after it exits.",
     "cloudBusy": "Cloud sync is busy for {{title}}; back up once it finishes.",
     "clientRunning": "Close {{client}} first: it is running and would write the same saves.",
-    "contextFailed": "The store couldn't resolve save locations: {{error}}",
     "queued": "{{title}} already has a save backup queued.",
     "unknown": "Unknown save backup version."
   }
