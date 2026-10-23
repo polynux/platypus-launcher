@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"platypus/internal/stores"
+	"platypus/internal/types"
 )
 
 // legacyRecord is a game saved by the old settings UI: its choices folded into
@@ -28,6 +31,7 @@ func legacyRecord() map[string]any {
 func TestLegacyGameSettingsRunWithTheSameEnv(t *testing.T) {
 	home := t.TempDir()
 	a := nativeTestApp(t, home)
+	a.ctx = context.Background()
 	exe := writeExe(t, filepath.Join(home, "game.exe"), []byte("MZ\x90\x00"), true)
 	cg, err := a.settings.AddCustomGame("Legacy", exe)
 	if err != nil {
@@ -140,5 +144,41 @@ func TestSaveGameSettingsKeepsUnmodeledKeys(t *testing.T) {
 	// And the game reads them back as its extra settings.
 	if g := a.customGames()[0]; g.SettingsExtra["proton_log"] != true || g.SettingsExtra["sync_mode"] != "off" {
 		t.Fatalf("extra settings = %v", g.SettingsExtra)
+	}
+}
+
+func TestPluginGameSavedSettingsReachRunnerAndLibrary(t *testing.T) {
+	home := t.TempDir()
+	a := nativeTestApp(t, home)
+	a.ctx = context.Background()
+	game := types.Game{ID: "echo_123", Source: "echo", Store: "echo", StoreAppID: "123", Title: "Plugin game",
+		Executable: "/bin/true", Settings: types.GameSettings{UseGameMode: true}}
+	a.stores = stores.NewRegistry(func() []stores.Store { return []stores.Store{&fakeSource{id: "echo", games: []types.Game{game}}} })
+	runnerDir := filepath.Join(home, ".local/share/Steam/compatibilitytools.d/FakeProton")
+	writeExe(t, filepath.Join(runnerDir, "proton"), []byte("#!/bin/sh\n"), true)
+	saved := map[string]any{"runner_id": "compat:FakeProton", "env_vars": map[string]any{"PLUGIN_SETTING": "saved"}, "proton_log": true}
+	if err := a.SaveGameSettings(game.ID, saved); err != nil {
+		t.Fatal(err)
+	}
+	lib, err := a.GetLibrary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.Games) != 1 || lib.Games[0].Settings.RunnerID != saved["runner_id"] || lib.Games[0].SettingsExtra["proton_log"] != true {
+		t.Fatalf("library game settings = %+v extra=%v", lib.Games, lib.Games[0].SettingsExtra)
+	}
+
+	// A stale game object must use settings.json at wrap time. The resulting
+	// runner and environment prove both modeled and opaque saved values reached
+	// runner.wrap.
+	p, err := a.prepareLaunch(game, true)
+	if err != nil {
+		t.Fatalf("prepareLaunch: %v", err)
+	}
+	if p.runner.ID != "compat:FakeProton" {
+		t.Fatalf("wrapped runner = %q, want compat:FakeProton", p.runner.ID)
+	}
+	if p.env["PLUGIN_SETTING"] != "saved" || p.env["PROTON_LOG"] != "1" {
+		t.Fatalf("wrapped env = %v, want saved custom env and runner option", p.env)
 	}
 }
