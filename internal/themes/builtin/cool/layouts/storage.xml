@@ -1,0 +1,13 @@
+<!-- The cool storage (issue #102): an invented demo, not a design proposal.
+     The header stays on top; the game list and the drives share a row, the
+     drives in a narrower side column (the view's row frame sets the ratio).
+     Validated against internal/themes/layout.xsd. -->
+<layout view="storage" catalog="1.0">
+  <region name="main">
+    <block name="header" />
+    <row>
+      <block name="games" />
+      <block name="drives" />
+    </row>
+  </region>
+</layout>

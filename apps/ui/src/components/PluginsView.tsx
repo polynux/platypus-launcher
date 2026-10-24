@@ -1,6 +1,6 @@
 // i18n: converted
 import { useTranslation, Trans } from 'react-i18next';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
@@ -18,6 +18,10 @@ import { offers } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { ThemeLayout } from '../lib/layout';
+import { useThemeLayout } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { usePluginsData, type PluginsAuthState } from './usePluginsData';
 
 interface PluginsViewProps {
   plugins: StorePlugin[];
@@ -46,291 +50,23 @@ const BUILT_IN = [
 
 const hasAuth = (p: StorePlugin) => offers(p, 'auth');
 
-type AuthState = AuthStatus | { error: string };
-
-// Login states outlive one visit: the core serves its cached state instantly
-// and refreshes it in the background, so a revisit shows the last known state
-// at once instead of flashing "checking login…" while the refresh runs.
-const authCache = new Map<string, AuthState>();
-
-/** Forgets every cached login state (tests). */
-export function resetPluginsAuthCache(): void {
-  authCache.clear();
-}
+/** Forgets every cached login state (tests). Kept here so existing imports
+ *  keep working; the cache itself lives in the view-owned data hook. */
+export { resetPluginsAuthCache } from './usePluginsData';
 
 export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
-  const { t } = useTranslation(['plugins', 'nav', 'common']);
-  const [auth, setAuth] = useState<Record<string, AuthState>>(() => Object.fromEntries(authCache));
-  const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
-  const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  const storeAuth = useCallback((id: string, s: AuthState) => {
-    authCache.set(id, s);
-    setAuth((a) => ({ ...a, [id]: s }));
-  }, []);
-
-  const refresh = useCallback(
-    (rescan = false) =>
-      Effect.runPromise(rescan ? LauncherApi.rescanPlugins() : LauncherApi.listPlugins())
-        .then(onPlugins)
-        .catch((e) => onNotify(coreErrMsg(e), 'err')),
-    [onPlugins, onNotify]
-  );
-
-  // Login state of every approved plugin with a login. Asking starts the plugin.
-  const readyIds = plugins.filter((p) => p.status === 'ready' && hasAuth(p)).map((p) => p.id).join(',');
-  // StrictMode mounts effects twice: only ask once per plugin id (FE-7).
-  // The core answers a known state from its cache at once and refreshes it
-  // in the background; the answer below only seeds the state, whose update
-  // (or the auth event) re-renders.
-  const statusFetched = useRef(new Set<string>());
-  useEffect(() => {
-    for (const id of readyIds ? readyIds.split(',') : []) {
-      if (statusFetched.current.has(id)) continue;
-      statusFetched.current.add(id);
-      Effect.runPromise(LauncherApi.authStatus(id))
-        .then((s) => storeAuth(id, s))
-        .catch((e) => storeAuth(id, { error: coreErrMsg(e) }));
-    }
-  }, [readyIds, storeAuth]);
-
-  // A background refresh that finds a changed state arrives as an event.
-  useEffect(() => onAuth((e) => storeAuth(e.plugin, e.status)), [storeAuth]);
-
-  const act = (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => {
-    setBusy(id + what);
-    Effect.runPromise(program)
-      .then(() => {
-        onNotify(done);
-        return refresh().then(onLibraryChanged);
-      })
-      .catch((e) => onNotify(coreErrMsg(e), 'err'))
-      .finally(() => setBusy(null));
-  };
-
-  const logout = (p: StorePlugin) =>
-    act(
-      p.id,
-      'logout',
-      LauncherApi.logout(p.id).pipe(Effect.tap((s: AuthStatus) => Effect.sync(() => storeAuth(p.id, s)))),
-      t('plugins:notify.loggedOutOf', { name: p.name })
-    );
-
-  const chooseFolder = (p: StorePlugin) =>
-    Effect.runPromise(LauncherApi.choosePluginInstallFolder(p.id))
-      .then((path) => path && act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, path), t('plugins:notify.installsInto', { name: p.name, path })))
-      .catch((e) => onNotify(coreErrMsg(e), 'err'));
-
+  const { t } = useTranslation(['plugins', 'common']);
+  const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
+  const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act } = data;
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's plugins before the core answers over RPC.
+  const layout = useThemeLayout('plugins') ?? BUILTIN_LAYOUTS['plugins'];
   return (
     <div className="p-7">
-      <ViewHeader
-        title={t('nav:title.plugins')}
-        subtitle={<p className="mt-0.5 max-w-xl text-[12.5px] text-text-body">
-          {t('plugins:header.subtitle')}
-        </p>}
-        actions={<div className="flex gap-2">
-          <Button variant="neutral" onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'))}>
-            <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
-          </Button>
-          <Button variant="neutral" onClick={() => refresh(true).then(onLibraryChanged)}>
-            <RefreshCw className="h-3.5 w-3.5" /> {t('plugins:header.rescan')}
-          </Button>
-        </div>}
+      <ThemeLayout
+        layout={layout}
+        blocks={pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibraryChanged })}
       />
-
-      <MonoLabel as="h2" className="mb-3">{t('plugins:section.store')}</MonoLabel>
-      {plugins.filter((p) => p.kind === 'store').length === 0 ? (
-        <EmptyState label={t('plugins:empty.label')}>
-          {t('plugins:empty.detail')}
-        </EmptyState>
-      ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {plugins.filter((p) => p.kind === 'store').map((p) => {
-            const st = STATUS[p.status] ?? STATUS.invalid;
-            const a = auth[p.id];
-            const warning = warnings.find((w) => w.source === p.id);
-            return (
-              <Panel key={p.id} className="flex flex-col gap-4">
-                <div>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <PluginLogo src={p.icon_url} name={p.name} />
-                      <div className="min-w-0">
-                        <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
-                        <p className="font-mono text-hint text-text-muted">
-                          v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ` · ${t('plugins:card.running')}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant={st.variant} className="flex-none">{t(st.key)}</Badge>
-                  </div>
-                  {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
-                  {p.problem && p.status !== 'missing-requirements' && (
-                    <p className={cx('mt-2 font-mono text-hint', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
-                  )}
-                </div>
-
-                {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
-
-                {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
-
-                {p.missing.length > 0 && (
-                  <div className="rounded-xl bg-attention/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
-                    <MonoLabel className="mb-1.5 text-orange-200/80">{t('plugins:card.installFirst')}</MonoLabel>
-                    {p.missing.map((r) => (
-                      <div key={r.bin} className="font-mono text-[12px] text-white/80">
-                        <span className="text-orange-200">{r.bin}</span>
-                        {r.hint && <> · <span className="select-text">{r.hint}</span></>}
-                      </div>
-                    ))}
-                    <p className="mt-1.5 text-[12px] text-text-body">{t('plugins:card.rescanHint')}</p>
-                  </div>
-                )}
-
-                {p.status === 'ready' && hasAuth(p) && (
-                  <div className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3.5 py-2.5">
-                    <span className="min-w-0 truncate text-[12px] text-text-body">
-                      {!a ? (
-                        <span className="flex items-center gap-2 text-text-muted"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
-                      ) : 'error' in a ? (
-                        <span className="font-mono text-hint text-red-300">{a.error}</span>
-                      ) : a.loggedIn ? (
-                        <>{a.user ? (
-                          <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-text" /> }} />
-                        ) : t('plugins:auth.loggedIn')}</>
-                      ) : (
-                        <span className="text-amber-200">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
-                      )}
-                    </span>
-                    {a && !('error' in a) && a.loggedIn ? (
-                      <Button variant="neutral" size="sm" className="flex-none" onClick={() => logout(p)} disabled={busy === p.id + 'logout'}>
-                        <LogOut className="h-3 w-3" /> {t('plugins:auth.logOut')}
-                      </Button>
-                    ) : (
-                      <Button variant="primary" size="sm" className="flex-none" onClick={() => setLoggingIn(p)}>
-                        <LogIn className="h-3 w-3" /> {t('plugins:auth.logIn')}
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
-                  <div className="space-y-1 font-mono text-hint">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-text-muted">{t('plugins:card.installsInto')}</span>
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
-                        <Button variant="link" className="flex-none" onClick={() => chooseFolder(p)}>{t('plugins:card.change')}</Button>
-                        {p.install_folder !== p.default_install_folder && (
-                          <Button variant="link" className="flex-none" onClick={() => act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), t('plugins:notify.installsIntoGames', { name: p.name }))}>
-                            {t('plugins:card.reset')}
-                          </Button>
-                        )}
-                      </span>
-                    </div>
-                    {p.extra_folders.map((f) => (
-                      <div key={f} className="flex justify-between gap-3">
-                        <span className="text-text-muted">{t('plugins:card.alsoAllowed')}</span>
-                        <span className="truncate text-text-muted select-text" title={f}>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-auto flex gap-2">
-                  {(p.status === 'unapproved' || p.status === 'changed') && (
-                    <Button variant="primary" className="flex-1" onClick={() => setReviewing(p)}>
-                      <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? t('plugins:card.reapprove') : t('plugins:card.approve')}
-                    </Button>
-                  )}
-                  {(p.status === 'ready' || p.status === 'missing-requirements') && (
-                    <Button
-                      variant="neutral"
-                      className="flex-1"
-                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), t('plugins:notify.disabled', { name: p.name }))}
-                      disabled={busy === p.id + 'toggle'}
-                    >
-                      {t('plugins:card.disable')}
-                    </Button>
-                  )}
-                  {p.status === 'disabled' && (
-                    <Button
-                      variant="primary"
-                      className="flex-1"
-                      onClick={() => act(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), t('plugins:notify.enabled', { name: p.name }))}
-                      disabled={busy === p.id + 'toggle'}
-                    >
-                      {t('plugins:card.enable')}
-                    </Button>
-                  )}
-                  {/* CORE-10: a plugin that gave up after repeated crashes
-                      fails fast until its crash count is cleared. */}
-                  {p.gave_up && p.status === 'ready' && (
-                    <Button
-                      variant="neutral"
-                      className="flex-1"
-                      onClick={() => act(p.id, 'retry', LauncherApi.retryPlugin(p.id), t('plugins:notify.willRetry', { name: p.name }))}
-                      disabled={busy === p.id + 'retry'}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" /> {t('common:retry')}
-                    </Button>
-                  )}
-                </div>
-              </Panel>
-            );
-          })}
-        </div>
-      )}
-
-      {plugins.some((p) => p.kind === 'data') && (
-        <>
-          <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">{t('plugins:section.data')}</MonoLabel>
-          <div className="grid gap-4 xl:grid-cols-2">
-            {plugins
-              .filter((p) => p.kind === 'data')
-              .map((p) => {
-                const st = STATUS[p.status] ?? STATUS.invalid;
-                return (
-                  <Panel key={p.id} className="flex flex-col gap-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <PluginLogo src={p.icon_url} name={p.name} />
-                        <div className="min-w-0">
-                          <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
-                          <p className="font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
-                        </div>
-                      </div>
-                      <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
-                        {p.status === 'ready' ? t('plugins:status.data') : t(st.key)}
-                      </Badge>
-                    </div>
-                    {p.description && <p className="text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
-                    {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
-                    {p.status === 'ready' && (
-                      <p className="mt-auto text-[12px] text-text-body">
-                        {t('plugins:card.dataNote')}
-                      </p>
-                    )}
-                  </Panel>
-                );
-              })}
-          </div>
-        </>
-      )}
-
-      <MonoLabel as="h2" className="mb-3 mt-8">{t('plugins:section.builtIn')}</MonoLabel>
-      <div className="grid gap-2 xl:grid-cols-2">
-        {BUILT_IN.map((b) => (
-          <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
-            <div className="min-w-0">
-              <div className="text-[13px] font-bold">{b.name}</div>
-              <div className="text-[12px] text-text-muted">{t('plugins:builtIn.protondb')}</div>
-            </div>
-            <Badge variant="neutral" className="flex-none">{t('plugins:status.builtIn')}</Badge>
-          </div>
-        ))}
-      </div>
 
       {reviewing && (
         <ApproveModal
@@ -356,6 +92,324 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
           }}
         />
       )}
+    </div>
+  );
+}
+
+// The plugins' layout blocks (issue #102): each takes its data as props only
+// and renders a single root, so a layout orders blocks without conditionals
+// of its own. The store block renders each card with its own login row and
+// approve/enable actions, so a layout can't hide the required parts on their
+// own; the approve and login dialogs stay owned by the view.
+function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibraryChanged }: {
+  plugins: StorePlugin[];
+  warnings: SourceWarning[];
+  auth: Record<string, PluginsAuthState>;
+  busy: string | null;
+  data: ReturnType<typeof usePluginsData>;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  onLibraryChanged: () => void;
+}): Record<string, React.ReactNode> {
+  return {
+    header: <PluginsHeader onRescan={() => { void data.refresh(true).then(onLibraryChanged); }} onOpenFolder={() => {
+      Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'));
+    }} />,
+    store: (
+      <PluginsStore
+        plugins={plugins.filter((p) => p.kind === 'store')}
+        warnings={warnings}
+        auth={auth}
+        busy={busy}
+        onLogout={data.logout}
+        onChooseFolder={data.chooseFolder}
+        onAct={data.act}
+        onReview={(p) => data.setReviewing(p)}
+        onLogin={(p) => data.setLoggingIn(p)}
+        onNotify={onNotify}
+      />
+    ),
+    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} />,
+    builtin: <PluginsBuiltIn />,
+  };
+}
+
+export function PluginsHeader({ onRescan, onOpenFolder }: { onRescan: () => void; onOpenFolder: () => void }) {
+  const { t } = useTranslation(['plugins', 'nav']);
+  return (
+    <ViewHeader
+      title={t('nav:title.plugins')}
+      subtitle={<p className="mt-0.5 max-w-xl text-[12.5px] text-text-body">
+        {t('plugins:header.subtitle')}
+      </p>}
+      actions={<div className="flex gap-2">
+        <Button variant="neutral" onClick={onOpenFolder}>
+          <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
+        </Button>
+        <Button variant="neutral" onClick={onRescan}>
+          <RefreshCw className="h-3.5 w-3.5" /> {t('plugins:header.rescan')}
+        </Button>
+      </div>}
+    />
+  );
+}
+
+export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onNotify }: {
+  plugins: StorePlugin[];
+  warnings: SourceWarning[];
+  auth: Record<string, PluginsAuthState>;
+  busy: string | null;
+  onLogout: (p: StorePlugin) => void;
+  onChooseFolder: (p: StorePlugin) => void;
+  onAct: (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => void;
+  onReview: (p: StorePlugin) => void;
+  onLogin: (p: StorePlugin) => void;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+}) {
+  const { t } = useTranslation('plugins');
+  // One root: the heading and the cards (or the empty state) stay together,
+  // so a row counts the store block as one column.
+  return (
+    <div>
+      <MonoLabel as="h2" className="mb-3">{t('plugins:section.store')}</MonoLabel>
+      {plugins.length === 0 ? (
+        <EmptyState label={t('plugins:empty.label')}>
+          {t('plugins:empty.detail')}
+        </EmptyState>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {plugins.map((p) => (
+            <StorePluginCard
+              key={p.id}
+              plugin={p}
+              authState={auth[p.id]}
+              warning={warnings.find((w) => w.source === p.id)}
+              busy={busy}
+              onLogout={() => onLogout(p)}
+              onChooseFolder={() => onChooseFolder(p)}
+              onAct={onAct}
+              onReview={() => onReview(p)}
+              onLogin={() => onLogin(p)}
+              onNotify={onNotify}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One store plugin's card: identity, capabilities, settings, requirements,
+ *  the login row and the approve/enable actions. The required parts (login
+ *  row, approval actions) render here, inside the card, so a layout can't
+ *  hide them on their own. */
+export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onNotify }: {
+  plugin: StorePlugin;
+  authState: PluginsAuthState | undefined;
+  warning: SourceWarning | undefined;
+  busy: string | null;
+  onLogout: () => void;
+  onChooseFolder: () => void;
+  onAct: (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => void;
+  onReview: () => void;
+  onLogin: () => void;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+}) {
+  const { t } = useTranslation('plugins');
+  const st = STATUS[p.status] ?? STATUS.invalid;
+  return (
+    <Panel className="flex flex-col gap-4">
+      <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <PluginLogo src={p.icon_url} name={p.name} />
+            <div className="min-w-0">
+              <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
+              <p className="font-mono text-hint text-text-muted">
+                v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ` · ${t('plugins:card.running')}` : ''}
+              </p>
+            </div>
+          </div>
+          <Badge variant={st.variant} className="flex-none">{t(st.key)}</Badge>
+        </div>
+        {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
+        {p.problem && p.status !== 'missing-requirements' && (
+          <p className={cx('mt-2 font-mono text-hint', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
+        )}
+      </div>
+
+      {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
+
+      {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
+
+      {p.missing.length > 0 && (
+        <div className="rounded-xl bg-attention/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
+          <MonoLabel className="mb-1.5 text-orange-200/80">{t('plugins:card.installFirst')}</MonoLabel>
+          {p.missing.map((r) => (
+            <div key={r.bin} className="font-mono text-[12px] text-white/80">
+              <span className="text-orange-200">{r.bin}</span>
+              {r.hint && <> · <span className="select-text">{r.hint}</span></>}
+            </div>
+          ))}
+          <p className="mt-1.5 text-[12px] text-text-body">{t('plugins:card.rescanHint')}</p>
+        </div>
+      )}
+
+      {p.status === 'ready' && hasAuth(p) && (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3.5 py-2.5">
+          <span className="min-w-0 truncate text-[12px] text-text-body">
+            {!a ? (
+              <span className="flex items-center gap-2 text-text-muted"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
+            ) : 'error' in a ? (
+              <span className="font-mono text-hint text-red-300">{a.error}</span>
+            ) : a.loggedIn ? (
+              <>{a.user ? (
+                <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-text" /> }} />
+              ) : t('plugins:auth.loggedIn')}</>
+            ) : (
+              <span className="text-amber-200">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
+            )}
+          </span>
+          {a && !('error' in a) && a.loggedIn ? (
+            <Button variant="neutral" size="sm" className="flex-none" onClick={onLogout} disabled={busy === p.id + 'logout'}>
+              <LogOut className="h-3 w-3" /> {t('plugins:auth.logOut')}
+            </Button>
+          ) : (
+            <Button variant="primary" size="sm" className="flex-none" onClick={onLogin}>
+              <LogIn className="h-3 w-3" /> {t('plugins:auth.logIn')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
+        <div className="space-y-1 font-mono text-hint">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-text-muted">{t('plugins:card.installsInto')}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
+              <Button variant="link" className="flex-none" onClick={onChooseFolder}>{t('plugins:card.change')}</Button>
+              {p.install_folder !== p.default_install_folder && (
+                <Button variant="link" className="flex-none" onClick={() => onAct(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), t('plugins:notify.installsIntoGames', { name: p.name }))}>
+                  {t('plugins:card.reset')}
+                </Button>
+              )}
+            </span>
+          </div>
+          {p.extra_folders.map((f) => (
+            <div key={f} className="flex justify-between gap-3">
+              <span className="text-text-muted">{t('plugins:card.alsoAllowed')}</span>
+              <span className="truncate text-text-muted select-text" title={f}>{f}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-auto flex gap-2">
+        {(p.status === 'unapproved' || p.status === 'changed') && (
+          <Button variant="primary" className="flex-1" onClick={onReview}>
+            <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? t('plugins:card.reapprove') : t('plugins:card.approve')}
+          </Button>
+        )}
+        {(p.status === 'ready' || p.status === 'missing-requirements') && (
+          <Button
+            variant="neutral"
+            className="flex-1"
+            onClick={() => onAct(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), t('plugins:notify.disabled', { name: p.name }))}
+            disabled={busy === p.id + 'toggle'}
+          >
+            {t('plugins:card.disable')}
+          </Button>
+        )}
+        {p.status === 'disabled' && (
+          <Button
+            variant="primary"
+            className="flex-1"
+            onClick={() => onAct(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), t('plugins:notify.enabled', { name: p.name }))}
+            disabled={busy === p.id + 'toggle'}
+          >
+            {t('plugins:card.enable')}
+          </Button>
+        )}
+        {/* CORE-10: a plugin that gave up after repeated crashes
+            fails fast until its crash count is cleared. */}
+        {p.gave_up && p.status === 'ready' && (
+          <Button
+            variant="neutral"
+            className="flex-1"
+            onClick={() => onAct(p.id, 'retry', LauncherApi.retryPlugin(p.id), t('plugins:notify.willRetry', { name: p.name }))}
+            disabled={busy === p.id + 'retry'}
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> {t('common:retry')}
+          </Button>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+export function PluginsData({ plugins }: { plugins: StorePlugin[] }) {
+  const { t } = useTranslation('plugins');
+  if (plugins.length === 0) return null;
+  // One root: the heading and the cards stay together, so a row counts the
+  // data block as one column.
+  return (
+    <div>
+      <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">{t('plugins:section.data')}</MonoLabel>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {plugins.map((p) => (
+          <DataPluginCard key={p.id} plugin={p} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function DataPluginCard({ plugin: p }: { plugin: StorePlugin }) {
+  const { t } = useTranslation('plugins');
+  const st = STATUS[p.status] ?? STATUS.invalid;
+  return (
+    <Panel className="flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <PluginLogo src={p.icon_url} name={p.name} />
+          <div className="min-w-0">
+            <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
+            <p className="font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+          </div>
+        </div>
+        <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
+          {p.status === 'ready' ? t('plugins:status.data') : t(st.key)}
+        </Badge>
+      </div>
+      {p.description && <p className="text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
+      {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
+      {p.status === 'ready' && (
+        <p className="mt-auto text-[12px] text-text-body">
+          {t('plugins:card.dataNote')}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+export function PluginsBuiltIn() {
+  const { t } = useTranslation('plugins');
+  // One root: the heading and the list stay together, so a row counts the
+  // built-in block as one column.
+  return (
+    <div>
+      <MonoLabel as="h2" className="mb-3 mt-8">{t('plugins:section.builtIn')}</MonoLabel>
+      <div className="grid gap-2 xl:grid-cols-2">
+        {BUILT_IN.map((b) => (
+          <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold">{b.name}</div>
+              <div className="text-[12px] text-text-muted">{t('plugins:builtIn.protondb')}</div>
+            </div>
+            <Badge variant="neutral" className="flex-none">{t('plugins:status.builtIn')}</Badge>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -418,19 +472,19 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
 
 /**
  * The plugin's QR login data: block-art text straight from the store tool's
- * stdout ("\u2588" = dark module, two chars per module, one row per module).
+ * stdout ("█" = dark module, two chars per module, one row per module).
  * Drawn as exact square modules so the phone can scan it off the screen.
  */
 function QrArt({ art }: { art: string }) {
   const { t } = useTranslation('plugins');
-  const rows = art.split('\n').filter((r) => r.includes('\u2588'));
+  const rows = art.split('\n').filter((r) => r.includes('█'));
   const lead = Math.min(...rows.map((r) => r.length - r.trimStart().length));
   let width = Math.max(...rows.map((r) => r.trimEnd().length)) - lead;
   if (width % 2) width += 1;
   const modules = rows.map((r) => {
     const line = r.slice(lead).padEnd(width, ' ').slice(0, width);
     const out: boolean[] = [];
-    for (let i = 0; i < width; i += 2) out.push(line[i] === '\u2588');
+    for (let i = 0; i < width; i += 2) out.push(line[i] === '█');
     return out;
   });
   const h = modules.length;
