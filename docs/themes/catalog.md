@@ -112,6 +112,10 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | `media` | `on`, `off` | `on` | `1.0` | — |
 | `density` | `comfortable`, `compact` | `comfortable` | `1.0` | — |
 
+## `command-palette`
+
+- since: `1.0`
+
 ## `dialog`
 
 - since: `1.0`

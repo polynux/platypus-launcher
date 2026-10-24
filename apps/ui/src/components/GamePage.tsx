@@ -100,6 +100,10 @@ interface GamePageProps {
   /** The collections (issue #45) and the dialog that changes a game's ones. */
   collections?: Collection[];
   onManageCollections?: (gameId: string) => void;
+  /** Open the settings dialog on this tab (the command palette's entry, issue
+   *  #124). Cleared through onSettingsOpened once the page has opened it. */
+  openSettingsTab?: GameSettingsTab;
+  onSettingsOpened?: () => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -387,6 +391,13 @@ export function GamePage(p: GamePageProps) {
   const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
   const hero = useHero(game, details);
   useEffect(() => { setShot(0); setLightbox(false); setSettingsTab(null); setInstallTo(false); setOptionsOpen(false); }, [game.id]);
+  // The palette's "Open game settings" (issue #124): open the tab it asked for,
+  // then clear the request so closing the dialog keeps it closed.
+  useEffect(() => {
+    if (!p.openSettingsTab) return;
+    setSettingsTab(p.openSettingsTab);
+    p.onSettingsOpened?.();
+  }, [p.openSettingsTab, p.onSettingsOpened]);
   useEffect(() => {
     const el = strip.current?.querySelectorAll<HTMLElement>('[data-thumb]')[shot];
     el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });

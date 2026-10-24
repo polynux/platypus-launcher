@@ -1,0 +1,25 @@
+{
+  "label": "Command palette",
+  "input": "Command",
+  "placeholder": "Type a command or game…",
+  "listbox": "Results",
+  "empty": "Nothing matches “{{query}}”.",
+  "group": {
+    "places": "Go to",
+    "games": "Games"
+  },
+  "action": {
+    "play": "Play {{title}}",
+    "stop": "Stop {{title}}",
+    "install": "Install {{title}}",
+    "gameSettings": "Open game settings"
+  },
+  "hint": {
+    "move": "move",
+    "run": "run",
+    "close": "close"
+  },
+  "key": {
+    "esc": "esc"
+  }
+}
