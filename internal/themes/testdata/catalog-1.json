@@ -186,6 +186,75 @@
           "since": "1.0"
         }
       ]
+    },
+    {
+      "entry": "shell",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "navigation",
+          "values": [
+            "sidebar",
+            "topbar"
+          ],
+          "default": "sidebar",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "shell.sidebar",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "shell.topbar",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "shell.nav",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.tools",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.collections",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.sources",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.store",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.footer",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
     }
   ]
 }

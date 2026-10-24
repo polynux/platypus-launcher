@@ -889,6 +889,10 @@ export namespace types {
     navigation: string;
   }
 
+  export interface ThemeShellVariants {
+    navigation: string;
+  }
+
   export interface ThemeTokens {
     id: string;
     tokens: Record<string, string>;
@@ -902,6 +906,7 @@ export namespace types {
     viewHeader: types.ThemeViewHeaderVariants;
     emptyState: types.ThemeEmptyStateVariants;
     listRow: types.ThemeListRowVariants;
+    shell: types.ThemeShellVariants;
   }
 
   export interface ThemeViewHeaderVariants {

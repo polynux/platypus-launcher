@@ -12,19 +12,20 @@ import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
 export const DEFAULT_THEME_ID = 'warm';
 
 const CACHE_KEY = 'platypus.theme';
-let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' }, viewHeader: { actions: 'right', subtitle: 'shown', size: 'regular' }, emptyState: { chrome: 'dashed', icon: 'off' }, listRow: { media: 'on', density: 'comfortable' } };
+let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' }, viewHeader: { actions: 'right', subtitle: 'shown', size: 'regular' }, emptyState: { chrome: 'dashed', icon: 'off' }, listRow: { media: 'on', density: 'comfortable' }, shell: { navigation: 'sidebar' } };
 const variantListeners = new Set<() => void>();
-type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `view-header.${keyof ThemeTokens['variants']['viewHeader']}` | `empty-state.${keyof ThemeTokens['variants']['emptyState']}` | `list-row.${keyof ThemeTokens['variants']['listRow']}`;
+type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `view-header.${keyof ThemeTokens['variants']['viewHeader']}` | `empty-state.${keyof ThemeTokens['variants']['emptyState']}` | `list-row.${keyof ThemeTokens['variants']['listRow']}` | `shell.${keyof ThemeTokens['variants']['shell']}`;
 
 /** Reads one resolved catalog choice and updates when the selected theme changes. */
 export function useVariant(axis: ThemeVariantAxis): string {
-  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'view-header' | 'empty-state' | 'list-row', string];
+  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'view-header' | 'empty-state' | 'list-row' | 'shell', string];
   const readVariant = () => {
     switch (entry) {
       case 'settings': return name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation;
       case 'section': return currentVariants.section.chrome;
       case 'view-header': return currentVariants.viewHeader[name as keyof ThemeTokens['variants']['viewHeader']];
       case 'empty-state': return currentVariants.emptyState[name as keyof ThemeTokens['variants']['emptyState']];
+      case 'shell': return currentVariants.shell.navigation;
       default: return currentVariants.listRow[name as keyof ThemeTokens['variants']['listRow']];
     }
   };
@@ -39,6 +40,7 @@ export function useVariant(axis: ThemeVariantAxis): string {
       case 'empty-state.chrome': return 'dashed';
       case 'empty-state.icon': return 'off';
       case 'list-row.media': return 'on';
+      case 'shell.navigation': return 'sidebar';
       default: return 'comfortable';
     }
   };

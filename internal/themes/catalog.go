@@ -38,4 +38,21 @@ var Catalog = []types.ThemeCatalogEntry{
 		{Name: "media", Values: []string{"on", "off"}, Default: "on", Since: "1.0"},
 		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "comfortable", Since: "1.0"},
 	}},
+	// Shell navigation entries (issue #104, ADR 0002 answer 4): the app shell
+	// is a view whose regions depend on shell.navigation (sidebar today,
+	// topbar as the alternate). Each variant has its own region; the
+	// sidebar's parts (inventory §1.2) are blocks either region can hold.
+	// None is required: the app keeps the Settings and Plugins entries
+	// reachable in both variants by construction.
+	{Entry: "shell", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "navigation", Values: []string{"sidebar", "topbar"}, Default: "sidebar", Since: "1.0"},
+	}},
+	{Entry: "shell.sidebar", Since: "1.0", Kind: "region"},
+	{Entry: "shell.topbar", Since: "1.0", Kind: "region"},
+	{Entry: "shell.nav", Since: "1.0", Kind: "block", Region: "sidebar"},
+	{Entry: "shell.tools", Since: "1.0", Kind: "block", Region: "sidebar"},
+	{Entry: "shell.collections", Since: "1.0", Kind: "block", Region: "sidebar"},
+	{Entry: "shell.sources", Since: "1.0", Kind: "block", Region: "sidebar"},
+	{Entry: "shell.store", Since: "1.0", Kind: "block", Region: "sidebar"},
+	{Entry: "shell.footer", Since: "1.0", Kind: "block", Region: "sidebar"},
 }

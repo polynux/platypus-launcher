@@ -477,6 +477,9 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			Media:   variants["list-row.media"],
 			Density: variants["list-row.density"],
 		},
+		Shell: types.ThemeShellVariants{
+			Navigation: variants["shell.navigation"],
+		},
 	}
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
@@ -514,6 +517,9 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 		ListRow: types.ThemeListRowVariants{
 			Media:   variants["list-row.media"],
 			Density: variants["list-row.density"],
+		},
+		Shell: types.ThemeShellVariants{
+			Navigation: variants["shell.navigation"],
 		},
 	}
 	return out

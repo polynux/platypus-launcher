@@ -400,6 +400,7 @@ type ThemeVariants struct {
 	ViewHeader ThemeViewHeaderVariants `json:"viewHeader"`
 	EmptyState ThemeEmptyStateVariants `json:"emptyState"`
 	ListRow    ThemeListRowVariants    `json:"listRow"`
+	Shell      ThemeShellVariants      `json:"shell"`
 }
 
 type ThemeSettingsVariants struct {
@@ -425,6 +426,10 @@ type ThemeEmptyStateVariants struct {
 type ThemeListRowVariants struct {
 	Media   string `json:"media"`
 	Density string `json:"density"`
+}
+
+type ThemeShellVariants struct {
+	Navigation string `json:"navigation"`
 }
 
 type ThemeCatalogEntry struct {
