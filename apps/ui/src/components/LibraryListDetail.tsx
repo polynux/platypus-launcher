@@ -120,6 +120,9 @@ export function LibraryListDetail(p: ListDetailProps) {
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); move(1); }
     else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); move(-1); }
+    // One launch for the selected row (the stage shows it). The rows have no
+    // key handler of their own: a focused row bubbles here, so Enter can't
+    // play twice. Keyboard and click selection keep focus on the selected row.
     else if (e.key === 'Enter') { e.preventDefault(); if (selected) p.onPlay(selected.id); }
   };
 
@@ -176,12 +179,9 @@ export function LibraryListDetail(p: ListDetailProps) {
                   <button
                     type="button"
                     data-game-row={g.id}
-                    aria-current={on}
+                    aria-current={on ? 'true' : undefined}
                     onClick={() => setSelectedId(g.id)}
                     onDoubleClick={() => p.onPlay(g.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); p.onPlay(g.id); }
-                    }}
                     className={cx(
                       'flex w-full items-center gap-2.5 rounded-xl px-1.5 py-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                       on ? 'bg-accent/[0.15] text-text' : 'text-text-muted hover:bg-surface hover:text-text',

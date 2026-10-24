@@ -108,6 +108,12 @@ interface GamePageProps {
   /** When the session started (ms epoch), for the tabs strip elapsed time.
    *  Only the tabs variant reads it; sections keep today's PlayButton. */
   sessionStartedAt?: number;
+  /** The list-detail stage shows no back link (it would go nowhere). */
+  hideBack?: boolean;
+  /** The hero art the page actually shows, for the game tone to sample. */
+  onHeroArt?: (url: string | null) => void;
+  /** A Tune flyout write the core confirmed, for App's copy of the game. */
+  onTuneSaved?: (settings: GameSettings) => void;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -394,6 +400,14 @@ export function GamePage(p: GamePageProps) {
   const needsConnection = !online && (game as Game & { offline?: string }).offline === 'network';
   const progress = useAchievementProgress(game, !!p.plugin && offers(p.plugin, 'achievements', { game }));
   const hero = useHero(game, details);
+  // The tone samples what the hero actually shows (the details hero once it
+  // loads, else the library fallback), not heroImages(game)[0] blindly.
+  const heroTop = hero[0] ?? null;
+  useEffect(() => {
+    p.onHeroArt?.(heroTop);
+    // The callback is App's stable setter; the art is what matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroTop]);
   useEffect(() => { setShot(0); setLightbox(false); setSettingsTab(null); setInstallTo(false); setOptionsOpen(false); }, [game.id]);
   // The palette's "Open game settings" (issue #124): open the tab it asked for,
   // then clear the request so closing the dialog keeps it closed.
@@ -547,7 +561,9 @@ export function GamePage(p: GamePageProps) {
   if (structure === 'tabs') {
     return (
       <TooltipProvider>
-        <div className="relative isolate p-7">
+        {/* Full-bleed like /21 `.stage`: no page padding around the hero and
+            strip; the tabs view owns its own padding below them. */}
+        <div className="relative isolate">
           {game.background_url && (
             <div
               aria-hidden
@@ -608,6 +624,8 @@ export function GamePage(p: GamePageProps) {
             facts={facts}
             onOpenRunner={() => setSettingsTab('general')}
             onOpenSettings={() => setSettingsTab('general')}
+            hideBack={p.hideBack}
+            onTuneSaved={p.onTuneSaved}
           />
           {!settingsPage && settingsModal}
           {installTo && plugin && (

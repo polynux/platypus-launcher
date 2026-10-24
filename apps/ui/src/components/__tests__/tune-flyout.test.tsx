@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, fireEvent, screen, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Effect } from 'effect';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
@@ -172,6 +173,35 @@ describe('TuneFlyout', () => {
     expect(getByText('Gold on ProtonDB')).toBeInTheDocument();
     const pick = await waitFor(() => getByRole('combobox', { name: 'Compatibility layer' }));
     expect(pick).toHaveTextContent('Automatic');
+  });
+
+  it('picks the runner from the portaled list without closing', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const { getByRole } = mount(game(), onClose);
+    await user.click(await waitFor(() => getByRole('combobox', { name: 'Compatibility layer' })));
+    const option = await screen.findByRole('option', { name: 'GE-Proton' });
+    // The pointer down on the portaled listbox is not an outside click.
+    fireEvent.pointerDown(option);
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(option);
+    await waitFor(() => expect(api.saveGameSettings).toHaveBeenCalledWith('g1', expect.objectContaining({ runner_id: 'ge' })));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('returns focus to the Tune button on Esc and on an outside click', () => {
+    const anchor = document.createElement('button');
+    anchor.setAttribute('data-tune-anchor', '');
+    document.body.appendChild(anchor);
+    const onClose = vi.fn();
+    mount(game(), onClose);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(anchor);
+    fireEvent.pointerDown(document.body);
+    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(anchor);
+    anchor.remove();
   });
 
   it('says Steam chooses the compatibility layer for a client launch', () => {
