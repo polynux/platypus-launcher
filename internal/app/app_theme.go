@@ -110,6 +110,11 @@ func (a *App) GetTheme(id string) types.ThemeTokens {
 // withThemeURLs turns a plugin theme's relative asset paths into art URLs.
 // A file that vanished since discovery drops out: its font leaves the map and
 // its wash layer keeps the gradient without the picture.
+//
+// The wash layers are copied first: the resolved theme shares their backing
+// array with the manager's cached theme, and writing URLs into it would
+// corrupt every later resolve (an already absolute URL fails the
+// inside-the-folder check, so the image would silently drop out).
 func (a *App) withThemeURLs(out types.ThemeTokens) types.ThemeTokens {
 	if a.plugins == nil {
 		out.Fonts = nil
@@ -132,6 +137,11 @@ func (a *App) withThemeURLs(out types.ThemeTokens) types.ThemeTokens {
 			}
 		}
 		out.Fonts = fonts
+	}
+	if len(out.Wash) > 0 {
+		wash := make([]types.WashLayer, len(out.Wash))
+		copy(wash, out.Wash)
+		out.Wash = wash
 	}
 	for i, l := range out.Wash {
 		if l.Image == "" {
