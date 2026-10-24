@@ -34,6 +34,28 @@ func TestSetThemePicksOnlyUsableThemes(t *testing.T) {
 	}
 }
 
+// SetGameTone saves the game-colour choice and answers the launcher settings
+// with it; a value the UI never sends is refused and changes nothing.
+func TestSetGameToneSavesTheChoice(t *testing.T) {
+	a := newLocaleApp(t)
+	if got := a.GetLauncherSettings().GameTone; got != "" {
+		t.Fatalf("launcher settings game tone = %q, want empty (accent)", got)
+	}
+	s, err := a.SetGameTone("whole")
+	if err != nil || s.GameTone != "whole" {
+		t.Fatalf("SetGameTone(whole) = %q, %v", s.GameTone, err)
+	}
+	if got := a.GetLauncherSettings().GameTone; got != "whole" {
+		t.Fatalf("launcher settings game tone = %q, want whole", got)
+	}
+	if _, err := a.SetGameTone("purple"); err == nil {
+		t.Fatal("SetGameTone(purple) succeeded, want an error")
+	}
+	if a.settings.GameTone() != "whole" {
+		t.Fatalf("a refused value changed the setting: %q", a.settings.GameTone())
+	}
+}
+
 func TestListThemesOffersBuiltIns(t *testing.T) {
 	a := newLocaleApp(t)
 	list := a.ListThemes()

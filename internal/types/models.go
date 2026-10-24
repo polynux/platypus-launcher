@@ -371,6 +371,10 @@ type LauncherSettings struct {
 	MinimizeToTray bool `json:"minimize_to_tray"`
 	// Theme is the picked theme's id (issue #93): "" is the built-in default.
 	Theme string `json:"theme"`
+	// GameTone is the "Accent / Whole app" choice (issue #123): "accent" or
+	// "whole". "" means accent. The theme's color.game-tone axis decides how
+	// far it applies.
+	GameTone string `json:"game_tone"`
 }
 
 // ThemeInfo is one theme in the Settings picker (issue #93). Status is "ok"

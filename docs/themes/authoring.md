@@ -138,6 +138,30 @@ built-in default. Inheritance applies only when the theme declares
 
 Source: `internal/themes/themes.go` (`setVariant`, `resolve`), `catalog.go`.
 
+## `[variants]` game colour
+
+`color.game-tone` is how much of the selected game's art colour the app
+takes (issue #123). It declares the most the theme supports; the user picks
+"Accent" or "Whole app" among the values it allows:
+
+```toml
+[variants]
+"color.game-tone" = "whole"
+```
+
+- `off` (the default): the theme's tokens, whatever the user picked.
+- `accent`: the accent and the text on it take the game's hue; surfaces,
+  lines and text keep the theme's tokens.
+- `whole`: the surfaces, lines and text are derived from the hue too.
+
+The app samples the colour off the render path (cached per art URL) and
+fades between games over 0.6s. Derived text is clamped to stay readable
+(text 4.5:1, muted and faint 3:1); with no art, or art whose pixels can't be
+read, the theme tokens stand. The switch only shows on a theme that allows
+`whole`; an `accent` theme always takes the accent.
+
+Source: `apps/ui/src/lib/gameTone.ts`, `apps/ui/src/components/GameToneSwitch.tsx`.
+
 ## `[fonts]`
 
 ```toml

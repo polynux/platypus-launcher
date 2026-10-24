@@ -21,6 +21,7 @@ namespace per UI area:
 | `plugins`   | plugins view                                      | 2     |
 | `chat`      | friends, chat, notifications                      | 2     |
 | `errors`    | error fallbacks shown in toasts                   | 1     |
+| `gameTone`  | the game colour switch (Accent / Whole app)       | 2     |
 | …           | dashboard, activity, fixes, runners, game page…   | 2     |
 
 Untranslated keys fall back to English key by key, so a partial locale

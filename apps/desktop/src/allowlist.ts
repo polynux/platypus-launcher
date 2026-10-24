@@ -157,6 +157,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'SetGameSavePaths',
   'SetGameStatus',
   'SetGameSteamAppID',
+  'SetGameTone',
   'SetLanguage',
   'SetMinimizeToTray',
   'SetPluginEnabled',

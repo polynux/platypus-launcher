@@ -5,6 +5,7 @@ export interface VariantValues {
   "settings.presentation": "page" | "dialog" | "sheet";
   "settings.navigation": "scroll" | "tabs";
   "section.chrome": "hairline" | "framed" | "plain";
+  "color.game-tone": "off" | "accent" | "whole";
   "view-header.actions": "right" | "below";
   "view-header.subtitle": "shown" | "hidden";
   "view-header.size": "regular" | "compact";
@@ -42,6 +43,7 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "settings.presentation": "page",
   "settings.navigation": "scroll",
   "section.chrome": "hairline",
+  "color.game-tone": "off",
   "view-header.actions": "right",
   "view-header.subtitle": "shown",
   "view-header.size": "regular",

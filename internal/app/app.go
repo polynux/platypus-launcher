@@ -1183,6 +1183,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		Language:              a.settings.Language(),
 		MinimizeToTray:        a.settings.MinimizeToTray(),
 		Theme:                 a.settings.Theme(),
+		GameTone:              a.settings.GameTone(),
 	}
 }
 

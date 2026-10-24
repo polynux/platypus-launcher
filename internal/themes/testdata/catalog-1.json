@@ -43,6 +43,22 @@
       ]
     },
     {
+      "entry": "color",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "game-tone",
+          "values": [
+            "off",
+            "accent",
+            "whole"
+          ],
+          "default": "off",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
       "entry": "dashboard.top",
       "since": "1.0",
       "axes": null,

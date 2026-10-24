@@ -36,7 +36,7 @@ export function onThemeApplied(listener: () => void): () => void {
 
 /** Where each token lands. `--color-*` are the @theme names; the rest are the
  *  variables the ds/ components and Tailwind's radius classes read. */
-const TOKEN_VARS: Record<string, string[]> = {
+export const TOKEN_VARS: Record<string, string[]> = {
   ground: ['--color-ground', '--background'],
   raised: ['--color-raised', '--card', '--popover'],
   surface: ['--color-surface', '--secondary', '--muted'],
