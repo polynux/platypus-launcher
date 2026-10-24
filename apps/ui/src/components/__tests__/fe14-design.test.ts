@@ -14,14 +14,15 @@ describe('FE-14 design drift guards', () => {
     expect(dashboard.includes('backdrop-blur')).toBe(true);
   });
 
-  it('toast uses the launcher panel surface (rounded-2xl, sans) and sits above an open modal', () => {
+  it('toast uses semantic launcher tokens and sits above an open modal', () => {
     // Issue #64: the toast layer is Sonner (ds/sonner.tsx + style.css), not
     // the old bottom notice in App.tsx. It is styled like the other floating
     // panels (dialog surface, JobProgress), not a terminal box; Sonner's own
     // z-index (999999999) beats any z-50 overlay wherever the toast mounts.
     const sonner = src('components/ds/sonner.tsx');
     expect(sonner).toContain('rounded-2xl');
-    expect(sonner).toContain('bg-[#191410]');
+    expect(sonner).toContain('bg-raised');
+    expect(sonner).toContain('text-text');
     expect(sonner).toContain('font-sans');
     expect(sonner).toContain('top-right');
     const css = src('style.css');
@@ -48,5 +49,31 @@ describe('FE-14 design drift guards', () => {
     const dir = path.join(__dirname, '../../assets/fonts');
     const files = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
     expect(files.some((f) => f.toLowerCase().includes('nunito'))).toBe(false);
+  });
+
+  it('defines the token-set-v1 semantic colors and radii', () => {
+    const css = src('style.css');
+    for (const token of [
+      '--color-surface:', '--color-surface-strong:', '--color-hairline:',
+      '--color-text-muted:', '--color-danger:', '--color-focus:',
+      '--radius-chip:', '--radius-card:', '--radius-panel:',
+    ]) expect(css).toContain(token);
+  });
+
+  it('does not reintroduce migrated raw palette classes', () => {
+    const files = [
+      'App.tsx', 'components/ui.tsx', 'components/Sidebar.tsx',
+      'components/JobProgress.tsx', 'components/Modal.tsx',
+      'components/Dashboard.tsx', 'components/LibraryView.tsx',
+      'components/GamePage.tsx', 'components/SettingsModal.tsx',
+      'components/PluginsView.tsx',
+      ...fs.readdirSync(path.join(__dirname, '../ds'))
+        .filter((f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx'))
+        .map((f) => `components/ds/${f}`),
+    ];
+    const rawPalette = /(?:text-white\/(?:90|70|60|55|40)|placeholder-white\/55|bg-white\/\[(?:0\.(?:03|04|045|05|06))\]|ring-white\/\[(?:0\.(?:06|07|08))\]|(?:border|divide)-white\/\[(?:0\.(?:05|06|07))\]|(?:bg|text|ring|border|divide)-amber-(?:300|400)|(?:bg|text|ring|border|divide)-(?:red-(?:400|500)|orange-400|sky-300|violet-400)|(?:bg|text)-\[#(?:191410|130f0a|ece6da|7dd3fc|a78bfa)\])/;
+    for (const file of files) {
+      expect(src(file).match(rawPalette), `${file} contains a raw palette class`).toBeNull();
+    }
   });
 });

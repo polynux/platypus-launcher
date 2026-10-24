@@ -127,7 +127,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
-          <p className="mt-0.5 max-w-xl text-[12.5px] text-white/70">
+          <p className="mt-0.5 max-w-xl text-[12.5px] text-text-body">
             {t('plugins:header.subtitle')}
           </p>
         </div>
@@ -160,14 +160,14 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                       <PluginLogo src={p.icon_url} name={p.name} />
                       <div className="min-w-0">
                         <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
-                        <p className="font-mono text-hint text-white/55">
+                        <p className="font-mono text-hint text-text-muted">
                           v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}{p.running ? ` · ${t('plugins:card.running')}` : ''}
                         </p>
                       </div>
                     </div>
                     <Badge variant={st.variant} className="flex-none">{t(st.key)}</Badge>
                   </div>
-                  {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
+                  {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
                   {p.problem && p.status !== 'missing-requirements' && (
                     <p className={cx('mt-2 font-mono text-hint', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
                   )}
@@ -178,7 +178,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
 
                 {p.missing.length > 0 && (
-                  <div className="rounded-xl bg-orange-400/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
+                  <div className="rounded-xl bg-attention/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
                     <MonoLabel className="mb-1.5 text-orange-200/80">{t('plugins:card.installFirst')}</MonoLabel>
                     {p.missing.map((r) => (
                       <div key={r.bin} className="font-mono text-[12px] text-white/80">
@@ -186,20 +186,20 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         {r.hint && <> · <span className="select-text">{r.hint}</span></>}
                       </div>
                     ))}
-                    <p className="mt-1.5 text-[12px] text-white/70">{t('plugins:card.rescanHint')}</p>
+                    <p className="mt-1.5 text-[12px] text-text-body">{t('plugins:card.rescanHint')}</p>
                   </div>
                 )}
 
                 {p.status === 'ready' && hasAuth(p) && (
-                  <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3.5 py-2.5">
-                    <span className="min-w-0 truncate text-[12px] text-white/70">
+                  <div className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3.5 py-2.5">
+                    <span className="min-w-0 truncate text-[12px] text-text-body">
                       {!a ? (
-                        <span className="flex items-center gap-2 text-white/55"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
+                        <span className="flex items-center gap-2 text-text-muted"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
                       ) : 'error' in a ? (
                         <span className="font-mono text-hint text-red-300">{a.error}</span>
                       ) : a.loggedIn ? (
                         <>{a.user ? (
-                          <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-white/90" /> }} />
+                          <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-text" /> }} />
                         ) : t('plugins:auth.loggedIn')}</>
                       ) : (
                         <span className="text-amber-200">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
@@ -220,7 +220,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                 {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
                   <div className="space-y-1 font-mono text-hint">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-white/55">{t('plugins:card.installsInto')}</span>
+                      <span className="text-text-muted">{t('plugins:card.installsInto')}</span>
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
                         <Button variant="link" className="flex-none" onClick={() => chooseFolder(p)}>{t('plugins:card.change')}</Button>
@@ -233,8 +233,8 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                     </div>
                     {p.extra_folders.map((f) => (
                       <div key={f} className="flex justify-between gap-3">
-                        <span className="text-white/55">{t('plugins:card.alsoAllowed')}</span>
-                        <span className="truncate text-white/60 select-text" title={f}>{f}</span>
+                        <span className="text-text-muted">{t('plugins:card.alsoAllowed')}</span>
+                        <span className="truncate text-text-muted select-text" title={f}>{f}</span>
                       </div>
                     ))}
                   </div>
@@ -300,17 +300,17 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
                         <PluginLogo src={p.icon_url} name={p.name} />
                         <div className="min-w-0">
                           <h2 className="truncate text-[14px] font-bold">{p.name}</h2>
-                          <p className="font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
+                          <p className="font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''}</p>
                         </div>
                       </div>
                       <Badge variant={p.status === 'ready' ? 'neutral' : st.variant} className="flex-none">
                         {p.status === 'ready' ? t('plugins:status.data') : t(st.key)}
                       </Badge>
                     </div>
-                    {p.description && <p className="text-[12.5px] leading-relaxed text-white/60">{p.description}</p>}
+                    {p.description && <p className="text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
                     {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
                     {p.status === 'ready' && (
-                      <p className="mt-auto text-[12px] text-white/70">
+                      <p className="mt-auto text-[12px] text-text-body">
                         {t('plugins:card.dataNote')}
                       </p>
                     )}
@@ -324,10 +324,10 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       <MonoLabel as="h2" className="mb-3 mt-8">{t('plugins:section.builtIn')}</MonoLabel>
       <div className="grid gap-2 xl:grid-cols-2">
         {BUILT_IN.map((b) => (
-          <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
+          <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
             <div className="min-w-0">
               <div className="text-[13px] font-bold">{b.name}</div>
-              <div className="text-[12px] text-white/55">{t('plugins:builtIn.protondb')}</div>
+              <div className="text-[12px] text-text-muted">{t('plugins:builtIn.protondb')}</div>
             </div>
             <Badge variant="neutral" className="flex-none">{t('plugins:status.builtIn')}</Badge>
           </div>
@@ -364,9 +364,9 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
 function ManifestRow({ label, items, empty }: { label: string; items: string[]; empty: string }) {
   return (
-    <div className="flex gap-4 border-t border-white/[0.05] pt-2">
-      <span className="w-24 flex-none text-white/55">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-white/85 select-text">{items.length ? items.join(', ') : <span className="text-white/55">{empty}</span>}</span>
+    <div className="flex gap-4 border-t border-hairline pt-2">
+      <span className="w-24 flex-none text-text-muted">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-white/85 select-text">{items.length ? items.join(', ') : <span className="text-text-muted">{empty}</span>}</span>
     </div>
   );
 }
@@ -378,9 +378,9 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
     <Modal label={t('plugins:approve.title', { name: p.name })} onClose={onClose} size="md">
       <div>
         <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? t('plugins:approve.titleChanged', { name: p.name }) : t('plugins:approve.title', { name: p.name })}</h2>
-        <p className="mt-1 font-mono text-hint text-white/55">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
+        <p className="mt-1 font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
         {p.status === 'changed' && (
-          <p className="mt-3 rounded-xl bg-orange-400/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
+          <p className="mt-3 rounded-xl bg-attention/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
             {t('plugins:approve.changedWarning')}
           </p>
         )}
@@ -402,8 +402,8 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
           <ManifestRow label={t('plugins:approve.row.installsInto')} items={[p.install_folder]} empty="" />
         </div>
 
-        <div className="mt-4 flex gap-3 rounded-xl bg-white/[0.04] px-3.5 py-3 text-hint leading-relaxed text-white/60">
-          <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300/80" />
+        <div className="mt-4 flex gap-3 rounded-xl bg-surface px-3.5 py-3 text-hint leading-relaxed text-text-muted">
+          <ShieldAlert className="mt-0.5 h-4 w-4 flex-none text-accent-strong/80" />
           <p>
             {t('plugins:approve.warning')}
           </p>
@@ -582,9 +582,9 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:auth.loginTo', { name: plugin.name })}</h2>
-        <p className="mt-1 text-[12px] text-white/70">{t('plugins:auth.loginStays', { name: plugin.name })}</p>
+        <p className="mt-1 text-[12px] text-text-body">{t('plugins:auth.loginStays', { name: plugin.name })}</p>
         {!prompt && !error && (
-          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-white/55"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('plugins:auth.startingLogin')}</div>
+          <div className="mt-5 flex items-center gap-2 font-mono text-[12px] text-text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t('plugins:auth.startingLogin')}</div>
         )}
         {prompt && (
           <div className="mt-4 space-y-4">
@@ -594,7 +594,7 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
                 <Button variant="neutral" className="w-full" onClick={() => openExternal(prompt.url)}>
                   <ExternalLink className="h-3.5 w-3.5" /> {t('plugins:auth.openLoginPage')}
                 </Button>
-                <p className="mt-1.5 break-all font-mono text-[12px] text-white/55 select-text">{prompt.url}</p>
+                <p className="mt-1.5 break-all font-mono text-[12px] text-text-muted select-text">{prompt.url}</p>
               </div>
             )}
             {prompt.qr && (

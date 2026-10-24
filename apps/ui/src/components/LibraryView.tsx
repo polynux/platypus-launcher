@@ -315,19 +315,19 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen, onManage }: { ga
           <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
             <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(t, job)}</div>
             <div className="mt-1 h-1 rounded-full bg-white/15">
-              <div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(job.percent, 2)}%` }} />
+              <div className="h-full rounded-full bg-accent-strong" style={{ width: `${Math.max(job.percent, 2)}%` }} />
             </div>
           </div>
         ) : (
           (g.status || !g.is_installed) && (
             <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
               {statusLabel && (
-                <Badge variant="neutral" className="bg-black/65 text-white/70" data-testid="status-badge">
+                <Badge variant="neutral" className="bg-black/65 text-text-body" data-testid="status-badge">
                   {statusLabel}
                 </Badge>
               )}
               {!g.is_installed && (
-                <Badge variant="neutral" className="gap-1 bg-black/65 text-white/70">
+                <Badge variant="neutral" className="gap-1 bg-black/65 text-text-body">
                   {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? t('library:cardNotInstalled') : t('library:cardOwned')}
                 </Badge>
               )}
@@ -348,7 +348,7 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen, onMan
       role="row"
       aria-rowindex={index + 2}
       onContextMenu={onManage ? (e) => { e.preventDefault(); onManage(g.id); } : undefined}
-      className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-amber-300/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}
+      className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-accent-strong/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}
     >
       <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />
       <span role="cell" className="min-w-0">
@@ -358,12 +358,12 @@ const TableRow = memo(function TableRow({ game: g, index, runners, onOpen, onMan
           {g.shared_by && <Badge variant="neutral" className="flex-none">{t('library:sharedBy', { name: g.shared_by.name })}</Badge>}
         </button>
       </span>
-      <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-white/55')}>{tier ?? '—'}</span>
-      <span role="cell" className="truncate font-mono text-hint text-white/55">{runnerShort(g.settings.runner_id, runners)}</span>
-      <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{hoursPlayed(g) ?? '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint tabular-nums text-white/55">{g.release_year ?? '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint text-white/55">{(g.is_installed ? formatBytes(g.size_bytes) : t('library:table.notInstalled')) || '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint text-white/55">{recencyWord(t, g) ?? '—'}</span>
+      <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-text-muted')}>{tier ?? '—'}</span>
+      <span role="cell" className="truncate font-mono text-hint text-text-muted">{runnerShort(g.settings.runner_id, runners)}</span>
+      <span role="cell" className="text-right font-mono text-hint tabular-nums text-text-muted">{hoursPlayed(g) ?? '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint tabular-nums text-text-muted">{g.release_year ?? '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint text-text-muted">{(g.is_installed ? formatBytes(g.size_bytes) : t('library:table.notInstalled')) || '—'}</span>
+      <span role="cell" className="text-right font-mono text-hint text-text-muted">{recencyWord(t, g) ?? '—'}</span>
     </div>
   );
 });
@@ -432,13 +432,13 @@ export function LibraryView(p: LibraryProps) {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.library')}</h1>
-            <p className="mt-0.5 text-[12.5px] tabular-nums text-white/70">
+            <p className="mt-0.5 text-[12.5px] tabular-nums text-text-body">
               {t('library:counts', { shown: formatCount(filtered.length), installed: formatCount(installedCount) })}
               {owned > installedCount ? t('library:ownedSuffix', { owned: formatCount(owned) }) : ''}
               {p.lastScan ? t('library:scannedSuffix', { time: clock(p.lastScan) }) : ''}
             </p>
             {activeCollection && (
-              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-white/70">
+              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-text-body">
                 <Badge variant="accent" className="gap-1.5" data-testid="collection-chip">
                   {activeCollection.builtin ? t(`collections:builtin.${activeCollection.id}`) : activeCollection.name}
                   <Tooltip>
@@ -458,7 +458,7 @@ export function LibraryView(p: LibraryProps) {
               </p>
             )}
             {!online && (
-              <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-white/80 ring-1 ring-white/[0.1]">
+              <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-strong px-2.5 py-1 text-[12px] font-semibold text-white/80 ring-1 ring-white/[0.1]">
                 <WifiOff className="h-3.5 w-3.5" aria-hidden />
                 {t('library:offline', 'Offline — showing the last known library')}
               </p>
@@ -493,7 +493,7 @@ export function LibraryView(p: LibraryProps) {
                     size="icon"
                     aria-label={t('library:clearSearch')}
                     onClick={() => p.onSearch('')}
-                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-white/55"
+                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-text-muted"
                   >
                     <X className="h-3.5 w-3.5" />
                   </Button>
@@ -542,7 +542,7 @@ export function LibraryView(p: LibraryProps) {
 
         {filtersOpen && (
           // One row per group, labels in a shared column: the panel never wraps a group onto a second line.
-          <div id="library-filters" className="flex flex-col items-start gap-2.5 rounded-2xl bg-white/[0.03] px-4 py-3 ring-1 ring-white/[0.06]">
+          <div id="library-filters" className="flex flex-col items-start gap-2.5 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
             {owned > installedCount && (
               <FilterGroup label={t('library:show')} labelClass="w-14">
                 <SegRow label={t('library:show')} value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: t('library:installed') }, { value: 'owned', label: t('library:owned') }]} />
@@ -586,7 +586,7 @@ export function LibraryView(p: LibraryProps) {
       {p.warnings.length > 0 && (
         <div className="mb-6 space-y-2">
           {p.warnings.map((w) => (
-            <div key={w.source} role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-4 py-3 ring-1 ring-amber-300/25">
+            <div key={w.source} role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-4 py-3 ring-1 ring-accent-strong/25">
               <p className="min-w-0 text-[12.5px] text-white/75">
                 {w.needs_auth ? (
                   <Trans i18nKey="library:warningLoggedOut" values={{ name: pluginName(w.source) }} components={{ name: <span className="font-bold text-amber-200" /> }} />
@@ -596,7 +596,7 @@ export function LibraryView(p: LibraryProps) {
                     values={{ name: pluginName(w.source), message: w.message }}
                     components={{
                       name: <span className="font-bold text-amber-200" />,
-                      msg: <span className="font-mono text-[12px] text-white/55" />,
+                      msg: <span className="font-mono text-[12px] text-text-muted" />,
                     }}
                   />
                 ) : (
@@ -605,7 +605,7 @@ export function LibraryView(p: LibraryProps) {
                     values={{ name: pluginName(w.source), message: w.message }}
                     components={{
                       name: <span className="font-bold text-amber-200" />,
-                      msg: <span className="font-mono text-[12px] text-white/55" />,
+                      msg: <span className="font-mono text-[12px] text-text-muted" />,
                     }}
                   />
                 )}
@@ -630,10 +630,10 @@ export function LibraryView(p: LibraryProps) {
         <>
           {played.length > 0 && (
             <section className="mb-8">
-              <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">{t('library:lastPlayed')}</h2>
+              <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:lastPlayed')}</h2>
               <div className="grid gap-4 lg:grid-cols-3">
                 {played.map((g) => (
-                  <button key={g.id} onClick={() => p.onOpenGame(g.id)} className="group relative overflow-hidden rounded-3xl text-left ring-1 ring-white/[0.08] transition hover:ring-amber-300/40">
+                  <button key={g.id} onClick={() => p.onOpenGame(g.id)} className="group relative overflow-hidden rounded-3xl text-left ring-1 ring-hairline transition hover:ring-accent-strong/40">
                     <Cover src={heroImages(g)} title={g.title} className="h-[210px] w-full transition duration-500 group-hover:scale-[1.04]" />
                     <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.95) 8%, transparent 60%)' }} />
                     <div className="absolute bottom-4 left-5 right-5">
@@ -641,13 +641,13 @@ export function LibraryView(p: LibraryProps) {
                         <span className="truncate text-[16px] font-extrabold tracking-tight">{g.title}</span>
                         {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} title={tierMeaning(t, g.fix_info.tier)} />}
                       </div>
-                      <div className="mt-1 flex items-center gap-2 font-mono text-hint text-white/55">
+                      <div className="mt-1 flex items-center gap-2 font-mono text-hint text-text-muted">
                         {hoursPlayed(g) != null && <><span>{t('library:cardHours', { hours: formatDecimal1(hoursPlayed(g)!) })}</span><span>·</span></>}
                         <span>{recencyWord(t, g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
                       </div>
                       {hoursPlayed(g) != null && (
                         <div className="mt-2.5 h-1 rounded-full bg-white/[0.14]">
-                          <div className="h-full rounded-full bg-amber-300/80" style={{ width: `${Math.min(100, (hoursPlayed(g)! / maxHours) * 100)}%` }} />
+                          <div className="h-full rounded-full bg-accent-strong/80" style={{ width: `${Math.min(100, (hoursPlayed(g)! / maxHours) * 100)}%` }} />
                         </div>
                       )}
                     </div>
@@ -661,7 +661,7 @@ export function LibraryView(p: LibraryProps) {
           )}
 
           <section className="mb-8">
-            <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-white/60">{t('library:allTitles')}</h2>
+            <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:allTitles')}</h2>
             <WindowedGrid
               items={rest}
               itemKey={(g) => g.id}
@@ -676,7 +676,7 @@ export function LibraryView(p: LibraryProps) {
           <section className={cx('mb-4 grid gap-5', recentlyAdded.length > 0 && 'xl:grid-cols-[1.5fr_1fr]')}>
             <ActivityPanel events={p.activity} limit={6} onFullLog={() => p.onNavigate({ name: 'activity' })} />
             {recentlyAdded.length > 0 && (
-              <Panel className="bg-white/[0.04]">
+              <Panel className="bg-surface">
                 <h2 className="mb-3 text-[14px] font-bold">{t('library:recentlyAdded')}</h2>
                 <RecentList games={recentlyAdded} onOpenGame={p.onOpenGame} />
               </Panel>
@@ -684,9 +684,9 @@ export function LibraryView(p: LibraryProps) {
           </section>
         </>
       ) : (
-        <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-white/[0.06]">
+        <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-hairline">
           <div role="table" aria-label={t('library:table.label')} aria-rowcount={tableRows.length + 1} className="min-w-[800px]">
-            <div role="row" aria-rowindex={1} className={cx('grid gap-3 border-b border-white/[0.05] px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-white/55', TABLE_COLS)}>
+            <div role="row" aria-rowindex={1} className={cx('grid gap-3 border-b border-hairline px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-text-muted', TABLE_COLS)}>
               <span role="columnheader"><span className="sr-only">{t('library:table.statusSr')}</span></span>
               <SortHead k="title" label={t('library:table.title')} sort={sort} onSort={toggleSort} />
               <SortHead k="tier" label={t('library:table.tier')} sort={sort} onSort={toggleSort} /><span role="columnheader">{t('library:table.runner')}</span>

@@ -252,7 +252,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:modal.heading')}</h2>
-            <div className="font-mono text-hint text-white/55">{game.title}</div>
+            <div className="font-mono text-hint text-text-muted">{game.title}</div>
           </div>
           <Button variant="neutral" size="icon" onClick={onClose} aria-label={t('common:close')} className="size-8">
             <X className="size-4" />
@@ -261,7 +261,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
       )}
 
       {isSteamClient && (
-        <div className="mb-6 rounded-2xl bg-sky-300/[0.07] p-4 ring-1 ring-sky-300/25">
+        <div className="mb-6 rounded-2xl bg-info/[0.07] p-4 ring-1 ring-info/25">
           <p className="text-[12.5px] leading-relaxed text-sky-100/85">
             {t('gameSettings:steamNotice')}
           </p>
@@ -299,15 +299,15 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             ) : (
               <>
                 <RunnerChoices groups={runnerGroups} ids={['runner']} draft={draft} onChange={changeChoice} />
-                {runners.length === 0 && <p className="text-[12px] text-white/70">{t('gameSettings:runner.noneInstalled')}</p>}
+                {runners.length === 0 && <p className="text-[12px] text-text-body">{t('gameSettings:runner.noneInstalled')}</p>}
                 <RunnerChoices groups={runnerGroups} ids={['sync', 'proton']} draft={draft} onChange={changeChoice} />
                 <div className="space-y-3">
-                  <MonoLabel>{t('gameSettings:winetricks.kicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:winetricks.note')}</span></MonoLabel>
+                  <MonoLabel>{t('gameSettings:winetricks.kicker')} <span className="normal-case tracking-normal text-text-muted">{t('gameSettings:winetricks.note')}</span></MonoLabel>
                   <div className="flex flex-wrap gap-1.5">
                     {[...new Set([...WINETRICKS_VERBS, ...(game.fix_info?.winetricks ?? [])])].map((v) => {
                       const on = tricks.includes(v);
                       return (
-                        <button key={v} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== v) : [...tricks, v])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-hint transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-white/[0.06] text-white/55 hover:bg-white/[0.1]')}>
+                        <button key={v} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== v) : [...tricks, v])} className={cx('rounded-lg px-2.5 py-1.5 font-mono text-hint transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-surface-strong text-text-muted hover:bg-white/[0.1]')}>
                           {on ? '✓ ' : '+ '}{v}
                         </button>
                       );
@@ -336,7 +336,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
             {!isSteamClient && (
               <div>
-                <MonoLabel className="mb-1.5">{t('gameSettings:launch.workdirKicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
+                <MonoLabel className="mb-1.5">{t('gameSettings:launch.workdirKicker')} <span className="normal-case tracking-normal text-text-muted">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
                 <div className="flex items-center gap-2">
                   <Input
                     aria-label={t('gameSettings:launch.workdirAria')}
@@ -359,13 +359,13 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     {t('gameSettings:launch.browse')}
                   </Button>
                 </div>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:launch.workdirHint')}</p>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-text-body">{t('gameSettings:launch.workdirHint')}</p>
               </div>
             )}
 
             {!isSteamClient && !effectiveNative && (
               <div>
-                <MonoLabel className="mb-1.5">{t('gameSettings:launch.prefixKicker')} <span className="normal-case tracking-normal text-white/55">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
+                <MonoLabel className="mb-1.5">{t('gameSettings:launch.prefixKicker')} <span className="normal-case tracking-normal text-text-muted">{t('gameSettings:launch.optionalNote')}</span></MonoLabel>
                 <div className="flex items-center gap-2">
                   <Input
                     aria-label={t('gameSettings:launch.prefixAria')}
@@ -401,13 +401,13 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     )}
                   </SelectField>
                 </div>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
+                <p className="mt-1.5 text-[12px] leading-relaxed text-text-body">
                   {draft.wine_prefix
                     ? t('gameSettings:launch.prefixCustom')
                     : t('gameSettings:launch.prefixDefault')}
                 </p>
                 {sharedWith.length > 0 && (
-                  <div className="mt-3 rounded-2xl bg-amber-300/[0.06] p-4 ring-1 ring-amber-300/25">
+                  <div className="mt-3 rounded-2xl bg-accent-strong/[0.06] p-4 ring-1 ring-accent-strong/25">
                     <p className="font-mono text-hint text-amber-200/90">{t('gameSettings:prefix.sharedWith', { games: sharedWith.join(', ') })}</p>
                     <p className="mt-1.5 text-[12.5px] leading-relaxed text-amber-100/85">{t('gameSettings:prefix.sharedWarning')}</p>
                   </div>
@@ -448,8 +448,8 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
         </div>
 
         <div className="min-w-0 space-y-5">
-          <div className="rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-white/[0.07]">
-            <div className="mb-1 flex items-center justify-between text-white/55">
+          <div className="rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-hairline">
+            <div className="mb-1 flex items-center justify-between text-text-muted">
               <span>{t('gameSettings:preview.label')}</span>
               {preview.cmd && (
                 <Button variant="ghost" size="none" onClick={() => copy(preview.cmd)} className="rounded px-1 py-0.5" aria-label={t('gameSettings:preview.copyLabel')}>
@@ -466,8 +466,8 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
             <Button variant="primary" onClick={() => { onSave(current); markClean(); }} className="flex-1">{t('gameSettings:general.save')}</Button>
           </div>
-          {dirty && <div role="status" className="font-mono text-hint text-amber-300/80">{t('gameSettings:general.unsaved')}</div>}
-          <div className="font-mono text-[12px] leading-relaxed text-white/55">
+          {dirty && <div role="status" className="font-mono text-hint text-accent-strong/80">{t('gameSettings:general.unsaved')}</div>}
+          <div className="font-mono text-[12px] leading-relaxed text-text-muted">
             {effectiveNative && isCustom
               ? t('gameSettings:general.savedNativeNote')
               : <>{t('gameSettings:general.savedNote', { prefix: effectivePrefix })}{draft.wine_prefix ? '' : t('gameSettings:general.defaultSuffix')}</>}
@@ -615,21 +615,21 @@ function PrefixPresets({ game, current, dirty, onApplied }: {
         )}
       </div>
       {preset && (
-        <div className="mt-2.5 rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-white/[0.07]">
-          <div className="mb-1 text-white/55">{t('gameSettings:prefixPresets.previewLabel')}</div>
+        <div className="mt-2.5 rounded-xl bg-black/35 p-3.5 font-mono text-hint leading-relaxed ring-1 ring-hairline">
+          <div className="mb-1 text-text-muted">{t('gameSettings:prefixPresets.previewLabel')}</div>
           {additions.map(([k, v]) => <div key={k} className="break-all text-amber-200/80">{k}={v}</div>)}
           {overrides && <div className="break-all text-amber-200/80">{t('gameSettings:prefixPresets.overrides', { value: overrides })}</div>}
-          {skipped.length > 0 && <div className="text-white/60">{t('gameSettings:prefixPresets.skipped', { keys: skipped.join(', ') })}</div>}
-          <div className="mt-2 text-white/55">{t('gameSettings:prefixPresets.storedHeading')}</div>
-          {verbs.length > 0 && <div className="text-white/70">{t('gameSettings:prefixPresets.storedVerbs', { verbs: verbs.join(' · ') })}</div>}
-          <div className="text-white/70">{t('gameSettings:prefixPresets.storedVersion', { version })}</div>
+          {skipped.length > 0 && <div className="text-text-muted">{t('gameSettings:prefixPresets.skipped', { keys: skipped.join(', ') })}</div>}
+          <div className="mt-2 text-text-muted">{t('gameSettings:prefixPresets.storedHeading')}</div>
+          {verbs.length > 0 && <div className="text-text-body">{t('gameSettings:prefixPresets.storedVerbs', { verbs: verbs.join(' · ') })}</div>}
+          <div className="text-text-body">{t('gameSettings:prefixPresets.storedVersion', { version })}</div>
           <div className="mt-2 flex items-center gap-2">
             <Button variant="primary" size="sm" disabled={busy || dirty} onClick={applyPreset}>{t('gameSettings:prefixPresets.apply')}</Button>
             {alreadyApplied && <span className="text-[12px] text-emerald-200/85">{t('gameSettings:prefixPresets.alreadyApplied')}</span>}
           </div>
           {/* The core merges into the saved settings: unsaved edits would be
               replaced by the refresh after applying, so save them first. */}
-          {dirty && <div className="mt-1 text-[12px] text-white/60">{t('gameSettings:prefixPresets.saveFirst')}</div>}
+          {dirty && <div className="mt-1 text-[12px] text-text-muted">{t('gameSettings:prefixPresets.saveFirst')}</div>}
         </div>
       )}
       <div className="mt-2.5 flex items-center gap-2">
@@ -727,7 +727,7 @@ function CustomProgram({ game, detected, runMode, onRunMode, onChanged }: {
           </Button>
         </div>
         {detected && (
-          <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">
+          <p className="mt-1.5 text-[12px] leading-relaxed text-text-body">
             {detected.native ? t('gameSettings:program.detectedNative') : t('gameSettings:program.detectedWine')}
           </p>
         )}
@@ -740,10 +740,10 @@ function CustomProgram({ game, detected, runMode, onRunMode, onChanged }: {
           <SelectItem value="native">{t('gameSettings:program.runNative')}</SelectItem>
           <SelectItem value="wine">{t('gameSettings:program.runWine')}</SelectItem>
         </SelectField>
-        <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('gameSettings:program.runHelp')}</p>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-text-body">{t('gameSettings:program.runHelp')}</p>
       </div>
       {effectiveNative && execOk === false && (
-        <div className="rounded-2xl bg-amber-300/[0.06] p-4 ring-1 ring-amber-300/25">
+        <div className="rounded-2xl bg-accent-strong/[0.06] p-4 ring-1 ring-accent-strong/25">
           <p className="text-[12.5px] leading-relaxed text-amber-100/85">{t('gameSettings:program.notExecutable')}</p>
           <div className="mt-2.5">
             <Button variant="primary" size="sm" disabled={makingExec} onClick={makeExec}>

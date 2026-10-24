@@ -26,7 +26,7 @@ export function DialogContent({
           aria-label={label}
           aria-describedby={undefined}
           className={cn(
-            'flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-[#191410] outline-none ring-1 ring-white/10',
+            'flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-white/10',
             className,
           )}
           style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)' }}
