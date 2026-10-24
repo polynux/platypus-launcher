@@ -1,6 +1,6 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
 import type { LauncherSettings, StorePlugin, ThemeInfo } from '../types';
@@ -21,6 +21,17 @@ import { ViewHeader } from './ui';
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
 
+// The active Settings section survives a Settings re-mount (issue #111): a
+// theme switch can move Settings from page to sheet/dialog (App mounts a new
+// LauncherSettingsView), which would otherwise drop the tab back to Language.
+// The last shown section persists here; a fresh mount starts from it. The
+// pending mount index carries the picker's focus across that same re-mount:
+// only a Theme picker mounted after the switch takes focus, so the instance
+// being replaced never steals it back.
+let persistedSettingsSection = 'language';
+let themePickerMountCount = 0;
+let pendingThemePickerMount = 0;
+
 interface LauncherSettingsViewProps {
   onNotify: (msg: string, kind?: 'ok' | 'err') => void;
   /** The plugins list: the cloud-saves defaults come from the stores that offer them. */
@@ -31,7 +42,18 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const { t } = useTranslation('settings');
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
-  const [activeSection, setActiveSection] = useState(0);
+  const sectionNames = ['language', 'theme', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
+  const [, setRenderTick] = useState(0);
+  const setActiveSection = (index: number) => {
+    persistedSettingsSection = sectionNames[index] ?? persistedSettingsSection;
+    // Leaving Theme abandons a pending picker-focus handoff.
+    if (persistedSettingsSection !== 'theme') pendingThemePickerMount = 0;
+    setRenderTick((n) => n + 1);
+  };
+  // Derived from the persisted section so a same-instance navigation switch
+  // (scroll -> tabs, no re-mount) lands on what the user was on. Tab clicks
+  // update the persisted section, so this agrees with the state above.
+  const activeSection = Math.max(0, sectionNames.indexOf(persistedSettingsSection));
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -84,7 +106,6 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <BackupsSetting onNotify={onNotify} />,
     <CloudSavesDefaults plugins={plugins} />,
   ];
-  const sectionNames = ['language', 'theme', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
   const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
   const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-white/10 [&>section]:bg-white/[0.035] [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
 
@@ -151,7 +172,8 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
   // Language names stay in their own language (endonyms): translating them
   // would hide what the option means.
   // Radix Select treats "" as no value (an empty trigger), so System is
-  // 'system' inside the picker and "" in the setting.
+  // 'system' inside the picker and "" in the setting. Controlled from the
+  // first render (issue #111): while loading we show System, never undefined.
   const SYSTEM = 'system';
   const options = [
     { value: SYSTEM, label: t('language.system') },
@@ -163,7 +185,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('language.heading')}</h2>
       <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('language.description')}</p>
-      <Select value={value === null ? undefined : value || SYSTEM} onValueChange={(v) => change(v === SYSTEM ? '' : v)} disabled={value === null || busy}>
+      <Select value={value || SYSTEM} onValueChange={(v) => change(v === SYSTEM ? '' : v)} disabled={value === null || busy}>
         <SelectTrigger aria-label={t('language.label')} className="w-64">
           <SelectValue />
         </SelectTrigger>
@@ -186,6 +208,9 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
   const [themes, setThemes] = useState<ThemeInfo[] | null>(null);
   const [value, setValue] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const mountIndex = useRef(0);
+  if (mountIndex.current === 0) mountIndex.current = ++themePickerMountCount;
   useEffect(() => {
     let live = true;
     Effect.runPromise(LauncherApi.listThemes())
@@ -196,7 +221,22 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
       .catch(() => live && setValue(DEFAULT_THEME_ID));
     return () => { live = false; };
   }, []);
+  // Across a theme switch that re-mounts Settings (page -> sheet/dialog,
+  // issue #111) the fresh picker takes focus once it is enabled. Only a
+  // picker mounted after the switch qualifies, so the replaced instance
+  // never consumes the pending focus.
+  useEffect(() => {
+    if (pendingThemePickerMount === 0 || mountIndex.current < pendingThemePickerMount) return;
+    if (themes === null || value === null || busy) return;
+    pendingThemePickerMount = 0;
+    triggerRef.current?.focus();
+    document.getElementById('settings-section-theme')?.scrollIntoView({ block: 'nearest' });
+  }, [themes, value, busy]);
   const change = (id: string) => {
+    // Remember where the user was and that focus belongs to the picker: the
+    // theme apply below can re-mount this whole view on another presentation.
+    persistedSettingsSection = 'theme';
+    pendingThemePickerMount = themePickerMountCount + 1;
     setBusy(true);
     Effect.runPromise(LauncherApi.setTheme(id))
       .then((s) => {
@@ -208,7 +248,8 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
       .finally(() => setBusy(false));
   };
   // A pick the list no longer offers shows as the default, not as an empty trigger.
-  const shown = themes?.some((th) => th.id === value) ? value ?? undefined : DEFAULT_THEME_ID;
+  // Controlled from the first render (issue #111): never undefined.
+  const shown = themes?.some((th) => th.id === value) ? (value ?? DEFAULT_THEME_ID) : DEFAULT_THEME_ID;
   const warnings = (themes ?? []).flatMap((th) => th.warnings.map((w) => ({ key: `${th.id}:${w}`, text: `${th.name}: ${w}` })));
   const label = (th: ThemeInfo): string => {
     const status = th.status === 'ok' ? '' : t(`theme.status.${th.status}`, { defaultValue: th.status });
@@ -219,11 +260,16 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
     return th.name;
   };
   return (
-    <section className={SECTION}>
+    <section className={SECTION} id="settings-section-theme">
       <h2 className="text-[14px] font-bold">{t('theme.heading')}</h2>
       <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('theme.description')}</p>
       <Select value={shown} onValueChange={change} disabled={themes === null || value === null || busy}>
-        <SelectTrigger aria-label={t('theme.label')} className="w-64">
+        <SelectTrigger
+          ref={triggerRef}
+          aria-label={t('theme.label')}
+          className="w-64"
+          onFocus={() => { persistedSettingsSection = 'theme'; }}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
