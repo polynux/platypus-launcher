@@ -58,6 +58,8 @@ import type {
   TermRef,
   RunnerEnv,
   SettingGroup,
+  ThemeInfo,
+  ThemeTokens,
   Tweak,
   VersionInfo,
   VersionPin,
@@ -223,6 +225,12 @@ export const LauncherApi = {
     call<Game>('MakeGameExecutable', () => App.MakeGameExecutable(gameId)),
 
   getLauncherSettings: () => call<LauncherSettings>('GetLauncherSettings', () => App.GetLauncherSettings()),
+
+  // Themes (issue #93): the picker's list, a theme's resolved tokens ("" is the
+  // picked theme, what the UI applies at boot), and the pick itself.
+  listThemes: () => call<ThemeInfo[]>('ListThemes', () => App.ListThemes()),
+  getTheme: (id: string) => call<ThemeTokens>('GetTheme', () => App.GetTheme(id)),
+  setTheme: (id: string) => call<LauncherSettings>('SetTheme', () => App.SetTheme(id)),
 
   // The UI language (issue #39): "" is System, else a BCP 47 tag. Switching
   // applies live through applyLanguage (lib/i18n), without a restart.

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
-import type { LauncherSettings, StorePlugin } from '../types';
+import type { LauncherSettings, StorePlugin, ThemeInfo } from '../types';
 import { NumberField } from '@/components/ds/number-field';
 import { Input } from '@/components/ds/input';
 import { Switch } from '@/components/ds/switch';
@@ -15,6 +15,7 @@ import { GameFoldersSettings } from './GameFoldersSettings';
 import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { DEFAULT_THEME_ID, loadTheme } from '../lib/theme';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
@@ -63,6 +64,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
 
       <LanguageSetting onNotify={onNotify} />
+
+      <ThemeSetting onNotify={onNotify} />
 
       <GameFoldersSettings onNotify={onNotify} />
 
@@ -176,6 +179,63 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
         </SelectContent>
       </Select>
       {dev && <p className="mt-2 font-mono text-hint text-white/55">{t('language.pseudoNote')}</p>}
+    </section>
+  );
+}
+
+/** The launcher's look (issue #93): a built-in theme restyles the whole app
+ *  as soon as it is picked. A theme that needs a newer Platypus, or whose file
+ *  is broken, stays in the list with the reason, and can't be picked. */
+export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
+  const [themes, setThemes] = useState<ThemeInfo[] | null>(null);
+  const [value, setValue] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    Effect.runPromise(LauncherApi.listThemes())
+      .then((list) => live && setThemes(list ?? []))
+      .catch(() => live && setThemes([]));
+    Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => live && setValue(s.theme || DEFAULT_THEME_ID))
+      .catch(() => live && setValue(DEFAULT_THEME_ID));
+    return () => { live = false; };
+  }, []);
+  const change = (id: string) => {
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setTheme(id))
+      .then((s) => {
+        setValue(s.theme || DEFAULT_THEME_ID);
+        return loadTheme();
+      })
+      .then(() => onNotify(t('theme.saved')))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  // A pick the list no longer offers shows as the default, not as an empty trigger.
+  const shown = themes?.some((th) => th.id === value) ? value ?? undefined : DEFAULT_THEME_ID;
+  const warnings = (themes ?? []).flatMap((th) => th.warnings.map((w) => ({ key: `${th.id}:${w}`, text: `${th.name}: ${w}` })));
+  return (
+    <section className={SECTION}>
+      <h2 className="text-[14px] font-bold">{t('theme.heading')}</h2>
+      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('theme.description')}</p>
+      <Select value={shown} onValueChange={change} disabled={themes === null || value === null || busy}>
+        <SelectTrigger aria-label={t('theme.label')} className="w-64">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(themes ?? []).map((th) => (
+            <SelectItem key={th.id} value={th.id} disabled={th.status !== 'ok'}>
+              {th.status === 'ok' ? th.name : `${th.name} (${t(`theme.status.${th.status}`, { defaultValue: th.status })})`}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {warnings.length > 0 && (
+        <ul aria-label={t('theme.warningsLabel')} className="mt-3 space-y-1 font-mono text-hint leading-relaxed text-white/55">
+          {warnings.map((w) => <li key={w.key}>{w.text}</li>)}
+        </ul>
+      )}
     </section>
   );
 }

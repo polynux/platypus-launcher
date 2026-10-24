@@ -367,6 +367,38 @@ type LauncherSettings struct {
 	// (issue #49), off by default. The shell reads it and hides the window
 	// to the tray while a game session runs.
 	MinimizeToTray bool `json:"minimize_to_tray"`
+	// Theme is the picked theme's id (issue #93): "" is the built-in default.
+	Theme string `json:"theme"`
+}
+
+// ThemeInfo is one theme in the Settings picker (issue #93). Status is "ok"
+// (can be picked), "newer" (needs a newer Platypus) or "invalid" (its
+// theme.toml can't be used). Warnings list what was ignored or fell back.
+type ThemeInfo struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Schema   int      `json:"schema"`
+	Supports []string `json:"supports"`
+	Status   string   `json:"status"`
+	Warnings []string `json:"warnings"`
+}
+
+// ThemeTokens is a theme's resolved tokens (issue #93): every token has a
+// value, the built-in one where the theme's is missing or invalid. The UI sets
+// them as CSS custom properties.
+type ThemeTokens struct {
+	ID     string            `json:"id"`
+	Tokens map[string]string `json:"tokens"`
+	Wash   []WashLayer       `json:"wash"`
+}
+
+// WashLayer is one radial gradient of the background wash: where it sits,
+// how big it is, its colour, and where it fades out.
+type WashLayer struct {
+	At    string `json:"at"`
+	Size  string `json:"size"`
+	Color string `json:"color"`
+	Fade  string `json:"fade"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when

@@ -1,0 +1,51 @@
+# The default theme: the warm control room (DESIGN.md §1). Its values are the
+# ones style.css and the components have always used.
+
+[theme]
+id = "warm"
+name = "Warm"
+schema = 1
+supports = ["tokens"]
+
+[tokens]
+ground = "#130f0a"
+raised = "#191410"
+surface = "rgba(255, 255, 255, 0.06)"
+surface-strong = "rgba(255, 255, 255, 0.1)"
+hairline = "rgba(255, 255, 255, 0.07)"
+text = "#ece6da"
+text-body = "#a8a29e"
+text-muted = "rgba(255, 255, 255, 0.55)"
+text-faint = "#78716c"
+accent = "#fbbf24"
+accent-strong = "#fcd34d"
+on-accent = "#130f0a"
+ok = "#34d399"
+attention = "#fb923c"
+info = "#7dd3fc"
+dl = "#a78bfa"
+danger = "#f87171"
+focus = "rgba(252, 211, 77, 0.8)"
+radius-chip = "0.75rem"
+radius-card = "1rem"
+radius-panel = "1.5rem"
+font-sans = '"Hanken Grotesk", system-ui, sans-serif'
+font-mono = '"JetBrains Mono", ui-monospace, monospace'
+
+[[wash]]
+at = "14% -8%"
+size = "1100px 620px"
+color = "rgba(150, 96, 58, 0.46)"
+fade = "58%"
+
+[[wash]]
+at = "90% 10%"
+size = "880px 520px"
+color = "rgba(86, 62, 128, 0.44)"
+fade = "54%"
+
+[[wash]]
+at = "52% 108%"
+size = "760px 460px"
+color = "rgba(30, 78, 96, 0.36)"
+fade = "56%"

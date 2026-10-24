@@ -1,0 +1,51 @@
+# A cool dark alternate: slate ground, sky accent, tighter corners. It shows
+# what a theme can change; it is not a design proposal.
+
+[theme]
+id = "cool"
+name = "Cool dark"
+schema = 1
+supports = ["tokens"]
+
+[tokens]
+ground = "#0b1118"
+raised = "#101a24"
+surface = "rgba(148, 163, 184, 0.08)"
+surface-strong = "rgba(148, 163, 184, 0.14)"
+hairline = "rgba(148, 163, 184, 0.12)"
+text = "#e2e8f0"
+text-body = "#94a3b8"
+text-muted = "rgba(226, 232, 240, 0.6)"
+text-faint = "#64748b"
+accent = "#7dd3fc"
+accent-strong = "#bae6fd"
+on-accent = "#0b1118"
+ok = "#4ade80"
+attention = "#fdba74"
+info = "#67e8f9"
+dl = "#c4b5fd"
+danger = "#fb7185"
+focus = "rgba(125, 211, 252, 0.8)"
+radius-chip = "0.5rem"
+radius-card = "0.75rem"
+radius-panel = "1rem"
+font-sans = '"Hanken Grotesk", system-ui, sans-serif'
+font-mono = '"JetBrains Mono", ui-monospace, monospace'
+
+[[wash]]
+at = "10% -10%"
+size = "1000px 600px"
+color = "rgba(56, 189, 248, 0.22)"
+fade = "56%"
+
+[[wash]]
+at = "92% 0%"
+size = "900px 520px"
+color = "rgba(99, 102, 241, 0.2)"
+fade = "54%"
+
+[[wash]]
+at = "50% 110%"
+size = "800px 460px"
+color = "rgba(20, 184, 166, 0.16)"
+fade = "56%"

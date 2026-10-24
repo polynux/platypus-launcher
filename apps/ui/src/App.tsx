@@ -39,6 +39,7 @@ import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRe
 import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
+import { loadTheme } from './lib/theme';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { hasDetails, plainError } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
@@ -294,6 +295,9 @@ export function App() {
         () => applyLanguage(''),
       );
   }, []);
+
+  // The picked theme (issue #93) replaces the one applied from the cache at boot.
+  useEffect(() => { void loadTheme(); }, []);
 
   // StrictMode mounts effects twice in dev; scan only once on startup.
   const started = useRef(false);
