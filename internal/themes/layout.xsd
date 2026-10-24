@@ -37,7 +37,9 @@
           <xs:restriction base="xs:string">
             <xs:enumeration value="dashboard" />
             <xs:enumeration value="library" />
+            <xs:enumeration value="plugins" />
             <xs:enumeration value="shell" />
+            <xs:enumeration value="storage" />
           </xs:restriction>
         </xs:simpleType>
       </xs:attribute>
@@ -50,12 +52,16 @@
         <xs:restriction base="xs:string">
           <xs:enumeration value="activity" />
           <xs:enumeration value="all-titles" />
+          <xs:enumeration value="builtin" />
           <xs:enumeration value="chips" />
           <xs:enumeration value="collections" />
           <xs:enumeration value="continue" />
+          <xs:enumeration value="data" />
+          <xs:enumeration value="drives" />
           <xs:enumeration value="empty" />
           <xs:enumeration value="filters" />
           <xs:enumeration value="footer" />
+          <xs:enumeration value="games" />
           <xs:enumeration value="grid" />
           <xs:enumeration value="header" />
           <xs:enumeration value="hero" />

@@ -109,4 +109,28 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
 	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "bottom"},
+	// Storage layout entries (issue #102): its regions, then its blocks in
+	// the built-in order (inventory §2.7). None of them is required: the
+	// drives and the game list act on nothing by themselves (remove/move
+	// flows stay inside the games block). The built-in arrangement (issue
+	// #108) keeps the header full width and stacks drives over games; themes
+	// like cool move the drives to a side column.
+	{Entry: "storage.top", Since: "1.0", Kind: "region"},
+	{Entry: "storage.main", Since: "1.0", Kind: "region"},
+	{Entry: "storage.side", Since: "1.0", Kind: "region"},
+	{Entry: "storage.header", Since: "1.0", Kind: "block", Region: "top"},
+	{Entry: "storage.drives", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "storage.games", Since: "1.0", Kind: "block", Region: "main"},
+	// Plugins layout entries (issue #102): its regions, then its blocks in
+	// the built-in order (inventory §2.8). Only the store cards are required:
+	// each card renders its own login row and approve/enable actions, so a
+	// layout can't hide them on their own. Data cards carry no actions and
+	// the built-in list stays hideable.
+	{Entry: "plugins.top", Since: "1.0", Kind: "region"},
+	{Entry: "plugins.main", Since: "1.0", Kind: "region"},
+	{Entry: "plugins.side", Since: "1.0", Kind: "region"},
+	{Entry: "plugins.header", Since: "1.0", Kind: "block", Region: "top"},
+	{Entry: "plugins.store", Since: "1.0", Kind: "block", Required: true, Region: "main"},
+	{Entry: "plugins.data", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "plugins.builtin", Since: "1.0", Kind: "block", Region: "main"},
 }

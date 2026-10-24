@@ -61,6 +61,33 @@ var builtinLayoutXML = map[string]string{
     </row>
   </region>
 </layout>`,
+	// Today's storage: the header full width, the drives over the game list
+	// below. The games block owns the remove and move flows, like the
+	// built-in list does.
+	"storage": `<layout view="storage" catalog="1.0">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="drives" />
+    <block name="games" />
+  </region>
+</layout>`,
+	// Today's plugins: the header full width, then the store cards, the data
+	// cards and the built-in list below. The store block renders each card
+	// with its own login row and approve/enable actions, so a layout can't
+	// hide them on their own; the approve and login dialogs stay owned by
+	// the view.
+	"plugins": `<layout view="plugins" catalog="1.0">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="store" />
+    <block name="data" />
+    <block name="builtin" />
+  </region>
+</layout>`,
 }
 
 // builtinLayouts holds the parsed built-ins, in layout order.

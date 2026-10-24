@@ -513,6 +513,92 @@
       "axes": null,
       "kind": "block",
       "region": "bottom"
+    },
+    {
+      "entry": "storage.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "storage.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "storage.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "storage.header",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "storage.drives",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "storage.games",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "plugins.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "plugins.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "plugins.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "plugins.header",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "plugins.store",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "plugins.data",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "plugins.builtin",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
     }
   ]
 }

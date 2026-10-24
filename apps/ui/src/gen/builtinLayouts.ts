@@ -6,4 +6,6 @@ import type { ThemeLayout } from '../types';
 export const BUILTIN_LAYOUTS: Record<string, ThemeLayout> = {
   "dashboard": {"view":"dashboard","regions":[{"name":"top","nodes":[{"block":"hero"},{"block":"welcome"},{"block":"empty"}]},{"name":"main","nodes":[{"block":"continue"}]},{"name":"side","nodes":[{"block":"waiting"},{"block":"recent"}]},{"name":"bottom","nodes":[{"block":"activity","attrs":{"limit":"8"}}]}]},
   "library": {"view":"library","regions":[{"name":"top","nodes":[{"block":"header"},{"block":"warnings"},{"block":"empty"}]},{"name":"bottom","nodes":[{"block":"last-played"},{"block":"grid"},{"block":"table"},{"row":[{"block":"activity","attrs":{"limit":"6"}},{"block":"recent"}]}]}]},
+  "plugins": {"view":"plugins","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"store"},{"block":"data"},{"block":"builtin"}]}]},
+  "storage": {"view":"storage","regions":[{"name":"top","nodes":[{"block":"header"}]},{"name":"main","nodes":[{"block":"drives"},{"block":"games"}]}]},
 };
