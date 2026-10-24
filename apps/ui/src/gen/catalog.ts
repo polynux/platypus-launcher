@@ -28,12 +28,15 @@ export interface VariantValues {
   "library-tile.compat": "on" | "off";
   "library-tile.overlay": "on" | "off";
   "library-tile.density": "comfortable" | "compact";
+  "library.presentation": "grid" | "list-detail";
   "hero.height": "tall" | "regular" | "compact";
   "hero.gradient": "warm" | "neutral" | "none";
   "hero.chips": "glass" | "solid";
   "game-hero.height": "tall" | "regular" | "compact";
   "game-hero.gradient": "warm" | "neutral" | "none";
   "game-hero.chips": "glass" | "solid";
+  "game-hero.logo": "title" | "logo";
+  "game.structure": "sections" | "tabs";
 }
 
 export type VariantAxis = keyof VariantValues;
@@ -66,10 +69,13 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "library-tile.compat": "on",
   "library-tile.overlay": "on",
   "library-tile.density": "compact",
+  "library.presentation": "grid",
   "hero.height": "tall",
   "hero.gradient": "warm",
   "hero.chips": "glass",
   "game-hero.height": "regular",
   "game-hero.gradient": "warm",
   "game-hero.chips": "solid",
+  "game-hero.logo": "title",
+  "game.structure": "sections",
 };

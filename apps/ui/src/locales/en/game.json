@@ -363,5 +363,39 @@
     "saving": "Saving…",
     "saved": "Saved",
     "failed": "Failed"
+  },
+  "tabs": {
+    "label": "Game page",
+    "store": "Store page",
+    "achievements": "Achievements",
+    "activity": "Activity",
+    "saves": "Saves",
+    "compat": "Compatibility"
+  },
+  "strip": {
+    "tune": "Tune",
+    "starting": "Starting",
+    "elapsedLabel": "{{time}} elapsed",
+    "saveConflict": "Save conflict, resolve",
+    "saveSynced": "Saves in sync",
+    "saveSyncing": "Uploading save",
+    "saveLocal": "Local saves only",
+    "saveOff": "Cloud saves off",
+    "launchFrom": "Launch from",
+    "update": "Update"
+  },
+  "storeTab": {
+    "pictures": "Pictures",
+    "picturesCount": "{{count}} screenshots",
+    "played": "Played",
+    "lastPlayed": "Last played",
+    "runsWith": "Runs with",
+    "protondb": "ProtonDB",
+    "neverPlayed": "Never played",
+    "unknownRunner": "Unknown",
+    "noRating": "No rating",
+    "achievements": "Achievements",
+    "seeAll": "See all {{total}} achievements",
+    "details": "Details"
   }
 }

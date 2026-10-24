@@ -140,5 +140,21 @@
     "finished": "finished",
     "abandoned": "abandoned"
   },
-  "statusFilterAria": "Filter by status"
+  "statusFilterAria": "Filter by status",
+  "listDetail": {
+    "listLabel": "Games",
+    "filterAria": "Filter games",
+    "filterPlaceholder": "Filter",
+    "sortAria": "Sort games",
+    "sort": {
+      "recent": "Recent",
+      "title": "Title",
+      "hours": "Most played"
+    },
+    "empty": "Nothing here.",
+    "showAll": "Show all games",
+    "notInstalled": "Not installed",
+    "neverPlayed": "Never played",
+    "needsAttention": "Needs attention"
+  }
 }

@@ -16,6 +16,9 @@ supports = ["tokens", "variants"]
 "color.game-tone" = "whole"
 "game-settings.presentation" = "sheet"
 "game-settings.tabs" = "accordion"
+"library.presentation" = "list-detail"
+"game.structure" = "tabs"
+"game-hero.logo" = "logo"
 
 [tokens]
 ground = "#13161b"

@@ -34,6 +34,7 @@ import { LauncherApi } from '../effect/runtime';
 import { useVariant, useThemeLayout } from '../lib/theme';
 import { ThemeLayout } from '../lib/layout';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { GameTabsView } from './GameTabs';
 import type { ThemeLayout as GameLayoutData } from '../types';
 import { offers } from '../lib/capabilities';
 import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
@@ -104,6 +105,9 @@ interface GamePageProps {
    *  #124). Cleared through onSettingsOpened once the page has opened it. */
   openSettingsTab?: GameSettingsTab;
   onSettingsOpened?: () => void;
+  /** When the session started (ms epoch), for the tabs strip elapsed time.
+   *  Only the tabs variant reads it; sections keep today's PlayButton. */
+  sessionStartedAt?: number;
 }
 
 // Store metadata is cached across navigations, keyed by game id + version.
@@ -487,6 +491,9 @@ export function GamePage(p: GamePageProps) {
   // sheet overlays the game, while a page replaces it, with its own back
   // entry to the game.
   const settingsPage = useVariant('game-settings.presentation') === 'page';
+  // The theme picks the game structure (issue #127): sections is today's
+  // page, tabs is the /21 hero with the action strip and sticky tabs.
+  const structure = useVariant('game.structure');
   const settingsModal = settingsTab ? (
     <GameSettingsModal
       game={game}
@@ -535,6 +542,96 @@ export function GamePage(p: GamePageProps) {
   // The built-in arrangement is the initial layout, so the first paint
   // already shows today's game page before the core answers over RPC.
   const layout = useThemeLayout('game') ?? BUILTIN_LAYOUTS['game'];
+  // Tabs re-arrange the same blocks (issue #127): the page owns the data,
+  // the tabs only lay it out, so required blocks stay present.
+  if (structure === 'tabs') {
+    return (
+      <TooltipProvider>
+        <div className="relative isolate p-7">
+          {game.background_url && (
+            <div
+              aria-hidden
+              data-testid="game-background"
+              className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-cover bg-top opacity-[.2]"
+              style={{ backgroundImage: `url("${game.background_url}")`, maskImage: 'linear-gradient(180deg, #000 30%, transparent)', WebkitMaskImage: 'linear-gradient(180deg, #000 30%, transparent)' }}
+            />
+          )}
+          <GameTabsView
+            game={game}
+            hero={hero}
+            plugin={plugin}
+            runners={runners}
+            activity={activity}
+            backLabel={p.backLabel}
+            onBack={p.onBack}
+            onPlay={p.onPlay}
+            onStop={p.onStop}
+            onForceStop={p.onForceStop}
+            launching={p.launching}
+            session={session}
+            sessionStartedAt={p.sessionStartedAt}
+            refreshing={p.refreshing}
+            job={job}
+            sourceLogos={p.sourceLogos}
+            onJob={p.onJob}
+            onJobAction={p.onJobAction}
+            onAllowFolder={p.onAllowFolder}
+            onNavigate={p.onNavigate}
+            onNotify={p.onNotify}
+            onCopyChanged={p.onCopyChanged}
+            installing={installing}
+            installSize={installSize}
+            canChooseOptions={canChooseOptions}
+            canChooseVersion={canChooseVersion}
+            onInstall={() => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install'))}
+            onInstallTo={plugin && !canChooseOptions ? () => setInstallTo(true) : undefined}
+            onOpenVersions={() => setSettingsTab('versions')}
+            onOpenPlugins={() => p.onNavigate({ name: 'plugins' })}
+            media={media}
+            details={details}
+            loading={loading}
+            error={error}
+            compatUrls={{ protondb: ratingBadge?.link, wiki: info?.wiki?.url }}
+            onReload={reload}
+            onSearchInfo={onSearchInfo}
+            onLinkInfo={onLinkInfo}
+            onUnlinkInfo={onUnlinkInfo}
+            onOpenStore={onOpenStore}
+            hours={hours}
+            last={last}
+            runsWith={facts[0]?.[1] ?? ''}
+            protondb={ratingBadge?.label ?? ''}
+            progress={progress}
+            ach={ach}
+            events={events}
+            compatText={compat}
+            facts={facts}
+            onOpenRunner={() => setSettingsTab('general')}
+          />
+          {!settingsPage && settingsModal}
+          {installTo && plugin && (
+            <InstallDialog
+              game={game}
+              plugin={plugin}
+              onClose={() => setInstallTo(false)}
+              onChanged={() => p.onVersionsChanged?.()}
+              onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+            />
+          )}
+          {optionsOpen && plugin && (
+            <InstallOptionsDialog
+              game={game}
+              plugin={plugin}
+              mode="install"
+              onClose={() => setOptionsOpen(false)}
+              onChanged={() => p.onVersionsChanged?.()}
+              onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+            />
+          )}
+        </div>
+      </TooltipProvider>
+    );
+  }
   const blocks = gameBlocks(
     {
       backLabel: p.backLabel,
@@ -877,7 +974,7 @@ function gameBlocks(d: GameData, _layout?: GameLayoutData): Record<string, React
 
 /** The store's HTML (description, requirements): core sanitizes it to the
  *  allowlist, so rendering it as markup is safe. Links open in the browser. */
-function SafeHtml({ html, testid }: { html: string; testid?: string }) {
+export function SafeHtml({ html, testid }: { html: string; testid?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -1002,7 +1099,7 @@ function controllerLabel(t: (key: string) => string, c?: string): string | null 
  *  here, not in the hero. Sideloaded games (issue #38) get a "Find info
  *  online" action when nothing is linked, and an attribution + Unlink control
  *  once linked. */
-function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, onReload, onSearchInfo, onLinkInfo, onUnlinkInfo }: {
+export function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, onReload, onSearchInfo, onLinkInfo, onUnlinkInfo, hideDetails }: {
   game: Game;
   details: GameDetails | null;
   loading: boolean;
@@ -1015,6 +1112,8 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
   onSearchInfo: (query: string) => Promise<ArtCandidate[]>; // i18n:allow: Promise return type, not user-facing text
   onLinkInfo: (id: string, source: string, infoId: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
   onUnlinkInfo: (id: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  /** The tabs store page shows Details in its side column: hide the grid here. */
+  hideDetails?: boolean;
 }) {
   const { t } = useTranslation('game');
   const [expanded, setExpanded] = useState(false);
@@ -1082,7 +1181,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
       {isCustom && !linked && !loading && (
         <InfoFinder game={game} onLinked={() => onReload?.()} onSearch={onSearchInfo} onLink={onLinkInfo} />
       )}
-      {rows.length > 0 && (
+      {!hideDetails && rows.length > 0 && (
         <dl data-testid="details-grid" className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-hairline pt-3">
           {rows.map(([k, v]) => (
             <div key={k} className="min-w-0">
@@ -1684,7 +1783,7 @@ function InstallationPanel({
   );
 }
 
-function AchievementsSection({
+export function AchievementsSection({
   ach,
   known,
   viaSteam,
