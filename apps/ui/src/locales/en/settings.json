@@ -1,6 +1,7 @@
 {
  "title": "Settings",
  "subtitle": "Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.",
+ "sections": { "label": "Settings sections", "language": "Language", "theme": "Theme", "folders": "Game folders", "prefixes": "Wine prefix", "cleanup": "Canceled downloads", "ratings": "Game information", "artwork": "Artwork", "gameInfo": "Game details", "chat": "Chat", "tray": "System tray", "backups": "Save backups", "cloud": "Cloud saves" },
  "language": {
   "heading": "Language",
   "description": "The language of the launcher. System follows your desktop language. Applies right away, without a restart.",

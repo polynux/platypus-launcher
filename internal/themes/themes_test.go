@@ -1,6 +1,7 @@
 package themes
 
 import (
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -82,6 +83,44 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	cool := Resolve("cool")
 	if cool.ID != "cool" || cool.Tokens["ground"] != "#0b1118" || len(cool.Wash) != 3 {
 		t.Fatalf("Resolve(cool) = %+v", cool)
+	}
+	if cool.Variants.Settings.Presentation != "sheet" || cool.Variants.Settings.Navigation != "tabs" || cool.Variants.Section.Chrome != "framed" {
+		t.Fatalf("cool variants = %v", cool.Variants)
+	}
+	if def.Variants.Settings.Presentation != "page" || def.Variants.Settings.Navigation != "scroll" || def.Variants.Section.Chrome != "hairline" {
+		t.Fatalf("warm variants = %v", def.Variants)
+	}
+}
+
+func TestCatalogSnapshot(t *testing.T) {
+	want := []types.ThemeCatalogEntry{
+		{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+			{Name: "presentation", Values: []string{"page", "dialog", "sheet"}, Default: "page", Since: "1.0"},
+			{Name: "navigation", Values: []string{"scroll", "tabs"}, Default: "scroll", Since: "1.0"},
+		}},
+		{Entry: "section", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+			{Name: "chrome", Values: []string{"hairline", "framed", "plain"}, Default: "hairline", Since: "1.0"},
+		}},
+	}
+	if CatalogVersion != "1.0" || !reflect.DeepEqual(Catalog, want) {
+		t.Fatalf("catalog changed without updating its snapshot and version: %#v", Catalog)
+	}
+}
+
+func TestVariantsWarnAndFallBack(t *testing.T) {
+	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1) + `
+[variants]
+"settings.presentation" = "drawer"
+"settings.navigation" = "tabs"
+"unknown.axis" = "x"
+`
+	th := parse(t, src)
+	if !warningsContain(th, "unknown value") || !warningsContain(th, "unknown variant axis") {
+		t.Fatalf("warnings = %v", th.Info.Warnings)
+	}
+	got := resolve(th, true)
+	if got.Variants.Settings.Presentation != "page" || got.Variants.Settings.Navigation != "tabs" {
+		t.Fatalf("variants = %v", got.Variants)
 	}
 }
 

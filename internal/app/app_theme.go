@@ -23,6 +23,9 @@ func (a *App) GetTheme(id string) types.ThemeTokens {
 	return themes.Resolve(id)
 }
 
+// GetThemeCatalog returns the versioned variant catalog used by the UI.
+func (a *App) GetThemeCatalog() []types.ThemeCatalogEntry { return themes.Catalog }
+
 // SetTheme saves the picked theme ("" for the built-in default). Only a theme
 // listed as "ok" can be picked.
 func (a *App) SetTheme(id string) (types.LauncherSettings, error) {

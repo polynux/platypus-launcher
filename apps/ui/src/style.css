@@ -54,9 +54,14 @@
   --color-ring: var(--ring);
 
   --animate-modal-in: modal-in 150ms ease-out;
+  --animate-sheet-in: sheet-in 180ms ease-out;
   @keyframes modal-in {
     from { opacity: 0; transform: scale(0.96); }
     to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes sheet-in {
+    from { opacity: 0.8; transform: translateX(2rem); }
+    to { opacity: 1; transform: translateX(0); }
   }
 }
 

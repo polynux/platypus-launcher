@@ -75,9 +75,10 @@ var (
 // Theme is one parsed theme.toml. Tokens and Wash hold only the values that
 // passed validation; Resolve fills in the rest from the default.
 type Theme struct {
-	Info   types.ThemeInfo
-	Tokens map[string]string
-	Wash   []types.WashLayer
+	Info     types.ThemeInfo
+	Tokens   map[string]string
+	Wash     []types.WashLayer
+	Variants map[string]string
 }
 
 // file is the theme.toml shape. Tokens and wash layers decode as loose maps so
@@ -89,16 +90,18 @@ type file struct {
 		Schema   int      `toml:"schema"`
 		Supports []string `toml:"supports"`
 	} `toml:"theme"`
-	Tokens map[string]any   `toml:"tokens"`
-	Wash   []map[string]any `toml:"wash"`
+	Tokens   map[string]any   `toml:"tokens"`
+	Wash     []map[string]any `toml:"wash"`
+	Variants map[string]any   `toml:"variants"`
 }
 
 // Parse reads one theme.toml. It never fails: a file it can't use comes back
 // with status invalid and the reason in Warnings.
 func Parse(src []byte) Theme {
 	t := Theme{
-		Info:   types.ThemeInfo{Status: StatusInvalid, Supports: []string{}, Warnings: []string{}},
-		Tokens: map[string]string{},
+		Info:     types.ThemeInfo{Status: StatusInvalid, Supports: []string{}, Warnings: []string{}},
+		Tokens:   map[string]string{},
+		Variants: map[string]string{},
 	}
 	var f file
 	md, err := toml.Decode(string(src), &f)
@@ -136,7 +139,36 @@ func Parse(src []byte) Theme {
 	if len(f.Wash) > 0 {
 		t.setWash(f.Wash)
 	}
+	for _, key := range slices.Sorted(maps.Keys(f.Variants)) {
+		t.setVariant(key, f.Variants[key])
+	}
 	return t
+}
+
+func (t *Theme) setVariant(key string, raw any) {
+	parts := strings.Split(key, ".")
+	if len(parts) != 2 {
+		t.warn("unknown variant axis %q, ignored", key)
+		return
+	}
+	for _, entry := range Catalog {
+		if entry.Entry != parts[0] {
+			continue
+		}
+		for _, axis := range entry.Axes {
+			if axis.Name != parts[1] {
+				continue
+			}
+			value, ok := raw.(string)
+			if !ok || !slices.Contains(axis.Values, value) {
+				t.warn("unknown value %q for variant %s, using the built-in value", raw, key)
+				return
+			}
+			t.Variants[key] = value
+			return
+		}
+	}
+	t.warn("unknown variant axis %q, ignored", key)
 }
 
 func (t *Theme) warn(format string, args ...any) {
@@ -312,7 +344,21 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 	if !ok {
 		panic("themes: the built-in default " + DefaultID + " is missing")
 	}
+	variants := map[string]string{}
+	for _, entry := range Catalog {
+		for _, axis := range entry.Axes {
+			key := entry.Entry + "." + axis.Name
+			variants[key] = axis.Default
+		}
+	}
 	out := types.ThemeTokens{ID: def.Info.ID, Tokens: map[string]string{}, Wash: def.Wash}
+	out.Variants = types.ThemeVariants{
+		Settings: types.ThemeSettingsVariants{
+			Presentation: variants["settings.presentation"],
+			Navigation:   variants["settings.navigation"],
+		},
+		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
+	}
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
 	}
@@ -325,6 +371,18 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 	}
 	if t.Wash != nil {
 		out.Wash = t.Wash
+	}
+	if slices.Contains(t.Info.Supports, "variants") {
+		for key, value := range t.Variants {
+			variants[key] = value
+		}
+	}
+	out.Variants = types.ThemeVariants{
+		Settings: types.ThemeSettingsVariants{
+			Presentation: variants["settings.presentation"],
+			Navigation:   variants["settings.navigation"],
+		},
+		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
 	}
 	return out
 }

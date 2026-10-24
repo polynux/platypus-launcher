@@ -1,6 +1,7 @@
 {
  "title": "Paramètres",
  "subtitle": "Réglages généraux de Platypus, enregistrés dans ~/.local/share/platypus/settings.json.",
+ "sections": { "label": "Sections des paramètres", "language": "Langue", "theme": "Thème", "folders": "Dossiers de jeux", "prefixes": "Préfixe Wine", "cleanup": "Téléchargements annulés", "ratings": "Informations sur les jeux", "artwork": "Illustrations", "gameInfo": "Détails des jeux", "chat": "Discussion", "tray": "Zone de notification", "backups": "Sauvegardes", "cloud": "Sauvegardes cloud" },
  "language": {
   "heading": "Langue",
   "description": "La langue du lanceur. Système suit la langue de votre bureau. S'applique aussitôt, sans redémarrage.",
