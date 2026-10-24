@@ -85,6 +85,29 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if cool.ID != "cool" || cool.Tokens["ground"] != "#0b1118" || len(cool.Wash) != 3 {
 		t.Fatalf("Resolve(cool) = %+v", cool)
 	}
+	if cool.Variants.Settings.Presentation != "sheet" || cool.Variants.Settings.Navigation != "tabs" || cool.Variants.Section.Chrome != "framed" {
+		t.Fatalf("cool variants = %v", cool.Variants)
+	}
+	if def.Variants.Settings.Presentation != "page" || def.Variants.Settings.Navigation != "scroll" || def.Variants.Section.Chrome != "hairline" {
+		t.Fatalf("warm variants = %v", def.Variants)
+	}
+}
+
+func TestVariantsWarnAndFallBack(t *testing.T) {
+	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1) + `
+[variants]
+"settings.presentation" = "drawer"
+"settings.navigation" = "tabs"
+"unknown.axis" = "x"
+`
+	th := parse(t, src)
+	if !warningsContain(th, "unknown value") || !warningsContain(th, "unknown variant axis") {
+		t.Fatalf("warnings = %v", th.Info.Warnings)
+	}
+	got := resolve(th, true)
+	if got.Variants.Settings.Presentation != "page" || got.Variants.Settings.Navigation != "tabs" {
+		t.Fatalf("variants = %v", got.Variants)
+	}
 }
 
 func TestValidThemeResolvesItsTokens(t *testing.T) {
@@ -97,6 +120,41 @@ func TestValidThemeResolvesItsTokens(t *testing.T) {
 	}
 	if th.Tokens["accent"] != "#7dd3fc" {
 		t.Fatalf("accent = %q", th.Tokens["accent"])
+	}
+}
+
+func TestMissingCatalogVersionAssumesOneWithoutWarning(t *testing.T) {
+	th := parse(t, minimal)
+	if th.Info.Status != StatusOK || len(th.Info.Warnings) != 0 {
+		t.Fatalf("status %q warnings %v, want ok and no warning", th.Info.Status, th.Info.Warnings)
+	}
+}
+
+func TestNewerMajorCatalogNeedsNewerPlatypus(t *testing.T) {
+	src := strings.Replace(minimal, "schema = 1", "schema = 1\ncatalog = \"2.0\"", 1)
+	th := parse(t, src)
+	if th.Info.Status != StatusNewer || !warningsContain(th, "needs catalog 2.0") {
+		t.Fatalf("status %q warnings %v, want newer catalog status", th.Info.Status, th.Info.Warnings)
+	}
+	if got := resolve(th, true); got.ID != DefaultID {
+		t.Fatalf("newer catalog theme resolved as %q, want default", got.ID)
+	}
+}
+
+func TestNewerMinorCatalogIsUsableAndUnknownVariantsFallBack(t *testing.T) {
+	src := strings.Replace(minimal, "schema = 1", "schema = 1\ncatalog = \"1.1\"", 1)
+	src = strings.Replace(src, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1) + `
+[variants]
+"settings.navigation" = "tabs"
+"settings.presentation" = "drawer"
+`
+	th := parse(t, src)
+	if th.Info.Status != StatusOK || !warningsContain(th, "unknown value") {
+		t.Fatalf("status %q warnings %v, want usable theme and unknown-value warning", th.Info.Status, th.Info.Warnings)
+	}
+	got := resolve(th, true)
+	if got.Variants.Settings.Navigation != "tabs" || got.Variants.Settings.Presentation != "page" {
+		t.Fatalf("variants = %v, want known 1.0 value applied and unknown value defaulted", got.Variants)
 	}
 }
 

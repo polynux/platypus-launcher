@@ -828,6 +828,19 @@ export namespace types {
     version: string;
   }
 
+  export interface ThemeCatalogAxis {
+    name: string;
+    values: string[];
+    default: string;
+    since: string;
+  }
+
+  export interface ThemeCatalogEntry {
+    entry: string;
+    since: string;
+    axes: types.ThemeCatalogAxis[];
+  }
+
   export interface ThemeInfo {
     id: string;
     name: string;
@@ -837,10 +850,25 @@ export namespace types {
     warnings: string[];
   }
 
+  export interface ThemeSectionVariants {
+    chrome: string;
+  }
+
+  export interface ThemeSettingsVariants {
+    presentation: string;
+    navigation: string;
+  }
+
   export interface ThemeTokens {
     id: string;
     tokens: Record<string, string>;
     wash: types.WashLayer[];
+    variants: types.ThemeVariants;
+  }
+
+  export interface ThemeVariants {
+    settings: types.ThemeSettingsVariants;
+    section: types.ThemeSectionVariants;
   }
 
   export interface Tweak {

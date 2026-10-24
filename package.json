@@ -33,5 +33,9 @@
   },
   "trustedDependencies": [
     "electron"
-  ]
+  ],
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "vitest-axe": "^0.1.0"
+  }
 }

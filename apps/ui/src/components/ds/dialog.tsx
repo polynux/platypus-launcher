@@ -16,17 +16,19 @@ export function DialogContent({
   className,
   children,
   label,
+  sheet = false,
   ...props
-}: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, 'aria-label'> & { label: string }) {
+}: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, 'aria-label'> & { label: string; sheet?: boolean }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay data-slot="dialog-overlay" className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-6">
+      <DialogPrimitive.Overlay data-slot="dialog-overlay" className={cn('fixed inset-0 z-50 grid place-items-center bg-black/65 p-6', sheet && 'place-items-stretch justify-items-end p-0')}>
         <DialogPrimitive.Content
           data-slot="dialog-content"
           aria-label={label}
           aria-describedby={undefined}
           className={cn(
-            'flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-white/10',
+            'relative flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-white/10',
+            sheet && 'h-full max-h-full w-[min(42rem,92vw)] animate-sheet-in motion-reduce:animate-none rounded-l-3xl rounded-r-none',
             className,
           )}
           style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)' }}

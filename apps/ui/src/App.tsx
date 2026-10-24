@@ -44,7 +44,10 @@ import { LibrarySkeleton } from './components/LibrarySkeleton';
 import { hasDetails, plainError } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
+import { Modal } from './components/Modal';
+import { useVariant } from './lib/theme';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
+import { X } from 'lucide-react';
 
 export function App() {
   const { t } = useTranslation(['nav', 'common', 'activity']);
@@ -66,6 +69,18 @@ export function App() {
   const [scanning, setScanning] = useState(false);
 
   const [view, setView] = useState<View>({ name: 'dashboard' });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsReturnView, setSettingsReturnView] = useState<View>({ name: 'dashboard' });
+  const settingsPresentation = useVariant('settings.presentation');
+  useEffect(() => {
+    if (settingsPresentation !== 'page' && view.name === 'settings') {
+      setSettingsOpen(true);
+      setView(settingsReturnView.name === 'settings' ? { name: 'dashboard' } : settingsReturnView);
+    } else if (settingsPresentation === 'page' && settingsOpen) {
+      setSettingsOpen(false);
+      setView({ name: 'settings' });
+    }
+  }, [settingsPresentation, settingsOpen, settingsReturnView, view.name]);
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<StoreType | 'all'>('all');
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
@@ -762,7 +777,7 @@ export function App() {
           />
         );
       case 'settings':
-        return <LauncherSettingsView onNotify={notify} plugins={plugins} />;
+        return settingsPresentation === 'page' ? <LauncherSettingsView onNotify={notify} plugins={plugins} /> : null;
       case 'store': {
         const plugin = storePlugins.find((x) => x.id === view.plugin);
         if (!plugin) {
@@ -790,6 +805,11 @@ export function App() {
       <Sidebar
         view={view}
         onNavigate={setView}
+        onSettingsOpen={() => {
+          setSettingsReturnView(view);
+          if (settingsPresentation === 'page') setView({ name: 'settings' });
+          else setSettingsOpen(true);
+        }}
         search={search}
         onSearch={setSearch}
         storeCounts={storeCounts}
@@ -818,6 +838,12 @@ export function App() {
         onOpenCollection={(id) => setView({ name: 'library', collection: id })}
         onManageCollections={() => setCollectionsDialog({})}
       />
+      {settingsPresentation !== 'page' && settingsOpen && (
+        <Modal label={t('nav:title.settings')} presentation={settingsPresentation === 'sheet' ? 'sheet' : 'dialog'} size="xl" className="h-[min(52rem,100%)]" onClose={() => setSettingsOpen(false)}>
+          <button type="button" aria-label={t('common:close')} onClick={() => setSettingsOpen(false)} className="absolute right-5 top-5 z-10 rounded-lg p-2 text-text-muted hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><X aria-hidden className="h-4 w-4" /></button>
+          <LauncherSettingsView onNotify={notify} plugins={plugins} />
+        </Modal>
+      )}
 
       <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
         {migration && (

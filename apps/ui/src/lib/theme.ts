@@ -4,6 +4,7 @@
 // `rounded-2xl` to `var(--radius-2xl)`, so variables set here restyle them.
 // Token names are the ones in apps/ui/src/style.css (@theme and :root).
 import { Effect } from 'effect';
+import { useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
 import type { ThemeTokens, WashLayer } from '../types';
 
@@ -11,6 +12,22 @@ import type { ThemeTokens, WashLayer } from '../types';
 export const DEFAULT_THEME_ID = 'warm';
 
 const CACHE_KEY = 'platypus.theme';
+let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' } };
+const variantListeners = new Set<() => void>();
+type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}`;
+
+/** Reads one resolved catalog choice and updates when the selected theme changes. */
+export function useVariant(axis: ThemeVariantAxis): string {
+  const [entry, name] = axis.split('.') as ['settings' | 'section', string];
+  const readVariant = () => entry === 'settings'
+    ? name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation
+    : currentVariants.section.chrome;
+  return useSyncExternalStore(
+    (listener) => { variantListeners.add(listener); return () => variantListeners.delete(listener); },
+    readVariant,
+    () => axis === 'settings.presentation' ? 'page' : axis === 'settings.navigation' ? 'scroll' : 'hairline',
+  );
+}
 
 /** Where each token lands. `--color-*` are the @theme names; the rest are the
  *  variables the ds/ components and Tailwind's radius classes read. */
@@ -90,6 +107,8 @@ export function themeVariables(theme: ThemeTokens): Record<string, string> {
 export function applyTheme(theme: ThemeTokens): void {
   const style = document.documentElement.style;
   for (const [name, value] of Object.entries(themeVariables(theme))) style.setProperty(name, value);
+  currentVariants = { ...currentVariants, ...(theme.variants ?? {}) };
+  for (const listener of variantListeners) listener();
 }
 
 /** Applies a theme and remembers it, so the next boot can paint it before the

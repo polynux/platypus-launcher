@@ -387,9 +387,38 @@ type ThemeInfo struct {
 // value, the built-in one where the theme's is missing or invalid. The UI sets
 // them as CSS custom properties.
 type ThemeTokens struct {
-	ID     string            `json:"id"`
-	Tokens map[string]string `json:"tokens"`
-	Wash   []WashLayer       `json:"wash"`
+	ID       string            `json:"id"`
+	Tokens   map[string]string `json:"tokens"`
+	Wash     []WashLayer       `json:"wash"`
+	Variants ThemeVariants     `json:"variants"`
+}
+
+// ThemeVariants gives the generated UI bridge a closed set of catalog axes.
+type ThemeVariants struct {
+	Settings ThemeSettingsVariants `json:"settings"`
+	Section  ThemeSectionVariants  `json:"section"`
+}
+
+type ThemeSettingsVariants struct {
+	Presentation string `json:"presentation"`
+	Navigation   string `json:"navigation"`
+}
+
+type ThemeSectionVariants struct {
+	Chrome string `json:"chrome"`
+}
+
+type ThemeCatalogEntry struct {
+	Entry string             `json:"entry"`
+	Since string             `json:"since"`
+	Axes  []ThemeCatalogAxis `json:"axes"`
+}
+
+type ThemeCatalogAxis struct {
+	Name    string   `json:"name"`
+	Values  []string `json:"values"`
+	Default string   `json:"default"`
+	Since   string   `json:"since"`
 }
 
 // WashLayer is one radial gradient of the background wash: where it sits,

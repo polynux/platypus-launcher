@@ -5,7 +5,8 @@
 id = "warm"
 name = "Warm"
 schema = 1
-supports = ["tokens"]
+catalog = "1.0"
+supports = ["tokens", "variants"]
 
 [tokens]
 ground = "#130f0a"

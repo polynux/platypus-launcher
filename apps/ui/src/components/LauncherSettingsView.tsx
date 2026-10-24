@@ -15,7 +15,7 @@ import { GameFoldersSettings } from './GameFoldersSettings';
 import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
-import { DEFAULT_THEME_ID, loadTheme } from '../lib/theme';
+import { DEFAULT_THEME_ID, loadTheme, useVariant } from '../lib/theme';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
@@ -28,6 +28,9 @@ interface LauncherSettingsViewProps {
 
 export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsViewProps) {
   const { t } = useTranslation('settings');
+  const navigation = useVariant('settings.navigation');
+  const chrome = useVariant('section.chrome');
+  const [activeSection, setActiveSection] = useState(0);
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,6 +58,35 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
   const cleanupDirty = saved != null && typeof cleanupDays === 'number' && cleanupDays !== saved.cancel_cleanup_days;
 
+  const sections = [
+    <LanguageSetting onNotify={onNotify} />,
+    <ThemeSetting onNotify={onNotify} />,
+    <GameFoldersSettings onNotify={onNotify} />,
+    <PrefixesFolderSetting onNotify={onNotify} />,
+    <section className={SECTION}>
+      <h2 className="text-[14px] font-bold">{t('cleanup.heading')}</h2>
+      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('cleanup.description')}</p>
+      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>
+        <label className="flex items-center gap-2"><span className="text-[12.5px] text-white/70">{t('cleanup.keepFor')}</span>
+          <NumberField min={0} max={365} step={1} hideSteppers value={cleanupDays === '' ? undefined : cleanupDays} onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }} disabled={!saved} aria-label={t('cleanup.daysLabel')} className="w-24" />
+          <span className="text-[12.5px] text-white/70">{t('cleanup.days')}</span>
+        </label>
+        <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
+      </form>
+      <div className="mt-2.5 flex min-h-4 items-center gap-4">{cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}</div>
+    </section>,
+    <RatingsSetting onNotify={onNotify} />,
+    <ArtworkSetting onNotify={onNotify} />,
+    <GameInfoSetting onNotify={onNotify} />,
+    <ChatNotificationsSetting onNotify={onNotify} />,
+    <TraySetting onNotify={onNotify} />,
+    <BackupsSetting onNotify={onNotify} />,
+    <CloudSavesDefaults plugins={plugins} />,
+  ];
+  const sectionNames = ['language', 'theme', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
+  const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
+  const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-white/10 [&>section]:bg-white/[0.035] [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
+
   return (
     <div className="p-7">
       <header className="mb-2">
@@ -63,61 +95,22 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       </header>
       {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
 
-      <LanguageSetting onNotify={onNotify} />
-
-      <ThemeSetting onNotify={onNotify} />
-
-      <GameFoldersSettings onNotify={onNotify} />
-
-      <PrefixesFolderSetting onNotify={onNotify} />
-
-      <section className={SECTION}>
-        <h2 className="text-[14px] font-bold">{t('cleanup.heading')}</h2>
-        <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-{t('cleanup.description')}
-        </p>
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays);
-          }}
-        >
-          <label className="flex items-center gap-2">
-            <span className="text-[12.5px] text-white/70">{t('cleanup.keepFor')}</span>
-            <NumberField
-              min={0}
-              max={365}
-              step={1}
-              hideSteppers
-              value={cleanupDays === '' ? undefined : cleanupDays}
-              onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }}
-              disabled={!saved}
-              aria-label={t('cleanup.daysLabel')}
-              className="w-24"
-            />
-            <span className="text-[12.5px] text-white/70">{t('cleanup.days')}</span>
-          </label>
-          <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
-        </form>
-        <div className="mt-2.5 flex min-h-4 items-center gap-4">
-          {cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}
+      {navigation === 'tabs' ? (
+        <div className="grid grid-cols-[10rem_minmax(0,1fr)] gap-5">
+          <div role="tablist" aria-label={t('sections.label')} aria-orientation="vertical" className="flex flex-col gap-1.5">
+            {sectionNames.map((name, index) => <button key={name} role="tab" id={`settings-tab-${name}`} aria-selected={activeSection === index} aria-controls={`settings-panel-${name}`} tabIndex={activeSection === index ? 0 : -1} onClick={() => setActiveSection(index)} onKeyDown={(e) => {
+              const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? (index + 1) % sectionNames.length : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? (index - 1 + sectionNames.length) % sectionNames.length : -1;
+              if (next < 0) return;
+              e.preventDefault(); setActiveSection(next); document.getElementById(`settings-tab-${sectionNames[next]}`)?.focus();
+            }} className="rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold aria-selected:bg-accent/15 aria-selected:text-text">{sectionLabels[index]}</button>)}
+          </div>
+          <div className={chromeClass} role="tabpanel" id={`settings-panel-${sectionNames[activeSection]}`} aria-labelledby={`settings-tab-${sectionNames[activeSection]}`}>
+            {sections[activeSection]}
+          </div>
         </div>
-      </section>
-
-      <RatingsSetting onNotify={onNotify} />
-
-      <ArtworkSetting onNotify={onNotify} />
-
-      <GameInfoSetting onNotify={onNotify} />
-
-      <ChatNotificationsSetting onNotify={onNotify} />
-
-      <TraySetting onNotify={onNotify} />
-
-      <BackupsSetting onNotify={onNotify} />
-
-      <CloudSavesDefaults plugins={plugins} />
+      ) : (
+        <div className={chromeClass}>{sections.map((section, index) => <React.Fragment key={sectionNames[index]}>{section}</React.Fragment>)}</div>
+      )}
     </div>
   );
 }

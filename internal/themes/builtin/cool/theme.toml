@@ -5,7 +5,13 @@
 id = "cool"
 name = "Cool dark"
 schema = 1
-supports = ["tokens"]
+catalog = "1.0"
+supports = ["tokens", "variants"]
+
+[variants]
+"settings.presentation" = "sheet"
+"settings.navigation" = "tabs"
+"section.chrome" = "framed"
 
 [tokens]
 ground = "#0b1118"

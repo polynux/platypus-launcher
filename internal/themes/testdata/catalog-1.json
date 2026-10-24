@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "entries": [
+    {
+      "entry": "settings",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "page",
+            "dialog",
+            "sheet"
+          ],
+          "default": "page",
+          "since": "1.0"
+        },
+        {
+          "name": "navigation",
+          "values": [
+            "scroll",
+            "tabs"
+          ],
+          "default": "scroll",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "section",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "chrome",
+          "values": [
+            "hairline",
+            "framed",
+            "plain"
+          ],
+          "default": "hairline",
+          "since": "1.0"
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'ru
 interface SidebarProps {
   view: View;
   onNavigate: (v: View) => void;
+  onSettingsOpen?: () => void;
   search: string;
   onSearch: (q: string) => void;
   storeCounts: Record<string, number>;
@@ -271,7 +272,7 @@ export function Sidebar(p: SidebarProps) {
         )}
         <button
           type="button"
-          onClick={() => p.onNavigate({ name: 'settings' })}
+          onClick={() => p.onSettingsOpen ? p.onSettingsOpen() : p.onNavigate({ name: 'settings' })}
           aria-current={active === 'settings' ? 'page' : undefined}
           className={cx(
             'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
