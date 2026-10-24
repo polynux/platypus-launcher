@@ -219,16 +219,16 @@ export function ViewHeader({ title, subtitle, actions, below, tight }: { title: 
  *  (media on, comfortable) is pixel-identical to today. */
 const LISTROW_BOX: Record<'fix' | 'runner' | 'job', { comfortable: string; compact: string }> = {
   fix: {
-    comfortable: 'flex w-full gap-4 rounded-2xl bg-white/[0.045] p-4 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40',
-    compact: 'flex w-full gap-3 rounded-2xl bg-white/[0.045] p-3 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40',
+    comfortable: 'flex w-full gap-4 rounded-2xl bg-surface p-4 text-left ring-1 ring-hairline transition hover:ring-attention/40',
+    compact: 'flex w-full gap-3 rounded-2xl bg-surface p-3 text-left ring-1 ring-hairline transition hover:ring-attention/40',
   },
   runner: {
-    comfortable: 'flex items-center justify-between gap-4 rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]',
-    compact: 'flex items-center justify-between gap-3 rounded-2xl bg-white/[0.045] px-3 py-2 ring-1 ring-white/[0.07]',
+    comfortable: 'flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline',
+    compact: 'flex items-center justify-between gap-3 rounded-2xl bg-surface px-3 py-2 ring-1 ring-hairline',
   },
   job: {
-    comfortable: 'rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]',
-    compact: 'rounded-2xl bg-white/[0.045] px-3 py-2 ring-1 ring-white/[0.07]',
+    comfortable: 'rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline',
+    compact: 'rounded-2xl bg-surface px-3 py-2 ring-1 ring-hairline',
   },
 };
 
