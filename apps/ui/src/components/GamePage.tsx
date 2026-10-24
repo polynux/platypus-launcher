@@ -31,7 +31,10 @@ import { useNetState } from './useNetState';
 import { formatCount, formatDate, formatHours, formatPercentValue } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { LauncherApi } from '../effect/runtime';
-import { useVariant } from '../lib/theme';
+import { useVariant, useThemeLayout } from '../lib/theme';
+import { ThemeLayout } from '../lib/layout';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import type { ThemeLayout as GameLayoutData } from '../types';
 import { offers } from '../lib/capabilities';
 import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
 import { pinLabel } from '../lib/versions';
@@ -171,6 +174,189 @@ function useDetails(game: Game) {
     setNonce((n) => n + 1);
   };
   return { details, error, loading: !details && !error && hasSource, reload };
+}
+
+/** One region's frame in a game layout (issue #103): the hero holds the top
+ *  of the page full width; the main column breathes like the built-in page
+ *  and the side column packs tighter. The built-in spacing is exact. */
+function gameRegionClass(region: string): string {
+  switch (region) {
+    case 'hero': return 'min-w-0 space-y-0';
+    case 'side': return 'min-w-0 space-y-5';
+    default: return 'min-w-0 space-y-5';
+  }
+}
+
+/** The back link (catalog game.back): where the game was opened from. Required. */
+export function GameBackLink({ backLabel, onBack }: { backLabel: string; onBack: () => void }) {
+  return (
+    <Button variant="ghost" size="none" onClick={onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-text-muted hover:bg-transparent hover:text-white">
+      <ArrowLeft className="h-3.5 w-3.5" /> {backLabel}
+    </Button>
+  );
+}
+
+/** The outside-folder alert (catalog game.outside): a plugin game installed
+ *  outside its folder. Required: it tells the truth about the game's state. */
+export function GameOutsideAlert({ game, plugin, onAllowFolder }: {
+  game: Game;
+  plugin: StorePlugin;
+  onAllowFolder: (folder: string) => void;
+}) {
+  const { t } = useTranslation('game');
+  if (!game.is_installed || !game.outside_folder) return null;
+  return (
+    <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
+      <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
+        <p className="font-bold text-amber-200">{t('game:outside.title', { name: plugin.name })}</p>
+        <p>
+          <Trans
+            i18nKey="game:outside.body"
+            values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
+            components={{
+              folder: <span className="font-mono text-[12px]" />,
+              dir: <span className="font-mono text-[12px] text-text" />,
+            }}
+          />
+        </p>
+      </div>
+      <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
+        <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
+      </Button>
+    </div>
+  );
+}
+
+/** The install note (catalog game.note): the sideload note, the fresh-install
+ *  size and folder, the failed attempt, and the refreshing line. All small
+ *  full-width notices live here, so a layout moves them as one. */
+export function GameInstallNote({ game, plugin, installing, installSize, job, canChooseVersion, refreshing, onOpenVersions, onOpenPlugins }: {
+  game: Game;
+  plugin?: StorePlugin;
+  installing: boolean;
+  installSize: InstallSize;
+  job?: Job;
+  canChooseVersion: boolean;
+  refreshing?: boolean;
+  onOpenVersions: () => void;
+  onOpenPlugins: () => void;
+}) {
+  const { t } = useTranslation('game');
+  const active = job && (job.state === 'queued' || job.state === 'running');
+  const showNote = !active && (game.note || installing);
+  if (!showNote && !refreshing) return null;
+  if (showNote && !refreshing) {
+    return (
+      <div className="mb-6 rounded-2xl bg-surface px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-hairline">
+        {game.note && <p>{game.note}</p>}
+        {installing && plugin && (
+          <>
+            <InstallSizeLine size={installSize} />
+            <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-text-muted">
+              {canChooseVersion ? (
+                <Trans
+                  i18nKey="game:install.noteWithVersion"
+                  values={{ folder: plugin.install_folder }}
+                  components={{
+                    v: <NoteLink onClick={onOpenVersions} />,
+                    d: <NoteLink onClick={onOpenPlugins} />,
+                  }}
+                />
+              ) : (
+                <Trans
+                  i18nKey="game:install.notePlain"
+                  values={{ folder: plugin.install_folder }}
+                  components={{ d: <NoteLink onClick={onOpenPlugins} /> }}
+                />
+              )}
+            </p>
+          </>
+        )}
+        {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
+      </div>
+    );
+  }
+  // Both present (a rescan landing while the note shows): one root for the
+  // row count, the same siblings as today inside it.
+  return (
+    <div>
+      {showNote && (
+        <div className="mb-6 rounded-2xl bg-surface px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-hairline">
+          {game.note && <p>{game.note}</p>}
+          {installing && plugin && (
+            <>
+              <InstallSizeLine size={installSize} />
+              <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-text-muted">
+                {canChooseVersion ? (
+                  <Trans
+                    i18nKey="game:install.noteWithVersion"
+                    values={{ folder: plugin.install_folder }}
+                    components={{
+                      v: <NoteLink onClick={onOpenVersions} />,
+                      d: <NoteLink onClick={onOpenPlugins} />,
+                    }}
+                  />
+                ) : (
+                  <Trans
+                    i18nKey="game:install.notePlain"
+                    values={{ folder: plugin.install_folder }}
+                    components={{ d: <NoteLink onClick={onOpenPlugins} /> }}
+                  />
+                )}
+              </p>
+            </>
+          )}
+          {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
+        </div>
+      )}
+      {refreshing && (
+        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-text-muted">{t('game:refreshing')}</p>
+      )}
+    </div>
+  );
+}
+
+/** Compatibility facts (catalog game.compat): the curated recipe or rating,
+ *  the runner facts, and the compat badges. Props only (facts come from the
+ *  page's useCompat hook). */
+export function GameCompat({ compat, fix, facts, info }: {
+  compat: string;
+  fix: Game['fix_info'];
+  facts: [string, string][];
+  info: ReturnType<typeof useCompat>['compat'];
+}) {
+  const { t } = useTranslation('game');
+  return (
+    <Panel className="bg-surface-strong">
+      <h2 className="mb-2 text-[15px] font-bold">{t('game:compat.heading')}</h2>
+      <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
+      {fix?.winetricks && fix.winetricks.length > 0 && (
+        <p className="mt-2 font-mono text-hint text-sky-200/80">{t('game:compat.recipe', { mods: fix.winetricks.join(' ') })}</p>
+      )}
+      <div className="mt-4 space-y-2 font-mono text-hint">
+        {facts.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-4 border-t border-hairline pt-2">
+            <span className="text-text-muted">{k}</span>
+            <span className="truncate text-right text-white/85">{v}</span>
+          </div>
+        ))}
+      </div>
+      {info && <CompatFacts compat={info} />}
+    </Panel>
+  );
+}
+
+/** Session activity for one game (catalog game.activity): the last events
+ *  with this game's title. Props only. */
+export function GameActivity({ events }: { events: ActivityEvent[] }) {
+  const { t } = useTranslation('game');
+  if (events.length === 0) return null;
+  return (
+    <section className="pb-10">
+      <MonoLabel className="mb-2">{t('game:session')}</MonoLabel>
+      <ActivityFeed events={events} />
+    </section>
+  );
 }
 
 export function GamePage(p: GamePageProps) {
@@ -316,6 +502,96 @@ export function GamePage(p: GamePageProps) {
     );
   }
 
+  // The page owns the data: the core calls live here, the blocks get
+  // callbacks, so they are props only and can move in a layout.
+  const onSearchInfo = (query: string) => Effect.runPromise(LauncherApi.searchArtOnline(query));
+  const onLinkInfo = (id: string, source: string, infoId: string) =>
+    Effect.runPromise(LauncherApi.linkGameInfo(id, source, infoId)).then(() => {});
+  const onUnlinkInfo = (id: string) =>
+    Effect.runPromise(LauncherApi.linkGameInfo(id, '', '')).then(() => {});
+  const onSaveStatus = (id: string, status: GameStatus) =>
+    Effect.runPromise(LauncherApi.setGameStatus(id, status));
+  const onSaveNotes = (id: string, text: string) =>
+    Effect.runPromise(LauncherApi.setGameNotes(id, text)).then(() => {});
+  const onOpenStore = plugin?.storefront_url && details?.store_url
+    ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url })
+    : undefined;
+
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's game page before the core answers over RPC.
+  const layout = useThemeLayout('game') ?? BUILTIN_LAYOUTS['game'];
+  const blocks = gameBlocks(
+    {
+      backLabel: p.backLabel,
+      onBack: p.onBack,
+      game,
+      fix,
+      storeLogo,
+      storeName,
+      needsConnection,
+      plugin,
+      job,
+      active: !!active,
+      session,
+      launching: p.launching,
+      hours,
+      last,
+      playtimeTitle,
+      canChooseOptions,
+      onJob: p.onJob,
+      onJobAction: p.onJobAction,
+      onPlay: p.onPlay,
+      onStop: p.onStop,
+      onForceStop: p.onForceStop,
+      onInstall: () => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install')),
+      onInstallTo: plugin && !canChooseOptions ? () => setInstallTo(true) : undefined,
+      onSettings: () => setSettingsTab('general'),
+      onOpenStore,
+      onAllowFolder: p.onAllowFolder,
+      installing,
+      installSize,
+      canChooseVersion,
+      refreshing: p.refreshing,
+      onOpenVersions: () => setSettingsTab('versions'),
+      onOpenPlugins: () => p.onNavigate({ name: 'plugins' }),
+      media,
+      shot,
+      onShot: setShot,
+      onOpenLightbox: () => setLightbox(true),
+      strip,
+      details,
+      loading,
+      error,
+      compatUrls: { protondb: ratingBadge?.link, wiki: info?.wiki?.url },
+      onReload: reload,
+      onSearchInfo,
+      onLinkInfo,
+      onUnlinkInfo,
+      compat,
+      facts,
+      info,
+      crash,
+      onNotify: p.onNotify,
+      onOpenRunner: () => setSettingsTab('general'),
+      onCustomized: p.onCustomized,
+      onSaveStatus,
+      onSaveNotes,
+      collections: p.collections,
+      onManageCollections: p.onManageCollections,
+      sourceLogos: p.sourceLogos,
+      onCopyChanged: p.onCopyChanged,
+      progress,
+      ach,
+      events,
+    },
+    layout,
+  );
+  const heroRegion = layout.regions.find((r) => r.name === 'hero');
+  const restLayout: GameLayoutData = {
+    view: layout.view,
+    regions: layout.regions.filter((r) => r.name !== 'hero'),
+  };
+
   return (
     <TooltipProvider>
     <div className="relative isolate p-7">
@@ -327,152 +603,16 @@ export function GamePage(p: GamePageProps) {
           style={{ backgroundImage: `url("${game.background_url}")`, maskImage: 'linear-gradient(180deg, #000 30%, transparent)', WebkitMaskImage: 'linear-gradient(180deg, #000 30%, transparent)' }}
         />
       )}
-      <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-text-muted hover:bg-transparent hover:text-white">
-        <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
-      </Button>
-
-      <Hero site="game" art={hero} title={game.title}>
-        <GameHeroHeading game={game} fix={fix} storeLogo={storeLogo} storeName={storeName} needsConnection={needsConnection} />
-        <GameHeroActions
-          game={game}
-          plugin={plugin}
-          job={job}
-          active={!!active}
-          session={session}
-          launching={p.launching}
-          hours={hours}
-          last={last}
-          playtimeTitle={playtimeTitle}
-          canChooseOptions={canChooseOptions}
-          onJob={p.onJob}
-          onJobAction={p.onJobAction}
-          onPlay={p.onPlay}
-          onStop={p.onStop}
-          onForceStop={p.onForceStop}
-          onInstall={() => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install'))}
-          onInstallTo={plugin && !canChooseOptions ? () => setInstallTo(true) : undefined}
-          onSettings={() => setSettingsTab('general')}
-          onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
-        />
-      </Hero>
-
-      {game.is_installed && game.outside_folder && plugin && (
-        <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
-          <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
-            <p className="font-bold text-amber-200">{t('game:outside.title', { name: plugin.name })}</p>
-            <p>
-              <Trans
-                i18nKey="game:outside.body"
-                values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
-                components={{
-                  folder: <span className="font-mono text-[12px]" />,
-                  dir: <span className="font-mono text-[12px] text-text" />,
-                }}
-              />
-            </p>
-          </div>
-          <Button onClick={() => p.onAllowFolder(game.install_dir)} className="flex-none">
-            <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
-          </Button>
-        </div>
+      {heroRegion && (
+        <GameHeroRegion region={heroRegion} blocks={blocks} art={hero} title={game.title} />
       )}
-
-      {!active && (game.note || installing) && (
-        <div className="mb-6 rounded-2xl bg-surface px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-hairline">
-          {game.note && <p>{game.note}</p>}
-          {installing && plugin && (
-            <>
-              <InstallSizeLine size={installSize} />
-              <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-text-muted">
-                {canChooseVersion ? (
-                  <Trans
-                    i18nKey="game:install.noteWithVersion"
-                    values={{ folder: plugin.install_folder }}
-                    components={{
-                      v: <NoteLink onClick={() => setSettingsTab('versions')} />,
-                      d: <NoteLink onClick={() => p.onNavigate({ name: 'plugins' })} />,
-                    }}
-                  />
-                ) : (
-                  <Trans
-                    i18nKey="game:install.notePlain"
-                    values={{ folder: plugin.install_folder }}
-                    components={{ d: <NoteLink onClick={() => p.onNavigate({ name: 'plugins' })} /> }}
-                  />
-                )}
-              </p>
-            </>
-          )}
-          {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="mt-1" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
-        </div>
-      )}
-
-      {p.refreshing && (
-        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-text-muted">{t('game:refreshing')}</p>
-      )}
-
-      <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
-        <div className="min-w-0 space-y-5">
-          {media.length > 0 && (
-            <MediaStrip game={game} media={media} index={shot} onIndex={setShot} onOpen={() => setLightbox(true)} stripRef={strip} />
-          )}
-          {lightbox && media.length > 0 && <Lightbox items={media} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
-
-          <AboutSection
-            game={game}
-            details={details}
-            loading={loading}
-            error={error}
-            compatUrls={{ protondb: ratingBadge?.link, wiki: info?.wiki?.url }}
-            onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
-            onReload={reload}
-          />
-        </div>
-
-        <aside className="min-w-0 space-y-5">
-          <Panel className="bg-surface-strong">
-            <h2 className="mb-2 text-[15px] font-bold">{t('game:compat.heading')}</h2>
-            <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
-            {fix?.winetricks && fix.winetricks.length > 0 && (
-              <p className="mt-2 font-mono text-hint text-sky-200/80">{t('game:compat.recipe', { mods: fix.winetricks.join(' ') })}</p>
-            )}
-            <div className="mt-4 space-y-2 font-mono text-hint">
-              {facts.map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4 border-t border-hairline pt-2">
-                  <span className="text-text-muted">{k}</span>
-                  <span className="truncate text-right text-white/85">{v}</span>
-                </div>
-              ))}
-            </div>
-            {info && <CompatFacts compat={info} />}
-          </Panel>
-
-          {crash && <CrashHintsPanel game={game} hints={crash} onNotify={p.onNotify} onRunner={() => setSettingsTab('general')} />}
-
-          <StatusNotesSection game={game} onChanged={p.onCustomized} />
-
-          <CollectionsSection game={game} collections={p.collections} onManage={p.onManageCollections} />
-
-          {isPluginGame(game) && game.is_installed && plugin && (
-            <InstallationPanel game={game} plugin={plugin} job={job} onJobAction={p.onJobAction} sourceLogos={p.sourceLogos} />
-          )}
-
-          {isPluginGame(game) && plugin && <CopyPicker game={game} plugin={plugin} onChanged={() => p.onCopyChanged?.()} />}
-        </aside>
-      </div>
-
-      {progress ? (
-        <ProgressAchievements progress={progress} />
-      ) : ach && ach.total > 0 ? (
-        <AchievementsSection ach={ach} known={ach.unlocked >= 0} viaSteam={game.source === 'steam'} />
-      ) : null}
-
-      {events.length > 0 && (
-        <section className="pb-10">
-          <MonoLabel className="mb-2">{t('game:session')}</MonoLabel>
-          <ActivityFeed events={events} />
-        </section>
-      )}
+      <ThemeLayout
+        layout={restLayout}
+        blocks={blocks}
+        className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]"
+        regionClassName={gameRegionClass}
+      />
+      {lightbox && media.length > 0 && <Lightbox items={media} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
       {!settingsPage && settingsModal}
       {installTo && plugin && (
         <InstallDialog
@@ -496,6 +636,215 @@ export function GamePage(p: GamePageProps) {
     </div>
     </TooltipProvider>
   );
+}
+
+/** The hero region's frame in a game layout (issue #103): the back link above
+ *  the hero, the outside-folder alert and install note below it, and the
+ *  heading and actions inside the Hero frame. The view wraps the hero
+ *  region's heading and actions in the Hero, so a layout can move the actions
+ *  out of the hero (then the hero shows the heading alone, and the actions
+ *  render where the layout puts them). Order follows the layout: the hero
+ *  frame sits where the first of heading/actions appears. */
+function GameHeroRegion({ region, blocks, art, title }: {
+  region: GameLayoutData['regions'][number];
+  blocks: Record<string, React.ReactNode>;
+  art: string[];
+  title: string;
+}) {
+  const nodes = region.nodes.flatMap((n) => (n.row ? n.row : [n]));
+  const names = nodes.map((n) => n.block ?? '');
+  const hasHeading = names.includes('heading');
+  const hasActions = names.includes('actions');
+  const heroAt = names.findIndex((n) => n === 'heading' || n === 'actions');
+  const out: React.ReactNode[] = [];
+  let heroEmitted = false;
+  const emitHero = (key: string) => {
+    if (heroEmitted) return;
+    heroEmitted = true;
+    if (!hasHeading && !hasActions) return;
+    out.push(
+      <Hero key={key} site="game" art={art} title={title}>
+        {hasHeading ? blocks['heading'] : null}
+        {hasActions ? blocks['actions'] : null}
+      </Hero>,
+    );
+  };
+  nodes.forEach((n, i) => {
+    const name = n.block ?? '';
+    if (name === 'heading' || name === 'actions') {
+      if (i === heroAt) emitHero(`hero-${i}`);
+      return;
+    }
+    if (i === heroAt) emitHero(`hero-${i}`);
+    if (name) out.push(<React.Fragment key={`${name}-${i}`}>{blocks[name]}</React.Fragment>);
+  });
+  if (!heroEmitted && (hasHeading || hasActions)) emitHero('hero-last');
+  // A hero region with no heading or actions still shows the back link and
+  // the alerts: the required blocks a layout left out come back here.
+  return <>{out}</>;
+}
+
+interface GameData {
+  backLabel: string;
+  onBack: () => void;
+  game: Game;
+  fix: Game['fix_info'];
+  storeLogo?: string;
+  storeName: string;
+  needsConnection: boolean;
+  plugin?: StorePlugin;
+  job?: Job;
+  active: boolean;
+  session?: SessionEvent;
+  launching: boolean;
+  hours: number | null;
+  last?: string;
+  playtimeTitle?: string;
+  canChooseOptions: boolean;
+  onJob: (kind: GameJobKind) => void;
+  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onPlay: () => void;
+  onStop: () => void;
+  onForceStop: () => void;
+  onInstall: () => void;
+  onInstallTo?: () => void;
+  onSettings: () => void;
+  onOpenStore?: () => void;
+  onAllowFolder: (folder: string) => void;
+  installing: boolean;
+  installSize: InstallSize;
+  canChooseVersion: boolean;
+  refreshing?: boolean;
+  onOpenVersions: () => void;
+  onOpenPlugins: () => void;
+  media: MediaItem[];
+  shot: number;
+  onShot: (i: number) => void;
+  onOpenLightbox: () => void;
+  strip: React.RefObject<HTMLDivElement | null>;
+  details: GameDetails | null;
+  loading: boolean;
+  error: string | null;
+  compatUrls: { protondb?: string; wiki?: string };
+  onReload: () => void;
+  onSearchInfo: (query: string) => Promise<ArtCandidate[]>; // i18n:allow: Promise return type, not user-facing text
+  onLinkInfo: (id: string, source: string, infoId: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  onUnlinkInfo: (id: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  compat: string;
+  facts: [string, string][];
+  info: ReturnType<typeof useCompat>['compat'];
+  crash: ReturnType<typeof useCrashHints>;
+  onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  onOpenRunner: () => void;
+  onCustomized?: () => void;
+  onSaveStatus: (id: string, status: GameStatus) => Promise<{ status: GameStatus }>; // i18n:allow: Promise return type, not user-facing text
+  onSaveNotes: (id: string, text: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  collections?: Collection[];
+  onManageCollections?: (gameId: string) => void;
+  sourceLogos?: Record<string, string>;
+  onCopyChanged?: () => void;
+  progress: ReturnType<typeof useAchievementProgress>;
+  ach: GameDetails['achievements'];
+  events: ActivityEvent[];
+}
+
+// The game page's layout blocks (issue #103): each takes its data as props
+// only (data hooks stay in the page above) and renders a single root or null
+// when it has nothing to show, so a layout orders blocks without conditionals
+// of its own. The hero region's heading and actions render inside the Hero
+// frame (see GameHeroRegion); every other block carries its own spacing, as
+// the built-in page does.
+function gameBlocks(d: GameData, _layout?: GameLayoutData): Record<string, React.ReactNode> {
+  const { game } = d;
+  return {
+    back: <GameBackLink backLabel={d.backLabel} onBack={d.onBack} />,
+    heading: (
+      <GameHeroHeading game={game} fix={d.fix} storeLogo={d.storeLogo} storeName={d.storeName} needsConnection={d.needsConnection} />
+    ),
+    actions: (
+      <GameHeroActions
+        game={game}
+        plugin={d.plugin}
+        job={d.job}
+        active={d.active}
+        session={d.session}
+        launching={d.launching}
+        hours={d.hours}
+        last={d.last}
+        playtimeTitle={d.playtimeTitle}
+        canChooseOptions={d.canChooseOptions}
+        onJob={d.onJob}
+        onJobAction={d.onJobAction}
+        onPlay={d.onPlay}
+        onStop={d.onStop}
+        onForceStop={d.onForceStop}
+        onInstall={d.onInstall}
+        onInstallTo={d.onInstallTo}
+        onSettings={d.onSettings}
+        onOpenStore={d.onOpenStore}
+      />
+    ),
+    outside: d.plugin ? (
+      <GameOutsideAlert game={game} plugin={d.plugin} onAllowFolder={d.onAllowFolder} />
+    ) : null,
+    note: (
+      <GameInstallNote
+        game={game}
+        plugin={d.plugin}
+        installing={d.installing}
+        installSize={d.installSize}
+        job={d.job}
+        canChooseVersion={d.canChooseVersion}
+        refreshing={d.refreshing}
+        onOpenVersions={d.onOpenVersions}
+        onOpenPlugins={d.onOpenPlugins}
+      />
+    ),
+    media: d.media.length > 0 ? (
+      <MediaStrip game={game} media={d.media} index={d.shot} onIndex={d.onShot} onOpen={d.onOpenLightbox} stripRef={d.strip} />
+    ) : null,
+    about: (
+      <AboutSection
+        game={game}
+        details={d.details}
+        loading={d.loading}
+        error={d.error}
+        compatUrls={d.compatUrls}
+        onOpenStore={d.onOpenStore}
+        onReload={d.onReload}
+        onSearchInfo={d.onSearchInfo}
+        onLinkInfo={d.onLinkInfo}
+        onUnlinkInfo={d.onUnlinkInfo}
+      />
+    ),
+    compat: <GameCompat compat={d.compat} fix={d.fix} facts={d.facts} info={d.info} />,
+    crash: d.crash ? (
+      <CrashHintsPanel game={game} hints={d.crash} onNotify={d.onNotify} onRunner={d.onOpenRunner} />
+    ) : null,
+    status: (
+      <StatusNotesSection
+        game={game}
+        onChanged={d.onCustomized}
+        onSaveStatus={d.onSaveStatus}
+        onSaveNotes={d.onSaveNotes}
+      />
+    ),
+    collections: (
+      <CollectionsSection game={game} collections={d.collections} onManage={d.onManageCollections} />
+    ),
+    installation: isPluginGame(game) && game.is_installed && d.plugin ? (
+      <InstallationPanel game={game} plugin={d.plugin} job={d.job} onJobAction={d.onJobAction} sourceLogos={d.sourceLogos} />
+    ) : null,
+    copies: isPluginGame(game) && d.plugin ? (
+      <CopyPicker game={game} plugin={d.plugin} onChanged={() => d.onCopyChanged?.()} />
+    ) : null,
+    'achievements-progress': d.progress ? <ProgressAchievements progress={d.progress} /> : null,
+    achievements:
+      !d.progress && d.ach && d.ach.total > 0 ? (
+        <AchievementsSection ach={d.ach} known={d.ach.unlocked >= 0} viaSteam={game.source === 'steam'} />
+      ) : null,
+    activity: <GameActivity events={d.events} />,
+  };
 }
 
 /** The store's HTML (description, requirements): core sanitizes it to the
@@ -625,7 +974,7 @@ function controllerLabel(t: (key: string) => string, c?: string): string | null 
  *  here, not in the hero. Sideloaded games (issue #38) get a "Find info
  *  online" action when nothing is linked, and an attribution + Unlink control
  *  once linked. */
-function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, onReload }: {
+function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, onReload, onSearchInfo, onLinkInfo, onUnlinkInfo }: {
   game: Game;
   details: GameDetails | null;
   loading: boolean;
@@ -635,6 +984,9 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
   onOpenStore?: () => void;
   /** The info link changed: details were evicted and refetched. */
   onReload?: () => void;
+  onSearchInfo: (query: string) => Promise<ArtCandidate[]>; // i18n:allow: Promise return type, not user-facing text
+  onLinkInfo: (id: string, source: string, infoId: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  onUnlinkInfo: (id: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
 }) {
   const { t } = useTranslation('game');
   const [expanded, setExpanded] = useState(false);
@@ -700,7 +1052,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
         <p className="text-[13px] text-text-body">{error ? t('game:about.storeUnavailable', { error }) : t('game:about.noDescription')}</p>
       )}
       {isCustom && !linked && !loading && (
-        <InfoFinder game={game} onLinked={() => onReload?.()} />
+        <InfoFinder game={game} onLinked={() => onReload?.()} onSearch={onSearchInfo} onLink={onLinkInfo} />
       )}
       {rows.length > 0 && (
         <dl data-testid="details-grid" className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-hairline pt-3">
@@ -759,7 +1111,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
               </ExternalLink>
             ) : infoName}
           </span>
-          <InfoUnlink game={game} onUnlinked={() => onReload?.()} />
+          <InfoUnlink game={game} onUnlinked={() => onReload?.()} onUnlink={onUnlinkInfo} />
         </div>
       )}
       {d?.info_stale && (
@@ -792,8 +1144,17 @@ function infoCandidateDetail(t: (key: string, vars?: Record<string, unknown>) =>
 
 /** The user's own status and plain-text notes for a game (issue #51): the
  *  select saves at once, the notes autosave on a debounce and on blur, one
- *  write at a time so a slow save can't overwrite a newer one. */
-function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () => void }) {
+ *  write at a time so a slow save can't overwrite a newer one. The page owns
+ *  the data: saves go through the callbacks it passes (the core calls live
+ *  there), so this block is props only and can move in a layout. */
+function StatusNotesSection({ game, onChanged, onSaveStatus, onSaveNotes }: {
+  game: Game;
+  onChanged?: () => void;
+  /** Saves the status through the page (the core call lives there). */
+  onSaveStatus: (id: string, status: GameStatus) => Promise<{ status: GameStatus }>; // i18n:allow: Promise return type, not user-facing text
+  /** Saves the notes through the page (the core call lives there). */
+  onSaveNotes: (id: string, text: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+}) {
   const { t } = useTranslation('game');
   const [status, setStatus] = useState(game.status ?? '');
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -804,7 +1165,7 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
   // ordered and a slow save can't overwrite a newer one. The game id is
   // captured when a write is enqueued, so a save of the previous game never
   // touches this game's state.
-  const chain = useRef<Promise<void>>(Promise.resolve());
+  const chain = useRef<Promise<void>>(Promise.resolve()); // i18n:allow: Promise return type, not user-facing text
   // The text waiting on the debounce, not yet enqueued: { id, text } for the
   // game it was typed on. null when nothing is pending.
   const pending = useRef<{ id: string; text: string } | null>(null);
@@ -817,7 +1178,7 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
     lastText.current = text;
     setNotesState('saving');
     chain.current = chain.current.then(() =>
-      Effect.runPromise(LauncherApi.setGameNotes(id, text)).then(
+      onSaveNotes(id, text).then(
         () => { if (shownId.current === id) setNotesState('saved'); },
         () => { if (shownId.current === id) setNotesState('failed'); },
       ),
@@ -846,7 +1207,7 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
   const saveStatus = (next: GameStatus) => {
     setStatusError(null);
     const at = game.id;
-    Effect.runPromise(LauncherApi.setGameStatus(at, next)).then(
+    onSaveStatus(at, next).then(
       (info) => { if (shownId.current === at) setStatus(info.status); onChanged?.(); },
       (e) => { if (shownId.current === at) setStatusError(e instanceof Error ? e.message : String(e)); },
     );
@@ -926,8 +1287,10 @@ function CollectionsSection({ game, collections = [], onManage }: { game: Game; 
   );
 }
 
-/** The Unlink control next to a linked game's attribution. */
-function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }) {
+/** The Unlink control next to a linked game's attribution. The page owns the
+ *  data: the unlink goes through the callback it passes, so this block is
+ *  props only and can move in a layout. */
+function InfoUnlink({ game, onUnlinked, onUnlink }: { game: Game; onUnlinked: () => void; onUnlink: (id: string) => Promise<void> }) { // i18n:allow: Promise return type, not user-facing text
   const { t } = useTranslation('game');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -935,7 +1298,7 @@ function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }
     if (busy) return;
     setBusy(true);
     setError(null);
-    Effect.runPromise(LauncherApi.linkGameInfo(game.id, '', '')).then(
+    onUnlink(game.id).then(
       () => { setBusy(false); onUnlinked(); },
       (e) => { setBusy(false); setError(e instanceof Error ? e.message : String(e)); },
     );
@@ -952,8 +1315,15 @@ function InfoUnlink({ game, onUnlinked }: { game: Game; onUnlinked: () => void }
 
 /** Find a sideloaded game's info online (issue #38): the same candidate
  *  search as Find art online (SearchArtOnline), the same list (source label,
- *  year), and a pick links via LinkGameInfo. */
-function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
+ *  year), and a pick links via LinkGameInfo. The page owns the data: search
+ *  and link go through the callbacks it passes, so this block is props only
+ *  and can move in a layout. */
+function InfoFinder({ game, onLinked, onSearch, onLink }: {
+  game: Game;
+  onLinked: () => void;
+  onSearch: (query: string) => Promise<ArtCandidate[]>; // i18n:allow: Promise return type, not user-facing text
+  onLink: (id: string, source: string, infoId: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+}) {
   const { t } = useTranslation('game');
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(game.title);
@@ -967,7 +1337,7 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
     if (!q || searching || linking != null) return;
     setSearching(true);
     setError(null);
-    Effect.runPromise(LauncherApi.searchArtOnline(q)).then(
+    onSearch(q).then(
       (cs) => { setSearching(false); setCandidates(cs); },
       (e) => { setSearching(false); setError(e instanceof Error ? e.message : String(e)); },
     );
@@ -979,7 +1349,7 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
     const id = source === 'steam' ? (c.id || String(c.app_id)) : c.id;
     setLinking(infoCandidateKey(c));
     setError(null);
-    Effect.runPromise(LauncherApi.linkGameInfo(game.id, source, id)).then(
+    onLink(game.id, source, id).then(
       () => { setLinking(null); onLinked(); },
       (e) => { setLinking(null); setError(e instanceof Error ? e.message : String(e)); },
     );

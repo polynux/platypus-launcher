@@ -88,6 +88,37 @@ var builtinLayoutXML = map[string]string{
     <block name="builtin" />
   </region>
 </layout>`,
+	// Today's game page: the back link, the hero (heading and actions inside
+	// the Hero frame), the outside-folder alert and the install note full
+	// width; the media strip and about text in the left column with the
+	// achievements and session activity below (below the fold); compat,
+	// crash hints, status, collections, installation and copies in the right
+	// column. The view wraps the hero region's heading and actions in the
+	// Hero frame, so a layout can move the actions out of the hero.
+	"game": `<layout view="game" catalog="1.0">
+  <region name="hero">
+    <block name="back" />
+    <block name="heading" />
+    <block name="actions" />
+    <block name="outside" />
+    <block name="note" />
+  </region>
+  <region name="main">
+    <block name="media" />
+    <block name="about" />
+    <block name="achievements-progress" />
+    <block name="achievements" />
+    <block name="activity" />
+  </region>
+  <region name="side">
+    <block name="compat" />
+    <block name="crash" />
+    <block name="status" />
+    <block name="collections" />
+    <block name="installation" />
+    <block name="copies" />
+  </region>
+</layout>`,
 }
 
 // builtinLayouts holds the parsed built-ins, in layout order.

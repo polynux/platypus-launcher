@@ -744,6 +744,124 @@
       "axes": null,
       "kind": "block",
       "region": "main"
+    },
+    {
+      "entry": "game.hero",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.back",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "hero"
+    },
+    {
+      "entry": "game.outside",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "hero"
+    },
+    {
+      "entry": "game.note",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "hero"
+    },
+    {
+      "entry": "game.media",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.about",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.achievements-progress",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.achievements",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.activity",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.compat",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.crash",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.status",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.collections",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.installation",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.copies",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
     }
   ]
 }

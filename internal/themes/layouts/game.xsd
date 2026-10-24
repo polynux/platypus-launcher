@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from the theme catalog: do not edit. Refresh with
+     go test ./internal/themes -run TestLayoutXSDCurrent -update. -->
+<!-- Strict schema for layouts/game.xml: only this view's regions and blocks. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="layout">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="region" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:choice maxOccurs="unbounded">
+              <xs:element name="block" type="blockType" />
+              <xs:element name="row">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="block" type="blockType" maxOccurs="unbounded" />
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:choice>
+            <xs:attribute name="name" use="required">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="hero" />
+                  <xs:enumeration value="main" />
+                  <xs:enumeration value="side" />
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="view" use="required">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="game" />
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="catalog" type="xs:string" />
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="blockType">
+    <xs:attribute name="name" use="required">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="about" />
+          <xs:enumeration value="achievements" />
+          <xs:enumeration value="achievements-progress" />
+          <xs:enumeration value="actions" />
+          <xs:enumeration value="activity" />
+          <xs:enumeration value="back" />
+          <xs:enumeration value="collections" />
+          <xs:enumeration value="compat" />
+          <xs:enumeration value="copies" />
+          <xs:enumeration value="crash" />
+          <xs:enumeration value="heading" />
+          <xs:enumeration value="installation" />
+          <xs:enumeration value="media" />
+          <xs:enumeration value="note" />
+          <xs:enumeration value="outside" />
+          <xs:enumeration value="status" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="span">
+      <xs:simpleType>
+        <xs:restriction base="xs:integer">
+          <xs:minInclusive value="1" />
+          <xs:maxInclusive value="12" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+</xs:schema>
