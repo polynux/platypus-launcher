@@ -28,14 +28,14 @@ func TestCatalogGuard(t *testing.T) {
 		t.Fatal("could not locate catalog test")
 	}
 	path := filepath.Join(filepath.Dir(source), "testdata", "catalog-1.json")
-	if *updateCatalogSnapshot {
+	data, err := os.ReadFile(path)
+	if err != nil && os.IsNotExist(err) && *updateCatalogSnapshot {
+		// First snapshot: nothing to stay compatible with yet.
 		if err := writeCatalogSnapshot(path); err != nil {
 			t.Fatal(err)
 		}
 		return
 	}
-
-	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read catalog snapshot: %v (refresh with go test ./internal/themes -run TestCatalogGuard -update)", err)
 	}
@@ -96,6 +96,17 @@ func TestCatalogGuard(t *testing.T) {
 				}
 			}
 		}
+	}
+	if *updateCatalogSnapshot {
+		// -update only records compatible changes: a removal or rename needs a
+		// catalog major bump first, so it can't slip through by refreshing.
+		if t.Failed() {
+			t.Fatal("not updating the catalog snapshot: fix the breaking change or bump the catalog major")
+		}
+		if err := writeCatalogSnapshot(path); err != nil {
+			t.Fatal(err)
+		}
+		return
 	}
 	if !reflect.DeepEqual(snapshot.Entries, Catalog) || snapshot.Version != CatalogVersion {
 		t.Log("catalog snapshot is out of date; refresh with go test ./internal/themes -run TestCatalogGuard -update")
