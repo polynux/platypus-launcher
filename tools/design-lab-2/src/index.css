@@ -1,0 +1,14 @@
+@import '@fontsource-variable/geist';
+body { background: #141414; color: #e8e8e8; font-family: 'Geist Variable', system-ui, sans-serif; overflow: auto; }
+.ix { max-width: 760px; margin: 0 auto; padding: 72px 32px; }
+.ix h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
+.ix-lead { color: #9a9a9a; margin: 12px 0 40px; line-height: 1.55; max-width: 62ch; }
+.ix ol { list-style: none; padding: 0; margin: 0; border-top: 1px solid #2a2a2a; }
+.ix li { border-bottom: 1px solid #2a2a2a; }
+.ix a { display: grid; grid-template-columns: 48px 160px 1fr; gap: 16px; padding: 18px 8px; color: inherit; text-decoration: none; align-items: baseline; }
+.ix a:hover, .ix a:focus-visible { background: #1d1d1d; outline: none; }
+.ix-n { font-variant-numeric: tabular-nums; color: #777; }
+.ix-name { font-weight: 600; font-size: 17px; }
+.ix-line { color: #a5a5a5; line-height: 1.5; font-size: 14px; }
+.ix-foot { color: #6f6f6f; font-size: 13px; margin-top: 32px; }
+.ix-h2 { font-size: 18px; font-weight: 600; margin: 40px 0 12px; }

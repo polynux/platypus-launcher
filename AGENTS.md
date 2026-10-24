@@ -12,6 +12,7 @@ Linux game launcher (Go core, React UI in a desktop shell) with store plugins ov
 - `plugins/`: store plugins and their install/scaffold scripts.
 - `packaging/`: icons and (later) the distributable build config.
 - `tools/design-lab`: the UI design mockup (dev server, port 5175).
+- `tools/design-lab-2`: redesign explorations (port 5176); `/21` is the reference design.
 - `docs/`: user and contributor docs (`docs/electron.md` describes the shell).
 - Folders: `internal/paths` resolves data/config/cache/plugins from
   `PLATYPUS_*` / XDG variables (defaults are today's `~/.local/share/platypus`
