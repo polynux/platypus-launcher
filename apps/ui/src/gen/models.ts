@@ -527,6 +527,7 @@ export namespace types {
     default_prefixes_folder: string;
     language: string;
     minimize_to_tray: boolean;
+    theme: string;
   }
 
   export interface LedgerEntry {
@@ -827,6 +828,21 @@ export namespace types {
     version: string;
   }
 
+  export interface ThemeInfo {
+    id: string;
+    name: string;
+    schema: number;
+    supports: string[];
+    status: string;
+    warnings: string[];
+  }
+
+  export interface ThemeTokens {
+    id: string;
+    tokens: Record<string, string>;
+    wash: types.WashLayer[];
+  }
+
   export interface Tweak {
     id: string;
     title: string;
@@ -894,6 +910,13 @@ export namespace types {
     build?: string;
     manual?: Record<string, string>;
     archiveRef?: unknown;
+  }
+
+  export interface WashLayer {
+    at: string;
+    size: string;
+    color: string;
+    fade: string;
   }
 
   export interface WikiCredit {

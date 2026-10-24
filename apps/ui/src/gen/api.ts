@@ -71,6 +71,7 @@ export interface CoreApi {
   GetRunnerEnv(game: types.Game): Promise<types.RunnerEnv>;
   GetRunnerOptions(): Promise<types.SettingsSchema>;
   GetSavePaths(game: types.Game): Promise<types.SavePath[]>;
+  GetTheme(id: string): Promise<types.ThemeTokens>;
   GetTweaks(): Promise<types.Tweak[]>;
   InstallGame(game: types.Game): Promise<types.Job>;
   InstallGameTo(game: types.Game, folder: string): Promise<types.Job>;
@@ -89,6 +90,7 @@ export interface CoreApi {
   ListSaveBackups(gameID: string): Promise<types.SaveBackup[]>;
   ListSessions(): Promise<types.SessionEvent[]>;
   ListStorePlugins(): Promise<types.StorePlugin[]>;
+  ListThemes(): Promise<types.ThemeInfo[]>;
   Locale(): Promise<string>;
   MakeDefaultGameFolder(path: string): Promise<types.GameFolder[]>;
   MakeGameExecutable(gameID: string): Promise<types.Game>;
@@ -169,6 +171,7 @@ export interface CoreApi {
   SetSocialPlaying(pluginID: string, show: boolean): Promise<void>;
   SetSocialStatus(pluginID: string, state: string): Promise<void>;
   SetSystemLanguages(langs: string[]): Promise<string>;
+  SetTheme(id: string): Promise<types.LauncherSettings>;
   SocialViews(): Promise<social.View[]>;
   StopGame(gameID: string): Promise<void>;
   UninstallGame(game: types.Game): Promise<types.Job>;
@@ -249,6 +252,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetRunnerEnv',
   'GetRunnerOptions',
   'GetSavePaths',
+  'GetTheme',
   'GetTweaks',
   'InstallGame',
   'InstallGameTo',
@@ -267,6 +271,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'ListSaveBackups',
   'ListSessions',
   'ListStorePlugins',
+  'ListThemes',
   'Locale',
   'MakeDefaultGameFolder',
   'MakeGameExecutable',
@@ -347,6 +352,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetSocialPlaying',
   'SetSocialStatus',
   'SetSystemLanguages',
+  'SetTheme',
   'SocialViews',
   'StopGame',
   'UninstallGame',

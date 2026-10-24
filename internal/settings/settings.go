@@ -119,6 +119,9 @@ type file struct {
 	// MinimizeToTray is the "Minimize to tray while a game runs" switch
 	// (issue #49). Off by default: a plain bool, unset means false.
 	MinimizeToTray bool `json:"minimize_to_tray,omitempty"`
+	// Theme is the picked theme's id (issue #93). Empty means the built-in
+	// default; the app checks the id (see app_theme.go).
+	Theme string `json:"theme,omitempty"`
 	// MigrationNoticeDismissed remembers that the user dismissed the one-time
 	// Hydra→Platypus migration notice (issue #14), so it never returns.
 	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`
