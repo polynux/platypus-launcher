@@ -3,8 +3,9 @@
 // the sidebar's parts (inventory §1.2) are blocks each region arranges. The
 // sidebar region is the Sidebar itself, unchanged; the topbar region lays the
 // same blocks out in two rows, with the Tools items in a menu.
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DropdownMenu } from 'radix-ui';
 import { ChevronDown, Search, Settings, Square, Ticket } from 'lucide-react';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
@@ -53,18 +54,17 @@ function Topbar(p: ShellProps) {
     { key: 'plugins', label: t('nav:plugins'), dot: p.authNeeded },
     { key: 'storage', label: t('nav:storage') },
   ];
-  // Opening a tool's view shows its item; the menu opens with it.
+  // A tool view marks the trigger, but the menu stays closed until opened:
+  // unlike the sidebar's disclosure group, a floating menu never pops up on
+  // page load or steals focus on navigation. Plugins stays one click away.
   const toolsHasActive = tools.some((item) => item.key === active);
   const toolsAttention = tools.reduce((n, item) => n + (item.count ?? 0), 0);
   const toolsDot = tools.some((item) => item.dot);
-  useEffect(() => {
-    if (toolsHasActive) setToolsOpen(true);
-  }, [toolsHasActive]);
 
   const navButton = (n: NavItem) => (
     <button
       key={n.key}
-      onClick={() => { setToolsOpen(false); p.onNavigate({ name: n.key } as View); }}
+      onClick={() => p.onNavigate({ name: n.key } as View)}
       aria-current={active === n.key ? 'page' : undefined}
       className={cx(
         'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
@@ -88,30 +88,49 @@ function Topbar(p: ShellProps) {
         {/* shell.nav */}
         <nav aria-label={t('nav:main')} className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {main.map((n) => navButton(n))}
-          {/* shell.tools: a menu in topbar mode, so Plugins stays one click away */}
-          <div className="relative flex-none">
-            <button
-              type="button"
-              onClick={() => setToolsOpen((open) => !open)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setToolsOpen(false); }}
-              aria-expanded={toolsOpen}
-              aria-controls="topbar-tools"
-              className={cx(
-                'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 font-mono text-micro uppercase tracking-[0.14em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-                toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-text-muted hover:text-text-body'
-              )}
-            >
-              <span>{t('nav:tools')}</span>
-              {!toolsOpen && toolsAttention > 0 && <Badge variant="neutral" className="h-4 rounded-full px-1.5 tracking-normal tabular-nums">{toolsAttention}</Badge>}
-              {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
-              <ChevronDown className={cx('h-3.5 w-3.5 transition-transform motion-reduce:transition-none', toolsOpen ? '' : '-rotate-90')} aria-hidden />
-            </button>
-            {toolsOpen && (
-              <div id="topbar-tools" onKeyDown={(e) => { if (e.key === 'Escape') setToolsOpen(false); }} className="absolute left-0 top-full z-50 mt-1 flex min-w-44 flex-col gap-0.5 rounded-xl border border-hairline bg-raised p-1.5 shadow-xl">
-                {tools.map((n) => navButton(n))}
-              </div>
-            )}
-          </div>
+          {/* shell.tools: a menu in topbar mode, so Plugins stays one click away.
+              The panel portals outside the nav's overflow container (D1); the
+              menu owns focus, arrows and Escape (D2). */}
+          <DropdownMenu.Root open={toolsOpen} onOpenChange={setToolsOpen} modal={false}>
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                className={cx(
+                  'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 font-mono text-micro uppercase tracking-[0.14em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
+                  toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-text-muted hover:text-text-body'
+                )}
+              >
+                <span>{t('nav:tools')}</span>
+                {!toolsOpen && toolsAttention > 0 && <Badge variant="neutral" className="h-4 rounded-full px-1.5 tracking-normal tabular-nums">{toolsAttention}</Badge>}
+                {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
+                <ChevronDown className={cx('h-3.5 w-3.5 transition-transform motion-reduce:transition-none', toolsOpen ? '' : '-rotate-90')} aria-hidden />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                side="bottom"
+                align="start"
+                sideOffset={4}
+                className="z-50 flex min-w-44 animate-modal-in flex-col gap-0.5 rounded-xl border border-hairline bg-raised p-1.5 shadow-xl motion-reduce:animate-none"
+              >
+                {tools.map((n) => (
+                  <DropdownMenu.Item key={n.key} asChild onSelect={() => p.onNavigate({ name: n.key } as View)}>
+                    <button
+                      aria-current={active === n.key ? 'page' : undefined}
+                      className={cx(
+                        'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
+                        active === n.key ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface-strong hover:text-white'
+                      )}
+                    >
+                      <span>{n.label}</span>
+                      {n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>}
+                      {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
+                    </button>
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </nav>
         <label className="relative ml-auto block w-52 flex-none">
           <span className="sr-only">{t('nav:searchLibrary')}</span>
@@ -149,7 +168,9 @@ function Topbar(p: ShellProps) {
           <Settings className="h-4 w-4" aria-hidden />
         </button>
       </div>
-      <div className="flex items-center gap-4 overflow-x-auto px-4 py-1.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+      {/* The context strip wraps instead of scrolling (D3): at 1280 px every
+          block stays fully visible and no scrollbar shows. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-1.5">
         {/* shell.collections */}
         {(p.collections ?? []).filter((c) => c.pinned).length > 0 && (
           <div className="flex flex-none items-center gap-1">
@@ -221,8 +242,10 @@ function Topbar(p: ShellProps) {
             ))}
           </div>
         )}
-        <div className="ml-auto flex flex-none items-center gap-2">
-          <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
+        <div className="ml-auto flex min-w-0 flex-none items-center gap-2">
+          <div className="min-w-0 max-w-72 [&>button]:w-auto [&>button]:max-w-72">
+            <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
+          </div>
           {p.sessions.map((e: SessionEvent & { title: string }) => {
             const running = e.state === 'running';
             const label = running ? t('nav:playing') : e.state === 'stopping' ? t('nav:stopping') : t('nav:starting');
