@@ -1,5 +1,16 @@
 # Theme inventory: the launcher's parts
 
+> Status (2026-10-24): catalog views are `dashboard`, `library`, `game`,
+> `storage` and `plugins` (layouts plus variants). `shell` and Settings and
+> the game settings dialog are themable through variants only: shell takes
+> `shell.navigation`, Settings takes `settings.*` and `section.chrome`, the
+> game settings dialog takes `game-settings.*` and `dialog.*`. Still not
+> themable: the store view (native rect, chrome only); dialogs other than
+> game settings and Settings (built-in chrome, except `dialog.size` on the
+> game settings dialog); Activity, Fixes, Runners and Downloads (shared
+> chrome variants only: `view-header`, `empty-state`, `list-row`,
+> `section` — no layouts).
+
 Input for the component catalog (ADR) and the layout and variant issues under #90. Refs #91.
 
 ## Scope and method
