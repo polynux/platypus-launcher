@@ -1,7 +1,7 @@
 // i18n: converted
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
-import { Sidebar } from './components/Sidebar';
+import { Shell } from './components/Shell';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
@@ -72,6 +72,10 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsReturnView, setSettingsReturnView] = useState<View>({ name: 'dashboard' });
   const settingsPresentation = useVariant('settings.presentation');
+  // The shell is a view (issue #104): its regions depend on shell.navigation.
+  // Sidebar mode keeps today's row layout; topbar mode stacks the bar above
+  // the main column.
+  const shellNavigation = useVariant('shell.navigation');
   useEffect(() => {
     if (settingsPresentation !== 'page' && view.name === 'settings') {
       setSettingsOpen(true);
@@ -801,8 +805,8 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash')}>
-      <Sidebar
+    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', shellNavigation === 'topbar' && 'flex-col')}>
+      <Shell
         view={view}
         onNavigate={setView}
         onSettingsOpen={() => {

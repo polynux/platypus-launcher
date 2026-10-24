@@ -135,7 +135,7 @@ export function Sidebar(p: SidebarProps) {
   );
 
   return (
-    <aside className="flex h-full w-56 flex-none flex-col border-r border-hairline bg-black/25 p-4">
+    <aside data-region="sidebar" className="flex h-full w-56 flex-none flex-col border-r border-hairline bg-black/25 p-4">
       <div className="mb-5 flex items-center gap-2.5 px-1.5">
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-accent-strong to-rose-500 text-[15px] font-black text-on-accent">P</span>
         <div>

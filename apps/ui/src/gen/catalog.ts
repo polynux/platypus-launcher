@@ -16,6 +16,7 @@ export interface VariantValues {
   "dialog.size": "auto" | "sm" | "md" | "lg" | "xl";
   "game-settings.presentation": "dialog" | "sheet" | "page";
   "game-settings.tabs": "vertical" | "horizontal";
+  "shell.navigation": "sidebar" | "topbar";
 }
 
 export type VariantAxis = keyof VariantValues;
@@ -36,4 +37,5 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "dialog.size": "auto",
   "game-settings.presentation": "dialog",
   "game-settings.tabs": "vertical",
+  "shell.navigation": "sidebar",
 };
