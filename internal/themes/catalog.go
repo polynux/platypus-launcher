@@ -176,7 +176,9 @@ var Catalog = []types.ThemeCatalogEntry{
 	// Game page layout entries (issue #103): its regions, then its blocks in
 	// the built-in order (inventory §2.3). The hero region holds the top of
 	// the page (back, hero content, alerts, install note); main and side
-	// are today's two columns. Required (ADR §5): the back link (navigation),
+	// are today's two columns; bottom holds the achievements and the session
+	// activity full width below both columns, as the pre-layout page did.
+	// Required (ADR §5): the back link (navigation),
 	// the actions (Install/Play/Stop/Update, with the running job progress
 	// inside the install button and the installation panel), and the
 	// outside-folder alert (it tells the truth about the game's state).
@@ -186,14 +188,15 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "game.hero", Since: "1.0", Kind: "region"},
 	{Entry: "game.main", Since: "1.0", Kind: "region"},
 	{Entry: "game.side", Since: "1.0", Kind: "region"},
+	{Entry: "game.bottom", Since: "1.0", Kind: "region"},
 	{Entry: "game.back", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
 	{Entry: "game.outside", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
 	{Entry: "game.note", Since: "1.0", Kind: "block", Region: "hero"},
 	{Entry: "game.media", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "game.about", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "game.achievements-progress", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "game.achievements", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "game.activity", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "game.achievements-progress", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "game.achievements", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "game.activity", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "game.compat", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "game.crash", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "game.status", Since: "1.0", Kind: "block", Region: "side"},

@@ -442,6 +442,11 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.0`
 - kind: `region`
 
+## `game.bottom`
+
+- since: `1.0`
+- kind: `region`
+
 ## `game.back`
 
 - since: `1.0`
@@ -478,19 +483,19 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 
 - since: `1.0`
 - kind: `block`
-- region: `main`
+- region: `bottom`
 
 ## `game.achievements`
 
 - since: `1.0`
 - kind: `block`
-- region: `main`
+- region: `bottom`
 
 ## `game.activity`
 
 - since: `1.0`
 - kind: `block`
-- region: `main`
+- region: `bottom`
 
 ## `game.compat`
 

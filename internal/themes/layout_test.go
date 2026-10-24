@@ -403,13 +403,25 @@ func TestParseGameLayout(t *testing.T) {
 			t.Fatalf("hero = %+v, want the %q block restored", hero, want)
 		}
 	}
-	// The built-in game layout reproduces today's look: hero, main, side.
+	// The built-in game layout reproduces today's look: hero, main, side and
+	// the full-width bottom with the achievements and session activity.
 	builtin := BuiltinLayout("game")
-	if builtin == nil || len(builtin.Regions) != 3 {
-		t.Fatalf("built-in game = %+v, want hero, main and side", builtin)
+	if builtin == nil || len(builtin.Regions) != 4 {
+		t.Fatalf("built-in game = %+v, want hero, main, side and bottom", builtin)
 	}
-	if builtin.Regions[0].Name != "hero" || builtin.Regions[1].Name != "main" || builtin.Regions[2].Name != "side" {
-		t.Fatalf("built-in game regions = %+v, want hero, main, side in order", builtin.Regions)
+	for i, want := range []string{"hero", "main", "side", "bottom"} {
+		if builtin.Regions[i].Name != want {
+			t.Fatalf("built-in game regions = %+v, want hero, main, side, bottom in order", builtin.Regions)
+		}
+	}
+	var bottom *types.ThemeLayoutRegion
+	for i := range builtin.Regions {
+		if builtin.Regions[i].Name == "bottom" {
+			bottom = &builtin.Regions[i]
+		}
+	}
+	if bottom == nil || len(bottom.Nodes) != 3 || bottom.Nodes[0].Block != "achievements-progress" || bottom.Nodes[1].Block != "achievements" || bottom.Nodes[2].Block != "activity" {
+		t.Fatalf("built-in game bottom = %+v, want achievements-progress, achievements and activity", bottom)
 	}
 }
 

@@ -90,11 +90,12 @@ var builtinLayoutXML = map[string]string{
 </layout>`,
 	// Today's game page: the back link, the hero (heading and actions inside
 	// the Hero frame), the outside-folder alert and the install note full
-	// width; the media strip and about text in the left column with the
-	// achievements and session activity below (below the fold); compat,
+	// width; the media strip and about text in the left column, compat,
 	// crash hints, status, collections, installation and copies in the right
-	// column. The view wraps the hero region's heading and actions in the
-	// Hero frame, so a layout can move the actions out of the hero.
+	// column; the achievements and session activity full width below both
+	// columns, exactly as the pre-layout page laid them out. The view wraps
+	// the hero region's heading and actions in the Hero frame, so a layout
+	// can move the actions out of the hero.
 	"game": `<layout view="game" catalog="1.0">
   <region name="hero">
     <block name="back" />
@@ -106,9 +107,6 @@ var builtinLayoutXML = map[string]string{
   <region name="main">
     <block name="media" />
     <block name="about" />
-    <block name="achievements-progress" />
-    <block name="achievements" />
-    <block name="activity" />
   </region>
   <region name="side">
     <block name="compat" />
@@ -117,6 +115,11 @@ var builtinLayoutXML = map[string]string{
     <block name="collections" />
     <block name="installation" />
     <block name="copies" />
+  </region>
+  <region name="bottom">
+    <block name="achievements-progress" />
+    <block name="achievements" />
+    <block name="activity" />
   </region>
 </layout>`,
 }
