@@ -833,6 +833,7 @@ export namespace types {
     values: string[];
     default: string;
     since: string;
+    inherits?: string;
   }
 
   export interface ThemeCatalogEntry {
@@ -843,11 +844,6 @@ export namespace types {
     required?: boolean;
     region?: string;
     attrs?: string[];
-  }
-
-  export interface ThemeEmptyStateVariants {
-    chrome: string;
-    icon: string;
   }
 
   export interface ThemeInfo {
@@ -876,40 +872,12 @@ export namespace types {
     nodes: types.ThemeLayoutNode[];
   }
 
-  export interface ThemeListRowVariants {
-    media: string;
-    density: string;
-  }
-
-  export interface ThemeSectionVariants {
-    chrome: string;
-  }
-
-  export interface ThemeSettingsVariants {
-    presentation: string;
-    navigation: string;
-  }
-
   export interface ThemeTokens {
     id: string;
     tokens: Record<string, string>;
     wash: types.WashLayer[];
-    variants: types.ThemeVariants;
+    variants: Record<string, string>;
     fonts?: Record<string, string>;
-  }
-
-  export interface ThemeVariants {
-    settings: types.ThemeSettingsVariants;
-    section: types.ThemeSectionVariants;
-    viewHeader: types.ThemeViewHeaderVariants;
-    emptyState: types.ThemeEmptyStateVariants;
-    listRow: types.ThemeListRowVariants;
-  }
-
-  export interface ThemeViewHeaderVariants {
-    actions: string;
-    subtitle: string;
-    size: string;
   }
 
   export interface Tweak {

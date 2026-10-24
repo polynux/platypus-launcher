@@ -614,27 +614,7 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			variants[key] = axis.Default
 		}
 	}
-	out := types.ThemeTokens{ID: def.Info.ID, Tokens: map[string]string{}, Wash: def.Wash}
-	out.Variants = types.ThemeVariants{
-		Settings: types.ThemeSettingsVariants{
-			Presentation: variants["settings.presentation"],
-			Navigation:   variants["settings.navigation"],
-		},
-		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
-		ViewHeader: types.ThemeViewHeaderVariants{
-			Actions:  variants["view-header.actions"],
-			Subtitle: variants["view-header.subtitle"],
-			Size:     variants["view-header.size"],
-		},
-		EmptyState: types.ThemeEmptyStateVariants{
-			Chrome: variants["empty-state.chrome"],
-			Icon:   variants["empty-state.icon"],
-		},
-		ListRow: types.ThemeListRowVariants{
-			Media:   variants["list-row.media"],
-			Density: variants["list-row.density"],
-		},
-	}
+	out := types.ThemeTokens{ID: def.Info.ID, Tokens: map[string]string{}, Wash: def.Wash, Variants: variants}
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
 	}
@@ -655,26 +635,20 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 		for key, value := range t.Variants {
 			variants[key] = value
 		}
-	}
-	out.Variants = types.ThemeVariants{
-		Settings: types.ThemeSettingsVariants{
-			Presentation: variants["settings.presentation"],
-			Navigation:   variants["settings.navigation"],
-		},
-		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
-		ViewHeader: types.ThemeViewHeaderVariants{
-			Actions:  variants["view-header.actions"],
-			Subtitle: variants["view-header.subtitle"],
-			Size:     variants["view-header.size"],
-		},
-		EmptyState: types.ThemeEmptyStateVariants{
-			Chrome: variants["empty-state.chrome"],
-			Icon:   variants["empty-state.icon"],
-		},
-		ListRow: types.ThemeListRowVariants{
-			Media:   variants["list-row.media"],
-			Density: variants["list-row.density"],
-		},
+		// A use-site axis the theme leaves unset follows the broader axis it
+		// inherits (ADR §2: use site > global > built-in), when that value is
+		// one the use site offers.
+		for _, entry := range Catalog {
+			for _, axis := range entry.Axes {
+				key := entry.Entry + "." + axis.Name
+				if _, explicit := t.Variants[key]; explicit || axis.Inherits == "" {
+					continue
+				}
+				if v, ok := t.Variants[axis.Inherits]; ok && slices.Contains(axis.Values, v) {
+					variants[key] = v
+				}
+			}
+		}
 	}
 	return out
 }

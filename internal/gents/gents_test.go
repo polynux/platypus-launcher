@@ -9,6 +9,7 @@ import (
 	"platypus/internal/app"
 	"platypus/internal/corerpc"
 	"platypus/internal/gents"
+	"platypus/internal/themes"
 )
 
 // repoRoot is the repository root, anchored at this test's source file so the
@@ -30,7 +31,7 @@ func TestGeneratedUpToDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	for name, want := range map[string]string{"models.ts": models, "api.ts": api} {
+	for name, want := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS()} {
 		got, err := os.ReadFile(filepath.Join(root, "apps", "ui", "src", "gen", name))
 		if err != nil {
 			t.Fatalf("%s: %v (run `go run ./cmd/gen-ts` from the repository root)", name, err)

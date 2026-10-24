@@ -7,45 +7,22 @@ import { Effect } from 'effect';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
 import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
+import { VARIANT_DEFAULTS, type VariantAxis, type VariantValues } from '../gen/catalog';
 
 /** The theme the app ships with. Matches the core's default (themes.DefaultID). */
 export const DEFAULT_THEME_ID = 'warm';
 
 const CACHE_KEY = 'platypus.theme';
-let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' }, viewHeader: { actions: 'right', subtitle: 'shown', size: 'regular' }, emptyState: { chrome: 'dashed', icon: 'off' }, listRow: { media: 'on', density: 'comfortable' } };
+let currentVariants: VariantValues = { ...VARIANT_DEFAULTS };
 const variantListeners = new Set<() => void>();
-type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `view-header.${keyof ThemeTokens['variants']['viewHeader']}` | `empty-state.${keyof ThemeTokens['variants']['emptyState']}` | `list-row.${keyof ThemeTokens['variants']['listRow']}`;
 
-/** Reads one resolved catalog choice and updates when the selected theme changes. */
-export function useVariant(axis: ThemeVariantAxis): string {
-  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'view-header' | 'empty-state' | 'list-row', string];
-  const readVariant = () => {
-    switch (entry) {
-      case 'settings': return name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation;
-      case 'section': return currentVariants.section.chrome;
-      case 'view-header': return currentVariants.viewHeader[name as keyof ThemeTokens['variants']['viewHeader']];
-      case 'empty-state': return currentVariants.emptyState[name as keyof ThemeTokens['variants']['emptyState']];
-      default: return currentVariants.listRow[name as keyof ThemeTokens['variants']['listRow']];
-    }
-  };
-  const getDefault = () => {
-    switch (axis) {
-      case 'settings.presentation': return 'page';
-      case 'settings.navigation': return 'scroll';
-      case 'section.chrome': return 'hairline';
-      case 'view-header.actions': return 'right';
-      case 'view-header.subtitle': return 'shown';
-      case 'view-header.size': return 'regular';
-      case 'empty-state.chrome': return 'dashed';
-      case 'empty-state.icon': return 'off';
-      case 'list-row.media': return 'on';
-      default: return 'comfortable';
-    }
-  };
+/** Reads one resolved catalog choice ("entry.axis", see gen/catalog.ts) and
+ *  updates when the selected theme changes. */
+export function useVariant<A extends VariantAxis>(axis: A): VariantValues[A] {
   return useSyncExternalStore(
     (listener) => { variantListeners.add(listener); return () => variantListeners.delete(listener); },
-    readVariant,
-    getDefault,
+    () => currentVariants[axis],
+    () => VARIANT_DEFAULTS[axis],
   );
 }
 
@@ -157,7 +134,9 @@ export function applyTheme(theme: ThemeTokens): void {
   const style = document.documentElement.style;
   for (const [name, value] of Object.entries(themeVariables(theme))) style.setProperty(name, value);
   loadThemeFonts(theme.fonts);
-  currentVariants = { ...currentVariants, ...(theme.variants ?? {}) };
+  // The core sends every axis resolved; a cached theme from an older build
+  // may lack new axes, which keep their built-in value.
+  currentVariants = { ...VARIANT_DEFAULTS, ...(theme.variants ?? {}) } as VariantValues;
   for (const listener of variantListeners) listener();
 }
 
