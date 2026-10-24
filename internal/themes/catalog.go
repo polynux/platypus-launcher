@@ -129,10 +129,38 @@ var Catalog = []types.ThemeCatalogEntry{
 	// Hero content blocks (issue #101): today's dashboard hero content and
 	// today's game page hero content. The dashboard keeps placing hero (the
 	// frame with its content); attention stays available for layouts that
-	// show the content on its own. The game page uses the blocks in fixed
-	// positions until it becomes a layout view (#103). Actions are required:
+	// show the content on its own. The game page places heading and actions
+	// in its hero region (#103): the view wraps them in the Hero frame, so
+	// a layout can move the actions out of the hero. Actions are required:
 	// they hold Install, Play and Update.
 	{Entry: "dashboard.attention", Since: "1.0", Kind: "block", Region: "top"},
 	{Entry: "game.heading", Since: "1.0", Kind: "block", Region: "hero"},
 	{Entry: "game.actions", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
+	// Game page layout entries (issue #103): its regions, then its blocks in
+	// the built-in order (inventory §2.3). The hero region holds the top of
+	// the page (back, hero content, alerts, install note); main and side
+	// are today's two columns. Required (ADR §5): the back link (navigation),
+	// the actions (Install/Play/Stop/Update, with the running job progress
+	// inside the install button and the installation panel), and the
+	// outside-folder alert (it tells the truth about the game's state).
+	// The running job progress lives inside the actions and installation
+	// panels as today, so it moves with them and can't be hidden without
+	// hiding the actions themselves.
+	{Entry: "game.hero", Since: "1.0", Kind: "region"},
+	{Entry: "game.main", Since: "1.0", Kind: "region"},
+	{Entry: "game.side", Since: "1.0", Kind: "region"},
+	{Entry: "game.back", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
+	{Entry: "game.outside", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
+	{Entry: "game.note", Since: "1.0", Kind: "block", Region: "hero"},
+	{Entry: "game.media", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "game.about", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "game.achievements-progress", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "game.achievements", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "game.activity", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "game.compat", Since: "1.0", Kind: "block", Region: "side"},
+	{Entry: "game.crash", Since: "1.0", Kind: "block", Region: "side"},
+	{Entry: "game.status", Since: "1.0", Kind: "block", Region: "side"},
+	{Entry: "game.collections", Since: "1.0", Kind: "block", Region: "side"},
+	{Entry: "game.installation", Since: "1.0", Kind: "block", Region: "side"},
+	{Entry: "game.copies", Since: "1.0", Kind: "block", Region: "side"},
 }

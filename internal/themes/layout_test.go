@@ -216,11 +216,28 @@ func TestBuiltinLayouts(t *testing.T) {
 	if len(library.Regions) != 2 || library.Regions[1].Name != "side" {
 		t.Fatalf("cool library = %+v", library)
 	}
-	if LayoutFor("warm", "dashboard") == nil || LayoutFor("warm", "library") == nil {
+	game, ok := cool.Layouts["game"]
+	if !ok {
+		t.Fatalf("cool ships layouts %v, want a game layout", cool.Layouts)
+	}
+	if len(game.Regions) != 3 || game.Regions[0].Name != "hero" {
+		t.Fatalf("cool game = %+v, want hero, main and side", game)
+	}
+	// Cool moves the media under the about text; the built-in shows it above.
+	var main *types.ThemeLayoutRegion
+	for i := range game.Regions {
+		if game.Regions[i].Name == "main" {
+			main = &game.Regions[i]
+		}
+	}
+	if main == nil || len(main.Nodes) < 2 || main.Nodes[0].Block != "about" || main.Nodes[1].Block != "media" {
+		t.Fatalf("cool game main = %+v, want about then media", main)
+	}
+	if LayoutFor("warm", "dashboard") == nil || LayoutFor("warm", "library") == nil || LayoutFor("warm", "game") == nil {
 		t.Fatal("warm resolves no layout, want the built-in arrangement")
 	}
-	if LayoutFor("cool", "dashboard") == nil || LayoutFor("cool", "library") == nil {
-		t.Fatal("cool resolves no layout, want its dashboard and library layouts")
+	if LayoutFor("cool", "dashboard") == nil || LayoutFor("cool", "library") == nil || LayoutFor("cool", "game") == nil {
+		t.Fatal("cool resolves no layout, want its dashboard, library and game layouts")
 	}
 	if LayoutFor("missing", "dashboard") == nil {
 		t.Fatal("a missing theme resolved no layout, want the built-in arrangement")
@@ -234,7 +251,7 @@ func TestBuiltinLayouts(t *testing.T) {
 // layouts: they parse with zero warnings, and resolving a view with blocks
 // never returns nothing.
 func TestBuiltinLayoutsPassValidation(t *testing.T) {
-	for _, view := range []string{"dashboard", "library"} {
+	for _, view := range []string{"dashboard", "library", "game"} {
 		src, ok := builtinLayoutXML[view]
 		if !ok {
 			t.Fatalf("no built-in XML for view %q", view)
@@ -328,6 +345,71 @@ restored:
 	}
 	if side == nil || len(side.Nodes) != 3 || side.Nodes[1].Attrs["limit"] != "4" {
 		t.Fatalf("side = %+v, want last-played, activity limit 4 and recent", side)
+	}
+}
+
+// The game layout (issue #103) puts the back link, hero content, alerts and
+// install note in the hero region, the media and about text in the main
+// column with the achievements and activity below, and compat, crash hints,
+// status, collections, installation and copies in the side column. The back
+// link, the actions and the outside-folder alert are required (ADR §5), so a
+// layout that leaves them out still gets them, in the hero region, with a
+// warning.
+func TestParseGameLayout(t *testing.T) {
+	src := `
+<layout view="game" catalog="1.0">
+  <region name="main">
+    <block name="about" />
+    <block name="media" />
+  </region>
+  <region name="side">
+    <block name="compat" />
+    <block name="installation" />
+  </region>
+</layout>`
+	layout, warnings := parseLayout("game", []byte(src))
+	for _, want := range []string{`leaves out required block "back"`, `leaves out required block "actions"`, `leaves out required block "outside"`} {
+		found := false
+		for _, w := range warnings {
+			if strings.Contains(w, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("warnings = %v, want %q", warnings, want)
+		}
+	}
+	if layout == nil {
+		t.Fatalf("warnings = %v, want a layout with the required blocks restored", warnings)
+	}
+	var hero *types.ThemeLayoutRegion
+	for i := range layout.Regions {
+		if layout.Regions[i].Name == "hero" {
+			hero = &layout.Regions[i]
+		}
+	}
+	if hero == nil {
+		t.Fatalf("layout = %+v, want a hero region", layout)
+	}
+	for _, want := range []string{"back", "actions", "outside"} {
+		found := false
+		for _, n := range hero.Nodes {
+			if n.Block == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("hero = %+v, want the %q block restored", hero, want)
+		}
+	}
+	// The built-in game layout reproduces today's look: hero, main, side.
+	builtin := BuiltinLayout("game")
+	if builtin == nil || len(builtin.Regions) != 3 {
+		t.Fatalf("built-in game = %+v, want hero, main and side", builtin)
+	}
+	if builtin.Regions[0].Name != "hero" || builtin.Regions[1].Name != "main" || builtin.Regions[2].Name != "side" {
+		t.Fatalf("built-in game regions = %+v, want hero, main, side in order", builtin.Regions)
 	}
 }
 

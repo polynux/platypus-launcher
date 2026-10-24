@@ -310,3 +310,143 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - kind: `block`
 - region: `bottom`
 
+## `hero`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `height` | `tall`, `regular`, `compact` | `tall` | `1.0` | — |
+| `gradient` | `warm`, `neutral`, `none` | `warm` | `1.0` | — |
+| `chips` | `glass`, `solid` | `glass` | `1.0` | — |
+
+## `game-hero`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `height` | `tall`, `regular`, `compact` | `regular` | `1.0` | `hero.height` |
+| `gradient` | `warm`, `neutral`, `none` | `warm` | `1.0` | `hero.gradient` |
+| `chips` | `glass`, `solid` | `solid` | `1.0` | `hero.chips` |
+
+## `dashboard.attention`
+
+- since: `1.0`
+- kind: `block`
+- region: `top`
+
+## `game.heading`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+
+## `game.actions`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `game.hero`
+
+- since: `1.0`
+- kind: `region`
+
+## `game.main`
+
+- since: `1.0`
+- kind: `region`
+
+## `game.side`
+
+- since: `1.0`
+- kind: `region`
+
+## `game.back`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `game.outside`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+
+## `game.note`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+
+## `game.media`
+
+- since: `1.0`
+- kind: `block`
+- region: `main`
+
+## `game.about`
+
+- since: `1.0`
+- kind: `block`
+- region: `main`
+
+## `game.achievements-progress`
+
+- since: `1.0`
+- kind: `block`
+- region: `main`
+
+## `game.achievements`
+
+- since: `1.0`
+- kind: `block`
+- region: `main`
+
+## `game.activity`
+
+- since: `1.0`
+- kind: `block`
+- region: `main`
+
+## `game.compat`
+
+- since: `1.0`
+- kind: `block`
+- region: `side`
+
+## `game.crash`
+
+- since: `1.0`
+- kind: `block`
+- region: `side`
+
+## `game.status`
+
+- since: `1.0`
+- kind: `block`
+- region: `side`
+
+## `game.collections`
+
+- since: `1.0`
+- kind: `block`
+- region: `side`
+
+## `game.installation`
+
+- since: `1.0`
+- kind: `block`
+- region: `side`
+
+## `game.copies`
+
+- since: `1.0`
+- kind: `block`
+- region: `side`
+

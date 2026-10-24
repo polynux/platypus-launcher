@@ -5,5 +5,6 @@ import type { ThemeLayout } from '../types';
 /** The built-in arrangement per view: what renders with no theme layout. */
 export const BUILTIN_LAYOUTS: Record<string, ThemeLayout> = {
   "dashboard": {"view":"dashboard","regions":[{"name":"top","nodes":[{"block":"hero"},{"block":"welcome"},{"block":"empty"}]},{"name":"main","nodes":[{"block":"continue"}]},{"name":"side","nodes":[{"block":"waiting"},{"block":"recent"}]},{"name":"bottom","nodes":[{"block":"activity","attrs":{"limit":"8"}}]}]},
+  "game": {"view":"game","regions":[{"name":"hero","nodes":[{"block":"back"},{"block":"heading"},{"block":"actions"},{"block":"outside"},{"block":"note"}]},{"name":"main","nodes":[{"block":"media"},{"block":"about"},{"block":"achievements-progress"},{"block":"achievements"},{"block":"activity"}]},{"name":"side","nodes":[{"block":"compat"},{"block":"crash"},{"block":"status"},{"block":"collections"},{"block":"installation"},{"block":"copies"}]}]},
   "library": {"view":"library","regions":[{"name":"top","nodes":[{"block":"header"},{"block":"warnings"},{"block":"empty"}]},{"name":"bottom","nodes":[{"block":"last-played"},{"block":"grid"},{"block":"table"},{"row":[{"block":"activity","attrs":{"limit":"6"}},{"block":"recent"}]}]}]},
 };
