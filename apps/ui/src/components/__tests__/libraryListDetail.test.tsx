@@ -74,6 +74,25 @@ describe('library list-detail', () => {
     expect(onPlay).toHaveBeenCalledWith('beta');
   });
 
+  it('launches the selected row exactly once on Enter', async () => {
+    const user = userEvent.setup();
+    const { onPlay } = list();
+    await user.click(screen.getByRole('button', { name: /Gamma/ }));
+    expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
+    onPlay.mockClear();
+    // Focus is on the Gamma row; Enter used to play twice (the row handler
+    // plus the list handler).
+    await user.keyboard('{Enter}');
+    expect(onPlay).toHaveBeenCalledTimes(1);
+    expect(onPlay).toHaveBeenCalledWith('gamma');
+  });
+
+  it('marks only the selected row current', () => {
+    list();
+    expect(screen.getByRole('button', { name: /Alpha/ }).getAttribute('aria-current')).toBe('true');
+    expect(screen.getByRole('button', { name: /Beta/ }).getAttribute('aria-current')).toBeNull();
+  });
+
   it('shows Not installed greyed and the empty filter result', async () => {
     const user = userEvent.setup();
     list();

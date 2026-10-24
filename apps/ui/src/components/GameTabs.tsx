@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, HardDrive, Loader2, Play, RefreshCw, SlidersHorizontal, Square } from 'lucide-react';
-import type { ActivityEvent, ArtCandidate, CloudInfo, Game, GameDetails, GameJobKind, Job, SessionEvent, StorePlugin } from '../types';
+import type { ActivityEvent, ArtCandidate, CloudInfo, Game, GameDetails, GameJobKind, GameSettings, Job, SessionEvent, StorePlugin } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -98,6 +98,10 @@ export interface GameTabsData {
   onOpenRunner: () => void;
   /** Opens the game settings (the drawer in atlas). */
   onOpenSettings: () => void;
+  /** The staged game writes through here, so App's copy stays current. */
+  onTuneSaved?: (settings: GameSettings) => void;
+  /** The list-detail stage shows no back link (it would go nowhere). */
+  hideBack?: boolean;
 }
 
 /** Ticks once a second while mounted, so the strip elapsed time stays live. */
@@ -323,6 +327,8 @@ function SaveState({ d }: { d: GameTabsData }) {
 function ActionStrip({ d }: { d: GameTabsData }) {
   const { t } = useTranslation('game');
   const [tuneOpen, setTuneOpen] = useState(false);
+  // Another game on the stage never inherits the open flyout.
+  useEffect(() => setTuneOpen(false), [d.game.id]);
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-accent/[0.12] px-5 py-3">
       <div className="mr-2 flex items-center gap-1.5">
@@ -343,7 +349,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             {t('game:strip.tune')}
             <ChevronDown className="h-3.5 w-3.5" aria-hidden />
           </button>
-          <TuneFlyout game={d.game} open={tuneOpen} onClose={() => setTuneOpen(false)} onAllSettings={d.onOpenSettings} />
+          <TuneFlyout game={d.game} open={tuneOpen} onClose={() => setTuneOpen(false)} onAllSettings={d.onOpenSettings} onSaved={d.onTuneSaved} />
         </span>
       </div>
       {d.game.update_available && d.game.is_installed && (
@@ -493,23 +499,31 @@ export function GameTabsView(d: GameTabsData) {
 
   return (
     <div>
-      <GameBackLink backLabel={d.backLabel} onBack={d.onBack} />
-      <div className="mt-1 overflow-hidden rounded-2xl ring-1 ring-hairline">
-        <AtlasHero game={d.game} hero={d.hero} details={d.details} />
-        <ActionStrip d={d} />
+      {!d.hideBack && (
+        <div className="px-7 pt-7">
+          <GameBackLink backLabel={d.backLabel} onBack={d.onBack} />
+        </div>
+      )}
+      {/* Full-bleed like /21 `.stage`: the hero art at the top with the
+          title bottom-left, and the action strip edge to edge under it. No
+          rounded inset card, so the Tune flyout is never clipped. */}
+      <AtlasHero game={d.game} hero={d.hero} details={d.details} />
+      <ActionStrip d={d} />
+      {/* Notices sit below the strip with the page padding. */}
+      <div className="px-5 pt-4 empty:hidden">
+        {d.plugin && <GameOutsideAlert game={d.game} plugin={d.plugin} onAllowFolder={d.onAllowFolder} />}
+        <GameInstallNote
+          game={d.game}
+          plugin={d.plugin}
+          installing={d.installing}
+          installSize={d.installSize}
+          job={d.job}
+          canChooseVersion={d.canChooseVersion}
+          refreshing={d.refreshing}
+          onOpenVersions={d.onOpenVersions}
+          onOpenPlugins={d.onOpenPlugins}
+        />
       </div>
-      {d.plugin && <GameOutsideAlert game={d.game} plugin={d.plugin} onAllowFolder={d.onAllowFolder} />}
-      <GameInstallNote
-        game={d.game}
-        plugin={d.plugin}
-        installing={d.installing}
-        installSize={d.installSize}
-        job={d.job}
-        canChooseVersion={d.canChooseVersion}
-        refreshing={d.refreshing}
-        onOpenVersions={d.onOpenVersions}
-        onOpenPlugins={d.onOpenPlugins}
-      />
       <div role="tablist" aria-label={t('game:tabs.label')} onKeyDown={onTabKey} className="sticky top-0 z-10 -mx-1 mt-2 flex gap-1 overflow-x-auto border-b border-hairline bg-ground px-4">
         {tabs.map((x) => (
           <button
@@ -530,7 +544,7 @@ export function GameTabsView(d: GameTabsData) {
           </button>
         ))}
       </div>
-      <div role="tabpanel" key={`${d.game.id}-${cur}`} className="pt-5">
+      <div role="tabpanel" key={`${d.game.id}-${cur}`} className="px-5 pb-8 pt-5">
         {cur === 'store' && (
           <div className="grid grid-cols-1 gap-7 min-[1100px]:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0">

@@ -152,6 +152,28 @@ describe('game page tabs variant', () => {
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 
+  it('hides the back link on the list-detail stage but keeps it outside', async () => {
+    const props = (hideBack?: boolean) => (
+      <GamePage
+        game={installedGame()}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        hideBack={hideBack}
+        onManageCollections={() => {}}
+        collections={[]}
+      />
+    );
+    const first = render(props(true));
+    expect(await screen.findByRole('button', { name: /^Play/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Library' })).toBeNull();
+    first.unmount();
+    cleanup();
+    render(props());
+    expect(await screen.findByRole('button', { name: 'Library' })).toBeInTheDocument();
+  });
+
   it('keeps the required blocks: back, actions with Update, and the outside alert', async () => {
     const g = installedGame();
     (g as Game & { outside_folder?: boolean }).outside_folder = true;

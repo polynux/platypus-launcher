@@ -108,6 +108,17 @@ export function TuneFlyout({
   const [groups, setGroups] = useState<SettingGroup[] | null>(null);
   const [failed, setFailed] = useState(false);
 
+  // The last settings the core confirmed, so a failed write can fall back
+  // to what is persisted without discarding a newer optimistic write.
+  // Every write builds from the latest optimistic draft (not the render
+  // closure), and the writes run one at a time: overlapping toggles used to
+  // roll back to a stale `before`.
+  const confirmedRef = useRef<GameSettings>(game.settings);
+  const draftRef = useRef<GameSettings>(draft);
+  draftRef.current = draft;
+  const writeSeq = useRef(0);
+  const writeQueue = useRef(Promise.resolve());
+
   // Follow the game's saved settings (a save from the game page, or another
   // game): the flyout never shows a stale switch.
   const saved = JSON.stringify(game.settings);
@@ -115,6 +126,7 @@ export function TuneFlyout({
   useEffect(() => {
     if (last.current.id === game.id && last.current.saved === saved) return;
     last.current = { id: game.id, saved };
+    confirmedRef.current = game.settings;
     setDraft(game.settings);
     setFailed(false);
   }, [game.id, saved]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -131,25 +143,34 @@ export function TuneFlyout({
     return () => { live = false; };
   }, [open, game.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Focus the first control on open.
+  // Focus the first control on open (without scrolling the stage: the
+  // flyout now renders outside any clipping ancestor).
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector<HTMLElement>('button:not(:disabled), [role="combobox"]')?.focus();
+    ref.current?.querySelector<HTMLElement>('button:not(:disabled), [role="combobox"]')?.focus({ preventScroll: true });
   }, [open, game.id]);
 
   // Esc and a click outside close. Radix's own listbox handles Escape itself
-  // (it preventDefaults), and the anchor toggles.
+  // (it preventDefaults), and the anchor toggles. The runner pick's portaled
+  // listbox is not inside the flyout, so a pointer down there must not close
+  // it before the selection lands.
   useEffect(() => {
     if (!open) return;
+    const focusAnchor = () => {
+      document.querySelector<HTMLElement>('[data-tune-anchor]')?.focus();
+    };
     const down = (e: PointerEvent) => {
       const target = e.target instanceof Element ? e.target : null;
       if (!target || ref.current?.contains(target)) return;
       if (target.closest('[data-tune-anchor]')) return;
+      if (target.closest('[role="listbox"], [data-radix-popper-content-wrapper]')) return;
+      focusAnchor();
       onClose();
     };
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       if (e.target instanceof Element && e.target.closest('[role="listbox"], [data-radix-popper-content-wrapper]')) return;
+      focusAnchor();
       onClose();
     };
     window.addEventListener('pointerdown', down);
@@ -163,15 +184,28 @@ export function TuneFlyout({
   if (!open) return null;
 
   const write = (next: GameSettings) => {
-    const before = draft;
+    const mySeq = ++writeSeq.current;
+    draftRef.current = next;
     setDraft(next);
     setFailed(false);
-    Effect.runPromise(LauncherApi.saveGameSettings(game.id, next))
-      .then(() => onSaved?.(next))
-      .catch(() => {
-        setDraft(before);
-        setFailed(true);
-      });
+    const task = () =>
+      Effect.runPromise(LauncherApi.saveGameSettings(game.id, next)).then(
+        () => {
+          confirmedRef.current = next;
+          onSaved?.(next);
+          if (mySeq === writeSeq.current) setFailed(false);
+        },
+        () => {
+          // Only the latest write falls back; an older failure must not
+          // wipe a newer optimistic draft queued behind it.
+          if (mySeq === writeSeq.current) {
+            draftRef.current = confirmedRef.current;
+            setDraft(confirmedRef.current);
+          }
+          setFailed(true);
+        },
+      );
+    writeQueue.current = writeQueue.current.then(task, task);
   };
 
   // A switch is offered only when the runner's schema has the field. Until the
@@ -232,7 +266,7 @@ export function TuneFlyout({
                 key={p.id}
                 type="button"
                 aria-pressed={on}
-                onClick={() => write(applyTunePreset(draft, p.id))}
+                onClick={() => write(applyTunePreset(draftRef.current, p.id))}
                 className={cx(
                   'h-[30px] rounded-md text-[12.5px] font-semibold ring-1 transition',
                   on ? 'bg-accent/20 text-text ring-accent/40' : 'text-text-muted ring-hairline hover:text-text',
@@ -256,7 +290,7 @@ export function TuneFlyout({
                 role="switch"
                 aria-checked={on}
                 disabled={!!disabledReason}
-                onClick={() => write(toggleTune(draft, key))}
+                onClick={() => write(toggleTune(draftRef.current, key))}
                 className="grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <Icon aria-hidden className={cx('size-4', on ? 'text-accent' : 'text-text-faint')} />
@@ -281,7 +315,7 @@ export function TuneFlyout({
         {clientLaunched ? (
           <small className="flex-none text-[12px] text-text-muted">{t('game:facts.steamRunner')}</small>
         ) : runnerField?.options?.length ? (
-          <Select value={draft.runner_id || 'auto'} onValueChange={(v) => write({ ...draft, runner_id: v })}>
+          <Select value={draft.runner_id || 'auto'} onValueChange={(v) => write({ ...draftRef.current, runner_id: v })}>
             <SelectTrigger aria-label={t('tune:runner.label')} className="h-8 w-[180px] flex-none">
               <SelectValue />
             </SelectTrigger>

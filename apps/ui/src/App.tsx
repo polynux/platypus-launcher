@@ -678,25 +678,36 @@ export function App() {
   // Atlas list-detail (issue #126): the library is the list plus the stage.
   const libraryPresentation = useVariant('library.presentation');
   const isListDetail = libraryPresentation === 'list-detail';
-  // The staged game in the library list-detail (for the game tone when the
-  // view is the library: the selected game feeds it too).
+  // The staged game in the library list-detail (for the game tone and the
+  // palette's actions): tracked whenever the stage shows, whatever opened
+  // it. Opening a game from the palette or dashboard lands on the stage,
+  // and clicking another row re-stages, so both follow the staged game.
   const [stagedGameId, setStagedGameId] = useState<string | null>(null);
-  const stagedGame = isListDetail && view.name === 'library' ? games.find((g) => g.id === stagedGameId) ?? undefined : undefined;
-  const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : stagedGame;
+  const stagedGame = isListDetail ? games.find((g) => g.id === stagedGameId) ?? undefined : undefined;
+  const gameViewGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
+  const currentGame = isListDetail ? (stagedGame ?? gameViewGame) : gameViewGame;
+  // The hero art the game page actually shows (the details hero once it
+  // loads): the tone samples that, falling back to the library chain.
+  const [heroArt, setHeroArt] = useState<string | null>(null);
+  const currentGameId = currentGame?.id;
+  useEffect(() => { setHeroArt(null); }, [currentGameId]);
   // The game's colour (issue #123), applied here so it also works where the
   // theme shows no switch; the sourcebar shell renders the switch.
-  const gameTone = useGameTone(currentGame ? heroImages(currentGame)[0] : undefined);
+  const gameTone = useGameTone(currentGame ? (heroArt ?? heroImages(currentGame)[0]) : undefined);
 
   // One game page for the game view and the list-detail stage (issues #126,
   // #127): the same props, so the stage renders the game page for the
   // selected game with the real data and APIs.
-  const renderGamePage = (game: Game, from: 'dashboard' | 'library' | 'fixes') => (
+  const renderGamePage = (game: Game, from: 'dashboard' | 'library' | 'fixes', hideBack = false) => (
     <GamePage
       game={game}
       runners={runners}
       activity={activity}
       backLabel={t(`nav:${from}`)}
       onBack={() => setView({ name: from } as View)}
+      hideBack={hideBack}
+      onHeroArt={setHeroArt}
+      onTuneSaved={(st) => setGames((prev) => prev.map((x) => (x.id === game.id ? { ...x, settings: st } : x)))}
       onPlay={() => launch(game)}
       onStop={() => stop(game.id, false)}
       onForceStop={() => stop(game.id, true)}
@@ -742,9 +753,9 @@ export function App() {
         const g = games.find((x) => x.id === id);
         if (g) launch(g);
       }}
-      renderStage={(g) => renderGamePage(g, view.name === 'game' && view.from ? view.from : 'library')}
+      renderStage={(g) => renderGamePage(g, view.name === 'game' && view.from ? view.from : 'library', true)}
       initialSelectedId={initialSelectedId}
-      onStageChange={view.name === 'library' ? setStagedGameId : undefined}
+      onStageChange={setStagedGameId}
       onResetFilters={() => {
         setOwnership('owned');
         setSelectedStores([]);
