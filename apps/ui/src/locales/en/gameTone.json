@@ -1,0 +1,7 @@
+{
+  "label": "Game colour",
+  "accent": "Accent",
+  "accentHint": "The game's colour on buttons and highlights",
+  "whole": "Whole app",
+  "wholeHint": "The game's colour across the whole app"
+}

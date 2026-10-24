@@ -13,6 +13,13 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "section", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "chrome", Values: []string{"hairline", "framed", "plain"}, Default: "hairline", Since: "1.0"},
 	}},
+	// App colour entries (issue #123): how much of the selected game's art
+	// colour the app takes. The axis is the most the theme supports; the user
+	// picks accent or whole among the values it allows. Default off, so every
+	// theme built before this keeps its tokens.
+	{Entry: "color", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "game-tone", Values: []string{"off", "accent", "whole"}, Default: "off", Since: "1.0"},
+	}},
 	// Dashboard layout entries (issue #96): its regions, then its blocks in
 	// the built-in order (inventory §2.1). None of them is required: advice
 	// and decoration stay hideable, and the dashboard acts on nothing.

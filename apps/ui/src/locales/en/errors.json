@@ -166,6 +166,9 @@
     "workdir": {
       "notFolder": "{{path}} is a file, not a folder."
     },
+    "gameTone": {
+      "invalid": "Game colour must be accent, whole or empty, got {{tone}}."
+    },
     "year": {
       "invalid": "Release year must be between 1970 and {{max}}, got {{year}}."
     },

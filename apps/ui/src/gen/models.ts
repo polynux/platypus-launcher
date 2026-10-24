@@ -536,6 +536,7 @@ export namespace types {
     language: string;
     minimize_to_tray: boolean;
     theme: string;
+    game_tone: string;
   }
 
   export interface LedgerEntry {

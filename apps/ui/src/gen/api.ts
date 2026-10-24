@@ -162,6 +162,7 @@ export interface CoreApi {
   SetGameSavePaths(gameID: string, paths: string[]): Promise<void>;
   SetGameStatus(gameID: string, status: string): Promise<types.GameStatusInfo>;
   SetGameSteamAppID(game: types.Game, appID: string): Promise<types.Compat>;
+  SetGameTone(tone: string): Promise<types.LauncherSettings>;
   SetLanguage(lang: string): Promise<types.LauncherSettings>;
   SetMinimizeToTray(on: boolean): Promise<types.LauncherSettings>;
   SetPluginEnabled(id: string, enabled: boolean): Promise<void>;
@@ -345,6 +346,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetGameSavePaths',
   'SetGameStatus',
   'SetGameSteamAppID',
+  'SetGameTone',
   'SetLanguage',
   'SetMinimizeToTray',
   'SetPluginEnabled',

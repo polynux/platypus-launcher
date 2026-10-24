@@ -21,6 +21,14 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | --- | --- | --- | --- | --- |
 | `chrome` | `hairline`, `framed`, `plain` | `hairline` | `1.0` | — |
 
+## `color`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `game-tone` | `off`, `accent`, `whole` | `off` | `1.0` | — |
+
 ## `dashboard.top`
 
 - since: `1.0`

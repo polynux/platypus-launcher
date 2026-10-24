@@ -355,3 +355,48 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Game colour from the art (issue #123). A theme may take the selected game's
+   hue (lib/gameTone.ts paints these variables on :root); registering them lets
+   one game's colours fade into the next one's instead of snapping. The
+   initial values are the built-in warm theme, which is what stands when no
+   tone is painted. */
+@property --color-ground { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
+@property --color-raised { syntax: "<color>"; inherits: true; initial-value: #191410; }
+@property --color-surface { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.045); }
+@property --color-surface-strong { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.06); }
+@property --color-hairline { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.07); }
+@property --color-text { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.9); }
+@property --color-text-body { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.7); }
+@property --color-text-muted { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.55); }
+@property --color-text-faint { syntax: "<color>"; inherits: true; initial-value: #78716c; }
+@property --color-accent { syntax: "<color>"; inherits: true; initial-value: oklch(82.8% 0.189 84.429); }
+@property --color-accent-strong { syntax: "<color>"; inherits: true; initial-value: oklch(87.9% 0.169 91.605); }
+@property --color-on-accent { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
+@property --background { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
+@property --card { syntax: "<color>"; inherits: true; initial-value: #191410; }
+@property --card-foreground { syntax: "<color>"; inherits: true; initial-value: #ece6da; }
+@property --popover { syntax: "<color>"; inherits: true; initial-value: #191410; }
+@property --popover-foreground { syntax: "<color>"; inherits: true; initial-value: #ece6da; }
+@property --primary { syntax: "<color>"; inherits: true; initial-value: #fbbf24; }
+@property --primary-foreground { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
+@property --accent-foreground { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
+@property --secondary { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.06); }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.06); }
+@property --muted-foreground { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.55); }
+@property --border { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.07); }
+@property --input { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.07); }
+
+/* The 0.6s fade is on only while a tone is painted, so a theme switch stays
+   instant (lib/gameTone.ts adds the class around its own paint). */
+:root.game-tone {
+  transition-property:
+    --color-ground, --color-raised, --color-surface, --color-surface-strong,
+    --color-hairline, --color-text, --color-text-body, --color-text-muted,
+    --color-text-faint, --color-accent, --color-accent-strong,
+    --color-on-accent, --background, --card, --card-foreground, --popover,
+    --popover-foreground, --primary, --primary-foreground, --accent-foreground,
+    --secondary, --muted, --muted-foreground, --border, --input;
+  transition-duration: 600ms;
+  transition-timing-function: ease;
+}
