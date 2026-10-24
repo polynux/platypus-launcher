@@ -26,6 +26,13 @@ func (a *App) GetTheme(id string) types.ThemeTokens {
 // GetThemeCatalog returns the versioned variant catalog used by the UI.
 func (a *App) GetThemeCatalog() []types.ThemeCatalogEntry { return themes.Catalog }
 
+// GetThemeLayout returns the validated layout for a view in the picked theme
+// (issue #96), or nil when the theme ships none: the UI then uses its
+// built-in arrangement.
+func (a *App) GetThemeLayout(view string) *types.ThemeLayout {
+	return themes.LayoutFor(a.settings.Theme(), view)
+}
+
 // SetTheme saves the picked theme ("" for the built-in default). Only a theme
 // listed as "ok" can be picked.
 func (a *App) SetTheme(id string) (types.LauncherSettings, error) {

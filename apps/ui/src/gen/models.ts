@@ -839,6 +839,10 @@ export namespace types {
     entry: string;
     since: string;
     axes: types.ThemeCatalogAxis[];
+    kind?: string;
+    required?: boolean;
+    region?: string;
+    attrs?: string[];
   }
 
   export interface ThemeInfo {
@@ -848,6 +852,22 @@ export namespace types {
     supports: string[];
     status: string;
     warnings: string[];
+  }
+
+  export interface ThemeLayout {
+    view: string;
+    regions: types.ThemeLayoutRegion[];
+  }
+
+  export interface ThemeLayoutNode {
+    block?: string;
+    attrs?: Record<string, string>;
+    row?: types.ThemeLayoutNode[];
+  }
+
+  export interface ThemeLayoutRegion {
+    name: string;
+    nodes: types.ThemeLayoutNode[];
   }
 
   export interface ThemeSectionVariants {

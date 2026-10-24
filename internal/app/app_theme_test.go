@@ -46,3 +46,23 @@ func TestListThemesOffersBuiltIns(t *testing.T) {
 		}
 	}
 }
+
+// GetThemeLayout follows the picked theme: the default ships no dashboard
+// layout (the UI uses its built-in arrangement), cool ships its own, and
+// unknown views resolve to nothing.
+func TestGetThemeLayoutFollowsPickedTheme(t *testing.T) {
+	a := newLocaleApp(t)
+	if a.GetThemeLayout("dashboard") != nil {
+		t.Fatal("warm resolves a layout, want the built-in arrangement")
+	}
+	if _, err := a.SetTheme("cool"); err != nil {
+		t.Fatalf("SetTheme(cool) = %v", err)
+	}
+	layout := a.GetThemeLayout("dashboard")
+	if layout == nil || len(layout.Regions) != 2 || layout.Regions[1].Name != "side" {
+		t.Fatalf("GetThemeLayout(dashboard) = %+v, want cool's two regions", layout)
+	}
+	if a.GetThemeLayout("attic") != nil {
+		t.Fatal("an unknown view resolved a layout")
+	}
+}

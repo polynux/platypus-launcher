@@ -1,8 +1,9 @@
 // i18n: converted
 import React from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { ActivityEvent, Game, ProtonVersion, View } from '../types';
+import type { ActivityEvent, Game, ProtonVersion, ThemeLayout as DashboardLayoutData, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
@@ -13,6 +14,8 @@ import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 import { ratingBadge } from '../lib/compat';
+import { ThemeLayout } from '../lib/layout';
+import { useThemeLayout } from '../lib/theme';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -28,8 +31,95 @@ interface DashboardProps {
   onNavigate: (v: View) => void;
 }
 
-export function Dashboard({ games, runners, activity, ownedCount, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps) {
-  const { t } = useTranslation(['dashboard', 'common']);
+export function Dashboard({ games, ownedCount, ...rest }: DashboardProps) {
+  const layout = useThemeLayout('dashboard');
+  if (games.length === 0) {
+    return (
+      <div className="p-7">
+        <div className="mb-6">
+          <DashboardWelcome installed={0} owned={ownedCount ?? 0} fixes={0} />
+        </div>
+        <DashboardEmpty games={games} />
+      </div>
+    );
+  }
+  if (!layout) return <DashboardBuiltIn games={games} ownedCount={ownedCount} {...rest} />;
+  return (
+    <div className="p-7">
+      <ThemeLayout
+        layout={layout}
+        blocks={dashboardBlocks({ games, ownedCount, ...rest }, layout)}
+        className="grid gap-5 xl:grid-cols-[1.75fr_1fr]"
+        regionClassName={dashboardRegionClass}
+      />
+    </div>
+  );
+}
+
+/** One region's frame in a dashboard layout: the main column breathes like
+ *  the built-in page, the side column packs tighter. */
+function dashboardRegionClass(region: string): string {
+  return region === 'side' ? 'min-w-0 space-y-5' : 'min-w-0 space-y-6';
+}
+
+// The dashboard's layout blocks (issue #96): each takes its data as props
+// only (it all comes from App) and renders null when it has nothing to show,
+// so a layout orders blocks without conditionals of its own.
+function dashboardBlocks({ games, runners, activity, ownedCount, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps, layout?: DashboardLayoutData): Record<string, ReactNode> {
+  const waiting = games.filter(needsAttention);
+  const pending = waiting.filter((g) => !dismissedHero.has(g.id));
+  const hero = pending[0];
+  const installed = games.length;
+  const owned = Math.max(ownedCount ?? installed, installed);
+  const hasPlayData = games.some((g) => g.last_played_at);
+  // Without play data byRecent has nothing to order by, so fall back to a stable title sort.
+  const continueGames = [...games].sort(hasPlayData ? byRecent : byTitle).slice(0, 8);
+  const recentlyAdded = games.filter((g) => g.store === 'custom').slice(0, 5);
+  return {
+    hero: (
+      <DashboardHero
+        hero={hero}
+        installed={installed}
+        owned={owned}
+        waitingCount={waiting.length}
+        pending={pending}
+        onOpenGame={onOpenGame}
+        onDismissHero={onDismissHero}
+      />
+    ),
+    welcome: <DashboardWelcome hero={hero} installed={installed} owned={owned} fixes={waiting.length} />,
+    empty: <DashboardEmpty games={games} />,
+    continue: (
+      <DashboardContinue
+        games={continueGames}
+        runners={runners}
+        hasPlayData={hasPlayData}
+        onOpenGame={onOpenGame}
+        onNavigate={onNavigate}
+      />
+    ),
+    waiting: <DashboardWaiting waiting={waiting} onOpenGame={onOpenGame} onNavigate={onNavigate} />,
+    recent: <DashboardRecent games={recentlyAdded} onOpenGame={onOpenGame} />,
+    activity: <DashboardActivity events={activity} limit={layoutLimit(layout, 'activity', 8)} onNavigate={onNavigate} />,
+  };
+}
+
+/** The layout's limit for a block, or the built-in default without one. The
+ *  core validated the number; the UI parses it again so a bad bridge value
+ *  can't widen a feed. */
+function layoutLimit(layout: DashboardLayoutData | undefined, block: string, fallback: number): number {
+  const nodes = layout?.regions.flatMap((r) => r.nodes) ?? [];
+  for (const node of nodes) {
+    for (const child of node.row ?? [node]) {
+      const raw = child.block === block ? child.attrs?.limit : undefined;
+      const parsed = raw === undefined ? NaN : Number.parseInt(raw, 10);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+  }
+  return fallback;
+}
+
+function DashboardBuiltIn({ games, runners, activity, ownedCount, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps) {
   const waiting = games.filter(needsAttention);
   const pending = waiting.filter((g) => !dismissedHero.has(g.id));
   const hero = pending[0];
@@ -41,130 +131,234 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
   const installed = games.length;
   const owned = Math.max(ownedCount ?? installed, installed);
 
-  if (games.length === 0) {
-    return (
-      <div className="p-7">
-        <WelcomeBanner installed={0} owned={ownedCount ?? 0} fixes={0} />
-        <EmptyState label={t('dashboard:empty.label')}>
-          {t('dashboard:empty.detail')}
-        </EmptyState>
-      </div>
-    );
-  }
-
   return (
     <div className="p-7">
       {hero ? (
-        <section className="relative mb-6 overflow-hidden rounded-3xl ring-1 ring-hairline">
-          <Cover src={heroImages(hero)} title={hero.title} className="h-[290px] w-full" />
-          <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
-          <div className="absolute bottom-6 left-7 max-w-lg">
-            <Badge variant="bronze" className="bg-attention text-on-accent">
-              {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '') ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
-            </Badge>
-            <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
-              {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '')
-                ? t('dashboard:hero.titleTweaks', { title: hero.title })
-                : t('dashboard:hero.titleFix', { title: hero.title })}
-            </h1>
-            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-text-body">{attentionReason(hero, t)}</p>
-            <div className="mt-3.5 flex gap-2.5">
-              <Button variant="primary" onClick={() => onOpenGame(hero.id)}>{t('dashboard:hero.openGame')}</Button>
-              <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>{t('common:later')}</Button>
-              {pending.length > 1 && (
-                <Button variant="ghost" onClick={() => onDismissHero(pending.map((g) => g.id))}>
-                  {t('dashboard:hero.hideAll', { count: pending.length })}
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="absolute bottom-6 right-7 hidden gap-3 lg:flex">
-            {[
-              [t('dashboard:hero.statInstalled'), String(installed), 'text-accent-strong'],
-              ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-white/80']] : []),
-              [t('dashboard:hero.statFixes'), String(waiting.length), 'text-orange-300'],
-            ].map(([k, v, c]) => (
-              <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
-                <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
-                <div className="font-mono text-micro uppercase tracking-widest text-text-muted">{k}</div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <div className="mb-6">
+          <DashboardHero
+            hero={hero}
+            installed={installed}
+            owned={owned}
+            waitingCount={waiting.length}
+            pending={pending}
+            onOpenGame={onOpenGame}
+            onDismissHero={onDismissHero}
+          />
+        </div>
       ) : (
-        <WelcomeBanner installed={installed} owned={owned} fixes={waiting.length} />
+        <div className="mb-6">
+          <DashboardWelcome hero={hero} installed={installed} owned={owned} fixes={waiting.length} />
+        </div>
       )}
 
       <section className="grid gap-5 xl:grid-cols-[1.75fr_1fr]">
         <div className="min-w-0">
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-[16px] font-bold tracking-tight">{hasPlayData ? t('dashboard:continuePlaying') : t('dashboard:yourGames')}</h2>
-            <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>{t('dashboard:fullLibrary')}</Button>
-          </div>
-          <div className="cover-grid items-stretch">
-            {continueGames.map((g) => (
-              <button key={g.id} onClick={() => onOpenGame(g.id)} className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}>
-                <div className="relative flex-none">
-                  <Cover src={coverImages(g)} title={g.title} className="aspect-[3/4] w-full" />
-                  {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
-                </div>
-                <GameCardBody
-                  title={g.title}
-                  meta={`${g.playtime_minutes ? `${formatHours(g.playtime_minutes)} · ` : ''}${runnerShort(g.settings.runner_id, runners)}`}
-                  game={g}
-                  hideNative
-                  className="px-3 py-2.5"
-                />
-              </button>
-            ))}
-          </div>
+          <DashboardContinue
+            games={continueGames}
+            runners={runners}
+            hasPlayData={hasPlayData}
+            onOpenGame={onOpenGame}
+            onNavigate={onNavigate}
+          />
         </div>
 
         <div className="space-y-5">
-          <div>
-            <h2 className="mb-2.5 text-[15px] font-bold">{t('dashboard:waiting')}</h2>
-            {waiting.length === 0 ? (
-              <p className="rounded-2xl bg-surface p-4 text-[12px] text-text-body ring-1 ring-white/[0.05]">
-                {t('dashboard:waitingEmpty')}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {waiting.slice(0, 3).map((g) => (
-                  <button
-                    key={g.id}
-                    onClick={() => onOpenGame(g.id)}
-                    className="block w-full rounded-2xl bg-surface p-4 text-left ring-1 ring-hairline transition hover:ring-attention/40"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-[13px] font-bold">{g.title}</span>
-                      {(ratingBadge(g)?.tone || g.fix_info?.tier) && <TierBadge tier={ratingBadge(g)?.tone || g.fix_info!.tier} />}
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-text-body">{attentionReason(g, t)}</p>
-                  </button>
-                ))}
-                {waiting.length > 3 && (
-                  <Button variant="link" onClick={() => onNavigate({ name: 'fixes' })}>
-                    {t('dashboard:moreInFixes', { count: waiting.length - 3 })}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
+          <DashboardWaiting waiting={waiting} onOpenGame={onOpenGame} onNavigate={onNavigate} />
 
-          {recentlyAdded.length > 0 && (
-            <Panel as="section" className="bg-surface">
-              <h2 className="mb-2.5 text-[14px] font-bold">{t('dashboard:recentlyAdded')}</h2>
-              <RecentList games={recentlyAdded} onOpenGame={onOpenGame} />
-            </Panel>
-          )}
+          <DashboardRecent games={recentlyAdded} onOpenGame={onOpenGame} />
         </div>
       </section>
 
       <div className="mt-6">
-        <ActivityPanel events={activity} limit={8} onFullLog={() => onNavigate({ name: 'activity' })} />
+        <DashboardActivity events={activity} onNavigate={onNavigate} />
       </div>
     </div>
   );
+}
+
+export function DashboardHero({ hero, installed, owned, waitingCount, pending, onOpenGame, onDismissHero }: {
+  hero: Game | undefined;
+  installed: number;
+  owned: number;
+  waitingCount: number;
+  pending: Game[];
+  onOpenGame: (id: string) => void;
+  onDismissHero: (ids: string[]) => void;
+}) {
+  const { t } = useTranslation(['dashboard', 'common']);
+  if (!hero) return null;
+  return (
+    <section className="relative overflow-hidden rounded-3xl ring-1 ring-hairline">
+      <Cover src={heroImages(hero)} title={hero.title} className="h-[290px] w-full" />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
+      <div className="absolute bottom-6 left-7 max-w-lg">
+        <Badge variant="bronze" className="bg-attention text-on-accent">
+          {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '') ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
+        </Badge>
+        <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
+          {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '')
+            ? t('dashboard:hero.titleTweaks', { title: hero.title })
+            : t('dashboard:hero.titleFix', { title: hero.title })}
+        </h1>
+        <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-text-body">{attentionReason(hero, t)}</p>
+        <div className="mt-3.5 flex gap-2.5">
+          <Button variant="primary" onClick={() => onOpenGame(hero.id)}>{t('dashboard:hero.openGame')}</Button>
+          <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>{t('common:later')}</Button>
+          {pending.length > 1 && (
+            <Button variant="ghost" onClick={() => onDismissHero(pending.map((g) => g.id))}>
+              {t('dashboard:hero.hideAll', { count: pending.length })}
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="absolute bottom-6 right-7 hidden gap-3 lg:flex">
+        {[
+          [t('dashboard:hero.statInstalled'), String(installed), 'text-accent-strong'],
+          ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-white/80']] : []),
+          [t('dashboard:hero.statFixes'), String(waitingCount), 'text-orange-300'],
+        ].map(([k, v, c]) => (
+          <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
+            <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
+            <div className="font-mono text-micro uppercase tracking-widest text-text-muted">{k}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function DashboardWelcome({ hero, installed, owned, fixes }: {
+  hero?: Game | undefined;
+  installed: number;
+  owned: number;
+  fixes: number;
+}) {
+  const { t } = useTranslation('dashboard');
+  // The greeting stands in for the hero: with something to attend to, the
+  // hero takes the banner's place.
+  if (hero) return null;
+  const hour = new Date().getHours();
+  const greeting = hour < 5
+    ? t('dashboard:greeting.night')
+    : hour < 12
+      ? t('dashboard:greeting.morning')
+      : hour < 18
+        ? t('dashboard:greeting.afternoon')
+        : t('dashboard:greeting.evening');
+  return (
+    <Panel as="section" className="p-6">
+      <h1 className="text-[25px] font-extrabold tracking-tight">{greeting}</h1>
+      <p className="mt-1 font-mono text-[12px] tabular-nums text-text-muted">
+        {t('dashboard:welcome.installed', { count: installed })}
+        {owned > installed ? ` · ${t('dashboard:welcome.owned', { count: owned })}` : ''} · {t('dashboard:welcome.fixes', { count: fixes })}
+      </p>
+    </Panel>
+  );
+}
+
+export function DashboardEmpty({ games }: { games: Game[] }) {
+  const { t } = useTranslation(['dashboard', 'common']);
+  if (games.length > 0) return null;
+  return (
+    <EmptyState label={t('dashboard:empty.label')}>
+      {t('dashboard:empty.detail')}
+    </EmptyState>
+  );
+}
+
+export function DashboardContinue({ games, runners, hasPlayData, onOpenGame, onNavigate }: {
+  games: Game[];
+  runners: ProtonVersion[];
+  hasPlayData: boolean;
+  onOpenGame: (id: string) => void;
+  onNavigate: (v: View) => void;
+}) {
+  const { t } = useTranslation(['dashboard', 'common']);
+  // One root: rows count a block as one column, so a fragment here would
+  // split the header and the grid into separate columns.
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-[16px] font-bold tracking-tight">{hasPlayData ? t('dashboard:continuePlaying') : t('dashboard:yourGames')}</h2>
+        <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>{t('dashboard:fullLibrary')}</Button>
+      </div>
+      <div className="cover-grid items-stretch">
+        {games.map((g) => (
+          <button key={g.id} onClick={() => onOpenGame(g.id)} className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}>
+            <div className="relative flex-none">
+              <Cover src={coverImages(g)} title={g.title} className="aspect-[3/4] w-full" />
+              {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
+            </div>
+            <GameCardBody
+              title={g.title}
+              meta={`${g.playtime_minutes ? `${formatHours(g.playtime_minutes)} · ` : ''}${runnerShort(g.settings.runner_id, runners)}`}
+              game={g}
+              hideNative
+              className="px-3 py-2.5"
+            />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function DashboardWaiting({ waiting, onOpenGame, onNavigate }: {
+  waiting: Game[];
+  onOpenGame: (id: string) => void;
+  onNavigate: (v: View) => void;
+}) {
+  const { t } = useTranslation('dashboard');
+  return (
+    <div>
+      <h2 className="mb-2.5 text-[15px] font-bold">{t('dashboard:waiting')}</h2>
+      {waiting.length === 0 ? (
+        <p className="rounded-2xl bg-surface p-4 text-[12px] text-text-body ring-1 ring-white/[0.05]">
+          {t('dashboard:waitingEmpty')}
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {waiting.slice(0, 3).map((g) => (
+            <button
+              key={g.id}
+              onClick={() => onOpenGame(g.id)}
+              className="block w-full rounded-2xl bg-surface p-4 text-left ring-1 ring-hairline transition hover:ring-attention/40"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-[13px] font-bold">{g.title}</span>
+                {(ratingBadge(g)?.tone || g.fix_info?.tier) && <TierBadge tier={ratingBadge(g)?.tone || g.fix_info!.tier} />}
+              </div>
+              <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-text-body">{attentionReason(g, t)}</p>
+            </button>
+          ))}
+          {waiting.length > 3 && (
+            <Button variant="link" onClick={() => onNavigate({ name: 'fixes' })}>
+              {t('dashboard:moreInFixes', { count: waiting.length - 3 })}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DashboardRecent({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
+  const { t } = useTranslation('dashboard');
+  if (games.length === 0) return null;
+  return (
+    <Panel as="section" className="bg-surface">
+      <h2 className="mb-2.5 text-[14px] font-bold">{t('dashboard:recentlyAdded')}</h2>
+      <RecentList games={games} onOpenGame={onOpenGame} />
+    </Panel>
+  );
+}
+
+export function DashboardActivity({ events, limit = 8, onNavigate }: {
+  events: ActivityEvent[];
+  limit?: number;
+  onNavigate: (v: View) => void;
+}) {
+  return <ActivityPanel events={events} limit={limit} onFullLog={() => onNavigate({ name: 'activity' })} />;
 }
 
 /** Why a game needs attention, in words. Curated recipes speak for
@@ -189,27 +383,6 @@ function storeLabel(store: string, t: TFunction): string {
     case 'custom': return t('dashboard:store.custom');
     default: return storeLabelFallback(store);
   }
-}
-
-function WelcomeBanner({ installed, owned, fixes }: { installed: number; owned: number; fixes: number }) {
-  const { t } = useTranslation('dashboard');
-  const hour = new Date().getHours();
-  const greeting = hour < 5
-    ? t('dashboard:greeting.night')
-    : hour < 12
-      ? t('dashboard:greeting.morning')
-      : hour < 18
-        ? t('dashboard:greeting.afternoon')
-        : t('dashboard:greeting.evening');
-  return (
-    <Panel as="section" className="mb-6 p-6">
-      <h1 className="text-[25px] font-extrabold tracking-tight">{greeting}</h1>
-      <p className="mt-1 font-mono text-[12px] tabular-nums text-text-muted">
-        {t('dashboard:welcome.installed', { count: installed })}
-        {owned > installed ? ` · ${t('dashboard:welcome.owned', { count: owned })}` : ''} · {t('dashboard:welcome.fixes', { count: fixes })}
-      </p>
-    </Panel>
-  );
 }
 
 export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {

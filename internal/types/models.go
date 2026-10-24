@@ -412,6 +412,16 @@ type ThemeCatalogEntry struct {
 	Entry string             `json:"entry"`
 	Since string             `json:"since"`
 	Axes  []ThemeCatalogAxis `json:"axes"`
+	// Kind is "block" or "region" for layout entries (issue #96); older
+	// component and container entries leave it empty.
+	Kind string `json:"kind,omitempty"`
+	// Required marks a block the layout can't hide: a layout that leaves it
+	// out still gets it, in Region, with a warning.
+	Required bool   `json:"required,omitempty"`
+	Region   string `json:"region,omitempty"`
+	// Attrs lists the per-block layout attributes the catalog declares (e.g.
+	// "limit" on the activity feed). Anything else is ignored with a warning.
+	Attrs []string `json:"attrs,omitempty"`
 }
 
 type ThemeCatalogAxis struct {
@@ -428,6 +438,29 @@ type WashLayer struct {
 	Size  string `json:"size"`
 	Color string `json:"color"`
 	Fade  string `json:"fade"`
+}
+
+// ThemeLayout is a view's validated block layout (issue #96): the regions in
+// the order the theme lists them, each with its blocks and rows. The UI maps
+// the names onto the view's block components; a nil layout means the theme
+// ships none and the UI uses its built-in arrangement.
+type ThemeLayout struct {
+	View    string              `json:"view"`
+	Regions []ThemeLayoutRegion `json:"regions"`
+}
+
+// ThemeLayoutRegion is one named place in a view (e.g. "main", "side").
+type ThemeLayoutRegion struct {
+	Name  string            `json:"name"`
+	Nodes []ThemeLayoutNode `json:"nodes"`
+}
+
+// ThemeLayoutNode is one block in a region, or one row grouping blocks
+// side by side. Exactly one of Block and Row is set.
+type ThemeLayoutNode struct {
+	Block string            `json:"block,omitempty"`
+	Attrs map[string]string `json:"attrs,omitempty"`
+	Row   []ThemeLayoutNode `json:"row,omitempty"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when

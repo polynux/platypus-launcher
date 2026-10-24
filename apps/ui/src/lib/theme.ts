@@ -4,9 +4,9 @@
 // `rounded-2xl` to `var(--radius-2xl)`, so variables set here restyle them.
 // Token names are the ones in apps/ui/src/style.css (@theme and :root).
 import { Effect } from 'effect';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
-import type { ThemeTokens, WashLayer } from '../types';
+import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
 
 /** The theme the app ships with. Matches the core's default (themes.DefaultID). */
 export const DEFAULT_THEME_ID = 'warm';
@@ -27,6 +27,13 @@ export function useVariant(axis: ThemeVariantAxis): string {
     readVariant,
     () => axis === 'settings.presentation' ? 'page' : axis === 'settings.navigation' ? 'scroll' : 'hairline',
   );
+}
+
+/** Runs the listener on every applied theme, like the variant hook. Layouts
+ *  arrive over their own call, so a view refetches its layout here. */
+export function onThemeApplied(listener: () => void): () => void {
+  variantListeners.add(listener);
+  return () => { variantListeners.delete(listener); };
 }
 
 /** Where each token lands. `--color-*` are the @theme names; the rest are the
@@ -144,4 +151,28 @@ export function loadTheme(): Promise<void> {
   } catch {
     return Promise.resolve();
   }
+}
+
+/** Reads one view's validated layout from the core, or null when the theme
+ *  ships none: the view then uses its built-in arrangement. A failed read
+ *  keeps the built-in one, like a failed theme read keeps the applied theme. */
+export function loadThemeLayout(view: string): Promise<ThemeLayout | null> {
+  try {
+    return Effect.runPromise(LauncherApi.getThemeLayout(view)).catch(() => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+/** One view's layout in the picked theme, and null for the built-in
+ *  arrangement. Refetches when the picked theme changes. */
+export function useThemeLayout(view: string): ThemeLayout | null {
+  const [layout, setLayout] = useState<ThemeLayout | null>(null);
+  useEffect(() => {
+    let live = true;
+    const fetch = () => { void loadThemeLayout(view).then((l) => { if (live) setLayout(l); }); };
+    fetch();
+    return onThemeApplied(fetch);
+  }, [view]);
+  return layout;
 }

@@ -6,7 +6,7 @@ id = "cool"
 name = "Cool dark"
 schema = 1
 catalog = "1.0"
-supports = ["tokens", "variants"]
+supports = ["tokens", "variants", "layouts"]
 
 [variants]
 "settings.presentation" = "sheet"

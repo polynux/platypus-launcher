@@ -41,6 +41,70 @@
           "since": "1.0"
         }
       ]
+    },
+    {
+      "entry": "dashboard.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "dashboard.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "dashboard.hero",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "dashboard.welcome",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "dashboard.empty",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "dashboard.continue",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "dashboard.waiting",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "dashboard.recent",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "dashboard.activity",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main",
+      "attrs": [
+        "limit"
+      ]
     }
   ]
 }
