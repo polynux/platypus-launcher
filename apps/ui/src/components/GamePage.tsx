@@ -178,11 +178,14 @@ function useDetails(game: Game) {
 
 /** One region's frame in a game layout (issue #103): the hero holds the top
  *  of the page full width; the main column breathes like the built-in page
- *  and the side column packs tighter. The built-in spacing is exact. */
+ *  and the side column packs tighter; the bottom region holds the
+ *  achievements and session activity full width below both columns, as the
+ *  pre-layout page did. The built-in spacing is exact. */
 function gameRegionClass(region: string): string {
   switch (region) {
     case 'hero': return 'min-w-0 space-y-0';
     case 'side': return 'min-w-0 space-y-5';
+    case 'bottom': return 'min-w-0';
     default: return 'min-w-0 space-y-5';
   }
 }
@@ -587,10 +590,16 @@ export function GamePage(p: GamePageProps) {
     layout,
   );
   const heroRegion = layout.regions.find((r) => r.name === 'hero');
-  const restLayout: GameLayoutData = {
+  const bottomRegion = layout.regions.find((r) => r.name === 'bottom');
+  // Main and side stay today's two columns; bottom holds the achievements
+  // and session activity full width below them, as the pre-layout page did.
+  const gridLayout: GameLayoutData = {
     view: layout.view,
-    regions: layout.regions.filter((r) => r.name !== 'hero'),
+    regions: layout.regions.filter((r) => r.name === 'main' || r.name === 'side'),
   };
+  const bottomLayout: GameLayoutData | null = bottomRegion
+    ? { view: layout.view, regions: [bottomRegion] }
+    : null;
 
   return (
     <TooltipProvider>
@@ -607,11 +616,18 @@ export function GamePage(p: GamePageProps) {
         <GameHeroRegion region={heroRegion} blocks={blocks} art={hero} title={game.title} />
       )}
       <ThemeLayout
-        layout={restLayout}
+        layout={gridLayout}
         blocks={blocks}
         className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]"
         regionClassName={gameRegionClass}
       />
+      {bottomLayout && (
+        <ThemeLayout
+          layout={bottomLayout}
+          blocks={blocks}
+          regionClassName={gameRegionClass}
+        />
+      )}
       {lightbox && media.length > 0 && <Lightbox items={media} index={shot} alt={game.title} onIndex={setShot} onClose={() => setLightbox(false)} />}
       {!settingsPage && settingsModal}
       {installTo && plugin && (

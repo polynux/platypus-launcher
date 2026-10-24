@@ -764,6 +764,12 @@
       "kind": "region"
     },
     {
+      "entry": "game.bottom",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
       "entry": "game.back",
       "since": "1.0",
       "axes": null,
@@ -805,21 +811,21 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "bottom"
     },
     {
       "entry": "game.achievements",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "bottom"
     },
     {
       "entry": "game.activity",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "bottom"
     },
     {
       "entry": "game.compat",

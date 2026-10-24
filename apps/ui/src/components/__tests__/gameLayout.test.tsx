@@ -142,9 +142,11 @@ describe('game page layouts', () => {
     expect(side).toBeTruthy();
     expect(within(side as HTMLElement).getAllByText('Compatibility').length).toBeGreaterThan(0);
     expect(within(side as HTMLElement).getByText('Installation')).toBeTruthy();
-    // Achievements list and session activity below.
-    expect(screen.getByText('Achievements')).toBeTruthy();
-    expect(screen.getByText('this session')).toBeTruthy();
+    // Bottom region: achievements list and session activity full width.
+    const bottom = container.querySelector('[data-region="bottom"]');
+    expect(bottom).toBeTruthy();
+    expect(within(bottom as HTMLElement).getByText('Achievements')).toBeTruthy();
+    expect(within(bottom as HTMLElement).getByText('this session')).toBeTruthy();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 
