@@ -19,6 +19,8 @@ supports = ["tokens", "variants", "layouts"]
 "empty-state.icon" = "on"
 "list-row.media" = "off"
 "list-row.density" = "compact"
+"game-settings.presentation" = "sheet"
+"game-settings.tabs" = "horizontal"
 
 [tokens]
 ground = "#0b1118"

@@ -390,41 +390,7 @@ type ThemeTokens struct {
 	ID       string            `json:"id"`
 	Tokens   map[string]string `json:"tokens"`
 	Wash     []WashLayer       `json:"wash"`
-	Variants ThemeVariants     `json:"variants"`
-}
-
-// ThemeVariants gives the generated UI bridge a closed set of catalog axes.
-type ThemeVariants struct {
-	Settings   ThemeSettingsVariants   `json:"settings"`
-	Section    ThemeSectionVariants    `json:"section"`
-	ViewHeader ThemeViewHeaderVariants `json:"viewHeader"`
-	EmptyState ThemeEmptyStateVariants `json:"emptyState"`
-	ListRow    ThemeListRowVariants    `json:"listRow"`
-}
-
-type ThemeSettingsVariants struct {
-	Presentation string `json:"presentation"`
-	Navigation   string `json:"navigation"`
-}
-
-type ThemeSectionVariants struct {
-	Chrome string `json:"chrome"`
-}
-
-type ThemeViewHeaderVariants struct {
-	Actions  string `json:"actions"`
-	Subtitle string `json:"subtitle"`
-	Size     string `json:"size"`
-}
-
-type ThemeEmptyStateVariants struct {
-	Chrome string `json:"chrome"`
-	Icon   string `json:"icon"`
-}
-
-type ThemeListRowVariants struct {
-	Media   string `json:"media"`
-	Density string `json:"density"`
+	Variants map[string]string `json:"variants"`
 }
 
 type ThemeCatalogEntry struct {
@@ -448,6 +414,9 @@ type ThemeCatalogAxis struct {
 	Values  []string `json:"values"`
 	Default string   `json:"default"`
 	Since   string   `json:"since"`
+	// Inherits names a broader axis ("dialog.presentation") whose value this
+	// use-site axis takes when the theme doesn't set it, if it's one of Values.
+	Inherits string `json:"inherits,omitempty"`
 }
 
 // WashLayer is one radial gradient of the background wash: where it sits,

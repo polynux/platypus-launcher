@@ -1,6 +1,7 @@
 // Command gen-ts regenerates the UI's typed core bridge from the Go
-// core: struct interfaces into apps/ui/src/gen/models.ts and the typed
-// method list into apps/ui/src/gen/api.ts.
+// core: struct interfaces into apps/ui/src/gen/models.ts, the typed
+// method list into apps/ui/src/gen/api.ts, and the theme catalog's variant
+// axes into apps/ui/src/gen/catalog.ts.
 //
 // Run it from the repository root: `go run ./cmd/gen-ts` (an optional first
 // argument overrides the root). The generated files are checked in;
@@ -14,6 +15,7 @@ import (
 
 	"platypus/internal/app"
 	"platypus/internal/gents"
+	"platypus/internal/themes"
 )
 
 func main() {
@@ -31,11 +33,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "gen-ts:", err)
 		os.Exit(1)
 	}
-	for name, src := range map[string]string{"models.ts": models, "api.ts": api} {
+	for name, src := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS()} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, "gen-ts:", err)
 			os.Exit(1)
 		}
 	}
-	fmt.Println("wrote apps/ui/src/gen/models.ts and apps/ui/src/gen/api.ts")
+	fmt.Println("wrote apps/ui/src/gen/models.ts, api.ts and catalog.ts")
 }
