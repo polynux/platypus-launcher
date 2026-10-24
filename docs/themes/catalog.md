@@ -204,6 +204,17 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | `columns` | `full`, `minimal` | `full` | `1.0` | — |
 | `mode` | `full`, `compact` | `full` | `1.0` | — |
 
+## `library-tile`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `aspect` | `2:3`, `3:4`, `16:9` | `2:3` | `1.0` | `game-tile.aspect` |
+| `compat` | `on`, `off` | `on` | `1.0` | `game-tile.compat` |
+| `overlay` | `on`, `off` | `on` | `1.0` | `game-tile.overlay` |
+| `density` | `comfortable`, `compact` | `compact` | `1.0` | `game-tile.density` |
+
 ## `library.top`
 
 - since: `1.0`
@@ -274,12 +285,6 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - region: `top`
 
 ## `library.last-played`
-
-- since: `1.0`
-- kind: `block`
-- region: `bottom`
-
-## `library.grid`
 
 - since: `1.0`
 - kind: `block`

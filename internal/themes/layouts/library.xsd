@@ -50,7 +50,6 @@
           <xs:enumeration value="chips" />
           <xs:enumeration value="empty" />
           <xs:enumeration value="filters" />
-          <xs:enumeration value="grid" />
           <xs:enumeration value="header" />
           <xs:enumeration value="last-played" />
           <xs:enumeration value="mode" />
@@ -67,6 +66,14 @@
         <xs:restriction base="xs:integer">
           <xs:minInclusive value="1" />
           <xs:maxInclusive value="50" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="span">
+      <xs:simpleType>
+        <xs:restriction base="xs:integer">
+          <xs:minInclusive value="1" />
+          <xs:maxInclusive value="12" />
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>

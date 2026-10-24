@@ -73,7 +73,8 @@ var Catalog = []types.ThemeCatalogEntry{
 	// Library game representations (issue #98): the tile the continue grid
 	// and the cards share, and the row the table and the recent lists share.
 	// Warm keeps today's dashboard tile (3:4, compat and overlay on) and
-	// today's full table.
+	// today's full table. The library cards read library-tile (issue #109),
+	// which follows game-tile unless the theme names a library value.
 	{Entry: "game-tile", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "aspect", Values: []string{"2:3", "3:4", "16:9"}, Default: "3:4", Since: "1.0"},
 		{Name: "compat", Values: []string{"on", "off"}, Default: "on", Since: "1.0"},
@@ -84,13 +85,26 @@ var Catalog = []types.ThemeCatalogEntry{
 		{Name: "columns", Values: []string{"full", "minimal"}, Default: "full", Since: "1.0"},
 		{Name: "mode", Values: []string{"full", "compact"}, Default: "full", Since: "1.0"},
 	}},
+	// Library tile use site (issue #109): the library cards read
+	// library-tile, which follows the global game-tile choice unless the
+	// theme names a value for the library itself (like game-hero follows
+	// hero). Warm keeps today's looks through the defaults: the dashboard
+	// reads game-tile (its 3:4 comfortable tile), the library reads
+	// library-tile (its 2:3 compact card).
+	{Entry: "library-tile", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "aspect", Values: []string{"2:3", "3:4", "16:9"}, Default: "2:3", Since: "1.0", Inherits: "game-tile.aspect"},
+		{Name: "compat", Values: []string{"on", "off"}, Default: "on", Since: "1.0", Inherits: "game-tile.compat"},
+		{Name: "overlay", Values: []string{"on", "off"}, Default: "on", Since: "1.0", Inherits: "game-tile.overlay"},
+		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "compact", Since: "1.0", Inherits: "game-tile.density"},
+	}},
 	// Library layout entries (issue #98): its regions, then its blocks in the
 	// built-in order (inventory §2.2). Only the plugin warnings are required:
 	// they tell the truth about the stores, so a layout can't hide them.
 	// The built-in arrangement (issue #108) groups the header in top and the
-	// catalog in bottom, both full width; the header block composes the
-	// title, mode, search, chips and filters exactly as the built-in header
-	// shows them, while themes like cool place the parts separately.
+	// catalog in bottom, both full width; the header block stays because the
+	// granular blocks stack vertically and can't reproduce its two-row flex
+	// arrangement pixel-identically (issue #109), while themes like cool
+	// place the parts separately. all-titles is the tile every layout uses.
 	{Entry: "library.top", Since: "1.0", Kind: "region"},
 	{Entry: "library.main", Since: "1.0", Kind: "region"},
 	{Entry: "library.side", Since: "1.0", Kind: "region"},
@@ -104,7 +118,6 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "library.warnings", Since: "1.0", Kind: "block", Required: true, Region: "top"},
 	{Entry: "library.empty", Since: "1.0", Kind: "block", Region: "top"},
 	{Entry: "library.last-played", Since: "1.0", Kind: "block", Region: "bottom"},
-	{Entry: "library.grid", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.all-titles", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []types.ThemeCatalogAttr{{Name: "limit", Type: "int", Min: 1, Max: 50}}},
 	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom"},

@@ -1,8 +1,10 @@
-// Layouts at runtime (issue #96). The core validates a theme's layouts XML
-// and sends typed regions over RPC; this maps the names onto the view's block
-// components. Regions and rows are plain divs: spacing and columns live in
-// the view's region and row frames, so the built-in layout reproduces
+// Layouts at runtime (issue #96, #109). The core validates a theme's layouts
+// XML and sends typed regions over RPC; this maps the names onto the view's
+// block components. Regions and rows are plain divs: spacing and columns live
+// in the view's region and row frames, so the built-in layout reproduces
 // today's look exactly, and a block that renders null leaves no gap behind.
+// A row with span attributes shares its 12-column grid by span instead of
+// splitting equally, so a tile grid beside a list gets the width it needs.
 import type { ReactNode } from 'react';
 import type { ThemeLayout, ThemeLayoutNode as LayoutNode } from '../types';
 
@@ -45,6 +47,27 @@ function ThemeLayoutNode({ node, blocks, rowClassName, region }: { node: LayoutN
     // A row the core validated always groups blocks; an empty one would
     // paint an empty grid, so it renders nothing.
     if (node.row.length === 0) return null;
+    // A row share (issue #109 span): a tile grid beside a list needs more
+    // columns than an equal split gives (Continue + Waiting). The core
+    // validates span 1-12; the default is 1, so rows without span keep the
+    // old equal-columns path pixel-identically.
+    const spans = node.row.map((child) => {
+      const raw = child.attrs?.span;
+      const parsed = raw === undefined ? NaN : Number.parseInt(raw, 10);
+      return Number.isFinite(parsed) && parsed >= 1 && parsed <= 12 ? parsed : 1;
+    });
+    if (spans.some((s) => s > 1)) {
+      const total = spans.reduce((a, b) => a + b, 0);
+      return (
+        <div className="grid min-w-0 gap-5" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }}>
+          {node.row.map((child, index) => (
+            <div key={index} className="min-w-0" style={{ gridColumn: `span ${spans[index]} / span ${spans[index]}` }}>
+              <ThemeLayoutNode node={child} blocks={blocks} rowClassName={rowClassName} region={region} />
+            </div>
+          ))}
+        </div>
+      );
+    }
     const frame = typeof rowClassName === 'function' ? rowClassName(node.row, region) : rowClassName;
     if (frame !== undefined) {
       return (

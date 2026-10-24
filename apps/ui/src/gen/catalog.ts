@@ -23,6 +23,10 @@ export interface VariantValues {
   "game-tile.density": "comfortable" | "compact";
   "game-row.columns": "full" | "minimal";
   "game-row.mode": "full" | "compact";
+  "library-tile.aspect": "2:3" | "3:4" | "16:9";
+  "library-tile.compat": "on" | "off";
+  "library-tile.overlay": "on" | "off";
+  "library-tile.density": "comfortable" | "compact";
   "hero.height": "tall" | "regular" | "compact";
   "hero.gradient": "warm" | "neutral" | "none";
   "hero.chips": "glass" | "solid";
@@ -56,6 +60,10 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "game-tile.density": "comfortable",
   "game-row.columns": "full",
   "game-row.mode": "full",
+  "library-tile.aspect": "2:3",
+  "library-tile.compat": "on",
+  "library-tile.overlay": "on",
+  "library-tile.density": "compact",
   "hero.height": "tall",
   "hero.gradient": "warm",
   "hero.chips": "glass",

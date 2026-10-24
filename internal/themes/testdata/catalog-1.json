@@ -394,6 +394,53 @@
       ]
     },
     {
+      "entry": "library-tile",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "aspect",
+          "values": [
+            "2:3",
+            "3:4",
+            "16:9"
+          ],
+          "default": "2:3",
+          "since": "1.0",
+          "inherits": "game-tile.aspect"
+        },
+        {
+          "name": "compat",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0",
+          "inherits": "game-tile.compat"
+        },
+        {
+          "name": "overlay",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0",
+          "inherits": "game-tile.overlay"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "compact",
+          "since": "1.0",
+          "inherits": "game-tile.density"
+        }
+      ]
+    },
+    {
       "entry": "library.top",
       "since": "1.0",
       "axes": null,
@@ -476,13 +523,6 @@
     },
     {
       "entry": "library.last-played",
-      "since": "1.0",
-      "axes": null,
-      "kind": "block",
-      "region": "bottom"
-    },
-    {
-      "entry": "library.grid",
       "since": "1.0",
       "axes": null,
       "kind": "block",

@@ -66,7 +66,6 @@
           <xs:enumeration value="filters" />
           <xs:enumeration value="footer" />
           <xs:enumeration value="games" />
-          <xs:enumeration value="grid" />
           <xs:enumeration value="header" />
           <xs:enumeration value="heading" />
           <xs:enumeration value="hero" />
@@ -91,6 +90,14 @@
         <xs:restriction base="xs:integer">
           <xs:minInclusive value="1" />
           <xs:maxInclusive value="50" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="span">
+      <xs:simpleType>
+        <xs:restriction base="xs:integer">
+          <xs:minInclusive value="1" />
+          <xs:maxInclusive value="12" />
         </xs:restriction>
       </xs:simpleType>
     </xs:attribute>

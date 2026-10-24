@@ -1,19 +1,19 @@
 // i18n: converted
 import { useTranslation, Trans } from 'react-i18next';
-import React, { memo, useDeferredValue, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, WifiOff, X } from 'lucide-react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, LogIn, PackagePlus, Play, Plus, SlidersHorizontal, WifiOff, X } from 'lucide-react';
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
-import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, cardClass, clock, cx } from './ui';
-import { GameCardBody, tierMeaning } from './CompatBadges';
+import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, clock, cx } from './ui';
+import { tierMeaning } from './CompatBadges';
 import { TIER_FILTERS, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
-import { byRecent, coverImages, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
+import { byRecent, heroImages, hoursPlayed, storeLabel } from '../lib/games';
 import { collectionPredicate, missingNames } from '../lib/collections';
 import { formatCount } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
@@ -219,23 +219,6 @@ function statusOptionLabel(t: T, v: StatusFilter): string {
   }
 }
 
-/** The status badge label of a game card: null when it has no status, so the
- *  card shows no badge (issue #51). */
-function statusBadgeLabel(t: T, status: string | undefined): string | null {
-  switch (status) {
-    case 'backlog':
-      return t('library:statusFilter.backlog');
-    case 'playing':
-      return t('library:statusFilter.playing');
-    case 'finished':
-      return t('library:statusFilter.finished');
-    case 'abandoned':
-      return t('library:statusFilter.abandoned');
-    default:
-      return null;
-  }
-}
-
 /** Filters the library by the user's own status (issue #51): all games, only
  *  the ones without one, or only one status. */
 function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChange: (v: StatusFilter) => void }) {
@@ -254,15 +237,6 @@ function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChang
       </SelectContent>
     </Select>
   );
-}
-
-function jobLabel(t: T, j: Job): string {
-  if (j.state === 'queued') return t('library:job.queued', { kind: j.kind });
-  if (j.percent >= 0) {
-    const percent = formatCount(Math.round(j.percent));
-    return j.kind === 'uninstall' ? t('library:job.removing', { percent }) : t('library:job.installing', { percent });
-  }
-  return j.phase ?? j.kind;
 }
 
 /** The store name for display: brand stores keep their name, sideloaded games translate. */
@@ -296,54 +270,7 @@ function SortHead({ k, label, sort, onSort, right }: { k: SortKey; label: string
 const CARD_FOOTER = 112;
 const CARD_GAP = 12;
 const CARD_MIN_WIDTH = 140;
-const cardRowHeight = (width: number) => width * 1.5 + CARD_FOOTER;
 const TABLE_ROW_HEIGHT = 44;
-
-const GameCard = memo(function GameCard({ game: g, job, onOpen, onManage }: { game: Game; job?: Job; onOpen: (id: string) => void; onManage?: (id: string) => void }) {
-  const { t } = useTranslation('library');
-  const hours = hoursPlayed(g);
-  const statusLabel = statusBadgeLabel(t, g.status);
-  const meta = [hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ');
-  return (
-    <button
-      onClick={() => onOpen(g.id)}
-      onContextMenu={onManage ? (e) => { e.preventDefault(); onManage(g.id); } : undefined}
-      className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}
-    >
-      <div className="relative flex-none">
-        <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full', !g.is_installed && !job && 'opacity-45 grayscale-[.6]')} />
-        {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
-        {g.shared_by && (
-          <Badge variant="neutral" className="absolute left-2 top-2 max-w-[85%] truncate bg-black/65 text-white/80">{t('library:sharedBy', { name: g.shared_by.name })}</Badge>
-        )}
-        {job ? (
-          <div className="absolute inset-x-2 bottom-2 rounded-lg bg-black/70 px-2 py-1.5">
-            <div className="font-mono text-micro uppercase tracking-wider text-amber-200">{jobLabel(t, job)}</div>
-            <div className="mt-1 h-1 rounded-full bg-white/15">
-              <div className="h-full rounded-full bg-accent-strong" style={{ width: `${Math.max(job.percent, 2)}%` }} />
-            </div>
-          </div>
-        ) : (
-          (g.status || !g.is_installed) && (
-            <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
-              {statusLabel && (
-                <Badge variant="neutral" className="bg-black/65 text-text-body" data-testid="status-badge">
-                  {statusLabel}
-                </Badge>
-              )}
-              {!g.is_installed && (
-                <Badge variant="neutral" className="gap-1 bg-black/65 text-text-body">
-                  {g.installable && <Download className="h-2.5 w-2.5" />} {g.installable ? t('library:cardNotInstalled') : t('library:cardOwned')}
-                </Badge>
-              )}
-            </div>
-          )
-        )}
-      </div>
-      <GameCardBody title={g.title} meta={meta} game={g} className="px-2.5 py-2" />
-    </button>
-  );
-});
 
 
 export function LibraryView(p: LibraryProps) {
@@ -525,7 +452,6 @@ function libraryBlocks(d: LibraryData, layout?: LibraryLayoutData): Record<strin
     warnings: <LibraryWarnings warnings={p.warnings} pluginName={d.pluginName} onNavigate={p.onNavigate} />,
     empty: <LibraryEmpty filteredCount={d.filtered.length} gamesCount={p.games.length} installedCount={d.installedCount} ownership={p.ownership} />,
     'last-played': <LibraryLastPlayed played={d.played} runners={p.runners} maxHours={d.maxHours} onOpenGame={p.onOpenGame} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
-    grid: <LibraryGrid rest={d.rest} jobs={d.jobs} onOpenGame={p.onOpenGame} onManage={p.onManageCollections} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
     'all-titles': <LibraryAllTitles rest={d.rest} jobs={d.jobs} onOpenGame={p.onOpenGame} onManage={p.onManageCollections} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
     activity: <LibraryActivity events={p.activity} onNavigate={p.onNavigate} limit={layoutLimit(layout, 'activity', 6)} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
     recent: <LibraryRecent recentlyAdded={d.recentlyAdded} onOpenGame={p.onOpenGame} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
@@ -869,7 +795,7 @@ export function LibraryLastPlayed({ played, runners, maxHours, onOpenGame, mode,
   return (
     <section>
       <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:lastPlayed')}</h2>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))]">
         {played.map((g) => (
           <button key={g.id} onClick={() => onOpenGame(g.id)} className="group relative overflow-hidden rounded-3xl text-left ring-1 ring-hairline transition hover:ring-accent-strong/40">
             <Cover src={heroImages(g)} title={g.title} className="h-[210px] w-full transition duration-500 group-hover:scale-[1.04]" />
@@ -901,12 +827,13 @@ export function LibraryLastPlayed({ played, runners, maxHours, onOpenGame, mode,
 
 export function LibraryAllTitles({ rest, jobs, onOpenGame, onManage, mode, filteredEmpty }: { rest: Game[]; jobs: Map<string, Job>; onOpenGame: (id: string) => void; onManage?: (id: string) => void; mode: LibraryMode; filteredEmpty: boolean }) {
   const { t } = useTranslation('library');
-  const aspect = useVariant('game-tile.aspect');
-  const density = useVariant('game-tile.density');
+  const aspect = useVariant('library-tile.aspect');
   if (filteredEmpty || mode !== 'cards') return null;
   const ratio = aspect === '2:3' ? 1.5 : aspect === '16:9' ? 9 / 16 : 4 / 3;
-  const footer = density === 'compact' ? 100 : CARD_FOOTER;
-  const rowHeight = (width: number) => width * ratio + footer;
+  // The footer matches the built-in cards (issue #109): the title, the
+  // details line and the two badge lines, so the built-in 2:3 cards stay
+  // pixel-identical (the virtual grid forces this height).
+  const rowHeight = (width: number) => width * ratio + CARD_FOOTER;
   // The card meta matches the built-in cards: playtime, recency, store, year, update.
   const metaFor = (g: Game) => {
     const hours = hoursPlayed(g);
@@ -922,29 +849,7 @@ export function LibraryAllTitles({ rest, jobs, onOpenGame, onManage, mode, filte
         gap={CARD_GAP}
         rowHeight={rowHeight}
         className="cover-grid-sm"
-        renderItem={(g) => <GameTile game={g} job={jobs.get(g.id)} meta={metaFor(g)} coverBadges onOpen={onOpenGame} onManage={onManage} />}
-      />
-    </section>
-  );
-}
-
-/** The built-in all-titles grid (issue #108): the catalog's 2:3 cards with
- *  the library's cover badges, exactly as the built-in section shows them.
- *  Theme layouts use the all-titles block (the catalog tile) instead. */
-export function LibraryGrid({ rest, jobs, onOpenGame, onManage, mode, filteredEmpty }: { rest: Game[]; jobs: Map<string, Job>; onOpenGame: (id: string) => void; onManage?: (id: string) => void; mode: LibraryMode; filteredEmpty: boolean }) {
-  const { t } = useTranslation('library');
-  if (filteredEmpty || mode !== 'cards') return null;
-  return (
-    <section>
-      <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:allTitles')}</h2>
-      <WindowedGrid
-        items={rest}
-        itemKey={(g) => g.id}
-        minColumn={CARD_MIN_WIDTH}
-        gap={CARD_GAP}
-        rowHeight={cardRowHeight}
-        className="cover-grid-sm"
-        renderItem={(g) => <GameCard game={g} job={jobs.get(g.id)} onOpen={onOpenGame} onManage={onManage} />}
+        renderItem={(g) => <GameTile game={g} job={jobs.get(g.id)} meta={metaFor(g)} coverBadges site="library" onOpen={onOpenGame} onManage={onManage} />}
       />
     </section>
   );

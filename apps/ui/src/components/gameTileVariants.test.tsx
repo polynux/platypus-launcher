@@ -8,6 +8,10 @@ const state = vi.hoisted(() => ({ variants: {
   'game-tile.compat': 'on',
   'game-tile.overlay': 'on',
   'game-tile.density': 'comfortable',
+  'library-tile.aspect': '2:3',
+  'library-tile.compat': 'on',
+  'library-tile.overlay': 'on',
+  'library-tile.density': 'compact',
   'game-row.columns': 'full',
   'game-row.mode': 'full',
 } as Record<string, string> }));
@@ -52,6 +56,13 @@ describe('GameTile catalog variants', () => {
   it('renders the dashboard tile without badges or job without axe violations', async () => {
     state.variants = { ...state.variants, 'game-tile.aspect': '3:4', 'game-tile.compat': 'on', 'game-tile.overlay': 'on', 'game-tile.density': 'comfortable' };
     const { container } = rtlRender(<GameTile game={game({ status: '', is_installed: true })} meta="1h · auto" hideNative onOpen={() => {}} />);
+    expect(rtlScreen.getByRole('button', { name: /Doom/ })).toBeInTheDocument();
+    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('renders the library tile (2:3 compact card) without axe violations', async () => {
+    state.variants = { ...state.variants, 'library-tile.aspect': '2:3', 'library-tile.compat': 'on', 'library-tile.overlay': 'on', 'library-tile.density': 'compact' };
+    const { container } = rtlRender(<GameTile game={game()} job={job} meta="10h · test" coverBadges site="library" onOpen={() => {}} />);
     expect(rtlScreen.getByRole('button', { name: /Doom/ })).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });

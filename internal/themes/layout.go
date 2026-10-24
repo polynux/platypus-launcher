@@ -259,9 +259,20 @@ func (p *layoutParser) block(dec *xml.Decoder, start xml.StartElement) *types.Th
 	return node
 }
 
-// findBlockAttr returns the catalog's declaration for one block attribute.
+// spanAttr is the one attribute every block takes (issue #109): its share of
+// a row, like a grid span, so a tile grid can take more columns than a list
+// beside it. It belongs to the layout, not to a block, so the catalog
+// entries don't repeat it.
+var spanAttr = types.ThemeCatalogAttr{Name: "span", Type: "int", Min: 1, Max: 12}
+
+// blockAttrs is a block's declared attributes plus the universal span.
+func blockAttrs(entry types.ThemeCatalogEntry) []types.ThemeCatalogAttr {
+	return append(slices.Clone(entry.Attrs), spanAttr)
+}
+
+// findBlockAttr returns the declaration for one block attribute.
 func findBlockAttr(entry types.ThemeCatalogEntry, key string) (types.ThemeCatalogAttr, bool) {
-	for _, a := range entry.Attrs {
+	for _, a := range blockAttrs(entry) {
 		if a.Name == key {
 			return a, true
 		}
@@ -417,7 +428,7 @@ func LayoutXSD() string {
 			regions[name] = true
 		case "block":
 			blocks[name] = true
-			for _, a := range entry.Attrs {
+			for _, a := range blockAttrs(entry) {
 				if _, exists := attrs[a.Name]; !exists {
 					attrs[a.Name] = a
 				}
@@ -491,7 +502,7 @@ func LayoutXSDForView(view string) string {
 			regions[name] = true
 		case "block":
 			blocks[name] = true
-			for _, a := range entry.Attrs {
+			for _, a := range blockAttrs(entry) {
 				if _, exists := attrs[a.Name]; !exists {
 					attrs[a.Name] = a
 				}

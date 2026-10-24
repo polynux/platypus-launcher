@@ -46,7 +46,7 @@ func TestFixturePluginThemeLoads(t *testing.T) {
 // a newer Platypus.
 func TestPluginThemeContrastAndCatalog(t *testing.T) {
 	base := map[string]string{
-		"theme.toml": "[theme]\nid = \"x\"\nname = \"X\"\nschema = 1\nsupports = [\"tokens\"]\n\n[tokens]\naccent = \"#7dd3fc\"\n",
+		"theme.toml":    "[theme]\nid = \"x\"\nname = \"X\"\nschema = 1\nsupports = [\"tokens\"]\n\n[tokens]\naccent = \"#7dd3fc\"\n",
 		"assets/bg.png": string(append([]byte("\x89PNG\r\n\x1a\n"), []byte("body")...)),
 	}
 	bad := fstest.MapFS{

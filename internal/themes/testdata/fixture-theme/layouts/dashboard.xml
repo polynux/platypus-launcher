@@ -1,11 +1,11 @@
-<!-- Fixture dashboard layout (issue #105): the cool layout, reused so the
-     fixture proves plugin layouts validate like built-ins. -->
+<!-- Fixture dashboard layout (issue #105, #109): the cool layout, reused so
+     the fixture proves plugin layouts validate like built-ins. -->
 <layout view="dashboard" catalog="1.0">
   <region name="main">
     <block name="hero" />
     <block name="empty" />
     <row>
-      <block name="continue" />
+      <block name="continue" span="2" />
       <block name="waiting" />
     </row>
     <block name="recent" />
