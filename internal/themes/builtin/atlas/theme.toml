@@ -1,0 +1,40 @@
+# Atlas: the /21 reference design (issues #122, #125). Tokens from
+# tools/design-lab-2/src/designs/d21/d21.css (.d21 block). Not the default yet.
+
+[theme]
+id = "atlas"
+name = "Atlas"
+schema = 1
+catalog = "1.0"
+supports = ["tokens", "variants"]
+
+[variants]
+"shell.navigation" = "sourcebar"
+"list-row.density" = "compact"
+"game-row.mode" = "compact"
+"view-header.size" = "compact"
+
+[tokens]
+ground = "#13161b"
+raised = "#181b21"
+surface = "#1f232a"
+surface-strong = "#293039"
+hairline = "#262b33"
+text = "#e9edf2"
+text-body = "#c3ccd8"
+text-muted = "#9ca7b5"
+text-faint = "#687384"
+accent = "#9db0ff"
+accent-strong = "#bccdff"
+on-accent = "#0f1218"
+ok = "#7ee2a8"
+attention = "#e8b26a"
+info = "#7dd3fc"
+dl = "#c4b5fd"
+danger = "#f0756a"
+focus = "#9db0ff"
+radius-chip = "7px"
+radius-card = "12px"
+radius-panel = "12px"
+font-sans = '"Albert Sans Variable", system-ui, sans-serif'
+font-mono = '"Geist Mono Variable", ui-monospace, monospace'

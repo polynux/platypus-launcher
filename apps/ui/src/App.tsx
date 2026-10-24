@@ -1,7 +1,7 @@
 // i18n: converted
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
-import { Shell } from './components/Shell';
+import { Shell, SourceFooter } from './components/Shell';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
@@ -89,6 +89,9 @@ export function App() {
   }, [settingsPresentation, settingsOpen, settingsReturnView, view.name]);
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<StoreType | 'all'>('all');
+  // The sourcebar's multi-store selection (issue #125, D21 empty = every
+  // store): kept in sync with the single source the sidebar and topbar use.
+  const [selectedStores, setSelectedStores] = useState<StoreType[]>([]);
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
   const [ownership, setOwnership] = useState<Ownership>('installed');
 
@@ -710,6 +713,7 @@ export function App() {
             onSearch={setSearch}
             source={source}
             onSource={setSource}
+            storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
             mode={libraryMode}
             onMode={setLibraryMode}
             ownership={ownership}
@@ -835,7 +839,7 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', shellNavigation === 'topbar' && 'flex-col')}>
+    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', (shellNavigation === 'topbar' || shellNavigation === 'sourcebar') && 'flex-col')}>
       <Shell
         view={view}
         onNavigate={setView}
@@ -843,7 +847,7 @@ export function App() {
         search={search}
         onSearch={setSearch}
         storeCounts={storeCounts}
-        onPickSource={(s) => { setSource(s); setView({ name: 'library' }); }}
+        onPickSource={(s) => { setSource(s); setSelectedStores(s === 'all' ? [] : [s]); setView({ name: 'library' }); }}
         sourceLogos={sourceLogos}
         gameCount={installedGames.length}
         loading={!loaded}
@@ -867,6 +871,13 @@ export function App() {
         collectionCounts={collectionTotals}
         onOpenCollection={(id) => setView({ name: 'library', collection: id })}
         onManageCollections={() => setCollectionsDialog({})}
+        ownership={ownership}
+        onOwnership={setOwnership}
+        ownedCount={games.length}
+        storeSelection={selectedStores}
+        onSelectStores={(s) => { setSelectedStores(s); setSource(s.length === 1 ? s[0] : 'all'); }}
+        jobs={activeJobs}
+        sessionStartedAt={{ ...sessionStart.current }}
       />
       {settingsPresentation !== 'page' && settingsOpen && (
         <Modal label={t('nav:title.settings')} presentation={settingsPresentation === 'sheet' ? 'sheet' : 'dialog'} size="xl" className="h-[min(52rem,100%)]" onClose={() => setSettingsOpen(false)}>
@@ -887,6 +898,13 @@ export function App() {
         )}
         {renderView()}
       </main>
+      {shellNavigation === 'sourcebar' && (
+        <SourceFooter
+          sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+          jobs={activeJobs}
+          sessionStartedAt={{ ...sessionStart.current }}
+        />
+      )}
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
 

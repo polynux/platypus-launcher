@@ -37,5 +37,17 @@
   "notFound": "not found",
   "goneDetail": "This game is no longer in the library. A rescan may have removed it.",
   "tagline": "game hub",
-  "main": "Main"
+  "main": "Main",
+  "sourcebar": {
+    "searchOrCommand": "Search or run a command",
+    "places": "Places",
+    "all": "All",
+    "installed": "Installed",
+    "downloads": "Downloads",
+    "attention": "Needs attention",
+    "addStore": "Add store",
+    "friends": "Friends",
+    "chat": "Chat",
+    "shiftHint": "Shift-click to combine stores"
+  }
 }
