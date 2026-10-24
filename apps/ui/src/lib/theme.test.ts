@@ -72,9 +72,19 @@ describe('theme variables', () => {
   it('draws a wash image under its gradient, so theme art tints like its colours', () => {
     const layers = [{ at: '10% 10%', size: '100px 100px', color: '#000000', fade: '50%', image: '/platypus-art/theme/p/assets/bg.png?v=abc' }];
     expect(washImage(layers)).toBe(
-      'radial-gradient(100px 100px at 10% 10%, #000000, transparent 50%), url("/platypus-art/theme/p/assets/bg.png?v=abc") center / cover no-repeat',
+      'radial-gradient(100px 100px at 10% 10%, #000000, transparent 50%), url("/platypus-art/theme/p/assets/bg.png?v=abc")',
     );
     expect(themeVariables({ ...warm, wash: layers })['--app-wash']).toContain('url("/platypus-art/theme/p/assets/bg.png?v=abc")');
+  });
+
+  it('applies a resolved plugin theme to the CSS variable, image URL included', () => {
+    applyTheme({
+      ...warm,
+      id: 'fixture',
+      wash: [{ at: '10% 10%', size: '100px 100px', color: '#000000', fade: '50%', image: '/platypus-art/theme/p/assets/bg.png?v=abc' }],
+      fonts: { 'Fixture Sans': '/platypus-art/theme/p/fonts/f.woff2?v=abc' },
+    });
+    expect(root().getPropertyValue('--app-wash')).toContain('url("/platypus-art/theme/p/assets/bg.png?v=abc")');
   });
 
   it('registers a plugin theme font, and tolerates a missing FontFace', async () => {
@@ -92,6 +102,23 @@ describe('theme variables', () => {
     vi.unstubAllGlobals();
     expect(() => loadThemeFonts({ 'Fixture Sans': '/platypus-art/theme/p/fonts/f.woff2' })).not.toThrow();
     expect(() => loadThemeFonts(undefined)).not.toThrow();
+  });
+
+  it('warns with the family and URL when a theme font fails to load', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const load = vi.fn().mockRejectedValue(new Error('decode'));
+    vi.stubGlobal('FontFace', class {
+      load = load;
+      constructor(public family: string, public source: string, public desc: object) {}
+    });
+    Object.defineProperty(document, 'fonts', { value: { add: vi.fn() }, configurable: true });
+    loadThemeFonts({ 'Fixture Sans': '/platypus-art/theme/p/fonts/f.woff2?v=abc' });
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Fixture Sans'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('/platypus-art/theme/p/fonts/f.woff2?v=abc'));
+    vi.unstubAllGlobals();
+    warn.mockRestore();
   });
 
   // style.css keeps the warm wash as its own default; the two must not drift.

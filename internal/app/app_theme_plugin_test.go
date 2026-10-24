@@ -127,6 +127,34 @@ func TestPluginThemeListsResolvesAndPicks(t *testing.T) {
 	}
 }
 
+// Resolving the same plugin theme twice keeps its asset URLs both times.
+// withThemeURLs must not write into the manager's cached theme: the resolved
+// wash shares its backing array, and mapping an already absolute URL fails
+// the inside-the-folder check, silently dropping the image (D9).
+func TestPluginThemeRepeatedResolvesKeepAssets(t *testing.T) {
+	a, _ := themeApp(t, "fixture-theme", "fixture", pluginThemeTOML, map[string][]byte{
+		"assets/bg.png":       pluginThemePNG,
+		"fonts/fixture.woff2": pluginThemeWOFF,
+	})
+	for i := 0; i < 3; i++ {
+		got := a.GetTheme("fixture")
+		if len(got.Wash) != 1 || !strings.HasPrefix(got.Wash[0].Image, themes.ThemeURLPrefix+"fixture-theme/assets/bg.png") {
+			t.Fatalf("resolve %d: wash = %+v, want the art URL", i, got.Wash)
+		}
+		if _, ok := got.Fonts["Fixture Sans"]; !ok {
+			t.Fatalf("resolve %d: fonts = %v, want the shipped family", i, got.Fonts)
+		}
+	}
+	if _, err := a.SetTheme("fixture"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if got := a.GetTheme(""); got.Wash[0].Image == "" {
+			t.Fatalf("picked resolve %d lost the wash image: %+v", i, got.Wash)
+		}
+	}
+}
+
 // An invalid plugin theme is listed with its problem and can't be picked,
 // exactly like a broken built-in file.
 func TestPluginThemeInvalidListsAndRefuses(t *testing.T) {

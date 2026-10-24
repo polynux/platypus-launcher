@@ -87,29 +87,34 @@ function shifted(channel: 'l' | 'h', by: number): string {
 
 /** One radial gradient per layer, the wash's CSS. A layer with an image draws
  *  the picture under its gradient, so a theme's art tints like its colours.
- *  Layers are composed from validated parts, so nothing here can carry more
- *  than the core allowed. */
+ *  The image is a bare url(): background-image layers can't carry position or
+ *  size (those belong to the background shorthand), and anything more would
+ *  invalidate the whole declaration. Layers are composed from validated
+ *  parts, so nothing here can carry more than the core allowed. */
 export function washImage(layers: WashLayer[]): string {
   if (layers.length === 0) return 'none';
   return layers
     .map((l) => {
       const gradient = `radial-gradient(${l.size} at ${l.at}, ${l.color}, transparent ${l.fade})`;
       if (!l.image) return gradient;
-      return `${gradient}, url("${l.image}") center / cover no-repeat`;
+      return `${gradient}, url("${l.image}")`;
     })
     .join(', ');
 }
 
 /** Registers a plugin theme's fonts (issue #105): each shipped family becomes
  *  a FontFace from its art URL, so a font token naming it paints at once.
- *  A failed load keeps the next family in the stack, like a missing webfont. */
+ *  A failed load stays silent for the user (the stack falls back) but warns
+ *  in the console with the family and URL, so a theme author can find it. */
 export function loadThemeFonts(fonts?: Record<string, string>): void {
   if (!fonts) return;
   try {
     for (const [family, href] of Object.entries(fonts)) {
       if (!family || !href) continue;
       const face = new FontFace(family, `url("${href}") format("woff2")`, {});
-      void face.load().then((loaded) => document.fonts.add(loaded)).catch(() => {});
+      void face.load().then((loaded) => document.fonts.add(loaded)).catch(() => {
+        console.warn(`theme font "${family}" failed to load from ${href}`);
+      });
     }
   } catch {
     // No FontFace (an old engine, a test without fonts): the stacks fall back.
