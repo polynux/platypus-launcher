@@ -120,7 +120,7 @@ describe('shell navigation variants', () => {
     // Unlike the sidebar's disclosure group, a floating menu never opens on
     // page load: Plugins stays one click away, marked by the active trigger.
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(screen.getByRole('button', { name: /Tools/ })).toHaveClass('text-amber-200');
+    expect(screen.getByRole('button', { name: /Tools/ })).toHaveClass('text-accent-strong');
   });
 
   it('marks the active item aria-current in both variants', async () => {
