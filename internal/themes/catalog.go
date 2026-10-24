@@ -16,15 +16,20 @@ var Catalog = []types.ThemeCatalogEntry{
 	// Dashboard layout entries (issue #96): its regions, then its blocks in
 	// the built-in order (inventory §2.1). None of them is required: advice
 	// and decoration stay hideable, and the dashboard acts on nothing.
+	// The built-in arrangement (issue #108) also uses the top region (the
+	// hero or welcome banner, full width) and the bottom region (the
+	// activity feed, full width); middle columns are main and side.
+	{Entry: "dashboard.top", Since: "1.0", Kind: "region"},
 	{Entry: "dashboard.main", Since: "1.0", Kind: "region"},
 	{Entry: "dashboard.side", Since: "1.0", Kind: "region"},
-	{Entry: "dashboard.hero", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "dashboard.welcome", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "dashboard.empty", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "dashboard.bottom", Since: "1.0", Kind: "region"},
+	{Entry: "dashboard.hero", Since: "1.0", Kind: "block", Region: "top"},
+	{Entry: "dashboard.welcome", Since: "1.0", Kind: "block", Region: "top"},
+	{Entry: "dashboard.empty", Since: "1.0", Kind: "block", Region: "top"},
 	{Entry: "dashboard.continue", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "dashboard.waiting", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "dashboard.waiting", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "dashboard.recent", Since: "1.0", Kind: "block", Region: "side"},
-	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"limit"}},
+	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
 	{Entry: "view-header", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "actions", Values: []string{"right", "below"}, Default: "right", Since: "1.0"},
 		{Name: "subtitle", Values: []string{"shown", "hidden"}, Default: "shown", Since: "1.0"},
@@ -82,18 +87,26 @@ var Catalog = []types.ThemeCatalogEntry{
 	// Library layout entries (issue #98): its regions, then its blocks in the
 	// built-in order (inventory §2.2). Only the plugin warnings are required:
 	// they tell the truth about the stores, so a layout can't hide them.
+	// The built-in arrangement (issue #108) groups the header in top and the
+	// catalog in bottom, both full width; the header block composes the
+	// title, mode, search, chips and filters exactly as the built-in header
+	// shows them, while themes like cool place the parts separately.
+	{Entry: "library.top", Since: "1.0", Kind: "region"},
 	{Entry: "library.main", Since: "1.0", Kind: "region"},
 	{Entry: "library.side", Since: "1.0", Kind: "region"},
+	{Entry: "library.bottom", Since: "1.0", Kind: "region"},
+	{Entry: "library.header", Since: "1.0", Kind: "block", Region: "top"},
 	{Entry: "library.title", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "library.mode", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "library.search", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "library.chips", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "library.filters", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.warnings", Since: "1.0", Kind: "block", Required: true, Region: "main"},
-	{Entry: "library.empty", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.last-played", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.all-titles", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"limit"}},
-	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "side"},
-	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "main"},
+	{Entry: "library.warnings", Since: "1.0", Kind: "block", Required: true, Region: "top"},
+	{Entry: "library.empty", Since: "1.0", Kind: "block", Region: "top"},
+	{Entry: "library.last-played", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "library.grid", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "library.all-titles", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
+	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "bottom"},
 }

@@ -8,6 +8,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
 import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
 import { VARIANT_DEFAULTS, type VariantAxis, type VariantValues } from '../gen/catalog';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 
 /** The theme the app ships with. Matches the core's default (themes.DefaultID). */
 export const DEFAULT_THEME_ID = 'warm';
@@ -175,24 +176,26 @@ export function loadTheme(): Promise<void> {
   }
 }
 
-/** Reads one view's validated layout from the core, or null when the theme
- *  ships none: the view then uses its built-in arrangement. A failed read
- *  keeps the built-in one, like a failed theme read keeps the applied theme. */
+/** Reads one view's validated layout from the core: the theme's own layout
+ *  when it ships one, else the built-in arrangement (issue #108). Null only
+ *  for an unknown view, or when the read fails: the view then keeps showing
+ *  its built-in arrangement, like a failed theme read keeps the applied theme. */
 export function loadThemeLayout(view: string): Promise<ThemeLayout | null> {
   try {
-    return Effect.runPromise(LauncherApi.getThemeLayout(view)).catch(() => null);
+    return Effect.runPromise(LauncherApi.getThemeLayout(view)).catch(() => BUILTIN_LAYOUTS[view] ?? null);
   } catch {
-    return Promise.resolve(null);
+    return Promise.resolve(BUILTIN_LAYOUTS[view] ?? null);
   }
 }
 
-/** One view's layout in the picked theme, and null for the built-in
- *  arrangement. Refetches when the picked theme changes. */
+/** One view's layout in the picked theme. It starts from the generated
+ *  built-in arrangement, so the first paint already shows the default
+ *  instead of flashing empty, and refetches when the picked theme changes. */
 export function useThemeLayout(view: string): ThemeLayout | null {
-  const [layout, setLayout] = useState<ThemeLayout | null>(null);
+  const [layout, setLayout] = useState<ThemeLayout | null>(() => BUILTIN_LAYOUTS[view] ?? null);
   useEffect(() => {
     let live = true;
-    const fetch = () => { void loadThemeLayout(view).then((l) => { if (live) setLayout(l); }); };
+    const fetch = () => { void loadThemeLayout(view).then((l) => { if (live && l) setLayout(l); }); };
     fetch();
     return onThemeApplied(fetch);
   }, [view]);

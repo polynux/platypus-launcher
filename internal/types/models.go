@@ -438,8 +438,9 @@ type WashLayer struct {
 
 // ThemeLayout is a view's validated block layout (issue #96): the regions in
 // the order the theme lists them, each with its blocks and rows. The UI maps
-// the names onto the view's block components; a nil layout means the theme
-// ships none and the UI uses its built-in arrangement.
+// the names onto the view's block components; the core resolves the built-in
+// arrangement (issue #108) when the theme ships none, so a view with blocks
+// always gets a layout and nil only means an unknown view.
 type ThemeLayout struct {
 	View    string              `json:"view"`
 	Regions []ThemeLayoutRegion `json:"regions"`

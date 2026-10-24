@@ -43,6 +43,12 @@
       ]
     },
     {
+      "entry": "dashboard.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
       "entry": "dashboard.main",
       "since": "1.0",
       "axes": null,
@@ -55,25 +61,31 @@
       "kind": "region"
     },
     {
+      "entry": "dashboard.bottom",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
       "entry": "dashboard.hero",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "top"
     },
     {
       "entry": "dashboard.welcome",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "top"
     },
     {
       "entry": "dashboard.empty",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "top"
     },
     {
       "entry": "dashboard.continue",
@@ -87,7 +99,7 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "side"
     },
     {
       "entry": "dashboard.recent",
@@ -101,7 +113,7 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main",
+      "region": "bottom",
       "attrs": [
         "limit"
       ]
@@ -377,6 +389,12 @@
       ]
     },
     {
+      "entry": "library.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
       "entry": "library.main",
       "since": "1.0",
       "axes": null,
@@ -387,6 +405,19 @@
       "since": "1.0",
       "axes": null,
       "kind": "region"
+    },
+    {
+      "entry": "library.bottom",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.header",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
     },
     {
       "entry": "library.title",
@@ -429,35 +460,42 @@
       "axes": null,
       "kind": "block",
       "required": true,
-      "region": "main"
+      "region": "top"
     },
     {
       "entry": "library.empty",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "top"
     },
     {
       "entry": "library.last-played",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "bottom"
+    },
+    {
+      "entry": "library.grid",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
     },
     {
       "entry": "library.all-titles",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "bottom"
     },
     {
       "entry": "library.activity",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main",
+      "region": "bottom",
       "attrs": [
         "limit"
       ]
@@ -467,14 +505,14 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "side"
+      "region": "bottom"
     },
     {
       "entry": "library.table",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "bottom"
     }
   ]
 }

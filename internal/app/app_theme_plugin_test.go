@@ -118,9 +118,8 @@ func TestPluginThemeListsResolvesAndPicks(t *testing.T) {
 	if got := a.GetTheme(""); got.ID != "fixture" {
 		t.Fatalf("GetTheme(\"\") after pick = %q", got.ID)
 	}
-	if layout := a.GetThemeLayout("dashboard"); layout == nil {
+	if layout := a.GetThemeLayout("dashboard"); layout == nil || len(layout.Regions) != 4 || layout.Regions[0].Name != "top" {
 		// The fixture ships no dashboard layout: the built-in arrangement stays.
-	} else {
 		t.Fatalf("unexpected layout: %+v", layout)
 	}
 	if _, err := a.SetTheme(""); err != nil {

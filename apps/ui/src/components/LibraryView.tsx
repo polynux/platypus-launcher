@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHo
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
-import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, ViewHeader, cardClass, clock, cx } from './ui';
+import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, cardClass, clock, cx } from './ui';
 import { GameCardBody, tierMeaning } from './CompatBadges';
 import { TIER_FILTERS, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
@@ -13,7 +13,7 @@ import { Badge } from './ds/badge';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
-import { byRecent, coverImages, formatBytes, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
+import { byRecent, coverImages, heroImages, hoursPlayed, needsAttention, storeLabel } from '../lib/games';
 import { collectionPredicate, missingNames } from '../lib/collections';
 import { formatCount } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
@@ -24,6 +24,7 @@ import { WindowedGrid, WindowedRows } from './WindowedList';
 import { PluginLogo } from './PluginLogo';
 import { ThemeLayout } from '../lib/layout';
 import { useThemeLayout, useVariant } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 import { GameRow, GameTile } from './GameTile';
 import type { ThemeLayout as LibraryLayoutData } from '../types';
 
@@ -344,37 +345,9 @@ const GameCard = memo(function GameCard({ game: g, job, onOpen, onManage }: { ga
   );
 });
 
-const TableRow = memo(function TableRow({ game: g, index, runners, onOpen, onManage }: { game: Game; index: number; runners: ProtonVersion[]; onOpen: (id: string) => void; onManage?: (id: string) => void }) {
-  const { t } = useTranslation('library');
-  const tier = tierFilterValue(g);
-  return (
-    <div
-      role="row"
-      aria-rowindex={index + 2}
-      onContextMenu={onManage ? (e) => { e.preventDefault(); onManage(g.id); } : undefined}
-      className={cx('grid h-11 items-center gap-3 px-4 transition hover:bg-accent-strong/[0.05]', TABLE_COLS, index % 2 && 'bg-white/[0.015]')}
-    >
-      <span role="cell" className={cx('h-1.5 w-1.5 rounded-full', TIER_DOT[tier ?? ''] ?? 'bg-white/15')} />
-      <span role="cell" className="min-w-0">
-        <button onClick={() => onOpen(g.id)} className="group flex w-full min-w-0 items-center gap-2.5 text-left">
-          <Cover src={coverImages(g)} title="" className="h-7 w-7 flex-none rounded ring-1 ring-white/10" />
-          <span className="truncate text-[12.5px] font-semibold group-hover:text-amber-200">{g.title}</span>
-          {g.shared_by && <Badge variant="neutral" className="flex-none">{t('library:sharedBy', { name: g.shared_by.name })}</Badge>}
-        </button>
-      </span>
-      <span role="cell" className={cx('font-mono text-hint', TIER_TEXT[tier ?? ''] ?? 'text-text-muted')}>{tier ?? '—'}</span>
-      <span role="cell" className="truncate font-mono text-hint text-text-muted">{runnerShort(g.settings.runner_id, runners)}</span>
-      <span role="cell" className="text-right font-mono text-hint tabular-nums text-text-muted">{hoursPlayed(g) ?? '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint tabular-nums text-text-muted">{g.release_year ?? '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint text-text-muted">{(g.is_installed ? formatBytes(g.size_bytes) : t('library:table.notInstalled')) || '—'}</span>
-      <span role="cell" className="text-right font-mono text-hint text-text-muted">{recencyWord(t, g) ?? '—'}</span>
-    </div>
-  );
-});
 
 export function LibraryView(p: LibraryProps) {
   const { t } = useTranslation(['library', 'nav', 'collections']);
-  const layout = useThemeLayout('library');
   const [sort, setSort] = useState<Sort | null>(null);
   const [tier, setTier] = useState<TierFilter>('all');
   // The user's own per-game status (issue #51): all games, none, or one.
@@ -431,7 +404,14 @@ export function LibraryView(p: LibraryProps) {
   // looks offline — the library shows the last known listing.
   const { online } = useNetState();
 
-  if (!layout) return <LibraryBuiltIn p={p} sort={sort} setSort={setSort} tier={tier} setTier={setTier} statusFilter={statusFilter} setStatusFilter={setStatusFilter} lending={lending} setLending={setLending} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} activeCollection={activeCollection} inCollection={inCollection} extraFilters={extraFilters} q={q} owned={owned} installedCount={installedCount} sources={sources} source={source} filtered={filtered} missing={missing} jobs={jobs} pluginName={pluginName} played={played} tableRows={tableRows} toggleSort={toggleSort} rest={rest} maxHours={maxHours} recentlyAdded={recentlyAdded} online={online} hasBorrowed={hasBorrowed} lendingFilter={lendingFilter} />;
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's library before the core answers over RPC.
+  const layout = useThemeLayout('library') ?? BUILTIN_LAYOUTS['library'];
+  // The activity and recent grid spans the bottom when the library holds
+  // sideloaded games, like the built-in grid does; otherwise activity fills
+  // the row on its own. Frames stay with the view: the layout only names
+  // the row's blocks.
+  const hasRecent = recentlyAdded.length > 0;
   return (
     <div className="p-7">
       <ThemeLayout
@@ -439,15 +419,29 @@ export function LibraryView(p: LibraryProps) {
         blocks={libraryBlocks({ p, sort, setSort, tier, setTier, statusFilter, setStatusFilter, lending, setLending, filtersOpen, setFiltersOpen, activeCollection, extraFilters, owned, installedCount, sources, source, filtered, missing, jobs, pluginName, played, tableRows, toggleSort, rest, maxHours, recentlyAdded, online, hasBorrowed, lendingFilter }, layout)}
         className="grid gap-5 xl:grid-cols-[1.75fr_1fr]"
         regionClassName={libraryRegionClass}
+        rowClassName={(row) =>
+          row.some((n) => n.block === 'activity' || n.block === 'recent')
+            ? hasRecent
+              ? 'grid gap-5 xl:grid-cols-[1.5fr_1fr]'
+              : 'grid gap-5'
+            : undefined}
       />
     </div>
   );
 }
 
-/** One region's frame in a library layout: like the dashboard, the main column
- *  breathes and the side column packs tighter. */
+/** One region's frame in a library layout (issue #108): the header and the
+ *  catalog span the full width, like the built-in page; the main column
+ *  breathes and the side column packs tighter for themes that split them.
+ *  The top margin makes up the wrapper's gap, so the built-in spacing is
+ *  exact. */
 function libraryRegionClass(region: string): string {
-  return region === 'side' ? 'min-w-0 space-y-5' : 'min-w-0 space-y-6';
+  switch (region) {
+    case 'top': return 'col-span-full min-w-0 space-y-6 mb-1';
+    case 'bottom': return 'col-span-full min-w-0 space-y-8';
+    case 'side': return 'min-w-0 space-y-5';
+    default: return 'min-w-0 space-y-6';
+  }
 }
 
 interface LibraryData {
@@ -489,6 +483,7 @@ interface LibraryData {
 function libraryBlocks(d: LibraryData, layout?: LibraryLayoutData): Record<string, React.ReactNode> {
   const { p } = d;
   return {
+    header: <LibraryHeader d={d} />,
     title: (
       <LibraryTitle
         filteredCount={d.filtered.length}
@@ -530,6 +525,7 @@ function libraryBlocks(d: LibraryData, layout?: LibraryLayoutData): Record<strin
     warnings: <LibraryWarnings warnings={p.warnings} pluginName={d.pluginName} onNavigate={p.onNavigate} />,
     empty: <LibraryEmpty filteredCount={d.filtered.length} gamesCount={p.games.length} installedCount={d.installedCount} ownership={p.ownership} />,
     'last-played': <LibraryLastPlayed played={d.played} runners={p.runners} maxHours={d.maxHours} onOpenGame={p.onOpenGame} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
+    grid: <LibraryGrid rest={d.rest} jobs={d.jobs} onOpenGame={p.onOpenGame} onManage={p.onManageCollections} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
     'all-titles': <LibraryAllTitles rest={d.rest} jobs={d.jobs} onOpenGame={p.onOpenGame} onManage={p.onManageCollections} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
     activity: <LibraryActivity events={p.activity} onNavigate={p.onNavigate} limit={layoutLimit(layout, 'activity', 6)} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
     recent: <LibraryRecent recentlyAdded={d.recentlyAdded} onOpenGame={p.onOpenGame} mode={p.mode} filteredEmpty={d.filtered.length === 0} />,
@@ -550,6 +546,56 @@ function layoutLimit(layout: LibraryLayoutData | undefined, block: string, fallb
     }
   }
   return fallback;
+}
+
+/** The built-in library header (issue #108): the title, the mode switch
+ *  with the add button, and the search, store and filters toolbar, arranged
+ *  exactly as the built-in header shows them. It carries no outer margin:
+ *  the top region's frame spaces it from the warnings below. */
+export function LibraryHeader({ d }: { d: LibraryData }) {
+  const { p } = d;
+  return (
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <LibraryTitle
+          filteredCount={d.filtered.length}
+          installedCount={d.installedCount}
+          owned={d.owned}
+          lastScan={p.lastScan}
+          collection={d.activeCollection}
+          missing={d.missing}
+          online={d.online}
+          onClearCollection={() => p.onCollection?.(undefined)}
+        />
+        <LibraryMode mode={p.mode} onMode={p.onMode} onAddGame={p.onAddGame} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2.5">
+        <LibrarySearch search={p.search} onSearch={p.onSearch} />
+        <LibraryChips sources={d.sources} source={d.source} onSource={p.onSource} sourceLogos={p.sourceLogos} />
+        <LibraryFilters
+          filtersOpen={d.filtersOpen}
+          setFiltersOpen={d.setFiltersOpen}
+          extraFilters={d.extraFilters}
+          owned={d.owned}
+          installedCount={d.installedCount}
+          ownership={p.ownership}
+          onOwnership={p.onOwnership}
+          hasBorrowed={d.hasBorrowed}
+          lendingFilter={d.lendingFilter}
+          setLending={d.setLending}
+          tier={d.tier}
+          setTier={d.setTier}
+          statusFilter={d.statusFilter}
+          setStatusFilter={d.setStatusFilter}
+          collections={p.collections}
+          onCollection={p.onCollection}
+          activeCollection={d.activeCollection}
+          sort={d.sort}
+          setSort={d.setSort}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function LibraryTitle({ filteredCount, installedCount, owned, lastScan, collection, missing, online, onClearCollection }: {
@@ -882,6 +928,28 @@ export function LibraryAllTitles({ rest, jobs, onOpenGame, onManage, mode, filte
   );
 }
 
+/** The built-in all-titles grid (issue #108): the catalog's 2:3 cards with
+ *  the library's cover badges, exactly as the built-in section shows them.
+ *  Theme layouts use the all-titles block (the catalog tile) instead. */
+export function LibraryGrid({ rest, jobs, onOpenGame, onManage, mode, filteredEmpty }: { rest: Game[]; jobs: Map<string, Job>; onOpenGame: (id: string) => void; onManage?: (id: string) => void; mode: LibraryMode; filteredEmpty: boolean }) {
+  const { t } = useTranslation('library');
+  if (filteredEmpty || mode !== 'cards') return null;
+  return (
+    <section>
+      <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:allTitles')}</h2>
+      <WindowedGrid
+        items={rest}
+        itemKey={(g) => g.id}
+        minColumn={CARD_MIN_WIDTH}
+        gap={CARD_GAP}
+        rowHeight={cardRowHeight}
+        className="cover-grid-sm"
+        renderItem={(g) => <GameCard game={g} job={jobs.get(g.id)} onOpen={onOpenGame} onManage={onManage} />}
+      />
+    </section>
+  );
+}
+
 export function LibraryActivity({ events, onNavigate, limit, mode, filteredEmpty }: { events: ActivityEvent[]; onNavigate: (v: View) => void; limit?: number; mode: LibraryMode; filteredEmpty: boolean }) {
   if (filteredEmpty || mode !== 'cards') return null;
   return <ActivityPanel events={events} limit={limit ?? 6} onFullLog={() => onNavigate({ name: 'activity' })} />;
@@ -926,292 +994,5 @@ export function LibraryTable({ tableRows, runners, onOpenGame, onManage, sort, o
         />
       </div>
     </section>
-  );
-}
-
-interface BuiltInProps extends LibraryData {
-  inCollection: ((g: Game) => boolean) | null;
-  q: string;
-}
-
-function LibraryBuiltIn({ p, sort, setSort, tier, setTier, statusFilter, setStatusFilter, lending, setLending, filtersOpen, setFiltersOpen, activeCollection, extraFilters, q: _q, owned, installedCount, sources, source, filtered, missing, jobs, pluginName, played, tableRows, toggleSort, rest, maxHours, recentlyAdded, online, hasBorrowed, lendingFilter }: BuiltInProps) {
-  const { t } = useTranslation(['library', 'nav', 'collections']);
-  void _q;
-  return (
-    <div className="p-7">
-      <ViewHeader
-        title={t('nav:title.library')}
-        subtitle={<><p className="mt-0.5 text-[12.5px] tabular-nums text-text-body">
-              {t('library:counts', { shown: formatCount(filtered.length), installed: formatCount(installedCount) })}
-              {owned > installedCount ? t('library:ownedSuffix', { owned: formatCount(owned) }) : ''}
-              {p.lastScan ? t('library:scannedSuffix', { time: clock(p.lastScan) }) : ''}
-            </p>
-            {activeCollection && (
-              <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-text-body">
-                <Badge variant="accent" className="gap-1.5" data-testid="collection-chip">
-                  {activeCollection.builtin ? t(`collections:builtin.${activeCollection.id}`) : activeCollection.name}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" aria-label={t('collections:clearCollection')} onClick={() => p.onCollection?.(undefined)} className="rounded-full hover:text-white">
-                        <X className="h-3 w-3" aria-hidden />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t('collections:clearCollection')}</TooltipContent>
-                  </Tooltip>
-                </Badge>
-                {missing.length > 0 && (
-                  <span className="text-amber-200" title={missing.join(', ')} data-testid="collection-missing">
-                    {t('collections:missing', { count: missing.length })}
-                  </span>
-                )}
-              </p>
-            )}
-            {!online && (
-              <p role="status" className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-strong px-2.5 py-1 text-[12px] font-semibold text-white/80 ring-1 ring-white/[0.1]">
-                <WifiOff className="h-3.5 w-3.5" aria-hidden />
-                {t('library:offline', 'Offline — showing the last known library')}
-              </p>
-            )}</>}
-        actions={<div className="flex flex-wrap items-center gap-2.5">
-            <FilterGroup label={t('library:view')}>
-              <SegRow label={t('library:view')} value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: t('library:mode.cards') }, { value: 'table', label: t('library:mode.table') }]} />
-            </FilterGroup>
-            <Button variant="primary" onClick={p.onAddGame}>
-              <Plus className="h-3.5 w-3.5" strokeWidth={3} /> {t('library:addGame')}
-            </Button>
-          </div>}
-        below={<>
-        {/* One row: search, the store, and a Filters toggle for the less-used groups (each keeps its label). */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative">
-            <Input
-              type="search"
-              aria-label={t('library:searchAria')}
-              value={p.search}
-              onChange={(e) => p.onSearch(e.target.value)}
-              placeholder={t('library:searchPlaceholder')}
-              className="w-48 pr-9 [&::-webkit-search-cancel-button]:hidden"
-            />
-            {p.search && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t('library:clearSearch')}
-                    onClick={() => p.onSearch('')}
-                    className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-text-muted"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('library:clearSearch')}</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {/* One store (or none) has nothing to choose between: the chips show only with two or more. */}
-          {sources.length > 2 && (
-            <FilterGroup label={t('library:store')}>
-              <SegRow
-                label={t('library:store')}
-                value={source}
-                onChange={p.onSource}
-                options={sources.map((s) => ({
-                  value: s,
-                  label:
-                    s === 'all' ? (
-                      t('library:all')
-                    ) : s === 'custom' ? (
-                      <span className="inline-flex items-center gap-1.5 leading-none">
-                        <PackagePlus className="h-4 w-4" aria-hidden />
-                        <span>{t('library:sideloaded')}</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        <PluginLogo src={p.sourceLogos?.[s]} name={storeLabel(s)} size="xs" />
-                        <span>{s}</span>
-                      </span>
-                    ),
-                }))}
-              />
-            </FilterGroup>
-          )}
-          <Button
-            variant="neutral"
-            aria-expanded={filtersOpen}
-            aria-controls="library-filters"
-            onClick={() => setFiltersOpen((o) => !o)}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" /> {t('library:filters')}
-            {extraFilters > 0 && <Badge variant="accent" className="h-5 rounded-full tracking-normal tabular-nums">{extraFilters}</Badge>}
-          </Button>
-        </div>
-
-        {filtersOpen && (
-          // One row per group, labels in a shared column: the panel never wraps a group onto a second line.
-          <div id="library-filters" className="flex flex-col items-start gap-2.5 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
-            {owned > installedCount && (
-              <FilterGroup label={t('library:show')} labelClass="w-14">
-                <SegRow label={t('library:show')} value={p.ownership} onChange={p.onOwnership} options={[{ value: 'installed', label: t('library:installed') }, { value: 'owned', label: t('library:owned') }]} />
-              </FilterGroup>
-            )}
-            {hasBorrowed && (
-              <FilterGroup label={t('library:family')} labelClass="w-14">
-                <SegRow label={t('library:family')} value={lendingFilter} onChange={(v) => setLending(v)} options={[{ value: 'all', label: t('library:all') }, { value: 'with-me', label: t('library:sharedWithMe') }]} />
-              </FilterGroup>
-            )}
-            <FilterGroup label={t('library:tier')} labelClass="w-14">
-              <TierFilterControl value={tier} onChange={setTier} />
-            </FilterGroup>
-            <FilterGroup label={t('library:statusFilter.label')} labelClass="w-14">
-              <StatusFilterControl value={statusFilter} onChange={setStatusFilter} />
-            </FilterGroup>
-            {p.collections && p.onCollection && (
-              <FilterGroup label={t('collections:filterLabel')} labelClass="w-14">
-                <Select value={activeCollection?.id ?? 'all'} onValueChange={(v) => p.onCollection?.(v === 'all' ? undefined : v)}>
-                  <SelectTrigger aria-label={t('collections:filterAria')} className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t('collections:allGames')}</SelectItem>
-                    {p.collections.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FilterGroup>
-            )}
-            <FilterGroup label={t('library:sort')} labelClass="w-14">
-              <SortControl sort={sort} onChange={(s) => setSort(s as Sort | null)} />
-            </FilterGroup>
-          </div>
-        )}
-        </>}
-      />
-
-      {p.warnings.length > 0 && (
-        <div className="mb-6 space-y-2">
-          {p.warnings.map((w) => (
-            <div key={w.source} role="status" className="flex items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-4 py-3 ring-1 ring-accent-strong/25">
-              <p className="min-w-0 text-[12.5px] text-white/75">
-                {w.needs_auth ? (
-                  <Trans i18nKey="library:warningLoggedOut" values={{ name: pluginName(w.source) }} components={{ name: <span className="font-bold text-amber-200" /> }} />
-                ) : w.unavailable ? (
-                  <Trans
-                    i18nKey="library:warningUnavailable"
-                    values={{ name: pluginName(w.source), message: w.message }}
-                    components={{
-                      name: <span className="font-bold text-amber-200" />,
-                      msg: <span className="font-mono text-[12px] text-text-muted" />,
-                    }}
-                  />
-                ) : (
-                  <Trans
-                    i18nKey="library:warningListFailed"
-                    values={{ name: pluginName(w.source), message: w.message }}
-                    components={{
-                      name: <span className="font-bold text-amber-200" />,
-                      msg: <span className="font-mono text-[12px] text-text-muted" />,
-                    }}
-                  />
-                )}
-              </p>
-              <Button variant="primary" size="sm" className="flex-none" onClick={() => p.onNavigate({ name: 'plugins' })}>
-                {w.needs_auth && <LogIn className="h-3.5 w-3.5" />} {w.needs_auth ? t('library:login') : t('library:plugins')}
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {filtered.length === 0 ? (
-        <EmptyState label={t('library:empty')}>
-          {p.games.length === 0
-            ? t('library:emptyNoGames')
-            : p.ownership === 'installed' && installedCount === 0
-              ? t('library:emptyNotInstalled')
-              : t('library:emptyNoMatch')}
-        </EmptyState>
-      ) : p.mode === 'cards' ? (
-        <>
-          {played.length > 0 && (
-            <section className="mb-8">
-              <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:lastPlayed')}</h2>
-              <div className="grid gap-4 lg:grid-cols-3">
-                {played.map((g) => (
-                  <button key={g.id} onClick={() => p.onOpenGame(g.id)} className="group relative overflow-hidden rounded-3xl text-left ring-1 ring-hairline transition hover:ring-accent-strong/40">
-                    <Cover src={heroImages(g)} title={g.title} className="h-[210px] w-full transition duration-500 group-hover:scale-[1.04]" />
-                    <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.95) 8%, transparent 60%)' }} />
-                    <div className="absolute bottom-4 left-5 right-5">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-[16px] font-extrabold tracking-tight">{g.title}</span>
-                        {g.fix_info?.tier && <TierBadge tier={g.fix_info.tier} title={tierMeaning(t, g.fix_info.tier)} />}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 font-mono text-hint text-text-muted">
-                        {hoursPlayed(g) != null && <><span>{t('library:cardHours', { hours: formatDecimal1(hoursPlayed(g)!) })}</span><span>·</span></>}
-                        <span>{recencyWord(t, g)}</span><span>·</span><span>{runnerShort(g.settings.runner_id, p.runners)}</span>
-                      </div>
-                      {hoursPlayed(g) != null && (
-                        <div className="mt-2.5 h-1 rounded-full bg-white/[0.14]">
-                          <div className="h-full rounded-full bg-accent-strong/80" style={{ width: `${Math.min(100, (hoursPlayed(g)! / maxHours) * 100)}%` }} />
-                        </div>
-                      )}
-                    </div>
-                    <span className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-black/55 text-white opacity-0 transition group-hover:opacity-100">
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <section className="mb-8">
-            <h2 className="mb-3.5 text-[13px] font-bold uppercase tracking-[0.14em] text-text-muted">{t('library:allTitles')}</h2>
-            <WindowedGrid
-              items={rest}
-              itemKey={(g) => g.id}
-              minColumn={CARD_MIN_WIDTH}
-              gap={CARD_GAP}
-              rowHeight={cardRowHeight}
-              className="cover-grid-sm"
-              renderItem={(g) => <GameCard game={g} job={jobs.get(g.id)} onOpen={p.onOpenGame} onManage={p.onManageCollections} />}
-            />
-          </section>
-
-          <section className={cx('mb-4 grid gap-5', recentlyAdded.length > 0 && 'xl:grid-cols-[1.5fr_1fr]')}>
-            <ActivityPanel events={p.activity} limit={6} onFullLog={() => p.onNavigate({ name: 'activity' })} />
-            {recentlyAdded.length > 0 && (
-              <Panel className="bg-surface">
-                <h2 className="mb-3 text-[14px] font-bold">{t('library:recentlyAdded')}</h2>
-                <RecentList games={recentlyAdded} onOpenGame={p.onOpenGame} />
-              </Panel>
-            )}
-          </section>
-        </>
-      ) : (
-        <section className="mb-8 overflow-x-auto rounded-2xl bg-black/25 ring-1 ring-hairline">
-          <div role="table" aria-label={t('library:table.label')} aria-rowcount={tableRows.length + 1} className="min-w-[800px]">
-            <div role="row" aria-rowindex={1} className={cx('grid gap-3 border-b border-hairline px-4 py-2 font-mono text-micro uppercase tracking-[0.12em] text-text-muted', TABLE_COLS)}>
-              <span role="columnheader"><span className="sr-only">{t('library:table.statusSr')}</span></span>
-              <SortHead k="title" label={t('library:table.title')} sort={sort} onSort={toggleSort} />
-              <SortHead k="tier" label={t('library:table.tier')} sort={sort} onSort={toggleSort} /><span role="columnheader">{t('library:table.runner')}</span>
-              <SortHead k="hours" label={t('library:table.hours')} sort={sort} onSort={toggleSort} right />
-              <SortHead k="year" label={t('library:table.year')} sort={sort} onSort={toggleSort} right />
-              <SortHead k="size" label={t('library:table.size')} sort={sort} onSort={toggleSort} right />
-              <SortHead k="last" label={t('library:table.lastPlayed')} sort={sort} onSort={toggleSort} right />
-            </div>
-            <WindowedRows
-              items={tableRows}
-              itemKey={(g) => g.id}
-              rowHeight={TABLE_ROW_HEIGHT}
-              renderRow={(g, i) => <TableRow game={g} index={i} runners={p.runners} onOpen={p.onOpenGame} onManage={p.onManageCollections} />}
-            />
-          </div>
-        </section>
-      )}
-    </div>
   );
 }
