@@ -12,7 +12,7 @@ export function ToggleGroupItem({ className, ...props }: React.ComponentProps<ty
     <ToggleGroupPrimitive.Item
       data-slot="toggle-group-item"
       className={cn(
-        'inline-flex items-center justify-center rounded-lg bg-white/[0.06] px-3 py-1.5 font-mono text-[12px] text-white/60 transition hover:bg-white/[0.1] data-[state=on]:bg-amber-300 data-[state=on]:font-bold data-[state=on]:text-[#130f0a] disabled:opacity-50',
+        'inline-flex items-center justify-center rounded-lg bg-surface-strong px-3 py-1.5 font-mono text-[12px] text-text-muted transition hover:bg-white/[0.1] data-[state=on]:bg-accent-strong data-[state=on]:font-bold data-[state=on]:text-on-accent disabled:opacity-50',
         className,
       )}
       {...props}

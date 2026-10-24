@@ -7,15 +7,15 @@ export const badgeVariants = cva(
   {
     variants: {
       variant: {
-        platinum: 'bg-amber-300 text-[#130f0a]',
-        gold: 'bg-amber-300/15 text-amber-300 ring-1 ring-amber-300/40',
-        silver: 'bg-white/[0.06] text-white/60',
-        bronze: 'bg-orange-400/10 text-orange-300',
-        borked: 'bg-red-500/15 text-red-300',
-        neutral: 'bg-white/[0.06] text-white/60',
-        accent: 'bg-amber-300/15 text-amber-300',
+        platinum: 'bg-accent-strong text-on-accent',
+        gold: 'bg-accent-strong/15 text-accent-strong ring-1 ring-accent-strong/40',
+        silver: 'bg-surface-strong text-text-muted',
+        bronze: 'bg-attention/10 text-orange-300',
+        borked: 'bg-danger/15 text-red-300',
+        neutral: 'bg-surface-strong text-text-muted',
+        accent: 'bg-accent-strong/15 text-accent-strong',
         ok: 'bg-emerald-400/10 text-emerald-300',
-        info: 'bg-sky-300/10 text-sky-300',
+        info: 'bg-info/10 text-info',
       },
     },
     defaultVariants: { variant: 'neutral' },

@@ -118,9 +118,9 @@ export function Sidebar(p: SidebarProps) {
       onClick={() => p.onNavigate({ name: n.key } as View)}
       aria-current={active === n.key ? 'page' : undefined}
       className={cx(
-        'mb-0.5 flex w-full items-center justify-between rounded-xl py-2 pr-3 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
+        'mb-0.5 flex w-full items-center justify-between rounded-xl py-2 pr-3 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
         indent ? 'pl-7' : 'px-3',
-        active === n.key ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.05] hover:text-white'
+        active === n.key ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface-strong hover:text-white'
       )}
     >
       <span>{n.label}</span>
@@ -129,23 +129,23 @@ export function Sidebar(p: SidebarProps) {
       ) : (
         n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>
       )}
-      {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label={t('nav:needsAttention')} />}
+      {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
     </button>
   );
 
   return (
-    <aside className="flex h-full w-56 flex-none flex-col border-r border-white/[0.06] bg-black/25 p-4">
+    <aside className="flex h-full w-56 flex-none flex-col border-r border-hairline bg-black/25 p-4">
       <div className="mb-5 flex items-center gap-2.5 px-1.5">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-rose-500 text-[15px] font-black text-[#130f0a]">P</span>
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-accent-strong to-rose-500 text-[15px] font-black text-on-accent">P</span>
         <div>
           <div className="text-[15px] font-extrabold tracking-tight">Platypus</div>
-          <div className="font-mono text-micro uppercase tracking-[0.16em] text-white/55">{t('nav:tagline')}</div>
+          <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-muted">{t('nav:tagline')}</div>
         </div>
       </div>
 
       <label className="relative mb-4 block flex-none">
         <span className="sr-only">{t('nav:searchLibrary')}</span>
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/55" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
         <Input
           type="search"
           value={p.search}
@@ -171,14 +171,14 @@ export function Sidebar(p: SidebarProps) {
             aria-expanded={toolsOpen}
             aria-controls="sidebar-tools"
             className={cx(
-              'mt-2 flex w-full items-center justify-between rounded-xl px-3 py-1.5 font-mono text-micro uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
-              toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-white/55 hover:text-white/70'
+              'mt-2 flex w-full items-center justify-between rounded-xl px-3 py-1.5 font-mono text-micro uppercase tracking-[0.18em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
+              toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-text-muted hover:text-text-body'
             )}
           >
             <span>{t('nav:tools')}</span>
             <span className="flex items-center gap-2">
               {!toolsOpen && toolsAttention > 0 && <Badge variant="neutral" className="h-4 rounded-full px-1.5 tracking-normal tabular-nums">{toolsAttention}</Badge>}
-              {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-amber-300" aria-label={t('nav:needsAttention')} />}
+              {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
               <ChevronDown className={cx('h-3.5 w-3.5 transition-transform motion-reduce:transition-none', toolsOpen ? '' : '-rotate-90')} aria-hidden />
             </span>
           </button>
@@ -190,8 +190,8 @@ export function Sidebar(p: SidebarProps) {
         {p.onManageCollections && (
           <>
             <div className="flex items-center justify-between px-2 pb-1.5 pt-4">
-              <span className="font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('collections:title')}</span>
-              <button type="button" onClick={p.onManageCollections} className="font-mono text-micro uppercase tracking-[0.14em] text-white/55 transition hover:text-white/80">
+              <span className="font-mono text-micro uppercase tracking-[0.18em] text-text-muted">{t('collections:title')}</span>
+              <button type="button" onClick={p.onManageCollections} className="font-mono text-micro uppercase tracking-[0.14em] text-text-muted transition hover:text-white/80">
                 {t('collections:manage')}
               </button>
             </div>
@@ -204,18 +204,18 @@ export function Sidebar(p: SidebarProps) {
                   aria-current={current ? 'page' : undefined}
                   className={cx(
                     'mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] transition',
-                    current ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.04] hover:text-white'
+                    current ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface hover:text-white'
                   )}
                 >
                   <span className="truncate">{c.builtin ? t(`collections:builtin.${c.id}`) : c.name}</span>
-                  <span className="font-mono text-hint tabular-nums text-white/55">{p.collectionCounts?.[c.id] ?? '—'}</span>
+                  <span className="font-mono text-hint tabular-nums text-text-muted">{p.collectionCounts?.[c.id] ?? '—'}</span>
                 </button>
               );
             })}
           </>
         )}
 
-        <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('nav:sources')}</div>
+        <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-text-muted">{t('nav:sources')}</div>
         {[
           ...SOURCES,
           // Stores that only plugins provide, then sideloaded games.
@@ -229,13 +229,13 @@ export function Sidebar(p: SidebarProps) {
             <button
               key={s.key}
               onClick={() => p.onPickSource(s.key)}
-              className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] text-white/70 transition hover:bg-white/[0.04] hover:text-white"
+              className="mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[12.5px] text-text-body transition hover:bg-surface hover:text-white"
             >
               <span className="flex items-center gap-2">
                 <PluginLogo src={p.sourceLogos?.[s.key]} name={s.label} size="xs" />
                 {s.label}
               </span>
-              <span className="font-mono text-hint tabular-nums text-white/55">
+              <span className="font-mono text-hint tabular-nums text-text-muted">
                 {p.loading ? <span aria-label={t('nav:countingGames')} className="inline-block h-2.5 w-5 animate-pulse rounded bg-white/15 motion-reduce:animate-none" /> : count || '—'}
               </span>
             </button>
@@ -243,7 +243,7 @@ export function Sidebar(p: SidebarProps) {
         })}
         {storeEntries.length > 0 && (
           <>
-            <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-white/55">{t('nav:store')}</div>
+            <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.18em] text-text-muted">{t('nav:store')}</div>
             {storeEntries.map((s) => (
               <button
                 key={s.id}
@@ -251,7 +251,7 @@ export function Sidebar(p: SidebarProps) {
                 aria-current={p.activeStore === s.id ? 'page' : undefined}
                 className={cx(
                   'mb-0.5 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[12.5px] transition',
-                  p.activeStore === s.id ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.04] hover:text-white'
+                  p.activeStore === s.id ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface hover:text-white'
                 )}
               >
                 <PluginLogo src={s.icon_url} name={s.name} size="xs" />
@@ -274,8 +274,8 @@ export function Sidebar(p: SidebarProps) {
           onClick={() => p.onNavigate({ name: 'settings' })}
           aria-current={active === 'settings' ? 'page' : undefined}
           className={cx(
-            'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60',
-            active === 'settings' ? 'bg-amber-300/12 text-amber-200' : 'text-white/70 hover:bg-white/[0.05] hover:text-white'
+            'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
+            active === 'settings' ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface-strong hover:text-white'
           )}
         >
           <Settings className="h-3.5 w-3.5" aria-hidden />
@@ -289,9 +289,9 @@ export function Sidebar(p: SidebarProps) {
             <div
               key={e.game_id}
               title={e.message}
-              className={cx('flex items-center gap-2 rounded-xl px-3 py-2 ring-1', running ? 'bg-emerald-400/[0.08] ring-emerald-300/25' : 'bg-amber-300/[0.07] ring-amber-300/25')}
+              className={cx('flex items-center gap-2 rounded-xl px-3 py-2 ring-1', running ? 'bg-emerald-400/[0.08] ring-emerald-300/25' : 'bg-accent-strong/[0.07] ring-accent-strong/25')}
             >
-              <span className={cx('h-2 w-2 flex-none rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-amber-300')} />
+              <span className={cx('h-2 w-2 flex-none rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-accent-strong')} />
               <span className="min-w-0 flex-1">
                 <span className={cx('block font-mono text-micro uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>
                   {label}
@@ -306,7 +306,7 @@ export function Sidebar(p: SidebarProps) {
                       size="icon"
                       onClick={() => p.onStop(e.game_id)}
                       aria-label={t('nav:stopGame', { title: e.title })}
-                      className="size-7 flex-none text-white/55 hover:text-red-200"
+                      className="size-7 flex-none text-text-muted hover:text-red-200"
                     >
                       <Square className="h-3 w-3 fill-current" />
                     </Button>
@@ -317,7 +317,7 @@ export function Sidebar(p: SidebarProps) {
             </div>
           );
         })}
-        <div className="truncate px-1.5 font-mono text-[12px] text-white/55">
+        <div className="truncate px-1.5 font-mono text-[12px] text-text-muted">
           platypus v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
       </div>

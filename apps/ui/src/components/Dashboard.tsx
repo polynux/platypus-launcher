@@ -55,11 +55,11 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
   return (
     <div className="p-7">
       {hero ? (
-        <section className="relative mb-6 overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
+        <section className="relative mb-6 overflow-hidden rounded-3xl ring-1 ring-hairline">
           <Cover src={heroImages(hero)} title={hero.title} className="h-[290px] w-full" />
           <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
           <div className="absolute bottom-6 left-7 max-w-lg">
-            <Badge variant="bronze" className="bg-orange-400 text-[#130f0a]">
+            <Badge variant="bronze" className="bg-attention text-on-accent">
               {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '') ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
             </Badge>
             <h1 className="mt-2.5 text-[27px] font-extrabold leading-tight tracking-tight">
@@ -67,7 +67,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                 ? t('dashboard:hero.titleTweaks', { title: hero.title })
                 : t('dashboard:hero.titleFix', { title: hero.title })}
             </h1>
-            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/70">{attentionReason(hero, t)}</p>
+            <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-text-body">{attentionReason(hero, t)}</p>
             <div className="mt-3.5 flex gap-2.5">
               <Button variant="primary" onClick={() => onOpenGame(hero.id)}>{t('dashboard:hero.openGame')}</Button>
               <Button variant="neutral" onClick={() => onDismissHero([hero.id])}>{t('common:later')}</Button>
@@ -80,13 +80,13 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           </div>
           <div className="absolute bottom-6 right-7 hidden gap-3 lg:flex">
             {[
-              [t('dashboard:hero.statInstalled'), String(installed), 'text-amber-300'],
+              [t('dashboard:hero.statInstalled'), String(installed), 'text-accent-strong'],
               ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-white/80']] : []),
               [t('dashboard:hero.statFixes'), String(waiting.length), 'text-orange-300'],
             ].map(([k, v, c]) => (
               <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
                 <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
-                <div className="font-mono text-micro uppercase tracking-widest text-white/55">{k}</div>
+                <div className="font-mono text-micro uppercase tracking-widest text-text-muted">{k}</div>
               </div>
             ))}
           </div>
@@ -124,7 +124,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           <div>
             <h2 className="mb-2.5 text-[15px] font-bold">{t('dashboard:waiting')}</h2>
             {waiting.length === 0 ? (
-              <p className="rounded-2xl bg-white/[0.03] p-4 text-[12px] text-white/70 ring-1 ring-white/[0.05]">
+              <p className="rounded-2xl bg-surface p-4 text-[12px] text-text-body ring-1 ring-white/[0.05]">
                 {t('dashboard:waitingEmpty')}
               </p>
             ) : (
@@ -133,13 +133,13 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
                   <button
                     key={g.id}
                     onClick={() => onOpenGame(g.id)}
-                    className="block w-full rounded-2xl bg-white/[0.045] p-4 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40"
+                    className="block w-full rounded-2xl bg-surface p-4 text-left ring-1 ring-hairline transition hover:ring-attention/40"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="truncate text-[13px] font-bold">{g.title}</span>
                       {(ratingBadge(g)?.tone || g.fix_info?.tier) && <TierBadge tier={ratingBadge(g)?.tone || g.fix_info!.tier} />}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/70">{attentionReason(g, t)}</p>
+                    <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-text-body">{attentionReason(g, t)}</p>
                   </button>
                 ))}
                 {waiting.length > 3 && (
@@ -152,7 +152,7 @@ export function Dashboard({ games, runners, activity, ownedCount, dismissedHero,
           </div>
 
           {recentlyAdded.length > 0 && (
-            <Panel as="section" className="bg-white/[0.04]">
+            <Panel as="section" className="bg-surface">
               <h2 className="mb-2.5 text-[14px] font-bold">{t('dashboard:recentlyAdded')}</h2>
               <RecentList games={recentlyAdded} onOpenGame={onOpenGame} />
             </Panel>
@@ -204,7 +204,7 @@ function WelcomeBanner({ installed, owned, fixes }: { installed: number; owned: 
   return (
     <Panel as="section" className="mb-6 p-6">
       <h1 className="text-[25px] font-extrabold tracking-tight">{greeting}</h1>
-      <p className="mt-1 font-mono text-[12px] tabular-nums text-white/55">
+      <p className="mt-1 font-mono text-[12px] tabular-nums text-text-muted">
         {t('dashboard:welcome.installed', { count: installed })}
         {owned > installed ? ` · ${t('dashboard:welcome.owned', { count: owned })}` : ''} · {t('dashboard:welcome.fixes', { count: fixes })}
       </p>
@@ -215,14 +215,14 @@ function WelcomeBanner({ installed, owned, fixes }: { installed: number; owned: 
 export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
   const { t } = useTranslation('dashboard');
   return (
-    <ul className="divide-y divide-white/[0.05]">
+    <ul className="divide-y divide-hairline">
       {games.map((g) => (
         <li key={g.id}>
-          <button onClick={() => onOpenGame(g.id)} className="-mx-1 flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-white/[0.04]">
+          <button onClick={() => onOpenGame(g.id)} className="-mx-1 flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-surface">
             <Cover src={coverImages(g)} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
-              <div className="font-mono text-micro uppercase tracking-wider text-white/55">{storeLabel(g.store, t)}</div>
+              <div className="font-mono text-micro uppercase tracking-wider text-text-muted">{storeLabel(g.store, t)}</div>
               {!g.native && <CompatChip game={g} className="mt-1" />}
             </div>
           </button>

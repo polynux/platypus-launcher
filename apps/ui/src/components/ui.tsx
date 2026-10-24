@@ -17,14 +17,14 @@ import { TIER_MEANING } from '../lib/compat';
 export const cx = cn;
 
 export function Panel({ className, children, as: Tag = 'div' }: { className?: string; children: React.ReactNode; as?: 'div' | 'section' | 'aside' }) {
-  return <Tag className={cx('rounded-3xl bg-white/[0.045] p-5 ring-1 ring-white/[0.07]', className)}>{children}</Tag>;
+  return <Tag className={cx('rounded-3xl bg-surface p-5 ring-1 ring-hairline', className)}>{children}</Tag>;
 }
 
 export const cardClass =
-  'group overflow-hidden rounded-2xl bg-white/[0.045] text-left ring-1 ring-white/[0.07] transition duration-300 hover:-translate-y-0.5 hover:ring-amber-300/40 focus-visible:ring-amber-300/60';
+  'group overflow-hidden rounded-2xl bg-surface text-left ring-1 ring-hairline transition duration-300 hover:-translate-y-0.5 hover:ring-accent-strong/40 focus-visible:ring-focus/60';
 
 export function MonoLabel({ children, className, as: Tag = 'div' }: { children: React.ReactNode; className?: string; as?: 'div' | 'h2' }) {
-  return <Tag className={cx('font-mono text-micro uppercase tracking-[0.16em] text-white/55', className)}>{children}</Tag>;
+  return <Tag className={cx('font-mono text-micro uppercase tracking-[0.16em] text-text-muted', className)}>{children}</Tag>;
 }
 
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
@@ -38,7 +38,7 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
 
 export function LinkButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-white/55 transition hover:text-white/80">
+    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-text-muted transition hover:text-white/80">
       {children}
     </button>
   );
@@ -72,8 +72,8 @@ export function SegRow<T extends string>({ options, value, onChange, label }: { 
 /** Visual-only switch for use inside a clickable row/button. For a standalone control use ds/Switch. */
 export function TogglePill({ on }: { on: boolean }) {
   return (
-    <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-amber-300' : 'bg-white/15')}>
-      <span className={cx('absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-[#191410] transition-transform', on && 'translate-x-3')} />
+    <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-accent-strong' : 'bg-white/15')}>
+      <span className={cx('absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-raised transition-transform', on && 'translate-x-3')} />
     </span>
   );
 }
@@ -92,26 +92,26 @@ export function TierBadge({ tier, suffix, title }: { tier?: string | null; suffi
 }
 
 export const TIER_TEXT: Record<string, string> = {
-  platinum: 'text-amber-300',
-  gold: 'text-amber-300/80',
-  silver: 'text-white/55',
+  platinum: 'text-accent-strong',
+  gold: 'text-accent-strong/80',
+  silver: 'text-text-muted',
   bronze: 'text-orange-300',
   borked: 'text-red-300',
 };
 
 export const TIER_DOT: Record<string, string> = {
-  platinum: 'bg-amber-300',
-  gold: 'bg-amber-300/50',
+  platinum: 'bg-accent-strong',
+  gold: 'bg-accent-strong/50',
   silver: 'bg-white/40',
   bronze: 'bg-orange-300/70',
-  borked: 'bg-red-400',
+  borked: 'bg-danger',
 };
 
 export function TweakDot({ className }: { className?: string }) {
   return (
     <span
       title="Community fix available"
-      className={cx('h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,.8)]', className)}
+      className={cx('h-2 w-2 rounded-full bg-attention shadow-[0_0_8px_rgba(251,146,60,.8)]', className)}
     />
   );
 }
@@ -122,33 +122,33 @@ export const btnNeutral = buttonVariantClass.neutral;
 
 export const EVENT_TEXT: Record<ActivityType, string> = {
   session: 'text-emerald-300',
-  unlock: 'text-amber-300',
-  fix: 'text-sky-300',
-  update: 'text-white/60',
-  add: 'text-white/60',
-  remove: 'text-white/60',
-  download: 'text-violet-400',
+  unlock: 'text-accent-strong',
+  fix: 'text-info',
+  update: 'text-text-muted',
+  add: 'text-text-muted',
+  remove: 'text-text-muted',
+  download: 'text-dl',
   tweak: 'text-orange-300',
-  cloud: 'text-sky-300',
+  cloud: 'text-info',
 };
 
 export const EVENT_DOT: Record<ActivityType, string> = {
   session: 'bg-emerald-400',
-  unlock: 'bg-amber-400',
-  fix: 'bg-[#7dd3fc]',
+  unlock: 'bg-accent',
+  fix: 'bg-info',
   update: 'bg-white/30',
   add: 'bg-white/30',
   remove: 'bg-white/30',
-  download: 'bg-[#a78bfa]',
-  tweak: 'bg-orange-400',
-  cloud: 'bg-[#7dd3fc]',
+  download: 'bg-dl',
+  tweak: 'bg-attention',
+  cloud: 'bg-info',
 };
 
 export function EmptyState({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="rounded-3xl border border-dashed border-white/15 p-10 text-center">
       <MonoLabel>{label}</MonoLabel>
-      <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-white/70">{children}</p>
+      <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-body">{children}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );

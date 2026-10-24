@@ -782,7 +782,7 @@ export function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className={cx('flex h-screen overflow-hidden text-[#ece6da]', view.name === 'game' ? 'app-wash-game' : 'app-wash')}>
+    <div className={cx('flex h-screen overflow-hidden text-text', view.name === 'game' ? 'app-wash-game' : 'app-wash')}>
       <Sidebar
         view={view}
         onNavigate={setView}

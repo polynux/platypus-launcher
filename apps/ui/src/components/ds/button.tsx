@@ -5,11 +5,11 @@ import { cn } from '@/lib/utils';
 
 /** Per-variant look only (no layout/size); ui.tsx derives the legacy btnPrimary/btnNeutral strings from these. */
 export const buttonVariantClass = {
-  primary: 'rounded-xl bg-amber-300 font-extrabold text-[#130f0a] transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60',
-  neutral: 'rounded-xl bg-white/[0.06] font-bold text-white/80 transition hover:bg-white/[0.1]',
-  ghost: 'rounded-xl font-bold text-white/60 hover:bg-white/[0.06] hover:text-white/90',
-  link: 'rounded font-mono uppercase tracking-widest text-white/55 hover:text-white/80',
-  danger: 'rounded-xl bg-red-500/15 font-bold text-red-300 hover:bg-red-500/25',
+  primary: 'rounded-xl bg-accent-strong font-extrabold text-on-accent transition hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60',
+  neutral: 'rounded-xl bg-surface-strong font-bold text-white/80 transition hover:bg-white/[0.1]',
+  ghost: 'rounded-xl font-bold text-text-muted hover:bg-surface-strong hover:text-text',
+  link: 'rounded font-mono uppercase tracking-widest text-text-muted hover:text-white/80',
+  danger: 'rounded-xl bg-danger/15 font-bold text-red-300 hover:bg-danger/25',
 } as const;
 
 export const buttonVariants = cva(

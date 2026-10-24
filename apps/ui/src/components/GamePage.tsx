@@ -291,11 +291,11 @@ export function GamePage(p: GamePageProps) {
           style={{ backgroundImage: `url("${game.background_url}")`, maskImage: 'linear-gradient(180deg, #000 30%, transparent)', WebkitMaskImage: 'linear-gradient(180deg, #000 30%, transparent)' }}
         />
       )}
-      <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-white/55 hover:bg-transparent hover:text-white">
+      <Button variant="ghost" size="none" onClick={p.onBack} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-text-muted hover:bg-transparent hover:text-white">
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
       </Button>
 
-      <section className="relative mb-6 mt-4 flex min-h-[280px] flex-col justify-end overflow-hidden rounded-3xl ring-1 ring-white/[0.08]">
+      <section className="relative mb-6 mt-4 flex min-h-[280px] flex-col justify-end overflow-hidden rounded-3xl ring-1 ring-hairline">
         <Cover src={hero} title={game.title} className="absolute inset-0 h-full w-full" />
         <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.98) 10%, rgba(19,15,10,.35) 62%, rgba(19,15,10,.25) 100%)' }} />
         <div className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4 px-8 pb-6 pt-16">
@@ -309,11 +309,11 @@ export function GamePage(p: GamePageProps) {
                 </span>
               </Badge>
               {formatBytes(game.size_bytes) && <Badge className="bg-black/50 text-white/75">{formatBytes(game.size_bytes)}</Badge>}
-              {!game.is_installed && <Badge className="bg-black/50 text-white/55">{t('game:hero.notInstalled')}</Badge>}
-              {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-sky-300/30">{t('game:hero.updateAvailable')}</Badge>}
-              {game.pinned && <Badge variant="accent" className="bg-amber-300/15 ring-1 ring-amber-300/30">{t('game:hero.pinned')}</Badge>}
+              {!game.is_installed && <Badge className="bg-black/50 text-text-muted">{t('game:hero.notInstalled')}</Badge>}
+              {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-info/30">{t('game:hero.updateAvailable')}</Badge>}
+              {game.pinned && <Badge variant="accent" className="bg-accent-strong/15 ring-1 ring-accent-strong/30">{t('game:hero.pinned')}</Badge>}
               {needsConnection && (
-                <Badge className="bg-amber-300/15 text-amber-100 ring-1 ring-amber-300/30" data-testid="needs-connection">
+                <Badge className="bg-accent-strong/15 text-amber-100 ring-1 ring-accent-strong/30" data-testid="needs-connection">
                   {t('game:hero.needsConnection', { store: storeName })}
                 </Badge>
               )}
@@ -322,7 +322,7 @@ export function GamePage(p: GamePageProps) {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
             {(hours != null || last) && (
-              <div className="text-right font-mono text-hint leading-relaxed text-white/55">
+              <div className="text-right font-mono text-hint leading-relaxed text-text-muted">
                 {hours != null && <div title={playtimeTitle}>{t('game:hero.hoursLogged', { hours: formatDecimal1(hours) })}</div>}
                 {last && <div>{t('game:hero.lastPlayed', { when: last })}</div>}
               </div>
@@ -374,7 +374,7 @@ export function GamePage(p: GamePageProps) {
       </section>
 
       {game.is_installed && game.outside_folder && plugin && (
-        <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-amber-300/[0.07] px-5 py-4 ring-1 ring-amber-300/25">
+        <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
           <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
             <p className="font-bold text-amber-200">{t('game:outside.title', { name: plugin.name })}</p>
             <p>
@@ -383,7 +383,7 @@ export function GamePage(p: GamePageProps) {
                 values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
                 components={{
                   folder: <span className="font-mono text-[12px]" />,
-                  dir: <span className="font-mono text-[12px] text-white/90" />,
+                  dir: <span className="font-mono text-[12px] text-text" />,
                 }}
               />
             </p>
@@ -395,12 +395,12 @@ export function GamePage(p: GamePageProps) {
       )}
 
       {!active && (game.note || installing) && (
-        <div className="mb-6 rounded-2xl bg-white/[0.04] px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-white/[0.07]">
+        <div className="mb-6 rounded-2xl bg-surface px-5 py-3.5 text-[12.5px] leading-relaxed text-white/65 ring-1 ring-hairline">
           {game.note && <p>{game.note}</p>}
           {installing && plugin && (
             <>
               <InstallSizeLine size={installSize} />
-              <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-white/55">
+              <p className="flex flex-wrap items-center gap-x-1.5 font-mono text-[12px] text-text-muted">
                 {canChooseVersion ? (
                   <Trans
                     i18nKey="game:install.noteWithVersion"
@@ -425,7 +425,7 @@ export function GamePage(p: GamePageProps) {
       )}
 
       {p.refreshing && (
-        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-white/55">{t('game:refreshing')}</p>
+        <p className="mb-4 font-mono text-micro uppercase tracking-widest text-text-muted">{t('game:refreshing')}</p>
       )}
 
       <div className="mb-6 grid gap-5 lg:grid-cols-[1.6fr_1fr]">
@@ -447,7 +447,7 @@ export function GamePage(p: GamePageProps) {
         </div>
 
         <aside className="min-w-0 space-y-5">
-          <Panel className="bg-white/[0.05]">
+          <Panel className="bg-surface-strong">
             <h2 className="mb-2 text-[15px] font-bold">{t('game:compat.heading')}</h2>
             <p className="text-[13px] leading-relaxed text-white/65">{compat}</p>
             {fix?.winetricks && fix.winetricks.length > 0 && (
@@ -455,8 +455,8 @@ export function GamePage(p: GamePageProps) {
             )}
             <div className="mt-4 space-y-2 font-mono text-hint">
               {facts.map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                  <span className="text-white/55">{k}</span>
+                <div key={k} className="flex justify-between gap-4 border-t border-hairline pt-2">
+                  <span className="text-text-muted">{k}</span>
                   <span className="truncate text-right text-white/85">{v}</span>
                 </div>
               ))}
@@ -559,7 +559,7 @@ function SafeHtml({ html, testid }: { html: string; testid?: string }) {
       ref={ref}
       data-testid={testid}
       dangerouslySetInnerHTML={{ __html: html }}
-      className="space-y-2 text-[13px] leading-relaxed text-white/70 [&_a]:text-amber-200/90 [&_a]:underline [&_a]:decoration-amber-200/40 [&_a]:underline-offset-2 [&_h2]:text-[14px] [&_h2]:font-bold [&_h2]:text-white/85 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:text-white/85 [&_h4]:text-[13px] [&_h4]:font-bold [&_h4]:text-white/85 [&_li]:ml-4 [&_li]:list-disc [&_ul]:space-y-1"
+      className="space-y-2 text-[13px] leading-relaxed text-text-body [&_a]:text-amber-200/90 [&_a]:underline [&_a]:decoration-amber-200/40 [&_a]:underline-offset-2 [&_h2]:text-[14px] [&_h2]:font-bold [&_h2]:text-white/85 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:text-white/85 [&_h4]:text-[13px] [&_h4]:font-bold [&_h4]:text-white/85 [&_li]:ml-4 [&_li]:list-disc [&_ul]:space-y-1"
     />
   );
 }
@@ -588,7 +588,7 @@ function MediaStrip({ game, media, index, onIndex, onOpen, stripRef }: {
       <button
         onClick={onOpen}
         aria-label={cur?.kind === 'video' ? t('game:media.openTrailer') : t('game:media.openShots')}
-        className="group relative block w-full cursor-zoom-in overflow-hidden rounded-3xl bg-black/40 ring-1 ring-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+        className="group relative block w-full cursor-zoom-in overflow-hidden rounded-3xl bg-black/40 ring-1 ring-hairline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         {cur?.kind === 'video' ? (
           cur.thumbnail ? (
@@ -626,7 +626,7 @@ function MediaStrip({ game, media, index, onIndex, onOpen, stripRef }: {
               onDoubleClick={onOpen}
               aria-label={thumbLabel(m, i)}
               aria-pressed={i === index}
-              className={cx('relative aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300', i === index ? 'ring-2 ring-amber-300/80' : 'opacity-55 ring-1 ring-white/[0.08] hover:opacity-90')}
+              className={cx('relative aspect-video h-[84px] flex-none overflow-hidden rounded-xl bg-black/50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', i === index ? 'ring-2 ring-accent-strong/80' : 'opacity-55 ring-1 ring-hairline hover:opacity-90')}
             >
               {m.kind === 'video' ? (
                 m.thumbnail ? (
@@ -716,12 +716,12 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
   const infoName = d?.info_source_name || infoSourceText(t, d?.info_source);
   const storeLinkLabel = t('game:about.linkStore');
   return (
-    <Panel className="bg-white/[0.05]">
+    <Panel className="bg-surface-strong">
       <h2 className="mb-2 text-[15px] font-bold">{t('game:about.heading')}</h2>
       {loading ? (
         <div className="space-y-2">
-          <div className="h-3 w-full animate-pulse rounded bg-white/[0.06]" />
-          <div className="h-3 w-4/5 animate-pulse rounded bg-white/[0.06]" />
+          <div className="h-3 w-full animate-pulse rounded bg-surface-strong" />
+          <div className="h-3 w-4/5 animate-pulse rounded bg-surface-strong" />
         </div>
       ) : html ? (
         <>
@@ -733,15 +733,15 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
           </Button>
         </>
       ) : summary ? (
-        <p className="text-[13px] leading-relaxed text-white/70">{summary}</p>
+        <p className="text-[13px] leading-relaxed text-text-body">{summary}</p>
       ) : (
-        <p className="text-[13px] text-white/70">{error ? t('game:about.storeUnavailable', { error }) : t('game:about.noDescription')}</p>
+        <p className="text-[13px] text-text-body">{error ? t('game:about.storeUnavailable', { error }) : t('game:about.noDescription')}</p>
       )}
       {isCustom && !linked && !loading && (
         <InfoFinder game={game} onLinked={() => onReload?.()} />
       )}
       {rows.length > 0 && (
-        <dl data-testid="details-grid" className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-white/[0.06] pt-3">
+        <dl data-testid="details-grid" className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-hairline pt-3">
           {rows.map(([k, v]) => (
             <div key={k} className="min-w-0">
               <dt className="font-mono text-hint uppercase tracking-widest text-white/45">{k}</dt>
@@ -751,7 +751,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
         </dl>
       )}
       {req && (req.minimum || req.recommended) && (
-        <div className="mt-4 border-t border-white/[0.06] pt-3" data-testid="requirements">
+        <div className="mt-4 border-t border-hairline pt-3" data-testid="requirements">
           <div role="tablist" aria-label={t('game:about.reqLabel')} className="mb-2 flex gap-1.5">
             {(['minimum', 'recommended'] as const).filter((k) => req[k]).map((k) => (
               <Button
@@ -762,7 +762,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
                 variant="ghost"
                 size="none"
                 onClick={() => setReqTab(k)}
-                className={reqTab === k ? 'rounded-lg bg-white/[0.08] px-2.5 py-1 font-mono text-[12px] text-white' : 'rounded-lg px-2.5 py-1 font-mono text-[12px] text-white/55 hover:bg-transparent hover:text-white/80'}
+                className={reqTab === k ? 'rounded-lg bg-white/[0.08] px-2.5 py-1 font-mono text-[12px] text-white' : 'rounded-lg px-2.5 py-1 font-mono text-[12px] text-text-muted hover:bg-transparent hover:text-white/80'}
               >
                 {k === 'minimum' ? t('game:about.reqMinimum') : t('game:about.reqRecommended')}
               </Button>
@@ -774,7 +774,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
         </div>
       )}
       {links.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-[12px]" data-testid="about-links">
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-hairline pt-3 font-mono text-[12px]" data-testid="about-links">
           {links.map(([label, href]) =>
             label === storeLinkLabel && onOpenStore ? (
               <button key={label} type="button" onClick={onOpenStore} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
@@ -789,7 +789,7 @@ function AboutSection({ game, details, loading, error, compatUrls, onOpenStore, 
         </div>
       )}
       {linked && (
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-white/[0.06] pt-3 font-mono text-[12px] text-white/55" data-testid="info-attribution">
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hairline pt-3 font-mono text-[12px] text-text-muted" data-testid="info-attribution">
           <span>
             {t('game:about.infoFrom')} {d?.store_url ? (
               <ExternalLink href={d.store_url} className="text-amber-200/80 underline decoration-white/25 underline-offset-2 hover:text-amber-200">
@@ -907,7 +907,7 @@ function StatusNotesSection({ game, onChanged }: { game: Game; onChanged?: () =>
   };
 
   return (
-    <Panel className="bg-white/[0.05]" data-testid="status-notes">
+    <Panel className="bg-surface-strong" data-testid="status-notes">
       <h2 className="mb-2 text-[15px] font-bold">{t('game:status.heading')}</h2>
       <Select value={status || 'none'} onValueChange={(v) => saveStatus((v === 'none' ? '' : v) as GameStatus)}>
         <SelectTrigger aria-label={t('game:status.aria')} className="w-full" data-testid="status-select">
@@ -952,7 +952,7 @@ function CollectionsSection({ game, collections = [], onManage }: { game: Game; 
   if (!onManage) return null;
   const mine = collections.filter((c) => !c.smart && c.games?.includes(game.id));
   return (
-    <Panel className="bg-white/[0.05]" data-testid="game-collections">
+    <Panel className="bg-surface-strong" data-testid="game-collections">
       <h2 className="mb-2 text-[15px] font-bold">{t('collections:gameHeading')}</h2>
       <p className="text-[13px] text-white/75">
         {mine.length > 0 ? mine.map((c) => (c.builtin ? t(`builtin.${c.id}`) : c.name)).join(', ') : t('collections:notInCollections')}
@@ -1034,9 +1034,9 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
   }
 
   return (
-    <div className="mt-3 border-t border-white/[0.06] pt-3">
+    <div className="mt-3 border-t border-hairline pt-3">
       <MonoLabel className="mb-1.5">{t('game:info.heading')}</MonoLabel>
-      <p className="mb-2 text-[12px] leading-relaxed text-white/55">
+      <p className="mb-2 text-[12px] leading-relaxed text-text-muted">
         {t('game:info.help', { title: game.title })}
       </p>
       <form
@@ -1055,15 +1055,15 @@ function InfoFinder({ game, onLinked }: { game: Game; onLinked: () => void }) {
         </Button>
       </form>
       {candidates != null && candidates.length === 0 && (
-        <p className="mt-2 text-[12px] text-white/55">{t('game:info.noneFound')}</p>
+        <p className="mt-2 text-[12px] text-text-muted">{t('game:info.noneFound')}</p>
       )}
       {candidates != null && candidates.length > 0 && (
         <ul className="mt-2 space-y-2">
           {candidates.map((c) => (
-            <li key={infoCandidateKey(c)} className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/[0.06]">
+            <li key={infoCandidateKey(c)} className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5 ring-1 ring-hairline">
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-semibold text-white/90">{c.name}</div>
-                <div className="font-mono text-hint text-white/55">
+                <div className="truncate text-[12.5px] font-semibold text-text">{c.name}</div>
+                <div className="font-mono text-hint text-text-muted">
                   <span data-testid="candidate-source">{infoSourceText(t, c.source)}</span>
                   {c.year ? ` · ${c.year}` : ''} · {infoCandidateDetail(t, c)}
                 </div>
@@ -1087,7 +1087,7 @@ function InstallButton({
   if (job && (job.state === 'queued' || job.state === 'running')) return <JobProgress job={job} onCancel={onCancel} />;
   if (!game.installable) {
     return (
-      <span className="rounded-2xl bg-white/[0.08] px-6 py-3.5 text-[13px] font-bold text-white/55" title={game.note}>
+      <span className="rounded-2xl bg-white/[0.08] px-6 py-3.5 text-[13px] font-bold text-text-muted" title={game.note}>
         {t('game:install.cantInstall')}
       </span>
     );
@@ -1133,12 +1133,12 @@ function InstallSizeLine({ size }: { size: InstallSize }) {
   const { t } = useTranslation('game');
   return (
     <p className="mb-1 font-mono text-[12px] text-white/75" data-testid="install-size-line">
-      {size.state === 'loading' && <span className="text-white/55">{t('game:installSize.checking')}</span>}
+      {size.state === 'loading' && <span className="text-text-muted">{t('game:installSize.checking')}</span>}
       {size.state === 'unknown' && <span title={t('game:installSize.unknownTitle')}>{t('game:installSize.unknown')}</span>}
       {size.state === 'known' && (
         <>
           {t('game:installSize.known', { size: formatBytes(size.total) })}
-          {size.added > 0 && <span className="text-white/55">{t('game:installSize.addons', { size: formatBytes(size.added) })}</span>}
+          {size.added > 0 && <span className="text-text-muted">{t('game:installSize.addons', { size: formatBytes(size.added) })}</span>}
         </>
       )}
     </p>
@@ -1187,12 +1187,12 @@ function InstallationPanel({
     [t('game:installation.size'), formatBytes(game.size_bytes) || '—', formatBytes(game.size_bytes) || ''],
   ];
   return (
-    <Panel className="bg-white/[0.05]">
+    <Panel className="bg-surface-strong">
       <h2 className="mb-2 text-[15px] font-bold">{t('game:installation.heading')}</h2>
       <div className="space-y-2 font-mono text-hint">
         {rows.map(([k, v, title]) => (
-          <div key={k} className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-            <span className="text-white/55">{k}</span>
+          <div key={k} className="flex justify-between gap-4 border-t border-hairline pt-2">
+            <span className="text-text-muted">{k}</span>
             <span className="truncate text-right text-white/85 select-text" title={title}>{v}</span>
           </div>
         ))}
@@ -1223,16 +1223,16 @@ function AchievementsSection({
     <section className="pb-8">
       <div className="mb-3.5 flex items-baseline justify-between">
         <h2 className="text-[16px] font-bold tracking-tight">{t('game:achievements.heading')}</h2>
-        <span className="font-mono text-[12px] tabular-nums text-white/55">
+        <span className="font-mono text-[12px] tabular-nums text-text-muted">
           {known ? t('game:achievements.countKnown', { unlocked: formatCount(ach.unlocked), total: formatCount(ach.total), percent: formatCount(pct) }) : t('game:achievements.countTotal', { total: formatCount(ach.total) })}
         </span>
       </div>
       {known ? (
         <div className="mb-4 h-1.5 rounded-full bg-white/[0.08]">
-          <div className="h-full rounded-full bg-amber-300" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-accent-strong" style={{ width: `${pct}%` }} />
         </div>
       ) : (
-        <p className="mb-4 text-[12px] text-white/70">
+        <p className="mb-4 text-[12px] text-text-body">
           {viaSteam
             ? t('game:achievements.steamHint')
             : t('game:achievements.storeHint')}
@@ -1244,7 +1244,7 @@ function AchievementsSection({
         ))}
       </div>
       {list.length < ach.total && (
-        <p className="mt-3 font-mono text-[12px] text-white/55">
+        <p className="mt-3 font-mono text-[12px] text-text-muted">
           {t('game:achievements.showing', { shown: formatCount(list.length), total: formatCount(ach.total), reason: known ? t('game:achievements.reasonSample') : t('game:achievements.reasonHighlight') })}
         </p>
       )}
@@ -1261,16 +1261,16 @@ function AchievementCard({ a, known }: { a: Achievement; known: boolean }) {
       ? t('game:achievements.ofPlayers', { share: formatPercentValue(a.global_percent) })
       : '';
   return (
-    <div title={a.description} className={cx('flex gap-3 rounded-2xl p-3 ring-1', a.unlocked ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06]')}>
+    <div title={a.description} className={cx('flex gap-3 rounded-2xl p-3 ring-1', a.unlocked ? 'bg-accent-strong/[0.07] ring-accent-strong/30' : 'ring-hairline')}>
       {a.icon ? (
         <img src={a.icon} alt="" loading="lazy" className={cx('h-11 w-11 flex-none rounded-lg', dim && 'opacity-40 grayscale')} />
       ) : (
-        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-white/[0.05]"><Trophy className="h-4 w-4 text-white/55" /></span>
+        <span className="grid h-11 w-11 flex-none place-items-center rounded-lg bg-surface-strong"><Trophy className="h-4 w-4 text-text-muted" /></span>
       )}
       <div className={cx('min-w-0', dim && 'opacity-60')}>
         <div className="truncate text-[12px] font-bold">{a.name}</div>
-        {a.description && <div className="line-clamp-2 text-hint leading-snug text-white/55">{a.description}</div>}
-        {meta && <div className="mt-0.5 font-mono text-hint text-white/55">{meta}</div>}
+        {a.description && <div className="line-clamp-2 text-hint leading-snug text-text-muted">{a.description}</div>}
+        {meta && <div className="mt-0.5 font-mono text-hint text-text-muted">{meta}</div>}
       </div>
     </div>
   );
