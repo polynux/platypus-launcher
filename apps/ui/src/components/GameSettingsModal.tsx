@@ -99,8 +99,15 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     ? 'flex min-h-0 flex-1 flex-col gap-5'
     : 'flex min-h-0 flex-1 flex-col gap-5 @2xl:grid @2xl:grid-cols-[11rem_1fr] @2xl:grid-rows-[minmax(0,1fr)]';
   const tablistClass = horizontalTabs
-    ? 'flex flex-none flex-wrap gap-1.5'
+    ? '-mx-6 flex min-w-0 flex-none flex-nowrap gap-1.5 overflow-x-auto px-6 [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_1.5rem,black_calc(100%-1.5rem),transparent)]'
     : 'flex flex-none flex-wrap gap-1.5 @2xl:flex-col @2xl:flex-nowrap @2xl:self-start';
+  // Horizontal tabs stay on one row (D7), with no scrollbar; the fades sit in
+  // the padding, so the first and last tabs are clear at rest. The active tab
+  // scrolls into view when it changes, by click, arrow keys or the initial tab.
+  useEffect(() => {
+    if (!horizontalTabs) return;
+    document.getElementById(`gs-tab-${shown}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [shown, horizontalTabs]);
 
   const content = (
     <div className="@container flex h-full min-h-0 flex-col">
@@ -149,6 +156,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
               }}
               className={cx(
                 'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
+                horizontalTabs && 'shrink-0',
                 name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
               )}
             >
