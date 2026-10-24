@@ -18,6 +18,9 @@ import { FriendsSummary } from './FriendsSummary';
 import { PluginLogo } from './PluginLogo';
 import { Sidebar } from './Sidebar';
 import { useVariant } from '../lib/theme';
+import type { GameTone } from '../lib/gameTone';
+import { GameToneSwitch } from './GameToneSwitch';
+import { openCommandPalette } from './CommandPalette';
 import type { Collection, Job, SessionEvent, SocialView, StoreType, View } from '../types';
 import type { Ownership } from './LibraryView';
 
@@ -38,6 +41,8 @@ interface ShellProps extends SidebarProps {
   jobs?: Job[];
   /** When each session started (ms epoch), for the footer's elapsed time. */
   sessionStartedAt?: Record<string, number>;
+  /** The game tone App applies; the sourcebar shows its switch (#123). */
+  gameTone?: GameTone;
 }
 
 const SOURCES: { key: StoreType; label: string }[] = [
@@ -368,7 +373,7 @@ function SourcebarChrome(p: ShellProps) {
         </div>
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent('platypus:command-palette'))}
+          onClick={openCommandPalette}
           className="flex h-[30px] items-center gap-2.5 rounded-xl bg-surface px-1.5 pl-3 text-left text-text-faint transition hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <Search className="h-3.5 w-3.5" aria-hidden />
@@ -376,7 +381,8 @@ function SourcebarChrome(p: ShellProps) {
           <kbd className="rounded-md border border-hairline px-1.5 font-mono text-hint text-text-faint">Ctrl K</kbd>
         </button>
         <div className="flex items-center justify-end gap-2">
-          {/* Game colour switch (#123) renders here when a theme supports it. */}
+          {/* Game colour switch (#123): hidden unless the theme supports "whole". */}
+          {p.gameTone && <GameToneSwitch tone={p.gameTone} />}
           <PlacesMenu p={p} active={active} />
         </div>
       </header>

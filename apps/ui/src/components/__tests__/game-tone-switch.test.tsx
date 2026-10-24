@@ -21,6 +21,12 @@ vi.mock('../../lib/theme', async (importOriginal) => {
 });
 
 import { GameToneSwitch } from '../GameToneSwitch';
+import { useGameTone } from '../../lib/gameTone';
+
+// App owns the hook and hands the tone to the switch.
+function Harness() {
+  return <GameToneSwitch tone={useGameTone(null)} />;
+}
 
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
@@ -37,7 +43,7 @@ afterEach(() => {
 
 describe('GameToneSwitch', () => {
   it('offers Accent and Whole app where the theme supports both, starting on Accent', async () => {
-    const { getByRole } = render(<GameToneSwitch />);
+    const { getByRole } = render(<Harness />);
     const accent = getByRole('radio', { name: 'Accent' });
     await waitFor(() => expect(accent).toHaveAttribute('aria-checked', 'true'));
     expect(getByRole('radio', { name: 'Whole app' })).toHaveAttribute('aria-checked', 'false');
@@ -46,13 +52,13 @@ describe('GameToneSwitch', () => {
 
   it('keeps the stored choice across a mount', async () => {
     api.getLauncherSettings.mockReturnValue(Effect.succeed({ game_tone: 'whole' }));
-    const { getByRole } = render(<GameToneSwitch />);
+    const { getByRole } = render(<Harness />);
     await waitFor(() => expect(getByRole('radio', { name: 'Whole app' })).toHaveAttribute('aria-checked', 'true'));
     expect(getByRole('radio', { name: 'Accent' })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('stores the pick as a launcher setting and shows it at once', async () => {
-    const { getByRole } = render(<GameToneSwitch />);
+    const { getByRole } = render(<Harness />);
     await waitFor(() => expect(getByRole('radio', { name: 'Accent' })).toHaveAttribute('aria-checked', 'true'));
     fireEvent.click(getByRole('radio', { name: 'Whole app' }));
     expect(getByRole('radio', { name: 'Whole app' })).toHaveAttribute('aria-checked', 'true');
@@ -61,8 +67,8 @@ describe('GameToneSwitch', () => {
 
   it('is hidden on a theme that takes only the accent, or none of it', () => {
     axis.support = 'accent';
-    expect(render(<GameToneSwitch />).container).toBeEmptyDOMElement();
+    expect(render(<Harness />).container).toBeEmptyDOMElement();
     axis.support = 'off';
-    expect(render(<GameToneSwitch />).container).toBeEmptyDOMElement();
+    expect(render(<Harness />).container).toBeEmptyDOMElement();
   });
 });

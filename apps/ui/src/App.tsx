@@ -47,6 +47,7 @@ import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
 import { Modal } from './components/Modal';
 import { useVariant } from './lib/theme';
+import { useGameTone } from './lib/gameTone';
 import type { GameSettingsTab } from './lib/gameSettingsTabs';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
 import { X } from 'lucide-react';
@@ -674,6 +675,9 @@ export function App() {
   };
 
   const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
+  // The game's colour (issue #123), applied here so it also works where the
+  // theme shows no switch; the sourcebar shell renders the switch.
+  const gameTone = useGameTone(currentGame?.hero_url || currentGame?.background_url);
 
   const renderView = () => {
     if (!loaded) return <LibrarySkeleton />;
@@ -844,6 +848,7 @@ export function App() {
         view={view}
         onNavigate={setView}
         onSettingsOpen={openSettings}
+        gameTone={gameTone}
         search={search}
         onSearch={setSearch}
         storeCounts={storeCounts}

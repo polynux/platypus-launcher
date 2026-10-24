@@ -5,18 +5,18 @@
 // does it on a theme that leaves the axis off). The shell places it.
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { useGameTone } from '../lib/gameTone';
+import type { GameTone } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 
 export interface GameToneSwitchProps {
-  /** The selected game's hero art: its colour drives the tone. */
-  heroUrl?: string | null;
+  /** The app's game tone (App owns the hook, so the tone also applies where
+   *  no switch is shown). */
+  tone: GameTone;
   className?: string;
 }
 
-export function GameToneSwitch({ heroUrl, className }: GameToneSwitchProps) {
+export function GameToneSwitch({ tone, className }: GameToneSwitchProps) {
   const { t } = useTranslation('gameTone');
-  const tone = useGameTone(heroUrl);
   if (tone.supported !== 'whole') return null;
   return (
     <ToggleGroup

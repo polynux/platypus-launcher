@@ -13,6 +13,9 @@ supports = ["tokens", "variants"]
 "list-row.density" = "compact"
 "game-row.mode" = "compact"
 "view-header.size" = "compact"
+"color.game-tone" = "whole"
+"game-settings.presentation" = "sheet"
+"game-settings.tabs" = "accordion"
 
 [tokens]
 ground = "#13161b"
