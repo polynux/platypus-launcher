@@ -1,0 +1,45 @@
+{
+  "title": "Quick settings for {{title}}",
+  "preset": {
+    "label": "Preset",
+    "applies": "Applies three of the switches below",
+    "custom": "Custom",
+    "quality": "Quality",
+    "balanced": "Balanced",
+    "performance": "Performance"
+  },
+  "gamemode": {
+    "label": "Performance mode",
+    "sub": "Keeps the CPU and GPU at full speed"
+  },
+  "mangohud": {
+    "label": "FPS overlay",
+    "sub": "Frame rate and temperatures in a corner"
+  },
+  "gamescope": {
+    "label": "Lock resolution",
+    "sub": "Pins the resolution and refresh rate",
+    "known": "{{resolution}} at {{rate}} Hz",
+    "rateOnly": "{{rate}} Hz"
+  },
+  "fsr": {
+    "label": "Sharper upscaling",
+    "sub": "Renders lower, sharpens the image",
+    "needsLock": "Turn on Lock resolution first",
+    "native": "Needs Proton: this is a native build"
+  },
+  "runner": {
+    "label": "Compatibility layer"
+  },
+  "tier": {
+    "rated": "{{tier}} on ProtonDB",
+    "none": "No ProtonDB rating"
+  },
+  "unavailable": {
+    "runner": "The runner plugin isn't installed",
+    "setting": "This runner doesn't offer it"
+  },
+  "all": "All settings",
+  "allHint": "Saves, fixes, environment, launch command",
+  "saveFailed": "Platypus couldn't save that change."
+}
