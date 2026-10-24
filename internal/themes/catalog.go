@@ -43,6 +43,10 @@ var Catalog = []types.ThemeCatalogEntry{
 		{Name: "media", Values: []string{"on", "off"}, Default: "on", Since: "1.0"},
 		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "comfortable", Since: "1.0"},
 	}},
+	// The command palette (issue #124) is a catalog component, not a block:
+	// the app mounts it once and every theme gets it, with its own tokens.
+	// It has one presentation, so it carries no axis yet.
+	{Entry: "command-palette", Since: "1.0"},
 	{Entry: "dialog", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "presentation", Values: []string{"dialog", "sheet"}, Default: "dialog", Since: "1.0"},
 		// auto is the use site's built-in size: every dialog keeps its own

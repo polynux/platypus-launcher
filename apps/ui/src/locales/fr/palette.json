@@ -1,0 +1,25 @@
+{
+  "label": "Palette de commandes",
+  "input": "Commande",
+  "placeholder": "Tapez une commande ou un jeu…",
+  "listbox": "Résultats",
+  "empty": "Rien ne correspond à « {{query}} ».",
+  "group": {
+    "places": "Aller à",
+    "games": "Jeux"
+  },
+  "action": {
+    "play": "Jouer à {{title}}",
+    "stop": "Arrêter {{title}}",
+    "install": "Installer {{title}}",
+    "gameSettings": "Ouvrir les paramètres du jeu"
+  },
+  "hint": {
+    "move": "se déplacer",
+    "run": "lancer",
+    "close": "fermer"
+  },
+  "key": {
+    "esc": "échap"
+  }
+}

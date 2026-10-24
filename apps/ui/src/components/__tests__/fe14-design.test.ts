@@ -69,7 +69,7 @@ describe('FE-14 design drift guards', () => {
       'components/JobProgress.tsx', 'components/Modal.tsx',
       'components/Dashboard.tsx', 'components/LibraryView.tsx',
       'components/GamePage.tsx', 'components/SettingsModal.tsx',
-      'components/PluginsView.tsx',
+      'components/PluginsView.tsx', 'components/CommandPalette.tsx',
       ...fs.readdirSync(path.join(__dirname, '../ds'))
         .filter((f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx'))
         .map((f) => `components/ds/${f}`),

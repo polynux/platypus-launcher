@@ -205,6 +205,11 @@
       ]
     },
     {
+      "entry": "command-palette",
+      "since": "1.0",
+      "axes": null
+    },
+    {
       "entry": "dialog",
       "since": "1.0",
       "axes": [

@@ -20,6 +20,7 @@ import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
 import { RedeemDialog } from './components/RedeemDialog';
 import { CollectionsDialog } from './components/CollectionsDialog';
+import { CommandPalette } from './components/CommandPalette';
 import { collectionCounts, staleTitles } from './lib/collections';
 import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
@@ -46,6 +47,7 @@ import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
 import { Modal } from './components/Modal';
 import { useVariant } from './lib/theme';
+import type { GameSettingsTab } from './lib/gameSettingsTabs';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
 import { X } from 'lucide-react';
 
@@ -629,8 +631,31 @@ export function App() {
 
   // Stable, so the library's memoized cards are not re-rendered by every App update.
   const openGame = useCallback(
-    (id: string) => setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' })),
+    (id: string) =>
+      setView((v) =>
+        // Opening the game already shown keeps its back target.
+        v.name === 'game' && v.id === id
+          ? v
+          : { name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' },
+      ),
     [],
+  );
+  // The Settings entry (the shell's and the palette's): the theme's presentation
+  // decides whether Settings replaces the view or opens over it.
+  const openSettings = useCallback(() => {
+    setSettingsReturnView(view);
+    if (settingsPresentation === 'page') setView({ name: 'settings' });
+    else setSettingsOpen(true);
+  }, [settingsPresentation, view]);
+  // Game settings asked for from the palette (issue #124): open the game page
+  // on that tab, as the page's own Settings button does.
+  const [gameSettingsTab, setGameSettingsTab] = useState<{ gameId: string; tab: GameSettingsTab } | null>(null);
+  const openGameSettings = useCallback(
+    (id: string) => {
+      openGame(id);
+      setGameSettingsTab({ gameId: id, tab: 'general' });
+    },
+    [openGame],
   );
   // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
@@ -735,6 +760,8 @@ export function App() {
             onRemove={(opts) => removeGame(currentGame, opts)}
             collections={collections}
             onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
+            openSettingsTab={gameSettingsTab?.gameId === currentGame.id ? gameSettingsTab.tab : undefined}
+            onSettingsOpened={() => setGameSettingsTab(null)}
           />
         ) : (
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
@@ -812,11 +839,7 @@ export function App() {
       <Shell
         view={view}
         onNavigate={setView}
-        onSettingsOpen={() => {
-          setSettingsReturnView(view);
-          if (settingsPresentation === 'page') setView({ name: 'settings' });
-          else setSettingsOpen(true);
-        }}
+        onSettingsOpen={openSettings}
         search={search}
         onSearch={setSearch}
         storeCounts={storeCounts}
@@ -866,6 +889,23 @@ export function App() {
       </main>
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
+
+      {/* The command palette (issue #124) is one dialog at the app root; the
+          shell reaches it through openCommandPalette(). */}
+      <CommandPalette
+        games={games}
+        currentGame={currentGame}
+        session={currentGame ? sessions[currentGame.id] : undefined}
+        stores={storePlugins}
+        onOpenGame={openGame}
+        onNavigate={setView}
+        onOpenStore={(id) => setView({ name: 'store', plugin: id })}
+        onOpenSettings={openSettings}
+        onPlay={launch}
+        onStop={(id) => stop(id, false)}
+        onInstall={(game) => runJob('install', game)}
+        onOpenGameSettings={openGameSettings}
+      />
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
       <FamilyWarningHost games={games} />
