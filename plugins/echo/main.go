@@ -12,7 +12,8 @@
 //	slow     native script, installs in ~20 s (try cancel)
 //	huge     claims 32 PiB, so the free-space check refuses it
 //	flaky    the plugin crashes once mid-install, then resumes
-//	client   always installed; "launches" through a store client (sleep 5.0421)
+//	client   always installed; "launches" through a store client (a sleep whose
+//	         command line is unique to this plugin process)
 //	escape   always installed outside the install folder; Platypus must refuse it
 //	ana, ben borrowed from the family (family.go): installed, launched through a store client
 //	shared   lent by ana and ben, whose copies differ (family.go): the user picks one
@@ -990,6 +991,14 @@ func startUninstall(p params) (any, error) {
 	return nil, nil
 }
 
+// clientSleep is the command the store client "launches" for a game reached
+// through it, and the string the core finds that game by (find.cmdline →
+// session.FindByCmdline, a scan of /proc). It carries this plugin process's
+// pid so the marker is unique to this plugin instance: two runs of the tests
+// each start their own echo plugin, and one must never find the other's
+// launch (issue #112).
+var clientSleep = fmt.Sprintf("5.%d", os.Getpid())
+
 func launchSpec(p params) (any, error) {
 	g, ok := games[p.ID]
 	if !ok {
@@ -1016,8 +1025,8 @@ func launchSpec(p params) (any, error) {
 	case g.client || g.lentBy != "" || p.Via == "client":
 		return map[string]any{
 			"delegate": "store-client", "client": "Echo client",
-			"command": []string{"sleep", "5.0421"},
-			"find":    map[string]any{"cmdline": []string{"sleep\x005.0421"}},
+			"command": []string{"sleep", clientSleep},
+			"find":    map[string]any{"cmdline": []string{"sleep\x00" + clientSleep}},
 		}, nil
 	case g.external != "":
 		return map[string]any{"exe": filepath.Join(g.external, "true")}, nil

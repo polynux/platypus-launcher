@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { act, render, screen, waitFor, cleanup } from '@testing-library/react';
 import { Effect } from 'effect';
 import i18n from '../../lib/i18n';
 import type { Game } from '../../types';
@@ -91,7 +91,13 @@ describe('offline indicator', () => {
     library();
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     render(<Probe />);
-    for (const cb of cbs.list) cb({ online: false });
+    // Deliver the event the way the bridge does, inside act: the library and
+    // the probe are separate roots, and React may otherwise commit the
+    // library's update a task before the probe's, so reading the probe right
+    // after the event can still see the previous render (issue #112).
+    act(() => {
+      for (const cb of cbs.list) cb({ online: false });
+    });
     expect(await screen.findByRole('status')).toHaveTextContent('Offline');
     expect(screen.getByTestId('probe')).toHaveTextContent('offline');
     await i18n.changeLanguage('fr');
