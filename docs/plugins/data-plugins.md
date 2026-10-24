@@ -6,7 +6,9 @@ recipes and tweak packs. It can't run anything, so Platypus applies it without
 asking the user to approve anything — the Plugins view lists it under
 "data plugins · no code, always on". A data plugin may also carry a theme
 (issue #105): `theme.toml` plus `layouts/*.xml` and assets, validated like the
-built-ins and listed in the theme picker with its source.
+built-ins and listed in the theme picker with its source. Theme authoring is
+documented in [docs/themes/authoring.md](../themes/authoring.md), with the
+generated catalog reference in [docs/themes/catalog.md](../themes/catalog.md).
 
 Platypus's own curated fixes and hardware tweaks are the same format, embedded in
 the launcher (`internal/dataplug/builtin`) and read through the same loader.
