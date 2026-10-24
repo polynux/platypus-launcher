@@ -84,6 +84,17 @@
   "on": "Platypus will hide to the tray while a game runs",
   "off": "Platypus stays open while a game runs"
  },
+  "theme": {
+    "heading": "Theme",
+    "description": "The look of the launcher: colours, corners and the background. Applies right away, without a restart.",
+    "label": "Theme",
+    "saved": "Theme applied",
+    "warningsLabel": "Theme problems",
+    "status": {
+      "newer": "needs a newer Platypus",
+      "invalid": "its file can't be used"
+    }
+  },
  "loadError": "Platypus couldn't load the settings.",
  "prefixError": "Platypus couldn't change the Wine prefix folder.",
  "cleanupError": "Platypus couldn't clean up those folders.",

@@ -1,0 +1,128 @@
+// Themes at runtime (issue #93). The core resolves a theme's tokens; this
+// module sets them as CSS custom properties on :root. Components keep their
+// Tailwind classes: `bg-amber-300` compiles to `var(--color-amber-300)`,
+// `rounded-2xl` to `var(--radius-2xl)`, so variables set here restyle them.
+// Token names are the ones in apps/ui/src/style.css (@theme and :root).
+import { Effect } from 'effect';
+import { LauncherApi } from '../effect/runtime';
+import type { ThemeTokens, WashLayer } from '../types';
+
+/** The theme the app ships with. Matches the core's default (themes.DefaultID). */
+export const DEFAULT_THEME_ID = 'warm';
+
+const CACHE_KEY = 'platypus.theme';
+
+/** Where each token lands. `--color-*` are the @theme names; the rest are the
+ *  variables the ds/ components and Tailwind's radius classes read. */
+const TOKEN_VARS: Record<string, string[]> = {
+  ground: ['--color-ground', '--background'],
+  raised: ['--color-raised', '--card', '--popover'],
+  surface: ['--color-surface', '--secondary', '--muted'],
+  'surface-strong': ['--color-surface-strong'],
+  hairline: ['--color-hairline', '--border', '--input'],
+  text: ['--color-text', '--foreground', '--card-foreground', '--popover-foreground'],
+  'text-body': ['--color-text-body'],
+  'text-muted': ['--color-text-muted', '--muted-foreground'],
+  'text-faint': ['--color-text-faint'],
+  accent: ['--color-accent', '--primary'],
+  'accent-strong': ['--color-accent-strong'],
+  'on-accent': ['--color-on-accent', '--primary-foreground', '--accent-foreground'],
+  ok: ['--color-ok'],
+  attention: ['--color-attention'],
+  info: ['--color-info'],
+  dl: ['--color-dl'],
+  danger: ['--color-danger', '--destructive'],
+  focus: ['--color-focus', '--ring'],
+  'radius-chip': ['--radius-xl'],
+  'radius-card': ['--radius-2xl'],
+  'radius-panel': ['--radius-3xl'],
+  'font-sans': ['--font-sans'],
+  'font-mono': ['--font-mono'],
+};
+
+/** Tailwind 4's amber ramp as offsets from the accent (amber-400, #fbbf24):
+ *  [step, lightness, chroma factor, hue]. Each step is `oklch(from accent …)`,
+ *  so an alternate accent brings its own ramp. For the warm accent the steps
+ *  are Tailwind's amber. */
+const AMBER_RAMP: [number, number, number, number][] = [
+  [50, 0.159, 0.116, 10.85],
+  [100, 0.134, 0.312, 11.19],
+  [200, 0.096, 0.635, 11.32],
+  [300, 0.051, 0.894, 7.18],
+  [400, 0, 1, 0],
+  [500, -0.059, 0.995, -14.35],
+  [600, -0.162, 0.947, -26.11],
+  [700, -0.273, 0.862, -35.43],
+  [800, -0.355, 0.725, -38.23],
+  [900, -0.414, 0.593, -38.53],
+  [950, -0.549, 0.407, -38.79],
+];
+
+/** `calc(l + 0.051)`, or `calc(l - 0.059)`: a signed offset of a channel. */
+function shifted(channel: 'l' | 'h', by: number): string {
+  return `calc(${channel} ${by < 0 ? '-' : '+'} ${Math.abs(by)})`;
+}
+
+/** One radial gradient per layer, the wash's CSS. Layers are composed from
+ *  validated parts, so nothing here can carry more than the core allowed. */
+export function washImage(layers: WashLayer[]): string {
+  if (layers.length === 0) return 'none';
+  return layers
+    .map((l) => `radial-gradient(${l.size} at ${l.at}, ${l.color}, transparent ${l.fade})`)
+    .join(', ');
+}
+
+/** Every custom property the theme sets, name to value. Pure: no DOM. */
+export function themeVariables(theme: ThemeTokens): Record<string, string> {
+  const vars: Record<string, string> = {};
+  for (const [token, names] of Object.entries(TOKEN_VARS)) {
+    const value = theme.tokens[token];
+    if (value) for (const name of names) vars[name] = value;
+  }
+  for (const [step, dl, kc, dh] of AMBER_RAMP) {
+    vars[`--color-amber-${step}`] = `oklch(from var(--color-accent) ${shifted('l', dl)} calc(c * ${kc}) ${shifted('h', dh)})`;
+  }
+  vars['--app-wash'] = washImage(theme.wash ?? []);
+  return vars;
+}
+
+/** Sets the theme on :root. Live: calling it again restyles what is on screen. */
+export function applyTheme(theme: ThemeTokens): void {
+  const style = document.documentElement.style;
+  for (const [name, value] of Object.entries(themeVariables(theme))) style.setProperty(name, value);
+}
+
+/** Applies a theme and remembers it, so the next boot can paint it before the
+ *  core answers (see applyCachedTheme). */
+export function applyAndRemember(theme: ThemeTokens): void {
+  applyTheme(theme);
+  try {
+    window.localStorage.setItem(CACHE_KEY, JSON.stringify(theme));
+  } catch {
+    // No storage: the next boot starts from the defaults and loads the pick.
+  }
+}
+
+/** Boot, before the first paint (main.tsx): the theme applied last time. With
+ *  nothing cached, style.css's own values stand, and those are the warm theme. */
+export function applyCachedTheme(): void {
+  try {
+    const raw = window.localStorage.getItem(CACHE_KEY);
+    if (raw) applyTheme(JSON.parse(raw) as ThemeTokens);
+  } catch {
+    // A missing or broken entry leaves the defaults in place.
+  }
+}
+
+/** Loads the picked theme from the core and applies it. A failed read keeps
+ *  what is applied: a theme is never a reason to break startup (or tests with
+ *  a partial core mock, which throws here instead of rejecting). */
+export function loadTheme(): Promise<void> {
+  try {
+    return Effect.runPromise(LauncherApi.getTheme(''))
+      .then(applyAndRemember)
+      .catch(() => {});
+  } catch {
+    return Promise.resolve();
+  }
+}

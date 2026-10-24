@@ -73,6 +73,11 @@
   --ring: rgba(252, 211, 77, 0.8);
   --accent-foreground: #130f0a;
   --radius: 0.75rem;
+  /* The background wash of .app-wash. A theme sets it at runtime (lib/theme.ts). */
+  --app-wash:
+    radial-gradient(1100px 620px at 14% -8%, rgba(150, 96, 58, 0.46), transparent 58%),
+    radial-gradient(880px 520px at 90% 10%, rgba(86, 62, 128, 0.44), transparent 54%),
+    radial-gradient(760px 460px at 52% 108%, rgba(30, 78, 96, 0.36), transparent 56%);
 }
 
 @layer base {
@@ -278,10 +283,7 @@
    is needed (WebKitGTK handles `fixed` unreliably). */
 .app-wash {
   background-color: var(--color-ground);
-  background-image:
-    radial-gradient(1100px 620px at 14% -8%, rgba(150, 96, 58, 0.46), transparent 58%),
-    radial-gradient(880px 520px at 90% 10%, rgba(86, 62, 128, 0.44), transparent 54%),
-    radial-gradient(760px 460px at 52% 108%, rgba(30, 78, 96, 0.36), transparent 56%);
+  background-image: var(--app-wash);
 }
 .app-wash-game {
   background-color: var(--color-ground);
