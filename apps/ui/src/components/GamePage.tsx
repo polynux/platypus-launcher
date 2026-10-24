@@ -30,6 +30,7 @@ import { useNetState } from './useNetState';
 import { formatCount, formatDate, formatHours, formatPercentValue } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { LauncherApi } from '../effect/runtime';
+import { useVariant } from '../lib/theme';
 import { offers } from '../lib/capabilities';
 import { ProgressAchievements, useAchievementProgress } from './ProgressAchievements';
 import { pinLabel } from '../lib/versions';
@@ -280,6 +281,40 @@ export function GamePage(p: GamePageProps) {
     ? `${ratingBadge.source} · ${ratingBadge.label}`
     : t('game:compat.noneLoaded'));
 
+  // The theme picks the game settings presentation (issue #99): a dialog or
+  // sheet overlays the game, while a page replaces it, with its own back
+  // entry to the game.
+  const settingsPage = useVariant('game-settings.presentation') === 'page';
+  const settingsModal = settingsTab ? (
+    <GameSettingsModal
+      game={game}
+      plugin={plugin}
+      runners={runners}
+      tweaks={tweaks}
+      jobs={p.jobs ?? []}
+      job={job}
+      initialTab={settingsTab}
+      onClose={() => setSettingsTab(null)}
+      onSaveSettings={p.onSaveSettings}
+      onChangeSettings={p.onChangeSettings}
+      onJob={p.onJob}
+      onJobAction={p.onJobAction}
+      onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
+      onChanged={() => p.onVersionsChanged?.()}
+      onCustomized={() => p.onCustomized?.()}
+      onCopied={() => p.onNotify?.(t('game:copied'))}
+      onRemove={p.onRemove}
+      running={!!session || p.launching}
+    />
+  ) : null;
+  if (settingsModal && settingsPage) {
+    return (
+      <TooltipProvider>
+        {settingsModal}
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider>
     <div className="relative isolate p-7">
@@ -490,28 +525,7 @@ export function GamePage(p: GamePageProps) {
           <ActivityFeed events={events} />
         </section>
       )}
-      {settingsTab && (
-        <GameSettingsModal
-          game={game}
-          plugin={plugin}
-          runners={runners}
-          tweaks={tweaks}
-          jobs={p.jobs ?? []}
-          job={job}
-          initialTab={settingsTab}
-          onClose={() => setSettingsTab(null)}
-          onSaveSettings={p.onSaveSettings}
-          onChangeSettings={p.onChangeSettings}
-          onJob={p.onJob}
-          onJobAction={p.onJobAction}
-          onNotify={(msg, kind) => p.onNotify?.(msg, kind)}
-          onChanged={() => p.onVersionsChanged?.()}
-          onCustomized={() => p.onCustomized?.()}
-          onCopied={() => p.onNotify?.(t('game:copied'))}
-          onRemove={p.onRemove}
-          running={!!session || p.launching}
-        />
-      )}
+      {!settingsPage && settingsModal}
       {installTo && plugin && (
         <InstallDialog
           game={game}

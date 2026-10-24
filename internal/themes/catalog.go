@@ -13,4 +13,12 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "section", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "chrome", Values: []string{"hairline", "framed", "plain"}, Default: "hairline", Since: "1.0"},
 	}},
+	{Entry: "dialog", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"dialog", "sheet"}, Default: "dialog", Since: "1.0"},
+		{Name: "size", Values: []string{"sm", "md", "lg", "xl"}, Default: "md", Since: "1.0"},
+	}},
+	{Entry: "game-settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"dialog", "sheet", "page"}, Default: "dialog", Since: "1.0"},
+		{Name: "tabs", Values: []string{"vertical", "horizontal"}, Default: "vertical", Since: "1.0"},
+	}},
 }

@@ -1,7 +1,7 @@
 // i18n: converted
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, RemoveOptions, StorePlugin, Tweak } from '../types';
 import { Modal } from './Modal';
 import { Button } from '@/components/ds/button';
@@ -21,6 +21,7 @@ import { TweaksPanel } from './TweaksPanel';
 import { LegalSection } from './LegalSection';
 import { cx } from './ui';
 import { tabLabel, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
+import { useVariant } from '../lib/theme';
 import { MaintenancePrefetchProvider, useMaintenancePrefetchSource } from './maintenancePrefetch';
 
 export interface GameSettingsModalProps {
@@ -83,93 +84,125 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // is usually ready before the tab is clicked. The tab awaits these same
   // promises: one fetch per dialog open, shared by the tab.
   const maintenance = useMaintenancePrefetchSource(game);
+  // The theme picks the presentation (issue #99): a dialog, a slide-in sheet
+  // on the app's shared Modal, or a full view with a back entry. `cool` takes
+  // the sheet with horizontal tabs; the built-in (warm) is today's dialog
+  // with the tab list down the side on wide content.
+  const presentation = useVariant('game-settings.presentation');
+  const horizontalTabs = useVariant('game-settings.tabs') === 'horizontal';
+
+  const tabsRootClass = horizontalTabs
+    ? 'flex min-h-0 flex-1 flex-col gap-5'
+    : 'flex min-h-0 flex-1 flex-col gap-5 @2xl:grid @2xl:grid-cols-[11rem_1fr] @2xl:grid-rows-[minmax(0,1fr)]';
+  const tablistClass = horizontalTabs
+    ? 'flex flex-none flex-wrap gap-1.5'
+    : 'flex flex-none flex-wrap gap-1.5 @2xl:flex-col @2xl:flex-nowrap @2xl:self-start';
+
+  const content = (
+    <div className="@container flex h-full min-h-0 flex-col">
+      <div className="mb-5 flex flex-none items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.heading')}</h2>
+          <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
+        </div>
+        {presentation !== 'page' && (
+          <Button variant="neutral" size="icon" onClick={p.onClose} aria-label={t('common:close')} className="size-8 flex-none">
+            <X className="size-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* Fixed header; the tab list and this content column below are the
+          only things that fill the dialog. The content column is the one
+          scrollbar: the dialog itself never scrolls (no double scrollbars).
+          Narrow widths stack the tabs above the content and keep the same
+          outer height, with the content scrolling under the tabs. */}
+      <MaintenancePrefetchProvider pre={maintenance}>
+      <div className={tabsRootClass}>
+        <div
+          role="tablist"
+          aria-label={t('gameSettings:settingsModal.sections')}
+          aria-orientation={horizontalTabs ? 'horizontal' : 'vertical'}
+          className={tablistClass}
+        >
+          {tabs.map((name) => (
+            <button
+              key={name}
+              role="tab"
+              id={`gs-tab-${name}`}
+              aria-selected={name === shown}
+              aria-controls={`gs-panel-${name}`}
+              tabIndex={name === shown ? 0 : -1}
+              onClick={() => setTab(name)}
+              onKeyDown={(e) => {
+                const i = tabs.indexOf(name);
+                const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
+                  : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length] : null;
+                if (!next) return;
+                e.preventDefault();
+                setTab(next);
+                document.getElementById(`gs-tab-${next}`)?.focus();
+              }}
+              className={cx(
+                'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
+                name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
+              )}
+            >
+              {tabLabel(t, name)}
+            </button>
+          ))}
+        </div>
+
+        <div ref={scrollRef} data-testid="gs-tab-scroll" className="min-h-0 min-w-0 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+          {/* General keeps its unsaved edits while another tab shows: it stays mounted. */}
+          <section role="tabpanel" id="gs-panel-general" aria-labelledby="gs-tab-general" hidden={shown !== 'general'}>
+            {game.store === 'custom' && <CustomGameYear game={game} onChanged={p.onCustomized} />}
+            <GeneralSettings
+              embedded
+              game={game}
+              runners={p.runners}
+              onClose={p.onClose}
+              onSave={p.onSaveSettings}
+              onCopied={p.onCopied}
+              onDirty={setDirty}
+              onChanged={p.onCustomized}
+              draftState={shared}
+            />
+            <LegalSection game={game} plugin={plugin} />
+          </section>
+          {shown !== 'general' && (
+            <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
+              {/* The cloud panel brings its own heading. */}
+              {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{tabLabel(t, shown)}</h3>}
+              <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} shared={shared} onTweakChange={handleTweakChange} />
+            </section>
+          )}
+        </div>
+      </div>
+      </MaintenancePrefetchProvider>
+      </div>
+  );
+
+  // A page is the settings as a full view, with a back entry instead of the
+  // dialog chrome. GamePage shows it in place of the game when it is open.
+  if (presentation === 'page') {
+    return (
+      <div className="p-7">
+        <Button variant="ghost" size="none" onClick={p.onClose} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-text-muted hover:bg-transparent hover:text-white">
+          <ArrowLeft className="h-3.5 w-3.5" /> {t('common:back')}
+        </Button>
+        <div className="mt-4">{content}</div>
+      </div>
+    );
+  }
 
   return (
     // Constant outer height across tabs (issue #57): about the Main tab's
     // height (43rem ~= the Main dialog's 688px at an 800px window, measured
     // in the app), clamped to the window. Only this dialog passes a height;
     // the shared Modal is untouched, so no other dialog changes size.
-    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size="xl" className="h-[min(43rem,calc(100dvh-6rem))]">
-      <div className="@container flex h-full min-h-0 flex-col">
-        <div className="mb-5 flex flex-none items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.heading')}</h2>
-            <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
-          </div>
-          <Button variant="neutral" size="icon" onClick={p.onClose} aria-label={t('common:close')} className="size-8 flex-none">
-            <X className="size-4" />
-          </Button>
-        </div>
-
-        {/* Fixed header; the tab list and this content column below are the
-            only things that fill the dialog. The content column is the one
-            scrollbar: the dialog itself never scrolls (no double scrollbars).
-            Narrow widths stack the tabs above the content and keep the same
-            outer height, with the content scrolling under the tabs. */}
-        <MaintenancePrefetchProvider pre={maintenance}>
-        <div className="flex min-h-0 flex-1 flex-col gap-5 @2xl:grid @2xl:grid-cols-[11rem_1fr] @2xl:grid-rows-[minmax(0,1fr)]">
-          <div
-            role="tablist"
-            aria-label={t('gameSettings:settingsModal.sections')}
-            aria-orientation="vertical"
-            className="flex flex-none flex-wrap gap-1.5 @2xl:flex-col @2xl:flex-nowrap @2xl:self-start"
-          >
-            {tabs.map((name) => (
-              <button
-                key={name}
-                role="tab"
-                id={`gs-tab-${name}`}
-                aria-selected={name === shown}
-                aria-controls={`gs-panel-${name}`}
-                tabIndex={name === shown ? 0 : -1}
-                onClick={() => setTab(name)}
-                onKeyDown={(e) => {
-                  const i = tabs.indexOf(name);
-                  const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
-                    : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length] : null;
-                  if (!next) return;
-                  e.preventDefault();
-                  setTab(next);
-                  document.getElementById(`gs-tab-${next}`)?.focus();
-                }}
-                className={cx(
-                  'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
-                  name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
-                )}
-              >
-                {tabLabel(t, name)}
-              </button>
-            ))}
-          </div>
-
-          <div ref={scrollRef} data-testid="gs-tab-scroll" className="min-h-0 min-w-0 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-            {/* General keeps its unsaved edits while another tab shows: it stays mounted. */}
-            <section role="tabpanel" id="gs-panel-general" aria-labelledby="gs-tab-general" hidden={shown !== 'general'}>
-              {game.store === 'custom' && <CustomGameYear game={game} onChanged={p.onCustomized} />}
-              <GeneralSettings
-                embedded
-                game={game}
-                runners={p.runners}
-                onClose={p.onClose}
-                onSave={p.onSaveSettings}
-                onCopied={p.onCopied}
-                onDirty={setDirty}
-                onChanged={p.onCustomized}
-                draftState={shared}
-              />
-              <LegalSection game={game} plugin={plugin} />
-            </section>
-            {shown !== 'general' && (
-              <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
-                {/* The cloud panel brings its own heading. */}
-                {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{tabLabel(t, shown)}</h3>}
-                <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} shared={shared} onTweakChange={handleTweakChange} />
-              </section>
-            )}
-          </div>
-        </div>
-        </MaintenancePrefetchProvider>
-      </div>
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size="xl" presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} className="h-[min(43rem,calc(100dvh-6rem))]">
+      {content}
     </Modal>
   );
 }

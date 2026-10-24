@@ -395,8 +395,10 @@ type ThemeTokens struct {
 
 // ThemeVariants gives the generated UI bridge a closed set of catalog axes.
 type ThemeVariants struct {
-	Settings ThemeSettingsVariants `json:"settings"`
-	Section  ThemeSectionVariants  `json:"section"`
+	Settings     ThemeSettingsVariants     `json:"settings"`
+	Section      ThemeSectionVariants      `json:"section"`
+	Dialog       ThemeDialogVariants       `json:"dialog"`
+	GameSettings ThemeGameSettingsVariants `json:"gameSettings"`
 }
 
 type ThemeSettingsVariants struct {
@@ -406,6 +408,20 @@ type ThemeSettingsVariants struct {
 
 type ThemeSectionVariants struct {
 	Chrome string `json:"chrome"`
+}
+
+// ThemeDialogVariants is the global dialog chrome (issue #99): every dialog
+// the catalog covers reads these, unless its use-site entry overrides them.
+type ThemeDialogVariants struct {
+	Presentation string `json:"presentation"`
+	Size         string `json:"size"`
+}
+
+// ThemeGameSettingsVariants is the game settings dialog (issue #99): its own
+// presentation overrides the global dialog one, and its tab orientation.
+type ThemeGameSettingsVariants struct {
+	Presentation string `json:"presentation"`
+	Tabs         string `json:"tabs"`
 }
 
 type ThemeCatalogEntry struct {

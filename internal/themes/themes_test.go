@@ -88,8 +88,20 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if cool.Variants.Settings.Presentation != "sheet" || cool.Variants.Settings.Navigation != "tabs" || cool.Variants.Section.Chrome != "framed" {
 		t.Fatalf("cool variants = %v", cool.Variants)
 	}
+	if cool.Variants.Dialog.Presentation != "dialog" || cool.Variants.Dialog.Size != "md" {
+		t.Fatalf("cool dialog variants = %v", cool.Variants.Dialog)
+	}
+	if cool.Variants.GameSettings.Presentation != "sheet" || cool.Variants.GameSettings.Tabs != "horizontal" {
+		t.Fatalf("cool game-settings variants = %v", cool.Variants.GameSettings)
+	}
 	if def.Variants.Settings.Presentation != "page" || def.Variants.Settings.Navigation != "scroll" || def.Variants.Section.Chrome != "hairline" {
 		t.Fatalf("warm variants = %v", def.Variants)
+	}
+	if def.Variants.Dialog.Presentation != "dialog" || def.Variants.Dialog.Size != "md" {
+		t.Fatalf("warm dialog variants = %v", def.Variants.Dialog)
+	}
+	if def.Variants.GameSettings.Presentation != "dialog" || def.Variants.GameSettings.Tabs != "vertical" {
+		t.Fatalf("warm game-settings variants = %v", def.Variants.GameSettings)
 	}
 }
 
@@ -107,6 +119,42 @@ func TestVariantsWarnAndFallBack(t *testing.T) {
 	got := resolve(th, true)
 	if got.Variants.Settings.Presentation != "page" || got.Variants.Settings.Navigation != "tabs" {
 		t.Fatalf("variants = %v", got.Variants)
+	}
+}
+
+// A use-site presentation wins over the global dialog one, which wins over
+// the built-in (ADR §2): game settings follow dialog.presentation unless the
+// theme says otherwise for game-settings itself.
+func TestGameSettingsPresentationFallsBackToDialog(t *testing.T) {
+	varianted := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1)
+	globalOnly, _ := resolveSrc(t, varianted+`
+[variants]
+"dialog.presentation" = "sheet"
+`)
+	if globalOnly.Variants.Dialog.Presentation != "sheet" {
+		t.Fatalf("dialog presentation = %q, want sheet", globalOnly.Variants.Dialog.Presentation)
+	}
+	if globalOnly.Variants.GameSettings.Presentation != "sheet" {
+		t.Fatalf("game-settings presentation = %q, want the global sheet", globalOnly.Variants.GameSettings.Presentation)
+	}
+	useSite, _ := resolveSrc(t, varianted+`
+[variants]
+"dialog.presentation" = "sheet"
+"game-settings.presentation" = "dialog"
+"game-settings.tabs" = "horizontal"
+`)
+	if useSite.Variants.GameSettings.Presentation != "dialog" || useSite.Variants.GameSettings.Tabs != "horizontal" {
+		t.Fatalf("game-settings variants = %v, want the use-site values", useSite.Variants.GameSettings)
+	}
+	if useSite.Variants.Dialog.Presentation != "sheet" {
+		t.Fatalf("dialog presentation = %q, want sheet", useSite.Variants.Dialog.Presentation)
+	}
+	builtin, _ := resolveSrc(t, varianted)
+	if builtin.Variants.GameSettings.Presentation != "dialog" || builtin.Variants.GameSettings.Tabs != "vertical" {
+		t.Fatalf("game-settings variants = %v, want the built-in values", builtin.Variants.GameSettings)
+	}
+	if builtin.Variants.Dialog.Size != "md" {
+		t.Fatalf("dialog size = %q, want the built-in md", builtin.Variants.Dialog.Size)
 	}
 }
 

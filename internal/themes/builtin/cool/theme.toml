@@ -12,6 +12,8 @@ supports = ["tokens", "variants"]
 "settings.presentation" = "sheet"
 "settings.navigation" = "tabs"
 "section.chrome" = "framed"
+"game-settings.presentation" = "sheet"
+"game-settings.tabs" = "horizontal"
 
 [tokens]
 ground = "#0b1118"

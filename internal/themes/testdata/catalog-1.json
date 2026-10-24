@@ -41,6 +41,57 @@
           "since": "1.0"
         }
       ]
+    },
+    {
+      "entry": "dialog",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "dialog",
+            "sheet"
+          ],
+          "default": "dialog",
+          "since": "1.0"
+        },
+        {
+          "name": "size",
+          "values": [
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ],
+          "default": "md",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-settings",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "dialog",
+            "sheet",
+            "page"
+          ],
+          "default": "dialog",
+          "since": "1.0"
+        },
+        {
+          "name": "tabs",
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical",
+          "since": "1.0"
+        }
+      ]
     }
   ]
 }

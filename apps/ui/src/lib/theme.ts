@@ -12,20 +12,33 @@ import type { ThemeTokens, WashLayer } from '../types';
 export const DEFAULT_THEME_ID = 'warm';
 
 const CACHE_KEY = 'platypus.theme';
-let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' } };
+let currentVariants: ThemeTokens['variants'] = {
+  settings: { presentation: 'page', navigation: 'scroll' },
+  section: { chrome: 'hairline' },
+  dialog: { presentation: 'dialog', size: 'md' },
+  gameSettings: { presentation: 'dialog', tabs: 'vertical' },
+};
 const variantListeners = new Set<() => void>();
-type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}`;
+type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `dialog.${keyof ThemeTokens['variants']['dialog']}` | `game-settings.${keyof ThemeTokens['variants']['gameSettings']}`;
 
 /** Reads one resolved catalog choice and updates when the selected theme changes. */
 export function useVariant(axis: ThemeVariantAxis): string {
-  const [entry, name] = axis.split('.') as ['settings' | 'section', string];
+  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'dialog' | 'game-settings', string];
   const readVariant = () => entry === 'settings'
     ? name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation
-    : currentVariants.section.chrome;
+    : entry === 'section' ? currentVariants.section.chrome
+    : entry === 'dialog'
+      ? name === 'presentation' ? currentVariants.dialog.presentation : currentVariants.dialog.size
+      : name === 'presentation' ? currentVariants.gameSettings.presentation : currentVariants.gameSettings.tabs;
   return useSyncExternalStore(
     (listener) => { variantListeners.add(listener); return () => variantListeners.delete(listener); },
     readVariant,
-    () => axis === 'settings.presentation' ? 'page' : axis === 'settings.navigation' ? 'scroll' : 'hairline',
+    () => axis === 'settings.presentation' ? 'page'
+      : axis === 'settings.navigation' ? 'scroll'
+      : axis === 'section.chrome' ? 'hairline'
+      : axis === 'dialog.presentation' ? 'dialog'
+      : axis === 'dialog.size' ? 'md'
+      : axis === 'game-settings.presentation' ? 'dialog' : 'vertical',
   );
 }
 

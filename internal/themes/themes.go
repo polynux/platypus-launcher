@@ -405,6 +405,14 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			Navigation:   variants["settings.navigation"],
 		},
 		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
+		Dialog: types.ThemeDialogVariants{
+			Presentation: variants["dialog.presentation"],
+			Size:         variants["dialog.size"],
+		},
+		GameSettings: types.ThemeGameSettingsVariants{
+			Presentation: variants["game-settings.presentation"],
+			Tabs:         variants["game-settings.tabs"],
+		},
 	}
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
@@ -423,6 +431,12 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 		for key, value := range t.Variants {
 			variants[key] = value
 		}
+		// A use-site presentation wins over the global dialog one (ADR §2):
+		// a theme that sheets every dialog but keeps game settings a dialog
+		// sets dialog.presentation back to "dialog" for game-settings alone.
+		if _, explicit := t.Variants["game-settings.presentation"]; !explicit {
+			variants["game-settings.presentation"] = variants["dialog.presentation"]
+		}
 	}
 	out.Variants = types.ThemeVariants{
 		Settings: types.ThemeSettingsVariants{
@@ -430,6 +444,14 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			Navigation:   variants["settings.navigation"],
 		},
 		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
+		Dialog: types.ThemeDialogVariants{
+			Presentation: variants["dialog.presentation"],
+			Size:         variants["dialog.size"],
+		},
+		GameSettings: types.ThemeGameSettingsVariants{
+			Presentation: variants["game-settings.presentation"],
+			Tabs:         variants["game-settings.tabs"],
+		},
 	}
 	return out
 }

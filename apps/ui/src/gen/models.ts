@@ -841,6 +841,16 @@ export namespace types {
     axes: types.ThemeCatalogAxis[];
   }
 
+  export interface ThemeDialogVariants {
+    presentation: string;
+    size: string;
+  }
+
+  export interface ThemeGameSettingsVariants {
+    presentation: string;
+    tabs: string;
+  }
+
   export interface ThemeInfo {
     id: string;
     name: string;
@@ -869,6 +879,8 @@ export namespace types {
   export interface ThemeVariants {
     settings: types.ThemeSettingsVariants;
     section: types.ThemeSectionVariants;
+    dialog: types.ThemeDialogVariants;
+    gameSettings: types.ThemeGameSettingsVariants;
   }
 
   export interface Tweak {
