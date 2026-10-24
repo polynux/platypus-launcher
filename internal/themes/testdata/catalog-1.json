@@ -186,6 +186,173 @@
           "since": "1.0"
         }
       ]
+    },
+    {
+      "entry": "game-tile",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "aspect",
+          "values": [
+            "2:3",
+            "3:4",
+            "16:9"
+          ],
+          "default": "3:4",
+          "since": "1.0"
+        },
+        {
+          "name": "compat",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0"
+        },
+        {
+          "name": "overlay",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "comfortable",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-row",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "columns",
+          "values": [
+            "full",
+            "minimal"
+          ],
+          "default": "full",
+          "since": "1.0"
+        },
+        {
+          "name": "mode",
+          "values": [
+            "full",
+            "compact"
+          ],
+          "default": "full",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "library.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.title",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.mode",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.search",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.chips",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.filters",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.warnings",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "library.empty",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.last-played",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.all-titles",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.activity",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main",
+      "attrs": [
+        "limit"
+      ]
+    },
+    {
+      "entry": "library.recent",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "library.table",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
     }
   ]
 }

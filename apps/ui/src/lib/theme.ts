@@ -12,19 +12,21 @@ import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
 export const DEFAULT_THEME_ID = 'warm';
 
 const CACHE_KEY = 'platypus.theme';
-let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' }, viewHeader: { actions: 'right', subtitle: 'shown', size: 'regular' }, emptyState: { chrome: 'dashed', icon: 'off' }, listRow: { media: 'on', density: 'comfortable' } };
+let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' }, viewHeader: { actions: 'right', subtitle: 'shown', size: 'regular' }, emptyState: { chrome: 'dashed', icon: 'off' }, listRow: { media: 'on', density: 'comfortable' }, gameTile: { aspect: '3:4', compat: 'on', overlay: 'on', density: 'comfortable' }, gameRow: { columns: 'full', mode: 'full' } };
 const variantListeners = new Set<() => void>();
-type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `view-header.${keyof ThemeTokens['variants']['viewHeader']}` | `empty-state.${keyof ThemeTokens['variants']['emptyState']}` | `list-row.${keyof ThemeTokens['variants']['listRow']}`;
+type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `view-header.${keyof ThemeTokens['variants']['viewHeader']}` | `empty-state.${keyof ThemeTokens['variants']['emptyState']}` | `list-row.${keyof ThemeTokens['variants']['listRow']}` | `game-tile.${keyof ThemeTokens['variants']['gameTile']}` | `game-row.${keyof ThemeTokens['variants']['gameRow']}`;
 
 /** Reads one resolved catalog choice and updates when the selected theme changes. */
 export function useVariant(axis: ThemeVariantAxis): string {
-  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'view-header' | 'empty-state' | 'list-row', string];
+  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'view-header' | 'empty-state' | 'list-row' | 'game-tile' | 'game-row', string];
   const readVariant = () => {
     switch (entry) {
       case 'settings': return name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation;
       case 'section': return currentVariants.section.chrome;
       case 'view-header': return currentVariants.viewHeader[name as keyof ThemeTokens['variants']['viewHeader']];
       case 'empty-state': return currentVariants.emptyState[name as keyof ThemeTokens['variants']['emptyState']];
+      case 'game-tile': return currentVariants.gameTile[name as keyof ThemeTokens['variants']['gameTile']];
+      case 'game-row': return currentVariants.gameRow[name as keyof ThemeTokens['variants']['gameRow']];
       default: return currentVariants.listRow[name as keyof ThemeTokens['variants']['listRow']];
     }
   };
@@ -39,7 +41,13 @@ export function useVariant(axis: ThemeVariantAxis): string {
       case 'empty-state.chrome': return 'dashed';
       case 'empty-state.icon': return 'off';
       case 'list-row.media': return 'on';
-      default: return 'comfortable';
+      case 'list-row.density': return 'comfortable';
+      case 'game-tile.aspect': return '3:4';
+      case 'game-tile.compat': return 'on';
+      case 'game-tile.overlay': return 'on';
+      case 'game-tile.density': return 'comfortable';
+      case 'game-row.columns': return 'full';
+      default: return 'full';
     }
   };
   return useSyncExternalStore(

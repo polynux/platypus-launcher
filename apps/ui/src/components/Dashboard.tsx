@@ -7,6 +7,7 @@ import type { ActivityEvent, Game, ProtonVersion, ThemeLayout as DashboardLayout
 import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
+import { GameTile } from './GameTile';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { byRecent, coverImages, heroImages, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
@@ -15,7 +16,7 @@ import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 import { ratingBadge } from '../lib/compat';
 import { ThemeLayout } from '../lib/layout';
-import { useThemeLayout } from '../lib/theme';
+import { useThemeLayout, useVariant } from '../lib/theme';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -284,19 +285,13 @@ export function DashboardContinue({ games, runners, hasPlayData, onOpenGame, onN
       </div>
       <div className="cover-grid items-stretch">
         {games.map((g) => (
-          <button key={g.id} onClick={() => onOpenGame(g.id)} className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}>
-            <div className="relative flex-none">
-              <Cover src={coverImages(g)} title={g.title} className="aspect-[3/4] w-full" />
-              {needsAttention(g) && <TweakDot className="absolute right-2 top-2" />}
-            </div>
-            <GameCardBody
-              title={g.title}
-              meta={`${g.playtime_minutes ? `${formatHours(g.playtime_minutes)} · ` : ''}${runnerShort(g.settings.runner_id, runners)}`}
-              game={g}
-              hideNative
-              className="px-3 py-2.5"
-            />
-          </button>
+          <GameTile
+            key={g.id}
+            game={g}
+            meta={`${g.playtime_minutes ? `${formatHours(g.playtime_minutes)} · ` : ''}${runnerShort(g.settings.runner_id, runners)}`}
+            hideNative
+            onOpen={onOpenGame}
+          />
         ))}
       </div>
     </section>
@@ -387,12 +382,16 @@ function storeLabel(store: string, t: TFunction): string {
 
 export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
   const { t } = useTranslation('dashboard');
+  // The recent rows share the game-row density: warm (full) is today's row,
+  // compact tightens the row and the cover.
+  const mode = useVariant('game-row.mode');
+  const compact = mode === 'compact';
   return (
     <ul className="divide-y divide-hairline">
       {games.map((g) => (
         <li key={g.id}>
-          <button onClick={() => onOpenGame(g.id)} className="-mx-1 flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-surface">
-            <Cover src={coverImages(g)} title="" className="h-8 w-8 flex-none rounded ring-1 ring-white/10" />
+          <button onClick={() => onOpenGame(g.id)} className={compact ? '-mx-1 flex w-full items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface' : '-mx-1 flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-surface'}>
+            <Cover src={coverImages(g)} title="" className={compact ? 'h-7 w-7 flex-none rounded ring-1 ring-white/10' : 'h-8 w-8 flex-none rounded ring-1 ring-white/10'} />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
               <div className="font-mono text-micro uppercase tracking-wider text-text-muted">{storeLabel(g.store, t)}</div>

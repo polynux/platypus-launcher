@@ -477,6 +477,16 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			Media:   variants["list-row.media"],
 			Density: variants["list-row.density"],
 		},
+		GameTile: types.ThemeGameTileVariants{
+			Aspect:  variants["game-tile.aspect"],
+			Compat:  variants["game-tile.compat"],
+			Overlay: variants["game-tile.overlay"],
+			Density: variants["game-tile.density"],
+		},
+		GameRow: types.ThemeGameRowVariants{
+			Columns: variants["game-row.columns"],
+			Mode:    variants["game-row.mode"],
+		},
 	}
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
@@ -514,6 +524,16 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 		ListRow: types.ThemeListRowVariants{
 			Media:   variants["list-row.media"],
 			Density: variants["list-row.density"],
+		},
+		GameTile: types.ThemeGameTileVariants{
+			Aspect:  variants["game-tile.aspect"],
+			Compat:  variants["game-tile.compat"],
+			Overlay: variants["game-tile.overlay"],
+			Density: variants["game-tile.density"],
+		},
+		GameRow: types.ThemeGameRowVariants{
+			Columns: variants["game-row.columns"],
+			Mode:    variants["game-row.mode"],
 		},
 	}
 	return out

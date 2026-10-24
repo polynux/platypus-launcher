@@ -19,6 +19,12 @@ supports = ["tokens", "variants", "layouts"]
 "empty-state.icon" = "on"
 "list-row.media" = "off"
 "list-row.density" = "compact"
+"game-tile.aspect" = "16:9"
+"game-tile.compat" = "off"
+"game-tile.overlay" = "off"
+"game-tile.density" = "compact"
+"game-row.columns" = "minimal"
+"game-row.mode" = "compact"
 
 [tokens]
 ground = "#0b1118"

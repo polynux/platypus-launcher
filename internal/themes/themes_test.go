@@ -88,8 +88,20 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if cool.Variants.Settings.Presentation != "sheet" || cool.Variants.Settings.Navigation != "tabs" || cool.Variants.Section.Chrome != "framed" {
 		t.Fatalf("cool variants = %v", cool.Variants)
 	}
+	if cool.Variants.GameTile.Aspect != "16:9" || cool.Variants.GameTile.Compat != "off" || cool.Variants.GameTile.Overlay != "off" || cool.Variants.GameTile.Density != "compact" {
+		t.Fatalf("cool game-tile variants = %+v", cool.Variants.GameTile)
+	}
+	if cool.Variants.GameRow.Columns != "minimal" || cool.Variants.GameRow.Mode != "compact" {
+		t.Fatalf("cool game-row variants = %+v", cool.Variants.GameRow)
+	}
 	if def.Variants.Settings.Presentation != "page" || def.Variants.Settings.Navigation != "scroll" || def.Variants.Section.Chrome != "hairline" {
 		t.Fatalf("warm variants = %v", def.Variants)
+	}
+	if def.Variants.GameTile.Aspect != "3:4" || def.Variants.GameTile.Compat != "on" || def.Variants.GameTile.Overlay != "on" || def.Variants.GameTile.Density != "comfortable" {
+		t.Fatalf("warm game-tile variants = %+v", def.Variants.GameTile)
+	}
+	if def.Variants.GameRow.Columns != "full" || def.Variants.GameRow.Mode != "full" {
+		t.Fatalf("warm game-row variants = %+v", def.Variants.GameRow)
 	}
 }
 

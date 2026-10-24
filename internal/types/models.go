@@ -400,6 +400,8 @@ type ThemeVariants struct {
 	ViewHeader ThemeViewHeaderVariants `json:"viewHeader"`
 	EmptyState ThemeEmptyStateVariants `json:"emptyState"`
 	ListRow    ThemeListRowVariants    `json:"listRow"`
+	GameTile   ThemeGameTileVariants   `json:"gameTile"`
+	GameRow    ThemeGameRowVariants    `json:"gameRow"`
 }
 
 type ThemeSettingsVariants struct {
@@ -425,6 +427,22 @@ type ThemeEmptyStateVariants struct {
 type ThemeListRowVariants struct {
 	Media   string `json:"media"`
 	Density string `json:"density"`
+}
+
+// ThemeGameTileVariants is the game tile (issue #98): the Dashboard continue
+// grid and the Library cards share it. Warm keeps today's dashboard tile.
+type ThemeGameTileVariants struct {
+	Aspect  string `json:"aspect"`
+	Compat  string `json:"compat"`
+	Overlay string `json:"overlay"`
+	Density string `json:"density"`
+}
+
+// ThemeGameRowVariants is the game row (issue #98): the Library table and the
+// recent lists share it. Warm keeps today's full table.
+type ThemeGameRowVariants struct {
+	Columns string `json:"columns"`
+	Mode    string `json:"mode"`
 }
 
 type ThemeCatalogEntry struct {

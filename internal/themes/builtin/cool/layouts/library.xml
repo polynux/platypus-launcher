@@ -1,0 +1,22 @@
+<!-- The cool library (issue #98): an invented demo, not a design proposal.
+     Header blocks stay in the main column in a new order; the last-played
+     strip moves to the side column with the activity feed and recent games.
+     Validated against internal/themes/layout.xsd. -->
+<layout view="library" catalog="1.0">
+  <region name="main">
+    <block name="title" />
+    <block name="search" />
+    <block name="mode" />
+    <block name="chips" />
+    <block name="filters" />
+    <block name="warnings" />
+    <block name="empty" />
+    <block name="table" />
+    <block name="all-titles" />
+  </region>
+  <region name="side">
+    <block name="last-played" />
+    <block name="activity" limit="4" />
+    <block name="recent" />
+  </region>
+</layout>

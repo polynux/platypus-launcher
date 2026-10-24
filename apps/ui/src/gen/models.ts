@@ -850,6 +850,18 @@ export namespace types {
     icon: string;
   }
 
+  export interface ThemeGameRowVariants {
+    columns: string;
+    mode: string;
+  }
+
+  export interface ThemeGameTileVariants {
+    aspect: string;
+    compat: string;
+    overlay: string;
+    density: string;
+  }
+
   export interface ThemeInfo {
     id: string;
     name: string;
@@ -902,6 +914,8 @@ export namespace types {
     viewHeader: types.ThemeViewHeaderVariants;
     emptyState: types.ThemeEmptyStateVariants;
     listRow: types.ThemeListRowVariants;
+    gameTile: types.ThemeGameTileVariants;
+    gameRow: types.ThemeGameRowVariants;
   }
 
   export interface ThemeViewHeaderVariants {
