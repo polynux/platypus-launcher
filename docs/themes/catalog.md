@@ -128,7 +128,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | axis | values | default | since | inherits |
 | --- | --- | --- | --- | --- |
 | `presentation` | `dialog`, `sheet`, `page` | `dialog` | `1.0` | `dialog.presentation` |
-| `tabs` | `vertical`, `horizontal` | `vertical` | `1.0` | — |
+| `tabs` | `vertical`, `horizontal`, `accordion` | `vertical` | `1.0` | — |
 
 ## `shell`
 

@@ -21,18 +21,21 @@ interface ModalProps {
   /** false = Esc and click-outside are ignored (e.g. unsaved edits); the owner's own buttons still close. */
   dismissable?: boolean;
   presentation?: 'dialog' | 'sheet';
+  /** A sheet's own width (a CSS length), when it isn't the default 42rem. */
+  sheetWidth?: string;
   children: React.ReactNode;
 }
 
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`. */
-export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', children }: ModalProps) {
+export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, children }: ModalProps) {
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         label={label}
         sheet={presentation === 'sheet'}
+        sheetWidth={sheetWidth}
         className={cn(MODAL_SIZES[size], className)}
         onEscapeKeyDown={(e) => !dismissable && e.preventDefault()}
         onInteractOutside={(e) => !dismissable && e.preventDefault()}

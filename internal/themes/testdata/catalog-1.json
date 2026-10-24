@@ -250,7 +250,8 @@
           "name": "tabs",
           "values": [
             "vertical",
-            "horizontal"
+            "horizontal",
+            "accordion"
           ],
           "default": "vertical",
           "since": "1.0"
