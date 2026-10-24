@@ -13,10 +13,10 @@ import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, themeVariabl
 const warm: ThemeTokens = {
   id: 'warm',
   tokens: {
-    ground: '#130f0a', raised: '#191410', surface: 'rgba(255, 255, 255, 0.06)', 'surface-strong': 'rgba(255, 255, 255, 0.1)',
-    hairline: 'rgba(255, 255, 255, 0.07)', text: '#ece6da', 'text-body': '#a8a29e', 'text-muted': 'rgba(255, 255, 255, 0.55)',
-    'text-faint': '#78716c', accent: '#fbbf24', 'accent-strong': '#fcd34d', 'on-accent': '#130f0a', ok: '#34d399',
-    attention: '#fb923c', info: '#7dd3fc', dl: '#a78bfa', danger: '#f87171', focus: 'rgba(252, 211, 77, 0.8)',
+    ground: '#130f0a', raised: '#191410', surface: 'rgba(255, 255, 255, 0.045)', 'surface-strong': 'rgba(255, 255, 255, 0.06)',
+    hairline: 'rgba(255, 255, 255, 0.07)', text: 'rgba(255, 255, 255, 0.9)', 'text-body': 'rgba(255, 255, 255, 0.7)', 'text-muted': 'rgba(255, 255, 255, 0.55)',
+    'text-faint': '#78716c', accent: 'oklch(82.8% 0.189 84.429)', 'accent-strong': 'oklch(87.9% 0.169 91.605)', 'on-accent': '#130f0a', ok: 'oklch(76.5% 0.177 163.223)',
+    attention: 'oklch(75% 0.183 55.934)', info: 'oklch(82.8% 0.111 230.318)', dl: 'oklch(70.2% 0.183 293.541)', danger: 'oklch(63.7% 0.237 25.331)', focus: 'oklch(87.9% 0.169 91.605)',
     'radius-chip': '0.75rem', 'radius-card': '1rem', 'radius-panel': '1.5rem',
     'font-sans': '"Hanken Grotesk", system-ui, sans-serif', 'font-mono': '"JetBrains Mono", ui-monospace, monospace',
   },
@@ -46,11 +46,11 @@ describe('theme variables', () => {
     const v = themeVariables(warm);
     expect(v['--color-ground']).toBe('#130f0a');
     expect(v['--background']).toBe('#130f0a');
-    expect(v['--primary']).toBe('#fbbf24');
-    expect(v['--color-accent']).toBe('#fbbf24');
+    expect(v['--primary']).toBe('oklch(82.8% 0.189 84.429)');
+    expect(v['--color-accent']).toBe('oklch(82.8% 0.189 84.429)');
     expect(v['--muted-foreground']).toBe('rgba(255, 255, 255, 0.55)');
-    expect(v['--ring']).toBe('rgba(252, 211, 77, 0.8)');
-    expect(v['--destructive']).toBe('#f87171');
+    expect(v['--ring']).toBe('oklch(87.9% 0.169 91.605)');
+    expect(v['--destructive']).toBe('oklch(63.7% 0.237 25.331)');
   });
 
   it('maps the radius tokens onto the classes Tailwind compiles rounded-xl/2xl/3xl to', () => {
@@ -74,6 +74,16 @@ describe('theme variables', () => {
     const css = readFileSync(path.join(__dirname, '../style.css'), 'utf8');
     const decl = /--app-wash:\s*([^;]+);/.exec(css)?.[1] ?? '';
     expect(decl.replace(/\s+/g, ' ').trim()).toBe(washImage(warm.wash));
+  });
+
+  it('keeps the warm theme colors equal to style.css defaults', () => {
+    const css = readFileSync(path.join(__dirname, '../style.css'), 'utf8');
+    const toml = readFileSync(path.join(__dirname, '../../../../internal/themes/builtin/warm/theme.toml'), 'utf8');
+    for (const token of ['ground', 'raised', 'surface', 'surface-strong', 'hairline', 'text', 'text-body', 'text-muted', 'text-faint', 'accent', 'accent-strong', 'on-accent', 'ok', 'attention', 'info', 'dl', 'danger', 'focus']) {
+      const cssValue = new RegExp(`--color-${token}:\\s*([^;]+);`).exec(css)?.[1].trim();
+      const tomlValue = new RegExp(`^${token}\\s*=\\s*"([^"]+)"`, 'm').exec(toml)?.[1];
+      expect(cssValue, `style.css ${token}`).toBe(tomlValue);
+    }
   });
 
   // The amber ramp is derived from the accent. For the warm accent it must
@@ -107,7 +117,7 @@ describe('theme variables', () => {
 describe('applying a theme', () => {
   it('sets the variables on :root, and a second apply restyles them', () => {
     applyTheme(warm);
-    expect(root().getPropertyValue('--color-accent')).toBe('#fbbf24');
+    expect(root().getPropertyValue('--color-accent')).toBe('oklch(82.8% 0.189 84.429)');
     applyTheme(cool);
     expect(root().getPropertyValue('--color-accent')).toBe('#7dd3fc');
     expect(root().getPropertyValue('--radius-xl')).toBe('0.5rem');
@@ -138,6 +148,6 @@ describe('applying a theme', () => {
       throw new TypeError('getTheme is not a function');
     });
     await expect(loadTheme()).resolves.toBeUndefined();
-    expect(root().getPropertyValue('--color-accent')).toBe('#fbbf24');
+    expect(root().getPropertyValue('--color-accent')).toBe('oklch(82.8% 0.189 84.429)');
   });
 });

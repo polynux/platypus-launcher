@@ -20,7 +20,7 @@ const TOKEN_VARS: Record<string, string[]> = {
   surface: ['--color-surface', '--secondary', '--muted'],
   'surface-strong': ['--color-surface-strong'],
   hairline: ['--color-hairline', '--border', '--input'],
-  text: ['--color-text', '--foreground', '--card-foreground', '--popover-foreground'],
+  text: ['--color-text', '--card-foreground', '--popover-foreground'],
   'text-body': ['--color-text-body'],
   'text-muted': ['--color-text-muted', '--muted-foreground'],
   'text-faint': ['--color-text-faint'],
@@ -40,22 +40,22 @@ const TOKEN_VARS: Record<string, string[]> = {
   'font-mono': ['--font-mono'],
 };
 
-/** Tailwind 4's amber ramp as offsets from the accent (amber-400, #fbbf24):
+/** Tailwind 4's amber ramp as exact offsets from the accent (amber-400):
  *  [step, lightness, chroma factor, hue]. Each step is `oklch(from accent …)`,
  *  so an alternate accent brings its own ramp. For the warm accent the steps
  *  are Tailwind's amber. */
 const AMBER_RAMP: [number, number, number, number][] = [
-  [50, 0.159, 0.116, 10.85],
-  [100, 0.134, 0.312, 11.19],
-  [200, 0.096, 0.635, 11.32],
-  [300, 0.051, 0.894, 7.18],
+  [50, 0.159, 0.1164021164, 10.848],
+  [100, 0.134, 0.3121693122, 11.188],
+  [200, 0.096, 0.6349206349, 11.317],
+  [300, 0.051, 0.8941798942, 7.176],
   [400, 0, 1, 0],
-  [500, -0.059, 0.995, -14.35],
-  [600, -0.162, 0.947, -26.11],
-  [700, -0.273, 0.862, -35.43],
-  [800, -0.355, 0.725, -38.23],
-  [900, -0.414, 0.593, -38.53],
-  [950, -0.549, 0.407, -38.79],
+  [500, -0.059, 0.9947089947, -14.349],
+  [600, -0.162, 0.9470899471, -26.111],
+  [700, -0.273, 0.8624338624, -35.431],
+  [800, -0.355, 0.7248677249, -38.228],
+  [900, -0.414, 0.5925925926, -38.525],
+  [950, -0.549, 0.4074074074, -38.794],
 ];
 
 /** `calc(l + 0.051)`, or `calc(l - 0.059)`: a signed offset of a channel. */

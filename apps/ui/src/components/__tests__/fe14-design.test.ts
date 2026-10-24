@@ -56,8 +56,8 @@ describe('FE-14 design drift guards', () => {
     for (const token of [
       '--color-surface:', '--color-surface-strong:', '--color-hairline:',
       '--color-text-muted:', '--color-danger:', '--color-focus:',
-      '--radius-chip:', '--radius-card:', '--radius-panel:',
     ]) expect(css).toContain(token);
+    for (const token of ['--radius-chip:', '--radius-card:', '--radius-panel:']) expect(css).not.toContain(token);
   });
 
   it('does not reintroduce migrated raw palette classes', () => {

@@ -73,7 +73,7 @@ func TestDefaultSetsEveryToken(t *testing.T) {
 
 func TestResolveDefaultsAndPicked(t *testing.T) {
 	def := Resolve("")
-	if def.ID != DefaultID || def.Tokens["accent"] != "#fbbf24" {
+	if def.ID != DefaultID || def.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
 		t.Fatalf("Resolve(\"\") = %s %q, want the warm default", def.ID, def.Tokens["accent"])
 	}
 	if got := Resolve("missing"); got.ID != DefaultID {
@@ -244,14 +244,14 @@ func resolveSrc(t *testing.T, src string) (types.ThemeTokens, Theme) {
 
 func TestNewerSchemaFallsBackToDefault(t *testing.T) {
 	src := strings.Replace(minimal, "schema = 1", "schema = 2", 1)
-	if got, _ := resolveSrc(t, src); got.ID != DefaultID || got.Tokens["accent"] != "#fbbf24" {
+	if got, _ := resolveSrc(t, src); got.ID != DefaultID || got.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
 		t.Fatalf("a newer theme was applied: %s %q", got.ID, got.Tokens["accent"])
 	}
 }
 
 func TestUnsupportedTokensLevelKeepsDefault(t *testing.T) {
 	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["layouts"]`, 1)
-	if got, _ := resolveSrc(t, src); got.ID != DefaultID || got.Tokens["accent"] != "#fbbf24" {
+	if got, _ := resolveSrc(t, src); got.ID != DefaultID || got.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
 		t.Fatalf("tokens applied without the tokens level: %s %q", got.ID, got.Tokens["accent"])
 	}
 }
