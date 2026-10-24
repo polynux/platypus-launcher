@@ -1,11 +1,13 @@
 // The app shell as a view (issue #104, ADR 0002 answer 4). The shell has one
-// region per shell.navigation value (catalog shell.sidebar, shell.topbar):
-// the sidebar's parts (inventory §1.2) are blocks each region arranges. The
-// sidebar region is the Sidebar itself, unchanged; the topbar region lays the
-// same blocks out in two rows, with the Tools items in a menu.
-import React, { useState } from 'react';
+// region per shell.navigation value (catalog shell.sidebar, shell.topbar,
+// shell.sourcebar for atlas in #125): the sidebar's parts (inventory §1.2)
+// are blocks each region arranges. The sidebar region is the Sidebar itself,
+// unchanged; the topbar region lays the same blocks out in two rows, with the
+// Tools items in a menu; the sourcebar region is the /21 chrome (D21.jsx):
+// a 44px top bar, a 48px source bar and a 28px activity footer.
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Search, Settings, Square, Ticket } from 'lucide-react';
+import { ArrowDownToLine, ChevronDown, CircleAlert, HardDrive, LibraryBig, Plus, Search, Settings, Square, Ticket } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
@@ -16,11 +18,27 @@ import { FriendsSummary } from './FriendsSummary';
 import { PluginLogo } from './PluginLogo';
 import { Sidebar } from './Sidebar';
 import { useVariant } from '../lib/theme';
-import type { Collection, SessionEvent, SocialView, StoreType, View } from '../types';
+import type { Collection, Job, SessionEvent, SocialView, StoreType, View } from '../types';
+import type { Ownership } from './LibraryView';
 
 type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'storage' | 'settings';
 
-type ShellProps = Parameters<typeof Sidebar>[0];
+type SidebarProps = Parameters<typeof Sidebar>[0];
+
+interface ShellProps extends SidebarProps {
+  /** Library ownership for the sourcebar All/Installed tabs. */
+  ownership?: Ownership;
+  onOwnership?: (o: Ownership) => void;
+  /** Every game the library holds (for the All count). Defaults to gameCount. */
+  ownedCount?: number;
+  /** Selected stores for the sourcebar (empty = all). Single-select writes through to onPickSource. */
+  storeSelection?: StoreType[];
+  onSelectStores?: (s: StoreType[]) => void;
+  /** Queued or running jobs for the sourcebar Downloads tab and the activity footer. */
+  jobs?: Job[];
+  /** When each session started (ms epoch), for the footer's elapsed time. */
+  sessionStartedAt?: Record<string, number>;
+}
 
 const SOURCES: { key: StoreType; label: string }[] = [
   { key: 'steam', label: 'Steam' },
@@ -32,6 +50,7 @@ type NavItem = { key: NavKey; label: string; count?: number; dot?: boolean };
 
 export function Shell(p: ShellProps) {
   const navigation = useVariant('shell.navigation');
+  if (navigation === 'sourcebar') return <SourcebarChrome {...p} />;
   if (navigation === 'topbar') return <Topbar {...p} />;
   return <Sidebar {...p} />;
 }
@@ -266,5 +285,268 @@ function Topbar(p: ShellProps) {
         </div>
       </div>
     </header>
+  );
+}
+
+// The /21 Atlas chrome (issue #125, D21.jsx `.tb`, `.sources`, `.tele`). The
+// grid rows are 44px, 48px, 1fr and 28px: the top bar and source bar render
+// here, the 1fr body is App's main, and the 28px footer renders after it
+// (SourceFooter). Library and game views stay as they are inside the new
+// shell (#126, #127 come later).
+function SourcebarChrome(p: ShellProps) {
+  const { t } = useTranslation(['nav', 'common']);
+  const ownership = p.ownership ?? 'installed';
+  const selection = p.storeSelection ?? [];
+  const selectStores = p.onSelectStores ?? (() => {});
+  const ownedCount = p.ownedCount ?? p.gameCount;
+  const jobs = p.jobs ?? [];
+  const downloadCount = p.downloadCount;
+  const active: NavKey | 'store' =
+    p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
+  const goLibrary = (o: Ownership) => {
+    p.onOwnership?.(o);
+    selectStores([]);
+    if (p.view.name !== 'library') p.onNavigate({ name: 'library' });
+  };
+  const pickStore = (s: StoreType, shift: boolean) => {
+    if (shift) {
+      const next = selection.includes(s) ? selection.filter((x) => x !== s) : [...selection, s];
+      selectStores(next);
+    } else {
+      selectStores(selection.length === 1 && selection[0] === s ? [] : [s]);
+    }
+    if (p.view.name !== 'library') p.onNavigate({ name: 'library' });
+  };
+
+  const viewTabs: { id: 'all' | 'installed' | 'downloads' | 'attention'; label: string; count?: number; warn?: boolean; progress?: number }[] = [
+    { id: 'all', label: t('nav:sourcebar.all'), count: ownedCount },
+    { id: 'installed', label: t('nav:sourcebar.installed'), count: p.gameCount },
+    {
+      id: 'downloads',
+      label: t('nav:sourcebar.downloads'),
+      count: downloadCount,
+      progress: jobs.length > 0 && jobs[0].percent >= 0 ? jobs[0].percent / 100 : undefined,
+    },
+    { id: 'attention', label: t('nav:sourcebar.attention'), count: p.fixCount, warn: p.fixCount > 0 },
+  ];
+  const isViewOn = (id: string) => {
+    if (id === 'all') return p.view.name === 'library' && ownership === 'owned' && selection.length === 0;
+    if (id === 'installed') return p.view.name === 'library' && ownership === 'installed' && selection.length === 0;
+    if (id === 'downloads') return p.view.name === 'downloads';
+    return p.view.name === 'fixes';
+  };
+  const onViewTab = (id: string) => {
+    if (id === 'all') goLibrary('owned');
+    else if (id === 'installed') goLibrary('installed');
+    else if (id === 'downloads') p.onNavigate({ name: 'downloads' });
+    else p.onNavigate({ name: 'fixes' });
+  };
+  const viewIcon = (id: string) => {
+    if (id === 'all') return LibraryBig;
+    if (id === 'installed') return HardDrive;
+    if (id === 'downloads') return ArrowDownToLine;
+    return CircleAlert;
+  };
+  // Stores with games, like the sidebar's Sources rows: the known storefronts
+  // first, then anything a plugin reported, then sideloaded games.
+  const storeTabs = [
+    ...SOURCES.filter((s) => (p.storeCounts[s.key] ?? 0) > 0),
+    ...Object.keys(p.storeCounts)
+      .filter((k) => k !== 'custom' && !SOURCES.some((s) => s.key === k) && (p.storeCounts[k] ?? 0) > 0)
+      .map((k) => ({ key: k as StoreType, label: storeLabel(k) })),
+    ...((p.storeCounts.custom ?? 0) > 0 ? [{ key: 'custom' as StoreType, label: t('nav:sideloaded') }] : []),
+  ];
+
+  return (
+    <div data-region="sourcebar" className="flex-none text-[13.5px]">
+      {/* Top bar (44px): the brand mark in the accent, a centred command button,
+          and the game colour slot (#123) plus the places menu at the right. */}
+      <header className="grid h-[44px] grid-cols-[1fr_minmax(280px,520px)_1fr] items-center bg-ground px-3.5">
+        <div className="flex items-center gap-2.5 font-bold text-[14.5px] text-text">
+          <span aria-hidden className="grid size-6 place-items-center rounded-xl bg-accent text-[13px] font-extrabold text-on-accent">P</span>
+          <span>Platypus</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('platypus:command-palette'))}
+          className="flex h-[30px] items-center gap-2.5 rounded-xl bg-surface px-1.5 pl-3 text-left text-text-faint transition hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Search className="h-3.5 w-3.5" aria-hidden />
+          <span className="flex-1 text-left text-[13px]">{t('nav:sourcebar.searchOrCommand')}</span>
+          <kbd className="rounded-md border border-hairline px-1.5 font-mono text-hint text-text-faint">Ctrl K</kbd>
+        </button>
+        <div className="flex items-center justify-end gap-2">
+          {/* Game colour switch (#123) renders here when a theme supports it. */}
+          <PlacesMenu p={p} active={active} />
+        </div>
+      </header>
+      {/* Source bar (48px): library views with counts, a separator, then one
+          tab per store with its game count. Shift-click combines stores. */}
+      <nav aria-label={t('nav:main')} className="flex h-12 items-center gap-1 border-y border-hairline bg-raised px-3">
+        {viewTabs.map((v) => {
+          const Icon = viewIcon(v.id);
+          const on = isViewOn(v.id);
+          return (
+            <button
+              key={v.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onViewTab(v.id)}
+              className={cx(
+                'relative inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                on ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
+              )}
+            >
+              <Icon className="h-[15px] w-[15px]" aria-hidden />
+              {v.label}
+              {v.progress != null ? (
+                <span
+                  role="progressbar"
+                  aria-valuenow={Math.round(v.progress * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${v.label} ${Math.round(v.progress * 100)}%`}
+                  className="h-1 w-7 overflow-hidden rounded-full bg-hairline"
+                >
+                  <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round(v.progress * 100)}%` }} />
+                </span>
+              ) : (
+                <span className={cx('font-medium tabular-nums text-[12px]', v.warn ? 'rounded-lg bg-danger px-1.5 font-bold text-on-accent' : 'text-text-faint')}>{v.count ?? 0}</span>
+              )}
+              {on && <span aria-hidden className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-accent" />}
+            </button>
+          );
+        })}
+        <span aria-hidden className="mx-2 h-[22px] w-px flex-none bg-hairline" />
+        <div
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{ maskImage: 'linear-gradient(to right, black calc(100% - 24px), transparent)' }}
+        >
+          {storeTabs.map((s) => {
+            const on = selection.includes(s.key);
+            return (
+              <button
+                key={s.key}
+                type="button"
+                aria-pressed={on}
+                title={t('nav:sourcebar.shiftHint')}
+                onClick={(e) => pickStore(s.key, e.shiftKey)}
+                className={cx(
+                  'relative inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  on ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
+                )}
+              >
+                <PluginLogo src={p.sourceLogos?.[s.key]} name={s.label} size="xs" />
+                {s.label}
+                <span className="font-medium tabular-nums text-[12px] text-text-faint">{p.storeCounts[s.key] ?? 0}</span>
+                {on && <span aria-hidden className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-accent" />}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => p.onNavigate({ name: 'plugins' })}
+            className="inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-medium text-text-faint transition hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            {t('nav:sourcebar.addStore')}
+          </button>
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) {
+  const { t } = useTranslation(['nav', 'chat']);
+  const [open, setOpen] = useState(false);
+  const items: { key: string; label: string; onSelect: () => void; current?: boolean }[] = [
+    { key: 'dashboard', label: t('nav:dashboard'), onSelect: () => p.onNavigate({ name: 'dashboard' }), current: active === 'dashboard' },
+    { key: 'storage', label: t('nav:storage'), onSelect: () => p.onNavigate({ name: 'storage' }), current: active === 'storage' },
+    { key: 'plugins', label: t('nav:plugins'), onSelect: () => p.onNavigate({ name: 'plugins' }), current: active === 'plugins' },
+    {
+      key: 'settings',
+      label: t('nav:settings'),
+      onSelect: () => (p.onSettingsOpen ? p.onSettingsOpen() : p.onNavigate({ name: 'settings' })),
+      current: active === 'settings',
+    },
+    { key: 'activity', label: t('nav:activity'), onSelect: () => p.onNavigate({ name: 'activity' }), current: active === 'activity' },
+    { key: 'runners', label: t('nav:runners'), onSelect: () => p.onNavigate({ name: 'runners' }), current: active === 'runners' },
+    { key: 'friends', label: t('nav:sourcebar.friends'), onSelect: () => p.onOpenFriends() },
+    { key: 'chat', label: t('nav:sourcebar.chat'), onSelect: () => p.onOpenFriends() },
+  ];
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('nav:sourcebar.places')}
+          className="grid size-8 place-items-center rounded-xl text-text-body transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <Settings className="h-4 w-4" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="bottom" align="end">
+        {items.map((n) => (
+          <DropdownMenuItem key={n.key} asChild onSelect={n.onSelect}>
+            <button aria-current={n.current ? 'page' : undefined} className={cx(n.current && 'text-accent-strong')}>
+              <span>{n.label}</span>
+            </button>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Ticks once a second while mounted, so the footer elapsed time stays live. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+function formatElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
+// The activity footer (28px, D21 `.tele`): the running game with its elapsed
+// time, plus one item per job with its percentage and a 2px progress line.
+export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionStartedAt'>) {
+  const { t } = useTranslation('nav');
+  const now = useNow();
+  const sessions = p.sessions ?? [];
+  const jobs = (p.jobs ?? []).filter((j) => j.state === 'queued' || j.state === 'running');
+  if (sessions.length === 0 && jobs.length === 0) {
+    return <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch border-t border-hairline bg-ground text-[12px] text-text-faint" />;
+  }
+  return (
+    <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch overflow-hidden whitespace-nowrap border-t border-hairline bg-ground text-[12px] text-text-faint">
+      {sessions.map((e) => {
+        const started = p.sessionStartedAt?.[e.game_id];
+        return (
+          <span key={e.game_id} className="relative inline-flex items-center gap-2 border-r border-hairline px-3.5">
+            <span aria-hidden className="size-[7px] rounded-full bg-ok" />
+            <span className="font-semibold text-text">{(e as SessionEvent & { title: string }).title}</span>
+            {started != null && <b className="font-medium tabular-nums text-text">{formatElapsed(now - started)}</b>}
+          </span>
+        );
+      })}
+      {jobs.map((j) => {
+        const pct = j.percent >= 0 ? Math.round(j.percent) : 0;
+        return (
+          <span key={j.id} className="relative inline-flex items-center gap-2 border-r border-hairline px-3.5">
+            {j.title}
+            <b className="font-medium tabular-nums text-text">{pct}%</b>
+            <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-accent opacity-70" style={{ width: `${pct}%` }} />
+          </span>
+        );
+      })}
+    </footer>
   );
 }

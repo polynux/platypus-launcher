@@ -60,7 +60,7 @@ var (
 // bundledFonts are the families the app ships (style.css @font-face): the only
 // names a font token may use. genericFonts are the fallbacks it may end with.
 var (
-	bundledFonts = []string{"Hanken Grotesk", "JetBrains Mono"}
+	bundledFonts = []string{"Hanken Grotesk", "JetBrains Mono", "Albert Sans Variable", "Geist Mono Variable"}
 	genericFonts = []string{"system-ui", "ui-sans-serif", "sans-serif", "serif", "ui-monospace", "monospace"}
 )
 

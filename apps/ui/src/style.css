@@ -5,6 +5,8 @@
 @import "@fontsource/hanken-grotesk/latin-800.css";
 @import "@fontsource/jetbrains-mono/latin-400.css";
 @import "@fontsource/jetbrains-mono/latin-700.css";
+@import "@fontsource-variable/albert-sans";
+@import "@fontsource-variable/geist-mono";
 @import "tailwindcss";
 
 @theme {

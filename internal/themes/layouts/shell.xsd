@@ -22,6 +22,7 @@
               <xs:simpleType>
                 <xs:restriction base="xs:string">
                   <xs:enumeration value="sidebar" />
+                  <xs:enumeration value="sourcebar" />
                   <xs:enumeration value="topbar" />
                 </xs:restriction>
               </xs:simpleType>

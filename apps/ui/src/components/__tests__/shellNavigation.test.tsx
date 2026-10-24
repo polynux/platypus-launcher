@@ -182,3 +182,156 @@ describe('shell navigation variants', () => {
     await i18n.changeLanguage('en');
   });
 });
+
+describe('sourcebar shell variant (issue #125)', () => {
+  const sourcebarProps = {
+    ...baseProps,
+    ownership: 'installed' as const,
+    onOwnership: () => {},
+    ownedCount: 10,
+    storeSelection: [] as string[],
+    onSelectStores: () => {},
+    jobs: [],
+    sessionStartedAt: {},
+  };
+
+  it('renders the /21 chrome: top bar, source bar and footer region, axe clean', async () => {
+    shellState.navigation = 'sourcebar';
+    const { container } = render(<Shell {...sourcebarProps} view={{ name: 'library' }} storeCounts={{ steam: 4, gog: 2 }} />);
+    expect(container.querySelector('[data-region="sourcebar"]')).toBeTruthy();
+    expect(container.querySelector('[data-region="sidebar"]')).toBeNull();
+    expect(container.querySelector('[data-region="topbar"]')).toBeNull();
+    // Top bar: brand and command button.
+    expect(screen.getByText('Platypus')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Search or run a command/ })).toBeInTheDocument();
+    // Source bar: library views with counts.
+    expect(screen.getByRole('button', { name: /All/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Installed/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Downloads/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Needs attention/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Add store/ })).toBeInTheDocument();
+    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('dispatches the command palette event from the search button', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const seen: string[] = [];
+    const onPalette = () => seen.push('palette');
+    window.addEventListener('platypus:command-palette', onPalette);
+    try {
+      render(<Shell {...sourcebarProps} view={{ name: 'library' }} />);
+      await user.click(screen.getByRole('button', { name: /Search or run a command/ }));
+      expect(seen).toEqual(['palette']);
+    } finally {
+      window.removeEventListener('platypus:command-palette', onPalette);
+    }
+  });
+
+  it('keeps every place reachable through the source bar and places menu', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const navigated: string[] = [];
+    let friendsOpened = 0;
+    let settingsOpened = 0;
+    render(
+      <Shell
+        {...sourcebarProps}
+        view={{ name: 'library' }}
+        onNavigate={(v: { name: string }) => navigated.push(v.name)}
+        onOpenFriends={() => { friendsOpened += 1; }}
+        onSettingsOpen={() => { settingsOpened += 1; }}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: /^Downloads/ }));
+    await user.click(screen.getByRole('button', { name: /Needs attention/ }));
+    expect(navigated).toEqual(['downloads', 'fixes']);
+    await user.click(screen.getByRole('button', { name: 'Places' }));
+    for (const name of ['Dashboard', 'Storage', 'Plugins', 'Activity', 'Runners', 'Friends', 'Chat']) {
+      expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
+    }
+    await user.click(screen.getByRole('menuitem', { name: 'Dashboard' }));
+    expect(navigated).toContain('dashboard');
+    await user.click(screen.getByRole('button', { name: 'Places' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Friends' }));
+    expect(friendsOpened).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'Places' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Settings' }));
+    expect(settingsOpened).toBe(1);
+  });
+
+  it('selects one store on click and combines on shift-click', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const selected: string[][] = [];
+    render(
+      <Shell
+        {...sourcebarProps}
+        view={{ name: 'library' }}
+        storeCounts={{ steam: 4, gog: 2 }}
+        storeSelection={['steam']}
+        onSelectStores={(s) => selected.push([...s])}
+      />
+    );
+    const steam = screen.getByRole('button', { name: /Steam/ });
+    expect(steam).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: /GOG/ }));
+    expect(selected.at(-1)).toEqual(['gog']);
+    await user.keyboard('{Shift>}');
+    await user.click(screen.getByRole('button', { name: /GOG/ }));
+    await user.keyboard('{/Shift}');
+    expect(selected.at(-1)).toEqual(['steam', 'gog']);
+  });
+
+  it('marks the active tab with a 2px accent underline', async () => {
+    shellState.navigation = 'sourcebar';
+    render(<Shell {...sourcebarProps} view={{ name: 'downloads' }} downloadCount={2} />);
+    const tab = screen.getByRole('button', { name: /^Downloads/ });
+    expect(tab).toHaveAttribute('aria-pressed', 'true');
+    expect(tab.querySelector('.bg-accent')).toBeTruthy();
+  });
+
+  it('shows a progress bar on Downloads and a red count on Needs attention', async () => {
+    shellState.navigation = 'sourcebar';
+    render(
+      <Shell
+        {...sourcebarProps}
+        view={{ name: 'library' }}
+        downloadCount={1}
+        fixCount={3}
+        jobs={[{ id: 'j1', kind: 'download', source: 'steam', game_id: 'g1', store_game_id: 'g1', title: 'Game', state: 'running', bytes: 50, total: 100, speed: 1, percent: 50, attempts: 1, created_at: 0, updated_at: 0 }]}
+      />
+    );
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
+    expect(screen.getByRole('button', { name: /Needs attention/ }).querySelector('.bg-danger')).toBeTruthy();
+  });
+
+  it('Add store opens Plugins', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const navigated: string[] = [];
+    render(<Shell {...sourcebarProps} view={{ name: 'library' }} onNavigate={(v: { name: string }) => navigated.push(v.name)} />);
+    await user.click(screen.getByRole('button', { name: /Add store/ }));
+    expect(navigated).toEqual(['plugins']);
+  });
+});
+
+describe('sourcebar activity footer (issue #125)', () => {
+  it('shows the running game with elapsed time and jobs with progress lines', async () => {
+    const { SourceFooter } = await import('../Shell');
+    shellState.navigation = 'sourcebar';
+    const startedAt = Date.now() - 65_000;
+    const { container } = render(
+      <SourceFooter
+        sessions={[{ game_id: 'g1', state: 'running', title: 'Game One' } as never]}
+        jobs={[{ id: 'j1', kind: 'install', source: 'steam', game_id: 'g2', store_game_id: 'g2', title: 'Game Two', state: 'running', bytes: 25, total: 100, speed: 1, percent: 25, attempts: 1, created_at: 0, updated_at: 0 }]}
+        sessionStartedAt={{ g1: startedAt }}
+      />
+    );
+    expect(container.querySelector('[data-region="sourcebar-footer"]')).toBeTruthy();
+    expect(screen.getByText('Game One')).toBeInTheDocument();
+    expect(screen.getByText('Game Two')).toBeInTheDocument();
+    expect(screen.getByText('25%')).toBeInTheDocument();
+    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+});

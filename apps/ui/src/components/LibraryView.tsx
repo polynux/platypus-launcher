@@ -42,6 +42,9 @@ interface LibraryProps {
   onSearch: (q: string) => void;
   source: StoreType | 'all';
   onSource: (s: StoreType | 'all') => void;
+  /** Multi-store selection for the sourcebar (issue #125): empty = every
+      store. When defined, it replaces the single source above. */
+  storeSelection?: StoreType[];
   mode: LibraryMode;
   onMode: (m: LibraryMode) => void;
   ownership: Ownership;
@@ -301,19 +304,23 @@ export function LibraryView(p: LibraryProps) {
   const sources = useMemo(() => sourceChips(p.games), [p.games]);
   // A store can drop to zero games (logout, uninstall) while selected: its chip is gone, so show all.
   const source = sources.includes(p.source) ? p.source : 'all';
+  // The sourcebar selects any number of stores (empty = all): when it names
+  // stores, they replace the single source above. A selected store with no
+  // games shows nothing, so it stays selected instead of falling back.
+  const multi = p.storeSelection;
   const filtered = useMemo(
     () =>
       p.games.filter(
         (g) =>
           (p.ownership === 'owned' || g.is_installed) &&
-          (source === 'all' || g.store === source) &&
+          (multi !== undefined ? multi.length === 0 || multi.includes(g.store) : source === 'all' || g.store === source) &&
           (lendingFilter === 'all' || g.shared_by != null) &&
           (tier === 'all' || tierFilterValue(g) === tier) &&
           (statusFilter === 'all' || (statusFilter === 'none' ? !g.status : g.status === statusFilter)) &&
           (!inCollection || inCollection(g)) &&
           g.title.toLowerCase().includes(q)
       ),
-    [p.games, p.ownership, source, lendingFilter, tier, statusFilter, inCollection, q]
+    [p.games, p.ownership, source, multi, lendingFilter, tier, statusFilter, inCollection, q]
   );
   // A manual collection's games that left the library: listed, not shown as cards.
   const missing = useMemo(() => (activeCollection && !activeCollection.smart ? missingNames(activeCollection, p.games) : []), [activeCollection, p.games]);

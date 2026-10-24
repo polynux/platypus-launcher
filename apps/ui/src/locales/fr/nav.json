@@ -37,5 +37,17 @@
   "notFound": "introuvable",
   "goneDetail": "Ce jeu n'est plus dans la bibliothèque. Une actualisation l'a peut-être retiré.",
   "tagline": "centre de jeux",
-  "main": "Principal"
+  "main": "Principal",
+  "sourcebar": {
+    "searchOrCommand": "Rechercher ou lancer une commande",
+    "places": "Lieux",
+    "all": "Tous",
+    "installed": "Installés",
+    "downloads": "Téléchargements",
+    "attention": "À surveiller",
+    "addStore": "Ajouter une boutique",
+    "friends": "Amis",
+    "chat": "Discussion",
+    "shiftHint": "Maj-clic pour combiner les boutiques"
+  }
 }

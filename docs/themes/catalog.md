@@ -136,7 +136,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 
 | axis | values | default | since | inherits |
 | --- | --- | --- | --- | --- |
-| `navigation` | `sidebar`, `topbar` | `sidebar` | `1.0` | — |
+| `navigation` | `sidebar`, `topbar`, `sourcebar` | `sidebar` | `1.0` | — |
 
 ## `shell.sidebar`
 
@@ -144,6 +144,11 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - kind: `region`
 
 ## `shell.topbar`
+
+- since: `1.0`
+- kind: `region`
+
+## `shell.sourcebar`
 
 - since: `1.0`
 - kind: `region`

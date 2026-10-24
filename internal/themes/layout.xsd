@@ -27,6 +27,7 @@
                   <xs:enumeration value="main" />
                   <xs:enumeration value="side" />
                   <xs:enumeration value="sidebar" />
+                  <xs:enumeration value="sourcebar" />
                   <xs:enumeration value="top" />
                   <xs:enumeration value="topbar" />
                 </xs:restriction>
