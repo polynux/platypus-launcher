@@ -9,6 +9,8 @@ import (
 )
 
 // minimal is a valid theme that sets one token, so tests can add lines to it.
+// Its accent has to be light enough for the on-accent it inherits, or the
+// contrast check would warn.
 const minimal = `
 [theme]
 id = "test"
@@ -17,7 +19,7 @@ schema = 1
 supports = ["tokens"]
 
 [tokens]
-accent = "#112233"
+accent = "#7dd3fc"
 `
 
 func parse(t *testing.T, src string) Theme {
@@ -93,7 +95,7 @@ func TestValidThemeResolvesItsTokens(t *testing.T) {
 	if th.Info.Name != "Test" || th.Info.Schema != 1 || !slices.Equal(th.Info.Supports, []string{"tokens"}) {
 		t.Fatalf("info = %+v", th.Info)
 	}
-	if th.Tokens["accent"] != "#112233" {
+	if th.Tokens["accent"] != "#7dd3fc" {
 		t.Fatalf("accent = %q", th.Tokens["accent"])
 	}
 }
