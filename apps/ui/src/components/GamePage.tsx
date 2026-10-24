@@ -607,6 +607,7 @@ export function GamePage(p: GamePageProps) {
             compatText={compat}
             facts={facts}
             onOpenRunner={() => setSettingsTab('general')}
+            onOpenSettings={() => setSettingsTab('general')}
           />
           {!settingsPage && settingsModal}
           {installTo && plugin && (

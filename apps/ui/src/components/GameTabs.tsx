@@ -6,6 +6,7 @@
 //
 // Data stays with the page: every block takes props only (the hooks live in
 // GamePage), so the tabs re-arrange blocks without forking data loading.
+import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
@@ -95,6 +96,8 @@ export interface GameTabsData {
   compatText: string;
   facts: [string, string][];
   onOpenRunner: () => void;
+  /** Opens the game settings (the drawer in atlas). */
+  onOpenSettings: () => void;
 }
 
 /** Ticks once a second while mounted, so the strip elapsed time stays live. */
@@ -327,6 +330,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
         <span className="relative">
           <button
             type="button"
+            data-tune-anchor
             aria-expanded={tuneOpen}
             aria-haspopup="dialog"
             onClick={() => setTuneOpen((v) => !v)}
@@ -339,8 +343,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             {t('game:strip.tune')}
             <ChevronDown className="h-3.5 w-3.5" aria-hidden />
           </button>
-          {/* // #128: the Tune flyout opens here */}
-          {tuneOpen && <span aria-hidden className="hidden" />}
+          <TuneFlyout game={d.game} open={tuneOpen} onClose={() => setTuneOpen(false)} onAllSettings={d.onOpenSettings} />
         </span>
       </div>
       {d.game.update_available && d.game.is_installed && (
