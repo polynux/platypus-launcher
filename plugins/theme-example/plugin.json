@@ -1,0 +1,10 @@
+{
+  "id": "theme-example",
+  "name": "Example theme",
+  "version": "1.0.0",
+  "author": "Platypus",
+  "description": "Example theme plugin: tokens, variants and one dashboard layout (Refs #106).",
+  "api": 1,
+  "kind": "data",
+  "theme": "theme.toml"
+}
