@@ -73,6 +73,7 @@ export interface CoreApi {
   GetSavePaths(game: types.Game): Promise<types.SavePath[]>;
   GetTheme(id: string): Promise<types.ThemeTokens>;
   GetThemeCatalog(): Promise<types.ThemeCatalogEntry[]>;
+  GetThemeLayout(view: string): Promise<types.ThemeLayout | null>;
   GetTweaks(): Promise<types.Tweak[]>;
   InstallGame(game: types.Game): Promise<types.Job>;
   InstallGameTo(game: types.Game, folder: string): Promise<types.Job>;
@@ -255,6 +256,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'GetSavePaths',
   'GetTheme',
   'GetThemeCatalog',
+  'GetThemeLayout',
   'GetTweaks',
   'InstallGame',
   'InstallGameTo',

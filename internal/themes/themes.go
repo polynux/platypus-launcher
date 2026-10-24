@@ -77,12 +77,14 @@ var (
 )
 
 // Theme is one parsed theme.toml. Tokens and Wash hold only the values that
-// passed validation; Resolve fills in the rest from the default.
+// passed validation; Resolve fills in the rest from the default. Layouts
+// holds the validated layouts/<view>.xml files by view.
 type Theme struct {
 	Info     types.ThemeInfo
 	Tokens   map[string]string
 	Wash     []types.WashLayer
 	Variants map[string]string
+	Layouts  map[string]types.ThemeLayout
 }
 
 // file is the theme.toml shape. Tokens and wash layers decode as loose maps so
@@ -174,6 +176,34 @@ func parseTheme(src []byte, checkContrast bool) Theme {
 		t.setVariant(key, f.Variants[key])
 	}
 	return t
+}
+
+// parseLayouts reads the theme's layouts/*.xml files into validated layouts,
+// warning about every file it can't use. It runs for every theme, like the
+// token and variant checks; whether the layouts apply is decided by the
+// supports level when the UI asks for a view.
+func (t *Theme) parseLayouts(readFile func(name string) ([]byte, error), entries []string) {
+	for _, name := range entries {
+		if !strings.HasSuffix(name, ".xml") {
+			t.warn("layouts/%s is not an XML layout, ignored", name)
+			continue
+		}
+		view := strings.TrimSuffix(name, ".xml")
+		src, err := readFile("layouts/" + name)
+		if err != nil {
+			t.warn("layouts/%s can't be read: %v, ignored", name, err)
+			continue
+		}
+		layout, warnings := parseLayout(view, src)
+		t.Info.Warnings = append(t.Info.Warnings, warnings...)
+		if layout == nil {
+			continue
+		}
+		if t.Layouts == nil {
+			t.Layouts = map[string]types.ThemeLayout{}
+		}
+		t.Layouts[view] = *layout
+	}
 }
 
 func catalogVersion(version string) (major, minor int, ok bool) {
@@ -344,7 +374,18 @@ func All() []Theme {
 		if err != nil {
 			continue
 		}
-		out = append(out, Parse(src))
+		th := Parse(src)
+		if dir, err := builtin.ReadDir(path.Join("builtin", e.Name(), "layouts")); err == nil {
+			var names []string
+			for _, f := range dir {
+				names = append(names, f.Name())
+			}
+			slices.Sort(names)
+			th.parseLayouts(func(name string) ([]byte, error) {
+				return builtin.ReadFile(path.Join("builtin", e.Name(), name))
+			}, names)
+		}
+		out = append(out, th)
 	}
 	slices.SortFunc(out, func(a, b Theme) int {
 		switch {
@@ -375,6 +416,24 @@ func Find(id string) (Theme, bool) {
 		}
 	}
 	return Theme{}, false
+}
+
+// LayoutFor returns the validated layout for a view in the theme with the
+// given id, or nil when the theme ships none: the UI then uses its built-in
+// arrangement. A theme that is missing, unusable, or doesn't declare the
+// layouts level gets no layout, exactly like an unsupported tokens level
+// keeps the built-in values.
+func LayoutFor(id, view string) *types.ThemeLayout {
+	t, ok := Find(id)
+	if !ok || t.Info.Status != StatusOK || !slices.Contains(t.Info.Supports, supportsLayouts) {
+		return nil
+	}
+	l, ok := t.Layouts[view]
+	if !ok {
+		return nil
+	}
+	out := l
+	return &out
 }
 
 // Resolve returns the tokens to apply for the theme with the given id, "" for

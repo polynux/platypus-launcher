@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from the theme catalog: do not edit. Refresh with
+     go test ./internal/themes -run TestLayoutXSDCurrent -update. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="layout">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="region" maxOccurs="unbounded">
+          <xs:complexType>
+            <xs:choice maxOccurs="unbounded">
+              <xs:element name="block" type="blockType" />
+              <xs:element name="row">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="block" type="blockType" maxOccurs="unbounded" />
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:choice>
+            <xs:attribute name="name" use="required">
+              <xs:simpleType>
+                <xs:restriction base="xs:string">
+                  <xs:enumeration value="main" />
+                  <xs:enumeration value="side" />
+                </xs:restriction>
+              </xs:simpleType>
+            </xs:attribute>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="view" use="required">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="dashboard" />
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="catalog" type="xs:string" />
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="blockType">
+    <xs:attribute name="name" use="required">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="activity" />
+          <xs:enumeration value="continue" />
+          <xs:enumeration value="empty" />
+          <xs:enumeration value="hero" />
+          <xs:enumeration value="recent" />
+          <xs:enumeration value="waiting" />
+          <xs:enumeration value="welcome" />
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="limit" type="xs:positiveInteger" />
+  </xs:complexType>
+</xs:schema>

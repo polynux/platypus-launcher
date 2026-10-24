@@ -59,6 +59,7 @@ import type {
   RunnerEnv,
   SettingGroup,
   ThemeInfo,
+  ThemeLayout,
   ThemeTokens,
   Tweak,
   VersionInfo,
@@ -231,6 +232,10 @@ export const LauncherApi = {
   listThemes: () => call<ThemeInfo[]>('ListThemes', () => App.ListThemes()),
   getTheme: (id: string) => call<ThemeTokens>('GetTheme', () => App.GetTheme(id)),
   setTheme: (id: string) => call<LauncherSettings>('SetTheme', () => App.SetTheme(id)),
+  // Layouts (issue #96): one view's validated layout, or null when the theme
+  // ships none. Go marshals the nil layout as null, like MigrationNotice.
+  getThemeLayout: (view: string) =>
+    call<ThemeLayout | null>('GetThemeLayout', async () => (await App.GetThemeLayout(view)) ?? null),
 
   // The UI language (issue #39): "" is System, else a BCP 47 tag. Switching
   // applies live through applyLanguage (lib/i18n), without a restart.
