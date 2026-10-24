@@ -146,8 +146,9 @@ func (a *App) withThemeURLs(out types.ThemeTokens) types.ThemeTokens {
 func (a *App) GetThemeCatalog() []types.ThemeCatalogEntry { return themes.Catalog }
 
 // GetThemeLayout returns the validated layout for a view in the picked theme
-// (issues #96, #105), or nil when the theme ships none: the UI then uses its
-// built-in arrangement.
+// (issues #96, #105): the theme's own layout when it ships one, else the
+// built-in arrangement (issue #108). It returns nil only for a view the
+// catalog knows no blocks for.
 func (a *App) GetThemeLayout(view string) *types.ThemeLayout {
 	id := a.settings.Theme()
 	if t, ok := themes.Find(id); ok {
@@ -155,7 +156,7 @@ func (a *App) GetThemeLayout(view string) *types.ThemeLayout {
 	}
 	t, ok := a.findTheme(id)
 	if !ok {
-		return nil
+		return themes.BuiltinLayout(view)
 	}
 	return themes.LayoutForTheme(t, view)
 }

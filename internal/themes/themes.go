@@ -561,14 +561,15 @@ func Find(id string) (Theme, bool) {
 }
 
 // LayoutFor returns the validated layout for a view in the theme with the
-// given id, or nil when the theme ships none: the UI then uses its built-in
-// arrangement. A theme that is missing, unusable, or doesn't declare the
-// layouts level gets no layout, exactly like an unsupported tokens level
-// keeps the built-in values.
+// given id: the theme's own layout when it ships one, else the built-in
+// arrangement for the view (issue #108). A theme that is missing, unusable,
+// or doesn't declare the layouts level gets the built-in arrangement,
+// exactly like an unsupported tokens level keeps the built-in values. It
+// returns nil only for a view the catalog knows no blocks for.
 func LayoutFor(id, view string) *types.ThemeLayout {
 	t, ok := Find(id)
 	if !ok {
-		return nil
+		return BuiltinLayout(view)
 	}
 	return LayoutForTheme(t, view)
 }
@@ -576,15 +577,13 @@ func LayoutFor(id, view string) *types.ThemeLayout {
 // LayoutForTheme is LayoutFor for an already loaded theme (issue #105): a
 // data plugin's theme never lives in Find, so the app resolves it directly.
 func LayoutForTheme(t Theme, view string) *types.ThemeLayout {
-	if t.Info.Status != StatusOK || !slices.Contains(t.Info.Supports, supportsLayouts) {
-		return nil
+	if t.Info.Status == StatusOK && slices.Contains(t.Info.Supports, supportsLayouts) {
+		if l, ok := t.Layouts[view]; ok {
+			out := l
+			return &out
+		}
 	}
-	l, ok := t.Layouts[view]
-	if !ok {
-		return nil
-	}
-	out := l
-	return &out
+	return BuiltinLayout(view)
 }
 
 // Resolve returns the tokens to apply for the theme with the given id, "" for

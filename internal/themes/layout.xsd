@@ -20,9 +20,11 @@
             <xs:attribute name="name" use="required">
               <xs:simpleType>
                 <xs:restriction base="xs:string">
+                  <xs:enumeration value="bottom" />
                   <xs:enumeration value="main" />
                   <xs:enumeration value="side" />
                   <xs:enumeration value="sidebar" />
+                  <xs:enumeration value="top" />
                   <xs:enumeration value="topbar" />
                 </xs:restriction>
               </xs:simpleType>
@@ -54,6 +56,8 @@
           <xs:enumeration value="empty" />
           <xs:enumeration value="filters" />
           <xs:enumeration value="footer" />
+          <xs:enumeration value="grid" />
+          <xs:enumeration value="header" />
           <xs:enumeration value="hero" />
           <xs:enumeration value="last-played" />
           <xs:enumeration value="mode" />

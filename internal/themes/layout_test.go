@@ -183,7 +183,7 @@ func TestParseLayoutLimitsAndVersions(t *testing.T) {
 	}
 }
 
-// Every built-in layout parses with zero warnings; warm ships none and keeps
+// Every theme parses with zero warnings; warm ships no layouts and keeps
 // the built-in arrangement.
 func TestBuiltinLayouts(t *testing.T) {
 	for _, th := range All() {
@@ -216,14 +216,57 @@ func TestBuiltinLayouts(t *testing.T) {
 	if len(library.Regions) != 2 || library.Regions[1].Name != "side" {
 		t.Fatalf("cool library = %+v", library)
 	}
-	if LayoutFor("warm", "dashboard") != nil || LayoutFor("warm", "library") != nil {
-		t.Fatal("warm resolves a layout, want the built-in arrangement")
+	if LayoutFor("warm", "dashboard") == nil || LayoutFor("warm", "library") == nil {
+		t.Fatal("warm resolves no layout, want the built-in arrangement")
 	}
 	if LayoutFor("cool", "dashboard") == nil || LayoutFor("cool", "library") == nil {
 		t.Fatal("cool resolves no layout, want its dashboard and library layouts")
 	}
-	if LayoutFor("missing", "dashboard") != nil || LayoutFor("cool", "attic") != nil {
-		t.Fatal("a missing theme or view resolved a layout")
+	if LayoutFor("missing", "dashboard") == nil {
+		t.Fatal("a missing theme resolved no layout, want the built-in arrangement")
+	}
+	if LayoutFor("cool", "attic") != nil {
+		t.Fatal("an unknown view resolved a layout")
+	}
+}
+
+// The built-in arrangements (issue #108) pass the same validation as theme
+// layouts: they parse with zero warnings, and resolving a view with blocks
+// never returns nothing.
+func TestBuiltinLayoutsPassValidation(t *testing.T) {
+	for _, view := range []string{"dashboard", "library"} {
+		src, ok := builtinLayoutXML[view]
+		if !ok {
+			t.Fatalf("no built-in XML for view %q", view)
+		}
+		layout, warnings := parseLayout(view, []byte(src))
+		if layout == nil || len(warnings) != 0 {
+			t.Fatalf("built-in %s: layout = %+v, warnings = %v, want clean", view, layout, warnings)
+		}
+		got := BuiltinLayout(view)
+		if got == nil || got.View != view || len(got.Regions) == 0 {
+			t.Fatalf("BuiltinLayout(%q) = %+v", view, got)
+		}
+		for _, region := range got.Regions {
+			if !layoutRegions(view)[region.Name] {
+				t.Fatalf("built-in %s uses unknown region %q", view, region.Name)
+			}
+			for _, node := range region.Nodes {
+				for _, child := range node.Row {
+					if _, ok := layoutBlock(view, child.Block); !ok {
+						t.Fatalf("built-in %s uses unknown block %q", view, child.Block)
+					}
+				}
+				if node.Block != "" {
+					if _, ok := layoutBlock(view, node.Block); !ok {
+						t.Fatalf("built-in %s uses unknown block %q", view, node.Block)
+					}
+				}
+			}
+		}
+	}
+	if BuiltinLayout("attic") != nil {
+		t.Fatal("an unknown view resolved a built-in layout")
 	}
 }
 
@@ -256,26 +299,26 @@ func TestParseLibraryLayout(t *testing.T) {
 	}
 	t.Fatalf("warnings = %v, want the required-block warning for warnings", warnings)
 restored:
-	if layout == nil || len(layout.Regions) != 2 {
-		t.Fatalf("layout = %+v, want two regions", layout)
+	if layout == nil || len(layout.Regions) != 3 {
+		t.Fatalf("layout = %+v, want main, side and the restored top regions", layout)
 	}
-	var main *types.ThemeLayoutRegion
+	var top *types.ThemeLayoutRegion
 	for i := range layout.Regions {
-		if layout.Regions[i].Name == "main" {
-			main = &layout.Regions[i]
+		if layout.Regions[i].Name == "top" {
+			top = &layout.Regions[i]
 		}
 	}
-	if main == nil {
-		t.Fatalf("layout = %+v, want a main region", layout)
+	if top == nil {
+		t.Fatalf("layout = %+v, want a top region", layout)
 	}
 	found := false
-	for _, n := range main.Nodes {
+	for _, n := range top.Nodes {
 		if n.Block == "warnings" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("main = %+v, want the warnings block restored", main)
+		t.Fatalf("top = %+v, want the warnings block restored", top)
 	}
 	var side *types.ThemeLayoutRegion
 	for i := range layout.Regions {

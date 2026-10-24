@@ -17,6 +17,7 @@ import { sortKey } from '../lib/customize';
 import { ratingBadge } from '../lib/compat';
 import { ThemeLayout } from '../lib/layout';
 import { useThemeLayout, useVariant } from '../lib/theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -33,18 +34,9 @@ interface DashboardProps {
 }
 
 export function Dashboard({ games, ownedCount, ...rest }: DashboardProps) {
-  const layout = useThemeLayout('dashboard');
-  if (games.length === 0) {
-    return (
-      <div className="p-7">
-        <div className="mb-6">
-          <DashboardWelcome installed={0} owned={ownedCount ?? 0} fixes={0} />
-        </div>
-        <DashboardEmpty games={games} />
-      </div>
-    );
-  }
-  if (!layout) return <DashboardBuiltIn games={games} ownedCount={ownedCount} {...rest} />;
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's dashboard before the core answers over RPC.
+  const layout = useThemeLayout('dashboard') ?? BUILTIN_LAYOUTS['dashboard'];
   return (
     <div className="p-7">
       <ThemeLayout
@@ -57,10 +49,17 @@ export function Dashboard({ games, ownedCount, ...rest }: DashboardProps) {
   );
 }
 
-/** One region's frame in a dashboard layout: the main column breathes like
- *  the built-in page, the side column packs tighter. */
+/** One region's frame in a dashboard layout (issue #108): the top banner and
+ *  the bottom feed span the full width, the main column breathes like the
+ *  built-in page and the side column packs tighter. The top and bottom
+ *  margins make up the wrapper's gap, so the built-in spacing is exact. */
 function dashboardRegionClass(region: string): string {
-  return region === 'side' ? 'min-w-0 space-y-5' : 'min-w-0 space-y-6';
+  switch (region) {
+    case 'top': return 'col-span-full min-w-0 space-y-6 mb-1';
+    case 'bottom': return 'col-span-full min-w-0 mt-1';
+    case 'side': return 'min-w-0 space-y-5';
+    default: return 'min-w-0 space-y-6';
+  }
 }
 
 // The dashboard's layout blocks (issue #96): each takes its data as props
@@ -118,63 +117,6 @@ function layoutLimit(layout: DashboardLayoutData | undefined, block: string, fal
     }
   }
   return fallback;
-}
-
-function DashboardBuiltIn({ games, runners, activity, ownedCount, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps) {
-  const waiting = games.filter(needsAttention);
-  const pending = waiting.filter((g) => !dismissedHero.has(g.id));
-  const hero = pending[0];
-
-  const hasPlayData = games.some((g) => g.last_played_at);
-  // Without play data byRecent has nothing to order by, so fall back to a stable title sort.
-  const continueGames = [...games].sort(hasPlayData ? byRecent : byTitle).slice(0, 8);
-  const recentlyAdded = games.filter((g) => g.store === 'custom').slice(0, 5);
-  const installed = games.length;
-  const owned = Math.max(ownedCount ?? installed, installed);
-
-  return (
-    <div className="p-7">
-      {hero ? (
-        <div className="mb-6">
-          <DashboardHero
-            hero={hero}
-            installed={installed}
-            owned={owned}
-            waitingCount={waiting.length}
-            pending={pending}
-            onOpenGame={onOpenGame}
-            onDismissHero={onDismissHero}
-          />
-        </div>
-      ) : (
-        <div className="mb-6">
-          <DashboardWelcome hero={hero} installed={installed} owned={owned} fixes={waiting.length} />
-        </div>
-      )}
-
-      <section className="grid gap-5 xl:grid-cols-[1.75fr_1fr]">
-        <div className="min-w-0">
-          <DashboardContinue
-            games={continueGames}
-            runners={runners}
-            hasPlayData={hasPlayData}
-            onOpenGame={onOpenGame}
-            onNavigate={onNavigate}
-          />
-        </div>
-
-        <div className="space-y-5">
-          <DashboardWaiting waiting={waiting} onOpenGame={onOpenGame} onNavigate={onNavigate} />
-
-          <DashboardRecent games={recentlyAdded} onOpenGame={onOpenGame} />
-        </div>
-      </section>
-
-      <div className="mt-6">
-        <DashboardActivity events={activity} onNavigate={onNavigate} />
-      </div>
-    </div>
-  );
 }
 
 export function DashboardHero({ hero, installed, owned, waitingCount, pending, onOpenGame, onDismissHero }: {

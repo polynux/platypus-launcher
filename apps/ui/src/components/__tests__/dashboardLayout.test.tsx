@@ -86,11 +86,15 @@ describe('dashboard layouts', () => {
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 
-  it('renders the empty library without the layout, even when a theme ships one', async () => {
-    layoutState.layout = coolLayout;
+  it('renders the empty library through the built-in layout', async () => {
+    layoutState.layout = null;
     const { container } = dash([]);
     expect(await screen.findByText('no titles found')).toBeTruthy();
-    expect(container.querySelector('[data-region]')).toBeNull();
+    // The single render path keeps the regions: the top region holds the
+    // welcome banner and the empty state, the other blocks render null.
+    const top = container.querySelector('[data-region="top"]');
+    expect(top).toBeTruthy();
+    expect(within(top as HTMLElement).getByText('no titles found')).toBeTruthy();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 });
