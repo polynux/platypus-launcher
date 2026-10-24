@@ -140,5 +140,21 @@
     "finished": "terminé",
     "abandoned": "abandonné"
   },
-  "statusFilterAria": "Filtrer par statut"
+  "statusFilterAria": "Filtrer par statut",
+  "listDetail": {
+    "listLabel": "Jeux",
+    "filterAria": "Filtrer les jeux",
+    "filterPlaceholder": "Filtrer",
+    "sortAria": "Trier les jeux",
+    "sort": {
+      "recent": "Récents",
+      "title": "Titre",
+      "hours": "Les plus joués"
+    },
+    "empty": "Rien ici.",
+    "showAll": "Afficher tous les jeux",
+    "notInstalled": "Non installé",
+    "neverPlayed": "Jamais joué",
+    "needsAttention": "Nécessite votre attention"
+  }
 }

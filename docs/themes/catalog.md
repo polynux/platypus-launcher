@@ -232,6 +232,14 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | `overlay` | `on`, `off` | `on` | `1.0` | `game-tile.overlay` |
 | `density` | `comfortable`, `compact` | `compact` | `1.0` | `game-tile.density` |
 
+## `library`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `presentation` | `grid`, `list-detail` | `grid` | `1.0` | — |
+
 ## `library.top`
 
 - since: `1.0`
@@ -351,6 +359,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | `height` | `tall`, `regular`, `compact` | `regular` | `1.0` | `hero.height` |
 | `gradient` | `warm`, `neutral`, `none` | `warm` | `1.0` | `hero.gradient` |
 | `chips` | `glass`, `solid` | `solid` | `1.0` | `hero.chips` |
+| `logo` | `title`, `logo` | `title` | `1.0` | — |
 
 ## `dashboard.attention`
 
@@ -443,6 +452,14 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.0`
 - kind: `block`
 - region: `main`
+
+## `game`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `structure` | `sections`, `tabs` | `sections` | `1.0` | — |
 
 ## `game.hero`
 

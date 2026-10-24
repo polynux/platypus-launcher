@@ -470,6 +470,21 @@
       ]
     },
     {
+      "entry": "library",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "grid",
+            "list-detail"
+          ],
+          "default": "grid",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
       "entry": "library.top",
       "since": "1.0",
       "axes": null,
@@ -663,6 +678,15 @@
           "default": "solid",
           "since": "1.0",
           "inherits": "hero.chips"
+        },
+        {
+          "name": "logo",
+          "values": [
+            "title",
+            "logo"
+          ],
+          "default": "title",
+          "since": "1.0"
         }
       ]
     },
@@ -773,6 +797,21 @@
       "axes": null,
       "kind": "block",
       "region": "main"
+    },
+    {
+      "entry": "game",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "structure",
+          "values": [
+            "sections",
+            "tabs"
+          ],
+          "default": "sections",
+          "since": "1.0"
+        }
+      ]
     },
     {
       "entry": "game.hero",

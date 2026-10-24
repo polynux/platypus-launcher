@@ -363,5 +363,39 @@
     "saving": "Enregistrement…",
     "saved": "Enregistré",
     "failed": "Échec"
+  },
+  "tabs": {
+    "label": "Page du jeu",
+    "store": "Page boutique",
+    "achievements": "Succès",
+    "activity": "Activité",
+    "saves": "Sauvegardes",
+    "compat": "Compatibilité"
+  },
+  "strip": {
+    "tune": "Régler",
+    "starting": "Démarrage",
+    "elapsedLabel": "{{time}} écoulées",
+    "saveConflict": "Conflit de sauvegardes, résoudre",
+    "saveSynced": "Sauvegardes synchronisées",
+    "saveSyncing": "Envoi de la sauvegarde",
+    "saveLocal": "Sauvegardes locales uniquement",
+    "saveOff": "Sauvegardes cloud désactivées",
+    "launchFrom": "Lancer depuis",
+    "update": "Mettre à jour"
+  },
+  "storeTab": {
+    "pictures": "Images",
+    "picturesCount": "{{count}} captures",
+    "played": "Joué",
+    "lastPlayed": "Dernière partie",
+    "runsWith": "Fonctionne avec",
+    "protondb": "ProtonDB",
+    "neverPlayed": "Jamais joué",
+    "unknownRunner": "Inconnu",
+    "noRating": "Sans évaluation",
+    "achievements": "Succès",
+    "seeAll": "Voir les {{total}} succès",
+    "details": "Détails"
   }
 }

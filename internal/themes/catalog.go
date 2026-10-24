@@ -111,6 +111,12 @@ var Catalog = []types.ThemeCatalogEntry{
 		{Name: "overlay", Values: []string{"on", "off"}, Default: "on", Since: "1.0", Inherits: "game-tile.overlay"},
 		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "compact", Since: "1.0", Inherits: "game-tile.density"},
 	}},
+	// Library presentation (issue #126): the grid every theme shows today,
+	// or the /21 list-detail (a game list with the selected game on the
+	// stage). Default grid, so warm, cool and slate render exactly as before.
+	{Entry: "library", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"grid", "list-detail"}, Default: "grid", Since: "1.0"},
+	}},
 	// Library layout entries (issue #98): its regions, then its blocks in the
 	// built-in order (inventory §2.2). Only the plugin warnings are required:
 	// they tell the truth about the stores, so a layout can't hide them.
@@ -152,6 +158,9 @@ var Catalog = []types.ThemeCatalogEntry{
 		{Name: "height", Values: []string{"tall", "regular", "compact"}, Default: "regular", Since: "1.0", Inherits: "hero.height"},
 		{Name: "gradient", Values: []string{"warm", "neutral", "none"}, Default: "warm", Since: "1.0", Inherits: "hero.gradient"},
 		{Name: "chips", Values: []string{"glass", "solid"}, Default: "solid", Since: "1.0", Inherits: "hero.chips"},
+		// Logo over the hero art (issue #127): title is today's type title,
+		// logo is the /21 art (logo_url at the bottom left, title as fallback).
+		{Name: "logo", Values: []string{"title", "logo"}, Default: "title", Since: "1.0"},
 	}},
 	// Hero content blocks (issue #101): today's dashboard hero content and
 	// today's game page hero content. The dashboard keeps placing hero (the
@@ -199,6 +208,12 @@ var Catalog = []types.ThemeCatalogEntry{
 	// The running job progress lives inside the actions and installation
 	// panels as today, so it moves with them and can't be hidden without
 	// hiding the actions themselves.
+	// Game structure (issue #127): sections is today's page, tabs is the /21
+	// game page (hero, action strip, sticky tabs with the store page).
+	// Default sections, so warm, cool and slate render exactly as before.
+	{Entry: "game", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "structure", Values: []string{"sections", "tabs"}, Default: "sections", Since: "1.0"},
+	}},
 	{Entry: "game.hero", Since: "1.0", Kind: "region"},
 	{Entry: "game.main", Since: "1.0", Kind: "region"},
 	{Entry: "game.side", Since: "1.0", Kind: "region"},

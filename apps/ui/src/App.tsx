@@ -5,6 +5,7 @@ import { Shell, SourceFooter } from './components/Shell';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
+import { LibraryListDetail } from './components/LibraryListDetail';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
 import { AddGameModal, type AddGameOptions } from './components/AddGameModal';
@@ -674,10 +675,86 @@ export function App() {
     Effect.runPromise(LauncherApi.dismissMigrationNotice()).catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
-  const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
+  // Atlas list-detail (issue #126): the library is the list plus the stage.
+  const libraryPresentation = useVariant('library.presentation');
+  const isListDetail = libraryPresentation === 'list-detail';
+  // The staged game in the library list-detail (for the game tone when the
+  // view is the library: the selected game feeds it too).
+  const [stagedGameId, setStagedGameId] = useState<string | null>(null);
+  const stagedGame = isListDetail && view.name === 'library' ? games.find((g) => g.id === stagedGameId) ?? undefined : undefined;
+  const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : stagedGame;
   // The game's colour (issue #123), applied here so it also works where the
   // theme shows no switch; the sourcebar shell renders the switch.
   const gameTone = useGameTone(currentGame ? heroImages(currentGame)[0] : undefined);
+
+  // One game page for the game view and the list-detail stage (issues #126,
+  // #127): the same props, so the stage renders the game page for the
+  // selected game with the real data and APIs.
+  const renderGamePage = (game: Game, from: 'dashboard' | 'library' | 'fixes') => (
+    <GamePage
+      game={game}
+      runners={runners}
+      activity={activity}
+      backLabel={t(`nav:${from}`)}
+      onBack={() => setView({ name: from } as View)}
+      onPlay={() => launch(game)}
+      onStop={() => stop(game.id, false)}
+      onForceStop={() => stop(game.id, true)}
+      launching={launchingId === game.id}
+      session={sessions[game.id] ?? sessionFailures[game.id]}
+      sessionStartedAt={sessionStart.current[game.id]}
+      refreshing={scanning}
+      tweaks={tweaks}
+      onChangeSettings={(st, what) => saveSettings(game.id, st, what)}
+      onSaveSettings={(st) => saveSettings(game.id, st)}
+      onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
+      plugin={plugins.find((x) => x.id === game.source)}
+      sourceLogos={sourceLogos}
+      job={jobFor(game.id)}
+      jobs={jobs}
+      onJob={(kind) => runJob(kind, game)}
+      onJobAction={jobAction}
+      onAllowFolder={(folder) => allowFolder(game, folder)}
+      onNavigate={setView}
+      onNotify={notify}
+      onVersionsChanged={() => loadData('update')}
+      onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
+      onRemove={(opts) => removeGame(game, opts)}
+      collections={collections}
+      onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
+      openSettingsTab={gameSettingsTab?.gameId === game.id ? gameSettingsTab.tab : undefined}
+      onSettingsOpened={() => setGameSettingsTab(null)}
+    />
+  );
+
+  // The list-detail library (issue #126): the list plus the stage. Opening a
+  // game from elsewhere (palette, dashboard) lands here with that game
+  // selected, through the game view below.
+  const renderListDetail = (initialSelectedId?: string | null) => (
+    <LibraryListDetail
+      games={games}
+      ownership={ownership}
+      source={source}
+      storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
+      collection={view.name === 'library' ? view.collection : undefined}
+      collections={collections}
+      onPlay={(id) => {
+        const g = games.find((x) => x.id === id);
+        if (g) launch(g);
+      }}
+      renderStage={(g) => renderGamePage(g, view.name === 'game' && view.from ? view.from : 'library')}
+      initialSelectedId={initialSelectedId}
+      onStageChange={view.name === 'library' ? setStagedGameId : undefined}
+      onResetFilters={() => {
+        setOwnership('owned');
+        setSelectedStores([]);
+        setSource('all');
+        setSearch('');
+        if (view.name !== 'library') setView({ name: 'library' });
+        else setView({ name: 'library', collection: undefined });
+      }}
+    />
+  );
 
   const renderView = () => {
     if (!loaded) return <LibrarySkeleton />;
@@ -708,6 +785,8 @@ export function App() {
           />
         );
       case 'library':
+        // Atlas list-detail is the list plus the stage; other themes keep the grid.
+        if (isListDetail) return renderListDetail();
         return (
           <LibraryView
             games={games}
@@ -737,40 +816,18 @@ export function App() {
           />
         );
       case 'game':
+        // Atlas list-detail shows the list with that game selected on the stage.
+        if (isListDetail) {
+          const selected = games.find((g) => g.id === view.id);
+          if (!selected) {
+            return (
+              <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
+            );
+          }
+          return renderListDetail(view.id);
+        }
         return currentGame ? (
-          <GamePage
-            game={currentGame}
-            runners={runners}
-            activity={activity}
-            backLabel={t(`nav:${view.from}`)}
-            onBack={() => setView({ name: view.from } as View)}
-            onPlay={() => launch(currentGame)}
-            onStop={() => stop(currentGame.id, false)}
-            onForceStop={() => stop(currentGame.id, true)}
-            launching={launchingId === currentGame.id}
-            session={sessions[currentGame.id] ?? sessionFailures[currentGame.id]}
-            refreshing={scanning}
-            tweaks={tweaks}
-            onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
-            onSaveSettings={(st) => saveSettings(currentGame.id, st)}
-            onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
-            plugin={plugins.find((x) => x.id === currentGame.source)}
-            sourceLogos={sourceLogos}
-            job={jobFor(currentGame.id)}
-            jobs={jobs}
-            onJob={(kind) => runJob(kind, currentGame)}
-            onJobAction={jobAction}
-            onAllowFolder={(folder) => allowFolder(currentGame, folder)}
-            onNavigate={setView}
-            onNotify={notify}
-            onVersionsChanged={() => loadData('update')}
-            onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
-            onRemove={(opts) => removeGame(currentGame, opts)}
-            collections={collections}
-            onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
-            openSettingsTab={gameSettingsTab?.gameId === currentGame.id ? gameSettingsTab.tab : undefined}
-            onSettingsOpened={() => setGameSettingsTab(null)}
-          />
+          renderGamePage(currentGame, view.from)
         ) : (
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
         );
