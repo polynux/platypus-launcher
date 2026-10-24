@@ -1,7 +1,7 @@
 // Storage data (issue #102): the view's core reads and row flows, owned by
 // the view. Blocks take the returned state and callbacks as props only, so a
 // layout can move them without touching the core.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
 import { LauncherApi, onDiskUsage } from '../effect/runtime';
@@ -28,20 +28,24 @@ export function useStorageData({ games: library, onNotify, onRemove, onUninstall
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [uninstallId, setUninstallId] = useState<string | null>(null);
   // The first answer can land after an event already brought a newer
-  // snapshot: keep the newer of the two.
+  // snapshot: keep the newer of the two. A finished pass (scanning false)
+  // answers every row's Scan, so its snapshot also clears the spinners —
+  // here, where the snapshot arrives, so the order stays causal: a passive
+  // effect on usage could run after a later Scan press and wipe its fresh
+  // spinner before the next snapshot (issue #107). Stale snapshots are
+  // ignored outright, so they never clear a newer Scan's spinner either.
+  const latest = useRef(-1);
   const apply = (next: DiskUsage | null) => {
-    if (!next) return;
-    setUsage((prev) => (prev && next.generated_at < prev.generated_at ? prev : next));
+    if (!next || next.generated_at < latest.current) return;
+    latest.current = next.generated_at;
+    setUsage(next);
+    if (!next.scanning) setMeasuring(new Set());
   };
   useEffect(() => {
     Effect.runPromise(LauncherApi.getDiskUsage()).then(apply).catch(() => {});
     return onDiskUsage(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // A finished pass answers every row's Scan: the spinners go with it.
-  useEffect(() => {
-    if (usage && !usage.scanning) setMeasuring(new Set());
-  }, [usage]);
   const rescan = () => {
     Effect.runPromise(LauncherApi.refreshDiskUsage()).then(apply).catch(() => {});
   };

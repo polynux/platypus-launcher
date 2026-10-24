@@ -209,12 +209,29 @@ describe('StorageView', () => {
   it('scans one game and spins until the next snapshot', async () => {
     const alpha = mk('g', { title: 'Alpha' });
     mock.api.getDiskUsage.mockReturnValue(Effect.succeed(usage({ games: [row({ game_id: 'g', title: 'Alpha' })] })));
-    mock.api.scanGameSize.mockReturnValue(Effect.succeed(usage({ scanning: true })));
+    // The scan stays pending until the test releases it: asserting the
+    // spinner while the promise is unresolved makes the spinning state
+    // deterministic instead of racing the mock's resolution.
+    let resolveScan!: (v: unknown) => void;
+    mock.api.scanGameSize.mockReturnValue(Effect.promise(() => new Promise((res) => (resolveScan = res))));
     view({ games: [alpha] });
-    const btn = await screen.findByRole('button', { name: 'Scan Alpha on disk' });
-    fireEvent.click(btn);
+    await screen.findByRole('button', { name: 'Scan Alpha on disk' });
+    fireEvent.click(screen.getByRole('button', { name: 'Scan Alpha on disk' }));
     await waitFor(() => expect(mock.api.scanGameSize).toHaveBeenCalledWith(alpha));
-    expect(btn.querySelector('.animate-spin')).toBeTruthy();
+    // The Scan request is still out: the row spins and stays mounted (the
+    // core answers with the current snapshot marked scanning, games kept).
+    // waitFor the appearance: under full-suite load React may flush the
+    // click's render a tick after the mock records the call. The deferred
+    // scan keeps this deterministic — the spinner cannot disappear again
+    // until the test releases the scan and emits the next snapshot below,
+    // so a missing spinner still fails loudly instead of being masked.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Scan Alpha on disk' }).querySelector('.animate-spin')).toBeTruthy(),
+    );
+    await act(async () => {
+      resolveScan(usage({ generated_at: 1, scanning: true, games: [row({ game_id: 'g', title: 'Alpha' })] }));
+    });
+    expect(screen.getByRole('button', { name: 'Scan Alpha on disk' }).querySelector('.animate-spin')).toBeTruthy();
     emit(usage({ generated_at: 5, games: [row({ game_id: 'g', title: 'Alpha' })] }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Scan Alpha on disk' }).querySelector('.animate-spin')).toBeNull());
   });
