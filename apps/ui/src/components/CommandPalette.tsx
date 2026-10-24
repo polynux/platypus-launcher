@@ -2,7 +2,7 @@
 // The command palette (issue #124): games, places, and the current game's
 // actions, opened with Ctrl K or by the shell's "Search or run a command"
 // entry. It is one dialog for every theme and speaks tokens only.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { Game, SessionEvent, StorePlugin, View } from '../types';
@@ -15,6 +15,22 @@ import { hoursPlayed } from '../lib/games';
 
 /** The event the shell dispatches to open the palette (issue #125). */
 export const COMMAND_PALETTE_EVENT = 'platypus:command-palette';
+
+/** The dialogs on screen. Radix keeps the page's other content inert instead
+ *  of setting aria-modal, so the app's own dialog content slot marks a modal
+ *  too; the lightbox and other hand-written modals use aria-modal. A
+ *  non-modal flyout (the game page's Tune panel) is not one, and leaves Ctrl K
+ *  alone. */
+const MODAL_SELECTOR = '[role="dialog"][aria-modal="true"], [role="dialog"][data-slot="dialog-content"]';
+
+/** Whether a modal other than the palette is on screen: the Settings drawer
+ *  with unsaved edits, the lightbox, a game's dialog. `paletteOpen` says
+ *  whether one of the dialogs is the palette's own. */
+function foreignModalOpen(paletteOpen: boolean): boolean {
+  if (typeof document === 'undefined') return false;
+  const dialogs = document.querySelectorAll(MODAL_SELECTOR);
+  return dialogs.length > (paletteOpen ? 1 : 0);
+}
 
 /** Open the command palette from anywhere. The app root listens for this. */
 export function openCommandPalette(): void {
@@ -41,13 +57,22 @@ export interface CommandPaletteProps {
 }
 
 /** Mounted once at the app root: listens for Ctrl K and for the shell's event,
- *  and renders the dialog only while it is open. */
+ *  and renders the dialog only while it is open. Another dialog on screen
+ *  keeps both shortcuts: stacking the palette over a modal with unsaved edits
+ *  leaves two dialogs open (issue #124). */
 export function CommandPalette(p: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
+  // The listeners are added once, so they read the state from here.
+  const openRef = useRef(open);
+  useEffect(() => { openRef.current = open; }, [open]);
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = () => {
+      if (foreignModalOpen(openRef.current)) return;
+      setOpen(true);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 'k') return;
+      if (foreignModalOpen(openRef.current)) return;
       e.preventDefault();
       setOpen((v) => !v);
     };

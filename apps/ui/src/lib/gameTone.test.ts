@@ -19,6 +19,8 @@ import {
   vivid,
   type Tone,
 } from './gameTone';
+import { applyTheme } from './theme';
+import type { ThemeTokens } from '../types';
 
 const root = () => document.documentElement;
 const css = (name: string) => root().style.getPropertyValue(name);
@@ -226,5 +228,47 @@ describe('sampling the hero art', () => {
     vi.stubGlobal('Image', FakeImage);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     await expect(loadArtTone('/platypus-art/echo/abc')).resolves.toBeNull();
+  });
+});
+
+describe('the theme\'s own colours come back', () => {
+  // Last in the file: applying a theme is module state the earlier tests rely
+  // on not having (they expect the variables to end up empty).
+  const themed = (id: string, tokens: Record<string, string> = {}): ThemeTokens => ({
+    id,
+    tokens: {
+      ground: '#0d0b09', raised: '#161310', hairline: '#2a2521',
+      text: '#f4efe9', accent: '#ffb648', 'on-accent': '#0d0b09',
+      ...tokens,
+    },
+    wash: [],
+    variants: {},
+  });
+
+  it('sets the theme values back when the tone clears, instead of removing them', () => {
+    const atlas = themed('atlas', { ground: '#070a10', accent: '#7dd3fc' });
+    applyTheme(atlas);
+    applyGameTone('whole', [60, 120, 200]);
+    // The tone is on, so the surfaces carry the game's colour.
+    expect(css('--color-ground')).toMatch(/^rgb\(/);
+
+    // Back to the Dashboard: the tone clears, and the theme stays what it was.
+    applyGameTone('off', null);
+    expect(css('--color-ground')).toBe('#070a10');
+    expect(css('--background')).toBe('#070a10');
+    expect(css('--color-accent')).toBe('#7dd3fc');
+    expect(css('--color-text')).toBe('#f4efe9');
+  });
+
+  it('sets the new theme\'s values across a theme switch, not the old ones', () => {
+    applyTheme(themed('atlas', { ground: '#070a10', accent: '#7dd3fc' }));
+    applyGameTone('whole', [60, 120, 200]);
+
+    // Atlas -> cool, which sets no tone: the theme paints, then the tone clears.
+    applyTheme(themed('cool', { ground: '#0b1220', accent: '#38bdf8' }));
+    applyGameTone('off', null);
+    expect(css('--color-ground')).toBe('#0b1220');
+    expect(css('--color-accent')).toBe('#38bdf8');
+    expect(css('--color-text')).toBe('#f4efe9');
   });
 });

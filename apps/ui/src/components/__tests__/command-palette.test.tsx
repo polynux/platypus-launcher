@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { CommandPalette, openCommandPalette, type CommandPaletteProps } from '../CommandPalette';
+import { Modal } from '../Modal';
 import type { Game, SessionEvent, StorePlugin } from '../../types';
 
 expect.extend(matchers);
@@ -75,6 +76,35 @@ describe('command palette', () => {
     expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('stays shut while another dialog is open, for both Ctrl K and the event', async () => {
+    setup();
+    // The settings drawer: the app's own Modal (Radix), with unsaved edits.
+    const drawer = render(<Modal label="Settings" onClose={() => {}}><p>Unsaved edits</p></Modal>);
+
+    openWithCtrlK();
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+    openCommandPalette();
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+
+    // The drawer closes: the palette opens again.
+    drawer.unmount();
+    openWithCtrlK();
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
+  });
+
+  it('stays shut under a modal that marks itself with aria-modal, such as the lightbox', async () => {
+    setup();
+    // Rendered rather than appended, so a failing test cannot leave it behind.
+    const viewer = render(<div role="dialog" aria-modal="true" aria-label="Screenshot" />);
+
+    openWithCtrlK();
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+
+    viewer.unmount();
+    openCommandPalette();
+    expect(await screen.findByRole('dialog', { name: 'Command palette' })).toBeInTheDocument();
   });
 
   it('lists the places, the stores and the first games, axe clean', async () => {

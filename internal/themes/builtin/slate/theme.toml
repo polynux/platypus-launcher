@@ -16,10 +16,6 @@ supports = ["tokens", "variants"]
 "section.chrome" = "plain"
 "view-header.size" = "compact"
 "list-row.density" = "compact"
-# Slate is the theme that takes the selected game's colour (issue #123): its
-# neutral accent and highlights take the game's hue. Warm and cool leave the
-# axis at its default (off).
-"color.game-tone" = "accent"
 
 [tokens]
 ground = "#0f151c"
