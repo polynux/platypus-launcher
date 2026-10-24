@@ -3,6 +3,8 @@ package themes
 import (
 	"fmt"
 	"strings"
+
+	"platypus/internal/types"
 )
 
 // CatalogMD renders the catalog reference (docs/themes/catalog.md, written by
@@ -27,11 +29,11 @@ func CatalogMD() string {
 			b.WriteString("- required: yes (a layout that leaves it out still gets it, with a warning)\n")
 		}
 		if len(entry.Attrs) > 0 {
-			quoted := make([]string, len(entry.Attrs))
+			parts := make([]string, len(entry.Attrs))
 			for i, a := range entry.Attrs {
-				quoted[i] = "`" + a + "`"
+				parts[i] = "`" + a.Name + "` " + catalogAttrType(a)
 			}
-			fmt.Fprintf(&b, "- attrs: %s\n", strings.Join(quoted, ", "))
+			fmt.Fprintf(&b, "- attrs: %s\n", strings.Join(parts, ", "))
 		}
 		if len(entry.Axes) == 0 {
 			b.WriteString("\n")
@@ -54,4 +56,23 @@ func CatalogMD() string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// catalogAttrType renders one attr's type for the catalog reference.
+func catalogAttrType(a types.ThemeCatalogAttr) string {
+	switch a.Type {
+	case "int":
+		if a.Max != 0 {
+			return fmt.Sprintf("(int %d..%d)", a.Min, a.Max)
+		}
+		return fmt.Sprintf("(int >=%d)", a.Min)
+	case "enum":
+		quoted := make([]string, len(a.Values))
+		for i, v := range a.Values {
+			quoted[i] = "`" + v + "`"
+		}
+		return "(enum: " + strings.Join(quoted, ", ") + ")"
+	default:
+		return ""
+	}
 }

@@ -23,8 +23,10 @@ All three levels are parsed always, so the picker can show their warnings.
 They apply only when the theme declares them. A colours-only theme sets
 `supports = ["tokens"]`. A theme without `tokens` keeps the built-in tokens,
 even if its `[tokens]` table is full.
+An unknown value (e.g. `supports = ["bogus"]`) warns and is ignored: only
+`tokens`, `variants` and `layouts` ever apply.
 
-Source: `internal/themes/themes.go` (`resolve`, `LayoutForTheme`).
+Source: `internal/themes/themes.go` (`setSupports`, `resolve`, `LayoutForTheme`).
 
 ## `theme.toml` reference
 
@@ -188,10 +190,13 @@ and `side`; `library` has `main` and `side`; `shell` has `sidebar` and
 - A region name the catalog doesn't know for the view is skipped with a
   warning, with everything in it. A block name the catalog doesn't know for
   the view is ignored with a warning.
-- Block attributes are only the ones the catalog declares. In catalog 1.0
-  that is `limit` on `dashboard.activity` and `library.activity`: an event
-  count from 1 to 50. A bad `limit` warns and is ignored; the block stays.
-  An undeclared attribute warns and is ignored.
+- A block placed twice in one view warns and keeps only the first: the
+  second placement is dropped, never merged.
+- Block attributes are only the ones the catalog declares, with the type the
+  catalog gives them. In catalog 1.0 that is `limit` on
+  `dashboard.activity` and `library.activity`: an int from 1 to 50. A bad
+  value warns and is ignored; the block stays. An undeclared attribute
+  warns and is ignored. Enum attributes take exactly one of their values.
 - Files that don't end in `.xml` are ignored with a warning. A file that
   can't be read is ignored with a warning. A document that breaks mid-way
   is discarded whole: a half-read tree never reaches the UI.
@@ -200,11 +205,24 @@ and `side`; `library` has `main` and `side`; `shell` has `sidebar` and
   `library.warnings`. A layout that leaves it out still gets it, appended in
   its built-in region (`main`), with a warning.
 
-The editor schema lives at `internal/themes/layout.xsd`. It is generated
-from the catalog (`LayoutXSD()`): views, region names, block names and the
-union of block attributes, for autocomplete. Per-view placement (which block
-goes in which region) stays with the core validator. Refresh it with `go
-test ./internal/themes -run TestLayoutXSDCurrent -update`.
+The editor schemas are generated from the catalog. `internal/themes/layout.xsd`
+(`LayoutXSD()`) is the compatibility schema: the union of every view's
+region names, block names and attribute types, for autocomplete. Per-view
+placement (which block goes in which region, and which view a block belongs
+to) stays with the core validator.
+For precise checking use the per-view files `internal/themes/layouts/<view>.xsd`
+(`LayoutXSDForView()`): each lists only its view's regions, blocks and
+attribute types, with `view` fixed to that view. They are plain XSD 1.0, so
+the VS Code XML extension (LemMinX) and IntelliJ validate them; a single
+file switching types on the `view` attribute would need XSD 1.1
+`xs:alternative`, which those editors handle poorly, so one file per view
+beats one clever file. `layout.xsd` stays so existing editor setups keep
+working.
+Point your editor at the file for the view you edit (e.g. VS Code file
+association `layouts/dashboard.xml` → `internal/themes/layouts/dashboard.xsd`),
+or add an `<?xml-model href="...">` processing instruction pointing at it:
+the core skips processing instructions, so it never warns. Refresh all
+schemas with `go test ./internal/themes -run TestLayoutXSDCurrent -update`.
 
 The UI maps region and block names onto the view's components
 (`apps/ui/src/lib/layout.tsx`). Regions and rows are plain divs. A block the
@@ -218,8 +236,9 @@ Source: `internal/themes/layout.go`, `internal/themes/catalog.go`,
 A theme never breaks the app. Every problem is a warning in the theme list
 (`ThemeInfo.Warnings`); the built-in choice fills the gap.
 
-- Unknown keys, tokens, axes, values, blocks, regions and attributes: warned
-  and ignored.
+- Unknown keys, tokens, axes, values, blocks, regions, attributes and
+  `supports` levels: warned and ignored.
+- A duplicate block in one view: warned, the second placement dropped.
 - Bad token or font value: that token keeps the built-in value.
 - Bad wash layer, or more than 4 layers: the whole wash keeps the built-in
   one.

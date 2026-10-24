@@ -44,6 +44,10 @@ const (
 // supportsTokens is the level a theme declares for its tokens to apply.
 const supportsTokens = "tokens"
 
+// supportsLevels are the values theme.toml supports accepts (issue #110).
+// Anything else warns and is ignored, like an unknown token or variant.
+var supportsLevels = []string{"tokens", "variants", "layouts"}
+
 // The token set v1 (issue #90), by kind. The names match the @theme variables
 // in apps/ui/src/style.css where those exist.
 var (
@@ -199,7 +203,7 @@ func parseThemeFS(src []byte, fsys fs.FS, themeDir string, checkContrast bool) T
 		t.Info.Name = f.Theme.ID
 	}
 	t.Info.Schema = f.Theme.Schema
-	t.Info.Supports = append([]string{}, f.Theme.Supports...)
+	t.setSupports(f.Theme.Supports)
 	switch {
 	case f.Theme.Schema < 1:
 		t.warn("theme.schema is missing")
@@ -312,6 +316,19 @@ func (t *Theme) setVariant(key string, raw any) {
 		}
 	}
 	t.warn("unknown variant axis %q, ignored", key)
+}
+
+func (t *Theme) setSupports(levels []string) {
+	t.Info.Supports = []string{}
+	for _, level := range levels {
+		if !slices.Contains(supportsLevels, level) {
+			t.warn("unknown supports value %q, ignored", level)
+			continue
+		}
+		if !slices.Contains(t.Info.Supports, level) {
+			t.Info.Supports = append(t.Info.Supports, level)
+		}
+	}
 }
 
 func (t *Theme) warn(format string, args ...any) {

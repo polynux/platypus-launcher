@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 type StoreType string
 
 const (
@@ -411,7 +413,52 @@ type ThemeCatalogEntry struct {
 	Region   string `json:"region,omitempty"`
 	// Attrs lists the per-block layout attributes the catalog declares (e.g.
 	// "limit" on the activity feed). Anything else is ignored with a warning.
-	Attrs []string `json:"attrs,omitempty"`
+	// Each attr is typed: "int" with a Min (and optional Max) or "enum"
+	// with Values. The XSD and the core check both come from here (issue
+	// #110).
+	Attrs []ThemeCatalogAttr `json:"attrs,omitempty"`
+}
+
+// ThemeCatalogAttr is one declared block attribute (issue #110): an integer
+// with a minimum (and optional maximum, 0 means no maximum) or an enum of
+// allowed values.
+type ThemeCatalogAttr struct {
+	Name string `json:"name"`
+	// Type is "int" or "enum".
+	Type string `json:"type"`
+	// Min is the minimum for int attributes.
+	Min int `json:"min,omitempty"`
+	// Max caps int attributes; 0 means no maximum.
+	Max int `json:"max,omitempty"`
+	// Values lists the allowed values for enum attributes.
+	Values []string `json:"values,omitempty"`
+}
+
+// UnmarshalJSON accepts the current object shape and the pre-#110 string
+// shape ("limit"), so the catalog guard can still read the old snapshot when
+// checking compatibility. The catalog is unreleased (still 1.0), so the shape
+// change needs no major bump: a bare name keeps its historic meaning (limit
+// 1..50) only for reading old snapshots, never for new catalog entries.
+func (a *ThemeCatalogAttr) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		a.Name = name
+		if name == "limit" {
+			a.Type = "int"
+			a.Min = 1
+			a.Max = 50
+			return nil
+		}
+		a.Type = "int"
+		return nil
+	}
+	type raw ThemeCatalogAttr
+	var v raw
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*a = ThemeCatalogAttr(v)
+	return nil
 }
 
 type ThemeCatalogAxis struct {

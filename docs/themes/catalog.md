@@ -82,7 +82,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
-- attrs: `limit`
+- attrs: `limit` (int 1..50)
 
 ## `view-header`
 
@@ -296,7 +296,7 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
-- attrs: `limit`
+- attrs: `limit` (int 1..50)
 
 ## `library.recent`
 

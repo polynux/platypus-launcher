@@ -828,6 +828,14 @@ export namespace types {
     version: string;
   }
 
+  export interface ThemeCatalogAttr {
+    name: string;
+    type: string;
+    min?: number;
+    max?: number;
+    values?: string[];
+  }
+
   export interface ThemeCatalogAxis {
     name: string;
     values: string[];
@@ -843,7 +851,7 @@ export namespace types {
     kind?: string;
     required?: boolean;
     region?: string;
-    attrs?: string[];
+    attrs?: types.ThemeCatalogAttr[];
   }
 
   export interface ThemeInfo {

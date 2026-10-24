@@ -378,13 +378,159 @@ func TestLayoutXSDCurrent(t *testing.T) {
 			if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			return
+		} else {
+			t.Fatal("layout.xsd is out of date; refresh with go test ./internal/themes -run TestLayoutXSDCurrent -update")
 		}
-		t.Fatal("layout.xsd is out of date; refresh with go test ./internal/themes -run TestLayoutXSDCurrent -update")
 	}
 	for _, want := range []string{`<xs:enumeration value="dashboard" />`, `<xs:enumeration value="side" />`, `<xs:enumeration value="activity" />`, `name="limit"`} {
 		if !strings.Contains(LayoutXSD(), want) {
 			t.Errorf("XSD misses %q", want)
 		}
+	}
+	dir := filepath.Join(filepath.Dir(source), "layouts")
+	for _, view := range LayoutXSDViews() {
+		path := filepath.Join(dir, view+".xsd")
+		data, err := os.ReadFile(path)
+		if err != nil && os.IsNotExist(err) && *updateCatalogSnapshot {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(LayoutXSDForView(view)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("read %s XSD: %v (refresh with go test ./internal/themes -run TestLayoutXSDCurrent -update)", view, err)
+		}
+		if got := LayoutXSDForView(view); got != string(data) {
+			if *updateCatalogSnapshot {
+				if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				continue
+			}
+			t.Fatalf("layouts/%s.xsd is out of date; refresh with go test ./internal/themes -run TestLayoutXSDCurrent -update", view)
+		}
+	}
+}
+
+// A layout that places the same block twice warns and keeps only the first
+// (issue #110 item 2): the second placement is dropped, never merged.
+func TestParseLayoutDuplicateBlocksWarn(t *testing.T) {
+	src := `
+<layout view="dashboard" catalog="1.0">
+  <region name="main">
+    <block name="continue" />
+    <block name="continue" />
+  </region>
+  <region name="side">
+    <row>
+      <block name="waiting" />
+      <block name="waiting" />
+    </row>
+  </region>
+</layout>`
+	layout, warnings := parseLayout("dashboard", []byte(src))
+	if layout == nil {
+		t.Fatalf("warnings = %v, want a usable layout", warnings)
+	}
+	joined := strings.Join(warnings, "\n")
+	if !strings.Contains(joined, `duplicate block "continue"`) || !strings.Contains(joined, `duplicate block "waiting"`) {
+		t.Fatalf("warnings = %v, want duplicate-block warnings", warnings)
+	}
+	if len(layout.Regions[0].Nodes) != 1 || layout.Regions[0].Nodes[0].Block != "continue" {
+		t.Fatalf("main = %+v, want a single continue block", layout.Regions[0])
+	}
+	if len(layout.Regions[1].Nodes) != 1 || len(layout.Regions[1].Nodes[0].Row) != 1 {
+		t.Fatalf("side = %+v, want a one-block row", layout.Regions[1])
+	}
+}
+
+// Typed block attributes come from the catalog (issue #110 item 4): int
+// attributes enforce their min/max, enum attributes their values, and the
+// canonical form is what reaches the UI.
+func TestParseLayoutTypedBlockAttrs(t *testing.T) {
+	withCatalog(t, []types.ThemeCatalogEntry{
+		{Entry: "dashboard.main", Since: "1.0", Kind: "region"},
+		{Entry: "dashboard.count", Since: "1.0", Kind: "block", Region: "main", Attrs: []types.ThemeCatalogAttr{{Name: "limit", Type: "int", Min: 2, Max: 5}}},
+		{Entry: "dashboard.align", Since: "1.0", Kind: "block", Region: "main", Attrs: []types.ThemeCatalogAttr{{Name: "side", Type: "enum", Values: []string{"left", "right"}}}},
+	})
+	for _, bad := range []string{"1", "6", "many"} {
+		layout, warnings := parseLayout("dashboard", []byte(
+			`<layout view="dashboard"><region name="main"><block name="count" limit="`+bad+`" /></region></layout>`))
+		if layout == nil {
+			t.Fatalf("limit %q: layout = nil, want the block without the attribute", bad)
+		}
+		if got := layout.Regions[0].Nodes[0].Attrs["limit"]; got != "" {
+			t.Fatalf("limit %q reached the UI", bad)
+		}
+		if !strings.Contains(strings.Join(warnings, "\n"), "is not valid") {
+			t.Fatalf("limit %q: warnings = %v, want the invalid-attribute warning", bad, warnings)
+		}
+	}
+	layout, warnings := parseLayout("dashboard", []byte(
+		`<layout view="dashboard"><region name="main"><block name="count" limit=" 3 " /></region></layout>`))
+	if len(warnings) != 0 || layout.Regions[0].Nodes[0].Attrs["limit"] != "3" {
+		t.Fatalf("limit 3 with spaces: layout = %+v, warnings = %v, want canonical 3", layout, warnings)
+	}
+	layout, warnings = parseLayout("dashboard", []byte(
+		`<layout view="dashboard"><region name="main"><block name="align" side="left" /></region></layout>`))
+	if len(warnings) != 0 || layout.Regions[0].Nodes[0].Attrs["side"] != "left" {
+		t.Fatalf("enum left: layout = %+v, warnings = %v", layout, warnings)
+	}
+	layout, warnings = parseLayout("dashboard", []byte(
+		`<layout view="dashboard"><region name="main"><block name="align" side="middle" /></region></layout>`))
+	if layout == nil {
+		t.Fatalf("enum middle: layout = nil, want the block without the attribute")
+	}
+	if got := layout.Regions[0].Nodes[0].Attrs["side"]; got != "" {
+		t.Fatalf("enum middle reached the UI")
+	}
+	if !strings.Contains(strings.Join(warnings, "\n"), "is not valid") {
+		t.Fatalf("enum middle: warnings = %v, want the invalid-attribute warning", warnings)
+	}
+}
+
+// Per-view XSDs are strict plain XSD 1.0 (issue #110 item 3): each view's
+// file lists only its regions and blocks, with the view fixed, while the
+// union layout.xsd stays for compatibility.
+func TestLayoutXSDPerView(t *testing.T) {
+	dashboard := LayoutXSDForView("dashboard")
+	library := LayoutXSDForView("library")
+	shell := LayoutXSDForView("shell")
+	for _, want := range []string{`<xs:enumeration value="hero" />`, `<xs:enumeration value="main" />`, `<xs:enumeration value="dashboard" />`} {
+		if !strings.Contains(dashboard, want) {
+			t.Errorf("dashboard XSD misses %q", want)
+		}
+	}
+	for _, unwanted := range []string{`<xs:enumeration value="header" />`, `<xs:enumeration value="sidebar" />`} {
+		if strings.Contains(dashboard, unwanted) {
+			t.Errorf("dashboard XSD contains %q, want only dashboard names", unwanted)
+		}
+	}
+	if !strings.Contains(library, `<xs:enumeration value="header" />`) || strings.Contains(library, `<xs:enumeration value="hero" />`) {
+		t.Errorf("library XSD mixes dashboard blocks")
+	}
+	if !strings.Contains(shell, `<xs:enumeration value="sidebar" />`) || strings.Contains(shell, `<xs:enumeration value="main" />`) {
+		t.Errorf("shell XSD mixes dashboard regions")
+	}
+	// Attribute types come from the catalog: limit is an int 1..50, not a
+	// bare positiveInteger, and enum attrs render as enumerations.
+	for _, xsd := range []string{dashboard, LayoutXSD()} {
+		if !strings.Contains(xsd, `name="limit"`) || !strings.Contains(xsd, `<xs:minInclusive value="1" />`) || !strings.Contains(xsd, `<xs:maxInclusive value="50" />`) {
+			t.Errorf("XSD misses the typed limit attribute")
+		}
+		if strings.Contains(xsd, `name="limit" type="xs:positiveInteger"`) {
+			t.Errorf("XSD still types limit as positiveInteger")
+		}
+	}
+	withCatalog(t, []types.ThemeCatalogEntry{
+		{Entry: "dashboard.main", Since: "1.0", Kind: "region"},
+		{Entry: "dashboard.align", Since: "1.0", Kind: "block", Region: "main", Attrs: []types.ThemeCatalogAttr{{Name: "side", Type: "enum", Values: []string{"left", "right"}}}},
+	})
+	xsd := LayoutXSDForView("dashboard")
+	if !strings.Contains(xsd, `name="side"`) || !strings.Contains(xsd, `<xs:enumeration value="left" />`) || !strings.Contains(xsd, `<xs:enumeration value="right" />`) {
+		t.Errorf("enum attr missing from XSD:\n%s", xsd)
 	}
 }

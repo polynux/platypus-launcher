@@ -24,9 +24,6 @@ import (
 // warnings) and applied only when the theme declares the level.
 const supportsLayouts = "layouts"
 
-// maxBlockLimit caps a block's limit attribute: ActivityView shows up to 50.
-const maxBlockLimit = 50
-
 // layoutParser validates one layouts/<view>.xml against the catalog, keeping
 // the warnings for the theme list. seen records the blocks placed, for the
 // required check.
@@ -237,13 +234,18 @@ func (p *layoutParser) block(dec *xml.Decoder, start xml.StartElement) *types.Th
 		}
 		return nil
 	}
+	if p.seen[name] {
+		p.warn("duplicate block %q in view %q, ignored", name, p.view)
+		return nil
+	}
 	node := &types.ThemeLayoutNode{Block: name}
 	for _, key := range slices.Sorted(maps.Keys(attrs)) {
-		if !slices.Contains(entry.Attrs, key) {
+		decl, ok := findBlockAttr(entry, key)
+		if !ok {
 			p.warn("unknown attribute %q on block %q, ignored", key, name)
 			continue
 		}
-		value, ok := checkBlockAttr(key, attrs[key])
+		value, ok := checkBlockAttr(decl, attrs[key])
 		if !ok {
 			p.warn("block %q: %s %q is not valid, ignored", name, key, attrs[key])
 			continue
@@ -257,17 +259,32 @@ func (p *layoutParser) block(dec *xml.Decoder, start xml.StartElement) *types.Th
 	return node
 }
 
+// findBlockAttr returns the catalog's declaration for one block attribute.
+func findBlockAttr(entry types.ThemeCatalogEntry, key string) (types.ThemeCatalogAttr, bool) {
+	for _, a := range entry.Attrs {
+		if a.Name == key {
+			return a, true
+		}
+	}
+	return types.ThemeCatalogAttr{}, false
+}
+
 // checkBlockAttr validates one declared block attribute and returns its
-// canonical form. limit is a positive event count, capped at what the feed
-// view itself shows.
-func checkBlockAttr(key, value string) (string, bool) {
-	switch key {
-	case "limit":
+// canonical form. int attributes take a whole number in Min..Max (Max 0 means
+// no maximum); enum attributes take one of Values.
+func checkBlockAttr(attr types.ThemeCatalogAttr, value string) (string, bool) {
+	switch attr.Type {
+	case "int":
 		n, err := strconv.Atoi(strings.TrimSpace(value))
-		if err != nil || n < 1 || n > maxBlockLimit {
+		if err != nil || n < attr.Min || (attr.Max != 0 && n > attr.Max) {
 			return "", false
 		}
 		return strconv.Itoa(n), true
+	case "enum":
+		if !slices.Contains(attr.Values, value) {
+			return "", false
+		}
+		return value, true
 	default:
 		return value, true
 	}
@@ -380,13 +397,15 @@ func (p *layoutParser) skipRest(dec *xml.Decoder) {
 
 // LayoutXSD returns the editor schema generated from the catalog: the views a
 // layout can target, every region and block name, and the union of the
-// per-block attributes. Per-view placement (which blocks go in which region)
-// stays with the core validator; the schema only autocompletes names.
+// per-block attributes. It stays as the compatibility schema at
+// internal/themes/layout.xsd: editors that point at it accept any catalog
+// name, while the core validator still rejects a block in the wrong view.
+// Per-view placement lives in LayoutXSDForView (issue #110).
 func LayoutXSD() string {
 	views := map[string]bool{}
 	regions := map[string]bool{}
 	blocks := map[string]bool{}
-	attrs := map[string]bool{}
+	attrs := map[string]types.ThemeCatalogAttr{}
 	for _, entry := range Catalog {
 		view, name, ok := splitBlockEntry(entry.Entry)
 		if !ok {
@@ -399,7 +418,9 @@ func LayoutXSD() string {
 		case "block":
 			blocks[name] = true
 			for _, a := range entry.Attrs {
-				attrs[a] = true
+				if _, exists := attrs[a.Name]; !exists {
+					attrs[a.Name] = a
+				}
 			}
 		}
 	}
@@ -407,6 +428,8 @@ func LayoutXSD() string {
 	b.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
 	b.WriteString("<!-- Generated from the theme catalog: do not edit. Refresh with\n")
 	b.WriteString("     go test ./internal/themes -run TestLayoutXSDCurrent -update. -->\n")
+	b.WriteString("<!-- Compatibility schema: the union of every view. For precise\n")
+	b.WriteString("     per-view checking use layouts/<view>.xsd (LayoutXSDForView). -->\n")
 	b.WriteString("<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n")
 	b.WriteString("  <xs:element name=\"layout\">\n")
 	b.WriteString("    <xs:complexType>\n")
@@ -439,12 +462,127 @@ func LayoutXSD() string {
 	b.WriteString("    <xs:attribute name=\"name\" use=\"required\">\n")
 	xsdEnum(&b, blocks, 6)
 	b.WriteString("    </xs:attribute>\n")
-	for _, a := range slices.Sorted(maps.Keys(attrs)) {
-		fmt.Fprintf(&b, "    <xs:attribute name=\"%s\" type=\"xs:positiveInteger\" />\n", a)
+	for _, name := range slices.Sorted(maps.Keys(attrs)) {
+		xsdAttr(&b, attrs[name], "    ")
 	}
 	b.WriteString("  </xs:complexType>\n")
 	b.WriteString("</xs:schema>\n")
 	return b.String()
+}
+
+// LayoutXSDForView returns the strict editor schema for one view (issue
+// #110): only its regions, blocks and attribute types. It is plain XSD 1.0
+// so common editors validate it: the VS Code XML extension (LemMinX) and
+// IntelliJ support XSD 1.0 well and XSD 1.1 xs:alternative poorly, so one
+// file per view beats a single file switching types on the view attribute.
+// Files live at internal/themes/layouts/<view>.xsd; layout.xsd stays as the
+// union for compatibility.
+func LayoutXSDForView(view string) string {
+	regions := map[string]bool{}
+	blocks := map[string]bool{}
+	attrs := map[string]types.ThemeCatalogAttr{}
+	for _, entry := range Catalog {
+		v, name, ok := splitBlockEntry(entry.Entry)
+		if !ok || v != view {
+			continue
+		}
+		switch entry.Kind {
+		case "region":
+			regions[name] = true
+		case "block":
+			blocks[name] = true
+			for _, a := range entry.Attrs {
+				if _, exists := attrs[a.Name]; !exists {
+					attrs[a.Name] = a
+				}
+			}
+		}
+	}
+	var b strings.Builder
+	b.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+	b.WriteString("<!-- Generated from the theme catalog: do not edit. Refresh with\n")
+	b.WriteString("     go test ./internal/themes -run TestLayoutXSDCurrent -update. -->\n")
+	fmt.Fprintf(&b, "<!-- Strict schema for layouts/%s.xml: only this view's regions and blocks. -->\n", view)
+	b.WriteString("<xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\">\n")
+	b.WriteString("  <xs:element name=\"layout\">\n")
+	b.WriteString("    <xs:complexType>\n")
+	b.WriteString("      <xs:sequence>\n")
+	b.WriteString("        <xs:element name=\"region\" maxOccurs=\"unbounded\">\n")
+	b.WriteString("          <xs:complexType>\n")
+	b.WriteString("            <xs:choice maxOccurs=\"unbounded\">\n")
+	b.WriteString("              <xs:element name=\"block\" type=\"blockType\" />\n")
+	b.WriteString("              <xs:element name=\"row\">\n")
+	b.WriteString("                <xs:complexType>\n")
+	b.WriteString("                  <xs:sequence>\n")
+	b.WriteString("                    <xs:element name=\"block\" type=\"blockType\" maxOccurs=\"unbounded\" />\n")
+	b.WriteString("                  </xs:sequence>\n")
+	b.WriteString("                </xs:complexType>\n")
+	b.WriteString("              </xs:element>\n")
+	b.WriteString("            </xs:choice>\n")
+	b.WriteString("            <xs:attribute name=\"name\" use=\"required\">\n")
+	xsdEnum(&b, regions, 14)
+	b.WriteString("            </xs:attribute>\n")
+	b.WriteString("          </xs:complexType>\n")
+	b.WriteString("        </xs:element>\n")
+	b.WriteString("      </xs:sequence>\n")
+	fmt.Fprintf(&b, "      <xs:attribute name=\"view\" use=\"required\">\n        <xs:simpleType>\n          <xs:restriction base=\"xs:string\">\n            <xs:enumeration value=\"%s\" />\n          </xs:restriction>\n        </xs:simpleType>\n      </xs:attribute>\n", view)
+	b.WriteString("      <xs:attribute name=\"catalog\" type=\"xs:string\" />\n")
+	b.WriteString("    </xs:complexType>\n")
+	b.WriteString("  </xs:element>\n")
+	b.WriteString("  <xs:complexType name=\"blockType\">\n")
+	b.WriteString("    <xs:attribute name=\"name\" use=\"required\">\n")
+	xsdEnum(&b, blocks, 6)
+	b.WriteString("    </xs:attribute>\n")
+	for _, name := range slices.Sorted(maps.Keys(attrs)) {
+		xsdAttr(&b, attrs[name], "    ")
+	}
+	b.WriteString("  </xs:complexType>\n")
+	b.WriteString("</xs:schema>\n")
+	return b.String()
+}
+
+// LayoutXSDViews are the views with a per-view schema file.
+func LayoutXSDViews() []string {
+	views := map[string]bool{}
+	for _, entry := range Catalog {
+		if entry.Kind != "region" {
+			continue
+		}
+		if view, _, ok := splitBlockEntry(entry.Entry); ok {
+			views[view] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(views))
+}
+
+// xsdAttr writes one block attribute from its catalog type: int becomes an
+// integer restriction with min/max, enum becomes an enumeration.
+func xsdAttr(b *strings.Builder, attr types.ThemeCatalogAttr, indent string) {
+	switch attr.Type {
+	case "int":
+		fmt.Fprintf(b, "%s<xs:attribute name=\"%s\">\n", indent, attr.Name)
+		fmt.Fprintf(b, "%s  <xs:simpleType>\n", indent)
+		fmt.Fprintf(b, "%s    <xs:restriction base=\"xs:integer\">\n", indent)
+		fmt.Fprintf(b, "%s      <xs:minInclusive value=\"%d\" />\n", indent, attr.Min)
+		if attr.Max != 0 {
+			fmt.Fprintf(b, "%s      <xs:maxInclusive value=\"%d\" />\n", indent, attr.Max)
+		}
+		fmt.Fprintf(b, "%s    </xs:restriction>\n", indent)
+		fmt.Fprintf(b, "%s  </xs:simpleType>\n", indent)
+		fmt.Fprintf(b, "%s</xs:attribute>\n", indent)
+	case "enum":
+		fmt.Fprintf(b, "%s<xs:attribute name=\"%s\">\n", indent, attr.Name)
+		fmt.Fprintf(b, "%s  <xs:simpleType>\n", indent)
+		fmt.Fprintf(b, "%s    <xs:restriction base=\"xs:string\">\n", indent)
+		for _, v := range attr.Values {
+			fmt.Fprintf(b, "%s      <xs:enumeration value=\"%s\" />\n", indent, v)
+		}
+		fmt.Fprintf(b, "%s    </xs:restriction>\n", indent)
+		fmt.Fprintf(b, "%s  </xs:simpleType>\n", indent)
+		fmt.Fprintf(b, "%s</xs:attribute>\n", indent)
+	default:
+		fmt.Fprintf(b, "%s<xs:attribute name=\"%s\" type=\"xs:string\" />\n", indent, attr.Name)
+	}
 }
 
 // xsdEnum writes a string restriction enumerating one name set, sorted.
