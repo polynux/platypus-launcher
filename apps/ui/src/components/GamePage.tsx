@@ -23,7 +23,8 @@ import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ds/tooltip';
 import { ScrollArea } from '@/components/ds/scroll-area';
-import { Cover, MonoLabel, Panel, TierBadge, cx } from './ui';
+import { MonoLabel, Panel, TierBadge, cx } from './ui';
+import { Hero, heroChipClass } from './Hero';
 import { PluginLogo } from './PluginLogo';
 import { formatBytes, heroImages, hoursPlayed, isPluginGame, needsAttention, storeLabel } from '../lib/games';
 import { useNetState } from './useNetState';
@@ -330,83 +331,30 @@ export function GamePage(p: GamePageProps) {
         <ArrowLeft className="h-3.5 w-3.5" /> {p.backLabel}
       </Button>
 
-      <section className="relative mb-6 mt-4 flex min-h-[280px] flex-col justify-end overflow-hidden rounded-3xl ring-1 ring-hairline">
-        <Cover src={hero} title={game.title} className="absolute inset-0 h-full w-full" />
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(0deg, rgba(19,15,10,.98) 10%, rgba(19,15,10,.35) 62%, rgba(19,15,10,.25) 100%)' }} />
-        <div className="relative flex flex-wrap items-end justify-between gap-x-6 gap-y-4 px-8 pb-6 pt-16">
-          <div className="min-w-0 flex-1 basis-72">
-            <div className="mb-2.5 flex flex-wrap gap-2">
-              {fix?.tier && <TierBadge tier={fix.tier} suffix={t('game:tierBadge.curated')} title={tierMeaning(t, fix.tier)} />}
-              <Badge className="bg-black/50 text-white/75" data-testid="store-badge">
-                <span className="inline-flex items-center gap-1.5">
-                  <PluginLogo src={storeLogo} name={storeName} size="xs" />
-                  <span>{storeName}</span>
-                </span>
-              </Badge>
-              {formatBytes(game.size_bytes) && <Badge className="bg-black/50 text-white/75">{formatBytes(game.size_bytes)}</Badge>}
-              {!game.is_installed && <Badge className="bg-black/50 text-text-muted">{t('game:hero.notInstalled')}</Badge>}
-              {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-info/30">{t('game:hero.updateAvailable')}</Badge>}
-              {game.pinned && <Badge variant="accent" className="bg-accent-strong/15 ring-1 ring-accent-strong/30">{t('game:hero.pinned')}</Badge>}
-              {needsConnection && (
-                <Badge className="bg-accent-strong/15 text-amber-100 ring-1 ring-accent-strong/30" data-testid="needs-connection">
-                  {t('game:hero.needsConnection', { store: storeName })}
-                </Badge>
-              )}
-            </div>
-            <GameHeading game={game} />
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
-            {(hours != null || last) && (
-              <div className="text-right font-mono text-hint leading-relaxed text-text-muted">
-                {hours != null && <div title={playtimeTitle}>{t('game:hero.hoursLogged', { hours: formatDecimal1(hours) })}</div>}
-                {last && <div>{t('game:hero.lastPlayed', { when: last })}</div>}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-end gap-2.5">
-              {game.is_installed && plugin && game.update_available && !active && (
-                <Button variant="neutral" size="none" onClick={() => p.onJob('update')} className="gap-2 rounded-2xl bg-black/50 px-4 py-3.5 text-[13px] text-sky-100 hover:bg-black/70">
-                  <RefreshCw className="h-4 w-4" /> {t('game:hero.update')}
-                </Button>
-              )}
-              {!game.is_installed ? (
-                <InstallButton
-                  game={game}
-                  job={job}
-                  onInstall={() => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install'))}
-                  onInstallTo={plugin && !canChooseOptions ? () => setInstallTo(true) : undefined}
-                  onCancel={(id) => p.onJobAction('cancel', id)}
-                />
-              ) : (
-                <PlayButton session={session} launching={p.launching} disabled={game.outside_folder} onPlay={p.onPlay} onStop={p.onStop} onForceStop={p.onForceStop} />
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="neutral" size="none" onClick={() => setSettingsTab('general')} aria-label={t('game:hero.gameSettings')} className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70">
-                    <Settings2 className="h-[18px] w-[18px]" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t('game:hero.gameSettings')}</TooltipContent>
-              </Tooltip>
-              {plugin?.storefront_url && details?.store_url && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="neutral"
-                      size="none"
-                      onClick={() => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url })}
-                      aria-label={t('game:hero.openInStore', { title: game.title, store: plugin.name })}
-                      className="size-[50px] rounded-2xl bg-black/50 text-white/80 hover:bg-black/70"
-                    >
-                      <StoreIcon className="h-[18px] w-[18px]" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{t('game:hero.openInStoreTip')}</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+      <Hero site="game" art={hero} title={game.title}>
+        <GameHeroHeading game={game} fix={fix} storeLogo={storeLogo} storeName={storeName} needsConnection={needsConnection} />
+        <GameHeroActions
+          game={game}
+          plugin={plugin}
+          job={job}
+          active={!!active}
+          session={session}
+          launching={p.launching}
+          hours={hours}
+          last={last}
+          playtimeTitle={playtimeTitle}
+          canChooseOptions={canChooseOptions}
+          onJob={p.onJob}
+          onJobAction={p.onJobAction}
+          onPlay={p.onPlay}
+          onStop={p.onStop}
+          onForceStop={p.onForceStop}
+          onInstall={() => (canChooseOptions ? setOptionsOpen(true) : p.onJob('install'))}
+          onInstallTo={plugin && !canChooseOptions ? () => setInstallTo(true) : undefined}
+          onSettings={() => setSettingsTab('general')}
+          onOpenStore={plugin?.storefront_url && details?.store_url ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url }) : undefined}
+        />
+      </Hero>
 
       {game.is_installed && game.outside_folder && plugin && (
         <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
@@ -1123,6 +1071,125 @@ function InstallButton({
         {job?.state === 'failed' ? t('game:install.retryInstall') : t('game:install.install')}
       </Button>
     </>
+  );
+}
+
+/** Today's game page hero heading (catalog game.heading): the badges and the
+ *  title. The game page shows it inside the Hero frame; #103 will place it in
+ *  a layout. Positioning is structural (as today): the frame lays the heading
+ *  and the actions out. */
+export function GameHeroHeading({ game, fix, storeLogo, storeName, needsConnection }: {
+  game: Game;
+  fix: Game['fix_info'];
+  storeLogo?: string;
+  storeName: string;
+  needsConnection: boolean;
+}) {
+  const { t } = useTranslation('game');
+  const chips = useVariant('game-hero.chips');
+  return (
+    <div className="min-w-0 flex-1 basis-72">
+      <div className="mb-2.5 flex flex-wrap gap-2">
+        {fix?.tier && <TierBadge tier={fix.tier} suffix={t('game:tierBadge.curated')} title={tierMeaning(t, fix.tier)} />}
+        <Badge className={cx(heroChipClass(chips), 'text-white/75')} data-testid="store-badge">
+          <span className="inline-flex items-center gap-1.5">
+            <PluginLogo src={storeLogo} name={storeName} size="xs" />
+            <span>{storeName}</span>
+          </span>
+        </Badge>
+        {formatBytes(game.size_bytes) && <Badge className={cx(heroChipClass(chips), 'text-white/75')}>{formatBytes(game.size_bytes)}</Badge>}
+        {!game.is_installed && <Badge className={cx(heroChipClass(chips), 'text-text-muted')}>{t('game:hero.notInstalled')}</Badge>}
+        {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-info/30">{t('game:hero.updateAvailable')}</Badge>}
+        {game.pinned && <Badge variant="accent" className="bg-accent-strong/15 ring-1 ring-accent-strong/30">{t('game:hero.pinned')}</Badge>}
+        {needsConnection && (
+          <Badge className="bg-accent-strong/15 text-amber-100 ring-1 ring-accent-strong/30" data-testid="needs-connection">
+            {t('game:hero.needsConnection', { store: storeName })}
+          </Badge>
+        )}
+      </div>
+      <GameHeading game={game} />
+    </div>
+  );
+}
+
+/** Today's game page hero actions (catalog game.actions): playtime, Install /
+ *  Play / Update, game settings and the store link. Required (it holds
+ *  Install, Play and Update); the game page shows it inside the Hero frame
+ *  until #103 places it in a layout. */
+export function GameHeroActions({ game, plugin, job, active, session, launching, hours, last, playtimeTitle, canChooseOptions, onJob, onJobAction, onPlay, onStop, onForceStop, onInstall, onInstallTo, onSettings, onOpenStore }: {
+  game: Game;
+  plugin?: StorePlugin;
+  job?: Job;
+  active: boolean;
+  session?: SessionEvent;
+  launching: boolean;
+  hours: number | null;
+  last?: string;
+  playtimeTitle?: string;
+  canChooseOptions: boolean;
+  onJob: (kind: GameJobKind) => void;
+  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onPlay: () => void;
+  onStop: () => void;
+  onForceStop: () => void;
+  onInstall: () => void;
+  onInstallTo?: () => void;
+  onSettings: () => void;
+  onOpenStore?: () => void;
+}) {
+  const { t } = useTranslation('game');
+  const chips = useVariant('game-hero.chips');
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
+      {(hours != null || last) && (
+        <div className="text-right font-mono text-hint leading-relaxed text-text-muted">
+          {hours != null && <div title={playtimeTitle}>{t('game:hero.hoursLogged', { hours: formatDecimal1(hours) })}</div>}
+          {last && <div>{t('game:hero.lastPlayed', { when: last })}</div>}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center justify-end gap-2.5">
+        {game.is_installed && plugin && game.update_available && !active && (
+          <Button variant="neutral" size="none" onClick={() => onJob('update')} className={cx(heroChipClass(chips), 'gap-2 rounded-2xl px-4 py-3.5 text-[13px] text-sky-100 hover:bg-black/70')}>
+            <RefreshCw className="h-4 w-4" /> {t('game:hero.update')}
+          </Button>
+        )}
+        {!game.is_installed ? (
+          <InstallButton
+            game={game}
+            job={job}
+            onInstall={onInstall}
+            onInstallTo={onInstallTo}
+            onCancel={(id) => onJobAction('cancel', id)}
+          />
+        ) : (
+          <PlayButton session={session} launching={launching} disabled={game.outside_folder} onPlay={onPlay} onStop={onStop} onForceStop={onForceStop} />
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="neutral" size="none" onClick={onSettings} aria-label={t('game:hero.gameSettings')} className={cx(heroChipClass(chips), 'size-[50px] rounded-2xl text-white/80 hover:bg-black/70')}>
+              <Settings2 className="h-[18px] w-[18px]" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t('game:hero.gameSettings')}</TooltipContent>
+        </Tooltip>
+        {plugin?.storefront_url && onOpenStore && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="neutral"
+                size="none"
+                onClick={onOpenStore}
+                aria-label={t('game:hero.openInStore', { title: game.title, store: plugin.name })}
+                className={cx(heroChipClass(chips), 'size-[50px] rounded-2xl text-white/80 hover:bg-black/70')}
+              >
+                <StoreIcon className="h-[18px] w-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t('game:hero.openInStoreTip')}</TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+    </div>
   );
 }
 

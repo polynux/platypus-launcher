@@ -23,6 +23,12 @@ export interface VariantValues {
   "game-tile.density": "comfortable" | "compact";
   "game-row.columns": "full" | "minimal";
   "game-row.mode": "full" | "compact";
+  "hero.height": "tall" | "regular" | "compact";
+  "hero.gradient": "warm" | "neutral" | "none";
+  "hero.chips": "glass" | "solid";
+  "game-hero.height": "tall" | "regular" | "compact";
+  "game-hero.gradient": "warm" | "neutral" | "none";
+  "game-hero.chips": "glass" | "solid";
 }
 
 export type VariantAxis = keyof VariantValues;
@@ -50,4 +56,10 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "game-tile.density": "comfortable",
   "game-row.columns": "full",
   "game-row.mode": "full",
+  "hero.height": "tall",
+  "hero.gradient": "warm",
+  "hero.chips": "glass",
+  "game-hero.height": "regular",
+  "game-hero.gradient": "warm",
+  "game-hero.chips": "solid",
 };

@@ -48,8 +48,10 @@
     <xs:attribute name="name" use="required">
       <xs:simpleType>
         <xs:restriction base="xs:string">
+          <xs:enumeration value="actions" />
           <xs:enumeration value="activity" />
           <xs:enumeration value="all-titles" />
+          <xs:enumeration value="attention" />
           <xs:enumeration value="chips" />
           <xs:enumeration value="collections" />
           <xs:enumeration value="continue" />
@@ -58,6 +60,7 @@
           <xs:enumeration value="footer" />
           <xs:enumeration value="grid" />
           <xs:enumeration value="header" />
+          <xs:enumeration value="heading" />
           <xs:enumeration value="hero" />
           <xs:enumeration value="last-played" />
           <xs:enumeration value="mode" />
