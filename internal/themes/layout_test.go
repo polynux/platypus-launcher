@@ -209,14 +209,82 @@ func TestBuiltinLayouts(t *testing.T) {
 	if len(dashboard.Regions) != 2 || dashboard.Regions[1].Name != "side" {
 		t.Fatalf("cool dashboard = %+v", dashboard)
 	}
-	if LayoutFor("warm", "dashboard") != nil {
+	library, ok := cool.Layouts["library"]
+	if !ok {
+		t.Fatalf("cool ships layouts %v, want a library layout", cool.Layouts)
+	}
+	if len(library.Regions) != 2 || library.Regions[1].Name != "side" {
+		t.Fatalf("cool library = %+v", library)
+	}
+	if LayoutFor("warm", "dashboard") != nil || LayoutFor("warm", "library") != nil {
 		t.Fatal("warm resolves a layout, want the built-in arrangement")
 	}
-	if LayoutFor("cool", "dashboard") == nil {
-		t.Fatal("cool resolves no layout, want its dashboard layout")
+	if LayoutFor("cool", "dashboard") == nil || LayoutFor("cool", "library") == nil {
+		t.Fatal("cool resolves no layout, want its dashboard and library layouts")
 	}
 	if LayoutFor("missing", "dashboard") != nil || LayoutFor("cool", "attic") != nil {
 		t.Fatal("a missing theme or view resolved a layout")
+	}
+}
+
+// The library layout (issue #98) orders the header blocks in the main column
+// and moves the last-played strip to the side, with a tighter activity feed.
+// Plugin warnings are required, so leaving them out restores them with a
+// warning; a bad limit costs only the attribute.
+func TestParseLibraryLayout(t *testing.T) {
+	src := `
+<layout view="library" catalog="1.0">
+  <region name="main">
+    <block name="title" />
+    <block name="mode" />
+    <block name="all-titles" />
+    <block name="table" />
+  </region>
+  <region name="side">
+    <block name="last-played" />
+    <block name="activity" limit="4" />
+    <block name="recent" />
+  </region>
+</layout>`
+	layout, warnings := parseLayout("library", []byte(src))
+	for _, w := range warnings {
+		if !strings.Contains(w, "leaves out required block") {
+			continue
+		}
+		// The warnings block is required: leaving it out warns and restores it.
+		goto restored
+	}
+	t.Fatalf("warnings = %v, want the required-block warning for warnings", warnings)
+restored:
+	if layout == nil || len(layout.Regions) != 2 {
+		t.Fatalf("layout = %+v, want two regions", layout)
+	}
+	var main *types.ThemeLayoutRegion
+	for i := range layout.Regions {
+		if layout.Regions[i].Name == "main" {
+			main = &layout.Regions[i]
+		}
+	}
+	if main == nil {
+		t.Fatalf("layout = %+v, want a main region", layout)
+	}
+	found := false
+	for _, n := range main.Nodes {
+		if n.Block == "warnings" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("main = %+v, want the warnings block restored", main)
+	}
+	var side *types.ThemeLayoutRegion
+	for i := range layout.Regions {
+		if layout.Regions[i].Name == "side" {
+			side = &layout.Regions[i]
+		}
+	}
+	if side == nil || len(side.Nodes) != 3 || side.Nodes[1].Attrs["limit"] != "4" {
+		t.Fatalf("side = %+v, want last-played, activity limit 4 and recent", side)
 	}
 }
 

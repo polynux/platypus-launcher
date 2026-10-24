@@ -34,6 +34,7 @@
         <xs:simpleType>
           <xs:restriction base="xs:string">
             <xs:enumeration value="dashboard" />
+            <xs:enumeration value="library" />
             <xs:enumeration value="shell" />
           </xs:restriction>
         </xs:simpleType>
@@ -46,17 +47,26 @@
       <xs:simpleType>
         <xs:restriction base="xs:string">
           <xs:enumeration value="activity" />
+          <xs:enumeration value="all-titles" />
+          <xs:enumeration value="chips" />
           <xs:enumeration value="collections" />
           <xs:enumeration value="continue" />
           <xs:enumeration value="empty" />
+          <xs:enumeration value="filters" />
           <xs:enumeration value="footer" />
           <xs:enumeration value="hero" />
+          <xs:enumeration value="last-played" />
+          <xs:enumeration value="mode" />
           <xs:enumeration value="nav" />
           <xs:enumeration value="recent" />
+          <xs:enumeration value="search" />
           <xs:enumeration value="sources" />
           <xs:enumeration value="store" />
+          <xs:enumeration value="table" />
+          <xs:enumeration value="title" />
           <xs:enumeration value="tools" />
           <xs:enumeration value="waiting" />
+          <xs:enumeration value="warnings" />
           <xs:enumeration value="welcome" />
         </xs:restriction>
       </xs:simpleType>

@@ -103,6 +103,18 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if def.Variants["game-settings.presentation"] != "dialog" || def.Variants["game-settings.tabs"] != "vertical" {
 		t.Fatalf("warm game-settings variants = %v", def.Variants)
 	}
+	if cool.Variants["game-tile.aspect"] != "16:9" || cool.Variants["game-tile.compat"] != "off" || cool.Variants["game-tile.overlay"] != "off" || cool.Variants["game-tile.density"] != "compact" {
+		t.Fatalf("cool game-tile variants = %v", cool.Variants)
+	}
+	if cool.Variants["game-row.columns"] != "minimal" || cool.Variants["game-row.mode"] != "compact" {
+		t.Fatalf("cool game-row variants = %v", cool.Variants)
+	}
+	if def.Variants["game-tile.aspect"] != "3:4" || def.Variants["game-tile.compat"] != "on" || def.Variants["game-tile.overlay"] != "on" || def.Variants["game-tile.density"] != "comfortable" {
+		t.Fatalf("warm game-tile variants = %v", def.Variants)
+	}
+	if def.Variants["game-row.columns"] != "full" || def.Variants["game-row.mode"] != "full" {
+		t.Fatalf("warm game-row variants = %v", def.Variants)
+	}
 }
 
 func TestVariantsWarnAndFallBack(t *testing.T) {

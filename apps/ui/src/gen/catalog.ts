@@ -17,6 +17,12 @@ export interface VariantValues {
   "game-settings.presentation": "dialog" | "sheet" | "page";
   "game-settings.tabs": "vertical" | "horizontal";
   "shell.navigation": "sidebar" | "topbar";
+  "game-tile.aspect": "2:3" | "3:4" | "16:9";
+  "game-tile.compat": "on" | "off";
+  "game-tile.overlay": "on" | "off";
+  "game-tile.density": "comfortable" | "compact";
+  "game-row.columns": "full" | "minimal";
+  "game-row.mode": "full" | "compact";
 }
 
 export type VariantAxis = keyof VariantValues;
@@ -38,4 +44,10 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "game-settings.presentation": "dialog",
   "game-settings.tabs": "vertical",
   "shell.navigation": "sidebar",
+  "game-tile.aspect": "3:4",
+  "game-tile.compat": "on",
+  "game-tile.overlay": "on",
+  "game-tile.density": "comfortable",
+  "game-row.columns": "full",
+  "game-row.mode": "full",
 };
