@@ -86,7 +86,8 @@ Done:
       tracking, with a download queue (progress, pause, resume, free-space checks).
 - [x] Core blocks for verify, move, install options (language, DLC), achievements, playtime and code
       redeem, checked with the test store; the real store plugins don't use them yet.
-- [x] Data plugins: community fixes and tweaks in a shared format.
+- [x] Data plugins: community fixes and tweaks in a shared format. A data plugin can also carry a
+      theme; see [docs/themes/authoring.md](docs/themes/authoring.md).
 - [x] Epic, GOG and Amazon plugins; a plugin scaffold (`plugins/new.sh`).
 - [x] Steam without the Steam client, with a Go depot downloader that spreads downloads over many CDN
       hosts (over 200 Mbps on average).

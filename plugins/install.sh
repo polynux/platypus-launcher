@@ -37,9 +37,11 @@ case "$icon_rel" in
 esac
 
 # Data plugins (kind: data, no exec) are JSON only: copy the listed data
-# files plus the manifest.
+# files plus the manifest. A theme-carrying plugin also ships its theme.toml,
+# its layouts/ files and its assets (images, fonts) inside the folder.
 if [ "$kind" = "data" ]; then
   data_files=$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).get("data",["fixes.json","tweaks.json"])))' "$src/plugin.json")
+  theme_rel=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("theme",""))' "$src/plugin.json")
   mkdir -p "$dest"
   # shellcheck disable=SC2086
   for d in $data_files; do
@@ -51,6 +53,26 @@ if [ "$kind" = "data" ]; then
       cp "$src/$d" "$dest/$d.new" && mv -f "$dest/$d.new" "$dest/$d"
     fi
   done
+  case "$theme_rel" in
+    "") ;;
+    /*|../*|*/../*) echo "$name/plugin.json theme escapes the folder: $theme_rel" >&2; exit 1 ;;
+    *)
+      if [ -f "$src/$theme_rel" ]; then
+        mkdir -p "$dest/$(dirname "$theme_rel")"
+        cp "$src/$theme_rel" "$dest/$theme_rel.new" && mv -f "$dest/$theme_rel.new" "$dest/$theme_rel"
+      fi
+      for sub in layouts assets fonts; do
+        if [ -d "$src/$sub" ]; then
+          mkdir -p "$dest/$sub"
+          for f in "$src/$sub"/*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            cp "$f" "$dest/$sub/$base.new" && mv -f "$dest/$sub/$base.new" "$dest/$sub/$base"
+          done
+        fi
+      done
+      ;;
+  esac
   cp "$src/plugin.json" "$dest/plugin.json.new" && mv -f "$dest/plugin.json.new" "$dest/plugin.json"
   if [ -n "$icon_rel" ] && [ -f "$src/$icon_rel" ]; then
     mkdir -p "$dest/$(dirname "$icon_rel")"
