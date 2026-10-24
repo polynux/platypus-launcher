@@ -3,6 +3,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createChatNotifier, validNotifyMessage } from './chatNotify.ts';
 import { Core, errorData } from './core.ts';
+import { isMethodAllowed, notAllowedMessage } from './allowlist.ts';
+import { approvalDetail, approvalMessage, runApproveGate, testApproveAnswer, type ApprovalPlugin } from './approve.ts';
 import { resolveShellLanguage, shellText } from './locale.ts';
 import { resolvePaths } from './paths.ts';
 import { restoreWindow, TrayState, type TrayGame } from './tray.ts';
@@ -337,9 +339,13 @@ function fromApp(e: IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
 function registerIPC(): void {
   ipcMain.handle('platypus:invoke', async (e, method: unknown, args: unknown) => {
     if (!fromApp(e)) return { ok: false, error: 'refused: not the app page' };
-    if (typeof method !== 'string' || !core?.methods.has(method) || !Array.isArray(args)) {
-      return { ok: false, error: `refused: ${String(method)} is not a core method` };
+    if (typeof method !== 'string' || !isMethodAllowed('app', method) || !Array.isArray(args)) {
+      return { ok: false, error: notAllowedMessage(method) };
     }
+    // Approving a plugin lets it run code (issue #89): the page may ask,
+    // but only a native confirmation parented to the window grants it.
+    if (method === 'ApprovePlugin') return approvePlugin(e, args);
+    if (!core) return { ok: false, error: notAllowedMessage(method) };
     try {
       return { ok: true, result: await core.call(method, args) };
     } catch (err) {
@@ -355,6 +361,42 @@ function registerIPC(): void {
     const url = webURL(raw);
     if (url) void shell.openExternal(url);
   });
+}
+
+/**
+ * ApprovePlugin through the native confirmation (issue #89). The dialog
+ * names the plugin (name + id), its folder and its declared permissions,
+ * looked up on the core; it forwards to the core only on an explicit
+ * Approve. The default button is Cancel, and a decline never reaches the
+ * core: the page gets a coded error it can show.
+ */
+async function approvePlugin(e: IpcMainInvokeEvent, args: unknown[]): Promise<unknown> {
+  const win = BrowserWindow.fromWebContents(e.sender) ?? parentWindow();
+  try {
+    return await runApproveGate(args, {
+      listPlugins: async () => ((await core?.call('ListStorePlugins', [])) ?? []) as ApprovalPlugin[],
+      showDialog: async (plugin) => {
+        const r = await dialog.showMessageBox(win, {
+          type: 'question',
+          buttons: [shellText(shellLang, 'approvePluginApprove'), shellText(shellLang, 'approvePluginCancel')],
+          defaultId: 1,
+          cancelId: 1,
+          title: shellText(shellLang, 'approvePluginTitle'),
+          message: approvalMessage(plugin, shellLang),
+          detail: approvalDetail(plugin, shellLang),
+        });
+        return r.response === 0;
+      },
+      forward: (a) => core!.call('ApprovePlugin', a),
+      // Test runs only: a packaged build always shows the dialog, like the
+      // other PLATYPUS_* switches that only work unpackaged.
+      testAnswer: app.isPackaged ? undefined : testApproveAnswer(),
+    });
+  } catch (err) {
+    const data = errorData(err);
+    const error = err instanceof Error ? err.message : String(err);
+    return data === undefined ? { ok: false, error } : { ok: false, error, data };
+  }
 }
 
 /**
