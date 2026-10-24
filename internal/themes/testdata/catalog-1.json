@@ -105,6 +105,87 @@
       "attrs": [
         "limit"
       ]
+    },
+    {
+      "entry": "view-header",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "actions",
+          "values": [
+            "right",
+            "below"
+          ],
+          "default": "right",
+          "since": "1.0"
+        },
+        {
+          "name": "subtitle",
+          "values": [
+            "shown",
+            "hidden"
+          ],
+          "default": "shown",
+          "since": "1.0"
+        },
+        {
+          "name": "size",
+          "values": [
+            "regular",
+            "compact"
+          ],
+          "default": "regular",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "empty-state",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "chrome",
+          "values": [
+            "dashed",
+            "plain"
+          ],
+          "default": "dashed",
+          "since": "1.0"
+        },
+        {
+          "name": "icon",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "off",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "list-row",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "media",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "comfortable",
+          "since": "1.0"
+        }
+      ]
     }
   ]
 }

@@ -464,6 +464,19 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			Navigation:   variants["settings.navigation"],
 		},
 		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
+		ViewHeader: types.ThemeViewHeaderVariants{
+			Actions:  variants["view-header.actions"],
+			Subtitle: variants["view-header.subtitle"],
+			Size:     variants["view-header.size"],
+		},
+		EmptyState: types.ThemeEmptyStateVariants{
+			Chrome: variants["empty-state.chrome"],
+			Icon:   variants["empty-state.icon"],
+		},
+		ListRow: types.ThemeListRowVariants{
+			Media:   variants["list-row.media"],
+			Density: variants["list-row.density"],
+		},
 	}
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
@@ -489,6 +502,19 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 			Navigation:   variants["settings.navigation"],
 		},
 		Section: types.ThemeSectionVariants{Chrome: variants["section.chrome"]},
+		ViewHeader: types.ThemeViewHeaderVariants{
+			Actions:  variants["view-header.actions"],
+			Subtitle: variants["view-header.subtitle"],
+			Size:     variants["view-header.size"],
+		},
+		EmptyState: types.ThemeEmptyStateVariants{
+			Chrome: variants["empty-state.chrome"],
+			Icon:   variants["empty-state.icon"],
+		},
+		ListRow: types.ThemeListRowVariants{
+			Media:   variants["list-row.media"],
+			Density: variants["list-row.density"],
+		},
 	}
 	return out
 }

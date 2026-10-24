@@ -25,4 +25,17 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "dashboard.waiting", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "dashboard.recent", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"limit"}},
+	{Entry: "view-header", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "actions", Values: []string{"right", "below"}, Default: "right", Since: "1.0"},
+		{Name: "subtitle", Values: []string{"shown", "hidden"}, Default: "shown", Since: "1.0"},
+		{Name: "size", Values: []string{"regular", "compact"}, Default: "regular", Since: "1.0"},
+	}},
+	{Entry: "empty-state", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "chrome", Values: []string{"dashed", "plain"}, Default: "dashed", Since: "1.0"},
+		{Name: "icon", Values: []string{"on", "off"}, Default: "off", Since: "1.0"},
+	}},
+	{Entry: "list-row", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "media", Values: []string{"on", "off"}, Default: "on", Since: "1.0"},
+		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "comfortable", Since: "1.0"},
+	}},
 }

@@ -5,7 +5,7 @@ import { Effect } from 'effect';
 import { FolderInput, FolderOpen, Loader2, RefreshCw, ScanLine, Trash2 } from 'lucide-react';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
 import { LauncherApi, onDiskUsage } from '../effect/runtime';
-import { EmptyState, MonoLabel } from './ui';
+import { EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { RemoveConfirmPanel, RemoveFirstRow, parentFolder, useRemoveCheck } from './MaintenanceTab';
@@ -90,17 +90,15 @@ export function StorageView({ games: library, onNotify, onRemove, onUninstall }:
   };
   return (
     <div className="p-7">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.storage')}</h1>
-          <p className="mt-0.5 text-[12.5px] text-white/70">{t('storage:intro')}</p>
-          <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/70">{t('storage:about')}</p>
-        </div>
-        <Button variant="neutral" onClick={rescan} disabled={scanning}>
+      <ViewHeader
+        title={t('nav:title.storage')}
+        subtitle={<><p className="mt-0.5 text-[12.5px] text-white/70">{t('storage:intro')}</p>
+        <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/70">{t('storage:about')}</p></>}
+        actions={<Button variant="neutral" onClick={rescan} disabled={scanning}>
           {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           {scanning ? t('storage:scanning') : t('storage:rescan')}
-        </Button>
-      </header>
+        </Button>}
+      />
 
       {drives.length > 0 && (
         <section className="mb-6">

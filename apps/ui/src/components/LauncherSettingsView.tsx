@@ -16,6 +16,7 @@ import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 import { DEFAULT_THEME_ID, loadTheme, useVariant } from '../lib/theme';
+import { ViewHeader } from './ui';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
@@ -89,10 +90,11 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 
   return (
     <div className="p-7">
-      <header className="mb-2">
-        <h1 className="text-[23px] font-extrabold tracking-tight">{t('settings:title')}</h1>
-        <p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">{t('subtitle')}</p>
-      </header>
+      <ViewHeader
+        tight
+        title={t('settings:title')}
+        subtitle={<p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">{t('subtitle')}</p>}
+      />
       {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
 
       {navigation === 'tabs' ? (

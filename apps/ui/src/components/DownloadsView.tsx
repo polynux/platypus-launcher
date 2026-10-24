@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
 import type { Job } from '../types';
-import { EmptyState, MonoLabel, cx } from './ui';
+import { EmptyState, ListRow, MonoLabel, Section, ViewHeader, cx } from './ui';
 import { Button } from './ds/button';
 import { formatBytes } from '../lib/games';
 import { currentLocale } from '../lib/format';
@@ -79,7 +79,7 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
             ? job.phase === 'resuming' || job.phase?.includes('restart') ? job.phase : t('downloads:job.waiting')
             : formatFinished(job.updated_at);
   return (
-    <div className="rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]">
+    <ListRow kind="job">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-amber-200">
@@ -139,7 +139,7 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
       )}
       {job.install_dir && job.kind !== 'uninstall' && job.kind !== 'move' && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir}</div>}
       {job.kind === 'move' && job.destination && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir} → {job.destination}</div>}
-    </div>
+    </ListRow>
   );
 }
 
@@ -154,14 +154,10 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
   const pausedCount = active.filter((j) => j.state === 'paused').length;
   return (
     <div className="p-7">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
-          <p className="mt-0.5 text-[12.5px] text-white/70">
-            {t('downloads:header.subtitle')}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <ViewHeader
+        title={t('nav:title.downloads')}
+        subtitle={<p className="mt-0.5 text-[12.5px] text-white/70">{t('downloads:header.subtitle')}</p>}
+        actions={<div className="flex items-center gap-2">
           {pausedCount > 0 && (
             <Button variant="neutral" onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}>
               {t('downloads:header.resumeAll')}
@@ -172,24 +168,24 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
               {clearing ? t('downloads:header.clearing') : t('downloads:header.clearFinished')}
             </Button>
           )}
-        </div>
-      </header>
+        </div>}
+      />
 
       {jobs.length === 0 ? (
         <EmptyState label={t('downloads:empty.label')}>{t('downloads:empty.detail')}</EmptyState>
       ) : (
         <>
           {active.length > 0 && (
-            <section className="mb-8">
+            <Section className="mb-8">
               <MonoLabel className="mb-3">{t('downloads:section.queue')}</MonoLabel>
               <div className="space-y-2">{active.map((j) => <JobRow key={j.id} job={j} onAction={onAction} onOpenGame={onOpenGame} />)}</div>
-            </section>
+            </Section>
           )}
           {finished.length > 0 && (
-            <section>
+            <Section>
               <MonoLabel className="mb-3">{t('downloads:section.finished')}</MonoLabel>
               <div className="space-y-2">{finished.map((j) => <JobRow key={j.id} job={j} onAction={onAction} onOpenGame={onOpenGame} />)}</div>
-            </section>
+            </Section>
           )}
         </>
       )}

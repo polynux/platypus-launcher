@@ -7,7 +7,7 @@ import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin }
 import { LauncherApi, onAuth } from '../effect/runtime';
 import { openExternal } from '../lib/external';
 import { Modal } from './Modal';
-import { EmptyState, MonoLabel, Panel, cx } from './ui';
+import { EmptyState, MonoLabel, Panel, ViewHeader, cx } from './ui';
 import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
@@ -124,22 +124,20 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
 
   return (
     <div className="p-7">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
-          <p className="mt-0.5 max-w-xl text-[12.5px] text-text-body">
-            {t('plugins:header.subtitle')}
-          </p>
-        </div>
-        <div className="flex gap-2">
+      <ViewHeader
+        title={t('nav:title.plugins')}
+        subtitle={<p className="mt-0.5 max-w-xl text-[12.5px] text-text-body">
+          {t('plugins:header.subtitle')}
+        </p>}
+        actions={<div className="flex gap-2">
           <Button variant="neutral" onClick={() => Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'))}>
             <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
           </Button>
           <Button variant="neutral" onClick={() => refresh(true).then(onLibraryChanged)}>
             <RefreshCw className="h-3.5 w-3.5" /> {t('plugins:header.rescan')}
           </Button>
-        </div>
-      </header>
+        </div>}
+      />
 
       <MonoLabel as="h2" className="mb-3">{t('plugins:section.store')}</MonoLabel>
       {plugins.filter((p) => p.kind === 'store').length === 0 ? (
