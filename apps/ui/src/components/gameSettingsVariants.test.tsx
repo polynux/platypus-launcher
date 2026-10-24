@@ -57,6 +57,7 @@ vi.mock('./LegalSection', () => ({ LegalSection: () => null }));
 vi.mock('./maintenancePrefetch', () => ({
   MaintenancePrefetchProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useMaintenancePrefetchSource: () => ({}),
+  useMaintenancePrefetch: () => null,
 }));
 
 import { GameSettingsModal } from './GameSettingsModal';
@@ -152,6 +153,30 @@ describe('Game settings catalog variants', () => {
     fireEvent.keyDown(general, { key: tabs === 'vertical' ? 'ArrowDown' : 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Cloud saves', selected: true })).toBeTruthy();
     expect(document.getElementById('gs-tab-cloud')).toHaveFocus();
+  });
+
+  it('keeps horizontal tabs on one scrolling row with an edge fade', () => {
+    state.variants['game-settings.tabs'] = 'horizontal';
+    render(<GameSettingsModal {...modalProps()} />);
+    const tablist = screen.getByRole('tablist', { name: 'Game settings sections' });
+    expect(tablist.className).toMatch(/\bflex-nowrap\b/);
+    expect(tablist.className).toMatch(/(^|\s)overflow-x-auto(\s|$)/);
+    expect(tablist.className).not.toMatch(/flex-wrap/);
+    expect(tablist.className).toMatch(/mask-image/);
+    for (const tab of screen.getAllByRole('tab')) expect(tab).toHaveClass('shrink-0');
+  });
+
+  it('scrolls the active horizontal tab into view', () => {
+    state.variants['game-settings.tabs'] = 'horizontal';
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+    try {
+      render(<GameSettingsModal {...modalProps()} />);
+      fireEvent.click(screen.getByRole('tab', { name: 'Maintenance' }));
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ block: 'nearest', inline: 'nearest' }));
+      expect(spy.mock.contexts).toContain(document.getElementById('gs-tab-maintenance'));
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('honours an explicit dialog size and keeps xl for auto', () => {
