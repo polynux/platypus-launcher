@@ -171,10 +171,14 @@ func TestTokenValueGrammar(t *testing.T) {
 			t.Errorf("%s = %q accepted, want it rejected", name, v)
 		}
 	}
-	for _, v := range []string{"10px", "0.75rem", "2.5REM"} {
-		_, err := checkToken("radius-chip", v)
-		if (err == nil) != (v != "2.5REM") {
-			t.Errorf("radius %q: err %v", v, err)
+	for _, v := range []string{"10px", "0.75rem"} {
+		if _, err := checkToken("radius-chip", v); err != nil {
+			t.Errorf("radius %q rejected: %v", v, err)
+		}
+	}
+	for _, v := range []string{"2.5REM", "10em", "calc(1rem)"} {
+		if _, err := checkToken("radius-chip", v); err == nil {
+			t.Errorf("radius %q accepted, want it rejected", v)
 		}
 	}
 }
