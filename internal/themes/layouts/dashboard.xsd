@@ -46,6 +46,7 @@
       <xs:simpleType>
         <xs:restriction base="xs:string">
           <xs:enumeration value="activity" />
+          <xs:enumeration value="attention" />
           <xs:enumeration value="continue" />
           <xs:enumeration value="empty" />
           <xs:enumeration value="hero" />
