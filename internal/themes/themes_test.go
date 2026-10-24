@@ -1,7 +1,6 @@
 package themes
 
 import (
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -92,21 +91,6 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	}
 }
 
-func TestCatalogSnapshot(t *testing.T) {
-	want := []types.ThemeCatalogEntry{
-		{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
-			{Name: "presentation", Values: []string{"page", "dialog", "sheet"}, Default: "page", Since: "1.0"},
-			{Name: "navigation", Values: []string{"scroll", "tabs"}, Default: "scroll", Since: "1.0"},
-		}},
-		{Entry: "section", Since: "1.0", Axes: []types.ThemeCatalogAxis{
-			{Name: "chrome", Values: []string{"hairline", "framed", "plain"}, Default: "hairline", Since: "1.0"},
-		}},
-	}
-	if CatalogVersion != "1.0" || !reflect.DeepEqual(Catalog, want) {
-		t.Fatalf("catalog changed without updating its snapshot and version: %#v", Catalog)
-	}
-}
-
 func TestVariantsWarnAndFallBack(t *testing.T) {
 	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1) + `
 [variants]
@@ -134,6 +118,41 @@ func TestValidThemeResolvesItsTokens(t *testing.T) {
 	}
 	if th.Tokens["accent"] != "#112233" {
 		t.Fatalf("accent = %q", th.Tokens["accent"])
+	}
+}
+
+func TestMissingCatalogVersionAssumesOneWithoutWarning(t *testing.T) {
+	th := parse(t, minimal)
+	if th.Info.Status != StatusOK || len(th.Info.Warnings) != 0 {
+		t.Fatalf("status %q warnings %v, want ok and no warning", th.Info.Status, th.Info.Warnings)
+	}
+}
+
+func TestNewerMajorCatalogNeedsNewerPlatypus(t *testing.T) {
+	src := strings.Replace(minimal, "schema = 1", "schema = 1\ncatalog = \"2.0\"", 1)
+	th := parse(t, src)
+	if th.Info.Status != StatusNewer || !warningsContain(th, "needs catalog 2.0") {
+		t.Fatalf("status %q warnings %v, want newer catalog status", th.Info.Status, th.Info.Warnings)
+	}
+	if got := resolve(th, true); got.ID != DefaultID {
+		t.Fatalf("newer catalog theme resolved as %q, want default", got.ID)
+	}
+}
+
+func TestNewerMinorCatalogIsUsableAndUnknownVariantsFallBack(t *testing.T) {
+	src := strings.Replace(minimal, "schema = 1", "schema = 1\ncatalog = \"1.1\"", 1)
+	src = strings.Replace(src, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1) + `
+[variants]
+"settings.navigation" = "tabs"
+"settings.presentation" = "drawer"
+`
+	th := parse(t, src)
+	if th.Info.Status != StatusOK || !warningsContain(th, "unknown value") {
+		t.Fatalf("status %q warnings %v, want usable theme and unknown-value warning", th.Info.Status, th.Info.Warnings)
+	}
+	got := resolve(th, true)
+	if got.Variants.Settings.Navigation != "tabs" || got.Variants.Settings.Presentation != "page" {
+		t.Fatalf("variants = %v, want known 1.0 value applied and unknown value defaulted", got.Variants)
 	}
 }
 

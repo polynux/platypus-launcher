@@ -5,6 +5,7 @@
 id = "warm"
 name = "Warm"
 schema = 1
+catalog = "1.0"
 supports = ["tokens", "variants"]
 
 [tokens]

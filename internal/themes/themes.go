@@ -11,6 +11,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -24,6 +25,9 @@ var builtin embed.FS
 // Schema is the newest theme.toml schema this build reads. A theme that asks
 // for a newer one is listed as "newer" and can't be picked.
 const Schema = 1
+
+// DefaultThemeCatalog is assumed when an older theme omits its catalog target.
+const DefaultThemeCatalog = "1.0"
 
 // DefaultID is the built-in theme the launcher starts with. Every token a
 // theme leaves out, or sets badly, takes its value from here.
@@ -88,6 +92,7 @@ type file struct {
 		ID       string   `toml:"id"`
 		Name     string   `toml:"name"`
 		Schema   int      `toml:"schema"`
+		Catalog  string   `toml:"catalog"`
 		Supports []string `toml:"supports"`
 	} `toml:"theme"`
 	Tokens   map[string]any   `toml:"tokens"`
@@ -132,6 +137,22 @@ func Parse(src []byte) Theme {
 		t.warn("needs schema %d, this Platypus reads schema %d", f.Theme.Schema, Schema)
 		return t
 	}
+	catalog := f.Theme.Catalog
+	if catalog == "" {
+		catalog = DefaultThemeCatalog
+	}
+	targetMajor, _, validCatalog := catalogVersion(catalog)
+	currentMajor, _, _ := catalogVersion(CatalogVersion)
+	if !validCatalog {
+		t.warn("theme.catalog must be a major.minor version, assuming %s", DefaultThemeCatalog)
+		catalog = DefaultThemeCatalog
+		targetMajor, _, _ = catalogVersion(catalog)
+	}
+	if targetMajor > currentMajor {
+		t.Info.Status = StatusNewer
+		t.warn("needs catalog %s, this Platypus reads catalog %s", catalog, CatalogVersion)
+		return t
+	}
 	t.Info.Status = StatusOK
 	for _, name := range slices.Sorted(maps.Keys(f.Tokens)) {
 		t.setToken(name, f.Tokens[name])
@@ -143,6 +164,22 @@ func Parse(src []byte) Theme {
 		t.setVariant(key, f.Variants[key])
 	}
 	return t
+}
+
+func catalogVersion(version string) (major, minor int, ok bool) {
+	parts := strings.Split(version, ".")
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil || major < 0 {
+		return 0, 0, false
+	}
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil || minor < 0 {
+		return 0, 0, false
+	}
+	return major, minor, true
 }
 
 func (t *Theme) setVariant(key string, raw any) {
