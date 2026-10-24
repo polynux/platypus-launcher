@@ -388,7 +388,9 @@ async function approvePlugin(e: IpcMainInvokeEvent, args: unknown[]): Promise<un
         return r.response === 0;
       },
       forward: (a) => core!.call('ApprovePlugin', a),
-      testAnswer: testApproveAnswer(),
+      // Test runs only: a packaged build always shows the dialog, like the
+      // other PLATYPUS_* switches that only work unpackaged.
+      testAnswer: app.isPackaged ? undefined : testApproveAnswer(),
     });
   } catch (err) {
     const data = errorData(err);
