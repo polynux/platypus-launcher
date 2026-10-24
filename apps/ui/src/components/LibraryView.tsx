@@ -5,7 +5,7 @@ import { ArrowDown, ArrowUp, Download, LogIn, PackagePlus, Play, Plus, SlidersHo
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SourceWarning, StorePlugin, StoreType, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { RecentList } from './Dashboard';
-import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, cardClass, clock, cx } from './ui';
+import { Cover, EmptyState, MonoLabel, Panel, SegRow, TierBadge, TweakDot, TIER_DOT, TIER_TEXT, ViewHeader, cardClass, clock, cx } from './ui';
 import { GameCardBody, tierMeaning } from './CompatBadges';
 import { TIER_FILTERS, tierFilterValue, type TierFilter } from '../lib/compat';
 import { Button } from './ds/button';
@@ -428,11 +428,9 @@ export function LibraryView(p: LibraryProps) {
 
   return (
     <div className="p-7">
-      <header className="mb-6 space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[23px] font-extrabold tracking-tight">{t('nav:title.library')}</h1>
-            <p className="mt-0.5 text-[12.5px] tabular-nums text-text-body">
+      <ViewHeader
+        title={t('nav:title.library')}
+        subtitle={<><p className="mt-0.5 text-[12.5px] tabular-nums text-text-body">
               {t('library:counts', { shown: formatCount(filtered.length), installed: formatCount(installedCount) })}
               {owned > installedCount ? t('library:ownedSuffix', { owned: formatCount(owned) }) : ''}
               {p.lastScan ? t('library:scannedSuffix', { time: clock(p.lastScan) }) : ''}
@@ -462,18 +460,16 @@ export function LibraryView(p: LibraryProps) {
                 <WifiOff className="h-3.5 w-3.5" aria-hidden />
                 {t('library:offline', 'Offline — showing the last known library')}
               </p>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+            )}</>}
+        actions={<div className="flex flex-wrap items-center gap-2.5">
             <FilterGroup label={t('library:view')}>
               <SegRow label={t('library:view')} value={p.mode} onChange={p.onMode} options={[{ value: 'cards', label: t('library:mode.cards') }, { value: 'table', label: t('library:mode.table') }]} />
             </FilterGroup>
             <Button variant="primary" onClick={p.onAddGame}>
               <Plus className="h-3.5 w-3.5" strokeWidth={3} /> {t('library:addGame')}
             </Button>
-          </div>
-        </div>
-
+          </div>}
+        below={<>
         {/* One row: search, the store, and a Filters toggle for the less-used groups (each keeps its label). */}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative">
@@ -581,7 +577,8 @@ export function LibraryView(p: LibraryProps) {
             </FilterGroup>
           </div>
         )}
-      </header>
+        </>}
+      />
 
       {p.warnings.length > 0 && (
         <div className="mb-6 space-y-2">

@@ -395,8 +395,11 @@ type ThemeTokens struct {
 
 // ThemeVariants gives the generated UI bridge a closed set of catalog axes.
 type ThemeVariants struct {
-	Settings ThemeSettingsVariants `json:"settings"`
-	Section  ThemeSectionVariants  `json:"section"`
+	Settings   ThemeSettingsVariants   `json:"settings"`
+	Section    ThemeSectionVariants    `json:"section"`
+	ViewHeader ThemeViewHeaderVariants `json:"viewHeader"`
+	EmptyState ThemeEmptyStateVariants `json:"emptyState"`
+	ListRow    ThemeListRowVariants    `json:"listRow"`
 }
 
 type ThemeSettingsVariants struct {
@@ -406,6 +409,22 @@ type ThemeSettingsVariants struct {
 
 type ThemeSectionVariants struct {
 	Chrome string `json:"chrome"`
+}
+
+type ThemeViewHeaderVariants struct {
+	Actions  string `json:"actions"`
+	Subtitle string `json:"subtitle"`
+	Size     string `json:"size"`
+}
+
+type ThemeEmptyStateVariants struct {
+	Chrome string `json:"chrome"`
+	Icon   string `json:"icon"`
+}
+
+type ThemeListRowVariants struct {
+	Media   string `json:"media"`
+	Density string `json:"density"`
 }
 
 type ThemeCatalogEntry struct {

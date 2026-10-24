@@ -841,6 +841,11 @@ export namespace types {
     axes: types.ThemeCatalogAxis[];
   }
 
+  export interface ThemeEmptyStateVariants {
+    chrome: string;
+    icon: string;
+  }
+
   export interface ThemeInfo {
     id: string;
     name: string;
@@ -848,6 +853,11 @@ export namespace types {
     supports: string[];
     status: string;
     warnings: string[];
+  }
+
+  export interface ThemeListRowVariants {
+    media: string;
+    density: string;
   }
 
   export interface ThemeSectionVariants {
@@ -869,6 +879,15 @@ export namespace types {
   export interface ThemeVariants {
     settings: types.ThemeSettingsVariants;
     section: types.ThemeSectionVariants;
+    viewHeader: types.ThemeViewHeaderVariants;
+    emptyState: types.ThemeEmptyStateVariants;
+    listRow: types.ThemeListRowVariants;
+  }
+
+  export interface ThemeViewHeaderVariants {
+    actions: string;
+    subtitle: string;
+    size: string;
   }
 
   export interface Tweak {

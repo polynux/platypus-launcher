@@ -1,7 +1,9 @@
 import React from 'react';
 import type { ActivityType } from '../types';
 import { cn } from '@/lib/utils';
+import { Inbox } from 'lucide-react';
 import { coverMisses } from '../lib/coverMisses';
+import { useVariant } from '../lib/theme';
 import { buttonVariantClass } from './ds/button';
 import { Badge } from './ds/badge';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
@@ -145,12 +147,123 @@ export const EVENT_DOT: Record<ActivityType, string> = {
 };
 
 export function EmptyState({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
+  const chrome = useVariant('empty-state.chrome');
+  const icon = useVariant('empty-state.icon');
   return (
-    <div className="rounded-3xl border border-dashed border-white/15 p-10 text-center">
+    <div className={chrome === 'plain' ? 'rounded-3xl p-10 text-center' : 'rounded-3xl border border-dashed border-white/15 p-10 text-center'}>
+      {icon === 'on' && <Inbox aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />}
       <MonoLabel>{label}</MonoLabel>
       <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-body">{children}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
+  );
+}
+
+/** A view's header (issue #100): title, subtitle and right-side actions.
+ *  The subtitle and actions are the caller's own nodes, so each view keeps
+ *  its copy; the variants only move or hide them. Warm (right/shown/regular)
+ *  is today's layout. */
+export function ViewHeader({ title, subtitle, actions, below, tight }: { title: React.ReactNode; subtitle?: React.ReactNode; actions?: React.ReactNode; below?: React.ReactNode; tight?: boolean }) {
+  const actionsAt = useVariant('view-header.actions');
+  const showSubtitle = useVariant('view-header.subtitle');
+  const size = useVariant('view-header.size');
+  const titleClass = size === 'compact' ? 'text-[20px] font-extrabold tracking-tight' : 'text-[23px] font-extrabold tracking-tight';
+  const subtitleNode = subtitle && showSubtitle === 'shown' ? subtitle : null;
+  if (!actions) {
+    return (
+      <header className={tight ? 'mb-2' : size === 'compact' ? 'mb-4' : 'mb-6'}>
+        <h1 className={titleClass}>{title}</h1>
+        {subtitleNode}
+        {below}
+      </header>
+    );
+  }
+  if (actionsAt === 'below') {
+    return (
+      <header className={tight ? 'mb-2' : size === 'compact' ? 'mb-4' : 'mb-6'}>
+        <h1 className={titleClass}>{title}</h1>
+        {subtitleNode}
+        <div className="mt-3 flex flex-wrap items-center gap-2.5">{actions}</div>
+        {below}
+      </header>
+    );
+  }
+  if (below) {
+    return (
+      <header className="mb-6 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className={titleClass}>{title}</h1>
+            {subtitleNode}
+          </div>
+          {actions}
+        </div>
+        {below}
+      </header>
+    );
+  }
+  return (
+    <header className={tight ? 'mb-2 flex flex-wrap items-end justify-between gap-4' : 'mb-6 flex flex-wrap items-end justify-between gap-4'}>
+      <div>
+        <h1 className={titleClass}>{title}</h1>
+        {subtitleNode}
+      </div>
+      {actions}
+    </header>
+  );
+}
+
+/** One row in a simple list (issue #100): runner, fix and job rows. The kind
+ *  keeps each row's box as it is today; the media variant hides the fix
+ *  cover in text-only themes, and density tightens the box. Warm
+ *  (media on, comfortable) is pixel-identical to today. */
+const LISTROW_BOX: Record<'fix' | 'runner' | 'job', { comfortable: string; compact: string }> = {
+  fix: {
+    comfortable: 'flex w-full gap-4 rounded-2xl bg-white/[0.045] p-4 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40',
+    compact: 'flex w-full gap-3 rounded-2xl bg-white/[0.045] p-3 text-left ring-1 ring-white/[0.06] transition hover:ring-orange-400/40',
+  },
+  runner: {
+    comfortable: 'flex items-center justify-between gap-4 rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]',
+    compact: 'flex items-center justify-between gap-3 rounded-2xl bg-white/[0.045] px-3 py-2 ring-1 ring-white/[0.07]',
+  },
+  job: {
+    comfortable: 'rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]',
+    compact: 'rounded-2xl bg-white/[0.045] px-3 py-2 ring-1 ring-white/[0.07]',
+  },
+};
+
+export function ListRow({ kind, media, children, as: Tag = 'div', buttonProps }: { kind: 'fix' | 'runner' | 'job'; media?: React.ReactNode; children: React.ReactNode; as?: 'div' | 'button'; buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement> }) {
+  const showMedia = useVariant('list-row.media');
+  const density = useVariant('list-row.density');
+  const box = density === 'compact' ? LISTROW_BOX[kind].compact : LISTROW_BOX[kind].comfortable;
+  const mediaNode = kind === 'fix' && media && showMedia === 'on' ? media : null;
+  if (Tag === 'button') {
+    return (
+      <button {...buttonProps} className={box}>
+        {mediaNode}
+        {children}
+      </button>
+    );
+  }
+  return (
+    <div className={box}>
+      {mediaNode}
+      {children}
+    </div>
+  );
+}
+
+/** A group in a simple view (issue #100): the queue and finished groups in
+ *  Downloads, the feed panel in Activity. The chrome prop is the view's
+ *  current box, so warm stays pixel-identical; the catalog variant drives
+ *  the Settings sections, and cool's framed/compact/split choices show in
+ *  the headers, empty states and rows instead. */
+export function Section({ children, className }: { children: React.ReactNode; className?: string }) {
+  const chrome = useVariant('section.chrome');
+  return (
+    <section data-chrome={chrome} className={className}>
+      {children}
+    </section>
   );
 }
 

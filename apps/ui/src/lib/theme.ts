@@ -12,20 +12,40 @@ import type { ThemeTokens, WashLayer } from '../types';
 export const DEFAULT_THEME_ID = 'warm';
 
 const CACHE_KEY = 'platypus.theme';
-let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' } };
+let currentVariants: ThemeTokens['variants'] = { settings: { presentation: 'page', navigation: 'scroll' }, section: { chrome: 'hairline' }, viewHeader: { actions: 'right', subtitle: 'shown', size: 'regular' }, emptyState: { chrome: 'dashed', icon: 'off' }, listRow: { media: 'on', density: 'comfortable' } };
 const variantListeners = new Set<() => void>();
-type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}`;
+type ThemeVariantAxis = `settings.${keyof ThemeTokens['variants']['settings']}` | `section.${keyof ThemeTokens['variants']['section']}` | `view-header.${keyof ThemeTokens['variants']['viewHeader']}` | `empty-state.${keyof ThemeTokens['variants']['emptyState']}` | `list-row.${keyof ThemeTokens['variants']['listRow']}`;
 
 /** Reads one resolved catalog choice and updates when the selected theme changes. */
 export function useVariant(axis: ThemeVariantAxis): string {
-  const [entry, name] = axis.split('.') as ['settings' | 'section', string];
-  const readVariant = () => entry === 'settings'
-    ? name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation
-    : currentVariants.section.chrome;
+  const [entry, name] = axis.split('.') as ['settings' | 'section' | 'view-header' | 'empty-state' | 'list-row', string];
+  const readVariant = () => {
+    switch (entry) {
+      case 'settings': return name === 'presentation' ? currentVariants.settings.presentation : currentVariants.settings.navigation;
+      case 'section': return currentVariants.section.chrome;
+      case 'view-header': return currentVariants.viewHeader[name as keyof ThemeTokens['variants']['viewHeader']];
+      case 'empty-state': return currentVariants.emptyState[name as keyof ThemeTokens['variants']['emptyState']];
+      default: return currentVariants.listRow[name as keyof ThemeTokens['variants']['listRow']];
+    }
+  };
+  const getDefault = () => {
+    switch (axis) {
+      case 'settings.presentation': return 'page';
+      case 'settings.navigation': return 'scroll';
+      case 'section.chrome': return 'hairline';
+      case 'view-header.actions': return 'right';
+      case 'view-header.subtitle': return 'shown';
+      case 'view-header.size': return 'regular';
+      case 'empty-state.chrome': return 'dashed';
+      case 'empty-state.icon': return 'off';
+      case 'list-row.media': return 'on';
+      default: return 'comfortable';
+    }
+  };
   return useSyncExternalStore(
     (listener) => { variantListeners.add(listener); return () => variantListeners.delete(listener); },
     readVariant,
-    () => axis === 'settings.presentation' ? 'page' : axis === 'settings.navigation' ? 'scroll' : 'hairline',
+    getDefault,
   );
 }
 

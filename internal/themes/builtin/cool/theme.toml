@@ -12,6 +12,13 @@ supports = ["tokens", "variants"]
 "settings.presentation" = "sheet"
 "settings.navigation" = "tabs"
 "section.chrome" = "framed"
+"view-header.actions" = "below"
+"view-header.subtitle" = "shown"
+"view-header.size" = "compact"
+"empty-state.chrome" = "plain"
+"empty-state.icon" = "on"
+"list-row.media" = "off"
+"list-row.density" = "compact"
 
 [tokens]
 ground = "#0b1118"
