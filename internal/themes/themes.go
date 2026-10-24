@@ -96,6 +96,13 @@ type file struct {
 // Parse reads one theme.toml. It never fails: a file it can't use comes back
 // with status invalid and the reason in Warnings.
 func Parse(src []byte) Theme {
+	return parseTheme(src, true)
+}
+
+// parseTheme is Parse with the contrast check optional: reading the built-in
+// default theme skips it, since that read supplies the values the check falls
+// back to.
+func parseTheme(src []byte, checkContrast bool) Theme {
 	t := Theme{
 		Info:   types.ThemeInfo{Status: StatusInvalid, Supports: []string{}, Warnings: []string{}},
 		Tokens: map[string]string{},
@@ -132,6 +139,9 @@ func Parse(src []byte) Theme {
 	t.Info.Status = StatusOK
 	for _, name := range slices.Sorted(maps.Keys(f.Tokens)) {
 		t.setToken(name, f.Tokens[name])
+	}
+	if checkContrast {
+		t.checkContrast()
 	}
 	if len(f.Wash) > 0 {
 		t.setWash(f.Wash)
