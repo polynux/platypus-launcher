@@ -149,13 +149,45 @@ containers; a normal desktop does not need it.)
   never sees the token and CSP has no `connect-src` beyond itself.
 - Security: contextIsolation, sandbox, no nodeIntegration, permissions denied,
   navigation and `window.open` blocked (http/https go to `shell.openExternal`),
-  IPC accepted only from `app://platypus`, only for methods the core listed,
-  strict CSP (scripts from the app only; images may come from https and
-  loopback). The dev CSP adds `unsafe-inline` and Vite's websocket. The core
-  is spawned with explicit stdio pipes and nothing else (libuv closes every
-  other fd in the child, so Chromium's sockets never reach it; plugins and
-  games get only 0/1/2 in turn — Go's os/exec closes the rest, and nothing in
-  internal/ passes ExtraFiles). Remote debugging exists only in development.
+  IPC accepted only from `app://platypus`, only for methods on that surface's
+  allowlist (see below), strict CSP (scripts from the app only; images may
+  come from https and loopback). The dev CSP adds `unsafe-inline` and Vite's
+  websocket. The core is spawned with explicit stdio pipes and nothing else
+  (libuv closes every other fd in the child, so Chromium's sockets never
+  reach it; plugins and games get only 0/1/2 in turn — Go's os/exec closes
+  the rest, and nothing in internal/ passes ExtraFiles). Remote debugging
+  exists only in development.
+
+## Trust boundary of the page bridge (issue #89)
+
+Any script that runs in the app page speaks with the user's full authority,
+so the bridge treats the page as untrusted input. Today only first-party code
+runs there (`script-src 'self'`), which makes this defense in depth; it
+becomes live the moment anything else reaches the page (an HTML-sanitizer
+miss in plugin-provided `descriptionHtml`, a compromised dependency, a future
+UI extension point).
+
+- One allowlist per surface: `apps/desktop/src/allowlist.ts` holds the app
+  page's list — exactly the methods `apps/ui/src` calls (`allowlist.test.ts`
+  fails when the two drift apart) — instead of `core.methods`, which is what
+  the core serves, not what a caller may use. A future surface (another
+  WebContents, e.g. a theme or plugin-defined UI view) gets its own list
+  here, starting empty. Methods the UI never calls (`GetGameStatus`,
+  `RefreshSavePaths`, `SetSystemLanguages`, `Locale`) stay off the page's
+  list; they remain core methods (main calls `SetSystemLanguages` straight at
+  the core, `GetGameStatus` backs its setters in Go).
+- Trust-granting goes through the main process: `ApprovePlugin` from the page
+  shows a native `dialog.showMessageBox` parented to the window — naming the
+  plugin (name + id), its folder and its declared permissions, looked up on
+  the core — and forwards to the core only on an explicit Approve. The
+  default button is Cancel; a decline answers a coded
+  `errors:plugin.approvalDeclined` error the UI shows, and never reaches the
+  core. Destructive actions (uninstall, remove, move) keep their in-page
+  confirmations for now. The page can request approval but never grant it.
+- Tests answer the dialog through `PLATYPUS_TEST_APPROVE_DIALOG`
+  (`approve`/`decline`) in the main process's environment — never through
+  the page, which has no way to set it, and never in production, where the
+  dialog always shows.
 
 ## Minimize to tray while a game runs (issue #49)
 

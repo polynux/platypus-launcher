@@ -8,5 +8,17 @@
   "trayStop": "Stop {{title}}",
   "trayQuit": "Quit",
   "trayTooltip": "Platypus",
-  "trayTooltipGame": "Platypus — {{title}}"
+  "trayTooltipGame": "Platypus — {{title}}",
+  "approvePluginTitle": "Approve plugin?",
+  "approvePluginMessage": "Approve {{name}} ({{id}})?",
+  "approvePluginApprove": "Approve",
+  "approvePluginCancel": "Cancel",
+  "approvePluginFolder": "Folder",
+  "approvePluginPermissions": "Declared permissions",
+  "approvePluginNetwork": "Network",
+  "approvePluginReads": "Reads",
+  "approvePluginWrites": "Writes",
+  "approvePluginNone": "none declared",
+  "approvePluginNoHosts": "no hosts declared",
+  "approvePluginNoPaths": "no paths declared"
 }
