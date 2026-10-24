@@ -259,12 +259,18 @@ func (p *layoutParser) block(dec *xml.Decoder, start xml.StartElement) *types.Th
 
 // checkBlockAttr validates one declared block attribute and returns its
 // canonical form. limit is a positive event count, capped at what the feed
-// view itself shows.
+// view itself shows; span is a row share (1-12, like a grid span).
 func checkBlockAttr(key, value string) (string, bool) {
 	switch key {
 	case "limit":
 		n, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil || n < 1 || n > maxBlockLimit {
+			return "", false
+		}
+		return strconv.Itoa(n), true
+	case "span":
+		n, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || n < 1 || n > 12 {
 			return "", false
 		}
 		return strconv.Itoa(n), true

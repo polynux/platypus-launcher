@@ -5,5 +5,5 @@ import type { ThemeLayout } from '../types';
 /** The built-in arrangement per view: what renders with no theme layout. */
 export const BUILTIN_LAYOUTS: Record<string, ThemeLayout> = {
   "dashboard": {"view":"dashboard","regions":[{"name":"top","nodes":[{"block":"hero"},{"block":"welcome"},{"block":"empty"}]},{"name":"main","nodes":[{"block":"continue"}]},{"name":"side","nodes":[{"block":"waiting"},{"block":"recent"}]},{"name":"bottom","nodes":[{"block":"activity","attrs":{"limit":"8"}}]}]},
-  "library": {"view":"library","regions":[{"name":"top","nodes":[{"block":"header"},{"block":"warnings"},{"block":"empty"}]},{"name":"bottom","nodes":[{"block":"last-played"},{"block":"grid"},{"block":"table"},{"row":[{"block":"activity","attrs":{"limit":"6"}},{"block":"recent"}]}]}]},
+  "library": {"view":"library","regions":[{"name":"top","nodes":[{"block":"header"},{"block":"warnings"},{"block":"empty"}]},{"name":"bottom","nodes":[{"block":"last-played"},{"block":"all-titles"},{"block":"table"},{"row":[{"block":"activity","attrs":{"limit":"6"}},{"block":"recent"}]}]}]},
 };

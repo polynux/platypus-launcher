@@ -342,6 +342,13 @@
     display: inline;
   }
 }
+/* The shared-by badge overlaps the fallback title on short 16:9 covers
+   (issue #109 D4): the tall 2:3 and 3:4 covers centre the title well below
+   the badge, but the short cover centres it under the badge. Only the 16:9
+   fallback gets top clearance, so warm 2:3 cards stay pixel-identical. */
+.card-compat[data-aspect="16:9"] .cover-fallback {
+  padding-top: 2.5rem;
+}
 .no-scrollbar {
   scrollbar-width: none;
 }

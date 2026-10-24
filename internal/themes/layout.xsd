@@ -58,7 +58,6 @@
           <xs:enumeration value="empty" />
           <xs:enumeration value="filters" />
           <xs:enumeration value="footer" />
-          <xs:enumeration value="grid" />
           <xs:enumeration value="header" />
           <xs:enumeration value="heading" />
           <xs:enumeration value="hero" />
@@ -79,5 +78,6 @@
       </xs:simpleType>
     </xs:attribute>
     <xs:attribute name="limit" type="xs:positiveInteger" />
+    <xs:attribute name="span" type="xs:positiveInteger" />
   </xs:complexType>
 </xs:schema>

@@ -23,13 +23,13 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "dashboard.main", Since: "1.0", Kind: "region"},
 	{Entry: "dashboard.side", Since: "1.0", Kind: "region"},
 	{Entry: "dashboard.bottom", Since: "1.0", Kind: "region"},
-	{Entry: "dashboard.hero", Since: "1.0", Kind: "block", Region: "top"},
-	{Entry: "dashboard.welcome", Since: "1.0", Kind: "block", Region: "top"},
-	{Entry: "dashboard.empty", Since: "1.0", Kind: "block", Region: "top"},
-	{Entry: "dashboard.continue", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "dashboard.waiting", Since: "1.0", Kind: "block", Region: "side"},
-	{Entry: "dashboard.recent", Since: "1.0", Kind: "block", Region: "side"},
-	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
+	{Entry: "dashboard.hero", Since: "1.0", Kind: "block", Region: "top", Attrs: []string{"span"}},
+	{Entry: "dashboard.welcome", Since: "1.0", Kind: "block", Region: "top", Attrs: []string{"span"}},
+	{Entry: "dashboard.empty", Since: "1.0", Kind: "block", Region: "top", Attrs: []string{"span"}},
+	{Entry: "dashboard.continue", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"span"}},
+	{Entry: "dashboard.waiting", Since: "1.0", Kind: "block", Region: "side", Attrs: []string{"span"}},
+	{Entry: "dashboard.recent", Since: "1.0", Kind: "block", Region: "side", Attrs: []string{"span"}},
+	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit", "span"}},
 	{Entry: "view-header", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "actions", Values: []string{"right", "below"}, Default: "right", Since: "1.0"},
 		{Name: "subtitle", Values: []string{"shown", "hidden"}, Default: "shown", Since: "1.0"},
@@ -73,7 +73,8 @@ var Catalog = []types.ThemeCatalogEntry{
 	// Library game representations (issue #98): the tile the continue grid
 	// and the cards share, and the row the table and the recent lists share.
 	// Warm keeps today's dashboard tile (3:4, compat and overlay on) and
-	// today's full table.
+	// today's full table. The library cards read library-tile (issue #109),
+	// which follows game-tile unless the theme names a library value.
 	{Entry: "game-tile", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "aspect", Values: []string{"2:3", "3:4", "16:9"}, Default: "3:4", Since: "1.0"},
 		{Name: "compat", Values: []string{"on", "off"}, Default: "on", Since: "1.0"},
@@ -88,27 +89,30 @@ var Catalog = []types.ThemeCatalogEntry{
 	// built-in order (inventory §2.2). Only the plugin warnings are required:
 	// they tell the truth about the stores, so a layout can't hide them.
 	// The built-in arrangement (issue #108) groups the header in top and the
-	// catalog in bottom, both full width; the header block composes the
-	// title, mode, search, chips and filters exactly as the built-in header
-	// shows them, while themes like cool place the parts separately.
+	// catalog in bottom, both full width; the header block stays because the
+	// granular blocks stack vertically and can't reproduce its two-row flex
+	// arrangement pixel-identically without contortions (issue #109), while
+	// themes like cool place the parts separately. The all-titles block is
+	// the catalog tile every layout uses; the old grid block is gone.
+	// Every block takes an optional span in a row (issue #109): a tile grid
+	// needs more columns than a list beside it.
 	{Entry: "library.top", Since: "1.0", Kind: "region"},
 	{Entry: "library.main", Since: "1.0", Kind: "region"},
 	{Entry: "library.side", Since: "1.0", Kind: "region"},
 	{Entry: "library.bottom", Since: "1.0", Kind: "region"},
-	{Entry: "library.header", Since: "1.0", Kind: "block", Region: "top"},
-	{Entry: "library.title", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.mode", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.search", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.chips", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.filters", Since: "1.0", Kind: "block", Region: "main"},
-	{Entry: "library.warnings", Since: "1.0", Kind: "block", Required: true, Region: "top"},
-	{Entry: "library.empty", Since: "1.0", Kind: "block", Region: "top"},
-	{Entry: "library.last-played", Since: "1.0", Kind: "block", Region: "bottom"},
-	{Entry: "library.grid", Since: "1.0", Kind: "block", Region: "bottom"},
-	{Entry: "library.all-titles", Since: "1.0", Kind: "block", Region: "bottom"},
-	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
-	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom"},
-	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "bottom"},
+	{Entry: "library.header", Since: "1.0", Kind: "block", Region: "top", Attrs: []string{"span"}},
+	{Entry: "library.title", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"span"}},
+	{Entry: "library.mode", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"span"}},
+	{Entry: "library.search", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"span"}},
+	{Entry: "library.chips", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"span"}},
+	{Entry: "library.filters", Since: "1.0", Kind: "block", Region: "main", Attrs: []string{"span"}},
+	{Entry: "library.warnings", Since: "1.0", Kind: "block", Required: true, Region: "top", Attrs: []string{"span"}},
+	{Entry: "library.empty", Since: "1.0", Kind: "block", Region: "top", Attrs: []string{"span"}},
+	{Entry: "library.last-played", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"span"}},
+	{Entry: "library.all-titles", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"span"}},
+	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit", "span"}},
+	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"span"}},
+	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"span"}},
 	// Hero frame entries (issue #101): one frame for the dashboard and game
 	// page heroes. The dashboard reads the global hero axes; the game page
 	// reads game-hero, which follows the global choice unless the theme
@@ -132,7 +136,20 @@ var Catalog = []types.ThemeCatalogEntry{
 	// show the content on its own. The game page uses the blocks in fixed
 	// positions until it becomes a layout view (#103). Actions are required:
 	// they hold Install, Play and Update.
-	{Entry: "dashboard.attention", Since: "1.0", Kind: "block", Region: "top"},
-	{Entry: "game.heading", Since: "1.0", Kind: "block", Region: "hero"},
-	{Entry: "game.actions", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
+	{Entry: "dashboard.attention", Since: "1.0", Kind: "block", Region: "top", Attrs: []string{"span"}},
+	{Entry: "game.heading", Since: "1.0", Kind: "block", Region: "hero", Attrs: []string{"span"}},
+	{Entry: "game.actions", Since: "1.0", Kind: "block", Required: true, Region: "hero", Attrs: []string{"span"}},
+	// Library tile use site (issue #109): the library cards read
+	// library-tile, which follows the global game-tile choice unless the
+	// theme names a value for the library itself (like game-hero follows
+	// hero). Warm keeps today's looks through the defaults: the dashboard
+	// reads game-tile (its 3:4 comfortable tile), the library reads
+	// library-tile (its 2:3 compact card, the GameCard footer through the
+	// compact density). Cool picks the compact 16:9 values.
+	{Entry: "library-tile", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "aspect", Values: []string{"2:3", "3:4", "16:9"}, Default: "2:3", Since: "1.0", Inherits: "game-tile.aspect"},
+		{Name: "compat", Values: []string{"on", "off"}, Default: "on", Since: "1.0", Inherits: "game-tile.compat"},
+		{Name: "overlay", Values: []string{"on", "off"}, Default: "on", Since: "1.0", Inherits: "game-tile.overlay"},
+		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "compact", Since: "1.0", Inherits: "game-tile.density"},
+	}},
 }

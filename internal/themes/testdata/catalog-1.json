@@ -71,42 +71,60 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "dashboard.welcome",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "dashboard.empty",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "dashboard.continue",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "main",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "dashboard.waiting",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "side"
+      "region": "side",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "dashboard.recent",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "side"
+      "region": "side",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "dashboard.activity",
@@ -115,7 +133,8 @@
       "kind": "block",
       "region": "bottom",
       "attrs": [
-        "limit"
+        "limit",
+        "span"
       ]
     },
     {
@@ -417,42 +436,60 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.title",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "main",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.mode",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "main",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.search",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "main",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.chips",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "main",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.filters",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "main"
+      "region": "main",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.warnings",
@@ -460,35 +497,40 @@
       "axes": null,
       "kind": "block",
       "required": true,
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.empty",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.last-played",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "bottom"
-    },
-    {
-      "entry": "library.grid",
-      "since": "1.0",
-      "axes": null,
-      "kind": "block",
-      "region": "bottom"
+      "region": "bottom",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.all-titles",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "bottom"
+      "region": "bottom",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.activity",
@@ -497,7 +539,8 @@
       "kind": "block",
       "region": "bottom",
       "attrs": [
-        "limit"
+        "limit",
+        "span"
       ]
     },
     {
@@ -505,14 +548,20 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "bottom"
+      "region": "bottom",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "library.table",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "bottom"
+      "region": "bottom",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "hero",
@@ -592,14 +641,20 @@
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "top"
+      "region": "top",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "game.heading",
       "since": "1.0",
       "axes": null,
       "kind": "block",
-      "region": "hero"
+      "region": "hero",
+      "attrs": [
+        "span"
+      ]
     },
     {
       "entry": "game.actions",
@@ -607,7 +662,57 @@
       "axes": null,
       "kind": "block",
       "required": true,
-      "region": "hero"
+      "region": "hero",
+      "attrs": [
+        "span"
+      ]
+    },
+    {
+      "entry": "library-tile",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "aspect",
+          "values": [
+            "2:3",
+            "3:4",
+            "16:9"
+          ],
+          "default": "2:3",
+          "since": "1.0",
+          "inherits": "game-tile.aspect"
+        },
+        {
+          "name": "compat",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0",
+          "inherits": "game-tile.compat"
+        },
+        {
+          "name": "overlay",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0",
+          "inherits": "game-tile.overlay"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "compact",
+          "since": "1.0",
+          "inherits": "game-tile.density"
+        }
+      ]
     }
   ]
 }

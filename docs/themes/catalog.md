@@ -46,43 +46,49 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.0`
 - kind: `block`
 - region: `top`
+- attrs: `span`
 
 ## `dashboard.welcome`
 
 - since: `1.0`
 - kind: `block`
 - region: `top`
+- attrs: `span`
 
 ## `dashboard.empty`
 
 - since: `1.0`
 - kind: `block`
 - region: `top`
+- attrs: `span`
 
 ## `dashboard.continue`
 
 - since: `1.0`
 - kind: `block`
 - region: `main`
+- attrs: `span`
 
 ## `dashboard.waiting`
 
 - since: `1.0`
 - kind: `block`
 - region: `side`
+- attrs: `span`
 
 ## `dashboard.recent`
 
 - since: `1.0`
 - kind: `block`
 - region: `side`
+- attrs: `span`
 
 ## `dashboard.activity`
 
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
-- attrs: `limit`
+- attrs: `limit`, `span`
 
 ## `view-header`
 
@@ -229,36 +235,42 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - since: `1.0`
 - kind: `block`
 - region: `top`
+- attrs: `span`
 
 ## `library.title`
 
 - since: `1.0`
 - kind: `block`
 - region: `main`
+- attrs: `span`
 
 ## `library.mode`
 
 - since: `1.0`
 - kind: `block`
 - region: `main`
+- attrs: `span`
 
 ## `library.search`
 
 - since: `1.0`
 - kind: `block`
 - region: `main`
+- attrs: `span`
 
 ## `library.chips`
 
 - since: `1.0`
 - kind: `block`
 - region: `main`
+- attrs: `span`
 
 ## `library.filters`
 
 - since: `1.0`
 - kind: `block`
 - region: `main`
+- attrs: `span`
 
 ## `library.warnings`
 
@@ -266,47 +278,100 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 - kind: `block`
 - region: `top`
 - required: yes (a layout that leaves it out still gets it, with a warning)
+- attrs: `span`
 
 ## `library.empty`
 
 - since: `1.0`
 - kind: `block`
 - region: `top`
+- attrs: `span`
 
 ## `library.last-played`
 
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
-
-## `library.grid`
-
-- since: `1.0`
-- kind: `block`
-- region: `bottom`
+- attrs: `span`
 
 ## `library.all-titles`
 
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
+- attrs: `span`
 
 ## `library.activity`
 
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
-- attrs: `limit`
+- attrs: `limit`, `span`
 
 ## `library.recent`
 
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
+- attrs: `span`
 
 ## `library.table`
 
 - since: `1.0`
 - kind: `block`
 - region: `bottom`
+- attrs: `span`
+
+## `hero`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `height` | `tall`, `regular`, `compact` | `tall` | `1.0` | — |
+| `gradient` | `warm`, `neutral`, `none` | `warm` | `1.0` | — |
+| `chips` | `glass`, `solid` | `glass` | `1.0` | — |
+
+## `game-hero`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `height` | `tall`, `regular`, `compact` | `regular` | `1.0` | `hero.height` |
+| `gradient` | `warm`, `neutral`, `none` | `warm` | `1.0` | `hero.gradient` |
+| `chips` | `glass`, `solid` | `solid` | `1.0` | `hero.chips` |
+
+## `dashboard.attention`
+
+- since: `1.0`
+- kind: `block`
+- region: `top`
+- attrs: `span`
+
+## `game.heading`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+- attrs: `span`
+
+## `game.actions`
+
+- since: `1.0`
+- kind: `block`
+- region: `hero`
+- required: yes (a layout that leaves it out still gets it, with a warning)
+- attrs: `span`
+
+## `library-tile`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `aspect` | `2:3`, `3:4`, `16:9` | `2:3` | `1.0` | `game-tile.aspect` |
+| `compat` | `on`, `off` | `on` | `1.0` | `game-tile.compat` |
+| `overlay` | `on`, `off` | `on` | `1.0` | `game-tile.overlay` |
+| `density` | `comfortable`, `compact` | `compact` | `1.0` | `game-tile.density` |
 

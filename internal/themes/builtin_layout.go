@@ -40,11 +40,11 @@ var builtinLayoutXML = map[string]string{
 </layout>`,
 	// Today's library: the header (title, controls, toolbar), warnings and
 	// empty state full width, then the catalog sections and the activity
-	// and recent grid full width below. The header block composes the title,
-	// mode, search, chips and filters exactly as the built-in header shows
-	// them; the grid block shows the catalog's 2:3 cards exactly as the
-	// built-in section does, while the all-titles block stays the catalog
-	// tile themes arrange. The row groups activity and recent side by side.
+	// and recent grid full width below. The header block stays (issue #109):
+	// the granular blocks stack vertically and can't reproduce its two-row
+	// flex arrangement without contortions; the all-titles block shows the
+	// catalog's 2:3 cards through library-tile exactly as the built-in
+	// section does. The row groups activity and recent side by side.
 	"library": `<layout view="library" catalog="1.0">
   <region name="top">
     <block name="header" />
@@ -53,7 +53,7 @@ var builtinLayoutXML = map[string]string{
   </region>
   <region name="bottom">
     <block name="last-played" />
-    <block name="grid" />
+    <block name="all-titles" />
     <block name="table" />
     <row>
       <block name="activity" limit="6" />

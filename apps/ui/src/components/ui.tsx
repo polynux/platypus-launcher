@@ -310,7 +310,7 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
   }, [current, fail]);
   if (!current) {
     return (
-      <div className={cx('grid place-items-center bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-3 text-center', className)}>
+      <div className={cx('cover-fallback grid place-items-center bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-3 text-center', className)}>
         <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/85">{title}</span>
       </div>
     );

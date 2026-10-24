@@ -1,6 +1,7 @@
-// Game tiles and rows (issue #98): the catalog components the Library and the
-// Dashboard share. Warm keeps today's dashboard tile (3:4, compat and overlay
-// on, comfortable) and today's full table; cool picks the compact values.
+// Game tiles and rows (issue #98, #109): the catalog components the Library
+// and the Dashboard share. Warm keeps today's dashboard tile (3:4, compat and
+// overlay on, comfortable) and today's library card (2:3, compact footer)
+// through library-tile following game-tile; cool picks the compact values.
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
@@ -8,6 +9,7 @@ import type { Game, Job, ProtonVersion } from '../types';
 import { Cover, TIER_DOT, TIER_TEXT, TweakDot, cardClass, cx } from './ui';
 import { GameCardBody } from './CompatBadges';
 import { coverImages, formatBytes, hoursPlayed, needsAttention } from '../lib/games';
+import { formatCount } from '../lib/format';
 import { tierFilterValue } from '../lib/compat';
 import { runnerShort } from '../lib/settings';
 import { useVariant } from '../lib/theme';
@@ -34,7 +36,8 @@ function statusBadgeLabel(t: T, status: string | undefined): string | null {
 function jobLabel(t: T, j: Job): string {
   if (j.state === 'queued') return t('library:job.queued', { kind: j.kind });
   if (j.percent >= 0) {
-    return j.kind === 'uninstall' ? t('library:job.removing', { percent: Math.round(j.percent) }) : t('library:job.installing', { percent: Math.round(j.percent) });
+    const percent = formatCount(Math.round(j.percent));
+    return j.kind === 'uninstall' ? t('library:job.removing', { percent }) : t('library:job.installing', { percent });
   }
   return j.phase ?? j.kind;
 }
@@ -54,18 +57,22 @@ interface GameTileProps {
   hideNative?: boolean;
   /** Show the library's cover badges (status, not installed, shared by). */
   coverBadges?: boolean;
+  /** Which use site: the dashboard reads game-tile, the library reads
+   *  library-tile (which follows game-tile unless the theme names a library
+   *  value, like game-hero follows hero). */
+  site?: 'dashboard' | 'library';
   onOpen: (id: string) => void;
   onManage?: (id: string) => void;
 }
 
 /** One game tile: the Dashboard continue grid and the Library cards share it.
  *  A single root (a button), so a layout row counts one column per tile. */
-export const GameTile = memo(function GameTile({ game: g, job, meta, hideNative, coverBadges, onOpen, onManage }: GameTileProps) {
+export const GameTile = memo(function GameTile({ game: g, job, meta, hideNative, coverBadges, site = 'dashboard', onOpen, onManage }: GameTileProps) {
   const { t } = useTranslation('library');
-  const aspect = useVariant('game-tile.aspect');
-  const compat = useVariant('game-tile.compat');
-  const overlay = useVariant('game-tile.overlay');
-  const density = useVariant('game-tile.density');
+  const aspect = useVariant(site === 'library' ? 'library-tile.aspect' : 'game-tile.aspect');
+  const compat = useVariant(site === 'library' ? 'library-tile.compat' : 'game-tile.compat');
+  const overlay = useVariant(site === 'library' ? 'library-tile.overlay' : 'game-tile.overlay');
+  const density = useVariant(site === 'library' ? 'library-tile.density' : 'game-tile.density');
   const statusLabel = statusBadgeLabel(t, g.status);
   const showOverlay = overlay === 'on';
   const bodyClass = density === 'compact' ? 'px-2.5 py-2' : 'px-3 py-2.5';
@@ -73,6 +80,7 @@ export const GameTile = memo(function GameTile({ game: g, job, meta, hideNative,
     <button
       onClick={() => onOpen(g.id)}
       onContextMenu={onManage ? (e) => { e.preventDefault(); onManage(g.id); } : undefined}
+      data-aspect={aspect}
       className={cx(cardClass, 'card-compat flex h-full min-w-0 flex-col')}
     >
       <div className="relative flex-none">
