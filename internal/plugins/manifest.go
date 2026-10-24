@@ -79,6 +79,11 @@ type Manifest struct {
 	// lists its JSON files in Data.
 	Kind         string   `json:"kind"`
 	Data         []string `json:"data"`
+	// Theme names the theme.toml inside the folder (issue #105), e.g.
+	// "theme.toml". Only a data plugin may carry one: it is data like the
+	// JSON files, so it needs no approval. Empty means the plugin carries
+	// no theme.
+	Theme        string   `json:"theme,omitempty"`
 	Capabilities []string `json:"capabilities"`
 	// Needs lists capabilities this Platypus must know for the plugin to be
 	// worth running: if one is not in the registry the plugin is listed and
@@ -320,6 +325,9 @@ func (m Manifest) validate() error {
 		if len(m.Data) > 0 {
 			bad("data files belong to a data plugin (kind \"data\")")
 		}
+		if m.Theme != "" {
+			bad("a theme belongs to a data plugin (kind \"data\")")
+		}
 	case KindData:
 		if m.Exec != "" {
 			bad("a data plugin has no exec")
@@ -337,6 +345,9 @@ func (m Manifest) validate() error {
 			if !filepath.IsLocal(f) {
 				bad("data file %q must be a path inside the plugin folder", f)
 			}
+		}
+		if m.Theme != "" && !filepath.IsLocal(m.Theme) {
+			bad("theme %q must be a path inside the plugin folder", m.Theme)
 		}
 	default:
 		bad("kind %q must be %q or %q", m.Kind, KindStore, KindData)

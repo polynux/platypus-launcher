@@ -91,6 +91,7 @@
     "label": "Thème",
     "saved": "Thème appliqué",
     "warningsLabel": "Problèmes du thème",
+    "source": "de {{plugin}}",
     "status": {
       "newer": "demande une version plus récente de Platypus",
       "invalid": "son fichier ne peut pas être utilisé"

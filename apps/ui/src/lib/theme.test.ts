@@ -8,7 +8,7 @@ import type { ThemeTokens } from '../types';
 const getTheme = vi.hoisted(() => vi.fn());
 vi.mock('../effect/runtime', () => ({ LauncherApi: { getTheme: (id: string) => getTheme(id) } }));
 
-import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, themeVariables, washImage } from './theme';
+import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, loadThemeFonts, themeVariables, washImage } from './theme';
 
 const warm: ThemeTokens = {
   id: 'warm',
@@ -67,6 +67,31 @@ describe('theme variables', () => {
         'radial-gradient(760px 460px at 52% 108%, rgba(30, 78, 96, 0.36), transparent 56%)',
     );
     expect(washImage([])).toBe('none');
+  });
+
+  it('draws a wash image under its gradient, so theme art tints like its colours', () => {
+    const layers = [{ at: '10% 10%', size: '100px 100px', color: '#000000', fade: '50%', image: '/platypus-art/theme/p/assets/bg.png?v=abc' }];
+    expect(washImage(layers)).toBe(
+      'radial-gradient(100px 100px at 10% 10%, #000000, transparent 50%), url("/platypus-art/theme/p/assets/bg.png?v=abc") center / cover no-repeat',
+    );
+    expect(themeVariables({ ...warm, wash: layers })['--app-wash']).toContain('url("/platypus-art/theme/p/assets/bg.png?v=abc")');
+  });
+
+  it('registers a plugin theme font, and tolerates a missing FontFace', async () => {
+    const add = vi.fn();
+    const load = vi.fn().mockResolvedValue({ family: 'Fixture Sans' });
+    vi.stubGlobal('FontFace', class {
+      load = load;
+      constructor(public family: string, public source: string, public desc: object) {}
+    });
+    Object.defineProperty(document, 'fonts', { value: { add }, configurable: true });
+    loadThemeFonts({ 'Fixture Sans': '/platypus-art/theme/p/fonts/f.woff2?v=abc' });
+    expect(load).toHaveBeenCalled();
+    await Promise.resolve();
+    expect(add).toHaveBeenCalled();
+    vi.unstubAllGlobals();
+    expect(() => loadThemeFonts({ 'Fixture Sans': '/platypus-art/theme/p/fonts/f.woff2' })).not.toThrow();
+    expect(() => loadThemeFonts(undefined)).not.toThrow();
   });
 
   // style.css keeps the warm wash as its own default; the two must not drift.

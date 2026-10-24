@@ -20,6 +20,7 @@ import (
 
 	"platypus/internal/dataplug"
 	"platypus/internal/settings"
+	"platypus/internal/themes"
 )
 
 // Status says whether a discovered plugin may run.
@@ -54,6 +55,11 @@ type Plugin struct {
 	// Data is a data plugin's content, loaded at discovery. Store plugins
 	// have none.
 	Data *dataplug.Data `json:"-"`
+	// Theme is a data plugin's theme (issue #105), loaded at discovery with
+	// internal/themes. Nil when the plugin carries none. An invalid theme
+	// stays here as invalid: the picker lists it with its problem, and the
+	// plugin's data still applies.
+	Theme *themes.Theme `json:"-"`
 }
 
 // NotifyFunc receives notifications other than `log` from a running plugin.
@@ -280,11 +286,27 @@ func (m *Manager) inspect(dir string) *Plugin {
 	if man.IsData() {
 		data, err := dataplug.Load(os.DirFS(dir), man.Data)
 		if err != nil {
-			p.Status, p.Problem = StatusInvalid, err.Error()
-			return p
+			// A theme-only plugin carries no fixes or tweaks: the missing
+			// data files are not an error when it names a theme. Any other
+			// data failure still breaks the plugin.
+			if man.Theme == "" || !strings.Contains(err.Error(), "no data files") {
+				p.Status, p.Problem = StatusInvalid, err.Error()
+				return p
+			}
+		} else {
+			p.Data = data
 		}
-		p.Data = data
 		p.Status = StatusReady
+		if man.Theme != "" {
+			th := themes.LoadFS(os.DirFS(dir), man.Theme, man.ID)
+			p.Theme = &th
+			// Version the asset URLs like the logos: a replaced file is a
+			// new address. A hashing failure only loses the version, not
+			// the theme.
+			if h, err := hashPlugin(dir); err == nil {
+				p.Hash = h
+			}
+		}
 		return p
 	}
 	if p.Hash, err = hashPlugin(dir); err != nil {

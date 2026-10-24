@@ -853,6 +853,7 @@ export namespace types {
     supports: string[];
     status: string;
     warnings: string[];
+    source?: string;
   }
 
   export interface ThemeLayout {
@@ -876,6 +877,7 @@ export namespace types {
     tokens: Record<string, string>;
     wash: types.WashLayer[];
     variants: Record<string, string>;
+    fonts?: Record<string, string>;
   }
 
   export interface Tweak {
@@ -952,6 +954,7 @@ export namespace types {
     size: string;
     color: string;
     fade: string;
+    image?: string;
   }
 
   export interface WikiCredit {

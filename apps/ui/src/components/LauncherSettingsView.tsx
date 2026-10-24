@@ -210,6 +210,14 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
   // A pick the list no longer offers shows as the default, not as an empty trigger.
   const shown = themes?.some((th) => th.id === value) ? value ?? undefined : DEFAULT_THEME_ID;
   const warnings = (themes ?? []).flatMap((th) => th.warnings.map((w) => ({ key: `${th.id}:${w}`, text: `${th.name}: ${w}` })));
+  const label = (th: ThemeInfo): string => {
+    const status = th.status === 'ok' ? '' : t(`theme.status.${th.status}`, { defaultValue: th.status });
+    const from = th.source ? t('theme.source', { plugin: th.source }) : '';
+    if (status && from) return `${th.name} (${status}, ${from})`;
+    if (status) return `${th.name} (${status})`;
+    if (from) return `${th.name} (${from})`;
+    return th.name;
+  };
   return (
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('theme.heading')}</h2>
@@ -221,7 +229,7 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
         <SelectContent>
           {(themes ?? []).map((th) => (
             <SelectItem key={th.id} value={th.id} disabled={th.status !== 'ok'}>
-              {th.status === 'ok' ? th.name : `${th.name} (${t(`theme.status.${th.status}`, { defaultValue: th.status })})`}
+              {label(th)}
             </SelectItem>
           ))}
         </SelectContent>

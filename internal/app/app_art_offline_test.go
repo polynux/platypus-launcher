@@ -172,9 +172,9 @@ func TestPluginGameArtServesFromTheDataFolder(t *testing.T) {
 }
 
 // The art handlers run as one chain in the core (cmd/platypus-core): custom
-// art, plugin local art and plugin logos each reach their own handler. Custom
-// art paths (/platypus-art/<hash>/cover.png) have the same shape as local-art
-// ones and were swallowed by PluginGameArt once (issue #58).
+// art, plugin local art, plugin logos and theme assets each reach their own
+// handler. Custom art paths (/platypus-art/<hash>/cover.png) have the same
+// shape as local-art ones and were swallowed by PluginGameArt once (issue #58).
 func TestArtHandlerChainServesEveryKind(t *testing.T) {
 	t.Parallel()
 	a := customApp(t)
@@ -188,7 +188,7 @@ func TestArtHandlerChainServesEveryKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	chain := PluginArt(a, PluginGameArt(a, CustomArt(a, http.NotFoundHandler())))
+	chain := PluginArt(a, ThemeArt(a, PluginGameArt(a, CustomArt(a, http.NotFoundHandler()))))
 	for name, target := range map[string]string{
 		"custom art":       strings.SplitN(c.Art["cover"], "?", 2)[0],
 		"plugin local art": "/platypus-art/echo/" + base64.RawURLEncoding.EncodeToString([]byte(local)),

@@ -84,13 +84,35 @@ function shifted(channel: 'l' | 'h', by: number): string {
   return `calc(${channel} ${by < 0 ? '-' : '+'} ${Math.abs(by)})`;
 }
 
-/** One radial gradient per layer, the wash's CSS. Layers are composed from
- *  validated parts, so nothing here can carry more than the core allowed. */
+/** One radial gradient per layer, the wash's CSS. A layer with an image draws
+ *  the picture under its gradient, so a theme's art tints like its colours.
+ *  Layers are composed from validated parts, so nothing here can carry more
+ *  than the core allowed. */
 export function washImage(layers: WashLayer[]): string {
   if (layers.length === 0) return 'none';
   return layers
-    .map((l) => `radial-gradient(${l.size} at ${l.at}, ${l.color}, transparent ${l.fade})`)
+    .map((l) => {
+      const gradient = `radial-gradient(${l.size} at ${l.at}, ${l.color}, transparent ${l.fade})`;
+      if (!l.image) return gradient;
+      return `${gradient}, url("${l.image}") center / cover no-repeat`;
+    })
     .join(', ');
+}
+
+/** Registers a plugin theme's fonts (issue #105): each shipped family becomes
+ *  a FontFace from its art URL, so a font token naming it paints at once.
+ *  A failed load keeps the next family in the stack, like a missing webfont. */
+export function loadThemeFonts(fonts?: Record<string, string>): void {
+  if (!fonts) return;
+  try {
+    for (const [family, href] of Object.entries(fonts)) {
+      if (!family || !href) continue;
+      const face = new FontFace(family, `url("${href}") format("woff2")`, {});
+      void face.load().then((loaded) => document.fonts.add(loaded)).catch(() => {});
+    }
+  } catch {
+    // No FontFace (an old engine, a test without fonts): the stacks fall back.
+  }
 }
 
 /** Every custom property the theme sets, name to value. Pure: no DOM. */
@@ -111,6 +133,7 @@ export function themeVariables(theme: ThemeTokens): Record<string, string> {
 export function applyTheme(theme: ThemeTokens): void {
   const style = document.documentElement.style;
   for (const [name, value] of Object.entries(themeVariables(theme))) style.setProperty(name, value);
+  loadThemeFonts(theme.fonts);
   // The core sends every axis resolved; a cached theme from an older build
   // may lack new axes, which keep their built-in value.
   currentVariants = { ...VARIANT_DEFAULTS, ...(theme.variants ?? {}) } as VariantValues;

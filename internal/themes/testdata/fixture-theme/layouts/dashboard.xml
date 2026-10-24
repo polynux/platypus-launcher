@@ -1,0 +1,16 @@
+<!-- Fixture dashboard layout (issue #105): the cool layout, reused so the
+     fixture proves plugin layouts validate like built-ins. -->
+<layout view="dashboard" catalog="1.0">
+  <region name="main">
+    <block name="hero" />
+    <block name="empty" />
+    <row>
+      <block name="continue" />
+      <block name="waiting" />
+    </row>
+    <block name="recent" />
+  </region>
+  <region name="side">
+    <block name="activity" limit="6" />
+  </region>
+</layout>
