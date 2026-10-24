@@ -64,6 +64,13 @@ import { GameSettingsModal } from './GameSettingsModal';
 
 expect.extend(matchers);
 afterEach(() => { cleanup(); });
+// Radix attaches its outside-pointer listener on the next tick.
+const tick = () => new Promise((r) => setTimeout(r, 10));
+// Radix defers outside-dismiss to the click that follows the primary pointerdown.
+const clickBackdrop = (el: Element) => {
+  fireEvent.pointerDown(el, { pointerType: 'mouse', button: 0 });
+  fireEvent.click(el);
+};
 beforeEach(() => {
   state.variants['game-settings.presentation'] = 'dialog';
   state.variants['game-settings.tabs'] = 'vertical';
@@ -196,5 +203,75 @@ describe('Game settings catalog variants', () => {
     render(<GameSettingsModal {...modalProps({ onClose: closed })} />);
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(closed).toHaveBeenCalledOnce();
+  });
+
+  // The accordion variant (issue #129): a 520px drawer from the right, with
+  // the categories grouped Everyday / Advanced and one open at a time.
+  describe('accordion', () => {
+    const open = () => {
+      state.variants['game-settings.presentation'] = 'sheet';
+      state.variants['game-settings.tabs'] = 'accordion';
+    };
+
+    it('renders the categories in Everyday and Advanced groups in the drawer, without axe violations', async () => {
+      open();
+      render(<GameSettingsModal {...modalProps()} />);
+      const dialog = screen.getByRole('dialog', { name: 'Settings for Echo Tiny' });
+      expect(dialog).toHaveStyle({ width: '520px' });
+      expect(screen.getByRole('heading', { name: 'All settings' })).toBeInTheDocument();
+      expect(screen.queryByRole('tablist')).toBeNull();
+      expect(screen.getByText('Everyday')).toBeInTheDocument();
+      expect(screen.getByText('Advanced')).toBeInTheDocument();
+      const headers = screen.getAllByRole('button').filter((b) => b.hasAttribute('data-gs-accordion-header'));
+      expect(headers.map((h) => h.id)).toEqual([
+        'gs-acc-general', 'gs-acc-cloud', 'gs-acc-customization',
+        'gs-acc-versions', 'gs-acc-options', 'gs-acc-plugin', 'gs-acc-tweaks', 'gs-acc-maintenance',
+      ]);
+      // Each header carries its one-line summary of the current values.
+      const summaries = headers.map((h) => h.textContent ?? '');
+      expect(summaries[0]).toContain('Automatic runner');
+      expect(summaries[1]).toContain('Synced by Platypus');
+      expect(summaries[2]).toContain('Art, title and sort');
+      expect(summaries[6]).toContain('1 suggested');
+      expect(summaries[7]).toContain('Verify, move, backups');
+      // One section open at a time: General is the first, the rest are closed.
+      expect(document.getElementById('gs-acc-general')).toHaveAttribute('aria-expanded', 'true');
+      for (const id of ['cloud', 'versions', 'options', 'plugin', 'tweaks', 'customization', 'maintenance']) {
+        expect(document.getElementById(`gs-acc-${id}`)).toHaveAttribute('aria-expanded', 'false');
+      }
+      (expect(await (await import('vitest-axe')).axe(document.body)) as any).toHaveNoViolations();
+    });
+
+    it('opens one section at a time and closes it again', async () => {
+      open();
+      const user = userEvent.setup();
+      render(<GameSettingsModal {...modalProps()} />);
+      const versions = screen.getByRole('button', { name: /^Versions/ });
+      await user.click(versions);
+      expect(versions).toHaveAttribute('aria-expanded', 'true');
+      expect(document.getElementById('gs-acc-general')).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById('gs-acc-panel-versions')).not.toBeNull();
+      await user.click(versions);
+      expect(versions).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById('gs-acc-panel-versions')).toBeNull();
+    });
+
+    it('starts focus on the first header, then Escape and a scrim click close it', async () => {
+      open();
+      const closed = vi.fn();
+      render(<GameSettingsModal {...modalProps({ onClose: closed })} />);
+      await tick();
+      expect(document.getElementById('gs-acc-general')).toHaveFocus();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(closed).toHaveBeenCalledTimes(1);
+      clickBackdrop(screen.getByRole('dialog').parentElement!);
+      expect(closed).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the standard sheet width for the tab variants', () => {
+      state.variants['game-settings.presentation'] = 'sheet';
+      render(<GameSettingsModal {...modalProps()} />);
+      expect(screen.getByRole('dialog').style.width).toBe('');
+    });
   });
 });

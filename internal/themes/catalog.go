@@ -51,7 +51,9 @@ var Catalog = []types.ThemeCatalogEntry{
 	}},
 	{Entry: "game-settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "presentation", Values: []string{"dialog", "sheet", "page"}, Default: "dialog", Since: "1.0", Inherits: "dialog.presentation"},
-		{Name: "tabs", Values: []string{"vertical", "horizontal"}, Default: "vertical", Since: "1.0"},
+		// accordion (issue #129): the categories as a grouped accordion with a
+		// one-line summary each, for a theme that presents them as a drawer.
+		{Name: "tabs", Values: []string{"vertical", "horizontal", "accordion"}, Default: "vertical", Since: "1.0"},
 	}},
 	// Shell navigation entries (issue #104, ADR 0002 answer 4): the app shell
 	// is a view whose regions depend on shell.navigation (sidebar today,

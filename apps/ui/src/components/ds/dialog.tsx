@@ -17,8 +17,9 @@ export function DialogContent({
   children,
   label,
   sheet = false,
+  sheetWidth,
   ...props
-}: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, 'aria-label'> & { label: string; sheet?: boolean }) {
+}: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, 'aria-label'> & { label: string; sheet?: boolean; sheetWidth?: string }) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay data-slot="dialog-overlay" className={cn('fixed inset-0 z-50 grid place-items-center bg-black/65 p-6', sheet && 'place-items-stretch justify-items-end p-0')}>
@@ -31,7 +32,7 @@ export function DialogContent({
             sheet && 'h-full max-h-full w-[min(42rem,92vw)] animate-sheet-in motion-reduce:animate-none rounded-l-3xl rounded-r-none',
             className,
           )}
-          style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)' }}
+          style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)', ...(sheetWidth ? { width: sheetWidth } : {}) }}
           {...props}
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-7 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">{children}</div>

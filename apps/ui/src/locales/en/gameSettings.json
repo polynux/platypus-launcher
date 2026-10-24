@@ -81,7 +81,29 @@
   "settingsModal": {
     "title": "Settings for {{title}}",
     "heading": "Game settings",
+    "allSettings": "All settings",
     "sections": "Game settings sections"
+  },
+  "accordion": {
+    "everyday": "Everyday",
+    "advanced": "Advanced"
+  },
+  "summary": {
+    "native": "Native Linux",
+    "auto": "Automatic runner",
+    "args": "{{runner}} · {{args}}",
+    "cloudStore": "Synced by the store",
+    "cloudPlatypus": "Synced by Platypus",
+    "pinned": "Pinned to {{version}}",
+    "update": "Update available",
+    "latest": "Latest version",
+    "options": "Add-ons and install options",
+    "plugin": "Store plugin",
+    "tweaks": "{{count}} suggested",
+    "customized": "{{count}} custom",
+    "customization": "Art, title and sort",
+    "maintenance": "Verify, move, backups",
+    "job": "{{kind}} {{percent}}%"
   },
   "tabs": {
     "general": "General",

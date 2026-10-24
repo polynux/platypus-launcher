@@ -15,7 +15,7 @@ export interface VariantValues {
   "dialog.presentation": "dialog" | "sheet";
   "dialog.size": "auto" | "sm" | "md" | "lg" | "xl";
   "game-settings.presentation": "dialog" | "sheet" | "page";
-  "game-settings.tabs": "vertical" | "horizontal";
+  "game-settings.tabs": "vertical" | "horizontal" | "accordion";
   "shell.navigation": "sidebar" | "topbar";
   "game-tile.aspect": "2:3" | "3:4" | "16:9";
   "game-tile.compat": "on" | "off";

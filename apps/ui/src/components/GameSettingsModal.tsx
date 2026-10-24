@@ -1,7 +1,7 @@
 // i18n: converted
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, ArrowLeft } from 'lucide-react';
+import { X, ArrowLeft, ChevronDown, Cloud, GitBranch, Palette, Plug, Puzzle, SlidersHorizontal, Wand2, Wrench } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, RemoveOptions, StorePlugin, Tweak } from '../types';
 import { Modal, type ModalSize } from './Modal';
 import { Button } from '@/components/ds/button';
@@ -20,7 +20,7 @@ import { MaintenanceTab } from './MaintenanceTab';
 import { TweaksPanel } from './TweaksPanel';
 import { LegalSection } from './LegalSection';
 import { cx } from './ui';
-import { tabLabel, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
+import { tabLabel, pickTab, settingsTabs, settingsGroups, tabSummary, type GameSettingsTab } from '../lib/gameSettingsTabs';
 import { useVariant } from '../lib/theme';
 import { MaintenancePrefetchProvider, useMaintenancePrefetchSource } from './maintenancePrefetch';
 
@@ -53,6 +53,18 @@ export interface GameSettingsModalProps {
   /** The game is starting or running: destructive actions wait. */
   running?: boolean;
 }
+
+/** The icon an accordion header shows (issue #129), one per category. */
+const TAB_ICONS: Record<GameSettingsTab, React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>> = {
+  general: SlidersHorizontal,
+  cloud: Cloud,
+  versions: GitBranch,
+  options: Puzzle,
+  plugin: Plug,
+  tweaks: Wand2,
+  customization: Palette,
+  maintenance: Wrench,
+};
 
 /** Everything about one game that is not playing it, in one place. A tab shows
  *  only where its content is on offer (see settingsTabs); the page keeps just
@@ -89,11 +101,36 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // the sheet with horizontal tabs; the built-in (warm) is today's dialog
   // with the tab list down the side on wide content.
   const presentation = useVariant('game-settings.presentation');
-  const horizontalTabs = useVariant('game-settings.tabs') === 'horizontal';
+  const tabsVariant = useVariant('game-settings.tabs');
+  const horizontalTabs = tabsVariant === 'horizontal';
+  // The accordion (issue #129): the same categories, in two groups, one open
+  // at a time, each header carrying its current values. Atlas draws it in the
+  // sheet presentation; the axis itself only picks the arrangement.
+  const accordion = tabsVariant === 'accordion';
+  const [open, setOpen] = useState<GameSettingsTab | null>(() => pickTab(tabs, p.initialTab));
+  // A section that goes away (a capability switched off meanwhile) closes to General.
+  useEffect(() => { if (open && !tabs.includes(open)) setOpen('general'); }, [open, tabs]);
+  // Opening another section closes the last one; General keeps its unsaved
+  // edits because its panel stays mounted (hidden) below.
+  const showTab = (name: GameSettingsTab) => { setTab(name); setOpen(name); };
+  const accordionRef = useRef<HTMLDivElement>(null);
+  // The focus starts on the first header, not on the close button (issue #129).
+  // Radix mounts and focuses the dialog's content after this component's first
+  // effects, so the move runs on the next tick.
+  useEffect(() => {
+    if (!accordion) return;
+    const id = window.setTimeout(() => {
+      accordionRef.current?.querySelector<HTMLButtonElement>('button[data-gs-accordion-header]')?.focus();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [accordion]);
   // An explicit dialog size wins; auto (and the sheet, whose width is its
   // own) keeps this dialog's built-in xl.
   const dialogSize = useVariant('dialog.size');
   const size: ModalSize = presentation === 'dialog' && dialogSize !== 'auto' ? (dialogSize as ModalSize) : 'xl';
+  // The drawer is 520px wide, as in the /21 design; other sheets keep theirs
+  // (the width only applies to a sheet, never to a dialog).
+  const sheetWidth = accordion && presentation === 'sheet' ? 'min(520px, 92vw)' : undefined;
 
   const tabsRootClass = horizontalTabs
     ? 'flex min-h-0 flex-1 flex-col gap-5'
@@ -109,11 +146,104 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     document.getElementById(`gs-tab-${shown}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [shown, horizontalTabs]);
 
+  const summary = (name: GameSettingsTab) => tabSummary(t, name, { game, plugin, runners: p.runners, tweaks: p.tweaks, job: p.job });
+  // One body per category, shared by the tabs and the accordion.
+  const body = (name: GameSettingsTab) => (name === 'general' ? (
+    <>
+      {game.store === 'custom' && <CustomGameYear game={game} onChanged={p.onCustomized} />}
+      <GeneralSettings
+        embedded
+        game={game}
+        runners={p.runners}
+        onClose={p.onClose}
+        onSave={p.onSaveSettings}
+        onCopied={p.onCopied}
+        onDirty={setDirty}
+        onChanged={p.onCustomized}
+        draftState={shared}
+      />
+      <LegalSection game={game} plugin={plugin} />
+    </>
+  ) : (
+    <>
+      {/* The cloud panel brings its own heading. */}
+      {name !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{tabLabel(t, name)}</h3>}
+      <TabBody tab={name} {...p} onOpenGeneral={() => showTab('general')} shared={shared} onTweakChange={handleTweakChange} />
+    </>
+  ));
+
+  const tabsBody = (
+    <div ref={scrollRef} data-testid="gs-tab-scroll" className="min-h-0 min-w-0 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+      {/* General keeps its unsaved edits while another tab shows: it stays mounted. */}
+      <section role="tabpanel" id="gs-panel-general" aria-labelledby="gs-tab-general" hidden={shown !== 'general'}>
+        {body('general')}
+      </section>
+      {shown !== 'general' && (
+        <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
+          {body(shown)}
+        </section>
+      )}
+    </div>
+  );
+
+  // The accordion (issue #129): group headings, then one collapsible per
+  // category. General's panel stays mounted while closed, like its tab, so
+  // unsaved edits survive opening another section.
+  const accordionBody = (
+    <div ref={accordionRef} data-testid="gs-accordion" className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+      {settingsGroups(tabs).map((group) => (
+        <div key={group.level}>
+          <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.14em] text-text-faint">
+            {t(`gameSettings:accordion.${group.level}`)}
+          </div>
+          {group.tabs.map((name) => {
+            const isOpen = open === name;
+            const Icon = TAB_ICONS[name];
+            return (
+              <section key={name} className={cx('rounded-xl', isOpen && 'bg-surface')}>
+                <h3 className="font-sans">
+                  <button
+                    type="button"
+                    id={`gs-acc-${name}`}
+                    data-gs-accordion-header
+                    aria-expanded={isOpen}
+                    aria-controls={isOpen || name === 'general' ? `gs-acc-panel-${name}` : undefined}
+                    aria-describedby={`gs-acc-sum-${name}`}
+                    onClick={() => setOpen(isOpen ? null : name)}
+                    className="flex min-h-[46px] w-full items-center gap-2.5 rounded-xl px-3 text-left outline-none hover:bg-surface-strong focus-visible:ring-2 focus-visible:ring-focus/60"
+                  >
+                    <Icon className={cx('size-4 flex-none', isOpen ? 'text-accent' : 'text-text-muted')} aria-hidden />
+                    <span className="text-[13px] font-bold text-text">{tabLabel(t, name)}</span>
+                    <span id={`gs-acc-sum-${name}`} className="ml-auto max-w-[46%] truncate text-hint text-text-faint">{summary(name)}</span>
+                    <ChevronDown className={cx('size-4 flex-none text-text-faint transition-transform', isOpen && 'rotate-180')} aria-hidden />
+                  </button>
+                </h3>
+                {(isOpen || name === 'general') && (
+                  <div
+                    id={`gs-acc-panel-${name}`}
+                    role="region"
+                    aria-labelledby={`gs-acc-${name}`}
+                    hidden={!isOpen}
+                    className="px-3.5 pb-3 pl-[38px]"
+                  >
+                    {body(name)}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+
   const content = (
     <div className="@container flex h-full min-h-0 flex-col">
       <div className="mb-5 flex flex-none items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.heading')}</h2>
+          <h2 className="text-[20px] font-extrabold tracking-tight">
+            {accordion ? t('gameSettings:settingsModal.allSettings') : t('gameSettings:settingsModal.heading')}
+          </h2>
           <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
         </div>
         {presentation !== 'page' && (
@@ -129,68 +259,46 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
           Narrow widths stack the tabs above the content and keep the same
           outer height, with the content scrolling under the tabs. */}
       <MaintenancePrefetchProvider pre={maintenance}>
-      <div className={tabsRootClass}>
-        <div
-          role="tablist"
-          aria-label={t('gameSettings:settingsModal.sections')}
-          aria-orientation={horizontalTabs ? 'horizontal' : 'vertical'}
-          className={tablistClass}
-        >
-          {tabs.map((name) => (
-            <button
-              key={name}
-              role="tab"
-              id={`gs-tab-${name}`}
-              aria-selected={name === shown}
-              aria-controls={`gs-panel-${name}`}
-              tabIndex={name === shown ? 0 : -1}
-              onClick={() => setTab(name)}
-              onKeyDown={(e) => {
-                const i = tabs.indexOf(name);
-                const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
-                  : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length] : null;
-                if (!next) return;
-                e.preventDefault();
-                setTab(next);
-                document.getElementById(`gs-tab-${next}`)?.focus();
-              }}
-              className={cx(
-                'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
-                horizontalTabs && 'shrink-0',
-                name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
-              )}
-            >
-              {tabLabel(t, name)}
-            </button>
-          ))}
-        </div>
+      {accordion ? accordionBody : (
+        <div className={tabsRootClass}>
+          <div
+            role="tablist"
+            aria-label={t('gameSettings:settingsModal.sections')}
+            aria-orientation={horizontalTabs ? 'horizontal' : 'vertical'}
+            className={tablistClass}
+          >
+            {tabs.map((name) => (
+              <button
+                key={name}
+                role="tab"
+                id={`gs-tab-${name}`}
+                aria-selected={name === shown}
+                aria-controls={`gs-panel-${name}`}
+                tabIndex={name === shown ? 0 : -1}
+                onClick={() => setTab(name)}
+                onKeyDown={(e) => {
+                  const i = tabs.indexOf(name);
+                  const next = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? tabs[(i + 1) % tabs.length]
+                    : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? tabs[(i - 1 + tabs.length) % tabs.length] : null;
+                  if (!next) return;
+                  e.preventDefault();
+                  setTab(next);
+                  document.getElementById(`gs-tab-${next}`)?.focus();
+                }}
+                className={cx(
+                  'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
+                  horizontalTabs && 'shrink-0',
+                  name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
+                )}
+              >
+                {tabLabel(t, name)}
+              </button>
+            ))}
+          </div>
 
-        <div ref={scrollRef} data-testid="gs-tab-scroll" className="min-h-0 min-w-0 flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-          {/* General keeps its unsaved edits while another tab shows: it stays mounted. */}
-          <section role="tabpanel" id="gs-panel-general" aria-labelledby="gs-tab-general" hidden={shown !== 'general'}>
-            {game.store === 'custom' && <CustomGameYear game={game} onChanged={p.onCustomized} />}
-            <GeneralSettings
-              embedded
-              game={game}
-              runners={p.runners}
-              onClose={p.onClose}
-              onSave={p.onSaveSettings}
-              onCopied={p.onCopied}
-              onDirty={setDirty}
-              onChanged={p.onCustomized}
-              draftState={shared}
-            />
-            <LegalSection game={game} plugin={plugin} />
-          </section>
-          {shown !== 'general' && (
-            <section role="tabpanel" id={`gs-panel-${shown}`} aria-labelledby={`gs-tab-${shown}`}>
-              {/* The cloud panel brings its own heading. */}
-              {shown !== 'cloud' && <h3 className="mb-4 text-[16px] font-bold tracking-tight">{tabLabel(t, shown)}</h3>}
-              <TabBody tab={shown} {...p} onOpenGeneral={() => setTab('general')} shared={shared} onTweakChange={handleTweakChange} />
-            </section>
-          )}
+          {tabsBody}
         </div>
-      </div>
+      )}
       </MaintenancePrefetchProvider>
       </div>
   );
@@ -215,7 +323,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     // the shared Modal is untouched, so no other dialog changes size. A
     // sheet spans the full viewport height, so the fixed height is for the
     // dialog presentation only.
-    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
       {content}
     </Modal>
   );

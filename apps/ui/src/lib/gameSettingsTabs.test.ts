@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { settingsTabs, pickTab } from './gameSettingsTabs';
-import type { Game, StorePlugin, Tweak } from '../types';
+import i18n from './i18n';
+import { settingsTabs, pickTab, settingsGroups, tabLevel, tabSummary, type GameSettingsTab } from './gameSettingsTabs';
+import type { Game, Job, ProtonVersion, StorePlugin, Tweak } from '../types';
+
+const t = i18n.t.bind(i18n);
 
 const plugin = (caps: string[], declared: string[] = caps): StorePlugin =>
   ({ id: 'echo', name: 'Echo', status: 'ready', capabilities: caps, declared }) as unknown as StorePlugin;
@@ -53,5 +56,59 @@ describe('settingsTabs', () => {
     expect(pickTab(tabs, 'maintenance')).toBe('maintenance');
     expect(pickTab(tabs, 'cloud')).toBe('general');
     expect(pickTab(tabs)).toBe('general');
+  });
+});
+
+describe('settingsGroups (issue #129)', () => {
+  it('splits the game settings tabs into Everyday and Advanced, keeping their order', () => {
+    const tabs = settingsTabs({ game: game(), plugin: plugin(ALL), tweaks: [tweak] });
+    expect(settingsGroups(tabs)).toEqual([
+      { level: 'everyday', tabs: ['general', 'cloud', 'customization'] },
+      { level: 'advanced', tabs: ['versions', 'options', 'plugin', 'tweaks', 'maintenance'] },
+    ]);
+  });
+
+  it('leaves out a group with no tab', () => {
+    expect(settingsGroups(['maintenance'])).toEqual([{ level: 'advanced', tabs: ['maintenance'] }]);
+    expect(settingsGroups(['general'])).toEqual([{ level: 'everyday', tabs: ['general'] }]);
+    expect(settingsGroups([])).toEqual([]);
+  });
+
+  it('puts every tab in exactly one group', () => {
+    const all: GameSettingsTab[] = ['general', 'cloud', 'versions', 'options', 'plugin', 'tweaks', 'customization', 'maintenance'];
+    expect(all.filter((tab) => tabLevel(tab) === 'everyday')).toEqual(['general', 'cloud', 'customization']);
+    expect(all.filter((tab) => tabLevel(tab) === 'advanced')).toEqual(['versions', 'options', 'plugin', 'tweaks', 'maintenance']);
+    expect(settingsGroups(all).flatMap((g) => g.tabs).sort()).toEqual([...all].sort());
+  });
+});
+
+describe('tabSummary', () => {
+  const runners = [{ id: 'Proton - Experimental', name: 'Proton Experimental' }] as ProtonVersion[];
+  const ctx = (o: Partial<Parameters<typeof tabSummary>[2]> = {}) => ({
+    game: game(), runners, tweaks: [], plugin: plugin(ALL), ...o,
+  });
+  const settings = { runner_id: 'auto', env_vars: {}, launch_arguments: '' };
+
+  it('shows the runner and the launch arguments in General', () => {
+    expect(tabSummary(t, 'general', ctx({ game: game({ settings: { ...settings } as Game['settings'] }) }))).toBe('Automatic runner');
+    expect(tabSummary(t, 'general', ctx({ game: game({ native: true, settings: { ...settings } as Game['settings'] }) }))).toBe('Native Linux');
+    expect(tabSummary(t, 'general', ctx({ game: game({ settings: { ...settings, runner_id: 'Proton - Experimental' } as Game['settings'] }) }))).toBe('Proton Experimental');
+    expect(tabSummary(t, 'general', ctx({ game: game({ settings: { ...settings, runner_id: 'Proton - Experimental', launch_arguments: ' -novid ' } as Game['settings'] }) }))).toBe('Proton Experimental · -novid');
+  });
+
+  it('reports the store sync, the version choice, the tweak count and the rest', () => {
+    expect(tabSummary(t, 'cloud', ctx())).toBe('Synced by Platypus');
+    expect(tabSummary(t, 'cloud', ctx({ game: game({ cloud_sync: true }) }))).toBe('Synced by the store');
+    expect(tabSummary(t, 'versions', ctx())).toBe('Latest version');
+    expect(tabSummary(t, 'versions', ctx({ game: game({ update_available: true }) }))).toBe('Update available');
+    expect(tabSummary(t, 'versions', ctx({ game: game({ pinned: { kind: 'build', id: 'b42' } }) }))).toBe('Pinned to b42');
+    expect(tabSummary(t, 'tweaks', ctx({ tweaks: [tweak, { ...tweak, id: 't2' }] }))).toBe('2 suggested');
+    expect(tabSummary(t, 'customization', ctx({ game: game({ customized: ['logo'] }) }))).toBe('1 custom');
+    expect(tabSummary(t, 'customization', ctx())).toBe('Art, title and sort');
+    expect(tabSummary(t, 'plugin', ctx())).toBe('Echo');
+    expect(tabSummary(t, 'plugin', ctx({ plugin: undefined }))).toBe('Store plugin');
+    expect(tabSummary(t, 'options', ctx())).toBe('Add-ons and install options');
+    expect(tabSummary(t, 'maintenance', ctx())).toBe('Verify, move, backups');
+    expect(tabSummary(t, 'maintenance', ctx({ job: { kind: 'install', percent: 42.4 } as Job }))).toBe('install 42%');
   });
 });
