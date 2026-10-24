@@ -28,7 +28,7 @@ describe('toast renders above an open modal', () => {
     const sonner = src('components/ds/sonner.tsx');
     expect(sonner).toContain('rounded-2xl');
     expect(sonner).toContain('font-sans');
-    expect(sonner).toContain('bg-[#191410]');
+    expect(sonner).toContain('bg-raised');
     expect(sonner).not.toContain('rounded-[3px]');
     expect(sonner).not.toContain('font-mono');
     const notify = src('lib/notify.ts');

@@ -271,5 +271,9 @@
     "clientRunning": "Close {{client}} first: it is running and would write the same saves.",
     "queued": "{{title}} already has a save backup queued.",
     "unknown": "Unknown save backup version."
+  },
+  "theme": {
+    "unknown": "There's no theme called {{theme}}.",
+    "unusable": "The theme {{theme}} can't be used. Check its warnings in Settings."
   }
 }

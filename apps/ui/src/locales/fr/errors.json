@@ -271,5 +271,9 @@
     "clientRunning": "Fermez {{client}} d’abord : il est ouvert et écrirait les mêmes sauvegardes.",
     "queued": "{{title}} a déjà une sauvegarde en file d’attente.",
     "unknown": "Version de sauvegarde inconnue."
+  },
+  "theme": {
+    "unknown": "Aucun thème ne s'appelle {{theme}}.",
+    "unusable": "Le thème {{theme}} n'est pas utilisable. Consultez ses avertissements dans les paramètres."
   }
 }
