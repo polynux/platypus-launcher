@@ -135,10 +135,25 @@ export function themeVariables(theme: ThemeTokens): Record<string, string> {
   return vars;
 }
 
+/** The variables the theme applied last set on :root, by name. The game tone
+ *  reads them to put the theme's own values back when it clears (issue #123). */
+let appliedThemeVars: Record<string, string> = {};
+
+/** The variables the applied theme set on :root, name to value. Empty until
+ *  the first theme is applied, when style.css's own values stand. Read-only:
+ *  the game tone restores these instead of removing them (issue #123). */
+export function currentThemeVariables(): Record<string, string> {
+  return appliedThemeVars;
+}
+
 /** Sets the theme on :root. Live: calling it again restyles what is on screen. */
 export function applyTheme(theme: ThemeTokens): void {
   const style = document.documentElement.style;
-  for (const [name, value] of Object.entries(themeVariables(theme))) style.setProperty(name, value);
+  const vars = themeVariables(theme);
+  // Kept before the listeners run, so a tone repainted from one of them
+  // restores this theme's values, not the previous theme's.
+  appliedThemeVars = vars;
+  for (const [name, value] of Object.entries(vars)) style.setProperty(name, value);
   loadThemeFonts(theme.fonts);
   // The core sends every axis resolved; a cached theme from an older build
   // may lack new axes, which keep their built-in value.

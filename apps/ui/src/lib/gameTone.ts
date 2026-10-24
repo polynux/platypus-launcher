@@ -7,7 +7,7 @@
 import { Effect } from 'effect';
 import { useEffect, useState } from 'react';
 import { LauncherApi } from '../effect/runtime';
-import { TOKEN_VARS, onThemeApplied, useVariant } from './theme';
+import { currentThemeVariables, TOKEN_VARS, onThemeApplied, useVariant } from './theme';
 
 /** A sampled colour: sRGB channels, 0..255. */
 export type Tone = [number, number, number];
@@ -186,8 +186,8 @@ const FADE_MS = 600;
 let fadeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Paints the game's tone over the theme's tokens. With no tone (the axis is
- *  off, there is no art, or sampling failed) the variables are removed again
- *  and the theme's own values show. */
+ *  off, there is no art, or sampling failed) every variable goes back to the
+ *  theme's own value, so the theme shows again. */
 export function applyGameTone(mode: GameToneMode, tone: Tone | null): void {
   paintedTone = { mode, tone };
   const vars = toneVariables(mode, tone);
@@ -205,7 +205,15 @@ export function applyGameTone(mode: GameToneMode, tone: Tone | null): void {
     root.classList.remove('game-tone');
     fadeTimer = undefined;
   }, FADE_MS + 50);
-  for (const name of painted) if (!(name in vars)) style.removeProperty(name);
+  for (const name of painted) {
+    if (name in vars) continue;
+    // Back to the theme's own value, never removed: removing an inline
+    // property drops the theme's colour and falls back to style.css's warm
+    // defaults (issue #123). A theme that set no value leaves the stylesheet's.
+    const themeValue = currentThemeVariables()[name];
+    if (themeValue === undefined) style.removeProperty(name);
+    else style.setProperty(name, themeValue);
+  }
   for (const [name, value] of Object.entries(vars)) style.setProperty(name, value);
   painted = names;
 }
