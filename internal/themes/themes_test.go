@@ -85,23 +85,35 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if cool.ID != "cool" || cool.Tokens["ground"] != "#0b1118" || len(cool.Wash) != 3 {
 		t.Fatalf("Resolve(cool) = %+v", cool)
 	}
-	if cool.Variants.Settings.Presentation != "sheet" || cool.Variants.Settings.Navigation != "tabs" || cool.Variants.Section.Chrome != "framed" {
+	if cool.Variants["settings.presentation"] != "sheet" || cool.Variants["settings.navigation"] != "tabs" || cool.Variants["section.chrome"] != "framed" {
 		t.Fatalf("cool variants = %v", cool.Variants)
 	}
-	if cool.Variants.GameTile.Aspect != "16:9" || cool.Variants.GameTile.Compat != "off" || cool.Variants.GameTile.Overlay != "off" || cool.Variants.GameTile.Density != "compact" {
-		t.Fatalf("cool game-tile variants = %+v", cool.Variants.GameTile)
+	if cool.Variants["dialog.presentation"] != "dialog" || cool.Variants["dialog.size"] != "auto" {
+		t.Fatalf("cool dialog variants = %v", cool.Variants)
 	}
-	if cool.Variants.GameRow.Columns != "minimal" || cool.Variants.GameRow.Mode != "compact" {
-		t.Fatalf("cool game-row variants = %+v", cool.Variants.GameRow)
+	if cool.Variants["game-settings.presentation"] != "sheet" || cool.Variants["game-settings.tabs"] != "horizontal" {
+		t.Fatalf("cool game-settings variants = %v", cool.Variants)
 	}
-	if def.Variants.Settings.Presentation != "page" || def.Variants.Settings.Navigation != "scroll" || def.Variants.Section.Chrome != "hairline" {
+	if def.Variants["settings.presentation"] != "page" || def.Variants["settings.navigation"] != "scroll" || def.Variants["section.chrome"] != "hairline" {
 		t.Fatalf("warm variants = %v", def.Variants)
 	}
-	if def.Variants.GameTile.Aspect != "3:4" || def.Variants.GameTile.Compat != "on" || def.Variants.GameTile.Overlay != "on" || def.Variants.GameTile.Density != "comfortable" {
-		t.Fatalf("warm game-tile variants = %+v", def.Variants.GameTile)
+	if def.Variants["dialog.presentation"] != "dialog" || def.Variants["dialog.size"] != "auto" {
+		t.Fatalf("warm dialog variants = %v", def.Variants)
 	}
-	if def.Variants.GameRow.Columns != "full" || def.Variants.GameRow.Mode != "full" {
-		t.Fatalf("warm game-row variants = %+v", def.Variants.GameRow)
+	if def.Variants["game-settings.presentation"] != "dialog" || def.Variants["game-settings.tabs"] != "vertical" {
+		t.Fatalf("warm game-settings variants = %v", def.Variants)
+	}
+	if cool.Variants["game-tile.aspect"] != "16:9" || cool.Variants["game-tile.compat"] != "off" || cool.Variants["game-tile.overlay"] != "off" || cool.Variants["game-tile.density"] != "compact" {
+		t.Fatalf("cool game-tile variants = %v", cool.Variants)
+	}
+	if cool.Variants["game-row.columns"] != "minimal" || cool.Variants["game-row.mode"] != "compact" {
+		t.Fatalf("cool game-row variants = %v", cool.Variants)
+	}
+	if def.Variants["game-tile.aspect"] != "3:4" || def.Variants["game-tile.compat"] != "on" || def.Variants["game-tile.overlay"] != "on" || def.Variants["game-tile.density"] != "comfortable" {
+		t.Fatalf("warm game-tile variants = %v", def.Variants)
+	}
+	if def.Variants["game-row.columns"] != "full" || def.Variants["game-row.mode"] != "full" {
+		t.Fatalf("warm game-row variants = %v", def.Variants)
 	}
 }
 
@@ -117,8 +129,44 @@ func TestVariantsWarnAndFallBack(t *testing.T) {
 		t.Fatalf("warnings = %v", th.Info.Warnings)
 	}
 	got := resolve(th, true)
-	if got.Variants.Settings.Presentation != "page" || got.Variants.Settings.Navigation != "tabs" {
+	if got.Variants["settings.presentation"] != "page" || got.Variants["settings.navigation"] != "tabs" {
 		t.Fatalf("variants = %v", got.Variants)
+	}
+}
+
+// A use-site presentation wins over the global dialog one, which wins over
+// the built-in (ADR §2): game settings follow dialog.presentation unless the
+// theme says otherwise for game-settings itself.
+func TestGameSettingsPresentationFallsBackToDialog(t *testing.T) {
+	varianted := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1)
+	globalOnly, _ := resolveSrc(t, varianted+`
+[variants]
+"dialog.presentation" = "sheet"
+`)
+	if globalOnly.Variants["dialog.presentation"] != "sheet" {
+		t.Fatalf("dialog presentation = %q, want sheet", globalOnly.Variants["dialog.presentation"])
+	}
+	if globalOnly.Variants["game-settings.presentation"] != "sheet" {
+		t.Fatalf("game-settings presentation = %q, want the global sheet", globalOnly.Variants["game-settings.presentation"])
+	}
+	useSite, _ := resolveSrc(t, varianted+`
+[variants]
+"dialog.presentation" = "sheet"
+"game-settings.presentation" = "dialog"
+"game-settings.tabs" = "horizontal"
+`)
+	if useSite.Variants["game-settings.presentation"] != "dialog" || useSite.Variants["game-settings.tabs"] != "horizontal" {
+		t.Fatalf("game-settings variants = %v, want the use-site values", useSite.Variants)
+	}
+	if useSite.Variants["dialog.presentation"] != "sheet" {
+		t.Fatalf("dialog presentation = %q, want sheet", useSite.Variants["dialog.presentation"])
+	}
+	builtin, _ := resolveSrc(t, varianted)
+	if builtin.Variants["game-settings.presentation"] != "dialog" || builtin.Variants["game-settings.tabs"] != "vertical" {
+		t.Fatalf("game-settings variants = %v, want the built-in values", builtin.Variants)
+	}
+	if builtin.Variants["dialog.size"] != "auto" {
+		t.Fatalf("dialog size = %q, want the built-in auto", builtin.Variants["dialog.size"])
 	}
 }
 
@@ -165,7 +213,7 @@ func TestNewerMinorCatalogIsUsableAndUnknownVariantsFallBack(t *testing.T) {
 		t.Fatalf("status %q warnings %v, want usable theme and unknown-value warning", th.Info.Status, th.Info.Warnings)
 	}
 	got := resolve(th, true)
-	if got.Variants.Settings.Navigation != "tabs" || got.Variants.Settings.Presentation != "page" {
+	if got.Variants["settings.navigation"] != "tabs" || got.Variants["settings.presentation"] != "page" {
 		t.Fatalf("variants = %v, want known 1.0 value applied and unknown value defaulted", got.Variants)
 	}
 }

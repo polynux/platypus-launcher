@@ -188,6 +188,59 @@
       ]
     },
     {
+      "entry": "dialog",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "dialog",
+            "sheet"
+          ],
+          "default": "dialog",
+          "since": "1.0"
+        },
+        {
+          "name": "size",
+          "values": [
+            "auto",
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ],
+          "default": "auto",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-settings",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "dialog",
+            "sheet",
+            "page"
+          ],
+          "default": "dialog",
+          "since": "1.0",
+          "inherits": "dialog.presentation"
+        },
+        {
+          "name": "tabs",
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
       "entry": "game-tile",
       "since": "1.0",
       "axes": [

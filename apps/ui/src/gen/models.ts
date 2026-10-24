@@ -833,6 +833,7 @@ export namespace types {
     values: string[];
     default: string;
     since: string;
+    inherits?: string;
   }
 
   export interface ThemeCatalogEntry {
@@ -843,23 +844,6 @@ export namespace types {
     required?: boolean;
     region?: string;
     attrs?: string[];
-  }
-
-  export interface ThemeEmptyStateVariants {
-    chrome: string;
-    icon: string;
-  }
-
-  export interface ThemeGameRowVariants {
-    columns: string;
-    mode: string;
-  }
-
-  export interface ThemeGameTileVariants {
-    aspect: string;
-    compat: string;
-    overlay: string;
-    density: string;
   }
 
   export interface ThemeInfo {
@@ -887,41 +871,11 @@ export namespace types {
     nodes: types.ThemeLayoutNode[];
   }
 
-  export interface ThemeListRowVariants {
-    media: string;
-    density: string;
-  }
-
-  export interface ThemeSectionVariants {
-    chrome: string;
-  }
-
-  export interface ThemeSettingsVariants {
-    presentation: string;
-    navigation: string;
-  }
-
   export interface ThemeTokens {
     id: string;
     tokens: Record<string, string>;
     wash: types.WashLayer[];
-    variants: types.ThemeVariants;
-  }
-
-  export interface ThemeVariants {
-    settings: types.ThemeSettingsVariants;
-    section: types.ThemeSectionVariants;
-    viewHeader: types.ThemeViewHeaderVariants;
-    emptyState: types.ThemeEmptyStateVariants;
-    listRow: types.ThemeListRowVariants;
-    gameTile: types.ThemeGameTileVariants;
-    gameRow: types.ThemeGameRowVariants;
-  }
-
-  export interface ThemeViewHeaderVariants {
-    actions: string;
-    subtitle: string;
-    size: string;
+    variants: Record<string, string>;
   }
 
   export interface Tweak {
