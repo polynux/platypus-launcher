@@ -13,7 +13,7 @@ const state = vi.hoisted(() => ({
     'game-settings.tabs': 'vertical',
     'section.chrome': 'hairline',
     'dialog.presentation': 'dialog',
-    'dialog.size': 'md',
+    'dialog.size': 'auto',
   } as Record<string, string>,
 }));
 const api = vi.hoisted(() => ({
@@ -66,6 +66,7 @@ afterEach(() => { cleanup(); });
 beforeEach(() => {
   state.variants['game-settings.presentation'] = 'dialog';
   state.variants['game-settings.tabs'] = 'vertical';
+  state.variants['dialog.size'] = 'auto';
   Object.values(api).forEach((f) => f.mockReset());
   api.getGameDetails.mockResolvedValue({ summary: '', screenshots: [], genres: [], developers: [], publishers: [], release_date: '', achievements: null });
   api.getInstallSize.mockResolvedValue(0);
@@ -151,6 +152,16 @@ describe('Game settings catalog variants', () => {
     fireEvent.keyDown(general, { key: tabs === 'vertical' ? 'ArrowDown' : 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Cloud saves', selected: true })).toBeTruthy();
     expect(document.getElementById('gs-tab-cloud')).toHaveFocus();
+  });
+
+  it('honours an explicit dialog size and keeps xl for auto', () => {
+    state.variants['dialog.size'] = 'lg';
+    const { unmount } = render(<GameSettingsModal {...modalProps()} />);
+    expect(screen.getByRole('dialog')).toHaveClass('max-w-[720px]');
+    unmount();
+    state.variants['dialog.size'] = 'auto';
+    render(<GameSettingsModal {...modalProps()} />);
+    expect(screen.getByRole('dialog')).toHaveClass('max-w-[920px]');
   });
 
   it('goes back to the game from the page presentation', async () => {

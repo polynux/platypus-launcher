@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, ArrowLeft } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, RemoveOptions, StorePlugin, Tweak } from '../types';
-import { Modal } from './Modal';
+import { Modal, type ModalSize } from './Modal';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { Effect } from 'effect';
@@ -90,6 +90,10 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // with the tab list down the side on wide content.
   const presentation = useVariant('game-settings.presentation');
   const horizontalTabs = useVariant('game-settings.tabs') === 'horizontal';
+  // An explicit dialog size wins; auto (and the sheet, whose width is its
+  // own) keeps this dialog's built-in xl.
+  const dialogSize = useVariant('dialog.size');
+  const size: ModalSize = presentation === 'dialog' && dialogSize !== 'auto' ? (dialogSize as ModalSize) : 'xl';
 
   const tabsRootClass = horizontalTabs
     ? 'flex min-h-0 flex-1 flex-col gap-5'
@@ -200,8 +204,10 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     // Constant outer height across tabs (issue #57): about the Main tab's
     // height (43rem ~= the Main dialog's 688px at an 800px window, measured
     // in the app), clamped to the window. Only this dialog passes a height;
-    // the shared Modal is untouched, so no other dialog changes size.
-    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size="xl" presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} className="h-[min(43rem,calc(100dvh-6rem))]">
+    // the shared Modal is untouched, so no other dialog changes size. A
+    // sheet spans the full viewport height, so the fixed height is for the
+    // dialog presentation only.
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
       {content}
     </Modal>
   );

@@ -15,7 +15,7 @@ const CACHE_KEY = 'platypus.theme';
 let currentVariants: ThemeTokens['variants'] = {
   settings: { presentation: 'page', navigation: 'scroll' },
   section: { chrome: 'hairline' },
-  dialog: { presentation: 'dialog', size: 'md' },
+  dialog: { presentation: 'dialog', size: 'auto' },
   gameSettings: { presentation: 'dialog', tabs: 'vertical' },
 };
 const variantListeners = new Set<() => void>();
@@ -37,7 +37,7 @@ export function useVariant(axis: ThemeVariantAxis): string {
       : axis === 'settings.navigation' ? 'scroll'
       : axis === 'section.chrome' ? 'hairline'
       : axis === 'dialog.presentation' ? 'dialog'
-      : axis === 'dialog.size' ? 'md'
+      : axis === 'dialog.size' ? 'auto'
       : axis === 'game-settings.presentation' ? 'dialog' : 'vertical',
   );
 }

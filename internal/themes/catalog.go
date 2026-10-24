@@ -15,7 +15,9 @@ var Catalog = []types.ThemeCatalogEntry{
 	}},
 	{Entry: "dialog", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "presentation", Values: []string{"dialog", "sheet"}, Default: "dialog", Since: "1.0"},
-		{Name: "size", Values: []string{"sm", "md", "lg", "xl"}, Default: "md", Since: "1.0"},
+		// auto is the use site's built-in size: every dialog keeps its own
+		// width unless the theme names one.
+		{Name: "size", Values: []string{"auto", "sm", "md", "lg", "xl"}, Default: "auto", Since: "1.0"},
 	}},
 	{Entry: "game-settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "presentation", Values: []string{"dialog", "sheet", "page"}, Default: "dialog", Since: "1.0"},

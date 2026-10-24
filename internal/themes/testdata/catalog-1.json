@@ -58,12 +58,13 @@
         {
           "name": "size",
           "values": [
+            "auto",
             "sm",
             "md",
             "lg",
             "xl"
           ],
-          "default": "md",
+          "default": "auto",
           "since": "1.0"
         }
       ]

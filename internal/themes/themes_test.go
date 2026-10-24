@@ -88,7 +88,7 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if cool.Variants.Settings.Presentation != "sheet" || cool.Variants.Settings.Navigation != "tabs" || cool.Variants.Section.Chrome != "framed" {
 		t.Fatalf("cool variants = %v", cool.Variants)
 	}
-	if cool.Variants.Dialog.Presentation != "dialog" || cool.Variants.Dialog.Size != "md" {
+	if cool.Variants.Dialog.Presentation != "dialog" || cool.Variants.Dialog.Size != "auto" {
 		t.Fatalf("cool dialog variants = %v", cool.Variants.Dialog)
 	}
 	if cool.Variants.GameSettings.Presentation != "sheet" || cool.Variants.GameSettings.Tabs != "horizontal" {
@@ -97,7 +97,7 @@ func TestResolveDefaultsAndPicked(t *testing.T) {
 	if def.Variants.Settings.Presentation != "page" || def.Variants.Settings.Navigation != "scroll" || def.Variants.Section.Chrome != "hairline" {
 		t.Fatalf("warm variants = %v", def.Variants)
 	}
-	if def.Variants.Dialog.Presentation != "dialog" || def.Variants.Dialog.Size != "md" {
+	if def.Variants.Dialog.Presentation != "dialog" || def.Variants.Dialog.Size != "auto" {
 		t.Fatalf("warm dialog variants = %v", def.Variants.Dialog)
 	}
 	if def.Variants.GameSettings.Presentation != "dialog" || def.Variants.GameSettings.Tabs != "vertical" {
@@ -153,8 +153,8 @@ func TestGameSettingsPresentationFallsBackToDialog(t *testing.T) {
 	if builtin.Variants.GameSettings.Presentation != "dialog" || builtin.Variants.GameSettings.Tabs != "vertical" {
 		t.Fatalf("game-settings variants = %v, want the built-in values", builtin.Variants.GameSettings)
 	}
-	if builtin.Variants.Dialog.Size != "md" {
-		t.Fatalf("dialog size = %q, want the built-in md", builtin.Variants.Dialog.Size)
+	if builtin.Variants.Dialog.Size != "auto" {
+		t.Fatalf("dialog size = %q, want the built-in auto", builtin.Variants.Dialog.Size)
 	}
 }
 
