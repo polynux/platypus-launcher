@@ -1,6 +1,6 @@
 # ADR 0002: themes choose from a versioned catalog the app implements
 
-- Status: proposed (2026-10-24)
+- Status: accepted (2026-10-24)
 - Issues: #90 (epic), #91 (inventory), #92 (this ADR), #93 (runtime tokens), #94 (semantic tokens), #95 (Settings testbed), #96 (Dashboard and Library layouts), #89 (bridge trust boundary)
 - Input: `docs/themes/inventory.md`
 
@@ -103,8 +103,10 @@ A layout may hide only optional blocks. The catalog marks some blocks **required
 
 - the Settings and Plugins entries;
 - the plugin warnings in the library and the plugin login row;
-- Install/Play and the back link on the game page;
+- on the game page: Install/Play/Stop, Update, the back link, the progress of a running job (install, verify, move) and the outside-folder alert;
 - toasts.
+
+The rule behind the list: a block is required when it lets the user act on the game, or when it tells the truth about the game's state. Advice and decoration are optional: media, about, achievements, activity, notes, crash hints. Collections and copies are optional on the page, but their actions stay reachable from game settings.
 
 A layout that leaves a required block out still gets it, in its built-in region, plus a warning. A capability surface (`CapabilitySurface`) that a layout hides would make a working feature invisible, so capability surfaces are required wherever their capability is offered.
 
@@ -121,7 +123,8 @@ Warnings show in the theme list. A theme never breaks the app; at worst it falls
 
 ### 7. Guarantees in tests
 
-- **Fixture render**: every component and container is rendered in every variant with fixture data. The render includes an accessibility check: role, label, focus order, and Escape behaviour for dialog-like variants. The tool is to be picked in #95.
+- **Fixture render**: every component and container is rendered in every variant with fixture data. The render runs `axe-core` (through `vitest-axe`) for roles, names, labels and focus order, plus a Testing Library test per variant for behaviour: Escape closes, focus is trapped and restored, arrow keys move between tabs.
+- **Contrast is checked on tokens, in the core.** jsdom can't compute colours, so the Go theme validator checks contrast on the token values: text on ground at least 4.5:1, muted and faint text at least 3:1, the focus ring on ground at least 3:1. A failing token falls back to the built-in value with a warning. This runs for every theme, not only in our tests.
 - **Catalog guard**: a test fails when an entry, axis or value is removed or renamed without a major bump. It compares against a committed snapshot of the catalog.
 - **Theme validation**: every built-in theme parses with zero warnings.
 - **e2e pins the built-in theme**, so e2e results don't depend on the user's choice.
@@ -155,9 +158,9 @@ A native renderer later would implement the same catalog: entries, axes, regions
 - Variant combinations multiply the test surface. The fixture render keeps it bounded, and a variant that can't be kept accessible isn't added.
 - The catalog will churn before 1.0. Until 1.0, the catalog major may move faster, and only built-in themes are supported.
 
-## Open questions
+## Answers (user, 2026-10-24)
 
-1. Which game-page blocks are required, beyond Install/Play and back? Is the outside-folder alert one (inventory §6.3)?
-2. Should the Dashboard hero and the game-page hero be one `Hero` entry with axes, or two entries?
-3. The accessibility check tool for the fixture render (#95).
-4. Should a theme be able to add a region, such as a top bar instead of the sidebar? Or are regions fixed per view and only filled by themes?
+1. **Required game-page blocks**: the rule in §5. A block is required when it lets the user act on the game or tells the truth about its state. The outside-folder alert is required.
+2. **Heroes**: one `Hero` **frame** (art background, gradient, height, overlay and chip style), with the content as blocks inside it: `dashboard.attention`, `game.heading`, `game.actions`, `library.last-played`, … A theme styles the hero once, and a layout can move content (e.g. the game actions) out of it.
+3. **Accessibility check**: `axe-core` via `vitest-axe` plus per-variant behaviour tests in the fixture render, and contrast in the Go validator on token values (§7).
+4. **Regions are fixed in the catalog.** Themes fill and arrange them; a new region is a catalog change (minor bump) built and tested in the app. A different shell structure, e.g. a top bar instead of the sidebar, is a shell variant the app implements (`shell.navigation = sidebar | topbar`), each with its own regions.
