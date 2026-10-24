@@ -1,7 +1,8 @@
 // Command gen-ts regenerates the UI's typed core bridge from the Go
 // core: struct interfaces into apps/ui/src/gen/models.ts, the typed
 // method list into apps/ui/src/gen/api.ts, and the theme catalog's variant
-// axes into apps/ui/src/gen/catalog.ts.
+// axes into apps/ui/src/gen/catalog.ts. It also writes the catalog reference
+// into docs/themes/catalog.md.
 //
 // Run it from the repository root: `go run ./cmd/gen-ts` (an optional first
 // argument overrides the root). The generated files are checked in;
@@ -39,5 +40,14 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	fmt.Println("wrote apps/ui/src/gen/models.ts, api.ts and catalog.ts")
+	docsDir := filepath.Join(root, "docs", "themes")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "gen-ts:", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "catalog.md"), []byte(themes.CatalogMD()), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "gen-ts:", err)
+		os.Exit(1)
+	}
+	fmt.Println("wrote apps/ui/src/gen/models.ts, api.ts and catalog.ts, and docs/themes/catalog.md")
 }

@@ -23,8 +23,9 @@ func repoRoot(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..")
 }
 
-// TestGeneratedUpToDate fails when apps/ui/src/gen/ is stale: regenerate with
-// `go run ./cmd/gen-ts` from the repository root and commit the result.
+// TestGeneratedUpToDate fails when apps/ui/src/gen/ or docs/themes/catalog.md
+// is stale: regenerate with `go run ./cmd/gen-ts` from the repository root
+// and commit the result.
 func TestGeneratedUpToDate(t *testing.T) {
 	root := repoRoot(t)
 	models, api, err := gents.Generate(&app.App{}, filepath.Join(root, "internal", "app"))
@@ -39,6 +40,14 @@ func TestGeneratedUpToDate(t *testing.T) {
 		if string(got) != want {
 			t.Fatalf("%s is stale: run `go run ./cmd/gen-ts` from the repository root and commit the result", name)
 		}
+	}
+	wantCatalog := themes.CatalogMD()
+	gotCatalog, err := os.ReadFile(filepath.Join(root, "docs", "themes", "catalog.md"))
+	if err != nil {
+		t.Fatalf("catalog.md: %v (run `go run ./cmd/gen-ts` from the repository root)", err)
+	}
+	if string(gotCatalog) != wantCatalog {
+		t.Fatalf("docs/themes/catalog.md is stale: run `go run ./cmd/gen-ts` from the repository root and commit the result")
 	}
 }
 
