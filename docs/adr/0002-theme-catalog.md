@@ -164,3 +164,33 @@ A native renderer later would implement the same catalog: entries, axes, regions
 2. **Heroes**: one `Hero` **frame** (art background, gradient, height, overlay and chip style), with the content as blocks inside it: `dashboard.attention`, `game.heading`, `game.actions`, `library.last-played`, … A theme styles the hero once, and a layout can move content (e.g. the game actions) out of it.
 3. **Accessibility check**: `axe-core` via `vitest-axe` plus per-variant behaviour tests in the fixture render, and contrast in the Go validator on token values (§7).
 4. **Regions are fixed in the catalog.** Themes fill and arrange them; a new region is a catalog change (minor bump) built and tested in the app. A different shell structure, e.g. a top bar instead of the sidebar, is a shell variant the app implements (`shell.navigation = sidebar | topbar`), each with its own regions.
+
+## Implementation notes (2026-10-24)
+
+How the accepted decisions landed, without changing them.
+
+- Variants are one generic map. The core resolves every `entry.axis` into
+  `ThemeTokens.Variants`, starting from each axis default. The UI reads them
+  through `useVariant` against the generated `gen/catalog.ts`
+  (`VariantValues`, `VARIANT_DEFAULTS`). No per-axis plumbing.
+- Built-in layouts live in the core (`builtin_layout.go`). Each view renders
+  one path: the theme layout when the theme ships one, else the built-in
+  arrangement (`useThemeLayout(view) ?? BUILTIN_LAYOUTS[view]` through
+  `ThemeLayout`). An omitted view keeps the built-in one.
+- Every block takes the universal `span` (int 1..12). A row shares its width
+  by span instead of splitting equally.
+- Per-view XSDs live at `internal/themes/layouts/<view>.xsd`
+  (`LayoutXSDForView`). `layout.xsd` stays as the union for compatibility.
+- Where the open items landed: tokens (#93, #94), Settings testbed (#95),
+  Dashboard layouts (#96), contrast checks (#97), Library blocks and tile
+  variants (#98), game settings variants (#99), shared view chrome (#100),
+  Hero frame (#101), Storage and Plugins blocks (#102), game page blocks
+  (#103), shell navigation (#104), plugin theme assets (#105), authoring
+  docs and example theme (#106), one render path with built-in layouts
+  (#108), tile polish and row spans (#109), validator gaps (#110). Still
+  open: the store view, the smaller views as layout views, and the native
+  renderer (§9).
+
+Source: `internal/themes/catalog.go`, `internal/themes/builtin_layout.go`,
+`apps/ui/src/gen/catalog.ts`, `apps/ui/src/lib/theme.ts`,
+`apps/ui/src/lib/layout.tsx`.

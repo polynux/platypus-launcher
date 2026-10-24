@@ -127,9 +127,14 @@ unknown variant axis. The entry and axis must exist in `catalog.md`, and the
 value must be a string from the axis's list. A bad value warns and keeps the
 built-in value for that axis only.
 
-One axis inherits: `game-settings.presentation` follows
-`dialog.presentation` when the theme doesn't set it, if that value is one
-the use site offers. An explicit use-site value always wins.
+Three use sites inherit. `game-settings.presentation` follows
+`dialog.presentation`. Every `game-hero` axis follows its `hero` axis.
+Every `library-tile` axis follows its `game-tile` axis. A use site follows
+the broader axis only when the theme leaves the use site unset, and only
+when the broader value is one the use site offers. An explicit use-site
+value always wins. A use-site value with no broader value set keeps its
+built-in default. Inheritance applies only when the theme declares
+`variants`.
 
 Source: `internal/themes/themes.go` (`setVariant`, `resolve`), `catalog.go`.
 
@@ -157,10 +162,43 @@ Source: `internal/themes/themes.go` (`setFonts`, `fontStackCustom`).
 
 ## Layouts
 
-One file per view: `layouts/<view>.xml`. The views the catalog knows are
-`dashboard`, `library` and `shell`. Regions per view: `dashboard` has `main`
-and `side`; `library` has `main` and `side`; `shell` has `sidebar` and
-`topbar`. Block names are per view; see `catalog.md` for the full list.
+Every layout view has a built-in arrangement in the core
+(`internal/themes/builtin_layout.go`). A theme layout replaces it per view:
+a shipped `layouts/<view>.xml` replaces the built-in one for that view, and
+an omitted view keeps the built-in one. The UI renders one path per view:
+the theme layout when the theme ships one, else the built-in arrangement
+(`useThemeLayout(view) ?? BUILTIN_LAYOUTS[view]`, mapped through
+`ThemeLayout`).
+
+The views that take layouts: `dashboard`, `library`, `game`, `storage`,
+`plugins`, and `shell`. Shell regions follow `shell.navigation`: `sidebar`
+for the sidebar variant, `topbar` for the topbar variant. Shell takes only
+the variant. A `layouts/shell.xml` file validates like any other layout,
+but the shell never loads a layout: `Shell.tsx` reads only
+`shell.navigation` and renders its blocks directly, arranged by the variant.
+
+Regions per view, from the catalog:
+
+- `dashboard`: `top`, `main`, `side`, `bottom`.
+- `library`: `top`, `main`, `side`, `bottom`.
+- `game`: `hero`, `main`, `side`.
+- `storage`: `top`, `main`, `side`.
+- `plugins`: `top`, `main`, `side`.
+- `shell`: `sidebar`, `topbar` (variant only, see above).
+
+Block names are per view; see `catalog.md` for the full list. Required
+blocks per view, from the catalog:
+
+- `dashboard`: none. Every block is hideable.
+- `library`: `warnings` (in `top`).
+- `game`: `back`, `actions` and `outside` (all in `hero`). The running job
+  progress lives inside the actions and installation panels, so it moves
+  with them.
+- `storage`: none. Every block is hideable.
+- `plugins`: `store` (in `main`). Each store card renders its own login row
+  and approve/enable actions.
+- `shell`: none. Both variants keep Settings and Plugins reachable by
+  construction.
 
 ```xml
 <layout view="dashboard" catalog="1.0">
@@ -193,17 +231,20 @@ and `side`; `library` has `main` and `side`; `shell` has `sidebar` and
 - A block placed twice in one view warns and keeps only the first: the
   second placement is dropped, never merged.
 - Block attributes are only the ones the catalog declares, with the type the
-  catalog gives them. In catalog 1.0 that is `limit` on
-  `dashboard.activity` and `library.activity`: an int from 1 to 50. A bad
-  value warns and is ignored; the block stays. An undeclared attribute
-  warns and is ignored. Enum attributes take exactly one of their values.
+  catalog gives them. In catalog 1.0 the typed attributes are `limit` on
+  `dashboard.activity` and `library.activity`: an int from 1 to 50. Every
+  block also takes the universal `span`: an int from 1 to 12, its share of
+  a row's width. A row shares its width by span: blocks without `span`
+  count 1, and a row with any `span` over 1 divides its 12-column grid by
+  the spans instead of splitting equally. A bad value warns and is ignored;
+  the block stays. An undeclared attribute warns and is ignored. Enum
+  attributes take exactly one of their values.
 - Files that don't end in `.xml` are ignored with a warning. A file that
   can't be read is ignored with a warning. A document that breaks mid-way
   is discarded whole: a half-read tree never reaches the UI.
 - A layout may list regions and blocks in any order, and may leave optional
-  blocks out. In catalog 1.0 the only required block is
-  `library.warnings`. A layout that leaves it out still gets it, appended in
-  its built-in region (`main`), with a warning.
+  blocks out. A layout that leaves a required block out still gets it,
+  appended in its built-in region (see the list above), with a warning.
 
 The editor schemas are generated from the catalog. `internal/themes/layout.xsd`
 (`LayoutXSD()`) is the compatibility schema: the union of every view's
@@ -311,6 +352,31 @@ The stored paths stay relative. The app turns them into art URLs at serve
 time, under `/platypus-art/theme/<plugin>/<path>` on the token-protected
 art route. The UI draws a wash image under its gradient layer and registers
 each shipped font as a `FontFace`, so a font token naming it paints at once.
+
+Working example: `plugins/theme-example/` ships `assets/bg.png` and names it
+from its wash layer, and loads with zero warnings:
+
+```toml
+[[wash]]
+at = "10% -10%"
+size = "1000px 600px"
+color = "rgba(56, 189, 248, 0.22)"
+fade = "56%"
+image = "assets/bg.png"
+```
+
+Fonts follow the same rules. A shipped family needs its file in the theme
+folder (`woff2` magic, `.woff2` ext, under 2 MiB) and a token naming it:
+
+```toml
+[fonts]
+"My Sans" = "fonts/my-sans.woff2"
+
+[tokens]
+font-sans = '"My Sans", system-ui, sans-serif'
+```
+
+The family must not be one the app ships (bundled or generic).
 
 Source: `internal/themes/assets.go`, `internal/plugins/theme.go`,
 `apps/ui/src/lib/theme.ts`.
