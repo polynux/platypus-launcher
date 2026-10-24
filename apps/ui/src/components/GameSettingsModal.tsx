@@ -99,10 +99,11 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     ? 'flex min-h-0 flex-1 flex-col gap-5'
     : 'flex min-h-0 flex-1 flex-col gap-5 @2xl:grid @2xl:grid-cols-[11rem_1fr] @2xl:grid-rows-[minmax(0,1fr)]';
   const tablistClass = horizontalTabs
-    ? 'flex min-w-0 flex-none flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent] [mask-image:linear-gradient(to_right,transparent,black_1.5rem,black_calc(100%-1.5rem),transparent)]'
+    ? '-mx-6 flex min-w-0 flex-none flex-nowrap gap-1.5 overflow-x-auto px-6 [scrollbar-width:none] [mask-image:linear-gradient(to_right,transparent,black_1.5rem,black_calc(100%-1.5rem),transparent)]'
     : 'flex flex-none flex-wrap gap-1.5 @2xl:flex-col @2xl:flex-nowrap @2xl:self-start';
-  // Horizontal tabs stay on one row (D7): the active tab scrolls into view
-  // when it changes, by click, arrow keys or the initial tab.
+  // Horizontal tabs stay on one row (D7), with no scrollbar; the fades sit in
+  // the padding, so the first and last tabs are clear at rest. The active tab
+  // scrolls into view when it changes, by click, arrow keys or the initial tab.
   useEffect(() => {
     if (!horizontalTabs) return;
     document.getElementById(`gs-tab-${shown}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
