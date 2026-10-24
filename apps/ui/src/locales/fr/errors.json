@@ -107,6 +107,7 @@
     "unknownLocation": "« {{title}} » est installé, mais Platypus ne sait pas quel dossier contient ses fichiers."
   },
   "plugin": {
+    "approvalDeclined": "L'approbation de {{name}} a été refusée.",
     "noLogin": "« {{name}} » n'a pas de connexion.",
     "notApproved": "« {{title}} » vient de {{source}}, qui n'est ni approuvé ni activé.",
     "notReady": "« {{name}} » est {{status}}.",

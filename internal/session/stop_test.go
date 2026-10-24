@@ -338,3 +338,59 @@ func TestStopWhileClientStillStarting(t *testing.T) {
 	rec.waitState(t, "stopped", 10*time.Second)
 	waitDead(t, game.Process.Pid, 2*time.Second)
 }
+
+func TestWatchClientIdleWithoutWorkUsesOriginalTimeout(t *testing.T) {
+	events := make(chan types.SessionEvent, 8)
+	tr := NewTracker(func(e types.SessionEvent) { events <- e })
+	status := func(time.Time) (*types.ClientStatus, error) { return &types.ClientStatus{State: "idle"}, nil }
+	if !tr.WatchClient("g-idle", "Steam", func() int { return 0 }, 100*time.Millisecond, WithClientStatus(status)) {
+		t.Fatal("WatchClient refused")
+	}
+	for {
+		select {
+		case e := <-events:
+			if e.State == "failed" {
+				if !strings.Contains(e.Message, "never started the game") {
+					t.Fatalf("failure message = %q", e.Message)
+				}
+				return
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("idle client status did not fail promptly")
+		}
+	}
+}
+
+func TestWatchClientBusyStatusExtendsStartTimeout(t *testing.T) {
+	events := make(chan types.SessionEvent, 8)
+	tr := NewTracker(func(e types.SessionEvent) { events <- e })
+	foundAt := time.Now().Add(time.Second)
+	found := false
+	status := func(time.Time) (*types.ClientStatus, error) { return &types.ClientStatus{State: "updating"}, nil }
+	if !tr.WatchClient("g-busy", "Steam", func() int {
+		if found {
+			found = false
+			return 0
+		}
+		if time.Now().After(foundAt) {
+			found = true
+			return 42
+		}
+		return 0
+	}, 100*time.Millisecond, WithClientStatus(status)) {
+		t.Fatal("WatchClient refused")
+	}
+	for {
+		select {
+		case e := <-events:
+			if e.State == "failed" {
+				t.Fatalf("busy launch timed out: %s", e.Message)
+			}
+			if e.State == "running" {
+				return
+			}
+		case <-time.After(4 * time.Second):
+			t.Fatal("busy launch did not reach running")
+		}
+	}
+}

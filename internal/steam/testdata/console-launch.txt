@@ -1,0 +1,8 @@
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to CheckShaderDepotManifest with ""
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to DownloadingDepots with ""
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to SiteLicenseSeatCheckout with ""
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to DelayLaunch with ""
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to CreatingProcess with ""
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to WaitingGameWindow with ""
+GameAction [AppID 3599690, ActionID 4] : LaunchApp changed task to Completed with ""
+GameAction [AppID 123, ActionID 5] : LaunchApp changed task to DownloadingDepots with ""

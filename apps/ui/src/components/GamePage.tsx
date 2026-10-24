@@ -365,6 +365,7 @@ export function GameActivity({ events }: { events: ActivityEvent[] }) {
 export function GamePage(p: GamePageProps) {
   const { t } = useTranslation('game');
   const { game, runners, activity, session, tweaks } = p;
+  const sessionActive = session?.state === 'starting' || session?.state === 'running' || session?.state === 'stopping';
   const [shot, setShot] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   // The game settings dialog, and the tab it opens on.
@@ -378,7 +379,7 @@ export function GamePage(p: GamePageProps) {
   // ProtonDB, native, DRM and anti-cheat facts (internal/compat); null while loading.
   const { compat: info } = useCompat(game);
   // What the last launch's log says went wrong (issue #46); null while it runs.
-  const crash = useCrashHints(game, !!session || p.launching);
+  const crash = useCrashHints(game, sessionActive || p.launching);
   // Offline (issue #44): a "network" game shows a needs-connection chip while
   // offline. Play stays enabled — only the store plugin can refuse the launch.
   const { online } = useNetState();
@@ -494,7 +495,7 @@ export function GamePage(p: GamePageProps) {
       onCustomized={() => p.onCustomized?.()}
       onCopied={() => p.onNotify?.(t('game:copied'))}
       onRemove={p.onRemove}
-      running={!!session || p.launching}
+      running={sessionActive || p.launching}
     />
   ) : null;
   if (settingsModal && settingsPage) {

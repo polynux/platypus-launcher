@@ -25,6 +25,17 @@ export function PlayButton(p: PlayButtonProps) {
   const { t } = useTranslation('game');
   const state = p.session?.state;
   const stopping = state === 'stopping';
+  const clientStatus = p.session?.client_status;
+  const clientName = p.session?.message?.split(' is ')[0] || 'Steam';
+  const clientAction = clientStatus?.state === 'updating' ? t('game:play.client.updating')
+    : clientStatus?.state === 'shaders' ? t('game:play.client.shaders')
+      : clientStatus?.state === 'downloading' ? t('game:play.client.downloading')
+        : clientStatus?.state === 'validating' ? t('game:play.client.validating')
+          : clientStatus?.state === 'launching' ? t('game:play.client.launching') : undefined;
+  const clientProgress = clientStatus?.progress == null ? '' : ` ${Math.round(clientStatus.progress * 100)}%`;
+  const failedMessage = p.session?.message?.includes("finished its work but didn't start the game")
+    ? t('game:play.clientFinished', { client: p.session.message.split(' finished its work')[0] })
+    : p.session?.message;
   const [canForce, setCanForce] = useState(false);
   useEffect(() => {
     setCanForce(false);
@@ -45,7 +56,7 @@ export function PlayButton(p: PlayButtonProps) {
         ) : (
           <Button variant="primary" size="none" disabled title={p.session?.message} className={cx(stopBtn, 'disabled:opacity-80')}>
             <Loader2 className="h-4 w-4 animate-spin" />
-            {t('game:play.starting')}
+            {clientAction ? `${clientStatus?.label || `${clientName}: ${clientAction}`}${clientProgress}` : t('game:play.starting')}
           </Button>
         )}
         <Button variant="neutral" size="none" onClick={p.onStop} className={cx(stopBtn, 'bg-white/[0.08] text-white/85 ring-1 ring-white/[0.12] hover:bg-red-400/20 hover:text-red-100 hover:ring-red-300/40')}>
@@ -73,6 +84,7 @@ export function PlayButton(p: PlayButtonProps) {
   }
 
   return (
+    <div className="flex flex-col items-start gap-2">
     <Button
       variant="primary"
       size="none"
@@ -83,5 +95,7 @@ export function PlayButton(p: PlayButtonProps) {
       {p.launching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 fill-current" />}
       {p.launching ? t('game:play.launching') : t('game:play.play')}
     </Button>
+    {state === 'failed' && failedMessage && <p role="status" className="max-w-md text-sm text-red-200">{failedMessage}</p>}
+    </div>
   );
 }

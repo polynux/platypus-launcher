@@ -289,6 +289,11 @@ func TestClientLaunchFactComesFromInstalledLaunchMode(t *testing.T) {
 }
 
 func TestSaveContextWithNoSteamClientIsEmpty(t *testing.T) {
+	// The plugin looks for Steam under HOME and XDG_DATA_HOME: an empty home
+	// keeps a real install on the machine from answering.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 	e := setup(t)
 	e.login()
 	var result map[string]any

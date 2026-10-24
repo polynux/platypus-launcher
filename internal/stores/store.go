@@ -46,6 +46,7 @@ type ClientLaunch struct {
 	// StartTimeout is how long the client gets to start the game; 0 is the
 	// session default.
 	StartTimeout time.Duration
+	ClientStatus func(time.Time) (*types.ClientStatus, error)
 }
 
 // DirectLaunch is a validated plugin launch spec Platypus runs itself.

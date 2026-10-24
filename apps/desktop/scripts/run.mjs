@@ -2,7 +2,7 @@
 // the desktop app. `dev` serves the UI from Vite (hot reload); `start` uses
 // apps/ui/dist (rebuilt when missing or older than the UI sources, or with --rebuild).
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
@@ -20,12 +20,39 @@ const run = (cmd, args, cwd, env = {}) => execFileSync(cmd, args, { cwd, stdio: 
 // Electron: PLATYPUS_ELECTRON, else the npm package's download, else the system one.
 function electronBinary() {
   if (process.env.PLATYPUS_ELECTRON) return process.env.PLATYPUS_ELECTRON;
-  try {
-    const rel = readFileSync(path.join(here, 'node_modules/electron/path.txt'), 'utf8').trim();
-    const bin = path.join(here, 'node_modules/electron/dist', rel);
-    if (existsSync(bin)) return bin;
-  } catch {}
-  console.error('» Electron is not downloaded (run `bun install` at the repo root; package.json trusts electron so its install script runs). Falling back to the system electron, which may be too old.');
+  const pkg = path.join(here, 'node_modules/electron');
+  const bin = () => {
+    try {
+      const rel = readFileSync(path.join(pkg, 'path.txt'), 'utf8').trim();
+      const candidate = path.join(pkg, 'dist', rel);
+      return existsSync(candidate) ? candidate : '';
+    } catch { return ''; }
+  };
+  if (existsSync(pkg)) {
+    let resolved;
+    try { resolved = realpathSync(pkg); } catch {}
+    if (resolved) {
+      let binary = bin();
+      if (binary) return binary;
+      const version = JSON.parse(readFileSync(path.join(resolved, 'package.json'), 'utf8')).version;
+      console.error(`» downloading Electron ${version} (its install script never ran)…`);
+      try {
+        const childEnv = { ...process.env };
+        delete childEnv.ELECTRON_RUN_AS_NODE;
+        execFileSync(process.execPath, ['install.js'], { cwd: resolved, stdio: 'inherit', env: childEnv });
+        binary = bin();
+        if (binary) return binary;
+        console.error('» Electron install script completed, but its binary is still missing.');
+      } catch (error) {
+        console.error(`» Electron install script failed${error.status == null ? `: ${error.message}` : ` (exit ${error.status})`}.`);
+      }
+    } else {
+      console.error('» Electron package is present but its real path could not be resolved.');
+    }
+  } else {
+    console.error('» Electron package is not installed.');
+  }
+  console.error('» Falling back to system electron, which may be too old. Fix with `bun install` or `(cd apps/desktop/node_modules/electron && node install.js)`.');
   return 'electron';
 }
 

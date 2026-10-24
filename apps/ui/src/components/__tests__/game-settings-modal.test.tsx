@@ -208,6 +208,14 @@ describe('the game settings dialog', () => {
     expect(screen.queryByLabelText('working directory')).toBeNull();
   });
 
+  it('hides the prefix footer and winetricks for a game the store client launches (issue #88)', async () => {
+    page({}, game({ source: 'steam', store: 'steam' as never, store_app_id: '322170', executable: '', features: null, client_launch: true }), undefined);
+    fireEvent.click(gear());
+    expect(await screen.findByRole('dialog', { name: 'Settings for Echo Tiny' })).toBeTruthy();
+    expect(screen.queryByText(/saved for next launch/)).toBeNull();
+    expect(screen.queryByText(/winetricks/)).toBeNull();
+  });
+
   it('round-trips the Wine prefix and shows the effective path (issue #34)', async () => {
     const props = page();
     fireEvent.click(gear());

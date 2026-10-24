@@ -102,6 +102,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 // gamePrefix collects the runner's Wine identity and the store's save roots.
 // Native games and store-client launches can still need store-owned roots.
 func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
+	a.applySavedSettings(&game)
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
 	defer cancel()
 	var result savebackup.Prefix
@@ -173,9 +174,17 @@ func (a *App) runnerList() ([]plugins.RunnerInfo, error) {
 	return result.Runners, nil
 }
 
+// clientLaunchHiddenRunnerGroups are the runner.options groups a game the
+// store client launches doesn't get (issue #88): Steam picks the Proton
+// version and owns the prefix, so the runner pick, the sync mode and the
+// anti-cheat runtime bindings don't apply. The rest (Proton flags, the DX
+// layer, wrappers, gamescope) carries over through the generated Steam
+// launch-options line, so it stays.
+var clientLaunchHiddenRunnerGroups = []string{"runner", "sync", "anticheat"}
+
 // GetRunnerOptions is the per-game runner choices the game settings show
 // (runner.options). Without a runner plugin there are none.
-func (a *App) GetRunnerOptions() (types.SettingsSchema, error) {
+func (a *App) GetRunnerOptions(game types.Game) (types.SettingsSchema, error) {
 	present, err := a.runnerPlugin()
 	if err != nil || !present {
 		return types.SettingsSchema{}, err
@@ -186,7 +195,25 @@ func (a *App) GetRunnerOptions() (types.SettingsSchema, error) {
 	if err := a.plugins.Call(ctx, "runner", "runner.options", map[string]any{}, &raw); err != nil {
 		return types.SettingsSchema{}, err
 	}
-	return types.ParseSettingsSchema(raw)
+	schema, err := types.ParseSettingsSchema(raw)
+	if err != nil {
+		return types.SettingsSchema{}, err
+	}
+	if !game.ClientLaunch {
+		return schema, nil
+	}
+	hidden := map[string]bool{}
+	for _, id := range clientLaunchHiddenRunnerGroups {
+		hidden[id] = true
+	}
+	kept := make([]types.SettingGroup, 0, len(schema.Groups))
+	for _, g := range schema.Groups {
+		if !hidden[g.ID] {
+			kept = append(kept, g)
+		}
+	}
+	schema.Groups = kept
+	return schema, nil
 }
 
 // GetRunnerEnv is the env and wrappers a game's runner choices add. Steam starts

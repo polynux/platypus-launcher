@@ -133,6 +133,14 @@ export namespace types {
     manifest: string;
   }
 
+  export interface ClientStatus {
+    state: string;
+    label?: string;
+    progress?: number | null;
+    bytes?: number;
+    total?: number;
+  }
+
   export interface CloudClient {
     running: boolean;
     name: string;
@@ -716,6 +724,7 @@ export namespace types {
     state: string;
     pid?: number;
     message?: string;
+    client_status?: types.ClientStatus | null;
   }
 
   export interface SettingField {

@@ -111,3 +111,21 @@ func TestValidateSpec(t *testing.T) {
 		t.Errorf("allowed folder: %v", err)
 	}
 }
+
+// The folder guard is for games Platypus runs itself. A client launch hands
+// the game to its store's client, which runs it from the store's own library,
+// so the game reads as installed nowhere Platypus contains (issue #86).
+func TestClientLaunchGamesAreNotOutsideFolder(t *testing.T) {
+	s := &Plugin{m: plugins.NewManager(plugins.Options{})}
+	allowed := []string{"/home/user/Games/steam"}
+	lib := plugins.LibraryGame{ID: "Megabonk", Installed: true, InstallPath: "/home/user/.local/share/Steam/steamapps/common/Megabonk"}
+
+	lib.ClientLaunch = true
+	if g := s.toGame(lib, allowed); g.OutsideFolder {
+		t.Fatalf("client-launch game %q is outside the folder guard: %+v", g.InstallDir, g)
+	}
+	lib.ClientLaunch = false
+	if g := s.toGame(lib, allowed); !g.OutsideFolder {
+		t.Fatalf("direct-launch game %q is not outside the folder guard: %+v", g.InstallDir, g)
+	}
+}

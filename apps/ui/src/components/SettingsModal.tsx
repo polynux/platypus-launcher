@@ -189,6 +189,10 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
     .map((g) => g.title);
 
   const isSteamClient = game.store === 'steam' && !game.executable;
+  // A game the store client launches (issue #88): Steam picks the runner and
+  // owns the prefix, so the runner/sync/anti-cheat groups never arrive from
+  // core, and the hardcoded winetricks block and prefix footer hide here.
+  const clientLaunched = !!game.client_launch;
   // A native Linux build runs without Proton: no runner and no Proton-only
   // settings to pick.
   const native = !!game.native;
@@ -236,9 +240,11 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
   const tricks = draft.winetricks ?? [];
   // The runner's per-game choices, from the schema the core got from runner.options.
+  // A game the store client launches gets only the launch-options choices
+  // (issue #88): the runner, sync and anti-cheat groups never arrive.
   const [runnerGroups, setRunnerGroups] = useState<SchemaGroup[]>([]);
   useEffect(() => {
-    Effect.runPromise(LauncherApi.getRunnerOptions()).then(setRunnerGroups, () => setRunnerGroups([]));
+    Effect.runPromise(LauncherApi.getRunnerOptions(game)).then(setRunnerGroups, () => setRunnerGroups([]));
   }, []);
   const changeChoice = (key: string, value: boolean | string | number) => set(key as keyof GameSettings, value as never);
   // The env and wrappers the choices add: the Steam launch options spell them out.
@@ -299,8 +305,9 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             ) : (
               <>
                 <RunnerChoices groups={runnerGroups} ids={['runner']} draft={draft} onChange={changeChoice} />
-                {runners.length === 0 && <p className="text-[12px] text-text-body">{t('gameSettings:runner.noneInstalled')}</p>}
+                {runners.length === 0 && !clientLaunched && <p className="text-[12px] text-text-body">{t('gameSettings:runner.noneInstalled')}</p>}
                 <RunnerChoices groups={runnerGroups} ids={['sync', 'proton']} draft={draft} onChange={changeChoice} />
+                {!clientLaunched && (
                 <div className="space-y-3">
                   <MonoLabel>{t('gameSettings:winetricks.kicker')} <span className="normal-case tracking-normal text-text-muted">{t('gameSettings:winetricks.note')}</span></MonoLabel>
                   <div className="flex flex-wrap gap-1.5">
@@ -314,6 +321,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
                     })}
                   </div>
                 </div>
+                )}
               </>
             )}
           </SettingGroup>
@@ -467,11 +475,14 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             <Button variant="primary" onClick={() => { onSave(current); markClean(); }} className="flex-1">{t('gameSettings:general.save')}</Button>
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-accent-strong/80">{t('gameSettings:general.unsaved')}</div>}
+          {/* The store client owns the prefix (issue #88): no footer naming one. */}
+          {!clientLaunched && (
           <div className="font-mono text-[12px] leading-relaxed text-text-muted">
             {effectiveNative && isCustom
               ? t('gameSettings:general.savedNativeNote')
               : <>{t('gameSettings:general.savedNote', { prefix: effectivePrefix })}{draft.wine_prefix ? '' : t('gameSettings:general.defaultSuffix')}</>}
           </div>
+          )}
         </div>
       </div>
     </div>
