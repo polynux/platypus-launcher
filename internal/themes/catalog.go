@@ -109,4 +109,30 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
 	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "bottom"},
+	// Hero frame entries (issue #101): one frame for the dashboard and game
+	// page heroes. The dashboard reads the global hero axes; the game page
+	// reads game-hero, which follows the global choice unless the theme
+	// names a value for the game itself (like game-settings follows
+	// dialog). Warm keeps today's looks through the defaults: the
+	// dashboard's tall glass banner, the game page's regular solid one.
+	// Cool picks the compact values.
+	{Entry: "hero", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "height", Values: []string{"tall", "regular", "compact"}, Default: "tall", Since: "1.0"},
+		{Name: "gradient", Values: []string{"warm", "neutral", "none"}, Default: "warm", Since: "1.0"},
+		{Name: "chips", Values: []string{"glass", "solid"}, Default: "glass", Since: "1.0"},
+	}},
+	{Entry: "game-hero", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "height", Values: []string{"tall", "regular", "compact"}, Default: "regular", Since: "1.0", Inherits: "hero.height"},
+		{Name: "gradient", Values: []string{"warm", "neutral", "none"}, Default: "warm", Since: "1.0", Inherits: "hero.gradient"},
+		{Name: "chips", Values: []string{"glass", "solid"}, Default: "solid", Since: "1.0", Inherits: "hero.chips"},
+	}},
+	// Hero content blocks (issue #101): today's dashboard hero content and
+	// today's game page hero content. The dashboard keeps placing hero (the
+	// frame with its content); attention stays available for layouts that
+	// show the content on its own. The game page uses the blocks in fixed
+	// positions until it becomes a layout view (#103). Actions are required:
+	// they hold Install, Play and Update.
+	{Entry: "dashboard.attention", Since: "1.0", Kind: "block", Region: "top"},
+	{Entry: "game.heading", Since: "1.0", Kind: "block", Region: "hero"},
+	{Entry: "game.actions", Since: "1.0", Kind: "block", Required: true, Region: "hero"},
 }

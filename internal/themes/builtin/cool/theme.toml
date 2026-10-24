@@ -27,6 +27,12 @@ supports = ["tokens", "variants", "layouts"]
 "game-tile.density" = "compact"
 "game-row.columns" = "minimal"
 "game-row.mode" = "compact"
+"hero.height" = "compact"
+"hero.gradient" = "neutral"
+"hero.chips" = "solid"
+"game-hero.height" = "compact"
+"game-hero.gradient" = "neutral"
+"game-hero.chips" = "glass"
 
 
 [tokens]

@@ -8,6 +8,7 @@ import { ActivityPanel } from './ActivityFeed';
 import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
 import { GameTile } from './GameTile';
+import { Hero, heroChipClass } from './Hero';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { byRecent, coverImages, heroImages, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
@@ -89,6 +90,17 @@ function dashboardBlocks({ games, runners, activity, ownedCount, dismissedHero, 
     ),
     welcome: <DashboardWelcome hero={hero} installed={installed} owned={owned} fixes={waiting.length} />,
     empty: <DashboardEmpty games={games} />,
+    attention: (
+      <DashboardAttention
+        hero={hero}
+        installed={installed}
+        owned={owned}
+        waitingCount={waiting.length}
+        pending={pending}
+        onOpenGame={onOpenGame}
+        onDismissHero={onDismissHero}
+      />
+    ),
     continue: (
       <DashboardContinue
         games={continueGames}
@@ -128,12 +140,41 @@ export function DashboardHero({ hero, installed, owned, waitingCount, pending, o
   onOpenGame: (id: string) => void;
   onDismissHero: (ids: string[]) => void;
 }) {
-  const { t } = useTranslation(['dashboard', 'common']);
   if (!hero) return null;
   return (
-    <section className="relative overflow-hidden rounded-3xl ring-1 ring-hairline">
-      <Cover src={heroImages(hero)} title={hero.title} className="h-[290px] w-full" />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(84deg, rgba(19,15,10,.97) 30%, rgba(19,15,10,.35) 62%, transparent)' }} />
+    <Hero site="dashboard" art={heroImages(hero)} title={hero.title}>
+      <DashboardAttention
+        hero={hero}
+        installed={installed}
+        owned={owned}
+        waitingCount={waitingCount}
+        pending={pending}
+        onOpenGame={onOpenGame}
+        onDismissHero={onDismissHero}
+      />
+    </Hero>
+  );
+}
+
+// Today's dashboard hero content (catalog dashboard.attention): why the game
+// needs attention, what to do about it, and the stat chips. The dashboard's
+// hero block shows it inside the Hero frame; a layout may also place it on
+// its own. Positioning is structural (as today): the frame is the relative
+// parent.
+export function DashboardAttention({ hero, installed, owned, waitingCount, pending, onOpenGame, onDismissHero }: {
+  hero: Game | undefined;
+  installed: number;
+  owned: number;
+  waitingCount: number;
+  pending: Game[];
+  onOpenGame: (id: string) => void;
+  onDismissHero: (ids: string[]) => void;
+}) {
+  const { t } = useTranslation(['dashboard', 'common']);
+  const chips = useVariant('hero.chips');
+  if (!hero) return null;
+  return (
+    <>
       <div className="absolute bottom-6 left-7 max-w-lg">
         <Badge variant="bronze" className="bg-attention text-on-accent">
           {['bronze', 'borked'].includes(ratingBadge(hero)?.tone ?? '') ? t('dashboard:hero.needsAttention') : t('dashboard:hero.fixAvailable')}
@@ -160,13 +201,13 @@ export function DashboardHero({ hero, installed, owned, waitingCount, pending, o
           ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-white/80']] : []),
           [t('dashboard:hero.statFixes'), String(waitingCount), 'text-orange-300'],
         ].map(([k, v, c]) => (
-          <div key={k} className="w-28 rounded-2xl bg-black/45 p-3.5 backdrop-blur">
+          <div key={k} className={cx(heroChipClass(chips), 'w-28 rounded-2xl p-3.5')}>
             <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
             <div className="font-mono text-micro uppercase tracking-widest text-text-muted">{k}</div>
           </div>
         ))}
       </div>
-    </section>
+    </>
   );
 }
 

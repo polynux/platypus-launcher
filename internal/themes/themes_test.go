@@ -134,6 +134,37 @@ func TestVariantsWarnAndFallBack(t *testing.T) {
 	}
 }
 
+// The game hero follows the global hero choice unless the theme says
+// otherwise for the game itself (issue #101, like game-settings follows
+// dialog): warm keeps the dashboard's tall glass banner and the game page's
+// regular solid one from the defaults alone.
+func TestGameHeroFollowsHero(t *testing.T) {
+	varianted := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "variants"]`, 1)
+	builtin, _ := resolveSrc(t, varianted)
+	if builtin.Variants["hero.height"] != "tall" || builtin.Variants["hero.chips"] != "glass" {
+		t.Fatalf("hero variants = %v, want the dashboard defaults", builtin.Variants)
+	}
+	if builtin.Variants["game-hero.height"] != "regular" || builtin.Variants["game-hero.chips"] != "solid" {
+		t.Fatalf("game-hero variants = %v, want the game page defaults", builtin.Variants)
+	}
+	globalOnly, _ := resolveSrc(t, varianted+`
+[variants]
+"hero.height" = "compact"
+"hero.gradient" = "neutral"
+`)
+	if globalOnly.Variants["game-hero.height"] != "compact" || globalOnly.Variants["game-hero.gradient"] != "neutral" {
+		t.Fatalf("game-hero variants = %v, want the global hero choice", globalOnly.Variants)
+	}
+	useSite, _ := resolveSrc(t, varianted+`
+[variants]
+"hero.height" = "compact"
+"game-hero.height" = "regular"
+`)
+	if useSite.Variants["hero.height"] != "compact" || useSite.Variants["game-hero.height"] != "regular" {
+		t.Fatalf("hero variants = %v, want the use-site override to win", useSite.Variants)
+	}
+}
+
 // A use-site presentation wins over the global dialog one, which wins over
 // the built-in (ADR §2): game settings follow dialog.presentation unless the
 // theme says otherwise for game-settings itself.

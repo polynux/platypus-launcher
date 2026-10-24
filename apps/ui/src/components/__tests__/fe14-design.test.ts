@@ -6,12 +6,14 @@ import path from 'node:path';
 const src = (p: string) => fs.readFileSync(path.join(__dirname, '../..', p), 'utf8');
 
 describe('FE-14 design drift guards', () => {
-  it('uses backdrop-blur only on hero stat chips (Dashboard), not JobProgress', () => {
+  it('uses backdrop-blur only on hero stat chips (the Hero frame), not JobProgress', () => {
     const gamePage = src('components/GamePage.tsx');
-    const dashboard = src('components/Dashboard.tsx');
+    const hero = src('components/Hero.tsx');
     expect(gamePage.includes('backdrop-blur')).toBe(false);
-    // Hero stat chips explicitly may keep one per DESIGN §1.1/§6.1.
-    expect(dashboard.includes('backdrop-blur')).toBe(true);
+    // Hero stat chips explicitly may keep one per DESIGN §1.1/§6.1. The frame
+    // serves the dashboard's glass chips (issue #101); the game page default
+    // is solid, so GamePage stays blur-free.
+    expect(hero.includes('backdrop-blur')).toBe(true);
   });
 
   it('toast uses semantic launcher tokens and sits above an open modal', () => {

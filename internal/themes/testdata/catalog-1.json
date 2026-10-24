@@ -513,6 +513,101 @@
       "axes": null,
       "kind": "block",
       "region": "bottom"
+    },
+    {
+      "entry": "hero",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "height",
+          "values": [
+            "tall",
+            "regular",
+            "compact"
+          ],
+          "default": "tall",
+          "since": "1.0"
+        },
+        {
+          "name": "gradient",
+          "values": [
+            "warm",
+            "neutral",
+            "none"
+          ],
+          "default": "warm",
+          "since": "1.0"
+        },
+        {
+          "name": "chips",
+          "values": [
+            "glass",
+            "solid"
+          ],
+          "default": "glass",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-hero",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "height",
+          "values": [
+            "tall",
+            "regular",
+            "compact"
+          ],
+          "default": "regular",
+          "since": "1.0",
+          "inherits": "hero.height"
+        },
+        {
+          "name": "gradient",
+          "values": [
+            "warm",
+            "neutral",
+            "none"
+          ],
+          "default": "warm",
+          "since": "1.0",
+          "inherits": "hero.gradient"
+        },
+        {
+          "name": "chips",
+          "values": [
+            "glass",
+            "solid"
+          ],
+          "default": "solid",
+          "since": "1.0",
+          "inherits": "hero.chips"
+        }
+      ]
+    },
+    {
+      "entry": "dashboard.attention",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "game.heading",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "hero"
+    },
+    {
+      "entry": "game.actions",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "hero"
     }
   ]
 }
