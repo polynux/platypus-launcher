@@ -76,8 +76,51 @@ describe('shell navigation variants', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
     // Plugins sits in the Tools menu in topbar mode.
     await user.click(screen.getByRole('button', { name: /Tools/ }));
-    expect(screen.getByRole('button', { name: /Plugins/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Plugins/ })).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('renders the Tools panel outside the nav overflow container (D1)', async () => {
+    shellState.navigation = 'topbar';
+    const user = userEvent.setup();
+    const { container } = render(<Shell {...baseProps} view={{ name: 'dashboard' }} />);
+    await user.click(screen.getByRole('button', { name: /Tools/ }));
+    const menu = screen.getByRole('menu');
+    // The panel portals to the body: the nav's overflow can't clip it, and a
+    // pointer on a menu row never hits the strip below the bar.
+    const nav = container.querySelector('nav[aria-label="Main"]');
+    expect(nav).toBeTruthy();
+    expect(nav!.contains(menu)).toBe(false);
+    expect(document.body.contains(menu)).toBe(true);
+  });
+
+  it('moves focus into the menu on open, arrows between items, Escape back (D2)', async () => {
+    shellState.navigation = 'topbar';
+    const user = userEvent.setup();
+    render(<Shell {...baseProps} view={{ name: 'dashboard' }} />);
+    const tools = screen.getByRole('button', { name: /Tools/ });
+    tools.focus();
+    await user.keyboard('{Enter}');
+    // Focus moves into the menu on open.
+    expect(screen.getByRole('menuitem', { name: 'Fixes' })).toHaveFocus();
+    // Arrow keys move between items.
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: 'Runners' })).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: /Plugins/ })).toHaveFocus();
+    // Escape closes and returns focus to the trigger.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(tools).toHaveFocus();
+  });
+
+  it('marks the trigger on a tool view without popping the menu open', async () => {
+    shellState.navigation = 'topbar';
+    render(<Shell {...baseProps} view={{ name: 'plugins' }} />);
+    // Unlike the sidebar's disclosure group, a floating menu never opens on
+    // page load: Plugins stays one click away, marked by the active trigger.
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('button', { name: /Tools/ })).toHaveClass('text-accent-strong');
   });
 
   it('marks the active item aria-current in both variants', async () => {
@@ -107,19 +150,13 @@ describe('shell navigation variants', () => {
   it('opens the Tools menu with Enter and closes it with Escape', async () => {
     shellState.navigation = 'topbar';
     const user = userEvent.setup();
-    render(<Shell {...baseProps} view={{ name: 'plugins' }} />);
-    // A tool view opens the menu with its item.
-    expect(screen.getByRole('button', { name: /Plugins/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Plugins/ })).toHaveAttribute('aria-current', 'page');
-    screen.getByRole('button', { name: /Plugins/ }).focus();
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('button', { name: /Plugins/ })).toBeNull();
+    render(<Shell {...baseProps} view={{ name: 'dashboard' }} />);
     const tools = screen.getByRole('button', { name: /Tools/ });
     expect(tools).toHaveAttribute('aria-expanded', 'false');
     tools.focus();
     await user.keyboard('{Enter}');
     expect(tools).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: /Storage/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Storage/ })).toBeInTheDocument();
   });
 
   it('searches with Enter and clears with Escape, like the sidebar', async () => {
@@ -141,7 +178,7 @@ describe('shell navigation variants', () => {
     const user = userEvent.setup();
     render(<Shell {...baseProps} view={{ name: 'dashboard' }} authNeeded fixCount={2} />);
     await user.click(screen.getByRole('button', { name: /Tools/ }));
-    expect(screen.getByRole('button', { name: /Plugins/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Plugins/ })).toBeInTheDocument();
     await i18n.changeLanguage('en');
   });
 });

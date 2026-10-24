@@ -63,6 +63,7 @@ describe('FE-14 design drift guards', () => {
   it('does not reintroduce migrated raw palette classes', () => {
     const files = [
       'App.tsx', 'components/ui.tsx', 'components/Sidebar.tsx',
+      'components/Shell.tsx',
       'components/JobProgress.tsx', 'components/Modal.tsx',
       'components/Dashboard.tsx', 'components/LibraryView.tsx',
       'components/GamePage.tsx', 'components/SettingsModal.tsx',

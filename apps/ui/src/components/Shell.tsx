@@ -3,9 +3,10 @@
 // the sidebar's parts (inventory §1.2) are blocks each region arranges. The
 // sidebar region is the Sidebar itself, unchanged; the topbar region lays the
 // same blocks out in two rows, with the Tools items in a menu.
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Search, Settings, Square, Ticket } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -53,22 +54,21 @@ function Topbar(p: ShellProps) {
     { key: 'plugins', label: t('nav:plugins'), dot: p.authNeeded },
     { key: 'storage', label: t('nav:storage') },
   ];
-  // Opening a tool's view shows its item; the menu opens with it.
+  // A tool view marks the trigger, but the menu stays closed until opened:
+  // unlike the sidebar's disclosure group, a floating menu never pops up on
+  // page load or steals focus on navigation. Plugins stays one click away.
   const toolsHasActive = tools.some((item) => item.key === active);
   const toolsAttention = tools.reduce((n, item) => n + (item.count ?? 0), 0);
   const toolsDot = tools.some((item) => item.dot);
-  useEffect(() => {
-    if (toolsHasActive) setToolsOpen(true);
-  }, [toolsHasActive]);
 
   const navButton = (n: NavItem) => (
     <button
       key={n.key}
-      onClick={() => { setToolsOpen(false); p.onNavigate({ name: n.key } as View); }}
+      onClick={() => p.onNavigate({ name: n.key } as View)}
       aria-current={active === n.key ? 'page' : undefined}
       className={cx(
         'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-        active === n.key ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface-strong hover:text-white'
+        active === n.key ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-white'
       )}
     >
       <span>{n.label}</span>
@@ -84,34 +84,49 @@ function Topbar(p: ShellProps) {
   return (
     <header data-region="topbar" className="flex-none border-b border-hairline bg-black/25">
       <div className="flex items-center gap-2 px-4 pt-2">
-        <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-gradient-to-br from-accent-strong to-rose-500 text-[14px] font-black text-on-accent">P</span>
+        <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-gradient-to-br from-accent-strong to-danger text-[14px] font-black text-on-accent">P</span>
         {/* shell.nav */}
         <nav aria-label={t('nav:main')} className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {main.map((n) => navButton(n))}
-          {/* shell.tools: a menu in topbar mode, so Plugins stays one click away */}
-          <div className="relative flex-none">
-            <button
-              type="button"
-              onClick={() => setToolsOpen((open) => !open)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setToolsOpen(false); }}
-              aria-expanded={toolsOpen}
-              aria-controls="topbar-tools"
-              className={cx(
-                'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 font-mono text-micro uppercase tracking-[0.14em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-                toolsHasActive && !toolsOpen ? 'text-amber-200' : 'text-text-muted hover:text-text-body'
-              )}
+          {/* shell.tools: a menu in topbar mode, so Plugins stays one click away.
+              The panel portals outside the nav's overflow container (D1); the
+              menu owns focus, arrows and Escape (D2). */}
+          <DropdownMenu open={toolsOpen} onOpenChange={setToolsOpen} modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cx(
+                  'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 font-mono text-micro uppercase tracking-[0.14em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
+                  toolsHasActive && !toolsOpen ? 'text-accent-strong' : 'text-text-muted hover:text-text-body'
+                )}
+              >
+                <span>{t('nav:tools')}</span>
+                {!toolsOpen && toolsAttention > 0 && <Badge variant="neutral" className="h-4 rounded-full px-1.5 tracking-normal tabular-nums">{toolsAttention}</Badge>}
+                {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
+                <ChevronDown className={cx('h-3.5 w-3.5 transition-transform motion-reduce:transition-none', toolsOpen ? '' : '-rotate-90')} aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="bottom"
+              align="start"
             >
-              <span>{t('nav:tools')}</span>
-              {!toolsOpen && toolsAttention > 0 && <Badge variant="neutral" className="h-4 rounded-full px-1.5 tracking-normal tabular-nums">{toolsAttention}</Badge>}
-              {!toolsOpen && toolsDot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
-              <ChevronDown className={cx('h-3.5 w-3.5 transition-transform motion-reduce:transition-none', toolsOpen ? '' : '-rotate-90')} aria-hidden />
-            </button>
-            {toolsOpen && (
-              <div id="topbar-tools" onKeyDown={(e) => { if (e.key === 'Escape') setToolsOpen(false); }} className="absolute left-0 top-full z-50 mt-1 flex min-w-44 flex-col gap-0.5 rounded-xl border border-hairline bg-raised p-1.5 shadow-xl">
-                {tools.map((n) => navButton(n))}
-              </div>
-            )}
-          </div>
+                {tools.map((n) => (
+                  <DropdownMenuItem key={n.key} asChild onSelect={() => p.onNavigate({ name: n.key } as View)}>
+                    <button
+                      aria-current={active === n.key ? 'page' : undefined}
+                      className={cx(
+                        'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
+                        active === n.key ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-white'
+                      )}
+                    >
+                      <span>{n.label}</span>
+                      {n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>}
+                      {n.dot && <span className="h-1.5 w-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
+                    </button>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+          </DropdownMenu>
         </nav>
         <label className="relative ml-auto block w-52 flex-none">
           <span className="sr-only">{t('nav:searchLibrary')}</span>
@@ -143,13 +158,15 @@ function Topbar(p: ShellProps) {
           title={t('nav:settings')}
           className={cx(
             'grid h-8 w-8 flex-none place-items-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-            active === 'settings' ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface-strong hover:text-white'
+            active === 'settings' ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-white'
           )}
         >
           <Settings className="h-4 w-4" aria-hidden />
         </button>
       </div>
-      <div className="flex items-center gap-4 overflow-x-auto px-4 py-1.5 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+      {/* The context strip wraps instead of scrolling (D3): at 1280 px every
+          block stays fully visible and no scrollbar shows. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-1.5">
         {/* shell.collections */}
         {(p.collections ?? []).filter((c) => c.pinned).length > 0 && (
           <div className="flex flex-none items-center gap-1">
@@ -163,7 +180,7 @@ function Topbar(p: ShellProps) {
                   aria-current={current ? 'page' : undefined}
                   className={cx(
                     'whitespace-nowrap rounded-lg px-2 py-1 text-[12px] transition',
-                    current ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface hover:text-white'
+                    current ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface hover:text-white'
                   )}
                 >
                   {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
@@ -171,7 +188,7 @@ function Topbar(p: ShellProps) {
               );
             })}
             {p.onManageCollections && (
-              <button type="button" onClick={p.onManageCollections} className="whitespace-nowrap font-mono text-micro uppercase tracking-[0.14em] text-text-muted transition hover:text-white/80">
+              <button type="button" onClick={p.onManageCollections} className="whitespace-nowrap font-mono text-micro uppercase tracking-[0.14em] text-text-muted transition hover:text-text">
                 {t('collections:manage')}
               </button>
             )}
@@ -212,7 +229,7 @@ function Topbar(p: ShellProps) {
                 aria-current={p.activeStore === s.id ? 'page' : undefined}
                 className={cx(
                   'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[12px] transition',
-                  p.activeStore === s.id ? 'bg-accent-strong/12 text-amber-200' : 'text-text-body hover:bg-surface hover:text-white'
+                  p.activeStore === s.id ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface hover:text-white'
                 )}
               >
                 <PluginLogo src={s.icon_url} name={s.name} size="xs" />
@@ -221,8 +238,10 @@ function Topbar(p: ShellProps) {
             ))}
           </div>
         )}
-        <div className="ml-auto flex flex-none items-center gap-2">
-          <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
+        <div className="ml-auto flex min-w-0 flex-none items-center gap-2">
+          <div className="min-w-0 max-w-72 [&>button]:w-auto [&>button]:max-w-72">
+            <FriendsSummary views={p.friends} labels={p.friendLabels} onOpen={p.onOpenFriends} unread={p.friendsUnread} />
+          </div>
           {p.sessions.map((e: SessionEvent & { title: string }) => {
             const running = e.state === 'running';
             const label = running ? t('nav:playing') : e.state === 'stopping' ? t('nav:stopping') : t('nav:starting');
@@ -230,13 +249,13 @@ function Topbar(p: ShellProps) {
               <span
                 key={e.game_id}
                 title={e.message}
-                className={cx('flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 ring-1', running ? 'bg-emerald-400/[0.08] ring-emerald-300/25' : 'bg-accent-strong/[0.07] ring-accent-strong/25')}
+                className={cx('flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 ring-1', running ? 'bg-ok/[0.08] ring-ok/25' : 'bg-accent-strong/[0.07] ring-accent-strong/25')}
               >
-                <span className={cx('h-2 w-2 rounded-full', running ? 'bg-emerald-400' : 'animate-pulse bg-accent-strong')} />
-                <span className={cx('font-mono text-micro uppercase tracking-wider', running ? 'text-emerald-200' : 'text-amber-200')}>{label}</span>
-                <span className="max-w-32 truncate text-hint font-semibold text-white/85">{e.title}</span>
+                <span className={cx('h-2 w-2 rounded-full', running ? 'bg-ok' : 'animate-pulse bg-accent-strong')} />
+                <span className={cx('font-mono text-micro uppercase tracking-wider', running ? 'text-ok' : 'text-accent-strong')}>{label}</span>
+                <span className="max-w-32 truncate text-hint font-semibold text-text">{e.title}</span>
                 {e.state !== 'stopping' && (
-                  <Button variant="ghost" size="icon" onClick={() => p.onStop(e.game_id)} aria-label={t('nav:stopGame', { title: e.title })} className="size-5 flex-none text-text-muted hover:text-red-200">
+                  <Button variant="ghost" size="icon" onClick={() => p.onStop(e.game_id)} aria-label={t('nav:stopGame', { title: e.title })} className="size-5 flex-none text-text-muted hover:text-danger">
                     <Square className="h-2.5 w-2.5 fill-current" />
                   </Button>
                 )}
