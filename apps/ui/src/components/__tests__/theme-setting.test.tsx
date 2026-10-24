@@ -19,6 +19,7 @@ const themes = [
   { id: 'warm', name: 'Warm', schema: 1, supports: ['tokens'], status: 'ok', warnings: [] },
   { id: 'cool', name: 'Cool dark', schema: 1, supports: ['tokens'], status: 'ok', warnings: ['unknown token "glow", ignored'] },
   { id: 'future', name: 'Future', schema: 2, supports: ['tokens'], status: 'newer', warnings: ['needs schema 2, this Platypus reads schema 1'] },
+  { id: 'fixture', name: 'Fixture', schema: 1, supports: ['tokens'], status: 'ok', warnings: [], source: 'fixture-theme' },
 ];
 const coolTokens = {
   id: 'cool',
@@ -48,6 +49,13 @@ describe('ThemeSetting', () => {
     expect(future).toHaveAttribute('aria-disabled', 'true');
     expect(future.textContent).toContain('needs a newer Platypus');
     expect(getByRole('option', { name: 'Cool dark' })).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('names the plugin a theme comes from', async () => {
+    const { getByRole, findByRole } = render(<ThemeSetting onNotify={() => {}} />);
+    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Warm'));
+    fireEvent.click(getByRole('combobox', { name: 'Theme' }));
+    expect(await findByRole('option', { name: /Fixture.*fixture-theme/ })).not.toHaveAttribute('aria-disabled', 'true');
   });
 
   it('lists the warnings of each theme where they can be read', async () => {

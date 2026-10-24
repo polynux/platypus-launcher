@@ -7,6 +7,7 @@ package themes
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path"
 	"regexp"
@@ -78,17 +79,22 @@ var (
 
 // Theme is one parsed theme.toml. Tokens and Wash hold only the values that
 // passed validation; Resolve fills in the rest from the default. Layouts
-// holds the validated layouts/<view>.xml files by view.
+// holds the validated layouts/<view>.xml files by view. Fonts maps a shipped
+// family to its file inside the theme folder (issue #105); Wash image paths
+// live in the wash layers. Both stay relative here; the app turns them into
+// art URLs when it resolves the theme.
 type Theme struct {
 	Info     types.ThemeInfo
 	Tokens   map[string]string
 	Wash     []types.WashLayer
 	Variants map[string]string
 	Layouts  map[string]types.ThemeLayout
+	Fonts    map[string]string
 }
 
 // file is the theme.toml shape. Tokens and wash layers decode as loose maps so
-// one bad value costs only that token, not the whole file.
+// one bad value costs only that token, not the whole file. Fonts maps a
+// family to its woff2 file, validated like the wash images.
 type file struct {
 	Theme struct {
 		ID       string   `toml:"id"`
@@ -98,20 +104,77 @@ type file struct {
 		Supports []string `toml:"supports"`
 	} `toml:"theme"`
 	Tokens   map[string]any   `toml:"tokens"`
+	Fonts    map[string]any   `toml:"fonts"`
 	Wash     []map[string]any `toml:"wash"`
 	Variants map[string]any   `toml:"variants"`
 }
 
 // Parse reads one theme.toml. It never fails: a file it can't use comes back
-// with status invalid and the reason in Warnings.
+// with status invalid and the reason in Warnings. Without the theme folder
+// (no fs.FS) asset references can't be checked, so they are dropped with a
+// warning; LoadFS loads the same file with its folder.
 func Parse(src []byte) Theme {
-	return parseTheme(src, true)
+	return parseThemeFS(src, nil, "", true)
 }
 
 // parseTheme is Parse with the contrast check optional: reading the built-in
 // default theme skips it, since that read supplies the values the check falls
 // back to.
 func parseTheme(src []byte, checkContrast bool) Theme {
+	return parseThemeFS(src, nil, "", checkContrast)
+}
+
+// LoadFS reads one theme.toml plus its layouts/*.xml from the theme folder
+// (issue #105). fsys is the folder's FS (embed for the built-ins, os.DirFS
+// for a plugin folder) and themeFile the toml's path inside it; assets and
+// layouts resolve under its directory. source names the data plugin carrying
+// the theme, empty for the built-ins. It never fails: an unreadable theme
+// comes back invalid with the reason in Warnings.
+func LoadFS(fsys fs.FS, themeFile, source string) Theme {
+	src, err := fs.ReadFile(fsys, themeFile)
+	if err != nil {
+		t := Theme{
+			Info:     types.ThemeInfo{Status: StatusInvalid, Supports: []string{}, Warnings: []string{}},
+			Tokens:   map[string]string{},
+			Variants: map[string]string{},
+		}
+		t.Info.Source = source
+		t.warn("theme.toml can't be read: %v", err)
+		return t
+	}
+	themeDir := path.Dir(themeFile)
+	if themeDir == "." {
+		themeDir = ""
+	}
+	t := parseThemeFS(src, fsys, themeDir, true)
+	t.Info.Source = source
+	if t.Info.Status != StatusOK && t.Info.Status != StatusNewer {
+		return t
+	}
+	// Layouts load for every theme, like the token checks; whether they apply
+	// is decided by the supports level when the UI asks for a view.
+	dir := path.Join(themeDir, "layouts")
+	if themeDir == "" {
+		dir = "layouts"
+	}
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return t
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	slices.Sort(names)
+	t.parseLayouts(func(name string) ([]byte, error) {
+		return fs.ReadFile(fsys, path.Join(dir, strings.TrimPrefix(name, "layouts/")))
+	}, names)
+	return t
+}
+
+func parseThemeFS(src []byte, fsys fs.FS, themeDir string, checkContrast bool) Theme {
 	t := Theme{
 		Info:     types.ThemeInfo{Status: StatusInvalid, Supports: []string{}, Warnings: []string{}},
 		Tokens:   map[string]string{},
@@ -163,6 +226,9 @@ func parseTheme(src []byte, checkContrast bool) Theme {
 		return t
 	}
 	t.Info.Status = StatusOK
+	if len(f.Fonts) > 0 {
+		t.setFonts(f.Fonts, fsys, themeDir)
+	}
 	for _, name := range slices.Sorted(maps.Keys(f.Tokens)) {
 		t.setToken(name, f.Tokens[name])
 	}
@@ -170,7 +236,7 @@ func parseTheme(src []byte, checkContrast bool) Theme {
 		t.checkContrast()
 	}
 	if len(f.Wash) > 0 {
-		t.setWash(f.Wash)
+		t.setWash(f.Wash, fsys, themeDir)
 	}
 	for _, key := range slices.Sorted(maps.Keys(f.Variants)) {
 		t.setVariant(key, f.Variants[key])
@@ -262,12 +328,82 @@ func (t *Theme) setToken(name string, raw any) {
 		t.warn("token %s must be a string, using the built-in value", name)
 		return
 	}
-	val, err := checkToken(name, strings.TrimSpace(v))
+	v = strings.TrimSpace(v)
+	if slices.Contains(fontTokens, name) {
+		val, err := t.fontStackCustom(v)
+		if err != nil {
+			t.warn("token %s: %v, using the built-in value", name, err)
+			return
+		}
+		t.Tokens[name] = val
+		return
+	}
+	val, err := checkToken(name, v)
 	if err != nil {
 		t.warn("token %s: %v, using the built-in value", name, err)
 		return
 	}
 	t.Tokens[name] = val
+}
+
+// setFonts validates the [fonts] table: family to woff2 file inside the
+// theme folder (issue #105). One bad entry costs only that family, like one
+// bad token.
+func (t *Theme) setFonts(raw map[string]any, fsys fs.FS, themeDir string) {
+	for _, family := range slices.Sorted(maps.Keys(raw)) {
+		name := strings.TrimSpace(family)
+		if name == "" || strings.ContainsAny(name, `",;{}`) || strings.Contains(strings.ToLower(name), "url(") {
+			t.warn("font %q has a character a theme may not use, ignored", family)
+			continue
+		}
+		if slices.Contains(bundledFonts, name) || slices.Contains(genericFonts, name) {
+			t.warn("font %q is one the app ships, ignored", family)
+			continue
+		}
+		relRaw, ok := raw[family].(string)
+		if !ok {
+			t.warn("font %q must be a path, ignored", family)
+			continue
+		}
+		rel, err := t.checkAssetRef(fsys, themeDir, relRaw, assetFont)
+		if err != nil {
+			t.warn("font %q: %v, ignored", family, err)
+			continue
+		}
+		if t.Fonts == nil {
+			t.Fonts = map[string]string{}
+		}
+		// Two families naming the same file share it; two files under one
+		// family name keep the first, so a typo can't swap a shipped face.
+		if _, dup := t.Fonts[name]; dup {
+			t.warn("font %q is listed twice, ignored", family)
+			continue
+		}
+		t.Fonts[name] = rel
+	}
+}
+
+// fontStackCustom checks a font list like fontStack, but a quoted family may
+// also be one the theme ships in [fonts]. It returns the list in canonical
+// form.
+func (t *Theme) fontStackCustom(v string) (string, error) {
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		item = strings.TrimSpace(item)
+		if len(item) >= 2 && strings.HasPrefix(item, `"`) && strings.HasSuffix(item, `"`) {
+			name := item[1 : len(item)-1]
+			if _, ok := t.Fonts[name]; ok || slices.Contains(bundledFonts, name) {
+				out = append(out, `"`+name+`"`)
+				continue
+			}
+			return "", fmt.Errorf("font %q is not one the app ships or this theme carries", name)
+		}
+		if !slices.Contains(genericFonts, item) {
+			return "", fmt.Errorf("font %q is neither a shipped family in quotes nor a generic family", item)
+		}
+		out = append(out, item)
+	}
+	return strings.Join(out, ", "), nil
 }
 
 // checkToken validates one token value and returns it in canonical form.
@@ -314,15 +450,16 @@ func fontStack(v string) (string, error) {
 }
 
 // setWash validates the wash layers. One bad layer costs the whole wash, which
-// then keeps the built-in one.
-func (t *Theme) setWash(raw []map[string]any) {
+// then keeps the built-in one. An image key names a png, webp or svg inside
+// the theme folder (issue #105); it is checked like a font file.
+func (t *Theme) setWash(raw []map[string]any, fsys fs.FS, themeDir string) {
 	if len(raw) > maxWashLayers {
 		t.warn("wash has %d layers, at most %d, using the built-in wash", len(raw), maxWashLayers)
 		return
 	}
 	layers := make([]types.WashLayer, 0, len(raw))
 	for i, m := range raw {
-		layer, err := t.washLayer(m)
+		layer, err := t.washLayer(m, fsys, themeDir)
 		if err != nil {
 			t.warn("wash layer %d: %v, using the built-in wash", i+1, err)
 			return
@@ -332,10 +469,13 @@ func (t *Theme) setWash(raw []map[string]any) {
 	t.Wash = layers
 }
 
-func (t *Theme) washLayer(m map[string]any) (types.WashLayer, error) {
+func (t *Theme) washLayer(m map[string]any, fsys fs.FS, themeDir string) (types.WashLayer, error) {
 	var l types.WashLayer
 	fields := map[string]*string{"at": &l.At, "size": &l.Size, "color": &l.Color, "fade": &l.Fade}
 	for _, key := range slices.Sorted(maps.Keys(m)) {
+		if key == "image" {
+			continue
+		}
 		dst, ok := fields[key]
 		if !ok {
 			t.warn("unknown wash key %q, ignored", key)
@@ -352,6 +492,17 @@ func (t *Theme) washLayer(m map[string]any) (types.WashLayer, error) {
 	}
 	if !pair(l.At, positionRe) || !pair(l.Size, lengthPctRe) || !colorRe.MatchString(l.Color) || !lengthPctRe.MatchString(l.Fade) {
 		return l, fmt.Errorf("%q is not a valid gradient layer", l.Color)
+	}
+	if raw, ok := m["image"]; ok {
+		s, ok := raw.(string)
+		if !ok {
+			return l, fmt.Errorf("image must be a string")
+		}
+		rel, err := t.checkAssetRef(fsys, themeDir, s, assetImage)
+		if err != nil {
+			return l, err
+		}
+		l.Image = rel
 	}
 	return l, nil
 }
@@ -370,20 +521,11 @@ func All() []Theme {
 	}
 	var out []Theme
 	for _, e := range entries {
-		src, err := builtin.ReadFile(path.Join("builtin", e.Name(), "theme.toml"))
-		if err != nil {
+		th := LoadFS(builtin, path.Join("builtin", e.Name(), "theme.toml"), "")
+		// A missing theme.toml reads as invalid; All used to skip it, so keep
+		// skipping what has no id at all.
+		if th.Info.ID == "" {
 			continue
-		}
-		th := Parse(src)
-		if dir, err := builtin.ReadDir(path.Join("builtin", e.Name(), "layouts")); err == nil {
-			var names []string
-			for _, f := range dir {
-				names = append(names, f.Name())
-			}
-			slices.Sort(names)
-			th.parseLayouts(func(name string) ([]byte, error) {
-				return builtin.ReadFile(path.Join("builtin", e.Name(), name))
-			}, names)
 		}
 		out = append(out, th)
 	}
@@ -425,7 +567,16 @@ func Find(id string) (Theme, bool) {
 // keeps the built-in values.
 func LayoutFor(id, view string) *types.ThemeLayout {
 	t, ok := Find(id)
-	if !ok || t.Info.Status != StatusOK || !slices.Contains(t.Info.Supports, supportsLayouts) {
+	if !ok {
+		return nil
+	}
+	return LayoutForTheme(t, view)
+}
+
+// LayoutForTheme is LayoutFor for an already loaded theme (issue #105): a
+// data plugin's theme never lives in Find, so the app resolves it directly.
+func LayoutForTheme(t Theme, view string) *types.ThemeLayout {
+	if t.Info.Status != StatusOK || !slices.Contains(t.Info.Supports, supportsLayouts) {
 		return nil
 	}
 	l, ok := t.Layouts[view]
@@ -443,6 +594,12 @@ func LayoutFor(id, view string) *types.ThemeLayout {
 func Resolve(id string) types.ThemeTokens {
 	t, ok := Find(id)
 	return resolve(t, ok)
+}
+
+// ResolveTheme is Resolve for an already loaded theme (issue #105): the
+// fonts and wash images stay relative here; the app turns them into art URLs.
+func ResolveTheme(t Theme, found bool) types.ThemeTokens {
+	return resolve(t, found)
 }
 
 func resolve(t Theme, found bool) types.ThemeTokens {
@@ -490,6 +647,9 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 	}
 	if t.Wash != nil {
 		out.Wash = t.Wash
+	}
+	if len(t.Fonts) > 0 {
+		out.Fonts = maps.Clone(t.Fonts)
 	}
 	if slices.Contains(t.Info.Supports, "variants") {
 		for key, value := range t.Variants {

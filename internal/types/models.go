@@ -374,6 +374,8 @@ type LauncherSettings struct {
 // ThemeInfo is one theme in the Settings picker (issue #93). Status is "ok"
 // (can be picked), "newer" (needs a newer Platypus) or "invalid" (its
 // theme.toml can't be used). Warnings list what was ignored or fell back.
+// Source is the data plugin that carries the theme (issue #105); empty for
+// the built-in themes.
 type ThemeInfo struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name"`
@@ -381,16 +383,19 @@ type ThemeInfo struct {
 	Supports []string `json:"supports"`
 	Status   string   `json:"status"`
 	Warnings []string `json:"warnings"`
+	Source   string   `json:"source,omitempty"`
 }
 
 // ThemeTokens is a theme's resolved tokens (issue #93): every token has a
 // value, the built-in one where the theme's is missing or invalid. The UI sets
-// them as CSS custom properties.
+// them as CSS custom properties. Fonts maps a shipped family to its art URL
+// (issue #105); empty for the built-ins, whose families come from @fontsource.
 type ThemeTokens struct {
 	ID       string            `json:"id"`
 	Tokens   map[string]string `json:"tokens"`
 	Wash     []WashLayer       `json:"wash"`
 	Variants ThemeVariants     `json:"variants"`
+	Fonts    map[string]string `json:"fonts,omitempty"`
 }
 
 // ThemeVariants gives the generated UI bridge a closed set of catalog axes.
@@ -451,12 +456,15 @@ type ThemeCatalogAxis struct {
 }
 
 // WashLayer is one radial gradient of the background wash: where it sits,
-// how big it is, its colour, and where it fades out.
+// how big it is, its colour, and where it fades out. Image is an optional
+// theme asset (issue #105): the art URL of a png, webp or svg inside the
+// theme folder, drawn under the gradient. Empty for the built-ins.
 type WashLayer struct {
 	At    string `json:"at"`
 	Size  string `json:"size"`
 	Color string `json:"color"`
 	Fade  string `json:"fade"`
+	Image string `json:"image,omitempty"`
 }
 
 // ThemeLayout is a view's validated block layout (issue #96): the regions in

@@ -1,0 +1,31 @@
+# Fixture theme plugin (issue #105): a data plugin's theme with tokens, a
+# shipped font, a wash image and a dashboard layout. Contrast and catalog
+# validation apply to it exactly as to the built-ins.
+[theme]
+id = "fixture"
+name = "Fixture"
+schema = 1
+catalog = "1.0"
+supports = ["tokens", "variants", "layouts"]
+
+[tokens]
+ground = "#0b1118"
+raised = "#101a24"
+accent = "#7dd3fc"
+on-accent = "#0b1118"
+font-sans = '"Fixture Sans", system-ui, sans-serif'
+
+[fonts]
+"Fixture Sans" = "fonts/fixture.woff2"
+
+[[wash]]
+at = "10% -10%"
+size = "1000px 600px"
+color = "rgba(56, 189, 248, 0.22)"
+fade = "56%"
+image = "assets/bg.png"
+
+[variants]
+"settings.presentation" = "sheet"
+"settings.navigation" = "tabs"
+"section.chrome" = "framed"

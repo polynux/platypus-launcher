@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,6 +10,7 @@ import (
 
 	"platypus/internal/plugins"
 	"platypus/internal/stores"
+	"platypus/internal/themes"
 )
 
 var pluginIconID = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
@@ -51,6 +53,54 @@ func PluginArt(a *App, next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy", "default-src 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		// The URL carries the plugin hash, so a replaced logo is a new address.
+		w.Header().Set("Cache-Control", "max-age=31536000, immutable")
+		http.ServeFile(w, r, path)
+	})
+}
+
+// ThemeArt serves data-plugin theme assets to the shell under
+// themes.ThemeURLPrefix (/platypus-art/theme/<plugin-id>/<path>), falling
+// through to next for anything else. Chain it before PluginGameArt: that
+// handler would otherwise treat "theme" as a plugin id and answer 404 without
+// falling through for unknown plugins. Files are served from the plugin
+// folder, never fetched from the network; SVG runs no script when drawn
+// through CSS or <img>, and the response carries a restrictive content type
+// plus a scriptless CSP so an asset opened directly can't run anything either.
+func ThemeArt(a *App, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rest, ok := strings.CutPrefix(r.URL.Path, themes.ThemeURLPrefix)
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		id, rel, found := strings.Cut(rest, "/")
+		if !found || !pluginIconID.MatchString(id) || rel == "" {
+			http.NotFound(w, r)
+			return
+		}
+		rel, err := url.PathUnescape(rel)
+		if err != nil || rel == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {
+			http.NotFound(w, r)
+			return
+		}
+		rel = filepath.ToSlash(filepath.Clean(filepath.FromSlash(rel)))
+		if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+			http.NotFound(w, r)
+			return
+		}
+		path, ctype, found := "", "", false
+		if a.plugins != nil {
+			path, ctype, found = a.plugins.ThemeFile(id, rel)
+		}
+		if !found {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", ctype)
+		// Scripts in SVG don't run in CSS or <img>; this locks the direct view too.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// The URL carries the plugin hash, so a replaced file is a new address.
 		w.Header().Set("Cache-Control", "max-age=31536000, immutable")
 		http.ServeFile(w, r, path)
 	})
