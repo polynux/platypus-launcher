@@ -433,3 +433,16 @@ func washColors(t types.ThemeTokens) []string {
 	}
 	return out
 }
+
+// Unknown supports values warn and are ignored (issue #110 item 1): a theme
+// naming "bogus" still loads, but only the known levels apply.
+func TestUnknownSupportsValueWarns(t *testing.T) {
+	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["tokens", "bogus"]`, 1)
+	th := parse(t, src)
+	if !warningsContain(th, `unknown supports value "bogus"`) {
+		t.Fatalf("warnings = %v, want the unknown-supports warning", th.Info.Warnings)
+	}
+	if !slices.Equal(th.Info.Supports, []string{"tokens"}) {
+		t.Fatalf("supports = %v, want only the known levels", th.Info.Supports)
+	}
+}

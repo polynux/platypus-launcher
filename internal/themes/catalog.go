@@ -29,7 +29,7 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "dashboard.continue", Since: "1.0", Kind: "block", Region: "main"},
 	{Entry: "dashboard.waiting", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "dashboard.recent", Since: "1.0", Kind: "block", Region: "side"},
-	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
+	{Entry: "dashboard.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []types.ThemeCatalogAttr{{Name: "limit", Type: "int", Min: 1, Max: 50}}},
 	{Entry: "view-header", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "actions", Values: []string{"right", "below"}, Default: "right", Since: "1.0"},
 		{Name: "subtitle", Values: []string{"shown", "hidden"}, Default: "shown", Since: "1.0"},
@@ -106,7 +106,7 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "library.last-played", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.grid", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.all-titles", Since: "1.0", Kind: "block", Region: "bottom"},
-	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []string{"limit"}},
+	{Entry: "library.activity", Since: "1.0", Kind: "block", Region: "bottom", Attrs: []types.ThemeCatalogAttr{{Name: "limit", Type: "int", Min: 1, Max: 50}}},
 	{Entry: "library.recent", Since: "1.0", Kind: "block", Region: "bottom"},
 	{Entry: "library.table", Since: "1.0", Kind: "block", Region: "bottom"},
 	// Hero frame entries (issue #101): one frame for the dashboard and game
