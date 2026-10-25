@@ -1,8 +1,8 @@
 // i18n: converted
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, RotateCw, TriangleAlert, X } from 'lucide-react';
-import { cx } from './ui';
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, RotateCw, TriangleAlert, WifiOff, X } from 'lucide-react';
+import { EmptyState, cx } from './ui';
 import { Button } from './ds/button';
 import { browserOpen, onStoreEvent, storeBridge, type StoreEvent } from '../effect/bridge';
 import type { StorePlugin } from '../types';
@@ -98,7 +98,9 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
     bridge.open(plugin.id, initialUrl).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       setFailed(msg);
-      onNotify(msg, 'err');
+      // The Atlas shop bar shows the failure inline (EmptyState below), so
+      // no duplicate toast there; the bare view keeps its toast.
+      if (!shopBar) onNotify(msg, 'err');
     });
     // Open once per plugin+link: navigating inside the store must not reopen it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,7 +172,23 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
     store?.open(plugin.id).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       setFailed(msg);
-      onNotify(msg, 'err');
+      if (!shopBar) onNotify(msg, 'err');
+    });
+  };
+  // The Atlas error state's Reload: reopen the storefront over the failed
+  // view (inline already, so no toast here either).
+  const retry = () => {
+    const bridge = storeBridge();
+    if (!bridge) {
+      setFailed(t('store:needsShell'));
+      return;
+    }
+    setFailed(null);
+    setBlocked(null);
+    bridge.open(plugin.id, initialUrl).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFailed(msg);
+      if (!shopBar) onNotify(msg, 'err');
     });
   };
 
@@ -252,9 +270,35 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
         </div>
       )}
       {failed ? (
-        <div className={shopBar ? 'flex flex-1 items-center justify-center px-6 text-center text-[13px] text-text-muted' : 'mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-surface px-6 text-center text-[13px] text-text-muted ring-1 ring-hairline'}>
-          <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
-        </div>
+        shopBar ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6">
+            <div className="w-full max-w-[520px]">
+              <EmptyState
+                icon={WifiOff}
+                label={t('store:openFailedTitle', { name: plugin.name })}
+                action={
+                  <span className="grid justify-items-center gap-2">
+                    <Button variant="primary" size="sm" onClick={retry} data-testid="store-retry">
+                      <RotateCw className="h-3.5 w-3.5" /> {t('store:toolbar.reload')}
+                    </Button>
+                    <details className="font-sans text-[12px] text-text-faint">
+                      <summary className="cursor-pointer hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                        {t('store:details')}
+                      </summary>
+                      <p className="mx-auto mt-1 max-w-[46ch] break-all select-text">{failed}</p>
+                    </details>
+                  </span>
+                }
+              >
+                {t('store:openFailedBody')}
+              </EmptyState>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-surface px-6 text-center text-[13px] text-text-muted ring-1 ring-hairline">
+            <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
+          </div>
+        )
       ) : (
         <div ref={area} data-testid="store-area" className={shopBar ? 'min-h-0 flex-1' : 'mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-surface ring-1 ring-hairline'} />
       )}

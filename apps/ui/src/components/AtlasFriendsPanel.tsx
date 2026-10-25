@@ -160,9 +160,14 @@ export function AtlasFriendsPanel(p: AtlasFriendsPanelProps) {
                   className="h-[30px] rounded-[7px] bg-surface pl-8.5 placeholder:text-text-faint"
                 />
               </label>
-              {p.views.map((v) => (
-                <StoreSection key={v.plugin} view={v} label={p.labels[v.plugin] ?? v.plugin} query={query} {...p} />
-              ))}
+              {(() => {
+                // The lab has no per-store header: with a single connected
+                // store it only repeats the MeCard/store notice below.
+                const single = p.views.filter((v) => v.enabled).length <= 1;
+                return p.views.map((v) => (
+                  <StoreSection key={v.plugin} {...p} view={v} label={p.labels[v.plugin] ?? v.plugin} query={query} hideHeader={single} />
+                ));
+              })()}
             </div>
           )}
           {tab === 'chats' && <ChatsTab {...p} />}
@@ -217,9 +222,9 @@ function MeCard({ views, labels, onSetStatus }: Pick<AtlasFriendsPanelProps, 'vi
   );
 }
 
-type SectionProps = AtlasFriendsPanelProps & { view: SocialView; label: string; query: string };
+type SectionProps = AtlasFriendsPanelProps & { view: SocialView; label: string; query: string; hideHeader?: boolean };
 
-function StoreSection({ view, label, query, plugins, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, unreadOf, onOpenChat, chatAlerts, onSetChatAlerts }: SectionProps) {
+function StoreSection({ view, label, query, hideHeader, plugins, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, unreadOf, onOpenChat, chatAlerts, onSetChatAlerts }: SectionProps) {
   const { t } = useTranslation('chat');
   const line = connectionLine(view.connection);
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
@@ -228,9 +233,11 @@ function StoreSection({ view, label, query, plugins, onSetEnabled, onSetStatus, 
   const logoUrl = useMemo(() => plugins.find((pl) => pl.id === view.plugin)?.icon_url ?? undefined, [plugins, view.plugin]);
   return (
     <section aria-label={t('chat:modal.section', { label })} className="flex flex-col gap-2.5">
-      <header>
-        <h3 className="text-[12px] font-bold text-text-faint">{label}</h3>
-      </header>
+      {!hideHeader && (
+        <header>
+          <h3 className="text-[12px] font-bold text-text-faint">{label}</h3>
+        </header>
+      )}
 
       {!view.enabled ? (
         <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-surface px-3 py-2 text-[12px] text-text-muted ring-1 ring-hairline">

@@ -383,10 +383,9 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   // Another game on the stage never inherits the open flyout.
   useEffect(() => setTuneOpen(false), [d.game.id]);
   const active = d.job && (d.job.state === 'queued' || d.job.state === 'running');
-  // The outside-folder alert below already names the folders: repeating the
-  // store note here would show the same long paths twice (a5).
-  const outside = !!d.game.outside_folder;
-  const showNote = !active && ((d.game.note && !outside && !d.game.client_launch) || d.installing);
+  // The game's own note lives in LaunchNotesRow under the strip; only the
+  // install/version links stay inline at the end of the strip.
+  const showNote = !active && d.installing;
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-accent-dim py-3 pl-6 pr-5">
       <div className="mr-2 flex items-center gap-1.5">
@@ -417,10 +416,11 @@ function ActionStrip({ d }: { d: GameTabsData }) {
       )}
       <StoreSwitch d={d} />
       <SaveState d={d} />
-      {/* /21 has no row between the strip and the tabs: the install note
+      {/* /21 has no row between the strip and the tabs: the install
           and folder/version links sit inline at the end of the strip. Only
           the short links show here (the long folder path would truncate
-          them): the full path lives in the title tooltip. */}
+          them): the full path lives in the title tooltip. The game's own
+          note sits in LaunchNotesRow below instead. */}
       {(showNote || d.refreshing) && (
         <p
           className="flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] text-text-muted"
@@ -431,7 +431,6 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             t('game:refreshing')
           ) : (
             <>
-              {d.game.note && !outside && <span>{d.game.note} </span>}
               {d.installing && d.plugin && (
                 <span>
                   {d.canChooseVersion ? (
@@ -461,8 +460,12 @@ function ActionStrip({ d }: { d: GameTabsData }) {
 
 /** The /22 launch notes row under the strip (D22 GameStage LaunchNotes): only
  *  what the app really knows. A store-client launch (client_launch, or Steam
- *  without an executable) names the client; a waiting update offers the
- *  versions settings. The outside-folder alert owns its row below. */
+ *  without an executable) names the client; any other game note (the strip
+ *  already shows it comes from the store client, e.g. the sandbox "5 s
+ *  sleep" note with client_launch false) sits here too, with the same
+ *  ExternalLink icon. A waiting update offers the versions settings. The
+ *  outside-folder alert owns its row below, so outside games show no note
+ *  here (their paths would repeat). */
 function LaunchNotesRow({ d }: { d: GameTabsData }) {
   const { t } = useTranslation('game');
   const viaSteam = d.game.source === 'steam' && !d.game.executable;
@@ -473,6 +476,13 @@ function LaunchNotesRow({ d }: { d: GameTabsData }) {
       <li key="client" className="inline-flex items-center gap-[7px]">
         <ExternalLinkIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
         <span>{d.game.note || t('game:launchNotes.client', { name })}</span>
+      </li>,
+    );
+  } else if (d.game.note && !d.game.outside_folder) {
+    notes.push(
+      <li key="note" className="inline-flex items-center gap-[7px]">
+        <ExternalLinkIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
+        <span>{d.game.note}</span>
       </li>,
     );
   }
@@ -1518,7 +1528,7 @@ export function GameTabsView(d: GameTabsData) {
           flyout is never clipped. */}
       <AtlasHero game={d.game} hero={d.hero} details={d.details} backLabel={d.backLabel} onBack={d.onBack} hideBack={d.hideBack} />
       <ActionStrip d={d} />
-      {/* /22 LaunchNotes: the client-launch and waiting-update notes sit in
+      {/* /22 LaunchNotes: the client-launch, game-note and waiting-update notes sit in
           their own row under the strip (the install note stays inline at
           the end of the strip; the outside-folder alert below owns its). */}
       <LaunchNotesRow d={d} />

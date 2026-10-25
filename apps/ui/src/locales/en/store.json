@@ -17,6 +17,9 @@
   },
   "blocked": "{{host}} isn't part of {{name}}. Open in your browser?",
   "failed": "Couldn't open {{name}}: {{error}}",
+  "openFailedTitle": "Couldn't open {{name}}",
+  "openFailedBody": "The store page didn't load. Games you own stay playable.",
+  "details": "Details",
   "needsShell": "The store view needs the app shell.",
   "shop": {
     "redeem": "Redeem a code",
