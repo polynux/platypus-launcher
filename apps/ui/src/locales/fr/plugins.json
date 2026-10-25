@@ -30,7 +30,7 @@
     "installFirst": "à installer d'abord",
     "rescanHint": "Puis réanalysez.",
     "installsInto": "s'installe dans",
-    "change": "modifier",
+    "change": "Modifier",
     "reset": "réinitialiser",
     "alsoAllowed": "aussi autorisé",
     "dataNote": "Que du JSON — recettes de correctifs et réglages. Il ne peut rien exécuter, Platypus l'applique donc sans demander.",

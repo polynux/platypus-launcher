@@ -107,7 +107,7 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
                   placeholder={t('common:redeem.codePlaceholder')}
                   disabled={busy}
                 />
-                <p className="text-center text-[12px] text-text-faint">{t('common:redeem.codePlaceholder')}</p>
+                <p className="text-left text-[12px] text-text-faint">{t('common:redeem.codeHint')}</p>
               </div>
               {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('common:redeem.error')} />}
             </div>

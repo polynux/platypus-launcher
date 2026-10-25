@@ -63,6 +63,7 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
           initialUrl={initialUrl}
           onClose={onClose}
           onNotify={onNotify}
+          shopBar
           toolbarLead={seg}
           toolbarTrail={canRedeem ? (
             <Button variant="neutral" size="sm" onClick={onRedeem} className="flex-none">

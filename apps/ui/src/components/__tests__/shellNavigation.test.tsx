@@ -497,7 +497,7 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(container.querySelector('[data-region="sourcebar-footer"]')?.className).toMatch(/h-7/);
     expect(screen.getByText(/Library scanned/)).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/Offline/);
-    expect(screen.getByText('Platypus v0.2')).toBeInTheDocument();
+    expect(screen.getByText('Platypus 0.2.0')).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 

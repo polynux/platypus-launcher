@@ -308,7 +308,7 @@ function AtlasSteamAppIdRow({ game }: { game: Game }) {
           onBlur={save}
           disabled={busy}
           spellCheck={false}
-          className="w-[190px] flex-none bg-raised font-sans text-[13px] ring-1 ring-hairline-strong focus-visible:ring-2 focus-visible:ring-focus"
+          className="h-8 w-[190px] flex-none rounded-[7px] bg-raised font-sans text-[13px] ring-1 ring-hairline-strong placeholder:text-text-faint focus-visible:ring-2 focus-visible:ring-focus"
         />
         <Button type="submit" variant="neutral" size="sm" disabled={busy || draft.trim() === userSet}>
           {t('common:save')}

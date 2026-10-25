@@ -56,6 +56,8 @@
     "toInstall": "À installer",
     "yourLibrary": "Votre bibliothèque",
     "openLibrary": "Ouvrir la bibliothèque",
+    "backlogFallback": "Dans votre bibliothèque, pas encore installé.",
+    "backlogRated": "Évalué {{tier}} sur ProtonDB.",
     "statGames": "Jeux",
     "statInstalled": "Installés",
     "statPlayed": "Joués",

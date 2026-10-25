@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Cloud, Download, FolderPlus, Play, Search, Settings2, X } from 'lucide-react';
 import type { ActivityEvent, Collection, Game, Job, ProtonVersion, StoreType } from '../types';
 import { Cover, cx, relTime } from './ui';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { PluginLogo } from './PluginLogo';
 import { coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason, byRecent, storeLabel } from '../lib/games';
 import { formatCount } from '../lib/format';
@@ -200,18 +201,17 @@ export function AtlasSortMenu({ sort, dir, onSort, onDir }: {
 }) {
   const { t } = useTranslation('library');
   return (
-    <span className="flex flex-none items-center">
-      <label className="sr-only" htmlFor="atlas-sort">{t('library:listDetail.sortAria')}</label>
-      <select
-        id="atlas-sort"
-        value={sort}
-        onChange={(e) => onSort(e.target.value as AtlasSortKey)}
-        className="h-[32px] flex-none rounded-l-lg border-r border-hairline bg-surface px-2 font-sans text-[13px] text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        {(['recent', 'title', 'hours', 'year', 'size', 'tier'] as const).map((k) => (
-          <option key={k} value={k}>{t(`library:listDetail.sort.${k}`)}</option>
-        ))}
-      </select>
+    <span className="flex flex-none items-center gap-1.5">
+      <Select value={sort} onValueChange={(v) => onSort(v as AtlasSortKey)}>
+        <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-8 w-[104px] flex-none bg-surface font-sans text-[13px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(['recent', 'title', 'hours', 'year', 'size', 'tier'] as const).map((k) => (
+            <SelectItem key={k} value={k} className="font-sans text-[13px]">{t(`library:listDetail.sort.${k}`)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <button
         type="button"
         aria-label={dir === 'asc' ? t('library:ascToDesc') : t('library:descToAsc')}
@@ -219,9 +219,9 @@ export function AtlasSortMenu({ sort, dir, onSort, onDir }: {
         aria-pressed={dir === 'desc'}
         onClick={() => onDir(dir === 'asc' ? 'desc' : 'asc')}
         className={cx(
-          'grid h-[32px] w-7 flex-none place-items-center rounded-r-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+          'grid h-8 w-8 flex-none place-items-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
           dir === 'desc'
-            ? 'bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/40'
+            ? 'bg-surface-strong text-text'
             : 'bg-surface text-text-faint hover:text-text'
         )}
       >
@@ -287,7 +287,7 @@ export function AtlasLibraryBlocks({ games, activity = [], onOpen }: { games: Ga
   return (
     <div className="grid gap-5 md:grid-cols-2 mb-[26px]">
       {continued.length > 0 && (
-        <section>
+        <section className={added.length === 0 ? 'md:col-span-2' : undefined}>
           <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('library:atlasViews.blocks.continue')}</h2>
           <ul className="grid gap-1.5">
             {continued.map((g) => (

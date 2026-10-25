@@ -21,14 +21,14 @@
   "tier": "tier",
   "tierFilterAria": "Filter by tier",
   "tierAll": "all",
-  "tierNative": "native",
-  "tierNone": "no rating",
+  "tierNative": "Native",
+  "tierNone": "No rating",
   "tierName": {
-    "platinum": "Platinum",
-    "gold": "Gold",
-    "silver": "Silver",
-    "bronze": "Bronze",
-    "borked": "Borked"
+    "platinum": "Platinum on ProtonDB",
+    "gold": "Gold on ProtonDB",
+    "silver": "Silver on ProtonDB",
+    "bronze": "Bronze on ProtonDB",
+    "borked": "Borked on ProtonDB"
   },
   "sort": "sort",
   "sortBy": "Sort by",
@@ -144,11 +144,11 @@
   "statusFilter": {
     "label": "status",
     "all": "all",
-    "none": "no status",
-    "backlog": "backlog",
-    "playing": "playing",
-    "finished": "finished",
-    "abandoned": "abandoned"
+    "none": "No status",
+    "backlog": "Backlog",
+    "playing": "Playing",
+    "finished": "Finished",
+    "abandoned": "Abandoned"
   },
   "statusFilterAria": "Filter by status",
   "listDetail": {
@@ -176,7 +176,7 @@
     "filterCompat": "Compatibility",
     "filterStatus": "Status",
     "filterLending": "Lent to me",
-    "filterLentOnly": "Only lent to me",
+    "filterLentOnly": "Lent to me",
     "filterAny": "Any",
     "filterReset": "Reset filters",
     "filterTiers": "Runs on Linux",

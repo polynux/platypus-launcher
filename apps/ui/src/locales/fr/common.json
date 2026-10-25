@@ -26,6 +26,7 @@
     "store": "Boutique",
     "code": "Code",
     "codePlaceholder": "XXXXX-XXXXX-XXXXX",
+    "codeHint": "Lettres et chiffres, tirets facultatifs.",
     "granted": "attribué",
     "redeemAnother": "Utiliser un autre code",
     "redeem": "Utiliser",

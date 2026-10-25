@@ -92,7 +92,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <GameFoldersSettings onNotify={onNotify} />,
     <PrefixesFolderSetting onNotify={onNotify} />,
     atlas ? (
-      <section className={SECTION}>
+      <section>
         <AtlasSRow label={t('cleanup.heading')} desc={t('cleanup.description')}>
           <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>
             <label className="flex items-center gap-2"><span className="text-[12.5px] text-text-body">{t('cleanup.keepFor')}</span>
@@ -266,7 +266,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
   // 210px Select right; the dev-only pseudo note sits inside the desc, sans.
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSRow
           label={t('language.heading')}
           desc={<>
@@ -366,6 +366,38 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
     if (from) return `${th.name} (${from})`;
     return th.name;
   };
+  // Atlas renders the row as a lab .srow: the Theme select right-aligned at
+  // 210px, with no inner heading (the category nav owns it).
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section>
+        <AtlasSRow label={t('theme.heading')}>
+          <Select value={shown} onValueChange={change} disabled={themes === null || value === null || busy}>
+            <SelectTrigger
+              ref={triggerRef}
+              aria-label={t('theme.label')}
+              className="h-8 w-[210px] flex-none font-sans text-[13px]"
+              onFocus={() => { persistedSettingsSection = 'theme'; }}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(themes ?? []).map((th) => (
+                <SelectItem key={th.id} value={th.id} disabled={th.status !== 'ok'} className="font-sans text-[13px]">
+                  {label(th)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </AtlasSRow>
+        {warnings.length > 0 && (
+          <ul aria-label={t('theme.warningsLabel')} className="mt-3 space-y-1 font-mono text-hint leading-relaxed text-text-muted">
+            {warnings.map((w) => <li key={w.key}>{w.text}</li>)}
+          </ul>
+        )}
+      </section>
+    );
+  }
   return (
     <section className={SECTION} id="settings-section-theme">
       <h2 className="text-[14px] font-bold">{t('theme.heading')}</h2>
@@ -438,6 +470,56 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
     tone.setChoice(next as GameToneChoice);
     onNotify(t('appearance.gameSaved'));
   };
+  // Atlas renders the lab's two .srows (issue #138): Theme is its own
+  // section above; here Colour scheme and Game colour sit right-aligned and
+  // sized to their content, with no inner heading or description sentence.
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section id="settings-section-appearance">
+        {showScheme && (
+          <AtlasSRow label={t('appearance.schemeLabel')}>
+            <ToggleGroup
+              type="single"
+              value={scheme}
+              onValueChange={(v) => { if (v) pickScheme(v); }}
+              aria-label={t('appearance.schemeLabel')}
+              className={cx('inline-flex w-auto', segWrap)}
+              disabled={busy}
+            >
+              {(['dark', 'light', 'black'] as const).filter((s) => schemes.includes(s)).map((s) => (
+                <ToggleGroupItem key={s} value={s} aria-label={t(`appearance.scheme.${s}`)} className={cx('h-[26px]', segItem)}>
+                  {t(`appearance.scheme.${s}`)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </AtlasSRow>
+        )}
+        {showTone && (
+          <AtlasSRow label={t('appearance.gameLabel')} desc={t('appearance.gameDescription')}>
+            <ToggleGroup
+              type="single"
+              value={tone.choice}
+              onValueChange={(v) => { if (v === 'off' || v === 'accent' || v === 'whole') pickTone(v); }}
+              aria-label={tTone('label')}
+              className={cx('inline-flex w-auto', segWrap)}
+            >
+              <ToggleGroupItem value="off" title={tTone('offHint')} className={cx('h-[26px]', segItem)}>
+                {tTone('off')}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="accent" title={tTone('accentHint')} className={cx('h-[26px]', segItem)}>
+                {tTone('accent')}
+              </ToggleGroupItem>
+              {tone.supported === 'whole' && (
+                <ToggleGroupItem value="whole" title={tTone('wholeHint')} className={cx('h-[26px]', segItem)}>
+                  {tTone('whole')}
+                </ToggleGroupItem>
+              )}
+            </ToggleGroup>
+          </AtlasSRow>
+        )}
+      </section>
+    );
+  }
   return (
     <section className={SECTION} id="settings-section-appearance">
       <h2 className="text-[14px] font-bold">{t('appearance.heading')}</h2>
@@ -516,7 +598,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
   };
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSSwitch
           label={t('ratings.heading')}
           desc={t('ratings.description')}
@@ -576,7 +658,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
   };
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSSwitch
           label={t('artwork.heading')}
           desc={t('artwork.description')}
@@ -631,7 +713,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
   };
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSSwitch
           label={t('gameInfo.heading')}
           desc={t('gameInfo.description')}
@@ -686,7 +768,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
   };
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSSwitch
           label={t('chat.heading')}
           desc={t('chat.description')}
@@ -735,7 +817,7 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
   };
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSSwitch
           label={t('tray.heading')}
           desc={t('tray.description')}
@@ -801,7 +883,7 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
   // Atlas: the lab's wide .srow (label + desc up top, the folder controls below).
   if (useVariant('shell.navigation') === 'sourcebar') {
     return (
-      <section className={SECTION}>
+      <section>
         <AtlasSRow label={t('prefixes.heading')} desc={t('prefixes.description')} wide>
           <form
             className="flex flex-wrap items-center gap-2"

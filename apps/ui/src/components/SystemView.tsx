@@ -2,23 +2,27 @@
 import { useTranslation } from 'react-i18next';
 import React from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
-import type { ProtonVersion } from '../types';
-import { ATLAS_PAGE, EmptyState, ListRow, Section, ViewHeader } from './ui';
+import type { Game, ProtonVersion } from '../types';
+import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
+import { heroImages } from '../lib/games';
 import { useVariant } from '../lib/theme';
 
 interface SystemViewProps {
   runners: ProtonVersion[];
   onRefresh: () => void;
   scanning: boolean;
+  /** Installed games, for each runner's usage strip (Atlas only). */
+  games?: Game[];
 }
 
-export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
+export function SystemView({ runners, onRefresh, scanning, games }: SystemViewProps) {
   const { t } = useTranslation(['nav', 'runners']);
   // Atlas renders the /22 Runners page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {
-    return <AtlasRunners runners={runners} onRefresh={onRefresh} scanning={scanning} />;
+    return <AtlasRunners runners={runners} games={games ?? []} onRefresh={onRefresh} scanning={scanning} />;
   }
   return (
     <div className="p-7">
@@ -66,9 +70,11 @@ export function SystemView({ runners, onRefresh, scanning }: SystemViewProps) {
  *  lab's per-game usage thumbs, sizes and Install/Remove buttons have no
  *  backing in the core (runners are detected, not installed, and each game
  *  picks its own in its settings), so this page lists and rescans only. */
-function AtlasRunners({ runners, onRefresh, scanning }: SystemViewProps) {
+function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps & { games: Game[] }) {
   const { t } = useTranslation(['nav', 'runners']);
   const fallback = runners.find((r) => r.is_default) ?? runners[0];
+  const uses = (id: string, name: string): Game[] =>
+    games.filter((g) => !g.native && (g.settings.runner_id === id || g.settings.runner_id === name));
   return (
     <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -90,33 +96,56 @@ function AtlasRunners({ runners, onRefresh, scanning }: SystemViewProps) {
               <h2 className="text-[13px] font-semibold text-text">{t('runners:atlas.defaultLabel')}</h2>
               <p className="text-[0.93em] leading-normal text-text-muted">{t('runners:atlas.defaultDesc')}</p>
             </div>
-            <span className="w-[190px] truncate text-[13px] font-semibold text-text-muted" aria-live="polite">
-              {fallback?.name ?? '—'}
-            </span>
+            {/* The core names the default but offers no call to change it, so
+                the picker reads only: a field, not bare text. */}
+            <Select value={fallback?.id ?? ''} disabled aria-label={t('runners:atlas.defaultLabel')}>
+              <SelectTrigger className="h-8 w-[210px] flex-none bg-surface font-sans text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {runners.map((r) => (
+                  <SelectItem key={r.id} value={r.id} className="font-sans text-[13px]">{r.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </section>
           <section aria-label={t('runners:atlas.installed')}>
             <h2 className="mb-1.5 text-[13px] font-bold text-text-muted">{t('runners:atlas.installed')}</h2>
             <ul className="divide-y divide-hairline">
-              {runners.map((r) => (
-                <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-2.5">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-semibold text-text">{r.name}</span>
-                      {r.is_default && (
-                        <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[11.5px] font-semibold text-text-muted">
-                          {t('runners:atlas.defaultBadge')}
-                        </span>
+              {runners.map((r) => {
+                const used = uses(r.id, r.name);
+                return (
+                  <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-2.5">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[13px] font-semibold text-text">{r.name}</span>
+                        {r.is_default && (
+                          <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[11.5px] font-semibold text-text-muted">
+                            {t('runners:atlas.defaultBadge')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 truncate text-[12px] text-text-faint select-text">{r.path}</div>
+                      {used.length > 0 ? (
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <span className="flex items-center" aria-hidden>
+                            {used.slice(0, 5).map((g) => (
+                              <Cover key={g.id} src={heroImages(g)} title="" className="h-4 w-8 rounded-[4px] ring-1 ring-hairline [&:not(:first-child)]:-ml-1" />
+                            ))}
+                          </span>
+                          <span className="text-[12px] tabular-nums text-text-muted">{t('runners:atlas.gamesCount', { count: used.length })}</span>
+                        </div>
+                      ) : (
+                        <div className="mt-1.5 text-[12px] text-text-faint">{t('runners:atlas.noGames')}</div>
                       )}
                     </div>
-                    <div className="mt-0.5 truncate text-[12px] text-text-faint select-text">{r.path}</div>
-                  </div>
-                  {r.is_system ? (
-                    <span className="flex-none text-[12px] text-text-faint">{t('runners:atlas.systemNote')}</span>
-                  ) : (
-                    <span className="w-[76px] flex-none" />
-                  )}
-                </li>
-              ))}
+                    {/* GetProtonVersions carries no size, and runners are
+                        detected, not installed (no remove call): the column
+                        reads unknown until the core reports it. */}
+                    <span className="flex-none text-[12px] tabular-nums text-text-faint" title={t('runners:atlas.sizeLabel')}>—</span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         </>

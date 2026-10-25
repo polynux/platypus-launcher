@@ -16,6 +16,10 @@
     "defaultDesc": "Chaque jeu peut toujours choisir le sien.",
     "defaultBadge": "Défaut",
     "systemNote": "De votre système",
+    "gamesCount_one": "{{count}} jeu",
+    "gamesCount_other": "{{count}} jeux",
+    "noGames": "Aucun jeu ne l'utilise",
+    "sizeLabel": "Taille",
     "installed": "Installés"
   }
 }

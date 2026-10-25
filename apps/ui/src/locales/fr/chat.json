@@ -82,6 +82,7 @@
   "alertOthers_one": "{{first}} et {{count}} autre",
   "alertOthers_other": "{{first}} et {{count}} autres",
   "unknownFriend": "un ami",
+  "findFriend": "Trouver un ami",
   "tabs": {
     "friends": "Amis",
     "chats": "Discussions",

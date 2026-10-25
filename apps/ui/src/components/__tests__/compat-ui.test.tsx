@@ -136,10 +136,10 @@ describe('Library tier filter', () => {
     expect(shown(container)).toEqual(['plat', 'nat', 'none', 'bork']);
     expect(getAllByText('Native').length).toBe(1);
     fireEvent.pointerDown(getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-    fireEvent.click(getByRole('option', { name: 'native' }));
+    fireEvent.click(getByRole('option', { name: 'Native' }));
     expect(shown(container)).toEqual(['nat']);
     fireEvent.pointerDown(getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-    fireEvent.click(getByRole('option', { name: 'no rating' }));
+    fireEvent.click(getByRole('option', { name: 'No rating' }));
     expect(shown(container)).toEqual(['none']);
   });
 

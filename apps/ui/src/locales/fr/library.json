@@ -21,14 +21,14 @@
   "tier": "niveau",
   "tierFilterAria": "Filtrer par niveau",
   "tierAll": "tout",
-  "tierNative": "natif",
+  "tierNative": "Natif",
   "tierNone": "sans évaluation",
   "tierName": {
-    "platinum": "Platine",
-    "gold": "Or",
-    "silver": "Argent",
-    "bronze": "Bronze",
-    "borked": "Non fonctionnel"
+    "platinum": "Platine sur ProtonDB",
+    "gold": "Or sur ProtonDB",
+    "silver": "Argent sur ProtonDB",
+    "bronze": "Bronze sur ProtonDB",
+    "borked": "Non fonctionnel sur ProtonDB"
   },
   "sort": "tri",
   "sortBy": "Trier par",
@@ -144,11 +144,11 @@
   "statusFilter": {
     "label": "statut",
     "all": "tous",
-    "none": "sans statut",
-    "backlog": "à jouer",
-    "playing": "en cours",
-    "finished": "terminé",
-    "abandoned": "abandonné"
+    "none": "Sans statut",
+    "backlog": "À jouer",
+    "playing": "En cours",
+    "finished": "Terminé",
+    "abandoned": "Abandonné"
   },
   "statusFilterAria": "Filtrer par statut",
   "listDetail": {
@@ -176,7 +176,7 @@
     "filterCompat": "Compatibilité",
     "filterStatus": "Statut",
     "filterLending": "Prêtés",
-    "filterLentOnly": "Seulement prêtés",
+    "filterLentOnly": "Prêtés",
     "filterAny": "Tous",
     "filterReset": "Réinitialiser les filtres",
     "filterTiers": "Fonctionne sous Linux",

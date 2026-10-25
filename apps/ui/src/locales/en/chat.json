@@ -82,6 +82,7 @@
   "alertOthers_one": "{{first}} and {{count}} other",
   "alertOthers_other": "{{first}} and {{count}} others",
   "unknownFriend": "a friend",
+  "findFriend": "Find a friend",
   "tabs": {
     "friends": "Friends",
     "chats": "Chats",

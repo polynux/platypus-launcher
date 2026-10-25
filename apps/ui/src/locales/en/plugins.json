@@ -30,7 +30,7 @@
     "installFirst": "install first",
     "rescanHint": "Then rescan.",
     "installsInto": "installs into",
-    "change": "change",
+    "change": "Change",
     "reset": "reset",
     "alsoAllowed": "also allowed",
     "dataNote": "JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.",

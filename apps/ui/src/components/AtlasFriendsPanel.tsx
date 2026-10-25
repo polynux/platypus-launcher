@@ -79,7 +79,7 @@ function PanelAvatar({ name, url, dot }: { name: string; url?: string; dot: stri
       <span className="grid h-full w-full place-items-center overflow-hidden rounded-full text-[12px] font-bold text-white" style={avatarHueStyle(name)}>
         {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
       </span>
-      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-ground-2', dot)} />
+      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full', dot)} />
     </span>
   );
 }
@@ -156,8 +156,8 @@ export function AtlasFriendsPanel(p: AtlasFriendsPanelProps) {
                   type="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder={t('chat:modal.searchPlaceholder')}
-                  className="h-[30px] rounded-[7px] bg-surface pl-8.5"
+                  placeholder={t('chat:findFriend')}
+                  className="h-[30px] rounded-[7px] bg-surface pl-8.5 placeholder:text-text-faint"
                 />
               </label>
               {p.views.map((v) => (
@@ -219,7 +219,7 @@ function MeCard({ views, labels, onSetStatus }: Pick<AtlasFriendsPanelProps, 'vi
 
 type SectionProps = AtlasFriendsPanelProps & { view: SocialView; label: string; query: string };
 
-function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, onOpenGame, unreadOf, onOpenChat, chatAlerts, onSetChatAlerts }: SectionProps) {
+function StoreSection({ view, label, query, plugins, onSetEnabled, onSetStatus, onSetPlaying, onReconnect, unreadOf, onOpenChat, chatAlerts, onSetChatAlerts }: SectionProps) {
   const { t } = useTranslation('chat');
   const line = connectionLine(view.connection);
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
@@ -228,15 +228,17 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
   const logoUrl = useMemo(() => plugins.find((pl) => pl.id === view.plugin)?.icon_url ?? undefined, [plugins, view.plugin]);
   return (
     <section aria-label={t('chat:modal.section', { label })} className="flex flex-col gap-2.5">
-      <header className="flex items-center justify-between gap-3">
+      <header>
         <h3 className="text-[12px] font-bold text-text-faint">{label}</h3>
-        <Button variant="ghost" size="sm" onClick={() => onSetEnabled(view.plugin, !view.enabled)}>
-          {view.enabled ? t('chat:modal.turnOff') : t('chat:modal.turnOn')}
-        </Button>
       </header>
 
       {!view.enabled ? (
-        <p className="text-[12.5px] text-text-muted">{t('chat:modal.friendsOff', { label })}</p>
+        <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-surface px-3 py-2 text-[12px] text-text-muted ring-1 ring-hairline">
+          <span>{t('chat:modal.friendsOff', { label })}</span>
+          <Button variant="ghost" size="sm" className="flex-none" onClick={() => onSetEnabled(view.plugin, true)}>
+            {t('chat:modal.turnOn')}
+          </Button>
+        </div>
       ) : (
         <>
           {total === 0 && (
@@ -245,11 +247,12 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
             </p>
           )}
 
-          <FriendGroup title={t('chat:group.playing')} friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
-          <FriendGroup title={t('chat:group.online')} friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
-          <FriendGroup title={t('chat:group.offline')} friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.playing')} friends={groups.inGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.online')} friends={groups.online} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.offline')} friends={groups.offline} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
 
-          {/* Store state lives at the bottom (the lab's notices row): the
+          {/* Store state lives at the bottom (the lab's notices row): a
+              notice only when the store is off or disconnected; the
               presence toggles stay reachable here instead of Settings. */}
           <div className="flex flex-col gap-2.5 border-t border-hairline pt-2.5">
             {line && (
@@ -322,11 +325,9 @@ function ChatsTab(p: AtlasFriendsPanelProps) {
   );
 }
 
-function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, logoUrl, unreadOf, onOpenChat }: {
+function FriendGroup({ title, friends, plugin, logoUrl, unreadOf, onOpenChat }: {
   title: string;
   friends: SocialFriend[];
-  inLibrary: (gameId: string) => boolean;
-  onOpenGame: (gameId: string) => void;
   plugin: string;
   logoUrl?: string;
   unreadOf?: (plugin: string, friendId: string) => number;
@@ -349,9 +350,6 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, logoUrl, u
               <span aria-label={t('chat:row.unread', { count: unreadOf(plugin, f.id) })} className="rounded-full bg-danger px-1.5 text-hint font-bold tabular-nums text-on-accent">
                 {unreadOf(plugin, f.id)}
               </span>
-            )}
-            {f.game?.id && inLibrary(f.game.id) && (
-              <LinkButton onClick={() => onOpenGame(f.game!.id!)}>{t('chat:row.openGame')}</LinkButton>
             )}
           </li>
         ))}

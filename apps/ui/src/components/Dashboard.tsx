@@ -11,7 +11,7 @@ import { GameTile } from './GameTile';
 import { Hero, heroChipClass } from './Hero';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
-import { X, Play } from 'lucide-react';
+import { X, Play, Download } from 'lucide-react';
 import { byRecent, coverImages, formatBytes, heroImages, lastPlayedAgo, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
 import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
@@ -357,6 +357,17 @@ function attentionReason(g: Game, t: TFunction): string {
   return t(badge.tone === 'borked' ? 'dashboard:reason.borked' : 'dashboard:reason.bronze', { source: badge.source });
 }
 
+/** The suggestion card's fallback for a plain backlog game (no fix, no low
+ *  rating): it is in the library but not installed, plus the ProtonDB tier
+ *  when one is known. */
+function backlogReason(g: Game, t: TFunction): string {
+  if (g.is_installed) return '';
+  const tone = ratingBadge(g)?.tone ?? g.fix_info?.tier ?? null;
+  const known = tone && tone !== 'native' ? tone.charAt(0).toUpperCase() + tone.slice(1) : null;
+  const base = t('dashboard:home.backlogFallback');
+  return known ? `${base} ${t('dashboard:home.backlogRated', { tier: known })}` : base;
+}
+
 /** The store of a game, in words. The shared helper stays as is for the
  *  areas that still render it; the dashboard reads the catalog so the one
  *  coined word ("Sideloaded") follows the UI language. */
@@ -453,7 +464,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
       </div>
     );
   }
-  const reason = suggested ? attentionReason(suggested, t) : '';
+  const reason = suggested ? attentionReason(suggested, t) || backlogReason(suggested, t) : '';
   const installSize = suggested && !suggested.is_installed && suggested.size_bytes ? formatBytes(suggested.size_bytes) : null;
   return (
     <div className={ATLAS_PAGE}>
@@ -471,7 +482,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
             {reason && <p className="line-clamp-2 text-[13.5px] leading-relaxed text-white/85">{reason}</p>}
             <div className="mt-1 flex gap-2.5">
               <Button variant="primary" onClick={() => onOpenGame(suggested.id)}>
-                {suggested.is_installed ? t('game:play.play') : installSize ? `${t('game:install.install')} ${installSize}` : t('game:install.install')}
+                {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
               </Button>
               <Button variant="neutral" onClick={() => onOpenGame(suggested.id)} className="bg-white/10 text-white ring-white/20 hover:bg-white/20">
                 {t('dashboard:hero.openGame')}
@@ -534,7 +545,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
             </ul>
           </section>
         )}
-        <section aria-label={t('dashboard:home.waitingForYou')}>
+        <section aria-label={t('dashboard:home.waitingForYou')} className={added.length === 0 ? 'lg:col-span-2' : undefined}>
           <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('dashboard:home.waitingForYou')}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
