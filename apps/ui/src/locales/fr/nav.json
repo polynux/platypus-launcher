@@ -50,6 +50,13 @@
     "chat": "Discussion",
     "shiftHint": "Maj-clic pour combiner les boutiques",
     "stores": "Boutiques",
-    "redeem": "Utiliser un code…"
+    "redeem": "Utiliser un code…",
+    "everyStore": "Toutes les boutiques",
+    "morePlaces": "Plus de lieux",
+    "ownership": "Propriété",
+    "viewSwitch": "Vue de la bibliothèque",
+    "viewList": "Liste",
+    "viewGrid": "Jaquettes",
+    "viewTable": "Tableau"
   }
 }
