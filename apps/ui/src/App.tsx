@@ -10,6 +10,7 @@ import { LibraryListDetail } from './components/LibraryListDetail';
 import { AtlasLibraryPage } from './components/AtlasLibraryViews';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
+import { StoresPage } from './components/StoresPage';
 import { AddGameModal, type AddGameOptions } from './components/AddGameModal';
 import { addGameFlow } from './lib/addGame';
 import { ActivityView } from './components/ActivityView';
@@ -871,6 +872,7 @@ export function AppContent() {
         return (
           <Dashboard
             games={installedGames}
+            allGames={games}
             ownedCount={games.length}
             runners={runners}
             activity={activity}
@@ -965,7 +967,7 @@ export function AppContent() {
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
         );
       case 'activity':
-        return <ActivityView events={activity} />;
+        return <ActivityView events={activity} games={games} />;
       case 'fixes':
         return <FixesView games={games} onOpenGame={openGame} />;
       case 'runners':
@@ -993,6 +995,7 @@ export function AppContent() {
         return (
           <DownloadsView
             jobs={jobs}
+            games={games}
             onAction={jobAction}
             onClear={() => {
               // Optimistic clear so the button feels instant even when the
@@ -1017,6 +1020,22 @@ export function AppContent() {
             <div className="p-7">
               <EmptyState label={t('store:unavailable')}>{t('store:unavailableDetail')}</EmptyState>
             </div>
+          );
+        }
+        // Atlas lists every storefront above the embedded view (issue #138);
+        // other themes keep the bare embedded view.
+        if (isSourcebar) {
+          return (
+            <StoresPage
+              plugins={storePlugins}
+              selected={plugin}
+              onSelect={(id) => setView({ name: 'store', plugin: id })}
+              canRedeem={redeemStores.length > 0}
+              onRedeem={() => setRedeemOpen(true)}
+              initialUrl={view.url}
+              onClose={() => closeStore(plugin.id)}
+              onNotify={notify}
+            />
           );
         }
         return (

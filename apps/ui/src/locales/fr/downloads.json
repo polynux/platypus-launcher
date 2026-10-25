@@ -74,5 +74,11 @@
     "cancelKind": "Annuler : {{kind}}"
   },
   "backedUp": "{{title}} sauvegardé",
-  "restored": "{{title}} restauré"
+  "restored": "{{title}} restauré",
+  "atlas": {
+    "queueSub_one": "{{count}} dans la file.",
+    "queueSub_other": "{{count}} dans la file.",
+    "pauseAll": "Tout mettre en pause",
+    "recent": "Récents"
+  }
 }

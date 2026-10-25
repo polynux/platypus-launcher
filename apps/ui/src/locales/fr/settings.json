@@ -161,5 +161,15 @@
   "gameDescription": "Prend la couleur de l’illustration du jeu sélectionné.",
   "gameSaved": "Couleur du jeu enregistrée",
   "none": "Ce thème n’a aucune option d’apparence."
+ },
+ "atlas": {
+  "cats": {
+   "general": "Général",
+   "appearance": "Apparence",
+   "folders": "Dossiers de jeux",
+   "saves": "Sauvegardes",
+   "data": "Notes et infos jeux",
+   "social": "Amis et discussion"
+  }
  }
 }

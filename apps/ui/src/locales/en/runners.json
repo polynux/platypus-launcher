@@ -9,5 +9,12 @@
     "custom": "custom",
     "system": "system",
     "found": "found"
+  },
+  "atlas": {
+    "sub": "Proton and Wine builds that run your Windows games.",
+    "defaultLabel": "Default for new games",
+    "defaultDesc": "Each game can still pick its own.",
+    "defaultBadge": "Default",
+    "installed": "Installed"
   }
 }

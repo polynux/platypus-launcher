@@ -278,7 +278,7 @@ describe('/22 friends panel and banners in App (issue #135)', () => {
     // The Atlas grid lib-bar (issue #136), not the classic grid search.
     expect(await screen.findByPlaceholderText('Filter the library')).toBeInTheDocument();
     // The choice persists like the classic library mode.
-    await user.click(screen.getByRole('button', { name: 'Dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Home' }));
     await user.click(screen.getByRole('button', { name: 'Library' }));
     expect(screen.getByPlaceholderText('Filter the library')).toBeInTheDocument();
     await i18n.changeLanguage('en');

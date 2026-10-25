@@ -5,12 +5,13 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { ActivityEvent, Game, ProtonVersion, ThemeLayout as DashboardLayoutData, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
-import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
+import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx, relTime } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
 import { GameTile } from './GameTile';
 import { Hero, heroChipClass } from './Hero';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
+import { X, Play } from 'lucide-react';
 import { byRecent, coverImages, heroImages, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
 import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
@@ -28,13 +29,20 @@ interface DashboardProps {
   activity: ActivityEvent[];
   /** Library-wide owned count (installed + store-only). Defaults to games.length. */
   ownedCount?: number;
+  /** The full library (installed + not): Home's "to install" list. Defaults to games. */
+  allGames?: Game[];
   dismissedHero: ReadonlySet<string>;
   onDismissHero: (ids: string[]) => void;
   onOpenGame: (id: string) => void;
   onNavigate: (v: View) => void;
 }
 
-export function Dashboard({ games, ownedCount, ...rest }: DashboardProps) {
+export function Dashboard({ games, ownedCount, allGames, ...rest }: DashboardProps) {
+  // Atlas renders the /22 Home page (issue #138); other themes keep the
+  // layout blocks below.
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return <AtlasHome games={games} allGames={allGames ?? games} ownedCount={ownedCount} {...rest} />;
+  }
   // The built-in arrangement is the initial layout, so the first paint
   // already shows today's dashboard before the core answers over RPC.
   const layout = useThemeLayout('dashboard') ?? BUILTIN_LAYOUTS['dashboard'];
@@ -198,8 +206,8 @@ export function DashboardAttention({ hero, installed, owned, waitingCount, pendi
       <div className="absolute bottom-6 right-7 hidden gap-3 lg:flex">
         {[
           [t('dashboard:hero.statInstalled'), String(installed), 'text-accent-strong'],
-          ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-white/80']] : []),
-          [t('dashboard:hero.statFixes'), String(waitingCount), 'text-orange-300'],
+          ...(owned > installed ? [[t('dashboard:hero.statOwned'), String(owned), 'text-text-muted']] : []),
+          [t('dashboard:hero.statFixes'), String(waitingCount), 'text-attention'],
         ].map(([k, v, c]) => (
           <div key={k} className={cx(heroChipClass(chips), 'w-28 rounded-2xl p-3.5')}>
             <div className={cx('text-[19px] font-extrabold tabular-nums', c)}>{v}</div>
@@ -291,7 +299,7 @@ export function DashboardWaiting({ waiting, onOpenGame, onNavigate }: {
     <div>
       <h2 className="mb-2.5 text-[15px] font-bold">{t('dashboard:waiting')}</h2>
       {waiting.length === 0 ? (
-        <p className="rounded-2xl bg-surface p-4 text-[12px] text-text-body ring-1 ring-white/[0.05]">
+        <p className="rounded-2xl bg-surface p-4 text-[12px] text-text-body ring-1 ring-hairline">
           {t('dashboard:waitingEmpty')}
         </p>
       ) : (
@@ -374,7 +382,7 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
       {games.map((g) => (
         <li key={g.id}>
           <button onClick={() => onOpenGame(g.id)} className={compact ? '-mx-1 flex w-full items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface' : '-mx-1 flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-surface'}>
-            <Cover src={coverImages(g)} title="" className={compact ? 'h-7 w-7 flex-none rounded ring-1 ring-white/10' : 'h-8 w-8 flex-none rounded ring-1 ring-white/10'} />
+            <Cover src={coverImages(g)} title="" className={compact ? 'h-7 w-7 flex-none rounded ring-1 ring-hairline' : 'h-8 w-8 flex-none rounded ring-1 ring-hairline'} />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[12px] font-semibold">{g.title}</div>
               <div className="font-mono text-micro uppercase tracking-wider text-text-muted">{storeLabel(g.store, t)}</div>
@@ -384,5 +392,153 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
         </li>
       ))}
     </ul>
+  );
+}
+
+/** The /22 Home page (issue #138, Atlas only): greeting, the suggestion card
+ *  (the first game needing attention, dismissable), Continue playing cards
+ *  with Play, the Recently added strip and the Waiting for you lists. Same
+ *  data and handlers as the layout blocks above; only the markup is /22.
+ *  The Play button opens the game page, where Play lives: Home gets no new
+ *  launch wiring of its own. */
+function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps & { allGames: Game[] }) {
+  const { t } = useTranslation(['dashboard', 'common', 'game', 'activity']);
+  const waiting = games.filter(needsAttention);
+  const pending = waiting.filter((g) => !dismissedHero.has(g.id));
+  const suggested = pending[0];
+  const installed = games.length;
+  const hasPlayData = games.some((g) => g.last_played_at);
+  const continueGames = [...games].sort(hasPlayData ? byRecent : byTitle).slice(0, 3);
+  const recentlyAdded = games.filter((g) => g.store === 'custom').slice(0, 5);
+  const toFinish = [...games].filter((g) => (g.playtime_minutes ?? 0) > 0).sort(byRecent).slice(0, 5);
+  const toInstall = allGames.filter((g) => !g.is_installed).slice(0, 5);
+  const hour = new Date().getHours();
+  const greeting = hour < 5
+    ? t('dashboard:greeting.night')
+    : hour < 12
+      ? t('dashboard:greeting.morning')
+      : hour < 18
+        ? t('dashboard:greeting.afternoon')
+        : t('dashboard:greeting.evening');
+  if (games.length === 0) {
+    return (
+      <div className="mx-auto w-full max-w-6xl px-7 py-7">
+        <DashboardEmpty games={games} />
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+      <header>
+        <h1 className="text-[24px] font-extrabold tracking-tight">{greeting}, polynux</h1>
+        <p className="mt-1 text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
+      </header>
+      {suggested && (
+        <Hero site="dashboard" art={heroImages(suggested)} title={suggested.title}>
+          <div className="absolute left-7 top-6 max-w-md">
+            <span className="font-mono text-micro uppercase tracking-widest text-text-muted">{t('dashboard:home.fromBacklog')}</span>
+            <h2 className="mt-1 text-[22px] font-extrabold tracking-tight text-white">{suggested.title}</h2>
+            <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-white/85">{attentionReason(suggested, t)}</p>
+            <div className="mt-3 flex gap-2.5">
+              <Button variant="primary" onClick={() => onOpenGame(suggested.id)}>{t('dashboard:hero.openGame')}</Button>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onDismissHero([suggested.id])}
+            aria-label={t('dashboard:home.dismiss')}
+            className="absolute right-4 top-4 grid size-8 place-items-center rounded-lg bg-glass text-text ring-1 ring-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </Hero>
+      )}
+      <section aria-label={t('dashboard:continuePlaying')}>
+        <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{hasPlayData ? t('dashboard:continuePlaying') : t('dashboard:yourGames')}</h2>
+        <ul className="grid gap-3.5 md:grid-cols-3">
+          {continueGames.map((g) => (
+            <li key={g.id}>
+              <button type="button" onClick={() => onOpenGame(g.id)} aria-label={t('dashboard:hero.openGame') + ': ' + g.title} className="block w-full overflow-hidden rounded-xl text-left ring-1 ring-hairline transition hover:ring-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                <Cover src={heroImages(g)} title={g.title} className="aspect-[16/7] w-full" />
+              </button>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-bold">{g.title}</div>
+                  <div className="truncate text-[12px] text-text-faint">
+                    {g.last_played_at ? `${relTime(g.last_played_at)} · ` : ''}{g.playtime_minutes ? formatHours(g.playtime_minutes) : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenGame(g.id)}
+                  aria-label={`${t('game:play.play')}: ${g.title}`}
+                  className="inline-flex h-[34px] flex-none items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  <Play className="size-3.5 fill-current" aria-hidden />
+                  {t('game:play.play')}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {recentlyAdded.length > 0 && (
+          <section aria-label={t('dashboard:recentlyAdded')}>
+            <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('dashboard:recentlyAdded')}</h2>
+            <ul className="grid grid-cols-5 gap-2.5">
+              {recentlyAdded.map((g) => (
+                <li key={g.id}>
+                  <button type="button" onClick={() => onOpenGame(g.id)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-lg">
+                    <Cover src={coverImages(g)} title={g.title} className="aspect-[2/3] w-full rounded-lg ring-1 ring-hairline" />
+                    <span className="mt-1.5 block truncate text-[12px] font-semibold">{g.title}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <section aria-label={t('dashboard:home.waitingForYou')}>
+          <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('dashboard:home.waitingForYou')}</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <h3 className="mb-1 text-[12px] font-semibold text-text-faint">{t('dashboard:home.toFinish')}</h3>
+              <ul>
+                {toFinish.map((g) => (
+                  <li key={g.id}>
+                    <button type="button" onClick={() => onOpenGame(g.id)} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                      <span className="truncate text-[13px] font-semibold">{g.title}</span>
+                      <span className="flex-none text-[12px] tabular-nums text-text-faint">{g.playtime_minutes ? formatHours(g.playtime_minutes) : ''}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="mb-1 text-[12px] font-semibold text-text-faint">{t('dashboard:home.toInstall')}</h3>
+              <ul>
+                {toInstall.map((g) => (
+                  <li key={g.id}>
+                    <button type="button" onClick={() => onOpenGame(g.id)} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                      <span className="truncate text-[13px] font-semibold">{g.title}</span>
+                      <span className="flex-none text-[12px] text-text-faint">{storeLabel(g.store, t)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+      {activity.length > 0 && (
+        <section aria-label={t('activity:panel.title')} className="rounded-2xl bg-surface p-4 ring-1 ring-hairline">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-[14px] font-bold">{t('activity:panel.title')}</h2>
+            <Button variant="link" onClick={() => onNavigate({ name: 'activity' })}>{t('activity:panel.fullLog')}</Button>
+          </div>
+          <DashboardActivity events={activity} limit={5} onNavigate={onNavigate} />
+        </section>
+      )}
+    </div>
   );
 }

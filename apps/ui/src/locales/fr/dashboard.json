@@ -45,5 +45,14 @@
     "epic": "Epic",
     "ubisoft": "Ubisoft",
     "custom": "Ajout manuel"
+  },
+  "home": {
+    "ready_one": "{{count}} jeu prêt à jouer.",
+    "ready_other": "{{count}} jeux prêts à jouer.",
+    "fromBacklog": "Dans votre backlog",
+    "dismiss": "Ne plus suggérer",
+    "waitingForYou": "En attente",
+    "toFinish": "À finir",
+    "toInstall": "À installer"
   }
 }

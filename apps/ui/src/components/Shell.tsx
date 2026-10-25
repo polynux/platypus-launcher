@@ -338,14 +338,16 @@ function TopBar({ p }: { p: ShellProps }) {
   const libOn = p.view.name === 'library' || p.view.name === 'game';
   const storeOn = p.view.name === 'store';
   const goStore = () => {
-    // No store list page yet: open the first storefront, or Plugins to add
-    // one (#138 will give Store its own page).
+    // The /22 stores page lists every storefront (#138): open the first, or
+    // Plugins to add one when there is none.
     if (p.view.name === 'store') return;
     if ((p.stores ?? []).length > 0) p.onOpenStore?.(p.stores![0].id);
     else p.onNavigate({ name: 'plugins' });
   };
   const nav = [
-    { id: 'home', label: t('nav:dashboard'), on: p.view.name === 'dashboard', go: () => p.onNavigate({ name: 'dashboard' }) },
+    // /22 calls the dashboard Home (nav.home), like the lab's top bar. The
+    // sidebar/topbar variants keep nav.dashboard.
+    { id: 'home', label: t('nav:home'), on: p.view.name === 'dashboard', go: () => p.onNavigate({ name: 'dashboard' }) },
     { id: 'library', label: t('nav:library'), on: libOn, go: () => p.onNavigate({ name: 'library' }) },
     { id: 'store', label: t('nav:store'), on: storeOn, go: goStore },
   ];

@@ -19,7 +19,7 @@ import type { VariantProps } from 'class-variance-authority';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 import { ThemeLayout } from '../lib/layout';
-import { useThemeLayout } from '../lib/theme';
+import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 import { usePluginsData, type PluginsAuthState } from './usePluginsData';
 
@@ -58,9 +58,48 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
   const { t } = useTranslation(['plugins', 'common']);
   const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
   const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act } = data;
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   // The built-in arrangement is the initial layout, so the first paint
   // already shows today's plugins before the core answers over RPC.
   const layout = useThemeLayout('plugins') ?? BUILTIN_LAYOUTS['plugins'];
+  if (atlas) {
+    return (
+      <>
+        <AtlasPlugins
+          plugins={plugins}
+          warnings={warnings}
+          auth={auth}
+          busy={busy}
+          data={data}
+          onNotify={onNotify}
+        />
+        {reviewing && (
+          <ApproveModal
+            plugin={reviewing}
+            onClose={() => setReviewing(null)}
+            onApprove={() => {
+              const p = reviewing;
+              setReviewing(null);
+              act(p.id, 'approve', LauncherApi.approvePlugin(p.id), t('plugins:notify.approved', { name: p.name }));
+            }}
+          />
+        )}
+        {loggingIn && (
+          <AuthModal
+            plugin={loggingIn}
+            onClose={() => setLoggingIn(null)}
+            onDone={(s) => {
+              const p = loggingIn;
+              setLoggingIn(null);
+              storeAuth(p.id, s);
+              onNotify(s.user ? t('plugins:notify.loggedInAs', { name: p.name, user: s.user }) : t('plugins:notify.loggedIn', { name: p.name }));
+              onLibraryChanged();
+            }}
+          />
+        )}
+      </>
+    );
+  }
   return (
     <div className="p-7">
       <ThemeLayout
@@ -198,6 +237,234 @@ export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChoose
   );
 }
 
+/** The /22 Plugins page (issue #138, Atlas only): the plugin list on the left
+ *  and the selected plugin's detail on the right, with the same cards,
+ *  login rows, approve/enable actions and dialogs. The lab's "Add a store"
+ *  button has no backing (store plugins install through the plugins folder),
+ *  so the header keeps Rescan and the Plugins folder entry. */
+function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
+  plugins: StorePlugin[];
+  warnings: SourceWarning[];
+  auth: Record<string, PluginsAuthState>;
+  busy: string | null;
+  data: ReturnType<typeof usePluginsData>;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+}) {
+  const { t } = useTranslation(['plugins', 'nav']);
+  const store = plugins.filter((p) => p.kind === 'store');
+  const rest = plugins.filter((p) => p.kind !== 'store');
+  const [selected, setSelected] = useState(() => store.find((p) => p.status !== 'ready')?.id ?? store[0]?.id ?? rest[0]?.id ?? null);
+  const current = plugins.find((p) => p.id === selected) ?? store[0] ?? rest[0];
+  const statusDot = (p: StorePlugin): string | null => {
+    switch (p.status) {
+      case 'ready': return null;
+      case 'disabled': return 'bg-text-faint';
+      case 'invalid': return 'bg-danger';
+      case 'unapproved':
+      case 'changed': return 'bg-attention';
+      default: return 'bg-attention';
+    }
+  };
+  const accountOf = (p: StorePlugin): string => {
+    const a = auth[p.id];
+    if (a && !('error' in a) && a.loggedIn) return a.user || t('plugins:auth.loggedIn');
+    return t('plugins:auth.loggedOut');
+  };
+  return (
+    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
+          <p className="mt-1 text-[13px] text-text-muted">{t('plugins:header.subtitle')}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="neutral" onClick={() => {
+            Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'));
+          }}>
+            <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
+          </Button>
+          <Button variant="neutral" onClick={() => { void data.refresh(true); }}>
+            <RefreshCw className="h-3.5 w-3.5" /> {t('plugins:header.rescan')}
+          </Button>
+        </div>
+      </header>
+      <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <ul className="grid gap-0.5" role="listbox" aria-label={t('nav:title.plugins')}>
+          {store.map((p) => {
+            const dot = statusDot(p);
+            const on = current?.id === p.id;
+            return (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={on}
+                  onClick={() => setSelected(p.id)}
+                  className={cx(
+                    'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    on ? 'bg-accent/15' : 'hover:bg-surface',
+                  )}
+                >
+                  <PluginLogo src={p.icon_url} name={p.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-bold">{p.name}</span>
+                    <span className="block truncate text-[12px] text-text-faint">{accountOf(p)}</span>
+                  </span>
+                  {dot && <span aria-hidden className={cx('size-1.5 flex-none rounded-full', dot)} />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="min-w-0 rounded-2xl bg-surface p-5 ring-1 ring-hairline">
+          {current && current.kind === 'store' ? (
+            <AtlasPluginDetail
+              plugin={current}
+              authState={auth[current.id]}
+              warning={warnings.find((w) => w.source === current.id)}
+              busy={busy}
+              onLogout={() => data.logout(current)}
+              onChooseFolder={() => data.chooseFolder(current)}
+              onAct={data.act}
+              onReview={() => data.setReviewing(current)}
+              onLogin={() => data.setLoggingIn(current)}
+              onRescan={() => { void data.refresh(true); }}
+              onNotify={onNotify}
+            />
+          ) : current ? (
+            <DataPluginCard plugin={current} />
+          ) : (
+            <p className="text-[13px] text-text-muted">{t('plugins:empty.detail')}</p>
+          )}
+        </div>
+      </div>
+      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} />}
+      <PluginsBuiltIn />
+    </div>
+  );
+}
+
+/** The selected store plugin's detail: the same identity, alert, approval,
+ *  account, capabilities and folder rows as the card, without the card frame
+ *  so the pane reads like the lab's detail column. */
+function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onRescan, onNotify }: {
+  plugin: StorePlugin;
+  authState: PluginsAuthState | undefined;
+  warning: SourceWarning | undefined;
+  busy: string | null;
+  onLogout: () => void;
+  onChooseFolder: () => void;
+  onAct: (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => void;
+  onReview: () => void;
+  onLogin: () => void;
+  onRescan: () => void;
+  onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+}) {
+  const { t } = useTranslation('plugins');
+  const st = STATUS[p.status] ?? STATUS.invalid;
+  const dot: Record<string, string> = {
+    ready: 'bg-ok',
+    unapproved: 'bg-attention',
+    changed: 'bg-attention',
+    disabled: 'bg-text-faint',
+    'missing-requirements': 'bg-attention',
+    invalid: 'bg-danger',
+    'needs-newer-platypus': 'bg-attention',
+    'too-old': 'bg-attention',
+  };
+  return (
+    <div className="grid content-start gap-4">
+      <header className="flex items-center gap-3.5">
+        <PluginLogo src={p.icon_url} name={p.name} />
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-[19px] font-extrabold tracking-tight">{p.name}</h2>
+          <p className="truncate font-mono text-hint text-text-muted">
+            v{p.version}{p.author ? ` · ${p.author}` : ''}
+          </p>
+        </div>
+        <span className="flex flex-none items-center gap-1.5 text-[12.5px] font-semibold text-attention">
+          {p.status !== 'ready' && <span aria-hidden className={cx('size-1.5 rounded-full', dot[p.status] ?? 'bg-attention')} />}
+          {p.status === 'ready' ? '' : t(st.key)}
+        </span>
+      </header>
+      {p.problem && (
+        <p className={cx('rounded-xl px-3.5 py-2.5 text-[12.5px] ring-1', p.status === 'invalid' ? 'bg-danger/10 text-danger ring-danger/25' : 'bg-attention/10 text-attention ring-attention/25')}>
+          {p.problem}
+        </p>
+      )}
+      {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
+      {(p.status === 'unapproved' || p.status === 'changed') && (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={onReview}>
+            <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? t('plugins:card.reapprove') : t('plugins:card.approve')}
+          </Button>
+        </div>
+      )}
+      {p.status === 'ready' && hasAuth(p) && (
+        <div className="flex items-center justify-between gap-3 border-t border-hairline pt-4">
+          <span className="min-w-0 truncate text-[13px] font-semibold">{t('plugins:atlas.account')}</span>
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="truncate text-[12.5px] text-text-muted">
+              {!a ? (
+                <span className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
+              ) : 'error' in a ? (
+                <span className="font-mono text-hint text-danger">{a.error}</span>
+              ) : a.loggedIn ? (
+                <>{a.user ? (
+                  <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-text" /> }} />
+                ) : t('plugins:auth.loggedIn')}</>
+              ) : (
+                <span className="text-attention">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
+              )}
+            </span>
+            {a && !('error' in a) && a.loggedIn ? (
+              <Button variant="neutral" size="sm" className="flex-none" onClick={onLogout} disabled={busy === p.id + 'logout'}>
+                <LogOut className="h-3 w-3" /> {t('plugins:auth.logOut')}
+              </Button>
+            ) : (
+              <Button variant="primary" size="sm" className="flex-none" onClick={onLogin}>
+                <LogIn className="h-3 w-3" /> {t('plugins:auth.logIn')}
+              </Button>
+            )}
+          </span>
+        </div>
+      )}
+      {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
+      {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
+        <div className="flex items-center justify-between gap-3 border-t border-hairline pt-4">
+          <span className="min-w-0">
+            <span className="block text-[13px] font-semibold">{t('plugins:atlas.libraryList')}</span>
+            <span className="block truncate font-mono text-hint text-text-muted select-text" title={p.install_folder}>{p.install_folder}</span>
+          </span>
+          <span className="flex flex-none gap-2">
+            <Button variant="neutral" size="sm" onClick={onChooseFolder}>{t('plugins:card.change')}</Button>
+            <Button variant="neutral" size="sm" onClick={onRescan}>
+              <RefreshCw className="h-3 w-3" /> {t('plugins:header.rescan')}
+            </Button>
+          </span>
+        </div>
+      )}
+      {(p.status === 'ready' || p.status === 'missing-requirements' || p.status === 'disabled' || p.gave_up) && (
+        <div className="flex gap-2">
+          {(p.status === 'unapproved' || p.status === 'changed') ? null : (p.status === 'ready' || p.status === 'missing-requirements') ? (
+            <Button variant="neutral" onClick={() => onAct(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, false), t('plugins:notify.disabled', { name: p.name }))} disabled={busy === p.id + 'toggle'}>
+              {t('plugins:card.disable')}
+            </Button>
+          ) : p.status === 'disabled' ? (
+            <Button variant="primary" onClick={() => onAct(p.id, 'toggle', LauncherApi.setPluginEnabled(p.id, true), t('plugins:notify.enabled', { name: p.name }))} disabled={busy === p.id + 'toggle'}>
+              {t('plugins:card.enable')}
+            </Button>
+          ) : null}
+          {p.gave_up && p.status === 'ready' && (
+            <Button variant="neutral" onClick={() => onAct(p.id, 'retry', LauncherApi.retryPlugin(p.id), t('plugins:notify.willRetry', { name: p.name }))} disabled={busy === p.id + 'retry'}>
+              <RotateCcw className="h-3.5 w-3.5" /> {t('common:retry')}
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 /** One store plugin's card: identity, capabilities, settings, requirements,
  *  the login row and the approve/enable actions. The required parts (login
  *  row, approval actions) render here, inside the card, so a layout can't
@@ -233,7 +500,7 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
         </div>
         {p.description && <p className="mt-2.5 text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
         {p.problem && p.status !== 'missing-requirements' && (
-          <p className={cx('mt-2 font-mono text-hint', p.status === 'invalid' ? 'text-red-300' : 'text-orange-200')}>{p.problem}</p>
+          <p className={cx('mt-2 font-mono text-hint', p.status === 'invalid' ? 'text-danger' : 'text-attention')}>{p.problem}</p>
         )}
       </div>
 
@@ -242,11 +509,11 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
       {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
 
       {p.missing.length > 0 && (
-        <div className="rounded-xl bg-attention/[0.07] px-3.5 py-2.5 ring-1 ring-orange-300/20">
-          <MonoLabel className="mb-1.5 text-orange-200/80">{t('plugins:card.installFirst')}</MonoLabel>
+        <div className="rounded-xl bg-attention/[0.07] px-3.5 py-2.5 ring-1 ring-attention/25">
+          <MonoLabel className="mb-1.5 text-attention">{t('plugins:card.installFirst')}</MonoLabel>
           {p.missing.map((r) => (
-            <div key={r.bin} className="font-mono text-[12px] text-white/80">
-              <span className="text-orange-200">{r.bin}</span>
+            <div key={r.bin} className="font-mono text-[12px] text-text">
+              <span className="text-attention">{r.bin}</span>
               {r.hint && <> · <span className="select-text">{r.hint}</span></>}
             </div>
           ))}
@@ -260,13 +527,13 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
             {!a ? (
               <span className="flex items-center gap-2 text-text-muted"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
             ) : 'error' in a ? (
-              <span className="font-mono text-hint text-red-300">{a.error}</span>
+              <span className="font-mono text-hint text-danger">{a.error}</span>
             ) : a.loggedIn ? (
               <>{a.user ? (
                 <Trans i18nKey="plugins:auth.loggedInAs" values={{ user: a.user }} components={{ b: <span className="font-bold text-text" /> }} />
               ) : t('plugins:auth.loggedIn')}</>
             ) : (
-              <span className="text-amber-200">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
+              <span className="text-attention">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
             )}
           </span>
           {a && !('error' in a) && a.loggedIn ? (
@@ -286,7 +553,7 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
           <div className="flex items-center justify-between gap-3">
             <span className="text-text-muted">{t('plugins:card.installsInto')}</span>
             <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-white/80 select-text" title={p.install_folder}>{p.install_folder}</span>
+              <span className="truncate text-text select-text" title={p.install_folder}>{p.install_folder}</span>
               <Button variant="link" className="flex-none" onClick={onChooseFolder}>{t('plugins:card.change')}</Button>
               {p.install_folder !== p.default_install_folder && (
                 <Button variant="link" className="flex-none" onClick={() => onAct(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, ''), t('plugins:notify.installsIntoGames', { name: p.name }))}>
@@ -382,7 +649,7 @@ export function DataPluginCard({ plugin: p }: { plugin: StorePlugin }) {
         </Badge>
       </div>
       {p.description && <p className="text-[12.5px] leading-relaxed text-text-muted">{p.description}</p>}
-      {p.problem && <p className="font-mono text-hint text-red-300">{p.problem}</p>}
+      {p.problem && <p className="font-mono text-hint text-danger">{p.problem}</p>}
       {p.status === 'ready' && (
         <p className="mt-auto text-[12px] text-text-body">
           {t('plugins:card.dataNote')}
@@ -418,7 +685,7 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
   return (
     <div className="flex gap-4 border-t border-hairline pt-2">
       <span className="w-24 flex-none text-text-muted">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-white/85 select-text">{items.length ? items.join(', ') : <span className="text-text-muted">{empty}</span>}</span>
+      <span className="min-w-0 flex-1 break-words text-text select-text">{items.length ? items.join(', ') : <span className="text-text-muted">{empty}</span>}</span>
     </div>
   );
 }
@@ -432,7 +699,7 @@ function ApproveModal({ plugin: p, onClose, onApprove }: { plugin: StorePlugin; 
         <h2 className="text-[20px] font-extrabold tracking-tight">{p.status === 'changed' ? t('plugins:approve.titleChanged', { name: p.name }) : t('plugins:approve.title', { name: p.name })}</h2>
         <p className="mt-1 font-mono text-hint text-text-muted">v{p.version}{p.author ? ` · ${p.author}` : ''} · {p.store}</p>
         {p.status === 'changed' && (
-          <p className="mt-3 rounded-xl bg-attention/[0.08] px-3.5 py-2.5 text-[12px] text-orange-100 ring-1 ring-orange-300/25">
+          <p className="mt-3 rounded-xl bg-attention/[0.08] px-3.5 py-2.5 text-[12px] text-attention ring-1 ring-attention/25">
             {t('plugins:approve.changedWarning')}
           </p>
         )}
@@ -657,12 +924,12 @@ function AuthModal({ plugin, onClose, onDone }: { plugin: StorePlugin; onClose: 
                 </div>
               </div>
             )}
-            {prompt.instructions && <p className="text-[12px] leading-relaxed text-white/65">{prompt.instructions}</p>}
+            {prompt.instructions && <p className="text-[12px] leading-relaxed text-text-body">{prompt.instructions}</p>}
             <div className="space-y-3">
               {prompt.url && <MonoLabel className="normal-case tracking-normal">{t('plugins:auth.stepPaste')}</MonoLabel>}
               {prompt.fields.map((f, i) => (
                 <label key={f.id} className="block">
-                  <span className="mb-1 block text-[12px] font-semibold text-white/75">{f.label}</span>
+                  <span className="mb-1 block text-[12px] font-semibold text-text">{f.label}</span>
                   <Input
                     autoFocus={i === 0 && !prompt.url}
                     type={f.secret ? 'password' : 'text'}
