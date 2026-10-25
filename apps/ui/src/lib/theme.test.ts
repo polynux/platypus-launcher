@@ -131,7 +131,7 @@ describe('theme variables', () => {
   it('keeps the warm theme colors equal to style.css defaults', () => {
     const css = readFileSync(path.join(__dirname, '../style.css'), 'utf8');
     const toml = readFileSync(path.join(__dirname, '../../../../internal/themes/builtin/warm/theme.toml'), 'utf8');
-    for (const token of ['ground', 'raised', 'surface', 'surface-strong', 'hairline', 'text', 'text-body', 'text-muted', 'text-faint', 'accent', 'accent-strong', 'on-accent', 'ok', 'attention', 'info', 'dl', 'danger', 'focus']) {
+    for (const token of ['ground', 'raised', 'surface', 'surface-strong', 'hairline', 'text', 'text-body', 'text-muted', 'text-faint', 'accent', 'accent-strong', 'accent-dim', 'on-accent', 'ok', 'attention', 'info', 'dl', 'danger', 'focus']) {
       const cssValue = new RegExp(`--color-${token}:\\s*([^;]+);`).exec(css)?.[1].trim();
       const tomlValue = new RegExp(`^${token}\\s*=\\s*"([^"]+)"`, 'm').exec(toml)?.[1];
       expect(cssValue, `style.css ${token}`).toBe(tomlValue);

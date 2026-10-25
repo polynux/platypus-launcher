@@ -194,7 +194,7 @@ export function LibraryListDetail(p: ListDetailProps) {
                     ) : (
                       <span aria-hidden className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />
                     )}
-                    <span className="grid min-w-0 flex-1">
+                    <span className="grid min-w-0 flex-1 leading-[1.2]">
                       <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
                       <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
                     </span>
@@ -210,7 +210,9 @@ export function LibraryListDetail(p: ListDetailProps) {
           </ul>
         )}
       </aside>
-      <div ref={stageRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+      {/* The stage keeps its scrollbar gutter reserved, so opening Tune
+          (which can show a scrollbar) never shifts the layout. */}
+      <div ref={stageRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
         {selected ? p.renderStage(selected) : null}
       </div>
     </div>

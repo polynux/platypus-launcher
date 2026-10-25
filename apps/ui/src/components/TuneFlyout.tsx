@@ -143,11 +143,12 @@ export function TuneFlyout({
     return () => { live = false; };
   }, [open, game.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Focus the first control on open (without scrolling the stage: the
-  // flyout now renders outside any clipping ancestor).
+  // Focus the dialog itself on open (its root is focusable through tabIndex):
+  // handing focus to the first preset would paint a focus ring on a mere
+  // mouse open. Keyboard users tab from the root into the controls.
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector<HTMLElement>('button:not(:disabled), [role="combobox"]')?.focus({ preventScroll: true });
+    ref.current?.focus({ preventScroll: true });
   }, [open, game.id]);
 
   // Esc and a click outside close. Radix's own listbox handles Escape itself
@@ -250,8 +251,9 @@ export function TuneFlyout({
     <div
       ref={ref}
       role="dialog"
+      tabIndex={-1}
       aria-label={t('tune:title', { title: game.title })}
-      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-[10px] bg-raised text-text ring-1 ring-hairline shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal]"
+      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-[10px] bg-surface text-[13.5px] text-text ring-1 ring-hairline shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal]"
     >
       <div className="border-b border-hairline px-3.5 py-3">
         <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -268,7 +270,7 @@ export function TuneFlyout({
                 aria-pressed={on}
                 onClick={() => write(applyTunePreset(draftRef.current, p.id))}
                 className={cx(
-                  'h-[30px] rounded-md text-[12.5px] font-semibold ring-1 transition',
+                  'h-[30px] rounded-md text-[13.5px] font-semibold ring-1 outline-none transition focus-visible:ring-2 focus-visible:ring-focus',
                   on ? 'bg-accent/20 text-text ring-accent/40' : 'text-text-muted ring-hairline hover:text-text',
                 )}
               >
@@ -291,11 +293,11 @@ export function TuneFlyout({
                 aria-checked={on}
                 disabled={!!disabledReason}
                 onClick={() => write(toggleTune(draftRef.current, key))}
-                className="grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left transition hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                className="grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left outline-none transition hover:bg-surface focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <Icon aria-hidden className={cx('size-4', on ? 'text-accent' : 'text-text-faint')} />
                 <span className="grid min-w-0">
-                  <span className="text-[13px] font-semibold text-text">{label}</span>
+                  <span className="text-[13.5px] font-semibold text-text">{label}</span>
                   <small className="truncate text-[12px] text-text-faint">{disabledReason ?? sub}</small>
                 </span>
                 <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', on ? 'bg-accent' : 'bg-white/15')}>
@@ -311,7 +313,7 @@ export function TuneFlyout({
 
       <div className="mx-1 flex items-center justify-between gap-3 border-t border-hairline px-2.5 pb-3 pt-2.5">
         <span className="grid min-w-0">
-          <span className="text-[13px] font-semibold text-text">{t('tune:runner.label')}</span>
+          <span className="text-[13.5px] font-semibold text-text">{t('tune:runner.label')}</span>
           <small className="truncate text-[12px] text-text-faint">{tierLine}</small>
         </span>
         {clientLaunched ? (
@@ -333,7 +335,7 @@ export function TuneFlyout({
       <button
         type="button"
         onClick={() => { onClose(); onAllSettings(); }}
-        className="grid w-full grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 border-t border-hairline px-3.5 py-2.5 text-left transition hover:bg-surface-strong"
+        className="grid w-full grid-cols-[1fr_auto] grid-rows-[auto_auto] items-center gap-x-2 border-t border-hairline px-3.5 py-2.5 text-left outline-none transition hover:bg-surface focus-visible:ring-2 focus-visible:ring-focus"
       >
         <span className="font-bold">{t('tune:all')}</span>
         <small className="col-start-1 row-start-2 text-[12px] text-text-faint">{t('tune:allHint')}</small>

@@ -51,7 +51,7 @@ var supportsLevels = []string{"tokens", "variants", "layouts"}
 // The token set v1 (issue #90), by kind. The names match the @theme variables
 // in apps/ui/src/style.css where those exist.
 var (
-	colorTokens  = []string{"ground", "raised", "surface", "surface-strong", "hairline", "text", "text-body", "text-muted", "text-faint", "accent", "accent-strong", "on-accent", "ok", "attention", "info", "dl", "danger", "focus"}
+	colorTokens  = []string{"ground", "raised", "surface", "surface-strong", "hairline", "text", "text-body", "text-muted", "text-faint", "accent", "accent-strong", "accent-dim", "on-accent", "ok", "attention", "info", "dl", "danger", "focus"}
 	radiusTokens = []string{"radius-chip", "radius-card", "radius-panel"}
 	fontTokens   = []string{"font-sans", "font-mono"}
 	allTokens    = slices.Concat(colorTokens, radiusTokens, fontTokens)

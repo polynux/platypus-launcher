@@ -145,6 +145,9 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null): Record<str
     const accent = vivid(tone, 0.7, 0.6);
     derived.accent = accent;
     derived['accent-strong'] = vivid(tone, 0.68, 0.76);
+    // The dim shade of the accent, worn by the action strip (the lab's
+    // --acc-dim: toneAt(.45,.17) in accent mode, (.42,.2) in whole mode).
+    derived['accent-dim'] = toneAt(tone, 0.45, 0.17);
     // The dim shade of the accent, worn as the text on it.
     derived['on-accent'] = readable(tone, 0.45, 0.17, accent, 4.5, -1);
   } else {
@@ -158,6 +161,7 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null): Record<str
     const accent = toneAt(tone, 0.9, 0.66);
     derived.accent = accent;
     derived['accent-strong'] = toneAt(tone, 0.7, 0.76);
+    derived['accent-dim'] = toneAt(tone, 0.42, 0.2);
     derived['on-accent'] = readable(tone, 0.5, 0.07, accent, 4.5, -1);
     derived.text = readable(tone, 0.3, 0.95, ground, 4.5, 1);
     derived['text-body'] = readable(tone, 0.25, 0.72, ground, 4.5, 1);

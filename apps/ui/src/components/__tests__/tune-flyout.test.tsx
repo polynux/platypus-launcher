@@ -121,11 +121,13 @@ describe('the preset mapping', () => {
 });
 
 describe('TuneFlyout', () => {
-  it('focuses the first control and marks the preset the switches match', async () => {
+  it('focuses the dialog itself and marks the preset the switches match', async () => {
     const { getByRole } = mount(game({}, { use_gamemode: true, use_gamescope: true, upscaler: 'native' }));
     const balanced = getByRole('button', { name: 'Balanced' });
     expect(balanced).toHaveAttribute('aria-pressed', 'true');
-    expect(document.activeElement).toBe(getByRole('button', { name: 'Quality' }));
+    // A mouse open must not paint a focus ring on the first preset: focus
+    // lands on the dialog root, and keyboard users tab into the controls.
+    expect(document.activeElement).toBe(getByRole('dialog', { name: 'Quick settings for Tuned Game' }));
     expect(getByRole('dialog', { name: 'Quick settings for Tuned Game' })).toBeInTheDocument();
     await waitFor(() => expect(api.getRunnerOptions).toHaveBeenCalled());
   });
