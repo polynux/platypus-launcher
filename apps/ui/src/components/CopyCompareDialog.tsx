@@ -37,11 +37,11 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
   return (
     <Modal label={t('gameOps:compare.dialogLabel', { title: game.title })} onClose={onClose} size="lg">
       <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:compare.title')}</h2>
-      <p className="mt-1 text-[12.5px] text-white/70">
+      <p className="mt-1 text-[12.5px] text-text-muted">
         {t('gameOps:compare.subtitle', { title: game.title, name: baseline.owner_name, why })}
       </p>
 
-      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-hint text-white/80">
+      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-mono text-hint text-text-body">
         <label className="flex items-center gap-2">
           <Switch aria-label={t('gameOps:compare.diffsOnly')} checked={differencesOnly} onCheckedChange={setDifferencesOnly} />
           {t('gameOps:compare.diffsOnly')}
@@ -52,14 +52,14 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
         </label>
       </div>
 
-      <div className="mt-4 max-h-[340px] overflow-auto rounded-2xl bg-white/[0.04]">
+      <div className="mt-4 max-h-[340px] overflow-auto rounded-2xl bg-surface">
         <table className="w-full border-collapse font-mono text-hint" aria-label={t('gameOps:compare.table')}>
-          <thead className="sticky top-0 bg-[#191410]">
-            <tr className="text-left text-white/55">
+          <thead className="sticky top-0 bg-raised">
+            <tr className="text-left text-text-muted">
               <th scope="col" className="px-3 py-2 font-normal">{t('gameOps:compare.addon')}</th>
               {ordered.map((c) => (
                 <th key={c.owner_id} scope="col" className="px-3 py-2 align-top font-normal">
-                  <span className={cx('block', c.owner_id === baseline.owner_id ? 'text-amber-200' : 'text-white/85')}>{c.owner_name}</span>
+                  <span className={cx('block', c.owner_id === baseline.owner_id ? 'text-accent-strong' : 'text-text')}>{c.owner_name}</span>
                   <CopyFlags copy={c} />
                 </th>
               ))}
@@ -67,16 +67,16 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id} className="border-t border-white/[0.06]">
-                <td className="px-3 py-2 text-white/85">
+              <tr key={row.id} className="border-t border-hairline">
+                <td className="px-3 py-2 text-text">
                   {row.name}
-                  {row.kind !== 'dlc' && <span className="ml-2 text-white/55">{row.kind}</span>}
+                  {row.kind !== 'dlc' && <span className="ml-2 text-text-muted">{row.kind}</span>}
                 </td>
                 {ordered.map((c) => {
                   const has = row.owners.includes(c.owner_id);
                   return (
                     <td key={c.owner_id} className="px-3 py-2 text-center">
-                      <span aria-label={has ? t('gameOps:compare.hasIt', { name: c.owner_name }) : t('gameOps:compare.lacksIt', { name: c.owner_name })} className={has ? 'text-emerald-300' : 'text-white/55'}>
+                      <span aria-label={has ? t('gameOps:compare.hasIt', { name: c.owner_name }) : t('gameOps:compare.lacksIt', { name: c.owner_name })} className={has ? 'text-ok' : 'text-text-muted'}>
                         {has ? '✓' : '—'}
                       </span>
                     </td>
@@ -87,14 +87,14 @@ export function CopyCompareDialog({ game, copies, compare, onClose }: CopyCompar
           </tbody>
         </table>
         {rows.length === 0 && (
-          <p className="px-4 py-6 text-center text-[12.5px] text-white/70">
+          <p className="px-4 py-6 text-center text-[12.5px] text-text-muted">
             {!differencesOnly ? t('gameOps:compare.emptyBare') : soundtracks ? t('gameOps:compare.emptySame') : t('gameOps:compare.emptySoundtracks')}
           </p>
         )}
       </div>
 
       {ordered.some((c) => c.exclude) && (
-        <ul className="mt-4 space-y-1 font-mono text-hint text-white/55">
+        <ul className="mt-4 space-y-1 font-mono text-hint text-text-muted">
           {ordered.filter((c) => c.exclude).map((c) => <li key={c.owner_id}>{c.owner_name}: {c.exclude}</li>)}
         </ul>
       )}

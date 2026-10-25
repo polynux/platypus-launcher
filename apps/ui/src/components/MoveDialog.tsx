@@ -68,38 +68,38 @@ export function MoveDialog({ game, startFolder, onClose, onQueued }: MoveDialogP
       <div className="p-6">
         <MonoLabel className="mb-2">{t('gameOps:move.kicker')}</MonoLabel>
         <h2 className="mb-2 text-[18px] font-bold">{t('gameOps:move.title', { title: game.title })}</h2>
-        <p className="mb-4 text-[13px] text-white/60">
+        <p className="mb-4 text-[13px] text-text-muted">
           {t('gameOps:move.description')}
         </p>
         <div className="space-y-2 font-mono text-hint">
-          <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-            <span className="text-white/55">{t('gameOps:move.from')}</span>
-            <span className="truncate text-right text-white/85" title={game.install_dir}>{game.install_dir}</span>
+          <div className="flex justify-between gap-4 border-t border-hairline pt-2">
+            <span className="text-text-muted">{t('gameOps:move.from')}</span>
+            <span className="truncate text-right text-text" title={game.install_dir}>{game.install_dir}</span>
           </div>
           {check && (
             <>
-              <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <span className="text-white/55">{t('gameOps:move.to')}</span>
-                <span className="truncate text-right text-white/85" title={check.to}>{check.to}</span>
+              <div className="flex justify-between gap-4 border-t border-hairline pt-2">
+                <span className="text-text-muted">{t('gameOps:move.to')}</span>
+                <span className="truncate text-right text-text" title={check.to}>{check.to}</span>
               </div>
-              <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <span className="text-white/55">{t('gameOps:move.needs')}</span>
-                <span className="text-white/85">{formatBytes(check.need_bytes)}</span>
+              <div className="flex justify-between gap-4 border-t border-hairline pt-2">
+                <span className="text-text-muted">{t('gameOps:move.needs')}</span>
+                <span className="text-text">{formatBytes(check.need_bytes)}</span>
               </div>
-              <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <span className="text-white/55">{t('gameOps:move.freeThere')}</span>
-                <span className="text-white/85">{formatBytes(check.free_bytes)}</span>
+              <div className="flex justify-between gap-4 border-t border-hairline pt-2">
+                <span className="text-text-muted">{t('gameOps:move.freeThere')}</span>
+                <span className="text-text">{formatBytes(check.free_bytes)}</span>
               </div>
             </>
           )}
         </div>
         {error && <ErrorNotice className="mt-3 text-[13px]" message={error} fallback={t('gameOps:move.error')} />}
         <div className="mt-6 flex gap-2">
-          <Button onClick={pick} disabled={busy} className="flex-1 text-white/80">
+          <Button variant="neutral" onClick={pick} disabled={busy} className="flex-1">
             {parent ? t('gameOps:move.pickAnother') : t('gameOps:move.pick')}
           </Button>
-          <Button onClick={move} disabled={busy || !check} className="flex-1 text-sky-100">{t('gameOps:move.action')}</Button>
-          <Button onClick={onClose} className="flex-1 text-white/70">{t('common:cancel')}</Button>
+          <Button variant="primary" onClick={move} disabled={busy || !check} className="flex-1">{t('gameOps:move.action')}</Button>
+          <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
         </div>
       </div>
     </Modal>

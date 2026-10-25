@@ -170,30 +170,30 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       {!embedded && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installed ? t('gameOps:versions.heading') : t('gameOps:versions.installHeading')}</h2>
-          <p className="mt-1 text-[12.5px] text-white/70">
+          <p className="mt-1 text-[12.5px] text-text-muted">
             {game.title} · {plugin.name}
           </p>
         </>
       )}
 
-      {!info && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:versions.loading')}</p>}
+      {!info && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-text-muted">{t('gameOps:versions.loading')}</p>}
       {error && (
-        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback={t('gameOps:versions.loadError')} />
+        <ErrorNotice className="mt-5 rounded-xl bg-danger/10 px-4 py-3" message={error} fallback={t('gameOps:versions.loadError')} />
       )}
 
       {info && (
         <>
           <dl className="mt-4 space-y-2 font-mono text-hint">
             {installed && (
-              <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <dt className="text-white/55">{t('gameOps:versions.installed')}</dt>
-                <dd className="truncate text-right text-white/85" title={game.version}>{game.version || '—'}</dd>
+              <div className="flex justify-between gap-4 border-t border-hairline pt-2">
+                <dt className="text-text-muted">{t('gameOps:versions.installed')}</dt>
+                <dd className="truncate text-right text-text" title={game.version}>{game.version || '—'}</dd>
               </div>
             )}
             {last && (
-              <div className="flex justify-between gap-4 border-t border-white/[0.05] pt-2">
-                <dt className="text-white/55">{t('gameOps:versions.lastInstall')}</dt>
-                <dd className="truncate text-right text-white/85">
+              <div className="flex justify-between gap-4 border-t border-hairline pt-2">
+                <dt className="text-text-muted">{t('gameOps:versions.lastInstall')}</dt>
+                <dd className="truncate text-right text-text">
                   {[last.versionName || last.build, last.channel, shortDate(last.date)].filter(Boolean).join(' · ')}
                 </dd>
               </div>
@@ -201,9 +201,9 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           </dl>
 
           {info.pinned && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-300/[0.07] px-4 py-3 ring-1 ring-amber-300/25">
-              <p className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
-                <span className="inline-flex items-center gap-1.5 font-bold text-amber-200"><Pin className="h-3.5 w-3.5" /> {t('gameOps:versions.pinnedTo', { pin: pinText(t, info.pinned, info) })}</span>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-attention/[0.07] px-4 py-3 ring-1 ring-attention/25">
+              <p className="min-w-0 text-[12.5px] leading-relaxed text-text-body">
+                <span className="inline-flex items-center gap-1.5 font-bold text-attention"><Pin className="h-3.5 w-3.5" /> {t('gameOps:versions.pinnedTo', { pin: pinText(t, info.pinned, info) })}</span>
                 <br />
                 {t('gameOps:versions.pinNote')}
               </p>
@@ -260,10 +260,10 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
                   onChange={(e) => type(e.target.value)}
                   rows={2}
                   aria-label={info.manual.label}
-                  className="w-full rounded-xl bg-white/[0.06] px-3 py-2 font-mono text-[12px] text-white placeholder-white/55 outline-none ring-amber-300/50 transition focus:ring-1"
+                  className="w-full rounded-xl bg-surface text-text placeholder:text-text-faint outline-none ring-focus/50 transition focus:ring-1"
                 />
               </label>
-              {info.manual.hint && <p className="mt-1 text-[12px] text-white/70">{info.manual.hint}</p>}
+              {info.manual.hint && <p className="mt-1 text-[12px] text-text-muted">{info.manual.hint}</p>}
             </section>
           )}
 
@@ -278,15 +278,15 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
           )}
 
           {info.channels.length === 0 && info.builds.length === 0 && !info.manual && (
-            <p className="mt-5 rounded-xl bg-white/[0.04] px-4 py-3 text-[12.5px] text-white/60">
+            <p className="mt-5 rounded-xl bg-surface text-text-muted">
               {t('gameOps:versions.onlyOne', { plugin: plugin.name })}
             </p>
           )}
 
           {step === 'confirm' ? (
-            <div role="alert" className="mt-6 rounded-2xl bg-amber-300/[0.07] px-4 py-3.5 ring-1 ring-amber-300/25">
-              <p className="flex items-center gap-1.5 text-[12.5px] font-bold text-amber-200"><TriangleAlert className="h-4 w-4" /> {installed ? t('gameOps:versions.confirmTitleSwitch') : t('gameOps:versions.confirmTitleInstall')}</p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">{t('gameOps:versions.warning')}</p>
+            <div role="alert" className="mt-6 rounded-2xl bg-attention/[0.07] px-4 py-3.5 ring-1 ring-attention/25">
+              <p className="flex items-center gap-1.5 text-[12.5px] font-bold text-attention"><TriangleAlert className="h-4 w-4" /> {installed ? t('gameOps:versions.confirmTitleSwitch') : t('gameOps:versions.confirmTitleInstall')}</p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-text-body">{t('gameOps:versions.warning')}</p>
               <div className="mt-3 flex justify-end gap-2.5">
                 <Button variant="neutral" size="sm" disabled={busy} onClick={() => setStep('pick')}>{t('common:back')}</Button>
                 <Button variant="primary" size="sm" disabled={busy} onClick={apply}>{installed ? t('gameOps:versions.switchAnyway') : t('gameOps:versions.installAnyway')}</Button>
@@ -294,17 +294,17 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
             </div>
           ) : (
             <div className="mt-6">
-              <label className={cx('flex items-start gap-2.5 text-[12.5px] leading-snug', pin == null ? 'text-white/55' : 'text-white/70')}>
+              <label className={cx('flex items-start gap-2.5 text-[12.5px] leading-snug', pin == null ? 'text-text-muted' : 'text-text-muted')}>
                 <input
                   type="checkbox"
                   checked={pinIt && pin != null}
                   disabled={pin == null}
                   onChange={(e) => setPinIt(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 accent-amber-300"
+                  className="mt-0.5 h-3.5 w-3.5 accent-attention"
                 />
                 <span>
                   {t('gameOps:versions.keepPin')}
-                  <span className="block text-[12px] text-white/55">
+                  <span className="block text-[12px] text-text-muted">
                     {pin != null
                       ? t('gameOps:versions.pinHintPinned')
                       : choice == null
@@ -349,11 +349,11 @@ function RowShell({
       onClick={onSelect}
       className={cx(
         'flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ring-1 transition',
-        selected ? 'bg-amber-300/[0.07] ring-amber-300/30' : 'ring-white/[0.06] hover:bg-white/[0.04]',
+        selected ? 'bg-attention/[0.07] ring-attention/30' : 'ring-hairline hover:bg-surface',
         disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
       )}
     >
-      <span aria-hidden className={cx('mt-0.5 grid h-4 w-4 flex-none place-items-center rounded-full ring-1', selected ? 'bg-amber-300 text-[#130f0a] ring-amber-300' : 'ring-white/25')}>
+      <span aria-hidden className={cx('mt-0.5 grid h-4 w-4 flex-none place-items-center rounded-full ring-1', selected ? 'bg-accent-strong text-on-accent ring-accent-strong' : 'ring-hairline-strong')}>
         {selected && <Check className="h-3 w-3" strokeWidth={3} />}
       </span>
       <span className="min-w-0 flex-1">{children}</span>
@@ -377,7 +377,7 @@ function ChannelRow({
     <div>
       <RowShell selected={selected} disabled={locked} onSelect={onSelect} label={channel.name}>
         <span className="flex flex-wrap items-center gap-2">
-          <span className="text-[12.5px] font-semibold text-white/90">{channel.name}</span>
+          <span className="text-[12.5px] font-semibold text-text">{channel.name}</span>
           {channel.current && <Badge variant="ok">{t('gameOps:versions.installedBadge')}</Badge>}
           {channel.requires === 'password' && (
             <Badge variant={locked ? 'bronze' : 'neutral'} className="gap-1">
@@ -385,9 +385,9 @@ function ChannelRow({
             </Badge>
           )}
         </span>
-        {channel.description && <span className="block text-[12px] leading-snug text-white/55">{channel.description}</span>}
+        {channel.description && <span className="block text-[12px] leading-snug text-text-muted">{channel.description}</span>}
         {(channel.updatedAt || channel.buildId) && (
-          <span className="mt-0.5 block font-mono text-hint text-white/55">
+          <span className="mt-0.5 block font-mono text-hint text-text-muted">
             {[channel.buildId && t('gameOps:versions.buildMeta', { id: channel.buildId }), channel.updatedAt && t('gameOps:versions.updatedMeta', { date: channel.updatedAt })].filter(Boolean).join(' · ')}
           </span>
         )}
@@ -452,12 +452,12 @@ function BuildRow({ build, selected, onSelect }: { build: VersionBuild; selected
   return (
     <RowShell selected={selected} disabled={!build.available} onSelect={onSelect} label={title}>
       <span className="flex flex-wrap items-center gap-2">
-        <span className="text-[12.5px] font-semibold text-white/90">{title}</span>
+        <span className="text-[12.5px] font-semibold text-text">{title}</span>
         {build.current && <Badge variant="ok">{t('gameOps:versions.installedBadge')}</Badge>}
         <Badge variant={build.source === 'store' ? 'neutral' : build.source === 'archive' ? 'info' : 'accent'}>{sourceText(t, build.source)}</Badge>
         {build.channel && <Badge variant="neutral">{build.channel}</Badge>}
       </span>
-      <span className="mt-0.5 block font-mono text-hint text-white/55">
+      <span className="mt-0.5 block font-mono text-hint text-text-muted">
         {[build.name && build.name !== build.id ? build.id : '', build.publishedAt, !build.available && t('gameOps:versions.unavailableNote')].filter(Boolean).join(' · ')}
       </span>
     </RowShell>
