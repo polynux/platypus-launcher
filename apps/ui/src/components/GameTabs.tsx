@@ -10,34 +10,35 @@ import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
-import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, HardDrive, Loader2, Play, RefreshCw, SlidersHorizontal, Square } from 'lucide-react';
-import type { ActivityEvent, ArtCandidate, CloudInfo, Game, GameDetails, GameJobKind, GameSettings, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
+import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, EyeOff, Loader2, Lock, Play, RefreshCw, SlidersHorizontal, Square, Trophy } from 'lucide-react';
+import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Game, GameDetails, GameJobKind, GameSettings, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
 import { PluginLogo } from './PluginLogo';
 import { CrashHintsPanel } from './CrashHints';
-import { CloudSavesPanel } from './CloudSavesPanel';
+import { CapabilitySurface } from '../lib/capabilities';
+import { agoLabel, asCloudMode, modeHelp, modeName, stateChip } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { JobProgress } from './JobProgress';
 import { useCrashHints } from '../lib/useCrashHints';
 import { useCompat } from '../lib/useCompat';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { useVariant } from '../lib/theme';
 import { formatBytes, hoursPlayed, storeLabel } from '../lib/games';
-import { currentLocale, formatClock, formatDate } from '../lib/format';
+import { currentLocale, formatClock, formatDate, formatPercentValue } from '../lib/format';
 import { formatDecimal1 } from '../lib/gameLocale';
 import { playedCopy, pickableCopies } from '../lib/family';
 import { coreErrMsg } from '../lib/coreError';
 import { cx } from './ui';
 import {
   AboutSection,
-  AchievementsSection,
   GameBackLink,
   GameInstallNote,
   GameOutsideAlert,
 } from './GamePage';
-import { ProgressAchievements, type useAchievementProgress } from './ProgressAchievements';
+import type { useAchievementProgress } from './ProgressAchievements';
 import type { InstallSize } from '../lib/installSize';
 
 type TabId = 'store' | 'achievements' | 'activity' | 'saves' | 'compat';
@@ -311,14 +312,19 @@ function SaveState({ d }: { d: GameTabsData }) {
       </span>
     );
   }
-  const busy = st == null && info?.mode !== 'off';
-  if (st) {
-    if (st.state === 'synced') return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><Cloud className="h-3.5 w-3.5" aria-hidden />{t('game:strip.saveSynced')}</span>;
+  // Only a real sync spins. No status yet is either still loading (nothing)
+  // or not checked (a static cloud): a spinner here showed "Uploading save"
+  // on every game, including ones that never sync.
+  const syncing = !!info?.busy;
+  if (st?.state === 'synced' && !syncing) {
+    return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><Cloud className="h-3.5 w-3.5" aria-hidden />{t('game:strip.saveSynced')}</span>;
+  }
+  if (syncing) {
     return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />{t('game:strip.saveSyncing')}</span>;
   }
-  if (info?.mode === 'off') return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><CloudOff className="h-3.5 w-3.5" aria-hidden />{t('game:strip.saveOff')}</span>;
-  if (busy) return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden />{t('game:strip.saveSyncing')}</span>;
-  return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><HardDrive className="h-3.5 w-3.5" aria-hidden />{t('game:strip.saveLocal')}</span>;
+  if (!info) return null;
+  if (info.mode === 'off') return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><CloudOff className="h-3.5 w-3.5" aria-hidden />{t('game:strip.saveOff')}</span>;
+  return <span className="inline-flex h-10 items-center gap-1.5 px-2.5 text-[13px] text-text-muted"><Cloud className="h-3.5 w-3.5" aria-hidden />{t('game:strip.saveUnchecked')}</span>;
 }
 
 function ActionStrip({ d }: { d: GameTabsData }) {
@@ -327,7 +333,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   // Another game on the stage never inherits the open flyout.
   useEffect(() => setTuneOpen(false), [d.game.id]);
   return (
-    <div className="flex flex-wrap items-center gap-2.5 bg-accent/[0.12] px-5 py-3">
+    <div className="flex flex-wrap items-center gap-2.5 bg-accent-dim py-3 pl-6 pr-5">
       <div className="mr-2 flex items-center gap-1.5">
         <StripPlay d={d} />
         <span className="relative">
@@ -403,7 +409,7 @@ function YouGrid({ d }: { d: GameTabsData }) {
     [t('game:storeTab.protondb'), d.protondb || t('game:storeTab.noRating')],
   ];
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline ring-1 ring-hairline">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline">
       {cells.map(([k, v]) => (
         <div key={k} className="bg-surface px-3 py-2.5">
           <dt className="text-[11.5px] text-text-faint">{k}</dt>
@@ -420,22 +426,171 @@ function AchSummary({ d, onOpen }: { d: GameTabsData; onOpen: () => void }) {
   const unlocked = d.progress?.unlocked ?? d.ach?.unlocked ?? 0;
   if (!total) return null;
   const pct = total ? Math.round((unlocked / total) * 100) : 0;
+  // The side column keeps the count, the bar and the link, with the last
+  // unlocked achievements as an icons row (the lab's .pg-achsum-list).
+  const list = d.progress?.list ?? d.ach?.list ?? [];
+  const recent = list.filter((a) => a.unlocked).slice(0, 3);
   return (
     <section aria-label={t('game:storeTab.achievements')}>
       <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:storeTab.achievements')}</h2>
       <div className="rounded-xl bg-surface px-3.5 py-3 ring-1 ring-hairline">
         <div className="flex items-center justify-between text-[13px]">
           <span className="font-bold text-text"><b>{unlocked}</b> / {total}</span>
-          <span className="font-mono text-[12px] tabular-nums text-text-muted">{pct}%</span>
+          <span className="text-[12px] tabular-nums text-text-muted">{pct}%</span>
         </div>
         <div className="mt-2 h-1.5 rounded-full bg-hairline" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={unlocked} aria-label={t('game:progress.barLabel')}>
           <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
         </div>
-        <button type="button" onClick={onOpen} className="mt-2 font-mono text-[12px] text-accent-strong underline decoration-accent-strong/40 underline-offset-2 hover:text-text">
+        {recent.length > 0 && (
+          <ul className="mt-2.5 grid gap-2">
+            {recent.map((a) => (
+              <li key={a.id || a.name} className="flex min-w-0 items-center gap-2.5">
+                {a.icon ? (
+                  <img src={a.icon} alt="" loading="lazy" className="h-[34px] w-[34px] flex-none rounded-md object-cover" />
+                ) : (
+                  <span className="grid h-[34px] w-[34px] flex-none place-items-center rounded-md bg-surface-strong"><Trophy className="h-4 w-4 text-text-muted" aria-hidden /></span>
+                )}
+                <span className="grid min-w-0">
+                  <span className="truncate text-[13px] font-medium text-text">{a.name}</span>
+                  <small className="truncate text-[12px] text-text-muted">{achRowMeta(t, a)}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button type="button" onClick={onOpen} className="mt-2 font-sans text-[12px] font-semibold text-accent hover:underline">
           {t('game:storeTab.seeAll', { total })}
         </button>
       </div>
     </section>
+  );
+}
+
+/** The second line under an achievement row: when it was unlocked, else the
+ *  global share (dates and percents go through lib/format for the locale). */
+function achRowMeta(t: (key: string, vars?: Record<string, unknown>) => string, a: { unlocked: boolean; unlocked_at?: number | null; global_percent?: number | null }): string {
+  if (a.unlocked && a.unlocked_at) return t('game:progress.unlockedOn', { date: formatDate(a.unlocked_at) });
+  if (a.global_percent) return t('game:progress.shareOfPlayers', { share: formatPercentValue(a.global_percent) });
+  return '';
+}
+
+type AchShow = 'all' | 'got' | 'locked';
+type AchSort = 'recent' | 'rare';
+
+interface AchRow {
+  id: string;
+  name: string;
+  desc: string;
+  icon: string;
+  hidden: boolean;
+  unlocked: boolean;
+  at: number | null;
+  pct: number | null;
+}
+
+/** The achievements tab as rows (the lab's AchList over .pg-achrows): two
+ *  segment controls (All/Unlocked/Locked + Recent/Rarest) above the rows.
+ *  Atlas-only (this file renders only for game.structure = tabs). Locked
+ *  hidden achievements stay secret until unlocked, like the lab. */
+function AchRows({ d }: { d: GameTabsData }) {
+  const { t } = useTranslation('game');
+  const [show, setShow] = useState<AchShow>('all');
+  const [sort, setSort] = useState<AchSort>('recent');
+  useEffect(() => { setShow('all'); setSort('recent'); }, [d.game.id]);
+  const { all, rows } = useMemo(() => {
+    const src: { id: string; name: string; description: string; icon: string; hidden?: boolean; unlocked: boolean; unlocked_at?: number | null; global_percent?: number | null }[] =
+      d.progress?.list ?? d.ach?.list ?? [];
+    const all: AchRow[] = src.map((a) => ({
+      id: a.id || a.name,
+      name: a.name,
+      desc: a.description,
+      icon: a.icon,
+      hidden: !!a.hidden,
+      unlocked: a.unlocked,
+      at: a.unlocked && a.unlocked_at ? a.unlocked_at : null,
+      pct: a.global_percent ?? null,
+    }));
+    const shown = all.filter((a) => (show === 'all' ? true : show === 'got' ? a.unlocked : !a.unlocked));
+    const list = [...shown];
+    if (sort === 'rare') {
+      list.sort((x, y) => (x.pct ?? 101) - (y.pct ?? 101));
+    } else {
+      list.sort((x, y) => {
+        if (x.unlocked !== y.unlocked) return x.unlocked ? -1 : 1;
+        if (x.unlocked) return (y.at ?? 0) - (x.at ?? 0);
+        return (y.pct ?? -1) - (x.pct ?? -1);
+      });
+    }
+    return { all, rows: list };
+  }, [d.progress, d.ach, show, sort]);
+  const total = d.progress?.total ?? d.ach?.total ?? all.length;
+  const nGot = all.filter((a) => a.unlocked).length;
+  const seg = (active: boolean) =>
+    cx(
+      'h-[26px] rounded-md px-2.5 text-[13px] tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+      active ? 'bg-surface-strong text-text ring-1 ring-hairline' : 'text-text-muted hover:text-text',
+    );
+  return (
+    <div className="grid max-w-[920px] gap-3 px-6 pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div role="radiogroup" aria-label={t('game:achList.show')} className="inline-flex gap-0.5 rounded-lg bg-surface p-0.5 ring-1 ring-hairline">
+          {([['all', t('game:achList.all', { count: all.length })], ['got', t('game:achList.unlocked', { count: nGot })], ['locked', t('game:achList.locked', { count: all.length - nGot })]] as [AchShow, string][]).map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={show === id} onClick={() => setShow(id)} className={seg(show === id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div role="radiogroup" aria-label={t('game:achList.sort')} className="inline-flex gap-0.5 rounded-lg bg-surface p-0.5 ring-1 ring-hairline">
+          {([['recent', t('game:achList.recent')], ['rare', t('game:achList.rarest')]] as [AchSort, string][]).map(([id, label]) => (
+            <button key={id} type="button" role="radio" aria-checked={sort === id} onClick={() => setSort(id)} className={seg(sort === id)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-4 text-[13px] text-text-muted">{t('game:achList.none')}</p>
+      ) : (
+        <ul>
+          {rows.map((a) => {
+            const secret = a.hidden && !a.unlocked;
+            return (
+              <li key={a.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-hairline py-[9px]">
+                <span className="relative block h-11 w-11 flex-none overflow-hidden rounded-md bg-surface-strong">
+                  {a.icon ? (
+                    <img src={a.icon} alt="" loading="lazy" className={cx('h-full w-full object-cover', !a.unlocked && 'opacity-50 grayscale')} />
+                  ) : (
+                    <span className="grid h-full w-full place-items-center"><Trophy className="h-4 w-4 text-text-muted" aria-hidden /></span>
+                  )}
+                  {!a.unlocked && a.icon && <Lock className="absolute bottom-[3px] right-[3px] h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,1)]" aria-hidden />}
+                </span>
+                <span className="grid min-w-0 gap-0.5">
+                  <span className={cx('truncate text-[13.5px] font-semibold', !a.unlocked && 'text-text-muted')}>{secret ? t('game:achList.hiddenName') : a.name}</span>
+                  <span className="flex items-center gap-1 text-[12.5px] text-text-muted">
+                    {secret ? (<><EyeOff className="h-3 w-3 flex-none" aria-hidden />{t('game:achList.hiddenDesc')}</>) : a.desc}
+                  </span>
+                </span>
+                <span className="grid justify-items-end gap-[3px] whitespace-nowrap text-[12px]">
+                  {a.unlocked && a.at ? (
+                    <span className="text-text">{t('game:progress.unlockedOn', { date: formatDate(a.at) })}</span>
+                  ) : (
+                    <span className="text-text-faint">{t('game:achList.lockedLabel')}</span>
+                  )}
+                  {a.pct != null && <span className="tabular-nums text-text-muted">{t('game:progress.shareOfPlayers', { share: formatPercentValue(a.pct) })}</span>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {total > all.length && (
+        <p className="text-[12px] text-text-muted">
+          {d.progress
+            ? t('game:progress.showing', { shown: all.length, total })
+            : t('game:achievements.showing', { shown: all.length, total, reason: t('game:achievements.reasonHighlight') })}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -508,21 +663,24 @@ function ActivityTab({ events }: { events: ActivityEvent[] }) {
   );
 }
 
-function BackupTable({ game, onNotify }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void }) {
+function BackupTable({ game, onNotify, onCount }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; onCount?: (n: number | undefined) => void }) {
   const { t } = useTranslation('game');
   const [backups, setBackups] = useState<SaveBackup[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string; what: 'restore' | 'delete' } | null>(null);
   const locale = currentLocale();
+  const countRef = useRef(onCount);
+  countRef.current = onCount;
   const reload = useCallback(() => {
     Effect.runPromise(LauncherApi.listSaveBackups(game.id)).then(
-      (v) => setBackups(v ?? []),
-      () => setBackups([]),
+      (v) => { setBackups(v ?? []); countRef.current?.((v ?? []).length); },
+      () => { setBackups([]); countRef.current?.(0); },
     );
   }, [game.id]);
   useEffect(() => {
     setBackups(null);
     setConfirm(null);
+    countRef.current?.(undefined);
     reload();
   }, [reload]);
   const backupNow = () => {
@@ -603,16 +761,159 @@ function BackupTable({ game, onNotify }: { game: Game; onNotify: (msg: string, k
   );
 }
 
-function SavesTab({ d }: { d: GameTabsData }) {
+/** The cloud saves state and mode as one slim row under the backups table
+ *  (the lab's .srow: plain text on the left, a 190px select on the right).
+ *  Atlas-only (this file renders only for game.structure = tabs). The badge
+ *  stays hidden under label.style = plain: the status reads as plain text. */
+function CloudSlimRow({ game, plain }: { game: Game; plain: boolean }) {
+  const { t } = useTranslation('cloud');
+  const [info, setInfo] = useState<CloudInfo | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const gameRef = useRef(game);
+  gameRef.current = game;
+
+  const refresh = useCallback(() => {
+    return Effect.runPromise(LauncherApi.getCloudInfo(gameRef.current)).then(setInfo).catch((e) => setError(coreErrMsg(e)));
+  }, []);
+
+  const check = useCallback(() => {
+    setChecking(true);
+    setError(null);
+    return Effect.runPromise(LauncherApi.checkCloudSaves(gameRef.current))
+      .then(setInfo)
+      .catch((e) => setError(coreErrMsg(e)))
+      .finally(() => setChecking(false));
+  }, []);
+
+  // Load the last known state; like the panel, look once per session when
+  // there is none yet.
+  useEffect(() => {
+    let live = true;
+    setInfo(null);
+    setError(null);
+    Effect.runPromise(LauncherApi.getCloudInfo(game))
+      .then((i) => {
+        if (!live) return;
+        setInfo(i);
+        if (!i.status && i.mode !== 'off' && !slimAutoChecked.has(game.id)) {
+          slimAutoChecked.add(game.id);
+          void check();
+        }
+      })
+      .catch((e) => live && setError(coreErrMsg(e)));
+    return () => { live = false; };
+    // Reload for another game, not on every settings edit of this one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+
+  useEffect(
+    () =>
+      onCloud((e) => {
+        if (e.game_id !== game.id || e.kind === 'progress') return;
+        void refresh();
+      }),
+    [game.id, refresh],
+  );
+
+  useEffect(
+    () =>
+      onSession((e) => {
+        if (e.game_id === game.id) void refresh();
+      }),
+    [game.id, refresh],
+  );
+
+  const setMode = (v: CloudMode | 'default') => {
+    setError(null);
+    Effect.runPromise(LauncherApi.setCloudGameMode(game.id, v === 'default' ? '' : v))
+      .then(refresh)
+      .catch((e) => setError(coreErrMsg(e)));
+  };
+
+  const st = info?.status ?? null;
+  const chip = st ? stateChip(st.state) : null;
+  const busy = checking || !!info?.busy;
+  const when = st?.checkedAt ? agoLabel(st.checkedAt) : '';
+  const conflicted = st?.state === 'conflict' && (st.conflicts?.length ?? 0) > 0;
+  const mode: CloudMode | 'default' = info ? (info.game_mode ? asCloudMode(info.game_mode) : 'default') : 'default';
+
+  return (
+    <div className="flex items-center gap-[18px] border-t border-hairline px-6 py-3.5">
+      <div className="grid min-w-0 flex-1 gap-0.5 text-[13px]">
+        {conflicted ? (
+          <span>
+            <button type="button" onClick={() => setResolving(true)} className="font-sans font-semibold text-accent hover:underline">
+              {t('cloud:panel.choose')}
+            </button>
+          </span>
+        ) : busy ? (
+          <span className="text-text-muted">{t('cloud:state.checking')}…</span>
+        ) : st && chip ? (
+          <span className="truncate text-text-muted">
+            {!plain && <Badge data-testid="cloud-state" variant={chip.variant}>{chip.label}</Badge>}{' '}
+            {chip.label}
+            {when && <span> · {t('cloud:panel.checked', { when })}</span>}
+          </span>
+        ) : (
+          <span className="truncate text-text-muted">
+            {!plain && <Badge data-testid="cloud-state" variant="neutral">{t('cloud:state.unchecked')}</Badge>}{' '}
+            {info?.mode === 'off' ? t('cloud:state.off') : t('cloud:state.unchecked')}
+            {info && info.mode !== 'off' && (
+              <>{' · '}<button type="button" onClick={() => void check()} disabled={checking} className="font-sans font-semibold text-accent hover:underline disabled:opacity-60">
+                {t('cloud:panel.check')}
+              </button></>
+            )}
+          </span>
+        )}
+        {error && <span className="truncate text-[12px] text-danger">{error}</span>}
+        {info && !conflicted && <span className="sr-only">{modeHelp(info.mode)}</span>}
+      </div>
+      <Select value={mode} onValueChange={(v) => setMode(v as CloudMode | 'default')} disabled={!info}>
+        <SelectTrigger aria-label={t('cloud:panel.modeLabel')} className="h-8 w-[190px] flex-none font-sans text-[13px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="default" className="font-sans text-[13px]">{t('cloud:panel.defaultOption', { mode: modeName(asCloudMode(info?.plugin_mode ?? 'ask')) })}</SelectItem>
+          <SelectItem value="off" className="font-sans text-[13px]">{t('cloud:mode.off')}</SelectItem>
+          <SelectItem value="ask" className="font-sans text-[13px]">{t('cloud:mode.ask')}</SelectItem>
+          <SelectItem value="auto" className="font-sans text-[13px]">{t('cloud:mode.auto')}</SelectItem>
+        </SelectContent>
+      </Select>
+      {resolving && st && (
+        <CloudConflictDialog
+          game={game}
+          status={st}
+          onClose={() => setResolving(false)}
+          onResolved={(next) => {
+            setInfo(next);
+            if (next.status?.state !== 'conflict') setResolving(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Games already checked on their own this session (the slim row checks once,
+ *  like the panel does; the two never mount together). */
+const slimAutoChecked = new Set<string>();
+
+function SavesTab({ d, onCount }: { d: GameTabsData; onCount?: (n: number | undefined) => void }) {
+  // The badge stays hidden under label.style = plain: the slim row reads as
+  // plain text (atlas sets plain; other themes never render these tabs).
+  const plain = useVariant('label.style') === 'plain';
   return (
     <div>
-      {/* The cloud saves controls sit above the table as a slim row. */}
+      {/* The backups table first, then the cloud status and mode as one slim
+          row (the lab's SavesTable over .tbl, with .srow controls). */}
+      <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} onCount={onCount} />
       {d.plugin && (
-        <div className="border-b border-hairline bg-raised px-6 py-2.5">
-          <CloudSavesPanel game={d.game} plugin={d.plugin} framed={false} />
-        </div>
+        <CapabilitySurface plugin={d.plugin} capability="cloud-saves" game={d.game}>
+          <CloudSlimRow game={d.game} plain={plain} />
+        </CapabilitySurface>
       )}
-      <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} />
     </div>
   );
 }
@@ -651,9 +952,20 @@ function CompatTab({ d, info }: { d: GameTabsData; info: ReturnType<typeof useCo
 export function GameTabsView(d: GameTabsData) {
   const { t } = useTranslation('game');
   const [tab, setTab] = useState<TabId>('store');
+  const [savesCount, setSavesCount] = useState<number | undefined>(undefined);
   const { compat: info } = useCompat(d.game);
   const crash = useCrashHints(d.game, d.session?.state === 'running' || d.session?.state === 'starting' || d.launching);
-  useEffect(() => setTab('store'), [d.game.id]);
+  useEffect(() => { setTab('store'); setSavesCount(undefined); }, [d.game.id]);
+  // The saves tab count reads the local backups (the tab's own table reports
+  // again when it loads, so a backup made on the tab updates it).
+  useEffect(() => {
+    let live = true;
+    Effect.runPromise(LauncherApi.listSaveBackups(d.game.id)).then(
+      (v) => { if (live) setSavesCount((v ?? []).length); },
+      () => { if (live) setSavesCount(0); },
+    );
+    return () => { live = false; };
+  }, [d.game.id]);
 
   const hasAch = (d.progress?.total ?? d.ach?.total ?? 0) > 0;
   const achCount = hasAch ? `${d.progress?.unlocked ?? d.ach?.unlocked ?? 0}/${d.progress?.total ?? d.ach?.total ?? 0}` : undefined;
@@ -663,7 +975,7 @@ export function GameTabsView(d: GameTabsData) {
     { id: 'store', label: t('game:tabs.store') },
     ...(hasAch ? [{ id: 'achievements' as TabId, label: t('game:tabs.achievements'), count: achCount }] : []),
     { id: 'activity', label: t('game:tabs.activity'), count: d.events.length },
-    { id: 'saves', label: t('game:tabs.saves') },
+    { id: 'saves', label: t('game:tabs.saves'), count: savesCount },
     { id: 'compat', label: t('game:tabs.compat'), count: compatCount },
   ];
   const cur: TabId = tabs.some((x) => x.id === tab) ? tab : 'store';
@@ -752,13 +1064,9 @@ export function GameTabsView(d: GameTabsData) {
             </aside>
           </div>
         )}
-        {cur === 'achievements' && (
-          <div className="max-w-[920px] px-6 pt-5">
-            {d.progress ? <ProgressAchievements progress={d.progress} /> : d.ach && d.ach.total > 0 ? <AchievementsSection ach={d.ach} known={d.ach.unlocked >= 0} viaSteam={d.game.source === 'steam'} /> : null}
-          </div>
-        )}
+        {cur === 'achievements' && <AchRows d={d} />}
         {cur === 'activity' && <ActivityTab events={d.events} />}
-        {cur === 'saves' && <SavesTab d={d} />}
+        {cur === 'saves' && <SavesTab d={d} onCount={setSavesCount} />}
         {cur === 'compat' && (
           <div>
             {crash && (

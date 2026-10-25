@@ -176,6 +176,7 @@
     "heading": "About",
     "showMore": "Show more",
     "showLess": "Show less",
+    "readFull": "Read the full description",
     "noDescription": "No store description for this title.",
     "storeUnavailable": "Store data unavailable: {{error}}",
     "developer": "Developer",
@@ -364,6 +365,19 @@
     "saved": "Saved",
     "failed": "Failed"
   },
+  "achList": {
+    "show": "Show",
+    "sort": "Sort",
+    "all": "All {{count}}",
+    "unlocked": "Unlocked {{count}}",
+    "locked": "Locked {{count}}",
+    "recent": "Recent",
+    "rarest": "Rarest",
+    "lockedLabel": "Locked",
+    "hiddenName": "Hidden achievement",
+    "hiddenDesc": "Keep playing to reveal it.",
+    "none": "No achievements match this filter."
+  },
   "tabs": {
     "label": "Game page",
     "store": "Store page",
@@ -379,6 +393,7 @@
     "saveConflict": "Save conflict, resolve",
     "saveSynced": "Saves in sync",
     "saveSyncing": "Uploading save",
+    "saveUnchecked": "Saves not checked",
     "saveLocal": "Local saves only",
     "saveOff": "Cloud saves off",
     "launchFrom": "Launch from",

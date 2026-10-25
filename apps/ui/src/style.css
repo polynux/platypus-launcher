@@ -20,6 +20,7 @@
   --color-hairline: rgba(255, 255, 255, 0.07);
   --color-accent: oklch(82.8% 0.189 84.429);
   --color-accent-strong: oklch(87.9% 0.169 91.605);
+  --color-accent-dim: #2f240d;
   --color-on-accent: #130f0a;
   --color-ok: oklch(76.5% 0.177 163.223);
   --color-attention: oklch(75% 0.183 55.934);
@@ -374,6 +375,7 @@
 @property --color-text-faint { syntax: "<color>"; inherits: true; initial-value: #78716c; }
 @property --color-accent { syntax: "<color>"; inherits: true; initial-value: oklch(82.8% 0.189 84.429); }
 @property --color-accent-strong { syntax: "<color>"; inherits: true; initial-value: oklch(87.9% 0.169 91.605); }
+@property --color-accent-dim { syntax: "<color>"; inherits: true; initial-value: #2f240d; }
 @property --color-on-accent { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
 @property --background { syntax: "<color>"; inherits: true; initial-value: #130f0a; }
 @property --card { syntax: "<color>"; inherits: true; initial-value: #191410; }
@@ -396,7 +398,7 @@
     --color-ground, --color-raised, --color-surface, --color-surface-strong,
     --color-hairline, --color-text, --color-text-body, --color-text-muted,
     --color-text-faint, --color-accent, --color-accent-strong,
-    --color-on-accent, --background, --card, --card-foreground, --popover,
+    --color-accent-dim, --color-on-accent, --background, --card, --card-foreground, --popover,
     --popover-foreground, --primary, --primary-foreground, --accent-foreground,
     --secondary, --muted, --muted-foreground, --border, --input;
   transition-duration: 600ms;

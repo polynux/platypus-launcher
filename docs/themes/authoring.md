@@ -61,10 +61,12 @@ Every token is a string. A non-string warns and keeps the built-in value.
 An unknown token name warns and is ignored. One bad token costs only that
 token.
 
-Colour tokens (18): `ground`, `raised`, `surface`, `surface-strong`,
+Colour tokens (19): `ground`, `raised`, `surface`, `surface-strong`,
 `hairline`, `text`, `text-body`, `text-muted`, `text-faint`, `accent`,
-`accent-strong`, `on-accent`, `ok`, `attention`, `info`, `dl`, `danger`,
-`focus`.
+`accent-strong`, `accent-dim`, `on-accent`, `ok`, `attention`, `info`, `dl`,
+`danger`, `focus`. `accent-dim` is the dim shade of the accent: the game page
+action strip in a theme that takes the game's colour (the game tone repaints
+it from the art; without a tone it is the theme's own value).
 
 A colour is a hex (`#abc`, `#abcd`, `#aabbcc`, `#aabbccdd`), `transparent`,
 or `rgb()` / `rgba()` / `hsl()` / `hsla()` / `oklch()` with plain numbers

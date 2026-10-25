@@ -176,6 +176,7 @@
     "heading": "À propos",
     "showMore": "Afficher plus",
     "showLess": "Afficher moins",
+    "readFull": "Lire la description complète",
     "noDescription": "Pas de description de la boutique pour ce titre.",
     "storeUnavailable": "Données de la boutique indisponibles : {{error}}",
     "developer": "Développeur",
@@ -364,6 +365,19 @@
     "saved": "Enregistré",
     "failed": "Échec"
   },
+  "achList": {
+    "show": "Afficher",
+    "sort": "Trier",
+    "all": "Tous {{count}}",
+    "unlocked": "Débloqués {{count}}",
+    "locked": "Verrouillés {{count}}",
+    "recent": "Récents",
+    "rarest": "Les plus rares",
+    "lockedLabel": "Verrouillé",
+    "hiddenName": "Succès caché",
+    "hiddenDesc": "Continuez à jouer pour le révéler.",
+    "none": "Aucun succès ne correspond à ce filtre."
+  },
   "tabs": {
     "label": "Page du jeu",
     "store": "Page boutique",
@@ -379,6 +393,7 @@
     "saveConflict": "Conflit de sauvegardes, résoudre",
     "saveSynced": "Sauvegardes synchronisées",
     "saveSyncing": "Envoi de la sauvegarde",
+    "saveUnchecked": "Sauvegardes non vérifiées",
     "saveLocal": "Sauvegardes locales uniquement",
     "saveOff": "Sauvegardes cloud désactivées",
     "launchFrom": "Lancer depuis",

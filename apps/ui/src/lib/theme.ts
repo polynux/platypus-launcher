@@ -48,6 +48,7 @@ export const TOKEN_VARS: Record<string, string[]> = {
   'text-faint': ['--color-text-faint'],
   accent: ['--color-accent', '--primary'],
   'accent-strong': ['--color-accent-strong'],
+  'accent-dim': ['--color-accent-dim'],
   'on-accent': ['--color-on-accent', '--primary-foreground', '--accent-foreground'],
   ok: ['--color-ok'],
   attention: ['--color-attention'],

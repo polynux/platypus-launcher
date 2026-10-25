@@ -287,38 +287,36 @@ export function GameInstallNote({ game, plugin, installing, installSize, job, ca
   const showNote = !active && (game.note || installing);
   const tabs = useVariant('game.structure') === 'tabs';
   if (tabs) {
-    // Atlas: slim full-width rows directly under the strip, flush with no
-    // outer card. The install note is muted text on k-bg with a hairline
-    // bottom border; the failed attempt warns with an attention tint.
+    // Atlas: one slim muted row directly under the strip, flush with no
+    // outer card. The install size lives in the Install button, so the row
+    // carries only the note and the folder links (sans, accent, underlined
+    // on hover). The failed attempt warns with an attention tint.
     if (!showNote && !refreshing) return null;
     return (
       <div className="empty:hidden">
         {showNote && (
-          <div className="flex items-center gap-3 border-b border-hairline bg-raised px-6 py-2.5 text-[13px] text-text-muted">
+          <div className="flex items-center gap-3 border-b border-hairline bg-raised px-6 py-2.5 text-[12.5px] text-text-muted">
             <p className="min-w-0 flex-1 leading-relaxed">
               {game.note && <span>{game.note} </span>}
               {installing && plugin && (
-                <>
-                  <InstallSizeLine size={installSize} />{' '}
-                  <span className="font-sans text-[12px]">
-                    {canChooseVersion ? (
-                      <Trans
-                        i18nKey="game:install.noteWithVersion"
-                        values={{ folder: plugin.install_folder }}
-                        components={{
-                          v: <NoteLink onClick={onOpenVersions} />,
-                          d: <NoteLink onClick={onOpenPlugins} />,
-                        }}
-                      />
-                    ) : (
-                      <Trans
-                        i18nKey="game:install.notePlain"
-                        values={{ folder: plugin.install_folder }}
-                        components={{ d: <NoteLink onClick={onOpenPlugins} /> }}
-                      />
-                    )}
-                  </span>
-                </>
+                <span>
+                  {canChooseVersion ? (
+                    <Trans
+                      i18nKey="game:install.noteWithVersion"
+                      values={{ folder: plugin.install_folder }}
+                      components={{
+                        v: <TabsNoteLink onClick={onOpenVersions} />,
+                        d: <TabsNoteLink onClick={onOpenPlugins} />,
+                      }}
+                    />
+                  ) : (
+                    <Trans
+                      i18nKey="game:install.notePlain"
+                      values={{ folder: plugin.install_folder }}
+                      components={{ d: <TabsNoteLink onClick={onOpenPlugins} /> }}
+                    />
+                  )}
+                </span>
               )}
             </p>
             {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="flex-none" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
@@ -1257,11 +1255,11 @@ export function AboutSection({ game, details, loading, error, compatUrls, onOpen
           </div>
         ) : html ? (
           <>
-            <div className={expanded ? '' : 'max-h-[104px] overflow-hidden'} data-testid="about-html-wrap">
+            <div className={expanded ? '' : 'max-h-[760px] overflow-hidden [mask-image:linear-gradient(#000_70%,transparent)]'} data-testid="about-html-wrap">
               <SafeHtml html={html} testid="about-html" className="text-[14px] leading-[1.62] [&_h2]:text-[14px] [&_h3]:text-[13px] [&_h4]:text-[13px] [&_li]:text-[14px] [&_li]:leading-[1.62] [&_p]:text-[14px] [&_p]:leading-[1.62] [&_ul]:text-[14px]" />
             </div>
-            <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-1.5 rounded px-0 font-sans text-[13px] font-semibold text-accent hover:bg-transparent hover:text-text">
-              {expanded ? t('game:about.showLess') : t('game:about.showMore')}
+            <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-2.5 rounded px-0 font-sans text-[13px] font-semibold text-accent hover:bg-transparent hover:text-text">
+              {expanded ? t('game:about.showLess') : t('game:about.readFull')}
             </Button>
           </>
         ) : summary ? (
@@ -1847,6 +1845,17 @@ function NoteLink({ onClick, children }: { onClick: () => void; children?: React
     <Button variant="ghost" size="none" onClick={onClick} className="inline-flex rounded-none px-0 font-mono text-[12px] font-normal underline decoration-white/25 underline-offset-2 hover:bg-transparent hover:text-white/80">
       {children}
     </Button>
+  );
+}
+
+/** The install note's folder links in the tabs row: plain sans text in the
+ *  accent, underlined on hover (the lab's link style, not the mono links the
+ *  sections page keeps). Only the tabs row uses it. */
+function TabsNoteLink({ onClick, children }: { onClick: () => void; children?: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="inline font-sans text-accent hover:underline">
+      {children}
+    </button>
   );
 }
 
