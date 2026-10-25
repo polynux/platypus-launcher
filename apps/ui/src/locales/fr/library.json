@@ -149,7 +149,10 @@
     "sort": {
       "recent": "Récents",
       "title": "Titre",
-      "hours": "Les plus joués"
+      "hours": "Les plus joués",
+      "year": "Année",
+      "size": "Taille",
+      "tier": "Niveau"
     },
     "empty": "Rien ici.",
     "showAll": "Afficher tous les jeux",
@@ -159,7 +162,7 @@
     "addGame": "Ajouter un jeu",
     "filtersAria": "Filtres de la bibliothèque",
     "warnings_one": "Une source nécessite votre attention",
-    "warnings_other": "{count} sources nécessitent votre attention",
+    "warnings_other": "{{count}} sources nécessitent votre attention",
     "filterCompat": "Compatibilité",
     "filterStatus": "Statut",
     "filterLending": "Prêtés",
@@ -167,5 +170,6 @@
     "filterAny": "Tous",
     "filterReset": "Réinitialiser les filtres",
     "rowCollections": "Collections…"
-  }
+  },
+  "scannedFooter": "Analysée {{time}}"
 }

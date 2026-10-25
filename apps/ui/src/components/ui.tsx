@@ -18,6 +18,9 @@ import { TIER_MEANING } from '../lib/compat';
 
 export const cx = cn;
 
+/** The launcher version stamped in the shell footers (sidebar, topbar, sourcebar). */
+export const APP_VERSION = 'platypus v0.2';
+
 export function Panel({ className, children, as: Tag = 'div' }: { className?: string; children: React.ReactNode; as?: 'div' | 'section' | 'aside' }) {
   return <Tag className={cx('rounded-3xl bg-surface p-5 ring-1 ring-hairline', className)}>{children}</Tag>;
 }

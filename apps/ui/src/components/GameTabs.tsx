@@ -17,6 +17,7 @@ import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
 import { CopyCompareDialog } from './CopyCompareDialog';
 import { PluginLogo } from './PluginLogo';
+import { ErrorNotice } from './ErrorNotice';
 import { CrashHintsPanel } from './CrashHints';
 import { CapabilitySurface } from '../lib/capabilities';
 import { agoLabel, asCloudMode, modeHelp, modeName, stateChip } from '../lib/cloud';
@@ -777,7 +778,7 @@ function AtlasCollections({ d }: { d: GameTabsData }) {
           onClick={() => d.onManageCollections?.(d.game.id)}
           className="mt-2 text-[12.5px] font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          {t('collections:addToCollection')}
+          {mine.length > 0 ? t('collections:manage') : t('collections:addToCollection')}
         </button>
       )}
     </section>
@@ -792,27 +793,40 @@ function AtlasStatusNotes({ d }: { d: GameTabsData }) {
   const [status, setStatus] = useState(d.game.status ?? '');
   const [notes, setNotes] = useState(d.game.user_notes ?? '');
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  // A save in flight owns the draft: an external change landing mid-save
+  // must not clobber it.
+  const savingRef = useRef(false);
   useEffect(() => {
     setStatus(d.game.status ?? '');
     setNotes(d.game.user_notes ?? '');
     setState('idle');
+    savingRef.current = false;
   }, [d.game.id]);
+  // Another surface saved while this game sits on the stage (the drawer, a
+  // rescan): follow it, unless a save from here is still running.
+  useEffect(() => {
+    if (savingRef.current) return;
+    setStatus(d.game.status ?? '');
+    setNotes(d.game.user_notes ?? '');
+  }, [d.game.status, d.game.user_notes]);
   if (!d.onSaveStatus && !d.onSaveNotes) return null;
   const saveStatus = (next: GameStatus) => {
     setStatus(next);
     if (!d.onSaveStatus) return;
+    savingRef.current = true;
     d.onSaveStatus(d.game.id, next).then(
-      (info) => { setStatus(info.status); d.onStatusChanged?.(); },
-      () => { setStatus(d.game.status ?? ''); },
+      (info) => { savingRef.current = false; setStatus(info.status); d.onStatusChanged?.(); },
+      () => { savingRef.current = false; setStatus(d.game.status ?? ''); },
     );
   };
   const saveNotes = () => {
     const text = notes;
     if (text === (d.game.user_notes ?? '') || !d.onSaveNotes) return;
     setState('saving');
+    savingRef.current = true;
     d.onSaveNotes(d.game.id, text).then(
-      () => { setState('saved'); d.onStatusChanged?.(); },
-      () => { setState('failed'); },
+      () => { savingRef.current = false; setState('saved'); d.onStatusChanged?.(); },
+      () => { savingRef.current = false; setState('failed'); },
     );
   };
   return (
@@ -1322,6 +1336,11 @@ export function GameTabsView(d: GameTabsData) {
           padding, with no outer card and no page padding around them. */}
       <div className="empty:hidden">
         {d.plugin && <GameOutsideAlert game={d.game} plugin={d.plugin} onAllowFolder={d.onAllowFolder} />}
+        {!d.game.is_installed && d.job?.state === 'failed' && (
+          <div className="border-b border-hairline bg-raised px-6 py-3">
+            <ErrorNotice message={d.job.error ?? ''} fallback={t('game:install.lastAttempt')} />
+          </div>
+        )}
         <GameInstallNote
           game={d.game}
           plugin={d.plugin}

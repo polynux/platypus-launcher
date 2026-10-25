@@ -443,6 +443,7 @@ describe('sourcebar activity footer (issue #125)', () => {
   });
 
   it('shows the last scan, offline marker and version in the Atlas footer (issue #132)', async () => {
+    shellState.navigation = 'sourcebar';
     const { SourceFooter } = await import('../Shell');
     const { container } = render(
       <SourceFooter
@@ -454,9 +455,31 @@ describe('sourcebar activity footer (issue #125)', () => {
       />
     );
     expect(container.querySelector('[data-region="sourcebar-footer"]')?.className).toMatch(/h-7/);
-    expect(screen.getByText(/scanned/)).toBeInTheDocument();
+    expect(screen.getByText(/Scanned/)).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/Offline/);
     expect(screen.getByText('platypus v0.2')).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('dots the Plugins item when a plugin needs attention (issue #132)', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    render(<Shell {...atlasBarProps} view={{ name: 'library' }} authNeeded />);
+    await user.click(screen.getByRole('button', { name: 'Places' }));
+    const plugins = screen.getByRole('menuitem', { name: /Plugins/ });
+    expect(plugins.querySelector('[aria-label="needs attention"]')).toBeTruthy();
+  });
+
+  it('leaves All and Installed inactive with a collection active (issue #132)', () => {
+    shellState.navigation = 'sourcebar';
+    render(
+      <Shell
+        {...atlasBarProps}
+        view={{ name: 'library', collection: 'couch' }}
+        collections={[{ id: 'couch', name: 'Couch co-op' }]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /^Installed/ })).toHaveAttribute('aria-pressed', 'false');
   });
 });

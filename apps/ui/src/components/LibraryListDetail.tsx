@@ -4,20 +4,23 @@
 // here; the grid keeps today's LibraryView path exactly, so warm, cool and
 // slate render as before.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { CircleAlert, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { useTranslation, Trans } from 'react-i18next';
+import { ArrowDown, ArrowUp, CircleAlert, LogIn, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import type { Collection, Game, SourceWarning, StoreType } from '../types';
 import { Input } from './ds/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { cx } from './ui';
-import { byRecent, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason } from '../lib/games';
-import { sortKey } from '../lib/customize';
+import { heroImages, lastPlayedAgo, needsAttention, attentionReason } from '../lib/games';
 import { collectionPredicate, missingNames } from '../lib/collections';
-import { TierFilterControl, StatusFilterControl, matchesExtraFilters, type StatusFilter } from './LibraryView';
+import { TierFilterControl, StatusFilterControl, matchesExtraFilters, sortGames, defaultDir, type Sort, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
 
-type ListSort = 'recent' | 'title' | 'hours';
+type ListSort = 'recent' | 'title' | 'hours' | 'year' | 'size' | 'tier';
+
+/** Atlas 'recent' is the classic 'last played' order, newest first. */
+const toSort = (s: ListSort, dir: 'asc' | 'desc'): Sort =>
+  s === 'recent' ? { key: 'last', dir } : { key: s, dir };
 
 interface ListDetailProps {
   games: Game[];
@@ -41,20 +44,16 @@ interface ListDetailProps {
   onAddGame?: () => void;
   /** Source warnings (issue #132): the classic LibraryWarnings content as a compact one-line notice. */
   warnings?: SourceWarning[];
+  /** Store names by source id, for the logged-out warning (like the classic list). */
+  pluginName?: (id: string) => string;
   /** Opens the Plugins view for a warning's login/plugins action. */
   onOpenPlugins?: () => void;
   /** Right-click (or the context-menu key) on a row opens the game's collections dialog. */
   onManageCollections?: (gameId: string) => void;
   /** The row menu's settings entry opens the game settings for that game. */
   onOpenSettings?: (gameId: string) => void;
-}
-
-function sortList(games: Game[], sort: ListSort): Game[] {
-  const list = [...games];
-  if (sort === 'title') list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  else if (sort === 'hours') list.sort((a, b) => (hoursPlayed(b) ?? -1) - (hoursPlayed(a) ?? -1) || a.title.localeCompare(b.title));
-  else list.sort(byRecent);
-  return list;
+  /** The row menu's install entry queues an install for that game. */
+  onInstall?: (game: Game) => void;
 }
 
 /** Sub-line under the title: the relative "ago" ("6 h ago", "yesterday",
@@ -67,16 +66,20 @@ function subLine(t: (k: string) => string, g: Game): { text: string; absent: boo
 }
 
 export function LibraryListDetail(p: ListDetailProps) {
-  const { t } = useTranslation(['library', 'game', 'collections']);
+  const { t } = useTranslation(['library', 'game', 'collections', 'nav']);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<ListSort>('recent');
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   // Atlas parity (issue #132): the classic tier/status/lending filters, reused
   // from LibraryView (no duplicated predicates).
   const [tier, setTier] = useState<TierFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [lending, setLending] = useState<'all' | 'with-me'>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  // The row menu needs a reason to exist: collections, settings or install.
+  const hasMenu = !!(p.onManageCollections || p.onOpenSettings || p.onInstall);
+  const menuGame = menu ? p.games.find((g) => g.id === menu.id) : undefined;
   const hasBorrowed = p.games.some((g) => g.shared_by != null);
   const lendingFilter = hasBorrowed ? lending : 'all';
   const extraCount = [tier !== 'all', statusFilter !== 'all', lendingFilter !== 'all'].filter(Boolean).length;
@@ -116,8 +119,8 @@ export function LibraryListDetail(p: ListDetailProps) {
         matchesExtraFilters(g, tier, statusFilter, lendingFilter) &&
         (q === '' || g.title.toLowerCase().includes(q)),
     );
-    return sortList(list, sort);
-  }, [p.games, p.ownership, p.source, p.storeSelection, inCollection, query, sort, tier, statusFilter, lendingFilter]);
+    return sortGames(list, toSort(sort, dir));
+  }, [p.games, p.ownership, p.source, p.storeSelection, inCollection, query, sort, dir, tier, statusFilter, lendingFilter]);
 
   // The selection is kept across filter changes when possible.
   useEffect(() => {
@@ -161,8 +164,13 @@ export function LibraryListDetail(p: ListDetailProps) {
     // The context-menu key (or Shift+F10) opens the row menu for the focused row.
     else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
       e.preventDefault();
-      const id = (e.target as HTMLElement)?.closest?.('[data-game-row]')?.getAttribute('data-game-row');
-      if (id && (p.onManageCollections || p.onOpenSettings)) { setSelectedId(id); setMenuFor(id); }
+      const el = (e.target as HTMLElement)?.closest?.('[data-game-row]');
+      const id = el?.getAttribute('data-game-row');
+      if (id && hasMenu) {
+        setSelectedId(id);
+        const r = (el as Element).getBoundingClientRect();
+        setMenu({ id, x: r.left, y: r.bottom });
+      }
     }
   };
 
@@ -192,7 +200,7 @@ export function LibraryListDetail(p: ListDetailProps) {
               }}
             />
           </label>
-          <Select value={sort} onValueChange={(v) => setSort(v as ListSort)}>
+          <Select value={sort} onValueChange={(v) => { const next = v as ListSort; setSort(next); setDir(defaultDir(next === 'recent' ? 'last' : next)); }}>
             <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[120px] flex-none bg-surface font-sans text-[13px]">
               <SelectValue />
             </SelectTrigger>
@@ -200,8 +208,20 @@ export function LibraryListDetail(p: ListDetailProps) {
               <SelectItem value="recent" className="font-sans text-[13px]">{t('library:listDetail.sort.recent')}</SelectItem>
               <SelectItem value="title" className="font-sans text-[13px]">{t('library:listDetail.sort.title')}</SelectItem>
               <SelectItem value="hours" className="font-sans text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
+              <SelectItem value="year" className="font-sans text-[13px]">{t('library:listDetail.sort.year')}</SelectItem>
+              <SelectItem value="size" className="font-sans text-[13px]">{t('library:listDetail.sort.size')}</SelectItem>
+              <SelectItem value="tier" className="font-sans text-[13px]">{t('library:listDetail.sort.tier')}</SelectItem>
             </SelectContent>
           </Select>
+          <button
+            type="button"
+            aria-label={dir === 'asc' ? t('library:ascToDesc') : t('library:descToAsc')}
+            title={dir === 'asc' ? t('library:ascending') : t('library:descending')}
+            onClick={() => setDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] bg-surface text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          >
+            {dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
+          </button>
           <DropdownMenu open={filtersOpen} onOpenChange={setFiltersOpen} modal={false}>
             <DropdownMenuTrigger asChild>
               <button
@@ -214,7 +234,7 @@ export function LibraryListDetail(p: ListDetailProps) {
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
                 {extraCount > 0 && (
-                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-mono text-[10px] font-bold tabular-nums text-on-accent">{extraCount}</span>
+                  <span aria-label={t('nav:needsAttention')} className="absolute right-1 top-1 size-1.5 rounded-full bg-accent-strong" />
                 )}
               </button>
             </DropdownMenuTrigger>
@@ -280,15 +300,37 @@ export function LibraryListDetail(p: ListDetailProps) {
         </div>
         {(p.warnings ?? []).length > 0 && (
           <div role="status" className="mx-2.5 mb-2 flex items-center gap-2 rounded-[7px] bg-danger/[0.08] px-2.5 py-2 text-[12px] ring-1 ring-danger/25">
-            <CircleAlert className="h-3.5 w-3.5 flex-none text-danger" aria-hidden />
-            <span className="min-w-0 flex-1 truncate text-text-body">{t('library:listDetail.warnings', { count: (p.warnings ?? []).length })}</span>
-            <button
-              type="button"
-              onClick={() => p.onOpenPlugins?.()}
-              className="flex-none font-semibold text-accent-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              {t('library:plugins')}
-            </button>
+            {(p.warnings ?? []).some((w) => w.needs_auth) ? (
+              <>
+                <LogIn className="h-3.5 w-3.5 flex-none text-danger" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-text-body">
+                  <Trans
+                    i18nKey="library:warningLoggedOut"
+                    values={{ name: (p.pluginName ?? ((id: string) => id))((p.warnings ?? []).find((w) => w.needs_auth)!.source) }}
+                    components={{ name: <span className="font-bold text-danger" /> }}
+                  />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => p.onOpenPlugins?.()}
+                  className="flex-none font-semibold text-accent-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {t('library:login')}
+                </button>
+              </>
+            ) : (
+              <>
+                <CircleAlert className="h-3.5 w-3.5 flex-none text-danger" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-text-body">{t('library:listDetail.warnings', { count: (p.warnings ?? []).length })}</span>
+                <button
+                  type="button"
+                  onClick={() => p.onOpenPlugins?.()}
+                  className="flex-none font-semibold text-accent-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {t('library:plugins')}
+                </button>
+              </>
+            )}
           </div>
         )}
         {filtered.length === 0 ? (
@@ -309,70 +351,90 @@ export function LibraryListDetail(p: ListDetailProps) {
               const on = g.id === selected?.id;
               const art = heroImages(g)[0];
               const attn = needsAttention(g);
-              const hasMenu = !!(p.onManageCollections || p.onOpenSettings);
-              const button = (
-                <button
-                  type="button"
-                  data-game-row={g.id}
-                  aria-current={on ? 'true' : undefined}
-                  onClick={() => setSelectedId(g.id)}
-                  onDoubleClick={() => p.onPlay(g.id)}
-                  onContextMenu={hasMenu ? (e) => { e.preventDefault(); setSelectedId(g.id); setMenuFor(g.id); } : undefined}
-                  className={cx(
-                    'flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] pl-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                    on ? 'bg-accent/[0.15] text-text' : 'text-text-muted hover:bg-surface hover:text-text',
-                  )}
-                >
-                  {art ? (
-                    <img src={art} alt="" loading="lazy" className={cx('h-7 w-[60px] flex-none rounded-[5px] object-cover', !g.is_installed && 'brightness-[0.55] grayscale')} />
-                  ) : (
-                    <span aria-hidden className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />
-                  )}
-                  <span className="grid min-w-0 flex-1 leading-[1.2]">
-                    <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
-                    <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
-                  </span>
-                  {attn && (
-                    <span title={attentionReason(g)} aria-label={t('library:listDetail.needsAttention')} className="flex-none text-attention">
-                      <CircleAlert className="h-4 w-4" aria-hidden />
-                    </span>
-                  )}
-                </button>
-              );
-              // The classic tile's right-click opens the game's collections;
-              // the Atlas row opens a small menu with the same entry, plus
-              // Play and the game settings (issue #132).
-              if (!hasMenu) return <li key={g.id}>{button}</li>;
+              // Plain rows: no trigger wrapper, so click focus and j/k, Enter
+              // and Space behave like any button. One controlled menu at the
+              // list level opens anchored at the right-clicked row (issue #132).
               return (
                 <li key={g.id}>
-                  <DropdownMenu open={menuFor === g.id} onOpenChange={(o) => { if (!o) setMenuFor(null); }} modal={false}>
-                    <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
-                    <DropdownMenuContent side="bottom" align="start">
-                      <DropdownMenuItem asChild onSelect={() => p.onPlay(g.id)}>
-                        <button>
-                          <span>{t('game:play.play')}</span>
-                        </button>
-                      </DropdownMenuItem>
-                      {p.onOpenSettings && (
-                        <DropdownMenuItem asChild onSelect={() => p.onOpenSettings?.(g.id)}>
-                          <button>
-                            <span>{t('game:hero.gameSettings')}</span>
-                          </button>
-                        </DropdownMenuItem>
-                      )}
-                      {p.onManageCollections && (
-                        <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.(g.id)}>
-                          <button>
-                            <span>{t('library:listDetail.rowCollections')}</span>
-                          </button>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <button
+                    type="button"
+                    data-game-row={g.id}
+                    aria-current={on ? 'true' : undefined}
+                    onClick={() => setSelectedId(g.id)}
+                    onDoubleClick={() => p.onPlay(g.id)}
+                    onContextMenu={hasMenu ? (e) => { e.preventDefault(); setSelectedId(g.id); setMenu({ id: g.id, x: e.clientX, y: e.clientY }); } : undefined}
+                    className={cx(
+                      'flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] pl-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                      on ? 'bg-accent/[0.15] text-text' : 'text-text-muted hover:bg-surface hover:text-text',
+                    )}
+                  >
+                    {art ? (
+                      <img src={art} alt="" loading="lazy" className={cx('h-7 w-[60px] flex-none rounded-[5px] object-cover', !g.is_installed && 'brightness-[0.55] grayscale')} />
+                    ) : (
+                      <span aria-hidden className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />
+                    )}
+                    <span className="grid min-w-0 flex-1 leading-[1.2]">
+                      <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
+                      <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
+                    </span>
+                    {attn && (
+                      <span title={attentionReason(g)} aria-label={t('library:listDetail.needsAttention')} className="flex-none text-attention">
+                        <CircleAlert className="h-4 w-4" aria-hidden />
+                      </span>
+                    )}
+                  </button>
                 </li>
               );
             })}
           </ul>
+        )}
+        {/* The classic tile's right-click opens the game's collections; the
+            Atlas row opens one small menu with the same entry, plus Play (or
+            Install for a game that isn't installed) and the game settings. */}
+        {menuGame && (
+          <DropdownMenu
+            open
+            onOpenChange={(o) => {
+              if (!o) {
+                setMenu(null);
+                document.querySelector<HTMLElement>(`[data-game-row="${CSS.escape(menu!.id)}"]`)?.focus();
+              }
+            }}
+            modal={false}
+          >
+            <DropdownMenuTrigger asChild>
+              <span aria-hidden className="pointer-events-none fixed h-0 w-0" style={{ left: menu!.x, top: menu!.y }} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="bottom" align="start" onCloseAutoFocus={(e) => e.preventDefault()}>
+              {menuGame.is_installed ? (
+                <DropdownMenuItem asChild onSelect={() => p.onPlay(menuGame.id)}>
+                  <button>
+                    <span>{t('game:play.play')}</span>
+                  </button>
+                </DropdownMenuItem>
+              ) : menuGame.installable && p.onInstall ? (
+                <DropdownMenuItem asChild onSelect={() => p.onInstall?.(menuGame)}>
+                  <button>
+                    <span>{t('game:install.install')}</span>
+                  </button>
+                </DropdownMenuItem>
+              ) : null}
+              {p.onOpenSettings && (
+                <DropdownMenuItem asChild onSelect={() => p.onOpenSettings?.(menuGame.id)}>
+                  <button>
+                    <span>{t('game:hero.gameSettings')}</span>
+                  </button>
+                </DropdownMenuItem>
+              )}
+              {p.onManageCollections && (
+                <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.(menuGame.id)}>
+                  <button>
+                    <span>{t('library:listDetail.rowCollections')}</span>
+                  </button>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </aside>
       {/* The stage is its own scroll container (like the list): it scrolls back

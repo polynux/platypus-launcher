@@ -768,9 +768,11 @@ export function App() {
       onStageChange={setStagedGameId}
       onAddGame={() => setAddOpen(true)}
       warnings={warnings}
+      pluginName={(id) => socialLabels[id] ?? id}
       onOpenPlugins={() => setView({ name: 'plugins' })}
       onManageCollections={(id) => setCollectionsDialog({ gameId: id })}
       onOpenSettings={openGameSettings}
+      onInstall={(g) => runJob('install', g)}
       onResetFilters={() => {
         setOwnership('owned');
         setSelectedStores([]);

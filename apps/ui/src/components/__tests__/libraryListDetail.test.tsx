@@ -134,7 +134,7 @@ describe('atlas parity (issue #132)', () => {
     expect(onAddGame).toHaveBeenCalledTimes(1);
   });
 
-  it('filters by tier with a count badge and resets with Show all games', async () => {
+  it('filters by tier with a dot badge and resets with Show all games', async () => {
     const user = userEvent.setup();
     list();
     expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
@@ -143,8 +143,8 @@ describe('atlas parity (issue #132)', () => {
     fireEvent.pointerDown(screen.getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
     fireEvent.click(screen.getByRole('option', { name: 'Platinum' }));
     expect(screen.getByText('Nothing here.')).toBeInTheDocument();
-    // The filter button carries the active-filter count as a badge.
-    expect(screen.getByRole('button', { name: 'Library filters' }).textContent).toMatch('1');
+    // The filter button carries a dot while a filter is active.
+    expect(screen.getByRole('button', { name: 'Library filters' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Show all games' }));
     expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
   });
@@ -152,9 +152,29 @@ describe('atlas parity (issue #132)', () => {
   it('shows source warnings with a link to Plugins', async () => {
     const user = userEvent.setup();
     const onOpenPlugins = vi.fn();
-    list({ warnings: [{ source: 'steam', needs_auth: true, message: 'logged out' }], onOpenPlugins });
+    list({
+      warnings: [
+        { source: 'steam', needs_auth: false, message: 'boom' },
+        { source: 'gog', needs_auth: false, message: 'bam' },
+      ],
+      onOpenPlugins,
+    });
     expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.getByText('2 sources need attention')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Plugins' }));
+    expect(onOpenPlugins).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the login wording for logged-out sources', async () => {
+    const user = userEvent.setup();
+    const onOpenPlugins = vi.fn();
+    list({
+      warnings: [{ source: 'steam', needs_auth: true, message: 'logged out' }],
+      pluginName: () => 'Steam',
+      onOpenPlugins,
+    });
+    expect(screen.getByText(/is logged out/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Log in' }));
     expect(onOpenPlugins).toHaveBeenCalledTimes(1);
   });
 });
@@ -187,15 +207,17 @@ describe('atlas parity round 2 (issue #132)', () => {
     const onPlay = vi.fn();
     const onManage = vi.fn();
     const onSettings = vi.fn();
+    const onInstall = vi.fn();
     render(
       <LibraryListDetail
-        games={games()}
+        games={[games()[0], { ...games()[1], installable: true }]}
         ownership="owned"
         source="all"
         onPlay={onPlay}
         renderStage={(g) => <div data-testid="stage">{g.title}</div>}
         onManageCollections={onManage}
         onOpenSettings={onSettings}
+        onInstall={onInstall}
       />,
     );
     const alpha = screen.getByRole('button', { name: /Alpha/ });
@@ -206,8 +228,10 @@ describe('atlas parity round 2 (issue #132)', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Collections…' }));
     expect(onManage).toHaveBeenCalledWith('alpha');
     fireEvent.contextMenu(screen.getByRole('button', { name: /Beta/ }));
-    await user.click(screen.getByRole('menuitem', { name: 'Play' }));
-    expect(onPlay).toHaveBeenCalledWith('beta');
+    // An uninstalled but installable game offers Install instead of Play.
+    expect(screen.queryByRole('menuitem', { name: 'Play' })).toBeNull();
+    await user.click(screen.getByRole('menuitem', { name: 'Install' }));
+    expect(onInstall).toHaveBeenCalledWith(expect.objectContaining({ id: 'beta' }));
   });
 
   it('opens the row menu with the keyboard and skips it without handlers', async () => {
@@ -240,5 +264,36 @@ describe('atlas parity round 2 (issue #132)', () => {
     });
     const note = screen.getByText('1 not in the library');
     expect(note.title).toBe('Gone Game');
+  });
+});
+
+describe('atlas parity round 3 (issue #132)', () => {
+  it('sorts by title, year, size and tier in both directions', async () => {
+    const user = userEvent.setup();
+    list();
+    const order = () => [...document.querySelectorAll('[data-game-row]')].map((el) => el.getAttribute('data-game-row'));
+    expect(order()).toEqual(['alpha', 'beta', 'gamma']);
+    fireEvent.pointerDown(screen.getByLabelText('Sort games'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    // The classic keys sit beside the compact ones, in the same select.
+    expect(screen.getByRole('option', { name: 'Title' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Year' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Size' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Tier' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'Title' }));
+    expect(order()).toEqual(['alpha', 'beta', 'gamma']);
+    await user.click(screen.getByRole('button', { name: 'Ascending, switch to descending' }));
+    expect(order()).toEqual(['gamma', 'beta', 'alpha']);
+    expect(screen.getByRole('button', { name: 'Descending, switch to ascending' })).toBeInTheDocument();
+  });
+
+  it('keeps native row focus so arrows and j move', async () => {
+    const user = userEvent.setup();
+    list();
+    await user.click(screen.getByRole('button', { name: /Alpha/ }));
+    expect(document.activeElement?.getAttribute('data-game-row')).toBe('alpha');
+    await user.keyboard('j');
+    expect(screen.getByTestId('stage')).toHaveTextContent('Beta');
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
   });
 });

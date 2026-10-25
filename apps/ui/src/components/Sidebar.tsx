@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Search, Settings, Square, Ticket } from 'lucide-react';
-import { cx, clock } from './ui';
+import { cx, clock, APP_VERSION } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
@@ -319,7 +319,7 @@ export function Sidebar(p: SidebarProps) {
           );
         })}
         <div className="truncate px-1.5 font-mono text-[12px] text-text-muted">
-          platypus v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
+          {APP_VERSION}{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}
         </div>
       </div>
     </aside>

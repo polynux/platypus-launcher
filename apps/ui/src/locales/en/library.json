@@ -149,7 +149,10 @@
     "sort": {
       "recent": "Recent",
       "title": "Title",
-      "hours": "Most played"
+      "hours": "Most played",
+      "year": "Year",
+      "size": "Size",
+      "tier": "Tier"
     },
     "empty": "Nothing here.",
     "showAll": "Show all games",
@@ -159,7 +162,7 @@
     "addGame": "Add a game",
     "filtersAria": "Library filters",
     "warnings_one": "One source needs attention",
-    "warnings_other": "{count} sources need attention",
+    "warnings_other": "{{count}} sources need attention",
     "filterCompat": "Compatibility",
     "filterStatus": "Status",
     "filterLending": "Lent to me",
@@ -167,5 +170,6 @@
     "filterAny": "Any",
     "filterReset": "Reset filters",
     "rowCollections": "Collections…"
-  }
+  },
+  "scannedFooter": "Scanned {{time}}"
 }

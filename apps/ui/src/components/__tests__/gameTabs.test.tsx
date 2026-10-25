@@ -213,7 +213,7 @@ describe('atlas parity side sections (issue #132)', () => {
       />,
     );
     expect(await screen.findByText('Couch co-op')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Add to collection' }));
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
     expect(onManage).toHaveBeenCalledWith(g.id);
   });
 
@@ -292,5 +292,58 @@ describe('atlas parity round 2 (issue #132)', () => {
     await screen.findByRole('radiogroup', { name: 'Launch from' });
     await user.click(screen.getByRole('button', { name: 'Compare copies' }));
     expect(await screen.findByRole('dialog', { name: /Compare copies of/ })).toBeInTheDocument();
+  });
+});
+
+describe('atlas parity round 3 (issue #132)', () => {
+  it('shows the last failed attempt under the strip', async () => {
+    const g = { ...installedGame(), is_installed: false, installable: true };
+    const failed = {
+      id: 'j1', kind: 'install', source: 'echo', game_id: g.id, store_game_id: '1', title: g.title,
+      state: 'failed', bytes: 0, total: 0, speed: 0, percent: 0, attempts: 1, created_at: 0, updated_at: 0, error: '',
+    };
+    render(
+      <GamePage
+        game={g as Game}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        job={failed as never}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: /Retry install/ })).toBeInTheDocument();
+    expect(await screen.findByText(/didn't finish/)).toBeInTheDocument();
+  });
+
+  it('resyncs status and notes when the game changes underneath', async () => {
+    const g = installedGame();
+    const { rerender } = render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('None');
+    rerender(
+      <GamePage
+        game={{ ...g, status: 'finished', user_notes: 'loved it' } as Game}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('Finished');
+    expect(screen.getByLabelText('Your notes')).toHaveValue('loved it');
   });
 });

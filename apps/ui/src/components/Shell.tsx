@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownToLine, ChevronDown, CircleAlert, HardDrive, Layers, LibraryBig, Plus, Search, Settings, ShoppingBag, Square, Ticket, WifiOff } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
-import { cx, clock } from './ui';
+import { cx, clock, APP_VERSION } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
@@ -286,7 +286,7 @@ function Topbar(p: ShellProps) {
               </span>
             );
           })}
-          <span className="whitespace-nowrap font-mono text-[12px] text-text-muted">platypus v0.2{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}</span>
+          <span className="whitespace-nowrap font-mono text-[12px] text-text-muted">{APP_VERSION}{p.lastScan ? ` · scan ${clock(p.lastScan)}` : ''}</span>
         </div>
       </div>
     </header>
@@ -335,8 +335,11 @@ function SourcebarChrome(p: ShellProps) {
     { id: 'attention', label: t('nav:sourcebar.attention'), count: p.fixCount, warn: p.fixCount > 0 },
   ];
   const isViewOn = (id: string) => {
-    if (id === 'all') return p.view.name === 'library' && ownership === 'owned' && selection.length === 0;
-    if (id === 'installed') return p.view.name === 'library' && ownership === 'installed' && selection.length === 0;
+    // A collection is its own scope: the All/Installed tabs only look active
+    // on the unfiltered library.
+    const collection = p.view.name === 'library' ? p.view.collection : undefined;
+    if (id === 'all') return p.view.name === 'library' && !collection && ownership === 'owned' && selection.length === 0;
+    if (id === 'installed') return p.view.name === 'library' && !collection && ownership === 'installed' && selection.length === 0;
     if (id === 'downloads') return p.view.name === 'downloads';
     return p.view.name === 'fixes';
   };
@@ -573,10 +576,10 @@ function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) 
   // Chat entry opened the same modal, so it is gone. The auth dot mirrors the
   // sidebar/tools attention when a plugin needs approval or login.
   const friendsLabel = p.friendsUnread > 0 ? `${t('nav:sourcebar.friends')} (${p.friendsUnread})` : t('nav:sourcebar.friends');
-  const items: { key: string; label: string; onSelect: () => void; current?: boolean }[] = [
+  const items: { key: string; label: string; onSelect: () => void; current?: boolean; dot?: boolean }[] = [
     { key: 'dashboard', label: t('nav:dashboard'), onSelect: () => p.onNavigate({ name: 'dashboard' }), current: active === 'dashboard' },
     { key: 'storage', label: t('nav:storage'), onSelect: () => p.onNavigate({ name: 'storage' }), current: active === 'storage' },
-    { key: 'plugins', label: t('nav:plugins'), onSelect: () => p.onNavigate({ name: 'plugins' }), current: active === 'plugins' },
+    { key: 'plugins', label: t('nav:plugins'), onSelect: () => p.onNavigate({ name: 'plugins' }), current: active === 'plugins', dot: p.authNeeded },
     {
       key: 'settings',
       label: t('nav:settings'),
@@ -605,7 +608,8 @@ function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) 
         {items.map((n) => (
           <DropdownMenuItem key={n.key} asChild onSelect={n.onSelect}>
             <button aria-current={n.current ? 'page' : undefined} className={cx(n.current && 'text-accent-strong')}>
-              <span>{n.label}</span>
+              <span className="min-w-0 flex-1 text-left">{n.label}</span>
+              {n.dot && <span className="size-1.5 flex-none rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
             </button>
           </DropdownMenuItem>
         ))}
@@ -684,8 +688,8 @@ export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionS
             {t('library:offline')}
           </span>
         )}
-        {p.lastScan != null && <span className="truncate tabular-nums">{t('library:scannedSuffix', { time: clock(p.lastScan) })}</span>}
-        <span className="flex-none">platypus v0.2</span>
+        {p.lastScan != null && <span className="truncate tabular-nums">{t('library:scannedFooter', { time: clock(p.lastScan) })}</span>}
+        <span className="flex-none">{APP_VERSION}</span>
       </span>
     </footer>
   );

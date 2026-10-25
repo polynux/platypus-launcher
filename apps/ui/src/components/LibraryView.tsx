@@ -68,8 +68,8 @@ interface LibraryProps {
 
 const CORE_SOURCES: StoreType[] = ['steam', 'gog', 'epic'];
 
-type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier' | 'year';
-type Sort = { key: SortKey; dir: 'asc' | 'desc' };
+export type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier' | 'year';
+export type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 /** ProtonDB quality order, best first. Unknown or missing tiers have no rank and sort last. */
 export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver: 3, bronze: 2, borked: 1 };
 const sortValue = (g: Game, k: SortKey): string | number =>
@@ -92,7 +92,7 @@ export function sortGames(games: Game[], sort: Sort | null): Game[] {
   });
 }
 const SORT_KEYS: (SortKey | '')[] = ['', 'title', 'year', 'last', 'hours', 'size', 'tier'];
-const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
+export const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
 
 function sortOptionLabel(t: T, k: SortKey | ''): string {
   switch (k) {
