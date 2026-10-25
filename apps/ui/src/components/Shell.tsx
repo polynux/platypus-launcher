@@ -757,8 +757,7 @@ function LibraryFiltersButton({ p }: { p: ShellProps }) {
 }
 
 // The /22 view switch (D22 ViewSwitch): list with the game beside it, grid
-// of covers, table. Until #136 the grid and table show the classic
-// LibraryView under Atlas.
+// of covers, table. The Atlas grid/table are the lib-full page (issue #136).
 function AtlasViewSwitch({ p }: { p: ShellProps }) {
   const { t } = useTranslation(['nav']);
   const view = p.atlasView ?? 'list';

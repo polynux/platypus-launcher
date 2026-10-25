@@ -7,6 +7,7 @@ import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
 import { LibraryListDetail } from './components/LibraryListDetail';
+import { AtlasLibraryPage } from './components/AtlasLibraryViews';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
 import { AddGameModal, type AddGameOptions } from './components/AddGameModal';
@@ -133,9 +134,25 @@ export function AppContent() {
   const [atlasTier, setAtlasTier] = useState<TierFilter>('all');
   const [atlasStatus, setAtlasStatus] = useState<StatusFilter>('all');
   const [atlasLending, setAtlasLending] = useState<'all' | 'with-me'>('all');
-  // Which library view the /22 switch shows: the list-detail stage, or the
-  // classic grid/table under Atlas until #136 builds them.
-  const [atlasView, setAtlasView] = useState<'list' | 'grid' | 'table'>('list');
+  // Which library view the /22 switch shows (issue #136): the list-detail
+  // stage, or the Atlas grid/table. Persisted like the classic library mode,
+  // so the choice survives a relaunch.
+  const [atlasView, setAtlasView] = useState<'list' | 'grid' | 'table'>(() => {
+    try {
+      const saved = window.localStorage.getItem('platypus.atlas.view');
+      return saved === 'grid' || saved === 'table' ? saved : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+  const persistAtlasView = useCallback((v: 'list' | 'grid' | 'table') => {
+    setAtlasView(v);
+    try {
+      window.localStorage.setItem('platypus.atlas.view', v);
+    } catch {
+      // A private window or denied storage keeps the in-memory choice.
+    }
+  }, []);
 
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
@@ -817,6 +834,7 @@ export function AppContent() {
       warnings={warnings}
       pluginName={(id) => socialLabels[id] ?? id}
       onOpenPlugins={() => setView({ name: 'plugins' })}
+      jobs={jobs}
       onManageCollections={(id) => setCollectionsDialog({ gameId: id })}
       onOpenSettings={openGameSettings}
       onInstall={(g) => runJob('install', g)}
@@ -864,8 +882,43 @@ export function AppContent() {
         );
       case 'library':
         // Atlas list-detail is the list plus the stage; the /22 grid and
-        // table switch shows the classic LibraryView under Atlas (#135,
-        // #136 builds the real ones). Other themes keep the grid.
+        // table are the Atlas lib-full page (issue #136). Other themes keep
+        // the classic LibraryView grid.
+        if (isListDetail && atlasView !== 'list') {
+          return (
+            <AtlasLibraryPage
+              games={games}
+              ownership={ownership}
+              source={source}
+              storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
+              collection={view.name === 'library' ? view.collection : undefined}
+              collections={collections}
+              tier={atlasTier}
+              onTier={setAtlasTier}
+              status={atlasStatus}
+              onStatus={setAtlasStatus}
+              lending={atlasLending}
+              onLending={setAtlasLending}
+              query={search}
+              onQuery={setSearch}
+              warnings={warnings}
+              pluginName={(id) => socialLabels[id] ?? id}
+              onOpenPlugins={() => setView({ name: 'plugins' })}
+              jobs={activeJobs}
+              runners={runners}
+              view={atlasView}
+              onOpen={openGame}
+              onPlay={(id) => {
+                const g = games.find((x) => x.id === id);
+                if (g) launch(g);
+              }}
+              onInstall={(g) => runJob('install', g)}
+              onOpenSettings={openGameSettings}
+              onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
+              onResetFilters={() => setView({ name: 'library', collection: undefined })}
+            />
+          );
+        }
         if (isListDetail && atlasView === 'list') return renderListDetail();
         return (
           <LibraryView
@@ -979,9 +1032,8 @@ export function AppContent() {
   };
 
   // Atlas parity (issue #132): the list and stage scroll inside themselves,
-  // so App's main clips only on the library/game views in list-detail mode;
-  // every other view scrolls like warm. The /22 grid/table switch shows the
-  // classic views, which scroll like warm too.
+  // so App's main clips only on the list-detail library/game views;
+  // every other view scrolls like warm. The Atlas grid/table scroll too.
   const listDetailActive = isListDetail && atlasView === 'list' && (view.name === 'library' || view.name === 'game');
   const isSourcebar = shellNavigation === 'sourcebar';
   const hasBorrowed = useMemo(() => games.some((g) => g.shared_by != null), [games]);
@@ -1045,7 +1097,7 @@ export function AppContent() {
         onLending={setAtlasLending}
         hasBorrowed={hasBorrowed}
         atlasView={atlasView}
-        onAtlasView={setAtlasView}
+        onAtlasView={persistAtlasView}
         canRedeem={redeemStores.length > 0}
         onRedeem={() => setRedeemOpen(true)}
         friendsUnread={chat.unread}

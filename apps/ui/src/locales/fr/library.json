@@ -171,5 +171,24 @@
     "filterReset": "Réinitialiser les filtres",
     "rowCollections": "Collections…"
   },
+  "atlasViews": {
+    "filterPlaceholder": "Filtrer la bibliothèque",
+    "blocks": {
+      "continue": "Reprendre",
+      "recent": "Ajouts récents"
+    },
+    "chips": {
+      "reset": "Réinitialiser",
+      "remove": "Retirer le filtre {{label}}"
+    },
+    "warnings": {
+      "fix": "Corriger",
+      "dismiss": "Masquer pour l'instant"
+    },
+    "badges": {
+      "update": "Mise à jour disponible",
+      "downloading": "Téléchargement, {{percent}} %"
+    }
+  },
   "scannedFooter": "Analysée {{time}}"
 }
