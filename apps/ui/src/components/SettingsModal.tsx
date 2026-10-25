@@ -18,7 +18,7 @@ interface Props {
   game: Game;
   runners: ProtonVersion[];
   onClose: () => void;
-  onSave: (s: GameSettings) => void | Promise<void>;
+  onSave: (s: GameSettings) => void | Promise<void>; // i18n:allow: Promise return type, not user-facing text
   onCopied: () => void;
 }
 
@@ -505,7 +505,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
             <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
             <Button variant="primary" onClick={() => {
               const r = onSave(current) as unknown as Promise<void> | void;
-              if (r && typeof (r as Promise<void>).then === 'function') (r as Promise<void>).then(() => markClean(), () => {});
+              if (r && typeof (r as Promise<void>).then === 'function') (r as Promise<void>).then(() => markClean(), () => {}); // i18n:allow: Promise type, not user-facing text
               else markClean();
             }} className="flex-1">{t('gameSettings:general.save')}</Button>
           </div>
