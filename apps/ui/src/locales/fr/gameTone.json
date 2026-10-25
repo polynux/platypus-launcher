@@ -3,5 +3,7 @@
   "accent": "Accent",
   "accentHint": "La couleur du jeu sur les boutons et les mises en avant",
   "whole": "Toute l'application",
-  "wholeHint": "La couleur du jeu dans toute l'application"
+  "wholeHint": "La couleur du jeu dans toute l'application",
+  "off": "Désactivée",
+  "offHint": "Les couleurs du thème, sans couleur du jeu"
 }

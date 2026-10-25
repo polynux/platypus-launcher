@@ -67,7 +67,9 @@ func builtinDefaults() map[string]string {
 // built-in ones, so a theme that only moves the ground still has its text
 // checked. The foreground is the token under test, so it is the one dropped;
 // when the theme didn't set it there is nothing to reset, but the warning still
-// points at the pair the theme has to fix (with an on-accent, say).
+// points at the pair the theme has to fix (with an on-accent, say). Each
+// declared scheme is checked the same way over its own resolved tokens
+// (issue #134): a failing scheme token falls back to the dark value.
 func (t *Theme) checkContrast() {
 	def := builtinDefaults()
 	if def == nil {
@@ -94,6 +96,38 @@ func (t *Theme) checkContrast() {
 				p.fg, p.bg, tokens[p.fg], tokens[p.bg], got, p.min)
 			delete(t.Tokens, p.fg)
 			tokens[p.fg] = def[p.fg]
+		}
+	}
+	for _, scheme := range schemeNames {
+		over, ok := t.Schemes[scheme]
+		if len(over) == 0 || !ok {
+			continue
+		}
+		resolved := make(map[string]string, len(tokens))
+		for name, v := range tokens {
+			resolved[name] = v
+		}
+		for name, v := range over {
+			resolved[name] = v
+		}
+		for _, p := range contrastPairs {
+			bg, ok := backdrop(resolved, p.bg)
+			if !ok {
+				continue
+			}
+			fg, ok := parseColor(resolved[p.fg])
+			if !ok {
+				continue
+			}
+			if got := contrast(fg.over(bg), bg); got < p.min {
+				t.warn("token %s in scheme %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
+					p.fg, scheme, p.bg, resolved[p.fg], resolved[p.bg], got, p.min)
+				delete(t.Schemes[scheme], p.fg)
+				resolved[p.fg] = tokens[p.fg]
+				if len(t.Schemes[scheme]) == 0 {
+					delete(t.Schemes, scheme)
+				}
+			}
 		}
 	}
 }

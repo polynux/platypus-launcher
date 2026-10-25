@@ -48,11 +48,35 @@ func TestSetGameToneSavesTheChoice(t *testing.T) {
 	if got := a.GetLauncherSettings().GameTone; got != "whole" {
 		t.Fatalf("launcher settings game tone = %q, want whole", got)
 	}
+	if s, err := a.SetGameTone("off"); err != nil || s.GameTone != "off" {
+		t.Fatalf("SetGameTone(off) = %q, %v", s.GameTone, err)
+	}
 	if _, err := a.SetGameTone("purple"); err == nil {
 		t.Fatal("SetGameTone(purple) succeeded, want an error")
 	}
-	if a.settings.GameTone() != "whole" {
+	if a.settings.GameTone() != "off" {
 		t.Fatalf("a refused value changed the setting: %q", a.settings.GameTone())
+	}
+}
+
+// SetColorScheme saves the colour-scheme choice (issue #134) and answers the
+// launcher settings with it; a value the UI never sends is refused.
+func TestSetColorSchemeSavesTheChoice(t *testing.T) {
+	a := newLocaleApp(t)
+	if got := a.GetLauncherSettings().ColorScheme; got != "" {
+		t.Fatalf("launcher settings color scheme = %q, want empty (dark)", got)
+	}
+	for _, scheme := range []string{"dark", "light", "black"} {
+		s, err := a.SetColorScheme(scheme)
+		if err != nil || s.ColorScheme != scheme {
+			t.Fatalf("SetColorScheme(%s) = %q, %v", scheme, s.ColorScheme, err)
+		}
+	}
+	if _, err := a.SetColorScheme("sepia"); err == nil {
+		t.Fatal("SetColorScheme(sepia) succeeded, want an error")
+	}
+	if a.settings.ColorScheme() != "black" {
+		t.Fatalf("a refused value changed the setting: %q", a.settings.ColorScheme())
 	}
 }
 

@@ -162,7 +162,7 @@ function AtlasHero({ game, hero, details }: { game: Game; hero: string[]; detail
   useEffect(() => setBroken(null), [game.id]);
   const logo = logoMode === 'logo' && game.logo_url && game.logo_url !== broken ? game.logo_url : null;
   return (
-    <div className="relative flex-none overflow-hidden bg-black/40" style={{ height: 'clamp(200px, 34vh, 380px)' }}>
+    <div className="relative flex-none overflow-hidden bg-ground" style={{ height: 'clamp(200px, 34vh, 380px)' }}>
       {src && (
         <img
           key={src}
@@ -205,7 +205,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
           variant="neutral"
           size="none"
           onClick={d.onStop}
-          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-black/30 px-5 text-[15px] font-extrabold text-text ring-1 ring-accent/60 hover:bg-black/40"
+          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-glass px-5 text-[15px] font-extrabold text-text ring-1 ring-accent/60 hover:bg-surface-strong"
         >
           {starting ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Square className="h-3 w-3 fill-current" aria-hidden />}
           <span>{starting ? t('game:strip.starting') : t('game:play.stop')}</span>
@@ -270,7 +270,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
   return (
     <>
       {copies.length > 1 ? (
-        <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-black/30 p-[3px]">
+        <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-glass p-[3px]">
           {copies.map((c) => {
             const on = c.owner_id === played;
             return (
@@ -294,7 +294,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
           })}
         </div>
       ) : (
-        <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-black/30 px-3 text-[13px] font-semibold text-text">
+        <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-glass px-3 text-[13px] font-semibold text-text">
           <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={storeName} size="xs" />
           {storeName}
           {plugin && game.source !== game.store && <span className="text-text-muted">· {plugin.name}</span>}
@@ -380,8 +380,8 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             aria-haspopup="dialog"
             onClick={() => setTuneOpen((v) => !v)}
             className={cx(
-              'inline-flex h-[42px] items-center gap-1.5 rounded-[9px] bg-black/30 px-3 pl-3.5 text-[14px] font-bold text-text transition hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              tuneOpen && 'bg-black/40',
+              'inline-flex h-[42px] items-center gap-1.5 rounded-[9px] bg-glass px-3 pl-3.5 text-[14px] font-bold text-text transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              tuneOpen && 'bg-surface-strong',
             )}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />
@@ -458,7 +458,7 @@ function GallerySheet({ media, title }: { media: MediaItem[]; title: string }) {
             onClick={() => setIndex(i)}
             aria-label={t('game:media.screenshotLabel', { index: i + 1 })}
             className={cx(
-              'overflow-hidden rounded-md bg-black/40 ring-1 ring-hairline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              'overflow-hidden rounded-md bg-ground ring-1 ring-hairline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               i === 0 && 'col-span-2',
             )}
           >

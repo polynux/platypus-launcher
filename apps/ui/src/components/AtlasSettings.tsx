@@ -229,7 +229,7 @@ export function AtlasSSwitch({ label, desc, hint, checked, disabled, onChange, l
         {desc && <span className="text-text-muted text-[0.93em] leading-[1.5]">{desc}</span>}
         {hint && <span className="font-mono text-[11.5px] text-text-faint">{hint}</span>}
       </span>
-      <span aria-hidden className={cx('relative h-5 w-9 flex-none rounded-full transition-colors', checked ? 'bg-accent' : 'bg-white/15')}>
+      <span aria-hidden className={cx('relative h-5 w-9 flex-none rounded-full transition-colors', checked ? 'bg-accent' : 'bg-surface-strong')}>
         <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', checked ? 'translate-x-4 bg-on-accent' : 'bg-raised')} />
       </span>
     </button>
@@ -693,7 +693,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
               const on = tricks.includes(v);
               return (
                 <button key={v} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== v) : [...tricks, v])}
-                  className={cx('rounded-lg px-2.5 py-1.5 font-sans text-[13px] transition', on ? 'bg-accent/[0.22] text-text ring-1 ring-accent/50' : 'bg-surface-strong text-text-muted hover:bg-white/[0.1]')}>
+                  className={cx('rounded-lg px-2.5 py-1.5 font-sans text-[13px] transition', on ? 'bg-accent/[0.22] text-text ring-1 ring-accent/50' : 'bg-surface-strong text-text-muted hover:bg-surface-strong')}>
                   {on ? '✓ ' : '+ '}{v}
                 </button>
               );
@@ -785,7 +785,7 @@ export function AtlasDrawer(props: Omit<AtlasBodyProps, 'cat' | 'onOpenGeneral' 
 
   return (
     <>
-      <div data-testid="gs-accordion" className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-1 pb-[30px] [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
+      <div data-testid="gs-accordion" className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-1 pb-[30px] [scrollbar-width:thin] [scrollbar-color:var(--color-hairline-strong)_transparent]">
         {atlasGroups(tabs).map((group) => (
           <div key={group.level}>
             <div className="px-2 pb-1.5 pt-4 text-[12px] font-bold text-text-faint">{groupLabel(group.level)}</div>
@@ -898,7 +898,7 @@ function AtlasEnvBody({ p, groups }: { p: AtlasBodyProps; groups: SettingGroup[]
                   <Button variant="ghost" size="icon" aria-label={t('gameSettings:launch.removeVar', { key: r.key || t('gameSettings:launch.varFallback') }) as string}
                     onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none size-7">×</Button>
                 </div>
-                {err && <p role="status" className="mt-1 font-mono text-hint text-orange-300">{err}</p>}
+                {err && <p role="status" className="mt-1 font-mono text-hint text-danger">{err}</p>}
               </div>
             );
           })}
@@ -949,9 +949,9 @@ function AtlasLaunchBody({ p, groups }: { p: AtlasBodyProps; groups: SettingGrou
     <div>
       {clientLaunched && (
         <div className="mb-2 rounded-xl bg-info/[0.07] p-3 ring-1 ring-info/25">
-          <p className="text-[12.5px] leading-relaxed text-sky-100/85">{t('gameSettings:steamNotice')}</p>
+          <p className="text-[12.5px] leading-relaxed text-text-body">{t('gameSettings:steamNotice')}</p>
           <div className="mt-2 flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-lg bg-black/35 px-2.5 py-2 font-mono text-hint text-sky-100/90 select-text">
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-ground px-2.5 py-2 font-mono text-hint text-text-body select-text">
               {steamLaunchOptions(backend, runnerEnv)}
             </code>
             <Button variant="neutral" size="sm" onClick={() => copy(steamLaunchOptions(backend, runnerEnv))}>{t('gameSettings:steamCopy')}</Button>
@@ -991,7 +991,7 @@ function AtlasLaunchBody({ p, groups }: { p: AtlasBodyProps; groups: SettingGrou
             )}
           </div>
           <div className="max-h-56 overflow-y-auto select-text">
-            {preview.err ? <div className="text-red-300">{preview.err}</div> : <div className="text-text-muted">{preview.cmd ?? '…'}</div>}
+            {preview.err ? <div className="text-danger">{preview.err}</div> : <div className="text-text-muted">{preview.cmd ?? '…'}</div>}
           </div>
         </div>
       </AtlasSRow>

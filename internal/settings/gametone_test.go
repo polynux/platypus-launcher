@@ -7,8 +7,8 @@ import (
 	"platypus/internal/apperr"
 )
 
-// The game colour (issue #123) starts empty (accent), persists, and refuses a
-// value the UI never sends.
+// The game colour (issues #123, #134) starts empty (accent), persists, and
+// refuses a value the UI never sends. Off (issue #134) is a valid pick.
 func TestGameTonePersistsAndDefaultsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	s, err := OpenWithHome(filepath.Join(dir, "settings.json"), dir)
@@ -28,6 +28,12 @@ func TestGameTonePersistsAndDefaultsEmpty(t *testing.T) {
 	if reopened.GameTone() != GameToneWhole {
 		t.Fatalf("reopened GameTone = %q, want whole", reopened.GameTone())
 	}
+	if err := s.SetGameTone(GameToneOff); err != nil {
+		t.Fatal(err)
+	}
+	if s.GameTone() != GameToneOff {
+		t.Fatalf("GameTone = %q, want off", s.GameTone())
+	}
 	err = s.SetGameTone("purple")
 	if err == nil {
 		t.Fatal("SetGameTone(purple) succeeded, want an error")
@@ -35,7 +41,7 @@ func TestGameTonePersistsAndDefaultsEmpty(t *testing.T) {
 	if ae, ok := err.(*apperr.Error); !ok || ae.Code != "settings.gameTone.invalid" {
 		t.Fatalf("SetGameTone(purple) error = %v, want settings.gameTone.invalid", err)
 	}
-	if s.GameTone() != GameToneWhole {
+	if s.GameTone() != GameToneOff {
 		t.Fatalf("a refused value changed the setting: %q", s.GameTone())
 	}
 }

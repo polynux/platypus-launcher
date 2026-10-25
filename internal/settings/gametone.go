@@ -14,10 +14,14 @@ const GameToneAccent = "accent"
 // GameToneWhole retints the whole app with the game's hue.
 const GameToneWhole = "whole"
 
-// gameTones are the values the setting takes. Empty means accent.
-var gameTones = []string{"", GameToneAccent, GameToneWhole}
+// GameToneOff leaves the theme's own colours alone (issue #134): no game
+// colour, whatever the theme allows.
+const GameToneOff = "off"
 
-// GameTone is the "Accent / Whole app" choice (issue #123): "" means accent.
+// gameTones are the values the setting takes. Empty means accent.
+var gameTones = []string{"", GameToneOff, GameToneAccent, GameToneWhole}
+
+// GameTone is the game colour choice (issues #123, #134): "" means accent.
 // How far it applies is the theme's color.game-tone axis, not this value: the
 // pick is kept across themes.
 func (s *Store) GameTone() string {
@@ -26,10 +30,10 @@ func (s *Store) GameTone() string {
 	return s.data.GameTone
 }
 
-// SetGameTone saves the game-colour choice ("" for accent).
+// SetGameTone saves the game-colour choice ("" for accent, "off" for none).
 func (s *Store) SetGameTone(tone string) error {
 	if !slices.Contains(gameTones, tone) {
-		return apperr.New("settings.gameTone.invalid", fmt.Sprintf("game colour must be %q, %q or empty, got %q", GameToneAccent, GameToneWhole, tone),
+		return apperr.New("settings.gameTone.invalid", fmt.Sprintf("game colour must be %q, %q, %q or empty, got %q", GameToneOff, GameToneAccent, GameToneWhole, tone),
 			map[string]string{"tone": tone})
 	}
 	s.mu.Lock()

@@ -92,12 +92,12 @@ function Topbar(p: ShellProps) {
       aria-current={active === n.key ? 'page' : undefined}
       className={cx(
         'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-        active === n.key ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-white'
+        active === n.key ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-text'
       )}
     >
       <span>{n.label}</span>
       {n.key === 'library' && p.loading ? (
-        <span aria-label={t('nav:countingGames')} className="h-4 w-7 animate-pulse rounded-full bg-white/15 motion-reduce:animate-none" />
+        <span aria-label={t('nav:countingGames')} className="h-4 w-7 animate-pulse rounded-full bg-surface-strong motion-reduce:animate-none" />
       ) : (
         n.count != null && <Badge variant="neutral" className="h-5 rounded-full tracking-normal tabular-nums">{n.count}</Badge>
       )}
@@ -106,7 +106,7 @@ function Topbar(p: ShellProps) {
   );
 
   return (
-    <header data-region="topbar" className="flex-none border-b border-hairline bg-black/25">
+    <header data-region="topbar" className="flex-none border-b border-hairline bg-ground">
       <div className="flex items-center gap-2 px-4 pt-2">
         <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-gradient-to-br from-accent-strong to-danger text-[14px] font-black text-on-accent">P</span>
         {/* shell.nav */}
@@ -140,7 +140,7 @@ function Topbar(p: ShellProps) {
                       aria-current={active === n.key ? 'page' : undefined}
                       className={cx(
                         'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-                        active === n.key ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-white'
+                        active === n.key ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-text'
                       )}
                     >
                       <span>{n.label}</span>
@@ -182,7 +182,7 @@ function Topbar(p: ShellProps) {
           title={t('nav:settings')}
           className={cx(
             'grid h-8 w-8 flex-none place-items-center rounded-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60',
-            active === 'settings' ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-white'
+            active === 'settings' ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface-strong hover:text-text'
           )}
         >
           <Settings className="h-4 w-4" aria-hidden />
@@ -204,7 +204,7 @@ function Topbar(p: ShellProps) {
                   aria-current={current ? 'page' : undefined}
                   className={cx(
                     'whitespace-nowrap rounded-lg px-2 py-1 text-[12px] transition',
-                    current ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface hover:text-white'
+                    current ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface hover:text-text'
                   )}
                 >
                   {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
@@ -233,7 +233,7 @@ function Topbar(p: ShellProps) {
               <button
                 key={s.key}
                 onClick={() => p.onPickSource(s.key)}
-                className="flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[12px] text-text-body transition hover:bg-surface hover:text-white"
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[12px] text-text-body transition hover:bg-surface hover:text-text"
               >
                 <PluginLogo src={p.sourceLogos?.[s.key]} name={s.label} size="xs" />
                 {s.label}
@@ -253,7 +253,7 @@ function Topbar(p: ShellProps) {
                 aria-current={p.activeStore === s.id ? 'page' : undefined}
                 className={cx(
                   'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[12px] transition',
-                  p.activeStore === s.id ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface hover:text-white'
+                  p.activeStore === s.id ? 'bg-accent-strong/12 text-accent-strong' : 'text-text-body hover:bg-surface hover:text-text'
                 )}
               >
                 <PluginLogo src={s.icon_url} name={s.name} size="xs" />

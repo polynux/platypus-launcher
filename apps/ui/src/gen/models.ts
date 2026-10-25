@@ -537,6 +537,7 @@ export namespace types {
     minimize_to_tray: boolean;
     theme: string;
     game_tone: string;
+    color_scheme: string;
   }
 
   export interface LedgerEntry {
@@ -896,6 +897,7 @@ export namespace types {
     wash: types.WashLayer[];
     variants: Record<string, string>;
     fonts?: Record<string, string>;
+    schemes?: Record<string, Record<string, string>>;
   }
 
   export interface Tweak {

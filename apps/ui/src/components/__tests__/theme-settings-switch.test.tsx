@@ -10,8 +10,12 @@ vi.mock('../../lib/theme', () => ({
     state.variants['settings.presentation'] = 'sheet';
     state.variants['settings.navigation'] = 'tabs';
   }),
-  useVariant: (axis: string) => state.variants[axis],
+  useVariant: (axis: string) => state.variants[axis] ?? (axis === 'color.game-tone' ? 'off' : 'page'),
+  useThemeSchemes: () => ['dark'],
+  useColorScheme: () => 'dark',
+  saveColorSchemeChoice: vi.fn(async () => {}),
 }));
+vi.mock('../../lib/gameTone', () => ({ useGameTone: () => ({ supported: 'off', mode: 'off', choice: 'accent', tone: null, setChoice: vi.fn() }) }));
 vi.mock('../../lib/i18n', () => ({ PSEUDO_LOCALE: 'pseudo', applyLanguage: vi.fn(), loadSessionInfo: async () => {}, pseudoAvailable: () => false }));
 const api = vi.hoisted(() => ({
   listThemes: vi.fn(),

@@ -61,10 +61,14 @@ Every token is a string. A non-string warns and keeps the built-in value.
 An unknown token name warns and is ignored. One bad token costs only that
 token.
 
-Colour tokens (19): `ground`, `raised`, `surface`, `surface-strong`,
-`hairline`, `text`, `text-body`, `text-muted`, `text-faint`, `accent`,
-`accent-strong`, `accent-dim`, `on-accent`, `ok`, `attention`, `info`, `dl`,
-`danger`, `focus`. `accent-dim` is the dim shade of the accent: the game page
+Colour tokens (23): `ground`, `ground-2`, `raised`, `surface`, `surface-strong`,
+`hairline`, `hairline-strong`, `popover`, `glass`, `text`, `text-body`,
+`text-muted`, `text-faint`, `accent`, `accent-strong`, `accent-dim`,
+`on-accent`, `ok`, `attention`, `info`, `dl`, `danger`, `focus`. `ground-2`
+is the second background (the lab's `--s1`: the list and the drawer foot),
+`popover` the floating panels (`--s-pop`), `hairline-strong` the stronger
+line (`--k-line-strong`), `glass` the translucent controls over art
+(`--k-glass`). `accent-dim` is the dim shade of the accent: the game page
 action strip in a theme that takes the game's colour (the game tone repaints
 it from the art; without a tone it is the theme's own value).
 
@@ -84,6 +88,33 @@ else is a generic family (`system-ui`, `ui-sans-serif`, `sans-serif`,
 theme ships in `[fonts]`.
 
 Source: `internal/themes/themes.go` (`setToken`, `checkToken`, `fontStack`).
+
+## `[schemes.*]`
+
+A theme may declare light and black token overrides (issue #134): `[schemes.light]`
+and `[schemes.black]` tables with token keys, validated like `[tokens]`. Dark
+is the theme's own `[tokens]`; themes without schemes are dark only.
+
+```toml
+[schemes.light]
+ground = "#e9ecf0"
+accent = "#3b5bdb"
+
+[schemes.black]
+ground = "#000000"
+accent-dim = "#0e1016"
+```
+
+An unknown scheme name warns and is ignored; only `light` and `black` ever
+apply. One bad token costs only that token, like one bad `[tokens]` entry.
+Each scheme is contrast-checked over its own resolved tokens: a failing
+foreground token falls back to the dark value with a warning, like any other
+bad token. The UI paints the stored scheme pick when the theme declares it,
+else dark; native controls follow through `color-scheme: light|dark` on the
+root.
+
+Source: `internal/themes/themes.go` (`setScheme`), `internal/themes/contrast.go`
+(`checkContrast`), `apps/ui/src/lib/theme.ts` (`themeVariables`, `applyTheme`).
 
 ## `[[wash]]`
 

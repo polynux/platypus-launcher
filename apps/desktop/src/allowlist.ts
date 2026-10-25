@@ -148,6 +148,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'SetChatDesktopNotify',
   'SetCloudGameMode',
   'SetCloudPluginMode',
+  'SetColorScheme',
   'SetCustomArt',
   'SetCustomGameYear',
   'SetCustomTitle',

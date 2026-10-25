@@ -191,12 +191,22 @@ func (a *App) SetTheme(id string) (types.LauncherSettings, error) {
 	return a.launcherSettings(), nil
 }
 
-// SetGameTone saves the "Accent / Whole app" choice (issue #123): "accent",
-// "whole", or "" for accent. The picked theme's color.game-tone axis decides
-// how far it applies, so the pick is kept across themes and needs no theme
-// check here.
+// SetGameTone saves the game colour choice (issues #123, #134): "off",
+// "accent", "whole", or "" for accent. The picked theme's color.game-tone axis
+// decides how far it applies, so the pick is kept across themes and needs no
+// theme check here.
 func (a *App) SetGameTone(tone string) (types.LauncherSettings, error) {
 	if err := a.settings.SetGameTone(tone); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
+// SetColorScheme saves the colour scheme choice (issue #134): "dark",
+// "light", "black", or "" for dark. Themes without the scheme fall back to
+// dark, so the pick is kept across themes and needs no theme check here.
+func (a *App) SetColorScheme(scheme string) (types.LauncherSettings, error) {
+	if err := a.settings.SetColorScheme(scheme); err != nil {
 		return a.launcherSettings(), err
 	}
 	return a.launcherSettings(), nil

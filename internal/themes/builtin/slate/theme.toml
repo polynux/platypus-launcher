@@ -19,10 +19,14 @@ supports = ["tokens", "variants"]
 
 [tokens]
 ground = "#0f151c"
+ground-2 = "#151d27"
 raised = "#151d27"
 surface = "rgba(148, 163, 184, 0.08)"
 surface-strong = "rgba(148, 163, 184, 0.14)"
 hairline = "rgba(148, 163, 184, 0.12)"
+hairline-strong = "rgba(148, 163, 184, 0.2)"
+popover = "#151d27"
+glass = "rgba(21, 29, 39, 0.82)"
 text = "#e2e8f0"
 text-body = "#94a3b8"
 text-muted = "rgba(226, 232, 240, 0.6)"

@@ -167,7 +167,7 @@
       "notFolder": "{{path}} is a file, not a folder."
     },
     "gameTone": {
-      "invalid": "Game colour must be accent, whole or empty, got {{tone}}."
+      "invalid": "Game colour must be off, accent, whole or empty, got {{tone}}."
     },
     "year": {
       "invalid": "Release year must be between 1970 and {{max}}, got {{year}}."
@@ -198,7 +198,10 @@
       "native": "Presets don't apply to {{title}}: it runs natively, without a Wine prefix.",
       "clientLaunch": "Presets don't apply to {{title}}: its store client launches it and owns its prefix."
     },
-    "unavailable": "Settings are not ready."
+    "unavailable": "Settings are not ready.",
+    "colorScheme": {
+      "invalid": "Colour scheme must be dark, light, black or empty, got {{scheme}}."
+    }
   },
   "sideload": {
     "duplicate": "{{executable}} is already in your library as {{title}}.",

@@ -14,10 +14,14 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --color-ground: #130f0a;
+  --color-ground-2: #191410;
   --color-raised: #191410;
   --color-surface: rgba(255, 255, 255, 0.045);
   --color-surface-strong: rgba(255, 255, 255, 0.06);
   --color-hairline: rgba(255, 255, 255, 0.07);
+  --color-hairline-strong: rgba(255, 255, 255, 0.12);
+  --color-popover: var(--popover);
+  --color-glass: rgba(25, 20, 16, 0.82);
   --color-accent: oklch(82.8% 0.189 84.429);
   --color-accent-strong: oklch(87.9% 0.169 91.605);
   --color-accent-dim: #2f240d;

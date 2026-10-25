@@ -5,9 +5,9 @@
 // the maths returns channel triples so readability can be checked before
 // anything is painted.
 import { Effect } from 'effect';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
-import { currentThemeVariables, TOKEN_VARS, onThemeApplied, useVariant } from './theme';
+import { currentThemeVariables, TOKEN_VARS, onThemeApplied, useVariant, getEffectiveScheme, type ColorScheme } from './theme';
 
 /** A sampled colour: sRGB channels, 0..255. */
 export type Tone = [number, number, number];
@@ -18,8 +18,8 @@ export type GameToneSupport = 'off' | 'accent' | 'whole';
 /** What is on screen: the axis value, capped by the theme. */
 export type GameToneMode = GameToneSupport;
 
-/** The user's pick, stored as a launcher setting. */
-export type GameToneChoice = 'accent' | 'whole';
+/** The user's pick, stored as a launcher setting (issue #134 adds off). */
+export type GameToneChoice = 'off' | 'accent' | 'whole';
 
 /** The width the hero art is sampled at, in pixels (the lab's 48x16). */
 const SAMPLE_W = 48;
@@ -137,31 +137,70 @@ export function cssColor(tone: Tone): string {
 
 /** The CSS variables of a game tone: the accent pair for `accent`, the whole
  *  palette for `whole` (the `whole` branch of D21.jsx, onto this app's token
- *  names). Empty when there is no tone, so the theme's own tokens stand. */
-export function toneVariables(mode: GameToneMode, tone: Tone | null): Record<string, string> {
+ *  names). Empty when there is no tone, so the theme's own tokens stand.
+ *  Ported from tintVars in tools/design-lab-2/src/core/app.js (issue #134):
+ *  light uses toneAt(…,0.75,0.38) for the accent and the 0.88–0.98 surfaces,
+ *  black halves the dark lightness (d=0.5). Contrast keeps readable() around
+ *  the text the lab leaves raw. */
+export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: ColorScheme = 'dark'): Record<string, string> {
   if (!tone || mode === 'off') return {};
   const derived: Record<string, Tone> = {};
+  const black = scheme === 'black';
   if (mode === 'accent') {
-    const accent = vivid(tone, 0.7, 0.6);
+    if (scheme === 'light') {
+      const accent = toneAt(tone, 0.75, 0.38);
+      derived.accent = accent;
+      derived['accent-strong'] = accent;
+      derived['accent-dim'] = toneAt(tone, 0.45, 0.88);
+      derived['on-accent'] = readable(tone, 0.15, 0.98, accent, 4.5, 1);
+    } else {
+      const accent = vivid(tone, 0.7, 0.6);
+      derived.accent = accent;
+      derived['accent-strong'] = vivid(tone, 0.68, 0.76);
+      // The dim shade of the accent, worn by the action strip (the lab's
+      // --acc-dim: toneAt(.45,.17) in accent mode, (.42,.2) in whole mode;
+      // black halves the lightness).
+      derived['accent-dim'] = toneAt(tone, 0.45, black ? 0.09 : 0.17);
+      // The dim shade of the accent, worn as the text on it.
+      derived['on-accent'] = readable(tone, 0.45, 0.17, accent, 4.5, -1);
+    }
+  } else if (scheme === 'light') {
+    const ground = toneAt(tone, 0.35, 0.88);
+    derived.ground = ground;
+    derived['ground-2'] = toneAt(tone, 0.32, 0.92);
+    derived.raised = toneAt(tone, 0.3, 0.95);
+    derived.surface = toneAt(tone, 0.32, 0.9);
+    derived['surface-strong'] = toneAt(tone, 0.32, 0.85);
+    derived.hairline = toneAt(tone, 0.25, 0.85);
+    derived['hairline-strong'] = toneAt(tone, 0.25, 0.76);
+    derived.popover = toneAt(tone, 0.25, 0.98);
+    const accent = toneAt(tone, 0.75, 0.38);
     derived.accent = accent;
-    derived['accent-strong'] = vivid(tone, 0.68, 0.76);
-    // The dim shade of the accent, worn by the action strip (the lab's
-    // --acc-dim: toneAt(.45,.17) in accent mode, (.42,.2) in whole mode).
-    derived['accent-dim'] = toneAt(tone, 0.45, 0.17);
-    // The dim shade of the accent, worn as the text on it.
-    derived['on-accent'] = readable(tone, 0.45, 0.17, accent, 4.5, -1);
+    derived['accent-strong'] = accent;
+    derived['accent-dim'] = toneAt(tone, 0.5, 0.84);
+    // Text stays dark on the light ground; the clamp moves it down when the
+    // sample is too light to read. on-accent stays the scheme's white (the
+    // lab's whole-light has no k-on-accent override).
+    derived.text = readable(tone, 0.4, 0.1, ground, 4.5, -1);
+    derived['text-body'] = readable(tone, 0.3, 0.2, ground, 4.5, -1);
+    derived['text-muted'] = readable(tone, 0.2, 0.36, ground, 3, -1);
+    derived['text-faint'] = readable(tone, 0.15, 0.5, ground, 3, -1);
   } else {
     // The surfaces first: the text is clamped against the ground it sits on.
-    const ground = toneAt(tone, 0.5, 0.06);
+    const d = black ? 0.5 : 1;
+    const ground = toneAt(tone, 0.5, 0.06 * d);
     derived.ground = ground;
-    derived.raised = toneAt(tone, 0.46, 0.1);
-    derived.surface = toneAt(tone, 0.42, 0.13);
-    derived['surface-strong'] = toneAt(tone, 0.38, 0.18);
-    derived.hairline = toneAt(tone, 0.34, 0.17);
+    derived['ground-2'] = toneAt(tone, 0.48, 0.08 * d);
+    derived.raised = toneAt(tone, 0.46, 0.1 * d);
+    derived.surface = toneAt(tone, 0.42, 0.13 * d);
+    derived['surface-strong'] = toneAt(tone, 0.38, 0.18 * d);
+    derived.hairline = toneAt(tone, 0.34, 0.17 * d);
+    derived['hairline-strong'] = toneAt(tone, 0.3, 0.26 * d);
+    derived.popover = toneAt(tone, 0.42, 0.13 * d);
     const accent = toneAt(tone, 0.9, 0.66);
     derived.accent = accent;
     derived['accent-strong'] = toneAt(tone, 0.7, 0.76);
-    derived['accent-dim'] = toneAt(tone, 0.42, 0.2);
+    derived['accent-dim'] = toneAt(tone, 0.42, 0.2 * d);
     derived['on-accent'] = readable(tone, 0.5, 0.07, accent, 4.5, -1);
     derived.text = readable(tone, 0.3, 0.95, ground, 4.5, 1);
     derived['text-body'] = readable(tone, 0.25, 0.72, ground, 4.5, 1);
@@ -176,10 +215,13 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null): Record<str
   return vars;
 }
 
-/** What the theme's axis allows, capped by the user's pick. */
+/** What the theme's axis allows, capped by the user's pick (issue #134 adds
+ *  off: no game colour, whatever the theme allows). */
 export function effectiveTone(supported: GameToneSupport, choice: GameToneChoice): GameToneMode {
+  if (choice === 'off') return 'off';
   if (supported === 'off') return 'off';
-  return supported === 'whole' ? choice : 'accent';
+  if (supported === 'accent') return 'accent';
+  return choice;
 }
 
 /** The tone painted on :root last, for a repaint after a theme change. */
@@ -191,10 +233,12 @@ let fadeTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** Paints the game's tone over the theme's tokens. With no tone (the axis is
  *  off, there is no art, or sampling failed) every variable goes back to the
- *  theme's own value, so the theme shows again. */
-export function applyGameTone(mode: GameToneMode, tone: Tone | null): void {
+ *  theme's own value, so the theme shows again. The scheme decides which
+ *  formulas paint (issue #134): light halves nothing, black halves the dark
+ *  lightness. */
+export function applyGameTone(mode: GameToneMode, tone: Tone | null, scheme?: ColorScheme): void {
   paintedTone = { mode, tone };
-  const vars = toneVariables(mode, tone);
+  const vars = toneVariables(mode, tone, scheme ?? getEffectiveScheme());
   const names = Object.keys(vars);
   // Nothing to paint and nothing painted: leave the stylesheet alone (no
   // transition class on a theme that never took the game's colour).
@@ -290,25 +334,49 @@ export function useArtTone(url: string | null): Tone | null {
   return tone;
 }
 
-/** The stored choice, or accent (the lighter one) when nothing is stored. */
+/** The stored choice: off stays off, whole stays whole, anything else (empty
+ *  included) is accent, the lighter one a theme needs no stored pick to show. */
 function choiceOf(settings: { game_tone?: string } | null): GameToneChoice {
-  return settings?.game_tone === 'whole' ? 'whole' : 'accent';
+  return settings?.game_tone === 'whole' ? 'whole' : settings?.game_tone === 'off' ? 'off' : 'accent';
+}
+
+/** Shared pick so the top-bar switch and the Appearance section stay in
+ *  agreement (issue #134 §5): every useGameTone instance reads the same
+ *  choice, and every setChoice updates them all. */
+let sharedChoice: GameToneChoice = 'accent';
+const choiceListeners = new Set<() => void>();
+
+function notifyChoice(): void {
+  for (const listener of choiceListeners) listener();
+}
+
+/** The current pick, for tests and non-React callers. */
+export function getGameToneChoice(): GameToneChoice {
+  return sharedChoice;
 }
 
 /** Reads the launcher setting; a failed read keeps accent. */
 export function loadGameToneChoice(): Promise<GameToneChoice> {
   try {
     return Effect.runPromise(LauncherApi.getLauncherSettings())
-      .then((settings) => choiceOf(settings))
-      .catch(() => 'accent' as const);
+      .then((settings) => {
+        const next = choiceOf(settings);
+        sharedChoice = next;
+        notifyChoice();
+        return next;
+      })
+      .catch(() => sharedChoice);
   } catch {
-    return Promise.resolve('accent');
+    return Promise.resolve(sharedChoice);
   }
 }
 
 /** Saves the pick as a launcher setting. A failed write keeps what is on
- *  screen: a colour choice is never a reason to break the UI. */
+ *  screen: a colour choice is never a reason to break the UI. Updates the
+ *  shared pick at once so the switch and the setting agree. */
 export function saveGameToneChoice(choice: GameToneChoice): Promise<void> {
+  sharedChoice = choice;
+  notifyChoice();
   try {
     return Effect.runPromise(LauncherApi.setGameTone(choice)).then(() => {}).catch(() => {});
   } catch {
@@ -333,23 +401,28 @@ export interface GameTone {
 
 export function useGameTone(heroUrl?: string | null): GameTone {
   const supported = useVariant('color.game-tone');
-  const [choice, setChoiceState] = useState<GameToneChoice>('accent');
+  const choice = useSyncExternalStore(
+    (listener) => { choiceListeners.add(listener); return () => choiceListeners.delete(listener); },
+    () => sharedChoice,
+    () => 'accent' as GameToneChoice,
+  );
   const tone = useArtTone(supported === 'off' ? null : heroUrl ?? null);
   const mode = effectiveTone(supported, choice);
 
   useEffect(() => {
     let live = true;
-    void loadGameToneChoice().then((stored) => { if (live) setChoiceState(stored); });
+    void loadGameToneChoice().then((stored) => { if (live && stored !== sharedChoice) { sharedChoice = stored; notifyChoice(); } });
     return () => { live = false; };
   }, []);
 
-  useEffect(() => { applyGameTone(mode, tone); }, [mode, tone]);
+  useEffect(() => { applyGameTone(mode, tone, getEffectiveScheme()); }, [mode, tone]);
 
-  // A theme change rewrites its tokens; the game's colour goes back on top.
+  // A theme or scheme change rewrites its tokens; the game's colour goes back
+  // on top. The scheme repaint reads the last mode and tone, so an Appearance
+  // pick and the top-bar switch stay in agreement (issue #134 §5).
   useEffect(() => onThemeApplied(repaintGameTone), []);
 
   const setChoice = (next: GameToneChoice) => {
-    setChoiceState(next);
     void saveGameToneChoice(next);
   };
 
