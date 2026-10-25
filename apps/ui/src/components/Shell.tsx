@@ -487,7 +487,7 @@ function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) 
         <button
           type="button"
           aria-label={t('nav:sourcebar.places')}
-          className="grid size-8 place-items-center rounded-xl text-text-body transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="grid size-7 place-items-center rounded-lg text-text-muted transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <Settings className="h-4 w-4" aria-hidden />
         </button>

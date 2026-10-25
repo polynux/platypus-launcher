@@ -70,6 +70,25 @@ export function lastPlayedLabel(g: Game, now = Date.now()): string | undefined {
   return formatLastPlayed(g.last_played_at, now);
 }
 
+/** Relative "ago" for the atlas list rows (issue #128), mirroring `ago()` in
+ *  tools/design-lab-2/src/core/launcher.js: "6 h ago", "yesterday",
+ *  "2 mo ago". Never a calendar date: anything past a month counts in months,
+ *  past a year in years. last_played_at is unix seconds; now is ms. */
+export function lastPlayedAgo(g: Game, now = Date.now()): string | undefined {
+  if (!g.last_played_at) return undefined;
+  const ms = Math.max(0, now - g.last_played_at * 1000);
+  const m = ms / 60e3;
+  if (m < 1) return 'just now';
+  if (m < 60) return `${Math.round(m)} min ago`;
+  const h = m / 60;
+  if (h < 24) return `${Math.round(h)} h ago`;
+  const d = h / 24;
+  if (d < 2) return 'yesterday';
+  if (d < 30) return `${Math.round(d)} days ago`;
+  if (d < 365) return `${Math.round(d / 30)} mo ago`;
+  return `${Math.round(d / 365)} yr ago`;
+}
+
 /** Most recently played first; never-played titles keep scan order at the end. */
 export function byRecent(a: Game, b: Game): number {
   return (b.last_played_at ?? 0) - (a.last_played_at ?? 0);

@@ -256,12 +256,12 @@ describe('Game settings catalog variants', () => {
       expect(document.getElementById('gs-acc-panel-versions')).toBeNull();
     });
 
-    it('starts focus on the first header, then Escape and a scrim click close it', async () => {
+    it('leaves focus off the headers on open (no focus ring on mouse open), then Escape and a scrim click close it', async () => {
       open();
       const closed = vi.fn();
       render(<GameSettingsModal {...modalProps({ onClose: closed })} />);
       await tick();
-      expect(document.getElementById('gs-acc-general')).toHaveFocus();
+      expect(document.getElementById('gs-acc-general')).not.toHaveFocus();
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(closed).toHaveBeenCalledTimes(1);
       clickBackdrop(screen.getByRole('dialog').parentElement!);

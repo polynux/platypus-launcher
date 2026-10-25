@@ -279,8 +279,9 @@ describe('StorageView', () => {
     );
     view({ games: [alpha], onRemove });
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Alpha from the library' }));
-    // The first row, with the check fetched as the panel opens.
-    expect(await screen.findByText('Remove from library')).toBeInTheDocument();
+    // The first row, with the check fetched as the panel opens. (The row's
+    // MonoLabel heading shares the button's text, so wait for the button.)
+    expect(await screen.findByRole('button', { name: 'Remove from library' })).toBeInTheDocument();
     await waitFor(() => expect(mock.api.checkRemove).toHaveBeenCalledWith('g', { delete_prefix: true, delete_files: true, allow_no_saves: false }));
     fireEvent.click(screen.getAllByRole('button', { name: 'Remove from library' })[0]);
     expect(await screen.findByTestId('remove-confirm-panel')).toBeInTheDocument();

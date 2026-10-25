@@ -26,6 +26,10 @@ export const cardClass =
   'group overflow-hidden rounded-2xl bg-surface text-left ring-1 ring-hairline transition duration-300 hover:-translate-y-0.5 hover:ring-accent-strong/40 focus-visible:ring-focus/60';
 
 export function MonoLabel({ children, className, as: Tag = 'div' }: { children: React.ReactNode; className?: string; as?: 'div' | 'h2' }) {
+  const style = useVariant('label.style');
+  if (style === 'plain') {
+    return <Tag className={cx('text-[12px] font-bold text-text-faint', className)}>{children}</Tag>;
+  }
   return <Tag className={cx('font-mono text-micro uppercase tracking-[0.16em] text-text-muted', className)}>{children}</Tag>;
 }
 
@@ -39,6 +43,14 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
 }
 
 export function LinkButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const style = useVariant('label.style');
+  if (style === 'plain') {
+    return (
+      <button onClick={onClick} className="rounded text-[12px] font-bold text-text-faint transition hover:text-text">
+        {children}
+      </button>
+    );
+  }
   return (
     <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-text-muted transition hover:text-white/80">
       {children}
@@ -53,6 +65,7 @@ export interface SegOption<T extends string> {
 }
 
 export function SegRow<T extends string>({ options, value, onChange, label }: { options: SegOption<T>[]; value: T; onChange: (v: T) => void; label: string }) {
+  const plain = useVariant('label.style') === 'plain';
   return (
     <ToggleGroup
       type="single"
@@ -63,7 +76,7 @@ export function SegRow<T extends string>({ options, value, onChange, label }: { 
       onValueChange={(v) => v && onChange(v as T)}
     >
       {options.map((o) => (
-        <ToggleGroupItem key={o.value} value={o.value} title={o.title}>
+        <ToggleGroupItem key={o.value} value={o.value} title={o.title} className={plain ? 'font-sans' : undefined}>
           {o.label}
         </ToggleGroupItem>
       ))}

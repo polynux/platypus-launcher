@@ -116,7 +116,7 @@
     "maintenance": "Maintenance"
   },
   "year": {
-    "kicker": "release year",
+    "kicker": "Release year",
     "aria": "Release year",
     "placeholder": "Unknown",
     "save": "Save year",

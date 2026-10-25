@@ -272,7 +272,7 @@
     "locked": "locked"
   },
   "steamAppId": {
-    "heading": "steam appid for ratings",
+    "heading": "Steam appid for ratings",
     "aria": "Steam AppID for ratings",
     "placeholder": "e.g. 620",
     "numberError": "A Steam AppID is a number, like 620.",
@@ -396,6 +396,26 @@
     "noRating": "No rating",
     "achievements": "Achievements",
     "seeAll": "See all {{total}} achievements",
-    "details": "Details"
+    "details": "Details",
+    "noActivity": "No activity for this game yet.",
+    "noSaves": "No saves found for this game yet.",
+    "noCompat": "No compatibility notes for this game yet.",
+    "activityStarted": "Started",
+    "activityEvent": "Event",
+    "activityInfo": "Info",
+    "savesBackup": "Backup",
+    "savesTrigger": "Trigger",
+    "savesFiles": "Files",
+    "savesSize": "Size",
+    "compatSource": "Source",
+    "compatNote": "Note",
+    "backupNow": "Back up now",
+    "backingUp": "Backing up…",
+    "backupQueued": "Save backup queued",
+    "restore": "Restore",
+    "delete": "Delete",
+    "restoreConfirm": "Restore this backup?",
+    "deleteConfirm": "Delete this backup?",
+    "cancel": "Cancel"
   }
 }

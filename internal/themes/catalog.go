@@ -46,6 +46,12 @@ var Catalog = []types.ThemeCatalogEntry{
 		{Name: "chrome", Values: []string{"dashed", "plain"}, Default: "dashed", Since: "1.0"},
 		{Name: "icon", Values: []string{"on", "off"}, Default: "off", Since: "1.0"},
 	}},
+	// Shared kickers (issue #128): the mono uppercase tracked labels the warm
+	// theme uses. Plain is the /21 reading: sans, sentence case, no
+	// letter-spacing. Default mono, so warm, cool and slate render as before.
+	{Entry: "label", Since: "1.0", Axes: []types.ThemeCatalogAxis{
+		{Name: "style", Values: []string{"mono", "plain"}, Default: "mono", Since: "1.0"},
+	}},
 	{Entry: "list-row", Since: "1.0", Axes: []types.ThemeCatalogAxis{
 		{Name: "media", Values: []string{"on", "off"}, Default: "on", Since: "1.0"},
 		{Name: "density", Values: []string{"comfortable", "compact"}, Default: "comfortable", Since: "1.0"},

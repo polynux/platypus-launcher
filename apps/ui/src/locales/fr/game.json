@@ -396,6 +396,26 @@
     "noRating": "Sans évaluation",
     "achievements": "Succès",
     "seeAll": "Voir les {{total}} succès",
-    "details": "Détails"
+    "details": "Détails",
+    "noActivity": "Aucune activité pour ce jeu pour l'instant.",
+    "noSaves": "Aucune sauvegarde trouvée pour ce jeu pour l'instant.",
+    "noCompat": "Aucune note de compatibilité pour ce jeu pour l'instant.",
+    "activityStarted": "Début",
+    "activityEvent": "Événement",
+    "activityInfo": "Info",
+    "savesBackup": "Sauvegarde",
+    "savesTrigger": "Déclencheur",
+    "savesFiles": "Fichiers",
+    "savesSize": "Taille",
+    "compatSource": "Source",
+    "compatNote": "Note",
+    "backupNow": "Sauvegarder maintenant",
+    "backingUp": "Sauvegarde en cours…",
+    "backupQueued": "Sauvegarde mise en file d'attente",
+    "restore": "Restaurer",
+    "delete": "Supprimer",
+    "restoreConfirm": "Restaurer cette sauvegarde ?",
+    "deleteConfirm": "Supprimer cette sauvegarde ?",
+    "cancel": "Annuler"
   }
 }

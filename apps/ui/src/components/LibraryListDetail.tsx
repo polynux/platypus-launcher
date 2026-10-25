@@ -10,7 +10,7 @@ import type { Collection, Game, StoreType } from '../types';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { cx } from './ui';
-import { byRecent, heroImages, hoursPlayed, lastPlayedLabel, needsAttention, attentionReason } from '../lib/games';
+import { byRecent, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason } from '../lib/games';
 import { sortKey } from '../lib/customize';
 import { collectionPredicate } from '../lib/collections';
 
@@ -44,10 +44,11 @@ function sortList(games: Game[], sort: ListSort): Game[] {
   return list;
 }
 
-/** Sub-line under the title: the last played word, or "Not installed" greyed. */
+/** Sub-line under the title: the relative "ago" ("6 h ago", "yesterday",
+ *  "2 mo ago" like ago() in the design lab), or "Not installed" greyed. */
 function subLine(t: (k: string) => string, g: Game): { text: string; absent: boolean } {
   if (!g.is_installed) return { text: t('library:listDetail.notInstalled'), absent: true };
-  const last = lastPlayedLabel(g);
+  const last = lastPlayedAgo(g);
   if (last) return { text: last, absent: false };
   return { text: t('library:listDetail.neverPlayed'), absent: false };
 }
@@ -99,11 +100,10 @@ export function LibraryListDetail(p: ListDetailProps) {
     p.onStageChange?.(selected?.id ?? null);
   }, [selected?.id]);
 
-  // The stage scrolls back to the top when the game changes.
+  // The stage is its own scroll container (like the list): it scrolls back
+  // to the top when the game changes.
   useEffect(() => {
-    const root = stageRef.current?.closest('[data-scroll-root]') as HTMLElement | null;
-    if (root) root.scrollTo({ top: 0 });
-    else stageRef.current?.scrollIntoView({ block: 'start' });
+    stageRef.current?.scrollTo({ top: 0 });
   }, [selected?.id]);
 
   const move = (dir: 1 | -1) => {
@@ -127,10 +127,12 @@ export function LibraryListDetail(p: ListDetailProps) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 items-stretch">
-      <aside aria-label={t('library:listDetail.listLabel')} className="flex w-[260px] min-w-0 flex-none flex-col border-r border-hairline bg-raised min-[1100px]:w-[296px]">
+    // The list and the stage are each their own scroll container under fixed
+    // tools: App's main never scrolls in this mode (/21 `.list` + `.stage`).
+    <div className="flex h-full min-h-0 flex-1 items-stretch overflow-x-hidden">
+      <aside aria-label={t('library:listDetail.listLabel')} className="flex min-h-0 w-[260px] min-w-0 flex-none flex-col border-r border-hairline bg-raised min-[1100px]:w-[296px]">
         <div className="flex gap-1.5 p-2.5">
-          <label className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-xl bg-surface px-2.5 text-text-faint">
+          <label className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] bg-surface px-2.5 text-text-faint">
             <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
             <span className="sr-only">{t('library:listDetail.filterAria')}</span>
             <input
@@ -146,13 +148,13 @@ export function LibraryListDetail(p: ListDetailProps) {
             />
           </label>
           <Select value={sort} onValueChange={(v) => setSort(v as ListSort)}>
-            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="w-[118px] flex-none">
+            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[120px] flex-none bg-surface font-sans text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="recent">{t('library:listDetail.sort.recent')}</SelectItem>
-              <SelectItem value="title">{t('library:listDetail.sort.title')}</SelectItem>
-              <SelectItem value="hours">{t('library:listDetail.sort.hours')}</SelectItem>
+              <SelectItem value="recent" className="font-sans text-[13px]">{t('library:listDetail.sort.recent')}</SelectItem>
+              <SelectItem value="title" className="font-sans text-[13px]">{t('library:listDetail.sort.title')}</SelectItem>
+              <SelectItem value="hours" className="font-sans text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -183,17 +185,17 @@ export function LibraryListDetail(p: ListDetailProps) {
                     onClick={() => setSelectedId(g.id)}
                     onDoubleClick={() => p.onPlay(g.id)}
                     className={cx(
-                      'flex w-full items-center gap-2.5 rounded-xl px-1.5 py-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                      'flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] pl-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                       on ? 'bg-accent/[0.15] text-text' : 'text-text-muted hover:bg-surface hover:text-text',
                     )}
                   >
                     {art ? (
-                      <img src={art} alt="" loading="lazy" className={cx('h-7 w-[60px] flex-none rounded-md object-cover', !g.is_installed && 'brightness-[0.55] grayscale')} />
+                      <img src={art} alt="" loading="lazy" className={cx('h-7 w-[60px] flex-none rounded-[5px] object-cover', !g.is_installed && 'brightness-[0.55] grayscale')} />
                     ) : (
-                      <span aria-hidden className="h-7 w-[60px] flex-none rounded-md bg-surface-strong" />
+                      <span aria-hidden className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />
                     )}
                     <span className="grid min-w-0 flex-1">
-                      <span className={cx('truncate text-[13px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
+                      <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
                       <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
                     </span>
                     {attn && (
@@ -208,7 +210,7 @@ export function LibraryListDetail(p: ListDetailProps) {
           </ul>
         )}
       </aside>
-      <div ref={stageRef} className="min-w-0 flex-1">
+      <div ref={stageRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
         {selected ? p.renderStage(selected) : null}
       </div>
     </div>

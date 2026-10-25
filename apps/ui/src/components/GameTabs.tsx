@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, HardDrive, Loader2, Play, RefreshCw, SlidersHorizontal, Square } from 'lucide-react';
-import type { ActivityEvent, ArtCandidate, CloudInfo, Game, GameDetails, GameJobKind, GameSettings, Job, SessionEvent, StorePlugin } from '../types';
+import type { ActivityEvent, ArtCandidate, CloudInfo, Game, GameDetails, GameJobKind, GameSettings, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -19,13 +19,13 @@ import { PluginLogo } from './PluginLogo';
 import { CrashHintsPanel } from './CrashHints';
 import { CloudSavesPanel } from './CloudSavesPanel';
 import { CloudConflictDialog } from './CloudSavesConflict';
-import { SaveBackupsSection } from './SaveBackupsSection';
 import { JobProgress } from './JobProgress';
 import { useCrashHints } from '../lib/useCrashHints';
 import { useCompat } from '../lib/useCompat';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { useVariant } from '../lib/theme';
 import { formatBytes, hoursPlayed, storeLabel } from '../lib/games';
+import { currentLocale, formatClock, formatDate } from '../lib/format';
 import { formatDecimal1 } from '../lib/gameLocale';
 import { playedCopy, pickableCopies } from '../lib/family';
 import { coreErrMsg } from '../lib/coreError';
@@ -33,12 +33,9 @@ import { cx } from './ui';
 import {
   AboutSection,
   AchievementsSection,
-  GameActivity,
   GameBackLink,
-  GameCompat,
   GameInstallNote,
   GameOutsideAlert,
-  SafeHtml,
 } from './GamePage';
 import { ProgressAchievements, type useAchievementProgress } from './ProgressAchievements';
 import type { InstallSize } from '../lib/installSize';
@@ -383,7 +380,7 @@ function GallerySheet({ media, title }: { media: MediaItem[]; title: string }) {
             onClick={() => setIndex(i)}
             aria-label={t('game:media.screenshotLabel', { index: i + 1 })}
             className={cx(
-              'overflow-hidden rounded-lg bg-black/40 ring-1 ring-hairline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              'overflow-hidden rounded-md bg-black/40 ring-1 ring-hairline transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               i === 0 && 'col-span-2',
             )}
           >
@@ -406,11 +403,11 @@ function YouGrid({ d }: { d: GameTabsData }) {
     [t('game:storeTab.protondb'), d.protondb || t('game:storeTab.noRating')],
   ];
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-hairline ring-1 ring-hairline">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline ring-1 ring-hairline">
       {cells.map(([k, v]) => (
         <div key={k} className="bg-surface px-3 py-2.5">
           <dt className="text-[11.5px] text-text-faint">{k}</dt>
-          <dd className="truncate font-semibold text-text" title={v}>{v}</dd>
+          <dd className="truncate font-[650] text-text" title={v}>{v}</dd>
         </div>
       ))}
     </dl>
@@ -455,15 +452,199 @@ function DetailsSide({ d }: { d: GameTabsData }) {
   return (
     <section aria-label={t('game:storeTab.details')}>
       <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:storeTab.details')}</h2>
-      <dl className="space-y-2">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4 border-t border-hairline pt-2 font-mono text-[12px]">
-            <dt className="text-text-muted">{k}</dt>
-            <dd className="truncate text-right text-text" title={v}>{v}</dd>
+          <div key={k} className="min-w-0">
+            <dt className="mb-0.5 text-[12px] text-text-muted">{k}</dt>
+            <dd className="truncate text-[13px] font-[550] text-text" title={v}>{v}</dd>
           </div>
         ))}
       </dl>
     </section>
+  );
+}
+
+/* Flat tables like `.tbl` in the design lab's kit.css: header cells 30px,
+ * weight 500, faint, with a hairline bottom border; rows 36px with hairline
+ * borders; the first column padded 24px; numbers right-aligned in mono
+ * tabular. An empty tab shows one muted line, padded 16px 24px. */
+const TBL_HEAD = 'h-[30px] px-3 text-left align-middle text-[13px] font-medium text-text-faint border-b border-hairline whitespace-nowrap';
+const TBL_HEAD_FIRST = 'h-[30px] pl-6 pr-3 text-left align-middle text-[13px] font-medium text-text-faint border-b border-hairline whitespace-nowrap';
+const TBL_CELL = 'h-9 px-3 text-left align-middle text-[13px] text-text border-b border-hairline';
+const TBL_CELL_FIRST = 'h-9 pl-6 pr-3 text-left align-middle text-[13px] text-text border-b border-hairline whitespace-nowrap';
+const TBL_NUM = 'h-9 px-3 text-right align-middle font-mono text-[12px] tabular-nums text-text border-b border-hairline whitespace-nowrap';
+
+function TblEmpty({ text }: { text: string }) {
+  return <p className="px-6 py-4 text-[13px] text-text-muted">{text}</p>;
+}
+
+function ActivityTab({ events }: { events: ActivityEvent[] }) {
+  const { t } = useTranslation('game');
+  const locale = currentLocale();
+  if (events.length === 0) return <TblEmpty text={t('game:storeTab.noActivity')} />;
+  return (
+    <table className="w-full">
+      <thead>
+        <tr>
+          <th className={TBL_HEAD_FIRST}>{t('game:storeTab.activityStarted')}</th>
+          <th className={TBL_HEAD}>{t('game:storeTab.activityEvent')}</th>
+          <th className={TBL_HEAD}>{t('game:storeTab.activityInfo')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {events.map((e) => (
+          <tr key={e.id}>
+            <td className={cx(TBL_CELL_FIRST, 'tabular-nums text-text-muted')}>
+              {formatDate(Math.floor(e.ts / 1000), locale)} {formatClock(e.ts, locale)}
+            </td>
+            <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
+              <span className="block whitespace-normal leading-relaxed">{e.detail}</span>
+            </td>
+            <td className={cx(TBL_CELL, 'text-text-muted')}>{e.meta ?? ''}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function BackupTable({ game, onNotify }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void }) {
+  const { t } = useTranslation('game');
+  const [backups, setBackups] = useState<SaveBackup[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<{ id: string; what: 'restore' | 'delete' } | null>(null);
+  const locale = currentLocale();
+  const reload = useCallback(() => {
+    Effect.runPromise(LauncherApi.listSaveBackups(game.id)).then(
+      (v) => setBackups(v ?? []),
+      () => setBackups([]),
+    );
+  }, [game.id]);
+  useEffect(() => {
+    setBackups(null);
+    setConfirm(null);
+    reload();
+  }, [reload]);
+  const backupNow = () => {
+    if (busy) return;
+    setBusy(true);
+    Effect.runPromise(LauncherApi.createSaveBackup(game))
+      .then(() => {
+        onNotify(t('game:storeTab.backupQueued'), 'busy');
+        reload();
+      })
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  const act = (id: string, what: 'restore' | 'delete') => {
+    Effect.runPromise(what === 'restore' ? LauncherApi.restoreSaveBackup(game, id) : LauncherApi.deleteSaveBackup(game.id, id)).then(
+      () => { setConfirm(null); reload(); },
+      (e) => { setConfirm(null); onNotify(coreErrMsg(e), 'err'); },
+    );
+  };
+  if (backups == null) return <TblEmpty text={t('game:storeTab.noSaves')} />;
+  return (
+    <div>
+      <div className="flex items-center gap-2 px-6 py-2">
+        <Button variant="neutral" size="sm" onClick={backupNow} disabled={busy}>
+          {busy ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
+        </Button>
+      </div>
+      {backups.length === 0 ? (
+        <TblEmpty text={t('game:storeTab.noSaves')} />
+      ) : (
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={TBL_HEAD_FIRST}>{t('game:storeTab.savesBackup')}</th>
+              <th className={TBL_HEAD}>{t('game:storeTab.savesTrigger')}</th>
+              <th className={cx(TBL_HEAD, 'text-right')}>{t('game:storeTab.savesFiles')}</th>
+              <th className={cx(TBL_HEAD, 'text-right')}>{t('game:storeTab.savesSize')}</th>
+              <th className={TBL_HEAD}><span className="sr-only">{t('game:storeTab.savesBackup')}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {backups.map((b) => (
+              <tr key={b.id}>
+                <td className={cx(TBL_CELL_FIRST, 'tabular-nums')}>
+                  {formatDate(b.created_at, locale)} {formatClock(b.created_at * 1000, locale)}
+                </td>
+                <td className={TBL_CELL}>{b.trigger}</td>
+                <td className={TBL_NUM}>{b.files}</td>
+                <td className={TBL_NUM}>{formatBytes(b.size)}</td>
+                <td className={TBL_CELL}>
+                  {confirm?.id === b.id ? (
+                    <span className="flex items-center justify-end gap-2">
+                      <span className="text-[12px] text-text-muted">
+                        {confirm.what === 'restore' ? t('game:storeTab.restoreConfirm') : t('game:storeTab.deleteConfirm')}
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirm(null)}>{t('game:storeTab.cancel')}</Button>
+                      <Button variant="danger" size="sm" onClick={() => act(b.id, confirm.what)}>
+                        {confirm.what === 'restore' ? t('game:storeTab.restore') : t('game:storeTab.delete')}
+                      </Button>
+                    </span>
+                  ) : (
+                    <span className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => setConfirm({ id: b.id, what: 'restore' })} disabled={game.is_installed === false}>
+                        {t('game:storeTab.restore')}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setConfirm({ id: b.id, what: 'delete' })}>
+                        {t('game:storeTab.delete')}
+                      </Button>
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function SavesTab({ d }: { d: GameTabsData }) {
+  return (
+    <div>
+      {/* The cloud saves controls sit above the table as a slim row. */}
+      {d.plugin && (
+        <div className="border-b border-hairline bg-raised px-6 py-2.5">
+          <CloudSavesPanel game={d.game} plugin={d.plugin} framed={false} />
+        </div>
+      )}
+      <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} />
+    </div>
+  );
+}
+
+function CompatTab({ d, info }: { d: GameTabsData; info: ReturnType<typeof useCompat>['compat'] }) {
+  const { t } = useTranslation('game');
+  const rows: { source: string; note: string }[] = [];
+  if (d.game.fix_info?.description) rows.push({ source: d.game.fix_info.source, note: d.game.fix_info.description });
+  const rating = info?.badges?.find((b) => b.kind === 'rating');
+  for (const n of info?.notes ?? []) {
+    rows.push({ source: rating?.source ?? d.game.fix_info?.source ?? 'Platypus', note: n });
+  }
+  if (rows.length === 0) return <TblEmpty text={t('game:storeTab.noCompat')} />;
+  return (
+    <table className="w-full">
+      <thead>
+        <tr>
+          <th className={TBL_HEAD_FIRST}>{t('game:storeTab.compatSource')}</th>
+          <th className={TBL_HEAD}>{t('game:storeTab.compatNote')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            <td className={cx(TBL_CELL_FIRST, 'text-text-muted')}>{r.source}</td>
+            <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
+              <span className="block whitespace-normal leading-relaxed">{r.note}</span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -509,8 +690,9 @@ export function GameTabsView(d: GameTabsData) {
           rounded inset card, so the Tune flyout is never clipped. */}
       <AtlasHero game={d.game} hero={d.hero} details={d.details} />
       <ActionStrip d={d} />
-      {/* Notices sit below the strip with the page padding. */}
-      <div className="px-5 pt-4 empty:hidden">
+      {/* Notices sit flush below the strip: each carries its own slim-row
+          padding, with no outer card and no page padding around them. */}
+      <div className="empty:hidden">
         {d.plugin && <GameOutsideAlert game={d.game} plugin={d.plugin} onAllowFolder={d.onAllowFolder} />}
         <GameInstallNote
           game={d.game}
@@ -524,7 +706,7 @@ export function GameTabsView(d: GameTabsData) {
           onOpenPlugins={d.onOpenPlugins}
         />
       </div>
-      <div role="tablist" aria-label={t('game:tabs.label')} onKeyDown={onTabKey} className="sticky top-0 z-10 -mx-1 mt-2 flex gap-1 overflow-x-auto border-b border-hairline bg-ground px-4">
+      <div role="tablist" aria-label={t('game:tabs.label')} onKeyDown={onTabKey} className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-hairline bg-raised px-4">
         {tabs.map((x) => (
           <button
             key={x.id}
@@ -535,7 +717,7 @@ export function GameTabsView(d: GameTabsData) {
             tabIndex={x.id === cur ? 0 : -1}
             onClick={() => setTab(x.id)}
             className={cx(
-              'h-[42px] flex-none px-3 text-[13.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              'h-[42px] flex-none px-2.5 text-[13.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               x.id === cur ? 'text-text shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-text-muted hover:text-text',
             )}
           >
@@ -544,9 +726,9 @@ export function GameTabsView(d: GameTabsData) {
           </button>
         ))}
       </div>
-      <div role="tabpanel" key={`${d.game.id}-${cur}`} className="px-5 pb-8 pt-5">
+      <div role="tabpanel" key={`${d.game.id}-${cur}`} className="pb-9">
         {cur === 'store' && (
-          <div className="grid grid-cols-1 gap-7 min-[1100px]:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid grid-cols-1 gap-7 px-6 pt-5 min-[1100px]:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0">
               <AboutSection
                 game={d.game}
@@ -571,21 +753,20 @@ export function GameTabsView(d: GameTabsData) {
           </div>
         )}
         {cur === 'achievements' && (
-          <div className="max-w-[920px]">
+          <div className="max-w-[920px] px-6 pt-5">
             {d.progress ? <ProgressAchievements progress={d.progress} /> : d.ach && d.ach.total > 0 ? <AchievementsSection ach={d.ach} known={d.ach.unlocked >= 0} viaSteam={d.game.source === 'steam'} /> : null}
           </div>
         )}
-        {cur === 'activity' && <GameActivity events={d.events} />}
-        {cur === 'saves' && (
-          <div className="grid max-w-[860px] gap-5">
-            {d.plugin && <CloudSavesPanel game={d.game} plugin={d.plugin} />}
-            <SaveBackupsSection game={d.game} onNotify={d.onNotify ?? (() => {})} />
-          </div>
-        )}
+        {cur === 'activity' && <ActivityTab events={d.events} />}
+        {cur === 'saves' && <SavesTab d={d} />}
         {cur === 'compat' && (
-          <div className="grid max-w-[860px] gap-5">
-            <GameCompat compat={d.compatText} fix={d.game.fix_info} facts={d.facts} info={info} />
-            {crash && <CrashHintsPanel game={d.game} hints={crash} onNotify={d.onNotify} onRunner={d.onOpenRunner} />}
+          <div>
+            {crash && (
+              <div className="border-b border-hairline bg-raised px-6 py-3">
+                <CrashHintsPanel game={d.game} hints={crash} onNotify={d.onNotify} onRunner={d.onOpenRunner} />
+              </div>
+            )}
+            <CompatTab d={d} info={info} />
           </div>
         )}
       </div>

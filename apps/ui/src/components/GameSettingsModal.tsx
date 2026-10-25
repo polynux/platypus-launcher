@@ -114,16 +114,12 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // edits because its panel stays mounted (hidden) below.
   const showTab = (name: GameSettingsTab) => { setTab(name); setOpen(name); };
   const accordionRef = useRef<HTMLDivElement>(null);
-  // The focus starts on the first header, not on the close button (issue #129).
-  // Radix mounts and focuses the dialog's content after this component's first
-  // effects, so the move runs on the next tick.
-  useEffect(() => {
-    if (!accordion) return;
-    const id = window.setTimeout(() => {
-      accordionRef.current?.querySelector<HTMLButtonElement>('button[data-gs-accordion-header]')?.focus();
-    }, 0);
-    return () => window.clearTimeout(id);
-  }, [accordion]);
+  // The drawer focuses its own panel on open (/21 `.drawer`): no focus ring
+  // on mouse open, and keyboard users land inside the trapped sheet.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const drawerAutoFocus = accordion && presentation === 'sheet'
+    ? (e: Event) => { e.preventDefault(); panelRef.current?.focus({ preventScroll: true }); }
+    : undefined;
   // An explicit dialog size wins; auto (and the sheet, whose width is its
   // own) keeps this dialog's built-in xl.
   const dialogSize = useVariant('dialog.size');
@@ -188,19 +184,21 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
 
   // The accordion (issue #129): group headings, then one collapsible per
   // category. General's panel stays mounted while closed, like its tab, so
-  // unsaved edits survive opening another section.
+  // unsaved edits survive opening another section. The groups read the
+  // label.style axis (/21 plain: 12px/700/faint, never a mono kicker).
+  const plainLabels = useVariant('label.style') === 'plain';
   const accordionBody = (
     <div ref={accordionRef} data-testid="gs-accordion" className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
       {settingsGroups(tabs).map((group) => (
         <div key={group.level}>
-          <div className="px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.14em] text-text-faint">
+          <div className={plainLabels ? 'px-2 pb-1.5 pt-4 text-[12px] font-bold text-text-faint' : 'px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.14em] text-text-faint'}>
             {t(`gameSettings:accordion.${group.level}`)}
           </div>
           {group.tabs.map((name) => {
             const isOpen = open === name;
             const Icon = TAB_ICONS[name];
             return (
-              <section key={name} className={cx('rounded-xl', isOpen && 'bg-surface')}>
+              <section key={name} className={cx('rounded-[10px]', isOpen && 'bg-surface')}>
                 <h3 className="font-sans">
                   <button
                     type="button"
@@ -210,7 +208,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                     aria-controls={isOpen || name === 'general' ? `gs-acc-panel-${name}` : undefined}
                     aria-describedby={`gs-acc-sum-${name}`}
                     onClick={() => setOpen(isOpen ? null : name)}
-                    className="flex min-h-[46px] w-full items-center gap-2.5 rounded-xl px-3 text-left outline-none hover:bg-surface-strong focus-visible:ring-2 focus-visible:ring-focus/60"
+                    className="flex h-[46px] w-full items-center gap-2.5 rounded-[10px] px-3 text-left outline-none hover:bg-surface-strong focus-visible:ring-2 focus-visible:ring-focus/60"
                   >
                     <Icon className={cx('size-4 flex-none', isOpen ? 'text-accent' : 'text-text-muted')} aria-hidden />
                     <span className="text-[13px] font-bold text-text">{tabLabel(t, name)}</span>
@@ -224,7 +222,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                     role="region"
                     aria-labelledby={`gs-acc-${name}`}
                     hidden={!isOpen}
-                    className="px-3.5 pb-3 pl-[38px]"
+                    className="px-3.5 pb-3 pl-[39px]"
                   >
                     {body(name)}
                   </div>
@@ -238,13 +236,13 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   );
 
   const content = (
-    <div className="@container flex h-full min-h-0 flex-col">
+    <div ref={panelRef} tabIndex={-1} className="@container flex h-full min-h-0 flex-col outline-none">
       <div className="mb-5 flex flex-none items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[20px] font-extrabold tracking-tight">
+          <h2 className={accordion ? 'text-[18px] font-extrabold tracking-tight' : 'text-[20px] font-extrabold tracking-tight'}>
             {accordion ? t('gameSettings:settingsModal.allSettings') : t('gameSettings:settingsModal.heading')}
           </h2>
-          <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
+          <div className={accordion ? 'truncate text-[13px] text-text-muted' : 'truncate font-mono text-hint text-white/55'}>{game.title}</div>
         </div>
         {presentation !== 'page' && (
           <Button variant="neutral" size="icon" onClick={p.onClose} aria-label={t('common:close')} className="size-8 flex-none">
@@ -323,7 +321,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     // the shared Modal is untouched, so no other dialog changes size. A
     // sheet spans the full viewport height, so the fixed height is for the
     // dialog presentation only.
-    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} onOpenAutoFocus={drawerAutoFocus} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
       {content}
     </Modal>
   );
@@ -334,6 +332,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
  *  like a customization change. */
 function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void }) {
   const { t } = useTranslation('gameSettings');
+  const plainKicker = useVariant('label.style') === 'plain';
   const [raw, setRaw] = useState(game.release_year ? String(game.release_year) : '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -352,7 +351,11 @@ function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void
   };
   return (
     <div className="mb-6">
-      <span className="mb-1.5 block font-mono text-[12px] uppercase tracking-[0.14em] text-white/55">{t('gameSettings:year.kicker')}</span>
+      {plainKicker ? (
+        <div className="mb-1.5 text-[12px] font-bold text-text-faint">{t('gameSettings:year.kicker')}</div>
+      ) : (
+        <span className="mb-1.5 block font-mono text-[12px] uppercase tracking-[0.14em] text-white/55">{t('gameSettings:year.kicker')}</span>
+      )}
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => { e.preventDefault(); save(); }}

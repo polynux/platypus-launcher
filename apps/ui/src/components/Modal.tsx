@@ -23,12 +23,16 @@ interface ModalProps {
   presentation?: 'dialog' | 'sheet';
   /** A sheet's own width (a CSS length), when it isn't the default 42rem. */
   sheetWidth?: string;
+  /** Radix's open autofocus, for surfaces (like the atlas drawer) that focus
+   *  their own panel instead of the first control, so a mouse open shows no
+   *  focus ring. */
+  onOpenAutoFocus?: (e: Event) => void;
   children: React.ReactNode;
 }
 
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`. */
-export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, children }: ModalProps) {
+export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, children }: ModalProps) {
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -39,6 +43,7 @@ export function Modal({ label, onClose, size = 'sm', className, dismissable = tr
         className={cn(MODAL_SIZES[size], className)}
         onEscapeKeyDown={(e) => !dismissable && e.preventDefault()}
         onInteractOutside={(e) => !dismissable && e.preventDefault()}
+        onOpenAutoFocus={onOpenAutoFocus}
         onCloseAutoFocus={(e) => {
           if (!restoreFocus.current?.isConnected) return;
           e.preventDefault();
