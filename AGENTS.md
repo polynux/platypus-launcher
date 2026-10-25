@@ -11,10 +11,11 @@ Linux game launcher (Go core, React UI in a desktop shell) with store plugins ov
 - `apps/desktop`: the desktop shell (Electron + Chromium) around the core.
 - `plugins/`: store plugins and their install/scaffold scripts.
 - `packaging/`: icons and (later) the distributable build config.
-- `tools/design-lab-2`: the reference UI design (dev server, port 5176). `/21`
-  (`src/designs/d21`) is the main design to implement. `/16` and `/18` may be
-  built only as secondary designs (for example test themes); the other routes
-  are decision history.
+- `tools/design-lab-2`: the reference UI design (dev server, port 5176). `/22`
+  (`src/designs/d22`) is the main design to implement: every launcher feature in
+  the `/21` look, with game colour (off, accent, whole app) in Settings. `/16`
+  and `/18` may be built only as secondary designs (for example test themes);
+  the other routes are decision history.
 - `tools/design-lab`: an older design (port 5175), kept for history. Don't use it
   as a reference; `DESIGN.md` still describes the app as built from it.
 - `docs/`: user and contributor docs (`docs/electron.md` describes the shell).

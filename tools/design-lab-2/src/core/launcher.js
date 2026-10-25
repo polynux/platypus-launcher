@@ -80,6 +80,8 @@ export const VIEWS = [
   { id: 'downloads', label: 'Downloads' },
   { id: 'attention', label: 'Needs attention' },
 ];
+export const TIER_ORDER = ['native', 'platinum', 'gold', 'silver', 'bronze', 'borked'];
+export const sizeOf = (g) => parseFloat(activeCopy(g).size) || 0;
 export const isDownloading = (g, jobs) => g.stores.some((s) => s.update) || jobs.some((j) => j.gameId === g.id && j.kind === 'download');
 export function stateMatch(g, f) {
   if (f === 'installed') return isInstalled(g);
@@ -110,6 +112,7 @@ export function useLauncher({ initial = 'bg3', sort: initialSort = 'recent' } = 
   const [storeFilter, setStoreFilter] = useState('all');
   const [stores, setStores] = useState([]); // empty = every store
   const [stateFilter, setStateFilter] = useState('all');
+  const [refine, setRefine] = useState(null); // optional extra filter from a design: { fn, key }
   const [inspector, setInspector] = useState(true);
   const [palette, setPalette] = useState(null); // null | { mode, gameId }
   const [conflictFor, setConflictFor] = useState(null);
@@ -138,17 +141,21 @@ export function useLauncher({ initial = 'bg3', sort: initialSort = 'recent' } = 
         (storeFilter === 'all' || g.stores.some((s) => s.store === storeFilter)) &&
         (stores.length === 0 || g.stores.some((s) => stores.includes(s.store))) &&
         (stateFilter === 'downloads' ? isDownloading(g, jobs) : stateMatch(g, stateFilter)) &&
-        matches(query, g.title),
+        matches(query, g.title) &&
+        (!refine || refine.fn(g)),
     );
     const by = {
       recent: (a, b) => isInstalled(b) - isInstalled(a) || a.lastAgo - b.lastAgo,
       title: (a, b) => a.title.localeCompare(b.title),
       hours: (a, b) => b.hours - a.hours,
       last: (a, b) => a.lastAgo - b.lastAgo,
+      year: (a, b) => b.year - a.year,
+      size: (a, b) => sizeOf(b) - sizeOf(a),
+      tier: (a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier),
     }[sort.replace(/-desc$/, '')];
     const out = [...list].sort(by);
     return sort.endsWith('-desc') ? out.reverse() : out;
-  }, [games, query, storeFilter, sort, stores, stateFilter, jobs.map((j) => j.id).join()]);
+  }, [games, query, storeFilter, sort, stores, stateFilter, refine?.key, jobs.map((j) => j.id).join()]);
 
   const game = games.find((g) => g.id === selectedId) || visible[0] || games[0];
 
@@ -176,6 +183,7 @@ export function useLauncher({ initial = 'bg3', sort: initialSort = 'recent' } = 
     setStores,
     setStateFilter,
     resetFilters: () => { setStores([]); setStateFilter('all'); setQuery(''); setStoreFilter('all'); },
+    setRefine,
     toggleInspector: () => setInspector((v) => !v),
     setInspector,
     openPalette: (mode = 'root') => setPalette({ mode }),

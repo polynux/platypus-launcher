@@ -1,0 +1,70 @@
+/* /23 Atlas, rail: every place on an icon rail, library tools in a column,
+   friends docked right, chats as floating windows. Builds on /22's styles. */
+.d23 .frame { flex: 1; min-height: 0; display: flex; }
+
+.d23 .rail { width: 60px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; background: var(--s0); border-right: 1px solid var(--k-line); }
+.d23 .rail-mark { margin-bottom: 10px; width: 30px; height: 30px; border-radius: 9px; font-size: 15px; }
+.d23 .rail-sp { flex: 1; }
+.d23 .rail-btn { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 11px; color: var(--k-faint); }
+.d23 .rail-btn:hover { color: var(--k-text); background: var(--k-bg-2); }
+.d23 .rail-btn.is-on { color: var(--k-text); background: color-mix(in srgb, var(--acc) 18%, var(--k-bg-2)); }
+.d23 .rail-btn.is-on::before { content: ''; position: absolute; left: -9px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 2px 2px 0; background: var(--acc); }
+.d23 .rail-btn .tb-ring { inset: 3px; width: 36px; height: 36px; }
+.d23 .rail-badge { position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; font-size: 10px; box-shadow: 0 0 0 2px var(--s0); }
+.d23 .rail-badge.is-warn { background: var(--k-warn); color: #1b1300; }
+.d23 .rail-btn::after { content: attr(data-tip); position: absolute; left: calc(100% + 10px); top: 50%; translate: 0 -50%; z-index: 80; padding: 4px 8px; border-radius: 6px; background: var(--s-pop); box-shadow: 0 0 0 1px var(--k-line-strong); color: var(--k-text); font-size: 12px; font-weight: 600; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.12s 0.25s; }
+.d23 .rail-btn:hover::after, .d23 .rail-btn:focus-visible::after { opacity: 1; }
+
+.d23 .col { width: 300px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--s1); border-right: 1px solid var(--k-line); }
+.d23 .col-head { display: flex; gap: 6px; padding: 10px; }
+.d23 .col-head .ap-viewsw { flex: none; padding: 2px; }
+.d23 .col-head .ap-viewsw button { height: 26px; padding: 0 6px; }
+.d23 .col-cmd { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; width: 100%; height: 32px; padding: 0 6px 0 11px; border-radius: 8px; background: var(--k-bg-2); color: var(--k-faint); }
+.d23 .col-cmd span { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d23 .col-cmd:hover { color: var(--k-muted); }
+.d23 .col-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 8px 12px; }
+.d23 .col-own { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px 6px; }
+.d23 .col-own .ap-seg { display: flex; width: 100%; }
+.d23 .col-own .ap-seg button { flex: 1; justify-content: center; }
+.d23 .col-cmd kbd { display: none; }
+.d23 .col-sec { border-top: 1px solid var(--k-line); padding: 4px 0; }
+.d23 .col-sec > h2 { display: flex; align-items: center; justify-content: space-between; }
+.d23 .col-sec > h2 > button { display: flex; align-items: center; gap: 6px; flex: 1; height: 30px; padding: 0 4px; font-size: 12px; font-weight: 700; color: var(--k-faint); }
+.d23 .col-sec > h2 > button:hover { color: var(--k-text); }
+.d23 .col-sec > h2 .ap-n { margin-left: auto; padding-right: 4px; }
+.d23 .col-add { width: 24px; height: 24px; }
+.d23 .col-stores { flex-wrap: wrap; overflow: visible; padding: 0 0 6px; }
+.d23 .col-stores .ap-store { height: 28px; padding: 0 9px; }
+.d23 .col-sec.is-games { padding-top: 8px; }
+.d23 .col-tools { display: flex; gap: 4px; }
+.d23 .col-tools .list-search { flex: 1; }
+.d23 .col-sort { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.d23 .col-sort .ap-sort .sel { width: 120px; }
+.d23 .col .list-body { padding: 0; }
+.d23 .col .ap-srcwarn { margin: 4px 0 8px; }
+.d23 .col-filters { display: flex; gap: 4px; padding-bottom: 6px; }
+
+.d23 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.d23 .main .stage { flex: 1; min-height: 0; }
+
+.d23 .dock { width: 280px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--s1); border-left: 1px solid var(--k-line); }
+.d23 .dock .ap-me { padding: 8px 8px 4px; border-bottom: 1px solid var(--k-line); }
+.d23 .dock-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 70px; }
+.d23 .dock .ap-family > header { display: none; }
+.d23 .dock-foot { display: grid; gap: 2px; padding: 8px; border-top: 1px solid var(--k-line); }
+.d23 .dock-foot .btn { justify-content: flex-start; }
+
+.d23 .chats { position: fixed; z-index: 85; right: 296px; bottom: 28px; display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 10px; pointer-events: none; }
+.d23 .chatwin { width: 300px; height: 380px; display: flex; flex-direction: column; border-radius: 12px 12px 0 0; background: var(--s-pop); box-shadow: 0 0 0 1px var(--k-line-strong), 0 -10px 40px rgba(0, 0, 0, 0.45); overflow: hidden; pointer-events: auto; animation: k-rise 0.16s ease-out; }
+.d23 .chatwin.is-mini { height: auto; }
+.d23 .chatwin > header { display: flex; align-items: center; gap: 2px; padding: 5px 6px 5px 8px; background: color-mix(in srgb, var(--acc) 14%, var(--s-pop)); }
+.d23 .chatwin-title { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 700; text-align: left; }
+.d23 .chatwin .ap-chat { flex: 1; min-height: 0; }
+.d23 .chatwin .ap-chat > header { display: none; }
+.d23 .chatwin .ap-chat-body { padding: 10px; }
+
+@media (max-width: 1280px) {
+  .d23 .frame { position: relative; }
+  .d23 .dock { position: absolute; right: 0; top: 0; bottom: 0; z-index: 60; box-shadow: -20px 0 50px rgba(0, 0, 0, 0.4); }
+  .d23 .col { width: 270px; }
+}
