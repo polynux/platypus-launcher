@@ -1,19 +1,20 @@
 // i18n: converted
 // The Atlas library as a game list with the game on the stage (issue #126,
-// D21.jsx `.list` + `.stage`). Only the list-detail presentation renders
-// here; the grid keeps today's LibraryView path exactly, so warm, cool and
-// slate render as before.
+// D22.jsx `.body.is-split` list + stage). Only the list-detail presentation
+// renders here; other themes keep their own path, so warm, cool and slate
+// render as before.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { ArrowDown, ArrowUp, CircleAlert, LogIn, Plus, Search, SlidersHorizontal } from 'lucide-react';
-import type { Collection, Game, SourceWarning, StoreType } from '../types';
+import { ArrowDown, ArrowUp, CircleAlert, LogIn, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import type { Collection, Game, Job, SourceWarning, StoreType } from '../types';
 import { Input } from './ds/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { cx } from './ui';
-import { heroImages, lastPlayedAgo, needsAttention, attentionReason } from '../lib/games';
+import { heroImages, lastPlayedAgo } from '../lib/games';
 import { collectionPredicate, missingNames } from '../lib/collections';
 import { TierFilterControl, StatusFilterControl, matchesExtraFilters, sortGames, defaultDir, type Sort, type StatusFilter } from './LibraryView';
+import { AtlasActiveChips, AtlasGameBadges } from './AtlasLibraryViews';
 import type { TierFilter } from '../lib/compat';
 
 type ListSort = 'recent' | 'title' | 'hours' | 'year' | 'size' | 'tier';
@@ -54,6 +55,8 @@ interface ListDetailProps {
   onOpenSettings?: (gameId: string) => void;
   /** The row menu's install entry queues an install for that game. */
   onInstall?: (game: Game) => void;
+  /** Queued or running jobs, for the download badges (issue #136). */
+  jobs?: Job[];
   /** Controlled filter state from the /22 library bar (App owns it, #135).
    *  When set, the list filters through these values and hides its own
    *  filter popover (the shell carries it); otherwise it keeps its internal
@@ -95,6 +98,7 @@ export function LibraryListDetail(p: ListDetailProps) {
   const lending = p.lendingValue ?? lendingInner;
   const setLending: (v: 'all' | 'with-me') => void = p.onLendingChange ?? setLendingInner;
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [warnDismissed, setWarnDismissed] = useState(false);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   // The row menu needs a reason to exist: collections, settings or install.
   const hasMenu = !!(p.onManageCollections || p.onOpenSettings || p.onInstall);
@@ -121,6 +125,8 @@ export function LibraryListDetail(p: ListDetailProps) {
   useEffect(() => {
     if (p.initialSelectedId) setSelectedId(p.initialSelectedId);
   }, [p.initialSelectedId]);
+  useEffect(() => { setWarnDismissed(false); }, [p.warnings]);
+  const jobsById = useMemo(() => new Map((p.jobs ?? []).map((j) => [j.game_id, j])), [p.jobs]);
 
   const inCollection = useMemo(
     () => collectionPredicate(p.collections ?? [], p.collection ?? '', Math.floor(Date.now() / 1000)),
@@ -324,7 +330,7 @@ export function LibraryListDetail(p: ListDetailProps) {
             </button>
           )}
         </div>
-        {(p.warnings ?? []).length > 0 && (
+        {(p.warnings ?? []).length > 0 && !warnDismissed && (
           <div role="status" className="mx-2.5 mb-2 flex items-center gap-2 rounded-[7px] bg-danger/[0.08] px-2.5 py-2 text-[12px] ring-1 ring-danger/25">
             {(p.warnings ?? []).some((w) => w.needs_auth) ? (
               <>
@@ -357,6 +363,30 @@ export function LibraryListDetail(p: ListDetailProps) {
                 </button>
               </>
             )}
+            <button
+              type="button"
+              onClick={() => setWarnDismissed(true)}
+              aria-label={t('library:atlasViews.warnings.dismiss')}
+              className="grid size-5 flex-none place-items-center rounded text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </div>
+        )}
+        {(activeCollection || tier !== 'all' || statusFilter !== 'all' || lendingFilter !== 'all' || query.trim() !== '') && (
+          <div className="mx-2.5 mb-2">
+            <AtlasActiveChips
+              collection={activeCollection ?? undefined}
+              onClearCollection={() => p.onResetFilters?.()}
+              tier={tier}
+              onTier={setTier}
+              status={statusFilter}
+              onStatus={setStatusFilter}
+              lending={lending}
+              onLending={setLending}
+              query={query}
+              onQuery={setQuery}
+            />
           </div>
         )}
         {filtered.length === 0 ? (
@@ -376,10 +406,10 @@ export function LibraryListDetail(p: ListDetailProps) {
               const sub = subLine(t, g);
               const on = g.id === selected?.id;
               const art = heroImages(g)[0];
-              const attn = needsAttention(g);
               // Plain rows: no trigger wrapper, so click focus and j/k, Enter
               // and Space behave like any button. One controlled menu at the
               // list level opens anchored at the right-clicked row (issue #132).
+              // Badges (issue #136) sit at the right, like the screenshots.
               return (
                 <li key={g.id}>
                   <button
@@ -403,11 +433,7 @@ export function LibraryListDetail(p: ListDetailProps) {
                       <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
                       <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
                     </span>
-                    {attn && (
-                      <span title={attentionReason(g)} aria-label={t('library:listDetail.needsAttention')} className="flex-none text-attention">
-                        <CircleAlert className="h-4 w-4" aria-hidden />
-                      </span>
-                    )}
+                    <AtlasGameBadges game={g} job={jobsById.get(g.id)} />
                   </button>
                 </li>
               );

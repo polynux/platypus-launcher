@@ -265,21 +265,22 @@ describe('/22 friends panel and banners in App (issue #135)', () => {
     expect(banner.compareDocumentPosition(libBar!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('shows the classic grid under Atlas and keeps it across navigation', async () => {
+  it('shows the Atlas grid under Atlas and keeps it across navigation', async () => {
     const user = userEvent.setup();
     const { App } = await import('../../App');
     mockApp([mkGame('alpha', { title: 'Alpha' }), mkGame('beta', { title: 'Beta' })]);
     render(<App />);
     await user.click(await screen.findByRole('button', { name: 'Library' }));
     await screen.findByRole('button', { name: /Installed/ });
-    // List-detail first: the filter field, not the classic grid search.
+    // List-detail first: the filter field, not the grid lib-bar.
     expect(screen.getByPlaceholderText('Filter')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Covers' }));
-    expect(await screen.findByPlaceholderText('filter…')).toBeInTheDocument();
+    // The Atlas grid lib-bar (issue #136), not the classic grid search.
+    expect(await screen.findByPlaceholderText('Filter the library')).toBeInTheDocument();
     // The choice persists like the classic library mode.
     await user.click(screen.getByRole('button', { name: 'Dashboard' }));
     await user.click(screen.getByRole('button', { name: 'Library' }));
-    expect(screen.getByPlaceholderText('filter…')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Filter the library')).toBeInTheDocument();
     await i18n.changeLanguage('en');
   });
 });
