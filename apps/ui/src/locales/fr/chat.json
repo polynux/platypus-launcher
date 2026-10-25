@@ -80,5 +80,11 @@
   "alert_other": "{{count}} nouveaux messages de {{who}} sur {{store}}",
   "alertOthers_one": "{{first}} et {{count}} autre",
   "alertOthers_other": "{{first}} et {{count}} autres",
-  "unknownFriend": "un ami"
+  "unknownFriend": "un ami",
+  "tabs": {
+    "friends": "Amis",
+    "chats": "Discussions",
+    "family": "Famille",
+    "empty": "Aucune conversation pour l'instant."
+  }
 }

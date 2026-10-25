@@ -183,7 +183,7 @@ describe('shell navigation variants', () => {
   });
 });
 
-describe('sourcebar shell variant (issue #125)', () => {
+describe('sourcebar shell variant (/22, issue #135)', () => {
   const sourcebarProps = {
     ...baseProps,
     ownership: 'installed' as const,
@@ -195,21 +195,42 @@ describe('sourcebar shell variant (issue #125)', () => {
     sessionStartedAt: {},
   };
 
-  it('renders the /21 chrome: top bar, source bar and footer region, axe clean', async () => {
+  it('renders the /22 chrome: top bar, library bar and footer region, axe clean', async () => {
     shellState.navigation = 'sourcebar';
     const { container } = render(<Shell {...sourcebarProps} view={{ name: 'library' }} storeCounts={{ steam: 4, gog: 2 }} />);
     expect(container.querySelector('[data-region="sourcebar"]')).toBeTruthy();
     expect(container.querySelector('[data-region="sidebar"]')).toBeNull();
     expect(container.querySelector('[data-region="topbar"]')).toBeNull();
-    // Top bar: brand and command button.
+    // Top bar: brand, nav and command button.
     expect(screen.getByText('Platypus')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Library' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Store' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Search or run a command/ })).toBeInTheDocument();
-    // Source bar: library views with counts.
-    expect(screen.getByRole('button', { name: /All/ })).toBeInTheDocument();
+    // The Places and Stores menus of the /21 chrome are gone.
+    expect(screen.queryByRole('button', { name: 'Places' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Stores' })).toBeNull();
+    // The game-colour switch moved to Settings > Appearance (#134).
+    expect(container.textContent).not.toMatch(/Game colour|Accent.*Whole/);
+    // Library bar: own switch, store tabs, collections, filters, view switch.
+    expect(screen.getByRole('button', { name: /All games/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Installed/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Downloads/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Needs attention/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Every store' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Collections/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Library filters' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Covers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Table' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add store/ })).toBeInTheDocument();
+    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('hides the library bar on views without a library', async () => {
+    shellState.navigation = 'sourcebar';
+    const { container } = render(<Shell {...sourcebarProps} view={{ name: 'dashboard' }} />);
+    // The top bar stays; only the library/views bar is gone.
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(container.querySelector('nav[aria-label="Library"]')).toBeNull();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 
@@ -228,12 +249,15 @@ describe('sourcebar shell variant (issue #125)', () => {
     }
   });
 
-  it('keeps every place reachable through the source bar and places menu', async () => {
+  it('keeps every place reachable through the top bar and More places menu', async () => {
     shellState.navigation = 'sourcebar';
     const user = userEvent.setup();
     const navigated: string[] = [];
     let friendsOpened = 0;
     let settingsOpened = 0;
+    let added = 0;
+    const redeemed: string[] = [];
+    const openedStores: string[] = [];
     render(
       <Shell
         {...sourcebarProps}
@@ -241,26 +265,52 @@ describe('sourcebar shell variant (issue #125)', () => {
         onNavigate={(v: { name: string }) => navigated.push(v.name)}
         onOpenFriends={() => { friendsOpened += 1; }}
         onSettingsOpen={() => { settingsOpened += 1; }}
+        onAddGame={() => { added += 1; }}
+        canRedeem
+        onRedeem={() => redeemed.push('redeem')}
+        stores={[{ id: 'echo', name: 'Echo' } as never]}
+        onOpenStore={(id) => openedStores.push(id)}
       />
     );
-    await user.click(screen.getByRole('button', { name: /^Downloads/ }));
-    await user.click(screen.getByRole('button', { name: /Needs attention/ }));
-    expect(navigated).toEqual(['downloads', 'fixes']);
-    await user.click(screen.getByRole('button', { name: 'Places' }));
-    for (const name of ['Dashboard', 'Storage', 'Plugins', 'Activity', 'Runners', 'Friends']) {
+    // Home, Library and Store nav.
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Library' }));
+    expect(navigated).toEqual(['dashboard', 'library']);
+    // Store opens the first storefront (#138 gives Store its own page).
+    await user.click(screen.getByRole('button', { name: 'Store' }));
+    expect(openedStores).toEqual(['echo']);
+    // Downloads and Attention icons.
+    await user.click(screen.getByRole('button', { name: 'Downloads' }));
+    await user.click(screen.getByRole('button', { name: 'Needs attention' }));
+    expect(navigated).toContain('downloads');
+    expect(navigated).toContain('fixes');
+    // The Friends avatar toggles the side panel.
+    await user.click(screen.getByRole('button', { name: 'Friends' }));
+    expect(friendsOpened).toBe(1);
+    // More places: Activity, Runners, Plugins, Storage, Settings, then
+    // Redeem a code and Add a game.
+    await user.click(screen.getByRole('button', { name: 'More places' }));
+    for (const name of ['Activity', 'Runners', 'Plugins', 'Storage', 'Settings']) {
       expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
     }
-    // Atlas parity (issue #132): the duplicate Chat entry opened the same
-    // modal as Friends, so it is gone.
-    expect(screen.queryByRole('menuitem', { name: 'Chat' })).toBeNull();
-    await user.click(screen.getByRole('menuitem', { name: 'Dashboard' }));
-    expect(navigated).toContain('dashboard');
-    await user.click(screen.getByRole('button', { name: 'Places' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Friends' }));
-    expect(friendsOpened).toBe(1);
-    await user.click(screen.getByRole('button', { name: 'Places' }));
+    expect(screen.queryByRole('menuitem', { name: 'Friends' })).toBeNull();
     await user.click(screen.getByRole('menuitem', { name: 'Settings' }));
     expect(settingsOpened).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'More places' }));
+    await user.click(screen.getByRole('menuitem', { name: /Redeem a code/ }));
+    expect(redeemed).toEqual(['redeem']);
+    await user.click(screen.getByRole('button', { name: 'More places' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Add a game' }));
+    expect(added).toBe(1);
+  });
+
+  it('opens Plugins from Store with no storefronts', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const navigated: string[] = [];
+    render(<Shell {...sourcebarProps} view={{ name: 'library' }} stores={[]} onNavigate={(v: { name: string }) => navigated.push(v.name)} />);
+    await user.click(screen.getByRole('button', { name: 'Store' }));
+    expect(navigated).toEqual(['plugins']);
   });
 
   it('selects one store on click and combines on shift-click', async () => {
@@ -286,15 +336,15 @@ describe('sourcebar shell variant (issue #125)', () => {
     expect(selected.at(-1)).toEqual(['steam', 'gog']);
   });
 
-  it('marks the active tab with a 2px accent underline', async () => {
+  it('marks the active own tab with a 2px accent underline', async () => {
     shellState.navigation = 'sourcebar';
-    render(<Shell {...sourcebarProps} view={{ name: 'downloads' }} downloadCount={2} />);
-    const tab = screen.getByRole('button', { name: /^Downloads/ });
+    render(<Shell {...sourcebarProps} ownership="installed" view={{ name: 'library' }} />);
+    const tab = screen.getByRole('button', { name: /^Installed/ });
     expect(tab).toHaveAttribute('aria-pressed', 'true');
     expect(tab.querySelector('.bg-accent')).toBeTruthy();
   });
 
-  it('shows a progress bar on Downloads and a red count on Needs attention', async () => {
+  it('rings the Downloads icon and badges Needs attention', async () => {
     shellState.navigation = 'sourcebar';
     render(
       <Shell
@@ -305,8 +355,8 @@ describe('sourcebar shell variant (issue #125)', () => {
         jobs={[{ id: 'j1', kind: 'download', source: 'steam', game_id: 'g1', store_game_id: 'g1', title: 'Game', state: 'running', bytes: 50, total: 100, speed: 1, percent: 50, attempts: 1, created_at: 0, updated_at: 0 }]}
       />
     );
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
-    expect(screen.getByRole('button', { name: /Needs attention/ }).querySelector('.bg-danger')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Downloads, 1 active/ }).querySelector('circle')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Needs attention, 3/ }).querySelector('.bg-danger')).toBeTruthy();
   });
 
   it('Add store opens Plugins', async () => {
@@ -349,11 +399,12 @@ describe('sourcebar activity footer (issue #125)', () => {
     sessionStartedAt: {},
   };
 
-  it('lists storefront plugins and redeem in the top-bar Stores menu (issue #132)', async () => {
+  it('Store nav opens the first storefront; redeem and add-game live in More places (issue #132)', async () => {
     shellState.navigation = 'sourcebar';
     const user = userEvent.setup();
     const opened: string[] = [];
     const redeemed: string[] = [];
+    const added: string[] = [];
     render(
       <Shell
         {...atlasBarProps}
@@ -363,22 +414,18 @@ describe('sourcebar activity footer (issue #125)', () => {
         onOpenStore={(id) => opened.push(id)}
         canRedeem
         onRedeem={() => redeemed.push('redeem')}
+        onAddGame={() => added.push('add')}
       />
     );
-    await user.click(screen.getByRole('button', { name: 'Stores' }));
-    expect(screen.getByRole('menuitem', { name: 'Echo' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /Redeem a code/ })).toBeInTheDocument();
-    await user.click(screen.getByRole('menuitem', { name: 'Echo' }));
+    await user.click(screen.getByRole('button', { name: 'Store' }));
     expect(opened).toEqual(['echo']);
-    await user.click(screen.getByRole('button', { name: 'Stores' }));
+    await user.click(screen.getByRole('button', { name: 'More places' }));
+    expect(screen.getByRole('menuitem', { name: /Redeem a code/ })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: /Redeem a code/ }));
     expect(redeemed).toEqual(['redeem']);
-  });
-
-  it('hides the Stores button with no stores and no redeem', () => {
-    shellState.navigation = 'sourcebar';
-    render(<Shell {...atlasBarProps} view={{ name: 'library' }} stores={[]} />);
-    expect(screen.queryByRole('button', { name: 'Stores' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'More places' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Add a game' }));
+    expect(added).toEqual(['add']);
   });
 
   it('pins Collections at the source-bar edge with counts and manage', async () => {
@@ -410,19 +457,11 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(managed).toEqual(['manage']);
   });
 
-  it('shows the unread count on Friends and a dot on the Places trigger', async () => {
+  it('badges the Friends avatar and dots More places when a plugin needs attention', async () => {
     shellState.navigation = 'sourcebar';
-    const user = userEvent.setup();
-    render(<Shell {...atlasBarProps} view={{ name: 'library' }} friendsUnread={3} />);
-    expect(screen.getByRole('button', { name: 'Places' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Places' }));
-    expect(screen.getByRole('menuitem', { name: /Friends \(3\)/ })).toBeInTheDocument();
-  });
-
-  it('shows an auth dot on the Places trigger when a plugin needs attention', () => {
-    shellState.navigation = 'sourcebar';
-    render(<Shell {...atlasBarProps} view={{ name: 'library' }} authNeeded />);
-    expect(screen.getByRole('button', { name: 'Places' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
+    render(<Shell {...atlasBarProps} view={{ name: 'library' }} friendsUnread={3} authNeeded />);
+    expect(screen.getByRole('button', { name: /Friends, 3 unread/ }).querySelector('.bg-danger')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'More places' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
   });
 
   it('stops a running game from the activity footer', async () => {
@@ -465,7 +504,7 @@ describe('sourcebar activity footer (issue #125)', () => {
     shellState.navigation = 'sourcebar';
     const user = userEvent.setup();
     render(<Shell {...atlasBarProps} view={{ name: 'library' }} authNeeded />);
-    await user.click(screen.getByRole('button', { name: 'Places' }));
+    await user.click(screen.getByRole('button', { name: 'More places' }));
     const plugins = screen.getByRole('menuitem', { name: /Plugins/ });
     expect(plugins.querySelector('[aria-label="needs attention"]')).toBeTruthy();
   });

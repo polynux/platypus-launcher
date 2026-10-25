@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
 import { Shell, SourceFooter } from './components/Shell';
+import { AtlasFriendsPanel } from './components/AtlasFriendsPanel';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
@@ -39,6 +40,8 @@ import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
 import { heroImages, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { TierFilter } from './lib/compat';
+import type { StatusFilter } from './components/LibraryView';
 import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { loadTheme } from './lib/theme';
@@ -100,6 +103,15 @@ export function App() {
   const [selectedStores, setSelectedStores] = useState<StoreType[]>([]);
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
   const [ownership, setOwnership] = useState<Ownership>('installed');
+
+  // The /22 library bar shares its filter state with the list (#135): one
+  // state in App drives both, like the classic library mode keeps its view.
+  const [atlasTier, setAtlasTier] = useState<TierFilter>('all');
+  const [atlasStatus, setAtlasStatus] = useState<StatusFilter>('all');
+  const [atlasLending, setAtlasLending] = useState<'all' | 'with-me'>('all');
+  // Which library view the /22 switch shows: the list-detail stage, or the
+  // classic grid/table under Atlas until #136 builds them.
+  const [atlasView, setAtlasView] = useState<'list' | 'grid' | 'table'>('list');
 
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
@@ -699,8 +711,11 @@ export function App() {
   const currentGameId = currentGame?.id;
   useEffect(() => { setHeroArt(null); }, [currentGameId]);
   // The game's colour (issue #123), applied here so it also works where the
-  // theme shows no switch; the sourcebar shell renders the switch.
-  const gameTone = useGameTone(currentGame ? (heroArt ?? heroImages(currentGame)[0]) : undefined);
+  // theme shows no switch (the /22 switch lives in Settings > Appearance,
+  // #134; the shell takes no tone prop).
+  // The game's colour is applied as a side effect; the /22 switch for it
+  // lives in Settings > Appearance (#134).
+  useGameTone(currentGame ? (heroArt ?? heroImages(currentGame)[0]) : undefined);
 
   // One game page for the game view and the list-detail stage (issues #126,
   // #127): the same props, so the stage renders the game page for the
@@ -750,7 +765,10 @@ export function App() {
 
   // The list-detail library (issue #126): the list plus the stage. Opening a
   // game from elsewhere (palette, dashboard) lands here with that game
-  // selected, through the game view below.
+  // selected, through the game view below. Under Atlas the /22 library bar
+  // owns the filters (#135), so the list filters through App's state and
+  // keeps only its filter field and sort; the add-game entry lives in the
+  // More places menu.
   const renderListDetail = (initialSelectedId?: string | null) => (
     <LibraryListDetail
       games={games}
@@ -766,7 +784,12 @@ export function App() {
       renderStage={(g) => renderGamePage(g, view.name === 'game' && view.from ? view.from : 'library', true)}
       initialSelectedId={initialSelectedId}
       onStageChange={setStagedGameId}
-      onAddGame={() => setAddOpen(true)}
+      tierValue={atlasTier}
+      onTierChange={setAtlasTier}
+      statusValue={atlasStatus}
+      onStatusChange={setAtlasStatus}
+      lendingValue={atlasLending}
+      onLendingChange={setAtlasLending}
       warnings={warnings}
       pluginName={(id) => socialLabels[id] ?? id}
       onOpenPlugins={() => setView({ name: 'plugins' })}
@@ -778,6 +801,9 @@ export function App() {
         setSelectedStores([]);
         setSource('all');
         setSearch('');
+        setAtlasTier('all');
+        setAtlasStatus('all');
+        setAtlasLending('all');
         if (view.name !== 'library') setView({ name: 'library' });
         else setView({ name: 'library', collection: undefined });
       }}
@@ -813,8 +839,10 @@ export function App() {
           />
         );
       case 'library':
-        // Atlas list-detail is the list plus the stage; other themes keep the grid.
-        if (isListDetail) return renderListDetail();
+        // Atlas list-detail is the list plus the stage; the /22 grid and
+        // table switch shows the classic LibraryView under Atlas (#135,
+        // #136 builds the real ones). Other themes keep the grid.
+        if (isListDetail && atlasView === 'list') return renderListDetail();
         return (
           <LibraryView
             games={games}
@@ -825,7 +853,7 @@ export function App() {
             source={source}
             onSource={setSource}
             storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
-            mode={libraryMode}
+            mode={isListDetail && atlasView === 'table' ? 'table' : libraryMode}
             onMode={setLibraryMode}
             ownership={ownership}
             onOwnership={setOwnership}
@@ -845,7 +873,7 @@ export function App() {
         );
       case 'game':
         // Atlas list-detail shows the list with that game selected on the stage.
-        if (isListDetail) {
+        if (isListDetail && atlasView === 'list') {
           const selected = games.find((g) => g.id === view.id);
           if (!selected) {
             return (
@@ -928,8 +956,35 @@ export function App() {
 
   // Atlas parity (issue #132): the list and stage scroll inside themselves,
   // so App's main clips only on the library/game views in list-detail mode;
-  // every other view scrolls like warm.
-  const listDetailActive = isListDetail && (view.name === 'library' || view.name === 'game');
+  // every other view scrolls like warm. The /22 grid/table switch shows the
+  // classic views, which scroll like warm too.
+  const listDetailActive = isListDetail && atlasView === 'list' && (view.name === 'library' || view.name === 'game');
+  const isSourcebar = shellNavigation === 'sourcebar';
+  const hasBorrowed = useMemo(() => games.some((g) => g.shared_by != null), [games]);
+  // The /22 banners (D22 Banners): between the top bar and the library bar.
+  // Other themes keep the banner in the main column.
+  const banner = migration ? (
+    <div className="border-b border-hairline bg-ground px-4 py-3 [&>div]:mb-0">
+      <MigrationBanner
+        notice={migration}
+        onOpenPlugins={() => setView({ name: 'plugins' })}
+        onDismiss={dismissMigration}
+      />
+    </div>
+  ) : undefined;
+  const chatPanel = chat.target && (
+    <ChatPanel
+      view={chat.conversation}
+      friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
+      storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
+      error={chat.error}
+      onLoadOlder={chat.loadOlder}
+      onSend={chat.send}
+      onResend={chat.resend}
+      onBack={chat.close}
+      onClose={closeFriends}
+    />
+  );
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -938,7 +993,6 @@ export function App() {
         view={view}
         onNavigate={setView}
         onSettingsOpen={openSettings}
-        gameTone={gameTone}
         search={search}
         onSearch={setSearch}
         storeCounts={storeCounts}
@@ -955,7 +1009,19 @@ export function App() {
         onStop={(id) => stop(id, false)}
         friends={social}
         friendLabels={socialLabels}
-        onOpenFriends={() => setFriendsOpen(true)}
+        onOpenFriends={() => setFriendsOpen((v) => !v)}
+        friendsOpen={friendsOpen}
+        banner={isSourcebar ? banner : undefined}
+        onAddGame={() => setAddOpen(true)}
+        tier={atlasTier}
+        onTier={setAtlasTier}
+        statusFilter={atlasStatus}
+        onStatusFilter={setAtlasStatus}
+        lending={atlasLending}
+        onLending={setAtlasLending}
+        hasBorrowed={hasBorrowed}
+        atlasView={atlasView}
+        onAtlasView={setAtlasView}
         canRedeem={redeemStores.length > 0}
         onRedeem={() => setRedeemOpen(true)}
         friendsUnread={chat.unread}
@@ -981,18 +1047,52 @@ export function App() {
         </Modal>
       )}
 
-      <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
-        {migration && (
-          <div className="px-7 pt-7">
-            <MigrationBanner
-              notice={migration}
-              onOpenPlugins={() => setView({ name: 'plugins' })}
-              onDismiss={dismissMigration}
+      {/* The /22 body (D22 `.body`): the stage and the friends side panel sit
+          side by side; other themes keep main as the single column. */}
+      {isSourcebar ? (
+        <div className="flex min-h-0 flex-1">
+          <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+            {renderView()}
+          </main>
+          {friendsOpen && (
+            <AtlasFriendsPanel
+              views={social}
+              labels={socialLabels}
+              plugins={plugins}
+              inLibrary={(id) => libraryIds.has(id)}
+              onClose={closeFriends}
+              onSetEnabled={(plugin, enabled) =>
+                Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onSetStatus={(plugin, state: SocialStatus) =>
+                Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onSetPlaying={(plugin, show) =>
+                Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onReconnect={(plugin) =>
+                Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onOpenGame={(id) => { closeFriends(); openGame(id); }}
+              unreadOf={chat.unreadOf}
+              onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
+              chat={chatPanel}
+              onBackFromChat={chat.close}
+              chatAlerts={chat.alerts}
+              onSetChatAlerts={chat.setAlerts}
             />
-          </div>
-        )}
-        {renderView()}
-      </main>
+          )}
+        </div>
+      ) : (
+        <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+          {migration && (
+            <div className="px-7 pt-7">
+              <MigrationBanner
+                notice={migration}
+                onOpenPlugins={() => setView({ name: 'plugins' })}
+                onDismiss={dismissMigration}
+              />
+            </div>
+          )}
+          {renderView()}
+        </main>
+      )}
       {shellNavigation === 'sourcebar' && (
         <SourceFooter
           sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
@@ -1041,7 +1141,9 @@ export function App() {
         />
       )}
 
-      {friendsOpen && (
+      {/* Atlas shows the friends side panel instead (#135); other themes
+          keep the modal. */}
+      {friendsOpen && !isSourcebar && (
         <FriendsModal
           views={social}
           labels={socialLabels}
@@ -1061,19 +1163,7 @@ export function App() {
           onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
           chatAlerts={chat.alerts}
           onSetChatAlerts={chat.setAlerts}
-          chat={chat.target && (
-            <ChatPanel
-              view={chat.conversation}
-              friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
-              storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
-              error={chat.error}
-              onLoadOlder={chat.loadOlder}
-              onSend={chat.send}
-              onResend={chat.resend}
-              onBack={chat.close}
-              onClose={closeFriends}
-            />
-          )}
+          chat={chatPanel}
           onBackFromChat={chat.close}
         />
       )}

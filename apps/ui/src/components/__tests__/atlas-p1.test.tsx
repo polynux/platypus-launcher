@@ -74,6 +74,8 @@ describe('atlas main scroll (issue #132)', () => {
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText('no titles found')).toBeInTheDocument();
+    // The /22 library bar only shows on the library and game views (#135).
+    await user.click(screen.getByRole('button', { name: 'Library' }));
     await user.click(screen.getByRole('button', { name: /^Installed/ }));
     await screen.findByLabelText('Games');
     expect(main()?.className).toMatch(/overflow-hidden/);

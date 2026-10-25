@@ -54,6 +54,16 @@ interface ListDetailProps {
   onOpenSettings?: (gameId: string) => void;
   /** The row menu's install entry queues an install for that game. */
   onInstall?: (game: Game) => void;
+  /** Controlled filter state from the /22 library bar (App owns it, #135).
+   *  When set, the list filters through these values and hides its own
+   *  filter popover (the shell carries it); otherwise it keeps its internal
+   *  state, like the classic header. */
+  tierValue?: TierFilter;
+  onTierChange?: (v: TierFilter) => void;
+  statusValue?: StatusFilter;
+  onStatusChange?: (v: StatusFilter) => void;
+  lendingValue?: 'all' | 'with-me';
+  onLendingChange?: (v: 'all' | 'with-me') => void;
 }
 
 /** Sub-line under the title: the relative "ago" ("6 h ago", "yesterday",
@@ -71,10 +81,19 @@ export function LibraryListDetail(p: ListDetailProps) {
   const [sort, setSort] = useState<ListSort>('recent');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   // Atlas parity (issue #132): the classic tier/status/lending filters, reused
-  // from LibraryView (no duplicated predicates).
-  const [tier, setTier] = useState<TierFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [lending, setLending] = useState<'all' | 'with-me'>('all');
+  // from LibraryView (no duplicated predicates). Under the /22 shell (#135)
+  // App owns this state so the library bar and the list share it, and the
+  // list hides its own popover (the shell carries it).
+  const controlled = p.tierValue !== undefined || p.statusValue !== undefined || p.lendingValue !== undefined;
+  const [tierInner, setTierInner] = useState<TierFilter>('all');
+  const [statusInner, setStatusInner] = useState<StatusFilter>('all');
+  const [lendingInner, setLendingInner] = useState<'all' | 'with-me'>('all');
+  const tier = p.tierValue ?? tierInner;
+  const setTier: (v: TierFilter) => void = p.onTierChange ?? setTierInner;
+  const statusFilter = p.statusValue ?? statusInner;
+  const setStatusFilter: (v: StatusFilter) => void = p.onStatusChange ?? setStatusInner;
+  const lending = p.lendingValue ?? lendingInner;
+  const setLending: (v: 'all' | 'with-me') => void = p.onLendingChange ?? setLendingInner;
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   // The row menu needs a reason to exist: collections, settings or install.
@@ -225,6 +244,9 @@ export function LibraryListDetail(p: ListDetailProps) {
             {dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
           </button>
           </div>
+          {/* The /22 shell carries the filters popover (#135); the list keeps
+              only its filter field and the sort control here. */}
+          {!controlled && (
           <DropdownMenu open={filtersOpen} onOpenChange={setFiltersOpen} modal={false}>
             <DropdownMenuTrigger asChild>
               <button
@@ -289,6 +311,7 @@ export function LibraryListDetail(p: ListDetailProps) {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
           {p.onAddGame && (
             <button
               type="button"
