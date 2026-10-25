@@ -247,9 +247,12 @@ describe('sourcebar shell variant (issue #125)', () => {
     await user.click(screen.getByRole('button', { name: /Needs attention/ }));
     expect(navigated).toEqual(['downloads', 'fixes']);
     await user.click(screen.getByRole('button', { name: 'Places' }));
-    for (const name of ['Dashboard', 'Storage', 'Plugins', 'Activity', 'Runners', 'Friends', 'Chat']) {
+    for (const name of ['Dashboard', 'Storage', 'Plugins', 'Activity', 'Runners', 'Friends']) {
       expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
     }
+    // Atlas parity (issue #132): the duplicate Chat entry opened the same
+    // modal as Friends, so it is gone.
+    expect(screen.queryByRole('menuitem', { name: 'Chat' })).toBeNull();
     await user.click(screen.getByRole('menuitem', { name: 'Dashboard' }));
     expect(navigated).toContain('dashboard');
     await user.click(screen.getByRole('button', { name: 'Places' }));
@@ -333,5 +336,150 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(screen.getByText('Game Two')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  const atlasBarProps = {
+    ...baseProps,
+    ownership: 'installed' as const,
+    onOwnership: () => {},
+    ownedCount: 10,
+    storeSelection: [] as string[],
+    onSelectStores: () => {},
+    jobs: [],
+    sessionStartedAt: {},
+  };
+
+  it('lists storefront plugins and redeem in the top-bar Stores menu (issue #132)', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const opened: string[] = [];
+    const redeemed: string[] = [];
+    render(
+      <Shell
+        {...atlasBarProps}
+        view={{ name: 'library' }}
+        stores={[{ id: 'echo', name: 'Echo' }]}
+        activeStore="echo"
+        onOpenStore={(id) => opened.push(id)}
+        canRedeem
+        onRedeem={() => redeemed.push('redeem')}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Stores' }));
+    expect(screen.getByRole('menuitem', { name: 'Echo' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Redeem a code/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Echo' }));
+    expect(opened).toEqual(['echo']);
+    await user.click(screen.getByRole('button', { name: 'Stores' }));
+    await user.click(screen.getByRole('menuitem', { name: /Redeem a code/ }));
+    expect(redeemed).toEqual(['redeem']);
+  });
+
+  it('hides the Stores button with no stores and no redeem', () => {
+    shellState.navigation = 'sourcebar';
+    render(<Shell {...atlasBarProps} view={{ name: 'library' }} stores={[]} />);
+    expect(screen.queryByRole('button', { name: 'Stores' })).toBeNull();
+  });
+
+  it('pins Collections at the source-bar edge with counts and manage', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const opened: (string | undefined)[] = [];
+    const managed: string[] = [];
+    render(
+      <Shell
+        {...atlasBarProps}
+        view={{ name: 'library', collection: 'couch' }}
+        collections={[{ id: 'couch', name: 'Couch co-op' }]}
+        collectionCounts={{ couch: 4 }}
+        onOpenCollection={(id) => opened.push(id)}
+        onManageCollections={() => managed.push('manage')}
+      />
+    );
+    // The active collection names the tab, with the accent underline.
+    const tab = screen.getByRole('button', { name: /Couch co-op/ });
+    expect(tab).toHaveAttribute('aria-pressed', 'true');
+    expect(tab.querySelector('.bg-accent')).toBeTruthy();
+    await user.click(tab);
+    expect(screen.getByRole('menuitem', { name: /All games/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Couch co-op/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: /Couch co-op/ }));
+    expect(opened).toEqual(['couch']);
+    await user.click(tab);
+    await user.click(screen.getByRole('menuitem', { name: /Manage/ }));
+    expect(managed).toEqual(['manage']);
+  });
+
+  it('shows the unread count on Friends and a dot on the Places trigger', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    render(<Shell {...atlasBarProps} view={{ name: 'library' }} friendsUnread={3} />);
+    expect(screen.getByRole('button', { name: 'Places' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Places' }));
+    expect(screen.getByRole('menuitem', { name: /Friends \(3\)/ })).toBeInTheDocument();
+  });
+
+  it('shows an auth dot on the Places trigger when a plugin needs attention', () => {
+    shellState.navigation = 'sourcebar';
+    render(<Shell {...atlasBarProps} view={{ name: 'library' }} authNeeded />);
+    expect(screen.getByRole('button', { name: 'Places' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
+  });
+
+  it('stops a running game from the activity footer', async () => {
+    const { SourceFooter } = await import('../Shell');
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    const stopped: string[] = [];
+    render(
+      <SourceFooter
+        sessions={[{ game_id: 'g1', state: 'running', title: 'Game One' } as never]}
+        jobs={[]}
+        sessionStartedAt={{}}
+        onStop={(id) => stopped.push(id)}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Stop Game One' }));
+    expect(stopped).toEqual(['g1']);
+  });
+
+  it('shows the last scan, offline marker and version in the Atlas footer (issue #132)', async () => {
+    shellState.navigation = 'sourcebar';
+    const { SourceFooter } = await import('../Shell');
+    const { container } = render(
+      <SourceFooter
+        sessions={[]}
+        jobs={[]}
+        sessionStartedAt={{}}
+        lastScan={Date.now() - 65_000}
+        online={false}
+      />
+    );
+    expect(container.querySelector('[data-region="sourcebar-footer"]')?.className).toMatch(/h-7/);
+    expect(screen.getByText(/Scanned/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Offline/);
+    expect(screen.getByText('platypus v0.2')).toBeInTheDocument();
+    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('dots the Plugins item when a plugin needs attention (issue #132)', async () => {
+    shellState.navigation = 'sourcebar';
+    const user = userEvent.setup();
+    render(<Shell {...atlasBarProps} view={{ name: 'library' }} authNeeded />);
+    await user.click(screen.getByRole('button', { name: 'Places' }));
+    const plugins = screen.getByRole('menuitem', { name: /Plugins/ });
+    expect(plugins.querySelector('[aria-label="needs attention"]')).toBeTruthy();
+  });
+
+  it('leaves All and Installed inactive with a collection active (issue #132)', () => {
+    shellState.navigation = 'sourcebar';
+    render(
+      <Shell
+        {...atlasBarProps}
+        view={{ name: 'library', collection: 'couch' }}
+        collections={[{ id: 'couch', name: 'Couch co-op' }]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /^Installed/ })).toHaveAttribute('aria-pressed', 'false');
   });
 });

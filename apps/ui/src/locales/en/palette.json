@@ -12,7 +12,10 @@
     "play": "Play {{title}}",
     "stop": "Stop {{title}}",
     "install": "Install {{title}}",
-    "gameSettings": "Open game settings"
+    "gameSettings": "Open game settings",
+    "redeem": "Redeem a code",
+    "manageCollections": "Manage collections",
+    "addGame": "Add a game"
   },
   "hint": {
     "move": "move",

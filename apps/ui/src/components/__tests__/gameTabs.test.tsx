@@ -4,7 +4,7 @@
 // today's path (see gameLayout.test.tsx).
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { render as rtlRender, cleanup, screen, within } from '@testing-library/react';
+import { render as rtlRender, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
@@ -36,6 +36,8 @@ vi.mock('../../effect/runtime', () => ({
     getCloudInfo: () => Effect.succeed({ mode: 'auto', plugin_mode: 'auto', game_mode: '', status: null, running: false } as never),
     checkCloudSaves: () => Effect.succeed({ mode: 'auto', plugin_mode: 'auto', game_mode: '', status: null, running: false } as never),
     listSaveBackups: () => Effect.succeed([] as never),
+    setGameStatus: () => Effect.succeed({ status: 'backlog', user_notes: '' } as never),
+    setGameNotes: () => Effect.succeed(undefined as never),
     getThemeLayout: () => Effect.succeed(null as never),
   },
   onJobs: () => () => {},
@@ -191,5 +193,157 @@ describe('game page tabs variant', () => {
     // Sections have no tablist; tabs do.
     expect(screen.queryByRole('tablist', { name: 'Game page' })).toBeNull();
     expect(container.querySelector('[data-region="main"]')).toBeTruthy();
+  });
+});
+
+describe('atlas parity side sections (issue #132)', () => {
+  it('lists the game collections with a Manage entry in the side column', async () => {
+    const user = userEvent.setup();
+    const onManage = vi.fn();
+    const g = installedGame();
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[{ id: 'couch', name: 'Couch co-op', games: [g.id] }]}
+        onManageCollections={onManage}
+      />,
+    );
+    expect(await screen.findByText('Couch co-op')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+    expect(onManage).toHaveBeenCalledWith(g.id);
+  });
+
+  it('carries a Status and notes section that saves through the page', async () => {
+    const user = userEvent.setup();
+    const g = installedGame();
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('heading', { name: 'Status & notes' })).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByLabelText('Status'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    fireEvent.click(screen.getByRole('option', { name: 'Backlog' }));
+    await waitFor(() => expect(screen.getByLabelText('Status')).toHaveTextContent('Backlog'));
+    await user.click(screen.getByLabelText('Your notes'));
+    await user.type(screen.getByLabelText('Your notes'), 'loved it');
+    fireEvent.blur(screen.getByLabelText('Your notes'));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+  });
+});
+
+describe('atlas parity round 2 (issue #132)', () => {
+  it('shows the classic facts above the compatibility notes', async () => {
+    const user = userEvent.setup();
+    const g = installedGame();
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    await screen.findByRole('tablist', { name: 'Game page' });
+    await user.click(screen.getByRole('tab', { name: /Compatibility/ }));
+    // The facts table carries the classic fact names like the sections do.
+    expect(screen.getByText('Runner')).toBeInTheDocument();
+  });
+
+  it('opens the compare dialog from the store switch when copies differ', async () => {
+    const user = userEvent.setup();
+    const g = {
+      ...installedGame(),
+      shared_by: { id: 'ana', name: 'Ana' },
+      preferred_copy: 'ana',
+      copies: [
+        { owner_id: 'ana', owner_name: 'Ana', available: true },
+        { owner_id: 'ben', owner_name: 'Ben', available: true },
+      ],
+      copy_compare: {
+        baseline: 'ana',
+        diffs: [{ owner_id: 'ben', only_here: 1, only_baseline: 0, shared: 3, soundtracks_only_here: 0, soundtracks_only_baseline: 0, soundtracks_shared: 0 }],
+      },
+    } as unknown as Game;
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    await screen.findByRole('radiogroup', { name: 'Launch from' });
+    await user.click(screen.getByRole('button', { name: 'Compare copies' }));
+    expect(await screen.findByRole('dialog', { name: /Compare copies of/ })).toBeInTheDocument();
+  });
+});
+
+describe('atlas parity round 3 (issue #132)', () => {
+  it('shows the last failed attempt under the strip', async () => {
+    const g = { ...installedGame(), is_installed: false, installable: true };
+    const failed = {
+      id: 'j1', kind: 'install', source: 'echo', game_id: g.id, store_game_id: '1', title: g.title,
+      state: 'failed', bytes: 0, total: 0, speed: 0, percent: 0, attempts: 1, created_at: 0, updated_at: 0, error: '',
+    };
+    render(
+      <GamePage
+        game={g as Game}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        job={failed as never}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: /Retry install/ })).toBeInTheDocument();
+    expect(await screen.findByText(/didn't finish/)).toBeInTheDocument();
+  });
+
+  it('resyncs status and notes when the game changes underneath', async () => {
+    const g = installedGame();
+    const { rerender } = render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('None');
+    rerender(
+      <GamePage
+        game={{ ...g, status: 'finished', user_notes: 'loved it' } as Game}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('Finished');
+    expect(screen.getByLabelText('Your notes')).toHaveValue('loved it');
   });
 });

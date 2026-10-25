@@ -657,6 +657,11 @@ export function GamePage(p: GamePageProps) {
             onOpenSettings={() => setSettingsTab('general')}
             hideBack={p.hideBack}
             onTuneSaved={p.onTuneSaved}
+            collections={p.collections}
+            onManageCollections={p.onManageCollections}
+            onSaveStatus={onSaveStatus}
+            onSaveNotes={onSaveNotes}
+            onStatusChanged={() => p.onCustomized?.()}
           />
           {!settingsPage && settingsModal}
           {installTo && plugin && (

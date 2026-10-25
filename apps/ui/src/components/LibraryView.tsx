@@ -68,8 +68,8 @@ interface LibraryProps {
 
 const CORE_SOURCES: StoreType[] = ['steam', 'gog', 'epic'];
 
-type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier' | 'year';
-type Sort = { key: SortKey; dir: 'asc' | 'desc' };
+export type SortKey = 'title' | 'hours' | 'size' | 'last' | 'tier' | 'year';
+export type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 /** ProtonDB quality order, best first. Unknown or missing tiers have no rank and sort last. */
 export const TIER_RANK: Record<string, number> = { platinum: 5, gold: 4, silver: 3, bronze: 2, borked: 1 };
 const sortValue = (g: Game, k: SortKey): string | number =>
@@ -92,7 +92,7 @@ export function sortGames(games: Game[], sort: Sort | null): Game[] {
   });
 }
 const SORT_KEYS: (SortKey | '')[] = ['', 'title', 'year', 'last', 'hours', 'size', 'tier'];
-const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
+export const defaultDir = (k: SortKey): Sort['dir'] => (k === 'title' ? 'asc' : 'desc');
 
 function sortOptionLabel(t: T, k: SortKey | ''): string {
   switch (k) {
@@ -181,18 +181,29 @@ function tierOptionLabel(t: T, v: TierFilter): string {
   }
 }
 
+/** Atlas styling for a filter select (issue #132): Albert Sans, human values,
+ *  no uppercase or mono. Warm keeps the default trigger and item classes. */
+export interface FilterControlStyle {
+  triggerClassName?: string;
+  itemClassName?: string;
+  /** Label for the 'all' option ("Any" in Atlas, "all" in warm). */
+  allLabel?: string;
+}
+
 /** Filters the library by compatibility: native builds, a ProtonDB tier, or none. */
-function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (v: TierFilter) => void }) {
+export function TierFilterControl({ value, onChange, triggerClassName = 'w-40 uppercase tracking-wider', itemClassName, allLabel }: {
+  value: TierFilter; onChange: (v: TierFilter) => void;
+} & FilterControlStyle) {
   const { t } = useTranslation('library');
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TierFilter)}>
-      <SelectTrigger aria-label={t('library:tierFilterAria')} className="w-40 uppercase tracking-wider">
+      <SelectTrigger aria-label={t('library:tierFilterAria')} className={triggerClassName}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {TIER_FILTERS.map((v) => (
-          <SelectItem key={v} value={v}>
-            {tierOptionLabel(t, v)}
+          <SelectItem key={v} value={v} className={itemClassName}>
+            {v === 'all' && allLabel ? allLabel : tierOptionLabel(t, v)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -202,8 +213,8 @@ function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (
 
 /** The status the user gave a game (issue #51): 'all' and 'none' are filter
  *  values only; the rest are the game statuses. */
-type StatusFilter = 'all' | 'none' | 'backlog' | 'playing' | 'finished' | 'abandoned';
-const STATUS_FILTERS: StatusFilter[] = ['all', 'none', 'backlog', 'playing', 'finished', 'abandoned'];
+export type StatusFilter = 'all' | 'none' | 'backlog' | 'playing' | 'finished' | 'abandoned';
+export const STATUS_FILTERS: StatusFilter[] = ['all', 'none', 'backlog', 'playing', 'finished', 'abandoned'];
 
 function statusOptionLabel(t: T, v: StatusFilter): string {
   switch (v) {
@@ -224,17 +235,19 @@ function statusOptionLabel(t: T, v: StatusFilter): string {
 
 /** Filters the library by the user's own status (issue #51): all games, only
  *  the ones without one, or only one status. */
-function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChange: (v: StatusFilter) => void }) {
+export function StatusFilterControl({ value, onChange, triggerClassName = 'w-40 uppercase tracking-wider', itemClassName, allLabel }: {
+  value: StatusFilter; onChange: (v: StatusFilter) => void;
+} & FilterControlStyle) {
   const { t } = useTranslation('library');
   return (
     <Select value={value} onValueChange={(v) => onChange(v as StatusFilter)}>
-      <SelectTrigger aria-label={t('library:statusFilterAria')} className="w-40 uppercase tracking-wider">
+      <SelectTrigger aria-label={t('library:statusFilterAria')} className={triggerClassName}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {STATUS_FILTERS.map((v) => (
-          <SelectItem key={v} value={v}>
-            {statusOptionLabel(t, v)}
+          <SelectItem key={v} value={v} className={itemClassName}>
+            {v === 'all' && allLabel ? allLabel : statusOptionLabel(t, v)}
           </SelectItem>
         ))}
       </SelectContent>
@@ -245,6 +258,16 @@ function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChang
 /** The store name for display: brand stores keep their name, sideloaded games translate. */
 function displayStore(t: T, s: string): string {
   return s === 'custom' ? t('library:storeSideloaded') : storeLabel(s);
+}
+
+/** The tier, status and lent-to-me filters as one predicate (issue #132):
+ *  both library presentations filter through it, so the logic can't drift. */
+export function matchesExtraFilters(g: Game, tier: TierFilter, status: StatusFilter, lending: 'all' | 'with-me'): boolean {
+  return (
+    (tier === 'all' || tierFilterValue(g) === tier) &&
+    (status === 'all' || (status === 'none' ? !g.status : g.status === status)) &&
+    (lending === 'all' || g.shared_by != null)
+  );
 }
 
 /** The compact recency word for a game ("today", "5d ago"), through the library catalog. */
@@ -314,9 +337,7 @@ export function LibraryView(p: LibraryProps) {
         (g) =>
           (p.ownership === 'owned' || g.is_installed) &&
           (multi !== undefined ? multi.length === 0 || multi.includes(g.store) : source === 'all' || g.store === source) &&
-          (lendingFilter === 'all' || g.shared_by != null) &&
-          (tier === 'all' || tierFilterValue(g) === tier) &&
-          (statusFilter === 'all' || (statusFilter === 'none' ? !g.status : g.status === statusFilter)) &&
+          matchesExtraFilters(g, tier, statusFilter, lendingFilter) &&
           (!inCollection || inCollection(g)) &&
           g.title.toLowerCase().includes(q)
       ),

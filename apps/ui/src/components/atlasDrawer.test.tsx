@@ -374,3 +374,47 @@ describe('atlas drawer save model', () => {
     expect(result.current.dirty).toBe(false);
   });
 });
+
+describe('atlas maintenance parity (issue #132)', () => {
+  it('carries verify, move and uninstall in the Maintenance category', async () => {
+    const { AtlasCategoryBody } = await import('./AtlasSettings');
+    const g = testGame();
+    const shared = {
+      draft: g.settings,
+      setDraft: () => {},
+      envRows: [],
+      setEnvRows: () => {},
+      nextRowId: { current: 0 },
+      current: g.settings,
+      dirty: false,
+      markClean: () => {},
+      applySaved: () => {},
+      discard: () => {},
+    };
+    render(
+      <AtlasCategoryBody
+        cat="maintenance"
+        game={g}
+        plugin={{ id: 'echo', name: 'Echo', status: 'ready', capabilities: ['verify', 'install'], declared: [], install_folder: '/games' } as unknown as StorePlugin}
+        runners={[]}
+        tweaks={[]}
+        jobs={[]}
+        groups={[]}
+        shared={shared}
+        onSaveSettings={() => {}}
+        onChangeSettings={() => {}}
+        onJob={() => {}}
+        onJobAction={() => {}}
+        onNotify={() => {}}
+        onChanged={() => {}}
+        onCustomized={() => {}}
+        onCopied={() => {}}
+        onClose={() => {}}
+        onOpenGeneral={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('button', { name: /Verify files/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Move/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Uninstall' })).toBeInTheDocument();
+  });
+});

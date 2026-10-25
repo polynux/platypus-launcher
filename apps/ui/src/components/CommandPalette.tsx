@@ -54,6 +54,12 @@ export interface CommandPaletteProps {
   onStop: (gameId: string) => void;
   onInstall: (game: Game) => void;
   onOpenGameSettings: (gameId: string) => void;
+  /** Atlas parity (issue #132): the redeem dialog, when a store offers it. */
+  onRedeem?: () => void;
+  /** Atlas parity (issue #132): the collections manager dialog. */
+  onManageCollections?: () => void;
+  /** Atlas parity (issue #132): the add-a-game dialog. */
+  onAddGame?: () => void;
 }
 
 /** Mounted once at the app root: listens for Ctrl K and for the shell's event,
@@ -206,6 +212,9 @@ function paletteItems(p: CommandPaletteProps, t: TFunction): PaletteItem[] {
   place('storage', t('nav:storage'), () => p.onNavigate({ name: 'storage' }));
   place('settings', t('nav:settings'), () => p.onOpenSettings());
   for (const store of p.stores) place(`store-${store.id}`, store.name, () => p.onOpenStore(store.id));
+  if (p.onRedeem) place('redeem', t('palette:action.redeem'), () => p.onRedeem?.());
+  if (p.onManageCollections) place('collections', t('palette:action.manageCollections'), () => p.onManageCollections?.());
+  if (p.onAddGame) place('add-game', t('palette:action.addGame'), () => p.onAddGame?.());
   const games = t('palette:group.games');
   for (const g of p.games) {
     const hours = hoursPlayed(g);
