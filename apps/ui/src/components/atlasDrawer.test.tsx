@@ -1,12 +1,14 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
 import React from 'react';
 import type { Game, StorePlugin, Tweak } from '../types';
-import { atlasFieldCategory, atlasGroups, atlasSummary } from './AtlasSettings';
+import { atlasFieldCategory, atlasGroups, atlasSummary, atlasUnmappedFields } from './AtlasSettings';
+import { compatTabCount } from './GameTabs';
 
 expect.extend(matchers);
 afterEach(() => { cleanup(); });
@@ -116,6 +118,23 @@ describe('atlas drawer mapping', () => {
     expect(atlasSummary(t, 'fixes', native)).toBe('Not needed');
     const withArgs = { ...base, game: { ...testGame(), settings: { ...testGame().settings, launch_arguments: '-novid' } } as Game };
     expect(atlasSummary(t, 'launch', withArgs)).toBe('-novid');
+  });
+
+  it('B5: atlasUnmappedFields finds future runner flags, not known ones', () => {
+    const known = [
+      { id: 'g', fields: [{ id: 'runner_id' }, { id: 'use_gamemode' }, { id: 'dx_layer' }, { id: 'winetricks' }] },
+    ] as never;
+    expect(atlasUnmappedFields(known)).toEqual([]);
+    const mixed = [{ id: 'g', fields: [{ id: 'runner_id' }, { id: 'some_future_runner_flag' }] }] as never;
+    expect(atlasUnmappedFields(mixed)).toEqual(['some_future_runner_flag']);
+  });
+
+  it('B4: the Compatibility tab count includes the fix-info row', () => {
+    const withFix = { fix_info: { description: 'Use the curated recipe', source: 'Platypus' } } as Game;
+    expect(compatTabCount(withFix, 0, 0)).toBe(1);
+    expect(compatTabCount(withFix, 2, 3)).toBe(6);
+    const plain = {} as Game;
+    expect(compatTabCount(plain, 2, 1)).toBe(3);
   });
 });
 
@@ -277,5 +296,81 @@ describe('atlas drawer save model', () => {
     render(<GameSettingsModal {...props()} onClose={closed} />);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(closed).not.toHaveBeenCalled();
+  });
+
+  it('B3: extra switch fields fall back to their default when the draft is missing', async () => {
+    draftCtl.dirty = false;
+    api.getRunnerOptions.mockResolvedValue([
+      { id: 'runner', label: 'Runner', fields: [{ id: 'runner_id', kind: 'select', label: 'Runner', description: 'The build.', scope: 'game', default: 'auto', options: [{ id: 'auto', label: 'Automatic' }] }] },
+      { id: 'future', label: 'Future', fields: [{ id: 'some_future_flag', kind: 'bool', label: 'Future flag', description: 'A new runner switch.', scope: 'game', default: true }] },
+    ]);
+    render(<GameSettingsModal {...props()} />);
+    // Fixes holds unknown flags: open it and the switch reads the default (on).
+    await userEvent.setup().click(await screen.findByRole('button', { name: /Fixes/ }));
+    const sw = await screen.findByRole('switch', { name: /Future flag/ });
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('B2: footer Save clears only once the save resolves (a failed save stays dirty)', async () => {
+    const user = userEvent.setup();
+    draftCtl.dirty = true;
+    draftCtl.markClean.mockClear();
+    draftCtl.onSave.mockReset();
+    draftCtl.onSave.mockImplementationOnce(() => Promise.reject(new Error('no disk')));
+    render(<GameSettingsModal {...props()} />);
+    expect(await screen.findByText('Unsaved changes')).toBeInTheDocument();
+    const saves = screen.getAllByRole('button', { name: 'Save' });
+    const footerSave = saves.find((b) => b.className.includes('bg-accent')) ?? saves[saves.length - 1];
+    await user.click(footerSave);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(draftCtl.onSave).toHaveBeenCalledOnce();
+    expect(draftCtl.markClean).not.toHaveBeenCalled();
+  });
+
+  it('B1: the slim Saves row skips its auto-check on an uninstalled game', async () => {
+    const { CloudSlimRow } = await import('./GameTabs');
+    api.getCloudInfo.mockReset();
+    api.checkCloudSaves.mockReset();
+    // No status yet, cloud on: an installed game checks once.
+    api.getCloudInfo.mockResolvedValue({ mode: 'ask', plugin_mode: 'ask', game_mode: '', running: false, status: null });
+    api.checkCloudSaves.mockResolvedValue({ mode: 'ask', plugin_mode: 'ask', game_mode: '', running: false, status: null });
+    const installed = { ...testGame(), is_installed: true };
+    const { unmount } = render(<CloudSlimRow game={installed} plain />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.checkCloudSaves).toHaveBeenCalledTimes(1);
+    unmount();
+    cleanup();
+    api.getCloudInfo.mockClear();
+    api.checkCloudSaves.mockClear();
+    api.getCloudInfo.mockResolvedValue({ mode: 'ask', plugin_mode: 'ask', game_mode: '', running: false, status: null });
+    const uninstalled = { ...testGame(), id: 'p.echo.uninstalled', is_installed: false };
+    render(<CloudSlimRow game={uninstalled} plain />);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(api.checkCloudSaves).not.toHaveBeenCalled();
+  });
+
+  it('B2: markClean remembers the saved env (Discard restores it, not stale vars)', async () => {
+    const actual = await vi.importActual<typeof import('./SettingsModal')>('./SettingsModal');
+    const game = { ...testGame(), settings: { ...testGame().settings, env_vars: { OLD: '1' } } } as Game;
+    const { result } = renderHook(() => actual.useGameSettingsDraft(game));
+    // Edit the env rows to a new valid value, then mark the save.
+    act(() => {
+      result.current.setEnvRows([{ id: 0, key: 'NEW', value: '2' }]);
+    });
+    expect(result.current.current.env_vars).toEqual({ NEW: '2' });
+    act(() => {
+      result.current.markClean();
+    });
+    expect(result.current.dirty).toBe(false);
+    // More edits, then Discard returns to the marked save (NEW), not OLD.
+    act(() => {
+      result.current.setEnvRows([{ id: 1, key: 'OTHER', value: '3' }]);
+    });
+    expect(result.current.dirty).toBe(true);
+    act(() => {
+      result.current.discard();
+    });
+    expect(result.current.current.env_vars).toEqual({ NEW: '2' });
+    expect(result.current.dirty).toBe(false);
   });
 });

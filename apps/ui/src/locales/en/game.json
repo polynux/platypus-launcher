@@ -270,7 +270,15 @@
     "unlocked": "unlocked",
     "shareOfPlayers": "{{share}} of players",
     "hidden": "hidden",
-    "locked": "locked"
+    "locked": "locked",
+    "unlockedAgo": "Unlocked {{when}}",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "monthsAgo_one": "{{count}} mo ago",
+    "monthsAgo_other": "{{count}} mo ago",
+    "yearsAgo_one": "{{count}} yr ago",
+    "yearsAgo_other": "{{count}} yr ago",
+    "yesterday": "yesterday"
   },
   "steamAppId": {
     "heading": "Steam appid for ratings",
@@ -431,6 +439,8 @@
     "delete": "Delete",
     "restoreConfirm": "Restore this backup?",
     "deleteConfirm": "Delete this backup?",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "of": "of",
+    "upNext": "Up next"
   }
 }

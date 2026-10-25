@@ -32,8 +32,9 @@ export interface GameSettingsModalProps {
   /** The tab to open (General when the game has no such tab). */
   initialTab?: GameSettingsTab;
   onClose: () => void;
-  /** The general form was saved. */
-  onSaveSettings: (s: GameSettings) => void;
+  /** The general form was saved. Returns a promise when the save is async:
+   *  the drawer clears its dirty state only once it resolves. */
+  onSaveSettings: (s: GameSettings) => void | Promise<void>;
   /** A tweak switched on or off. */
   onChangeSettings: (s: GameSettings, what: string) => void;
   onJob: (kind: GameJobKind) => void;
@@ -173,7 +174,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // Other presentations keep the shared dialog chrome below.
   if (accordion) {
     const drawer = (
-      <div ref={panelRef} tabIndex={-1} className="@container flex h-full min-h-0 flex-col outline-none">
+      <div ref={panelRef} tabIndex={-1} className="@container flex h-full min-h-0 flex-col text-[13.5px] leading-[normal] outline-none">
         <div className="flex flex-none items-center justify-between gap-4 border-b border-hairline pb-[14px] pl-6 pr-4 pt-[18px]">
           <div className="min-w-0">
             <h2 className="text-[18px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.allSettings')}</h2>

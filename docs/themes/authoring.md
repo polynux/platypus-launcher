@@ -111,7 +111,8 @@ image = "assets/bg.png"
   A non-string field drops the whole wash. An unknown wash key warns and is
   ignored.
 
-Without `[[wash]]` the theme keeps the built-in wash.
+Without `[[wash]]` the theme keeps the built-in wash. An explicit empty
+`wash = []` clears it (a flat stage with no glow, like Atlas).
 
 Source: `internal/themes/themes.go` (`setWash`, `washLayer`).
 

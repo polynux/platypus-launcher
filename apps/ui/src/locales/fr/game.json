@@ -270,7 +270,15 @@
     "unlocked": "débloqué",
     "shareOfPlayers": "{{share}} des joueurs",
     "hidden": "caché",
-    "locked": "verrouillé"
+    "locked": "verrouillé",
+    "unlockedAgo": "Débloqué {{when}}",
+    "daysAgo_one": "il y a {{count}} jour",
+    "daysAgo_other": "il y a {{count}} jours",
+    "monthsAgo_one": "il y a {{count}} mois",
+    "monthsAgo_other": "il y a {{count}} mois",
+    "yearsAgo_one": "il y a {{count}} an",
+    "yearsAgo_other": "il y a {{count}} ans",
+    "yesterday": "hier"
   },
   "steamAppId": {
     "heading": "appid steam pour les évaluations",
@@ -431,6 +439,8 @@
     "delete": "Supprimer",
     "restoreConfirm": "Restaurer cette sauvegarde ?",
     "deleteConfirm": "Supprimer cette sauvegarde ?",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "of": "sur",
+    "upNext": "À suivre"
   }
 }

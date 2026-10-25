@@ -239,8 +239,12 @@ func parseThemeFS(src []byte, fsys fs.FS, themeDir string, checkContrast bool) T
 	if checkContrast {
 		t.checkContrast()
 	}
+	// An explicit `wash = []` clears the built-in wash (the flat /21 stage
+	// has no glow). Without any wash key the theme keeps the built-in one.
 	if len(f.Wash) > 0 {
 		t.setWash(f.Wash, fsys, themeDir)
+	} else if md.IsDefined("wash") {
+		t.Wash = []types.WashLayer{}
 	}
 	for _, key := range slices.Sorted(maps.Keys(f.Variants)) {
 		t.setVariant(key, f.Variants[key])

@@ -422,8 +422,10 @@ export function App() {
   const saveSettings = (id: string, settings: GameSettings, what = t('activity:log.tweakDefault')) => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
-    if (!g) return;
-    Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
+    if (!g) return Promise.resolve();
+    // Returns the write: the settings drawer clears its dirty state only
+    // once this resolves, so a failed save keeps its footer.
+    return Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
         notify(t('common:settingsSaved'));
         log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
@@ -431,6 +433,7 @@ export function App() {
       .catch((err) => {
         notify(t('errors:notPersisted', { error: coreErrMsg(err) }), 'err');
         log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }), meta: t('activity:log.tweakSessionOnly') });
+        throw err;
       });
   };
 

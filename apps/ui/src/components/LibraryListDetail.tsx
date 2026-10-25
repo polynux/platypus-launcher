@@ -130,7 +130,7 @@ export function LibraryListDetail(p: ListDetailProps) {
     // The list and the stage are each their own scroll container under fixed
     // tools: App's main never scrolls in this mode (/21 `.list` + `.stage`).
     <div className="flex h-full min-h-0 flex-1 items-stretch overflow-x-hidden">
-      <aside aria-label={t('library:listDetail.listLabel')} className="flex min-h-0 w-[260px] min-w-0 flex-none flex-col border-r border-hairline bg-raised min-[1100px]:w-[296px]">
+      <aside aria-label={t('library:listDetail.listLabel')} className="flex min-h-0 w-[260px] min-w-0 flex-none flex-col border-r border-hairline bg-[color-mix(in_srgb,var(--color-ground)_60%,var(--color-raised))] min-[1100px]:w-[296px]">
         <div className="flex gap-1.5 p-2.5">
           <label className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] bg-surface px-2.5 text-text-faint">
             <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
@@ -210,9 +210,10 @@ export function LibraryListDetail(p: ListDetailProps) {
           </ul>
         )}
       </aside>
-      {/* The stage keeps its scrollbar gutter reserved, so opening Tune
-          (which can show a scrollbar) never shifts the layout. */}
-      <div ref={stageRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
+      {/* The stage is its own scroll container (like the list): it scrolls back
+          to the top when the game changes. No stable gutter: it left a
+          permanent 10px gap beside the full-bleed hero on short content. */}
+      <div ref={stageRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-raised">
         {selected ? p.renderStage(selected) : null}
       </div>
     </div>
