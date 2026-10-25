@@ -908,6 +908,8 @@ export function AppContent() {
               onOpenPlugins={() => setView({ name: 'plugins' })}
               jobs={activeJobs}
               runners={runners}
+              activity={activity}
+              sourceLogos={sourceLogos}
               view={atlasView}
               onOpen={openGame}
               onPlay={(id) => {
@@ -1115,6 +1117,7 @@ export function AppContent() {
         lending={atlasLending}
         onLending={setAtlasLending}
         hasBorrowed={hasBorrowed}
+        filterGames={games}
         atlasView={atlasView}
         onAtlasView={persistAtlasView}
         canRedeem={redeemStores.length > 0}

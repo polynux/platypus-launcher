@@ -79,6 +79,8 @@
     "queueSub_one": "{{count}} dans la file.",
     "queueSub_other": "{{count}} dans la file.",
     "pauseAll": "Tout mettre en pause",
-    "recent": "Récents"
+    "recent": "Récents",
+    "emptyTitle": "Rien à télécharger",
+    "emptyBody": "Les installations, mises à jour, déplacements et vérifications de fichiers apparaissent ici."
   }
 }

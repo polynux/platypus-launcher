@@ -4,7 +4,7 @@
 // persists like the classic library mode.
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
+import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect } from 'effect';
 import * as matchers from 'vitest-axe/matchers';
@@ -149,9 +149,8 @@ describe('/22 library bar controls (issue #135)', () => {
       />
     );
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
-    expect(document.body.textContent).toContain('Compatibility');
-    fireEvent.pointerDown(screen.getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-    fireEvent.click(screen.getByRole('option', { name: 'Platinum' }));
+    expect(document.body.textContent).toContain('Runs on Linux');
+    await user.click(screen.getByRole('checkbox', { name: 'Platinum' }));
     expect(tiers).toEqual(['platinum']);
   });
 
@@ -159,11 +158,11 @@ describe('/22 library bar controls (issue #135)', () => {
     const user = userEvent.setup();
     render(<Shell {...baseProps} view={{ name: 'library' }} hasBorrowed={false} />);
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
-    expect(document.body.textContent).not.toContain('Lent to me');
+    expect(screen.queryByRole('checkbox', { name: 'Only lent to me' })).not.toBeInTheDocument();
     cleanup();
     render(<Shell {...baseProps} view={{ name: 'library' }} hasBorrowed lending="all" onLending={() => {}} />);
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
-    expect(document.body.textContent).toContain('Lent to me');
+    expect(screen.getByRole('checkbox', { name: 'Only lent to me' })).toBeInTheDocument();
   });
 
   it('switches the library view through list, covers and table', async () => {

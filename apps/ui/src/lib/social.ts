@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { FriendState, SocialFriend, SocialStatus, SocialView } from '../types';
 import i18n from './i18n';
 
@@ -133,6 +134,19 @@ export function initials(name: string): string {
   const first = parts[0][0] ?? '?';
   const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
   return (first + last).toUpperCase();
+}
+
+/** Hashed hue for an avatar tile (the /22 lab's `avatarHue`): 0-359, so a
+ *  store and a friend keep their tile across views. */
+export function avatarHue(name: string): number {
+  let h = 0;
+  for (const c of name.trim().toLowerCase()) h = (h * 31 + c.codePointAt(0)!) >>> 0;
+  return h % 360;
+}
+
+/** Background for a hashed-hue avatar tile (the lab's `.ap-av`): white initial. */
+export function avatarHueStyle(name: string): CSSProperties {
+  return { backgroundColor: `hsl(${avatarHue(name)} 38% 42%)` };
 }
 
 /** Replaces (or adds) one store's view. Every event carries the whole view;

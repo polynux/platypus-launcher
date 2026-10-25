@@ -27,7 +27,7 @@
   "uninstallAsk": "Désinstaller « {{title}} » ? Ses fichiers quittent le disque.",
   "uninstallGo": "Désinstaller",
   "atlas": {
-    "freeOf": "libres sur {total}",
-    "played": "Joué {ago}"
+    "freeOf": "libres sur {{total}}",
+    "played": "Joué {{ago}}"
   }
 }

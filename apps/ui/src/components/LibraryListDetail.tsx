@@ -109,8 +109,8 @@ export function LibraryListDetail(p: ListDetailProps) {
   const resetExtra = () => { setTier('all'); setStatusFilter('all'); setLending('all'); };
   // Atlas filter selects in Albert Sans (label.style = plain): human values,
   // never uppercase or mono.
-  const atlasSelect = 'h-[30px] w-full font-sans text-[13px]';
-  const atlasItem = 'font-sans text-[13px] capitalize';
+  const atlasSelect = 'h-[30px] w-full text-[13px]';
+  const atlasItem = 'text-[13px] capitalize';
   const atlasAny = t('library:listDetail.filterAny');
   // The active collection's missing titles (issue #45's staleTitles): the same
   // names the classic header lists, as a one-line note at the top of the list.
@@ -228,16 +228,16 @@ export function LibraryListDetail(p: ListDetailProps) {
           {/* Sort key and direction as one joined control, so the filter field keeps its width. */}
           <div className="flex flex-none">
           <Select value={sort} onValueChange={(v) => { const next = v as ListSort; setSort(next); setDir(defaultDir(next === 'recent' ? 'last' : next)); }}>
-            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[92px] flex-none rounded-r-none bg-surface font-sans text-[13px]">
+            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[92px] flex-none rounded-r-none bg-surface text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="recent" className="font-sans text-[13px]">{t('library:listDetail.sort.recent')}</SelectItem>
-              <SelectItem value="title" className="font-sans text-[13px]">{t('library:listDetail.sort.title')}</SelectItem>
-              <SelectItem value="hours" className="font-sans text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
-              <SelectItem value="year" className="font-sans text-[13px]">{t('library:listDetail.sort.year')}</SelectItem>
-              <SelectItem value="size" className="font-sans text-[13px]">{t('library:listDetail.sort.size')}</SelectItem>
-              <SelectItem value="tier" className="font-sans text-[13px]">{t('library:listDetail.sort.tier')}</SelectItem>
+              <SelectItem value="recent" className="text-[13px]">{t('library:listDetail.sort.recent')}</SelectItem>
+              <SelectItem value="title" className="text-[13px]">{t('library:listDetail.sort.title')}</SelectItem>
+              <SelectItem value="hours" className="text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
+              <SelectItem value="year" className="text-[13px]">{t('library:listDetail.sort.year')}</SelectItem>
+              <SelectItem value="size" className="text-[13px]">{t('library:listDetail.sort.size')}</SelectItem>
+              <SelectItem value="tier" className="text-[13px]">{t('library:listDetail.sort.tier')}</SelectItem>
             </SelectContent>
           </Select>
           <button
@@ -309,7 +309,7 @@ export function LibraryListDetail(p: ListDetailProps) {
                   <button
                     type="button"
                     onClick={resetExtra}
-                    className="w-full rounded-lg px-2 py-1.5 text-left font-sans text-[13px] font-semibold text-accent transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    className="w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-semibold text-accent transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     {t('library:listDetail.filterReset')}
                   </button>

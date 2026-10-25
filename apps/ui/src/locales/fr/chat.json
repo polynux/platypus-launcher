@@ -31,6 +31,7 @@
   },
   "group": {
     "inGame": "En jeu",
+    "playing": "En partie",
     "online": "En ligne",
     "offline": "Hors ligne",
     "showMore": "Afficher {{count}} de plus"

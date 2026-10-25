@@ -192,8 +192,8 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     derived.ground = ground;
     derived['ground-2'] = toneAt(tone, 0.48, 0.08 * d);
     derived.raised = toneAt(tone, 0.46, 0.1 * d);
-    derived.surface = toneAt(tone, 0.42, 0.13 * d);
-    derived['surface-strong'] = toneAt(tone, 0.38, 0.18 * d);
+    derived.surface = toneAt(tone, 0.42, 0.14 * d);
+    derived['surface-strong'] = toneAt(tone, 0.38, 0.20 * d);
     derived.hairline = toneAt(tone, 0.34, 0.17 * d);
     derived['hairline-strong'] = toneAt(tone, 0.3, 0.26 * d);
     derived.popover = toneAt(tone, 0.42, 0.13 * d);
@@ -204,7 +204,7 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     derived['on-accent'] = readable(tone, 0.5, 0.07, accent, 4.5, -1);
     derived.text = readable(tone, 0.3, 0.95, ground, 4.5, 1);
     derived['text-body'] = readable(tone, 0.25, 0.72, ground, 4.5, 1);
-    derived['text-muted'] = readable(tone, 0.25, 0.62, ground, 3, 1);
+    derived['text-muted'] = readable(tone, 0.25, 0.72, ground, 3, 1);
     derived['text-faint'] = readable(tone, 0.22, 0.52, ground, 3, 1);
   }
   const vars: Record<string, string> = {};

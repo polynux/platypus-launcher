@@ -125,7 +125,7 @@ describe('atlas page (issue #136)', () => {
     expect(screen.getByPlaceholderText('Filter the library')).toBeInTheDocument();
     expect(screen.getByRole('status')).toBeInTheDocument();
     // No filter active: the blocks show above the grid.
-    expect(screen.getByText('Continue playing')).toBeInTheDocument();
+    expect(screen.getByText('Last played')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Alpha' })).toBeInTheDocument();
   });
 

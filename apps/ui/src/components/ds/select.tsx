@@ -31,7 +31,7 @@ export function SelectContent({ className, children, position = 'popper', ...pro
         position={position}
         sideOffset={6}
         className={cn(
-          'relative z-[70] max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] origin-[var(--radix-select-content-transform-origin)] overflow-hidden rounded-xl bg-raised text-text ring-1 ring-white/10 animate-modal-in',
+          'relative z-[70] max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)] origin-[var(--radix-select-content-transform-origin)] overflow-hidden rounded-xl bg-popover text-text ring-1 ring-hairline-strong animate-modal-in',
           className,
         )}
         style={{ boxShadow: '0 20px 50px rgba(0,0,0,.55)' }}
@@ -44,7 +44,7 @@ export function SelectContent({ className, children, position = 'popper', ...pro
 }
 
 export function SelectLabel({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.Label>) {
-  return <SelectPrimitive.Label data-slot="select-label" className={cn('px-2.5 pb-1 pt-2 font-mono text-micro uppercase tracking-[0.16em] text-text-muted', className)} {...props} />;
+  return <SelectPrimitive.Label data-slot="select-label" className={cn('px-2.5 pb-1 pt-2 font-mono text-micro uppercase tracking-[0.16em] text-text-muted plain:font-sans plain:normal-case plain:tracking-normal plain:text-[12px] plain:font-bold plain:text-text-faint', className)} {...props} />;
 }
 
 export function SelectItem({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) {
@@ -52,7 +52,7 @@ export function SelectItem({ className, children, ...props }: React.ComponentPro
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        'relative flex w-full items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-8 font-mono text-[12px] text-white/75 outline-none select-none data-[highlighted]:bg-accent-strong/10 data-[highlighted]:text-amber-200 data-[state=checked]:text-accent-strong data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
+        'relative flex w-full items-center gap-2 rounded-lg py-1.5 pl-2.5 pr-8 font-mono text-[12px] text-text-body outline-none select-none data-[highlighted]:bg-surface-strong data-[highlighted]:text-text data-[state=checked]:text-accent-strong data-[disabled]:pointer-events-none data-[disabled]:opacity-40 plain:font-sans plain:text-[13px]',
         className,
       )}
       {...props}

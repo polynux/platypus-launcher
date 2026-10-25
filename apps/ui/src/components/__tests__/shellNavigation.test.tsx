@@ -336,12 +336,13 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
     expect(selected.at(-1)).toEqual(['steam', 'gog']);
   });
 
-  it('marks the active own tab with a 2px accent underline', async () => {
+  it('marks the active own tab with the accent inset ring and no underline', async () => {
     shellState.navigation = 'sourcebar';
     render(<Shell {...sourcebarProps} ownership="installed" view={{ name: 'library' }} />);
     const tab = screen.getByRole('button', { name: /^Installed/ });
     expect(tab).toHaveAttribute('aria-pressed', 'true');
-    expect(tab.querySelector('.bg-accent')).toBeTruthy();
+    expect(tab.querySelector('.bg-accent')).toBeFalsy();
+    expect(tab.className).toMatch(/ring-accent/);
   });
 
   it('rings the Downloads icon and badges Needs attention', async () => {
@@ -448,7 +449,7 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(tab).toHaveAttribute('aria-pressed', 'true');
     expect(tab.querySelector('.bg-accent')).toBeTruthy();
     await user.click(tab);
-    expect(screen.getByRole('menuitem', { name: /All games/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /All games/ })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /Couch co-op/ })).toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: /Couch co-op/ }));
     expect(opened).toEqual(['couch']);
@@ -494,9 +495,9 @@ describe('sourcebar activity footer (issue #125)', () => {
       />
     );
     expect(container.querySelector('[data-region="sourcebar-footer"]')?.className).toMatch(/h-7/);
-    expect(screen.getByText(/Scanned/)).toBeInTheDocument();
+    expect(screen.getByText(/Library scanned/)).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(/Offline/);
-    expect(screen.getByText('platypus v0.2')).toBeInTheDocument();
+    expect(screen.getByText('Platypus v0.2')).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
 

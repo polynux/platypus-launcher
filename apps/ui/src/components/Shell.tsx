@@ -7,24 +7,25 @@
 // a 48px top bar, a 50px library bar and a 28px status footer. Library and
 // game views render the library bar (#135); other views get the full-width
 // body. The game-colour switch lives in Settings > Appearance (#134), not here.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownToLine, ChevronDown, CircleAlert, Layers, Menu, Plus, Search, Settings, SlidersHorizontal, Square, Ticket, Users, Rows3, LayoutGrid, Table2, WifiOff } from 'lucide-react';
+import { Activity, ArrowDownToLine, Check, ChevronDown, CircleAlert, Clock, Cpu, HardDriveDownload, Layers, Menu, Plus, Puzzle, Search, Settings, SlidersHorizontal, Square, Star, Sparkles, Ticket, Users, Rows3, LayoutGrid, Table2, WifiOff, type LucideIcon } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
-import { cx, clock, APP_VERSION } from './ui';
+import { cx, clock, relTime, APP_VERSION } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Input } from './ds/input';
 import { storeLabel } from '../lib/games';
+import { avatarHue, avatarHueStyle } from '../lib/social';
+import { TIER_FILTERS, tierFilterValue } from '../lib/compat';
 import { FriendsSummary } from './FriendsSummary';
 import { PluginLogo } from './PluginLogo';
 import { Sidebar } from './Sidebar';
 import { useVariant } from '../lib/theme';
 import { openCommandPalette } from './CommandPalette';
-import { TierFilterControl, StatusFilterControl, type StatusFilter } from './LibraryView';
+import { STATUS_FILTERS, tierOptionLabel, statusOptionLabel, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
-import type { Collection, Job, SessionEvent, SocialView, StoreType, View } from '../types';
+import type { Collection, Game, Job, SessionEvent, SocialView, StoreType, View } from '../types';
 import type { Ownership } from './LibraryView';
 
 type NavKey = 'dashboard' | 'library' | 'downloads' | 'activity' | 'fixes' | 'runners' | 'plugins' | 'storage' | 'settings';
@@ -57,6 +58,8 @@ interface ShellProps extends SidebarProps {
   onStatusFilter?: (v: StatusFilter) => void;
   lending?: 'all' | 'with-me';
   onLending?: (v: 'all' | 'with-me') => void;
+  /** The library games, for the filters popover's per-option counts. */
+  filterGames?: Game[];
   /** Whether any game is lent through a family (shows the lent row). */
   hasBorrowed?: boolean;
   /** Which library view the /22 switch shows (list-detail or the classic grid/table, #136). */
@@ -453,6 +456,20 @@ function AttentionButton({ p }: { p: ShellProps }) {
 
 // The friends avatar (D22 `.tb-friends`): the unread badge toggles the side
 // panel App renders (#135); other themes keep the modal.
+function dotFor(state: string): string {
+  switch (state) {
+    case 'online':
+    case 'looking':
+      return 'bg-ok';
+    case 'away':
+    case 'busy':
+    case 'snooze':
+      return 'bg-attention';
+    default:
+      return 'bg-text-faint';
+  }
+}
+
 function FriendsButton({ p }: { p: ShellProps }) {
   const { t } = useTranslation(['nav']);
   const self = (p.friends ?? []).find((v) => v.self)?.self;
@@ -471,10 +488,16 @@ function FriendsButton({ p }: { p: ShellProps }) {
       )}
     >
       {self?.avatarUrl ? (
-        <img src={self.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+        <span className="relative h-6 w-6 flex-none">
+          <img src={self.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+          <span aria-hidden className={cx('absolute -bottom-px -right-px size-2 rounded-full ring-2 ring-ground', dotFor(self.state))} />
+        </span>
       ) : (
-        <span aria-hidden className="grid h-6 w-6 place-items-center rounded-full bg-surface-strong text-[12px] font-bold text-text">
-          {self ? initial : <Users className="h-4 w-4" />}
+        <span className="relative h-6 w-6 flex-none">
+          <span aria-hidden className="grid h-6 w-6 place-items-center rounded-full text-[12px] font-bold text-white" style={avatarHueStyle(self?.name ?? '?')}>
+            {self ? initial : <Users className="h-4 w-4" />}
+          </span>
+          {self && <span aria-hidden className={cx('absolute -bottom-px -right-px size-2 rounded-full ring-2 ring-ground', dotFor(self.state))} />}
         </span>
       )}
       {(p.friendsUnread ?? 0) > 0 && (
@@ -494,14 +517,16 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
   const [open, setOpen] = useState(false);
   const active = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
   const pluginAttention = p.authNeeded;
-  const items: { key: string; label: string; onSelect: () => void; current?: boolean; badge?: boolean }[] = [
-    { key: 'activity', label: t('nav:activity'), onSelect: () => p.onNavigate({ name: 'activity' }), current: active === 'activity' },
-    { key: 'runners', label: t('nav:runners'), onSelect: () => p.onNavigate({ name: 'runners' }), current: active === 'runners' },
-    { key: 'plugins', label: t('nav:plugins'), onSelect: () => p.onNavigate({ name: 'plugins' }), current: active === 'plugins', badge: pluginAttention },
-    { key: 'storage', label: t('nav:storage'), onSelect: () => p.onNavigate({ name: 'storage' }), current: active === 'storage' },
+  const warnCount = (p.stores ?? []).filter((s) => (s as { status?: string }).status !== 'ready').length;
+  const items: { key: string; label: string; Icon: LucideIcon; onSelect: () => void; current?: boolean; badge?: boolean }[] = [
+    { key: 'activity', label: t('nav:activity'), Icon: Activity, onSelect: () => p.onNavigate({ name: 'activity' }), current: active === 'activity' },
+    { key: 'runners', label: t('nav:runners'), Icon: Cpu, onSelect: () => p.onNavigate({ name: 'runners' }), current: active === 'runners' },
+    { key: 'plugins', label: t('nav:plugins'), Icon: Puzzle, onSelect: () => p.onNavigate({ name: 'plugins' }), current: active === 'plugins', badge: pluginAttention },
+    { key: 'storage', label: t('nav:storage'), Icon: HardDriveDownload, onSelect: () => p.onNavigate({ name: 'storage' }), current: active === 'storage' },
     {
       key: 'settings',
       label: t('nav:settings'),
+      Icon: Settings,
       onSelect: () => (p.onSettingsOpen ? p.onSettingsOpen() : p.onNavigate({ name: 'settings' })),
       current: active === 'settings',
     },
@@ -525,8 +550,9 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
         {items.map((n) => (
           <DropdownMenuItem key={n.key} asChild onSelect={n.onSelect}>
             <button aria-current={n.current ? 'page' : undefined} className={cx('w-full', n.current && 'text-accent-strong')}>
+              <n.Icon aria-hidden className="size-[15px] flex-none text-text-muted" />
               <span className="min-w-0 flex-1 text-left">{n.label}</span>
-              {n.badge && <span className="size-1.5 flex-none rounded-full bg-attention" aria-label={t('nav:needsAttention')} />}
+              {n.badge && <Badge variant="neutral" aria-label={t('nav:needsAttention')}>{warnCount > 0 ? warnCount : '!'}</Badge>}
             </button>
           </DropdownMenuItem>
         ))}
@@ -534,7 +560,7 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
         {p.canRedeem && (
           <DropdownMenuItem asChild onSelect={() => p.onRedeem?.()}>
             <button>
-              <Ticket className="h-3.5 w-3.5" aria-hidden />
+              <Ticket aria-hidden className="size-[15px] flex-none text-text-muted" />
               <span>{t('nav:sourcebar.redeem')}</span>
             </button>
           </DropdownMenuItem>
@@ -542,7 +568,7 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
         {p.onAddGame && (
           <DropdownMenuItem asChild onSelect={() => p.onAddGame?.()}>
             <button>
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <Plus aria-hidden className="size-[15px] flex-none text-text-muted" />
               <span>{t('library:listDetail.addGame')}</span>
             </button>
           </DropdownMenuItem>
@@ -608,13 +634,12 @@ function LibraryBar({ p }: { p: ShellProps }) {
             aria-pressed={v.on}
             onClick={() => goLibrary(v.id)}
             className={cx(
-              'relative inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              v.on ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
+              'relative inline-flex h-7 flex-none items-center gap-1.5 whitespace-nowrap rounded-[7px] px-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              v.on ? 'bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/40' : 'text-text-muted hover:bg-surface hover:text-text'
             )}
           >
             {v.label}
             <span className="font-medium tabular-nums text-[12px] text-text-faint">{v.count}</span>
-            {v.on && <span aria-hidden className="absolute inset-x-3 -bottom-[10px] h-0.5 rounded-full bg-accent" />}
           </button>
         ))}
       </div>
@@ -631,12 +656,12 @@ function LibraryBar({ p }: { p: ShellProps }) {
             if (p.view.name !== 'library') p.onNavigate({ name: 'library' });
           }}
           className={cx(
-            'relative inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+            'relative inline-flex h-8 flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
             selection.length === 0 ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
           )}
         >
           {t('nav:sourcebar.everyStore')}
-          {selection.length === 0 && <span aria-hidden className="absolute inset-x-3 -bottom-[10px] h-0.5 rounded-full bg-accent" />}
+          {selection.length === 0 && <span aria-hidden className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-accent" />}
         </button>
         {storeTabs.map((s) => {
           const on = selection.includes(s.key as StoreType);
@@ -648,15 +673,17 @@ function LibraryBar({ p }: { p: ShellProps }) {
               title={t('nav:sourcebar.shiftHint')}
               onClick={(e) => pickStore(s.key as StoreType, e.shiftKey)}
               className={cx(
-                'relative inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                'relative inline-flex h-8 flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                 on ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
               )}
             >
-              <PluginLogo src={p.sourceLogos?.[s.key]} name={s.label} size="xs" />
+              <span className={cx('grid place-items-center', on && 'text-accent')}>
+                <PluginLogo src={p.sourceLogos?.[s.key]} name={s.label} size="xs" />
+              </span>
               {s.label}
               <span className="font-medium tabular-nums text-[12px] text-text-faint">{p.storeCounts[s.key] ?? 0}</span>
               {warn.has(s.key) && <span className="size-1.5 rounded-full bg-attention" aria-label={t('nav:needsAttention')} />}
-              {on && <span aria-hidden className="absolute inset-x-3 -bottom-[10px] h-0.5 rounded-full bg-accent" />}
+              {on && <span aria-hidden className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-accent" />}
             </button>
           );
         })}
@@ -678,18 +705,57 @@ function LibraryBar({ p }: { p: ShellProps }) {
   );
 }
 
-// The /22 filters button (D22 FilterButton + 08-filters FilterPanel): the
-// tier/status/lent chips as a popover, sharing App's filter state with the
-// list (#135). Counts ride with the options like the lab.
+// The /22 filters button (D22 FilterButton + 08-filters FilterPanel):
+// fieldsets of checkboxes sharing App's filter state with the list (#135).
+// Single-value semantics with checkboxes as radios: picking the active option
+// clears it. Counts ride with the options like the lab.
 function LibraryFiltersButton({ p }: { p: ShellProps }) {
   const { t } = useTranslation(['nav', 'library']);
   const [open, setOpen] = useState(false);
-  const activeCount = [p.tier !== 'all', p.statusFilter !== 'all', (p.lending ?? 'all') !== 'all'].filter(Boolean).length;
+  const games = p.filterGames ?? [];
+  const tierCounts = useMemo(() => {
+    const m = new Map<TierFilter, number>();
+    for (const g of games) {
+      const v = tierFilterValue(g) as TierFilter;
+      m.set(v, (m.get(v) ?? 0) + 1);
+    }
+    return m;
+  }, [games]);
+  const statusCounts = useMemo(() => {
+    const m = new Map<StatusFilter, number>();
+    for (const g of games) {
+      const v = ((g.status ?? 'none') as StatusFilter) ?? 'none';
+      m.set(v, (m.get(v) ?? 0) + 1);
+    }
+    return m;
+  }, [games]);
+  const lentCount = useMemo(() => games.filter((g) => g.shared_by != null).length, [games]);
+  const tier = p.tier ?? 'all';
+  const statusFilter = p.statusFilter ?? 'all';
+  const lending = p.lending ?? 'all';
+  const activeCount = [tier !== 'all', statusFilter !== 'all', lending !== 'all'].filter(Boolean).length;
   const reset = () => {
     p.onTier?.('all');
     p.onStatusFilter?.('all');
     p.onLending?.('all');
   };
+  const checkRow = (key: string, label: string, count: number, checked: boolean, onToggle: () => void) => (
+    <button
+      key={key}
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onToggle}
+      className="flex h-8 w-full items-center gap-[9px] rounded-lg px-2.5 text-left text-[13.5px] font-normal text-text transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    >
+      <span aria-hidden className={cx('grid size-4 flex-none place-items-center rounded-[4px] ring-1 ring-inset transition', checked ? 'bg-accent ring-accent' : 'ring-hairline-strong')}>
+        {checked && <Check className="size-3 text-on-accent" aria-hidden />}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="flex-none text-[12px] tabular-nums text-text-faint">{count}</span>
+    </button>
+  );
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>
@@ -707,52 +773,33 @@ function LibraryFiltersButton({ p }: { p: ShellProps }) {
           {activeCount > 0 && <span className="size-1.5 rounded-full bg-accent-strong" aria-label={t('nav:needsAttention')} />}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="bottom"
-        align="end"
-        className="w-[260px] p-3"
-        // The selects portal their listbox outside the menu: picking a value
-        // must not dismiss the popover.
-        onPointerDownOutside={(e) => {
-          if ((e.target as Element)?.closest?.('[role="listbox"], [data-radix-popper-content-wrapper]')) e.preventDefault();
-        }}
-      >
-        <div className="grid gap-3">
-          <div>
-            <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterCompat')}</p>
-            <TierFilterControl value={p.tier ?? 'all'} onChange={(v) => p.onTier?.(v)} triggerClassName="h-[30px] w-full font-sans text-[13px]" itemClassName="font-sans text-[13px] capitalize" allLabel={t('library:listDetail.filterAny')} />
-          </div>
-          <div>
-            <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterStatus')}</p>
-            <StatusFilterControl value={p.statusFilter ?? 'all'} onChange={(v) => p.onStatusFilter?.(v)} triggerClassName="h-[30px] w-full font-sans text-[13px]" itemClassName="font-sans text-[13px] capitalize" allLabel={t('library:listDetail.filterAny')} />
-          </div>
-          {(p.hasBorrowed ?? false) && (
-            <div>
-              <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterLending')}</p>
-              <Select value={p.lending ?? 'all'} onValueChange={(v) => p.onLending?.(v as 'all' | 'with-me')}>
-                <SelectTrigger aria-label={t('library:family')} className="h-[30px] w-full font-sans text-[13px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="font-sans text-[13px] capitalize">{t('library:listDetail.filterAny')}</SelectItem>
-                  <SelectItem value="with-me" className="font-sans text-[13px] capitalize">{t('library:listDetail.filterLentOnly')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-        {activeCount > 0 && (
-          <>
-            <DropdownMenuSeparator />
-            <button
-              type="button"
-              onClick={reset}
-              className="w-full rounded-lg px-2 py-1.5 text-left font-sans text-[13px] font-semibold text-accent transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-            >
-              {t('library:listDetail.filterReset')}
-            </button>
-          </>
+      <DropdownMenuContent side="bottom" align="end" className="w-[300px] p-1.5">
+        <fieldset>
+          <legend className="px-2.5 pb-1 pt-2 text-[12px] font-bold text-text-faint">{t('library:listDetail.filterTiers')}</legend>
+          {TIER_FILTERS.filter((v) => v !== 'all').map((v) => checkRow(v, tierOptionLabel(t, v), tierCounts.get(v) ?? 0, tier === v, () => p.onTier?.(tier === v ? 'all' : v)))}
+        </fieldset>
+        <fieldset className="border-t border-hairline">
+          <legend className="px-2.5 pb-1 pt-2 text-[12px] font-bold text-text-faint">{t('library:listDetail.filterStatuses')}</legend>
+          {STATUS_FILTERS.filter((v) => v !== 'all').map((v) => checkRow(v, statusOptionLabel(t, v), statusCounts.get(v) ?? 0, statusFilter === v, () => p.onStatusFilter?.(statusFilter === v ? 'all' : v)))}
+        </fieldset>
+        {(p.hasBorrowed ?? false) && (
+          <fieldset className="border-t border-hairline">
+            <legend className="px-2.5 pb-1 pt-2 text-[12px] font-bold text-text-faint">{t('library:listDetail.filterFamily')}</legend>
+            {checkRow('with-me', t('library:listDetail.filterLentOnly'), lentCount, lending === 'with-me', () => p.onLending?.(lending === 'with-me' ? 'all' : 'with-me'))}
+          </fieldset>
         )}
+        <div className="border-t border-hairline p-1">
+          <button
+            type="button"
+            onClick={reset}
+            className={cx(
+              'w-full rounded-lg px-2 py-1.5 text-left text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              activeCount > 0 ? 'text-accent hover:bg-surface-strong' : 'text-text-faint'
+            )}
+          >
+            {t('library:listDetail.filterClear')}
+          </button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -803,6 +850,28 @@ function CollectionsMenu({ p }: { p: ShellProps }) {
   const activeId = p.view.name === 'library' ? p.view.collection : undefined;
   const active = (p.collections ?? []).find((c) => c.id === activeId);
   const label = active ? (active.builtin ? t(`collections:builtin.${active.id}`) : active.name) : t('collections:title');
+  const builtins = (p.collections ?? []).filter((c) => c.builtin);
+  const customs = (p.collections ?? []).filter((c) => !c.builtin);
+  const rowIcon = (c: { id: string; name: string; builtin?: boolean; smart?: unknown }): React.ReactNode => {
+    if (c.builtin) {
+      const Icon = c.id === 'favourites' ? Star : c.id === 'installed' ? HardDriveDownload : Clock;
+      return <Icon aria-hidden className="size-[15px] flex-none text-text-muted" />;
+    }
+    if (c.smart) return <Sparkles aria-hidden className="size-[15px] flex-none text-text-muted" />;
+    return <span aria-hidden className="mx-[3.5px] size-2 flex-none rounded-full" style={avatarHueStyle(c.name)} />;
+  };
+  const row = (c: { id: string; name: string; builtin?: boolean; smart?: unknown }) => {
+    const on = c.id === activeId;
+    return (
+      <DropdownMenuItem key={c.id} asChild onSelect={() => p.onOpenCollection?.(c.id)}>
+        <button aria-current={on ? 'page' : undefined} className={cx('w-full', on && 'text-accent-strong')}>
+          {rowIcon(c)}
+          <span className="min-w-0 flex-1 truncate text-left">{c.builtin ? t(`collections:builtin.${c.id}`) : c.name}</span>
+          <span className="font-medium tabular-nums text-[12px] text-text-faint">{p.collectionCounts?.[c.id] ?? 0}</span>
+        </button>
+      </DropdownMenuItem>
+    );
+  };
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
       <DropdownMenuTrigger asChild>
@@ -820,25 +889,18 @@ function CollectionsMenu({ p }: { p: ShellProps }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="end">
-        <DropdownMenuItem asChild onSelect={() => p.onOpenCollection?.(undefined)}>
-          <button>
-            <span>{t('collections:allGames')}</span>
-          </button>
-        </DropdownMenuItem>
-        {(p.collections ?? []).map((c) => {
-          const on = c.id === activeId;
-          return (
-            <DropdownMenuItem key={c.id} asChild onSelect={() => p.onOpenCollection?.(c.id)}>
-              <button aria-current={on ? 'page' : undefined} className={cx('w-full', on && 'text-accent-strong')}>
-                <span className="min-w-0 flex-1 truncate text-left">{c.builtin ? t(`collections:builtin.${c.id}`) : c.name}</span>
-                <span className="font-medium tabular-nums text-[12px] text-text-faint">{p.collectionCounts?.[c.id] ?? 0}</span>
-              </button>
-            </DropdownMenuItem>
-          );
-        })}
+        {builtins.map(row)}
+        {builtins.length > 0 && customs.length > 0 && <DropdownMenuSeparator />}
+        {customs.map(row)}
         {p.onManageCollections && (
           <>
             <DropdownMenuSeparator />
+            <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.()}>
+              <button>
+                <Plus aria-hidden className="size-[15px] flex-none text-text-faint" />
+                <span>{t('collections:newHeading')}</span>
+              </button>
+            </DropdownMenuItem>
             <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.()}>
               <button>
                 <span>{t('collections:manage')}</span>
@@ -921,7 +983,7 @@ export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionS
             {t('library:offline')}
           </span>
         )}
-        {p.lastScan != null && <span className="truncate tabular-nums">{t('library:scannedFooter', { time: clock(p.lastScan) })}</span>}
+        {p.lastScan != null && <span className="truncate tabular-nums">{t('library:scannedFooter', { time: relTime(p.lastScan, now) })}</span>}
         <span className="flex-none">{APP_VERSION}</span>
       </span>
     </footer>

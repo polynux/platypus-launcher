@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowDownToLine, CircleDot, Cloud, Clock, Download, Trophy } from 'lucide-react';
 import type { ActivityEvent, ActivityType, Game } from '../types';
 import { ActivityFeed } from './ActivityFeed';
-import { Panel, Section, ViewHeader, clock, cx } from './ui';
+import { ATLAS_PAGE, Panel, Section, ViewHeader, EmptyState, clock, cx } from './ui';
 import { Button } from './ds/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { currentLocale } from '../lib/format';
@@ -86,10 +86,10 @@ function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game
   }, [items, t]);
   const kindIds = Object.keys(KIND_TYPES);
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.activity')}</h1>
-        <p className="mt-1 text-[13px] text-text-muted">{t('activity:view.subtitle')}</p>
+        <p className="mt-[3px] text-[13px] text-text-muted">{t('activity:view.subtitle')}</p>
       </header>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('activity:atlas.filterKinds')}>
@@ -126,14 +126,17 @@ function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game
         )}
       </div>
       {items.length === 0 ? (
-        <div className="rounded-2xl bg-surface p-10 text-center ring-1 ring-hairline">
-          <p className="text-[13px] text-text-body">{t('activity:atlas.noMatch')}</p>
-          {(kinds.length > 0 || game !== 'all') && (
-            <Button variant="neutral" size="sm" className="mt-3" onClick={() => { setKinds([]); setGame('all'); }}>
-              {t('activity:atlas.clearFilters')}
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          icon={Clock}
+          label={t('activity:atlas.noMatch')}
+          action={
+            (kinds.length > 0 || game !== 'all') ? (
+              <Button variant="neutral" size="sm" onClick={() => { setKinds([]); setGame('all'); }}>
+                {t('activity:atlas.clearFilters')}
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         days.map((d) => (
           <section key={d.key} aria-label={d.label}>
