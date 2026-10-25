@@ -48,13 +48,17 @@ export function TweaksPanel({
           </>
         )}
       </p>
-      {groups.map(([label, list]) =>
+      {groups.map(([label, list], gi) =>
         list.length === 0 ? null : (
           <div key={label} className="mt-3">
             <MonoLabel className="mb-1.5">{label}</MonoLabel>
-            <div className={atlas ? 'divide-y divide-hairline' : 'divide-y divide-white/[0.07]'}>
+            <div className={atlas ? (gi === 0 ? 'grid gap-1.5' : 'divide-y divide-hairline') : 'divide-y divide-white/[0.07]'}>
               {list.map((tw) => {
                 const on = tweakApplied(game.settings, tw);
+                // Recommended tweaks are the suggested fixes: the lab's
+                // `.fix.is-suggested` accent-tint card (page.css), not a
+                // plain hairline row. Troubleshoot stays a plain row.
+                const suggested = atlas && tw.kind === 'recommended';
                 return (
                   <button
                     key={tw.id}
@@ -63,7 +67,7 @@ export function TweaksPanel({
                     onClick={() => onChange(setTweak(game.settings, tw, !on), on
                       ? t('gameSettings:tweaks.removed', { title: tw.title })
                       : t('gameSettings:tweaks.applied', { title: tw.title }))}
-                    className={atlas ? 'flex w-full items-start gap-3 py-[11px] text-left transition' : 'flex w-full items-start gap-3 py-2.5 text-left transition hover:text-white'}
+                    className={suggested ? 'flex w-full items-start gap-3 rounded-lg bg-[color-mix(in_srgb,var(--color-accent)_9%,var(--color-surface))] px-3.5 py-3 text-left ring-1 ring-inset ring-accent/30 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus' : atlas ? 'flex w-full items-start gap-3 py-[11px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus' : 'flex w-full items-start gap-3 py-2.5 text-left transition hover:text-white'}
                   >
                     <span className="min-w-0 flex-1">
                       <span className={atlas ? 'block text-[13px] font-semibold text-text' : 'block text-[12.5px] font-semibold text-white/90'}>{tw.title}</span>
