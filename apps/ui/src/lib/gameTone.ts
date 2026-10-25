@@ -154,7 +154,7 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null): Record<str
     // The surfaces first: the text is clamped against the ground it sits on.
     const ground = toneAt(tone, 0.5, 0.06);
     derived.ground = ground;
-    derived.raised = toneAt(tone, 0.48, 0.08);
+    derived.raised = toneAt(tone, 0.46, 0.1);
     derived.surface = toneAt(tone, 0.42, 0.13);
     derived['surface-strong'] = toneAt(tone, 0.38, 0.18);
     derived.hairline = toneAt(tone, 0.34, 0.17);

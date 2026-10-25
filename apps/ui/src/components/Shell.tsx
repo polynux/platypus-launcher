@@ -388,7 +388,7 @@ function SourcebarChrome(p: ShellProps) {
       </header>
       {/* Source bar (48px): library views with counts, a separator, then one
           tab per store with its game count. Shift-click combines stores. */}
-      <nav aria-label={t('nav:main')} className="flex h-12 items-center gap-1 border-y border-hairline bg-raised px-3">
+      <nav aria-label={t('nav:main')} className="flex h-12 items-center gap-1 border-y border-hairline bg-[color-mix(in_srgb,var(--color-ground)_60%,var(--color-raised))] px-3">
         {viewTabs.map((v) => {
           const Icon = viewIcon(v.id);
           const on = isViewOn(v.id);

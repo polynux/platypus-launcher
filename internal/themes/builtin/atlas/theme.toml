@@ -1,6 +1,9 @@
 # Atlas: the /21 reference design (issues #122, #125). Tokens from
 # tools/design-lab-2/src/designs/d21/d21.css (.d21 block). Not the default yet.
 
+# The /21 stage is flat: no background glow.
+wash = []
+
 [theme]
 id = "atlas"
 name = "Atlas"

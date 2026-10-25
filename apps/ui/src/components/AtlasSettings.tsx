@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import {
-  Braces, Cloud, Cpu, Gauge, GitBranch, Layers, MonitorPlay, Palette,
+  Braces, ChevronDown, Cloud, Cpu, Gauge, GitBranch, Layers, MonitorPlay, Palette,
   Plug, Puzzle, TerminalSquare, Wrench,
 } from 'lucide-react';
 import type {
@@ -17,9 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { LauncherApi } from '../effect/runtime';
-import { SteamAppIdField } from './SteamAppIdField';
-import { CloudSavesPanel } from './CloudSavesPanel';
-import { SaveBackupsSection } from './SaveBackupsSection';
+import { AtlasSavesBlock } from './GameTabs';
 import { TweaksPanel } from './TweaksPanel';
 import { VersionsDialog } from './VersionsDialog';
 import { InstallOptionsDialog } from './InstallOptionsDialog';
@@ -31,6 +29,12 @@ import { CustomGameYear } from './CustomGameYear';
 import { CustomProgram, PrefixPresets } from './SettingsModal';
 import { cardCompat } from '../lib/compat';
 import { envKeyError, steamLaunchOptions, tweakApplied } from '../lib/settings';
+import { useCompat } from '../lib/useCompat';
+import { coreErrMsg } from '../lib/coreError';
+import { ErrorNotice } from './ErrorNotice';
+import { ExternalLink } from './ExternalLink';
+import { useTranslation as useT } from 'react-i18next';
+import { Trans as TransI18n } from 'react-i18next';
 import type { GameSettingsDraft } from './SettingsModal';
 import type { GameSettingsTab } from '../lib/gameSettingsTabs';
 import { cx } from './ui';
@@ -124,9 +128,25 @@ export function atlasFieldCategory(fieldId: string): 'compat' | 'performance' | 
 }
 
 /** Every runner field lands in exactly one drawer category (unknowns in Fixes). */
+const ATLAS_KNOWN_FIELDS: ReadonlySet<string> = new Set([
+  'runner_id',
+  'use_gamemode', 'use_mangohud', 'mangohud_preset',
+  'use_gamescope', 'gamescope_resolution', 'gamescope_rate', 'gamescope_filter',
+  'gamescope_fullscreen', 'gamescope_borderless', 'gamescope_grab_cursor',
+  'gamescope_hdr', 'gamescope_vrr', 'gamescope_wayland', 'gamescope_w',
+  'gamescope_h', 'gamescope_r', 'upscaler',
+  'dx_layer', 'sync_mode', 'shader_cache',
+  'proton_enable_nvapi', 'proton_hide_nvidia_gpu', 'proton_enable_wayland',
+  'proton_no_d3d11', 'proton_no_d3d12', 'proton_force_large_address_aware',
+  'proton_old_gl_string',
+  'proton_log', 'wine_prefix', 'env_vars',
+  'launch_arguments', 'working_dir', 'gamescope_args',
+  'eac_runtime', 'battleye_runtime', 'winetricks',
+]);
+/** Fields no drawer category names (future runner flags land in Fixes). */
 export function atlasUnmappedFields(groups: SettingGroup[]): string[] {
   const ids = groups.flatMap((g) => g.fields.map((f) => f.id));
-  return ids.filter((id) => !id);
+  return ids.filter((id) => !ATLAS_KNOWN_FIELDS.has(id));
 }
 
 export const ATLAS_ICONS: Record<AtlasCategory, React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>> = {
@@ -213,6 +233,89 @@ export function AtlasSSwitch({ label, desc, hint, checked, disabled, onChange, l
         <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', checked ? 'translate-x-4 bg-on-accent' : 'bg-raised')} />
       </span>
     </button>
+  );
+}
+
+/** The Steam AppID row as an AtlasSRow (the lab's .srow): a 600 label with a
+ *  muted description on the left, a 190px sans input and Save on the right.
+ *  No faint mono label or mono placeholder like the old field. */
+function AtlasSteamAppIdRow({ game }: { game: Game }) {
+  const { t } = useT('game');
+  const { compat, update } = useCompat(game);
+  const userSet = compat?.steam_app_id_source === 'user' ? compat.steam_app_id ?? '' : '';
+  const effective = compat?.steam_app_id ?? '';
+  const [draft, setDraft] = useState(userSet);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setDraft(userSet), [userSet]);
+  const save = () => {
+    const next = draft.trim();
+    if (next === userSet) return;
+    if (next !== '' && !/^\d+$/.test(next)) {
+      setError(t('game:steamAppId.numberError'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    Effect.runPromise(LauncherApi.setGameSteamAppID(game, next))
+      .then((c) => update(c))
+      .catch((e) => setError(coreErrMsg(e)))
+      .finally(() => setBusy(false));
+  };
+  const href = effective
+    ? `https://store.steampowered.com/app/${effective}`
+    : `https://store.steampowered.com/search/?term=${encodeURIComponent(game.title)}`;
+  const source =
+    compat?.steam_app_id_source === 'user' ? t('game:appIdSource.user')
+    : compat?.steam_app_id_source === 'plugin' ? t('game:appIdSource.plugin')
+    : compat?.steam_app_id_source === 'steam' ? t('game:appIdSource.steam')
+    : t('game:appIdSource.none');
+  return (
+    <AtlasSRow
+      label={t('game:steamAppId.heading')}
+      desc={
+        effective ? (
+          <TransI18n
+            i18nKey="game:steamAppId.current"
+            values={{ id: effective, source }}
+            components={{ a: <ExternalLink href={href} className="text-accent hover:underline" /> }}
+          />
+        ) : (
+          <TransI18n
+            i18nKey="game:steamAppId.none"
+            components={{ a: <ExternalLink href={href} className="text-accent hover:underline" /> }}
+          />
+        )
+      }
+    >
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <Input
+          aria-label={t('game:steamAppId.aria')}
+          aria-invalid={!!error}
+          inputMode="numeric"
+          value={draft}
+          placeholder={effective ? effective : t('game:steamAppId.placeholder')}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onBlur={save}
+          disabled={busy}
+          spellCheck={false}
+          className="w-[190px] flex-none font-sans text-[13px]"
+        />
+        <Button type="submit" variant="neutral" size="sm" disabled={busy || draft.trim() === userSet}>
+          {t('common:save')}
+        </Button>
+      </form>
+      {error && <ErrorNotice className="mt-2" message={error} fallback={t('game:steamAppId.failed')} />}
+    </AtlasSRow>
   );
 }
 
@@ -349,7 +452,7 @@ export interface AtlasBodyProps {
   job?: Job;
   groups: SettingGroup[];
   shared: GameSettingsDraft;
-  onSaveSettings: (s: GameSettings) => void;
+  onSaveSettings: (s: GameSettings) => void | Promise<void>;
   onChangeSettings: (s: GameSettings, what: string) => void;
   onJob: (kind: 'install' | 'update' | 'uninstall') => void;
   onJobAction: (action: 'cancel' | 'retry', id: string) => void;
@@ -410,9 +513,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
             : t('atlas:compat.unrated')}
         />
         {unrated && (
-          <div className="py-2">
-            <SteamAppIdField game={game} />
-          </div>
+          <AtlasSteamAppIdRow game={game} />
         )}
         {game.fix_info?.description && (
           <AtlasSRow label={t('atlas:compat.tip')} desc={game.fix_info.description} />
@@ -507,8 +608,8 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
             key={f.id}
             label={f.label}
             desc={f.description}
-            checked={!!draftRec[f.id]}
-            onChange={() => changeChoice(f.id, !draftRec[f.id])}
+            checked={!!(draftRec[f.id] ?? f.default)}
+            onChange={() => changeChoice(f.id, !(draftRec[f.id] ?? f.default))}
           />
         ) : (
           <AtlasSRow key={f.id} label={f.label} desc={f.description}>
@@ -520,13 +621,11 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
   }
 
   if (cat === 'saves') {
+    // The tab's own pieces (the lab's SavesTable over .tbl, with .srow
+    // controls): the backups table, then the cloud status, backup action
+    // and mode as one slim row. No uppercase badges or mono hints.
     return (
-      <div>
-        <CloudSavesPanel game={{ ...game, settings: current }} plugin={p.plugin} framed={false} />
-        <div className="pt-2">
-          <SaveBackupsSection game={{ ...game, settings: current }} onNotify={p.onNotify} />
-        </div>
-      </div>
+      <AtlasSavesBlock game={{ ...game, settings: current }} plugin={p.plugin} onNotify={p.onNotify} />
     );
   }
 
@@ -553,9 +652,9 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
             key={field.id}
             label={field.description || field.label}
             hint={field.label}
-            checked={!!draftRec[field.id]}
+            checked={!!(draftRec[field.id] ?? field.default)}
             disabled={native}
-            onChange={() => changeChoice(field.id, !draftRec[field.id])}
+            onChange={() => changeChoice(field.id, !(draftRec[field.id] ?? field.default))}
           />
         ))}
       </div>
@@ -580,6 +679,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
         <div className="py-2">
           <TweaksPanel
             framed={false}
+            atlas
             game={{ ...game, settings: current }}
             tweaks={native ? p.tweaks.filter((tw) => !Object.keys(tw.env ?? {}).some((k) => /^(PROTON_|WINE_)/.test(k))) : p.tweaks}
             viaSteam={viaSteam}
@@ -593,7 +693,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
               const on = tricks.includes(v);
               return (
                 <button key={v} aria-pressed={on} onClick={() => set('winetricks', on ? tricks.filter((x) => x !== v) : [...tricks, v])}
-                  className={cx('rounded-lg px-2.5 py-1.5 font-mono text-hint transition', on ? 'bg-emerald-300/15 text-emerald-200 ring-1 ring-emerald-300/40' : 'bg-surface-strong text-text-muted hover:bg-white/[0.1]')}>
+                  className={cx('rounded-lg px-2.5 py-1.5 font-sans text-[13px] transition', on ? 'bg-accent/[0.22] text-text ring-1 ring-accent/50' : 'bg-surface-strong text-text-muted hover:bg-white/[0.1]')}>
                   {on ? '✓ ' : '+ '}{v}
                 </button>
               );
@@ -601,7 +701,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
           </div>
         </AtlasSRow>
         {leftover.map((f) => f.kind === 'bool' ? (
-          <AtlasSSwitch key={f.id} label={f.description || f.label} hint={f.description ? f.label : undefined} checked={!!draftRec[f.id]} onChange={() => changeChoice(f.id, !draftRec[f.id])} />
+          <AtlasSSwitch key={f.id} label={f.description || f.label} hint={f.description ? f.label : undefined} checked={!!(draftRec[f.id] ?? f.default)} onChange={() => changeChoice(f.id, !(draftRec[f.id] ?? f.default))} />
         ) : f.kind === 'select' ? (
           <AtlasSRow key={f.id} label={f.label} desc={f.description}>
             <AtlasChoiceSelect field={f} value={String(draftRec[f.id] ?? f.default ?? '')} onChange={(v) => changeChoice(f.id, v)} />
@@ -703,12 +803,12 @@ export function AtlasDrawer(props: Omit<AtlasBodyProps, 'cat' | 'onOpenGeneral' 
                       aria-controls={isOpen ? `gs-acc-panel-${cat}` : undefined}
                       aria-describedby={`gs-acc-sum-${cat}`}
                       onClick={() => setOpen(isOpen ? null : cat)}
-                      className="flex h-[46px] w-full items-center gap-2.5 rounded-[10px] px-3 text-left outline-none hover:bg-surface-strong focus-visible:ring-2 focus-visible:ring-focus/60"
+                      className="flex h-[46px] w-full items-center gap-2.5 rounded-[10px] px-3 text-left outline-none hover:bg-surface focus-visible:ring-2 focus-visible:ring-focus/60"
                     >
-                      <Icon className={cx('size-4 flex-none', isOpen ? 'text-accent' : 'text-text-muted')} aria-hidden />
+                      <Icon className={cx('size-4 flex-none', isOpen ? 'text-accent' : 'text-text')} aria-hidden />
                       <span className="text-[13.5px] font-bold text-text">{atlasLabel(t as unknown as (k: string) => string, cat)}</span>
                       <span id={`gs-acc-sum-${cat}`} className="ml-auto max-w-[46%] truncate text-[12.5px] text-text-faint">{summary(cat)}</span>
-                      <span aria-hidden className={cx('text-text-faint transition-transform', isOpen && 'rotate-180')}>▾</span>
+                      <ChevronDown aria-hidden className={cx('size-[15px] flex-none text-text-faint transition-transform', isOpen && 'rotate-180')} />
                     </button>
                   </h3>
                   {isOpen && (
@@ -727,7 +827,13 @@ export function AtlasDrawer(props: Omit<AtlasBodyProps, 'cat' | 'onOpenGeneral' 
           <span className="text-[12.5px] text-text-muted">{t('atlas:footer.unsaved')}</span>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={() => shared.discard()}>{t('atlas:footer.discard')}</Button>
-            <Button variant="primary" size="sm" onClick={() => { props.onSaveSettings(shared.current); shared.markClean(); }}>
+            <Button variant="primary" size="sm" onClick={() => {
+              // A failed save keeps its dirty state: the error toast (App)
+              // explains, and the footer stays until the save lands.
+              const r = props.onSaveSettings(shared.current) as unknown as Promise<void> | void;
+              if (r && typeof (r as Promise<void>).then === 'function') (r as Promise<void>).then(() => shared.markClean(), () => {});
+              else shared.markClean();
+            }}>
               {t('atlas:footer.save')}
             </Button>
           </div>

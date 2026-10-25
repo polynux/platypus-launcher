@@ -8,7 +8,7 @@
 // GamePage), so the tabs re-arrange blocks without forking data loading.
 import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, EyeOff, Loader2, Lock, Play, RefreshCw, SlidersHorizontal, Square, Trophy } from 'lucide-react';
 import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Game, GameDetails, GameJobKind, GameSettings, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
@@ -37,6 +37,7 @@ import {
   GameBackLink,
   GameInstallNote,
   GameOutsideAlert,
+  TabsNoteLink,
 } from './GamePage';
 import type { useAchievementProgress } from './ProgressAchievements';
 import type { InstallSize } from '../lib/installSize';
@@ -192,7 +193,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
           variant="neutral"
           size="none"
           onClick={d.onStop}
-          className="inline-flex h-[42px] items-center gap-2 rounded-xl bg-black/30 px-5 text-[15px] font-extrabold text-text ring-1 ring-accent/60 hover:bg-black/40"
+          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-black/30 px-5 text-[15px] font-extrabold text-text ring-1 ring-accent/60 hover:bg-black/40"
         >
           {starting ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Square className="h-3 w-3 fill-current" aria-hidden />}
           <span>{starting ? t('game:strip.starting') : t('game:play.stop')}</span>
@@ -208,7 +209,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
         size="none"
         onClick={d.onPlay}
         disabled={launching || game.outside_folder}
-        className="inline-flex h-[42px] items-center gap-2 rounded-xl bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110 disabled:opacity-80"
+        className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110 disabled:opacity-80"
       >
         {launching ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Play className="h-[15px] w-[15px] fill-current" aria-hidden />}
         <span>{launching ? t('game:play.launching') : t('game:play.play')}</span>
@@ -216,7 +217,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
     );
   }
   if (!game.installable) {
-    return <span className="inline-flex h-[42px] items-center rounded-xl bg-surface px-5 text-[13px] font-bold text-text-muted">{t('game:install.cantInstall')}</span>;
+    return <span className="inline-flex h-[42px] items-center rounded-[9px] bg-surface px-5 text-[13px] font-bold text-text-muted">{t('game:install.cantInstall')}</span>;
   }
   const size = d.installSize.state === 'known' && d.installSize.total ? formatBytes(d.installSize.total) : null;
   return (
@@ -224,7 +225,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
       variant="primary"
       size="none"
       onClick={d.onInstall}
-      className="inline-flex h-[42px] items-center gap-2 rounded-xl bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110"
+      className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110"
     >
       <Download className="h-[15px] w-[15px]" aria-hidden />
       <span>{d.job?.state === 'failed' ? t('game:install.retryInstall') : t('game:install.install')}</span>
@@ -250,7 +251,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
       );
     };
     return (
-      <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-xl bg-black/30 p-[3px]">
+      <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-black/30 p-[3px]">
         {copies.map((c) => {
           const on = c.owner_id === played;
           return (
@@ -277,7 +278,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
   }
   const storeName = game.store === 'custom' ? t('game:store.sideloaded') : storeLabel(game.store);
   return (
-    <span className="inline-flex h-[42px] items-center gap-1.5 rounded-xl bg-black/30 px-3 text-[13px] font-semibold text-text">
+    <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-black/30 px-3 text-[13px] font-semibold text-text">
       <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={storeName} size="xs" />
       {storeName}
       {plugin && game.source !== game.store && <span className="text-text-muted">· {plugin.name}</span>}
@@ -332,6 +333,8 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   const [tuneOpen, setTuneOpen] = useState(false);
   // Another game on the stage never inherits the open flyout.
   useEffect(() => setTuneOpen(false), [d.game.id]);
+  const active = d.job && (d.job.state === 'queued' || d.job.state === 'running');
+  const showNote = !active && (d.game.note || d.installing);
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-accent-dim py-3 pl-6 pr-5">
       <div className="mr-2 flex items-center gap-1.5">
@@ -344,7 +347,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             aria-haspopup="dialog"
             onClick={() => setTuneOpen((v) => !v)}
             className={cx(
-              'inline-flex h-[42px] items-center gap-1.5 rounded-xl bg-black/30 px-3 pl-3.5 text-[14px] font-bold text-text transition hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              'inline-flex h-[42px] items-center gap-1.5 rounded-[9px] bg-black/30 px-3 pl-3.5 text-[14px] font-bold text-text transition hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               tuneOpen && 'bg-black/40',
             )}
           >
@@ -362,6 +365,39 @@ function ActionStrip({ d }: { d: GameTabsData }) {
       )}
       <StoreSwitch d={d} />
       <SaveState d={d} />
+      {/* /21 has no row between the strip and the tabs: the install note
+          and folder/version links sit inline at the end of the strip. */}
+      {(showNote || d.refreshing) && (
+        <span className="ml-auto min-w-0 max-w-[38%] truncate text-[12.5px] text-text-muted">
+          {d.refreshing ? (
+            t('game:refreshing')
+          ) : (
+            <>
+              {d.game.note && <span>{d.game.note} </span>}
+              {d.installing && d.plugin && (
+                <span>
+                  {d.canChooseVersion ? (
+                    <Trans
+                      i18nKey="game:install.noteWithVersion"
+                      values={{ folder: d.plugin.install_folder }}
+                      components={{
+                        v: <TabsNoteLink onClick={d.onOpenVersions} />,
+                        d: <TabsNoteLink onClick={d.onOpenPlugins} />,
+                      }}
+                    />
+                  ) : (
+                    <Trans
+                      i18nKey="game:install.notePlain"
+                      values={{ folder: d.plugin.install_folder }}
+                      components={{ d: <TabsNoteLink onClick={d.onOpenPlugins} /> }}
+                    />
+                  )}
+                </span>
+              )}
+            </>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -409,7 +445,7 @@ function YouGrid({ d }: { d: GameTabsData }) {
     [t('game:storeTab.protondb'), d.protondb || t('game:storeTab.noRating')],
   ];
   return (
-    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline">
+    <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline text-[13.5px] leading-[normal]">
       {cells.map(([k, v]) => (
         <div key={k} className="bg-surface px-3 py-2.5">
           <dt className="text-[11.5px] text-text-faint">{k}</dt>
@@ -426,23 +462,25 @@ function AchSummary({ d, onOpen }: { d: GameTabsData; onOpen: () => void }) {
   const unlocked = d.progress?.unlocked ?? d.ach?.unlocked ?? 0;
   if (!total) return null;
   const pct = total ? Math.round((unlocked / total) * 100) : 0;
-  // The side column keeps the count, the bar and the link, with the last
-  // unlocked achievements as an icons row (the lab's .pg-achsum-list).
+  // The lab's .pg-achsum: no card, a trophy icon heading with "**2** of 5",
+  // the bar, the last unlocked as rows, and an "Up next" icons row.
   const list = d.progress?.list ?? d.ach?.list ?? [];
   const recent = list.filter((a) => a.unlocked).slice(0, 3);
+  const next = list.filter((a) => !a.unlocked && !('hidden' in a && (a as { hidden?: boolean }).hidden)).sort((x, y) => (y.global_percent ?? -1) - (x.global_percent ?? -1)).slice(0, 3);
   return (
     <section aria-label={t('game:storeTab.achievements')}>
       <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:storeTab.achievements')}</h2>
-      <div className="rounded-xl bg-surface px-3.5 py-3 ring-1 ring-hairline">
-        <div className="flex items-center justify-between text-[13px]">
-          <span className="font-bold text-text"><b>{unlocked}</b> / {total}</span>
+      <div className="grid gap-3">
+        <div className="flex items-center gap-2 text-[13px]">
+          <Trophy className="h-4 w-4 flex-none text-accent" aria-hidden />
+          <span className="flex-1 text-text-muted"><b className="text-[15px] font-bold text-text">{unlocked}</b> {t('game:storeTab.of')} {total}</span>
           <span className="text-[12px] tabular-nums text-text-muted">{pct}%</span>
         </div>
-        <div className="mt-2 h-1.5 rounded-full bg-hairline" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={unlocked} aria-label={t('game:progress.barLabel')}>
+        <div className="h-1.5 rounded-full bg-hairline" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={unlocked} aria-label={t('game:progress.barLabel')}>
           <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
         </div>
         {recent.length > 0 && (
-          <ul className="mt-2.5 grid gap-2">
+          <ul className="grid gap-2">
             {recent.map((a) => (
               <li key={a.id || a.name} className="flex min-w-0 items-center gap-2.5">
                 {a.icon ? (
@@ -458,7 +496,23 @@ function AchSummary({ d, onOpen }: { d: GameTabsData; onOpen: () => void }) {
             ))}
           </ul>
         )}
-        <button type="button" onClick={onOpen} className="mt-2 font-sans text-[12px] font-semibold text-accent hover:underline">
+        {next.length > 0 && unlocked < total && (
+          <div className="flex items-center justify-between gap-2.5">
+            <span className="text-[12.5px] text-text-muted">{t('game:storeTab.upNext')}</span>
+            <span className="flex gap-1.5">
+              {next.map((a) => (
+                <span key={a.id || a.name} title={`${a.name}: ${a.description}`}>
+                  {a.icon ? (
+                    <img src={a.icon} alt="" loading="lazy" className="h-[30px] w-[30px] rounded-md object-cover opacity-70 grayscale" />
+                  ) : (
+                    <span className="grid h-[30px] w-[30px] place-items-center rounded-md bg-surface-strong"><Trophy className="h-3.5 w-3.5 text-text-muted" aria-hidden /></span>
+                  )}
+                </span>
+              ))}
+            </span>
+          </div>
+        )}
+        <button type="button" onClick={onOpen} className="justify-self-start font-sans text-[12px] font-semibold text-accent hover:underline">
           {t('game:storeTab.seeAll', { total })}
         </button>
       </div>
@@ -466,10 +520,41 @@ function AchSummary({ d, onOpen }: { d: GameTabsData; onOpen: () => void }) {
   );
 }
 
+/** When an achievement was unlocked, as a relative time (the lab's ago():
+ *  minutes, hours, days, months, years — never a calendar date). Under a day
+ *  it reuses the cloud agoLabel (minutes/hours, localized); beyond that it
+ *  counts days and months like the /21 list rows. */
+function achUnlockedWhen(t: (key: string, vars?: Record<string, unknown>) => string, atSeconds: number, nowMs = Date.now()): string {
+  const s = Math.max(0, Math.round(nowMs / 1000 - atSeconds));
+  if (s < 3600) {
+    const when = agoLabel(atSeconds, nowMs);
+    return t('game:progress.unlockedAgo', { when });
+  }
+  if (s < 86400) {
+    const when = agoLabel(atSeconds, nowMs);
+    return t('game:progress.unlockedAgo', { when });
+  }
+  const d = s / 86400;
+  if (d < 2) return t('game:progress.unlockedAgo', { when: t('game:progress.yesterday' as never) as string });
+  if (d < 30) {
+    const c = Math.round(d);
+    const when = t(c === 1 ? 'game:progress.daysAgo_one' : 'game:progress.daysAgo_other', { count: c }) as string;
+    return t('game:progress.unlockedAgo', { when });
+  }
+  if (d < 365) {
+    const c = Math.round(d / 30);
+    const when = t(c === 1 ? 'game:progress.monthsAgo_one' : 'game:progress.monthsAgo_other', { count: c }) as string;
+    return t('game:progress.unlockedAgo', { when });
+  }
+  const c = Math.round(d / 365);
+  const when = t(c === 1 ? 'game:progress.yearsAgo_one' : 'game:progress.yearsAgo_other', { count: c }) as string;
+  return t('game:progress.unlockedAgo', { when });
+}
+
 /** The second line under an achievement row: when it was unlocked, else the
  *  global share (dates and percents go through lib/format for the locale). */
 function achRowMeta(t: (key: string, vars?: Record<string, unknown>) => string, a: { unlocked: boolean; unlocked_at?: number | null; global_percent?: number | null }): string {
-  if (a.unlocked && a.unlocked_at) return t('game:progress.unlockedOn', { date: formatDate(a.unlocked_at) });
+  if (a.unlocked && a.unlocked_at) return achUnlockedWhen(t, a.unlocked_at);
   if (a.global_percent) return t('game:progress.shareOfPlayers', { share: formatPercentValue(a.global_percent) });
   return '';
 }
@@ -492,6 +577,23 @@ interface AchRow {
  *  segment controls (All/Unlocked/Locked + Recent/Rarest) above the rows.
  *  Atlas-only (this file renders only for game.structure = tabs). Locked
  *  hidden achievements stay secret until unlocked, like the lab. */
+function AchRowIcon({ a }: { a: AchRow }) {
+  const [broken, setBroken] = useState(false);
+  if (!a.icon || broken) {
+    return (
+      <span className="relative block h-11 w-11 flex-none overflow-hidden rounded-md bg-surface-strong">
+        <span className="grid h-full w-full place-items-center"><Trophy className="h-4 w-4 text-text-muted" aria-hidden /></span>
+      </span>
+    );
+  }
+  return (
+    <span className="relative block h-11 w-11 flex-none overflow-hidden rounded-md bg-surface-strong">
+      <img src={a.icon} alt="" loading="lazy" onError={() => setBroken(true)} className={cx('h-full w-full object-cover', !a.unlocked && 'opacity-50 grayscale')} />
+      {!a.unlocked && <Lock className="absolute bottom-[3px] right-[3px] h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,1)]" aria-hidden />}
+    </span>
+  );
+}
+
 function AchRows({ d }: { d: GameTabsData }) {
   const { t } = useTranslation('game');
   const [show, setShow] = useState<AchShow>('all');
@@ -556,14 +658,7 @@ function AchRows({ d }: { d: GameTabsData }) {
             const secret = a.hidden && !a.unlocked;
             return (
               <li key={a.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-hairline py-[9px]">
-                <span className="relative block h-11 w-11 flex-none overflow-hidden rounded-md bg-surface-strong">
-                  {a.icon ? (
-                    <img src={a.icon} alt="" loading="lazy" className={cx('h-full w-full object-cover', !a.unlocked && 'opacity-50 grayscale')} />
-                  ) : (
-                    <span className="grid h-full w-full place-items-center"><Trophy className="h-4 w-4 text-text-muted" aria-hidden /></span>
-                  )}
-                  {!a.unlocked && a.icon && <Lock className="absolute bottom-[3px] right-[3px] h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,1)]" aria-hidden />}
-                </span>
+                <AchRowIcon a={a} />
                 <span className="grid min-w-0 gap-0.5">
                   <span className={cx('truncate text-[13.5px] font-semibold', !a.unlocked && 'text-text-muted')}>{secret ? t('game:achList.hiddenName') : a.name}</span>
                   <span className="flex items-center gap-1 text-[12.5px] text-text-muted">
@@ -572,7 +667,7 @@ function AchRows({ d }: { d: GameTabsData }) {
                 </span>
                 <span className="grid justify-items-end gap-[3px] whitespace-nowrap text-[12px]">
                   {a.unlocked && a.at ? (
-                    <span className="text-text">{t('game:progress.unlockedOn', { date: formatDate(a.at) })}</span>
+                    <span className="text-text">{achUnlockedWhen(t, a.at)}</span>
                   ) : (
                     <span className="text-text-faint">{t('game:achList.lockedLabel')}</span>
                   )}
@@ -663,10 +758,9 @@ function ActivityTab({ events }: { events: ActivityEvent[] }) {
   );
 }
 
-function BackupTable({ game, onNotify, onCount }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; onCount?: (n: number | undefined) => void }) {
+export function BackupTable({ game, onNotify, onCount, reloadKey }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; onCount?: (n: number | undefined) => void; reloadKey?: number }) {
   const { t } = useTranslation('game');
   const [backups, setBackups] = useState<SaveBackup[] | null>(null);
-  const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string; what: 'restore' | 'delete' } | null>(null);
   const locale = currentLocale();
   const countRef = useRef(onCount);
@@ -682,18 +776,7 @@ function BackupTable({ game, onNotify, onCount }: { game: Game; onNotify: (msg: 
     setConfirm(null);
     countRef.current?.(undefined);
     reload();
-  }, [reload]);
-  const backupNow = () => {
-    if (busy) return;
-    setBusy(true);
-    Effect.runPromise(LauncherApi.createSaveBackup(game))
-      .then(() => {
-        onNotify(t('game:storeTab.backupQueued'), 'busy');
-        reload();
-      })
-      .catch((e) => onNotify(coreErrMsg(e), 'err'))
-      .finally(() => setBusy(false));
-  };
+  }, [reload, reloadKey]);
   const act = (id: string, what: 'restore' | 'delete') => {
     Effect.runPromise(what === 'restore' ? LauncherApi.restoreSaveBackup(game, id) : LauncherApi.deleteSaveBackup(game.id, id)).then(
       () => { setConfirm(null); reload(); },
@@ -703,11 +786,6 @@ function BackupTable({ game, onNotify, onCount }: { game: Game; onNotify: (msg: 
   if (backups == null) return <TblEmpty text={t('game:storeTab.noSaves')} />;
   return (
     <div>
-      <div className="flex items-center gap-2 px-6 py-2">
-        <Button variant="neutral" size="sm" onClick={backupNow} disabled={busy}>
-          {busy ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
-        </Button>
-      </div>
       {backups.length === 0 ? (
         <TblEmpty text={t('game:storeTab.noSaves')} />
       ) : (
@@ -765,7 +843,7 @@ function BackupTable({ game, onNotify, onCount }: { game: Game; onNotify: (msg: 
  *  (the lab's .srow: plain text on the left, a 190px select on the right).
  *  Atlas-only (this file renders only for game.structure = tabs). The badge
  *  stays hidden under label.style = plain: the status reads as plain text. */
-function CloudSlimRow({ game, plain }: { game: Game; plain: boolean }) {
+export function CloudSlimRow({ game, plain, action }: { game: Game; plain: boolean; action?: React.ReactNode }) {
   const { t } = useTranslation('cloud');
   const [info, setInfo] = useState<CloudInfo | null>(null);
   const [checking, setChecking] = useState(false);
@@ -788,7 +866,8 @@ function CloudSlimRow({ game, plain }: { game: Game; plain: boolean }) {
   }, []);
 
   // Load the last known state; like the panel, look once per session when
-  // there is none yet.
+  // there is none yet. An uninstalled game has no saves on disk to check,
+  // so skip the auto-check there (it only surfaces a "not installed" error).
   useEffect(() => {
     let live = true;
     setInfo(null);
@@ -797,6 +876,7 @@ function CloudSlimRow({ game, plain }: { game: Game; plain: boolean }) {
       .then((i) => {
         if (!live) return;
         setInfo(i);
+        if (game.is_installed === false) return;
         if (!i.status && i.mode !== 'off' && !slimAutoChecked.has(game.id)) {
           slimAutoChecked.add(game.id);
           void check();
@@ -870,6 +950,7 @@ function CloudSlimRow({ game, plain }: { game: Game; plain: boolean }) {
         {error && <span className="truncate text-[12px] text-danger">{error}</span>}
         {info && !conflicted && <span className="sr-only">{modeHelp(info.mode)}</span>}
       </div>
+      {action}
       <Select value={mode} onValueChange={(v) => setMode(v as CloudMode | 'default')} disabled={!info}>
         <SelectTrigger aria-label={t('cloud:panel.modeLabel')} className="h-8 w-[190px] flex-none font-sans text-[13px]">
           <SelectValue />
@@ -904,18 +985,90 @@ function SavesTab({ d, onCount }: { d: GameTabsData; onCount?: (n: number | unde
   // The badge stays hidden under label.style = plain: the slim row reads as
   // plain text (atlas sets plain; other themes never render these tabs).
   const plain = useVariant('label.style') === 'plain';
+  const { t } = useTranslation('game');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [backingUp, setBackingUp] = useState(false);
+  const backupNow = () => {
+    if (backingUp) return;
+    setBackingUp(true);
+    Effect.runPromise(LauncherApi.createSaveBackup(d.game))
+      .then(() => {
+        (d.onNotify ?? (() => {}))(t('game:storeTab.backupQueued'), 'busy');
+        setReloadKey((k) => k + 1);
+      })
+      .catch((e) => (d.onNotify ?? (() => {}))(coreErrMsg(e), 'err'))
+      .finally(() => setBackingUp(false));
+  };
+  // The lab's SavesTable has no button row: "Back up now" lives in the slim
+  // row with the cloud status and the 190px mode select.
+  const backupButton = (
+    <Button variant="neutral" size="sm" onClick={backupNow} disabled={backingUp} className="flex-none">
+      {backingUp ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
+    </Button>
+  );
   return (
     <div>
-      {/* The backups table first, then the cloud status and mode as one slim
-          row (the lab's SavesTable over .tbl, with .srow controls). */}
-      <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} onCount={onCount} />
-      {d.plugin && (
+      {/* The backups table first, then the cloud status, backup action and
+          mode as one slim row (the lab's SavesTable over .tbl, with .srow
+          controls). */}
+      <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} onCount={onCount} reloadKey={reloadKey} />
+      {d.plugin ? (
         <CapabilitySurface plugin={d.plugin} capability="cloud-saves" game={d.game}>
-          <CloudSlimRow game={d.game} plain={plain} />
+          <CloudSlimRow game={d.game} plain={plain} action={backupButton} />
         </CapabilitySurface>
+      ) : (
+        <div className="flex items-center gap-[18px] border-t border-hairline px-6 py-3.5">
+          <span className="min-w-0 flex-1" />
+          {backupButton}
+        </div>
       )}
     </div>
   );
+}
+
+/** The drawer's Saves category reuses the tab's pieces (the table plus the
+ *  one slim row), so the drawer and the tab never drift apart. */
+export function AtlasSavesBlock({ game, plugin, onNotify }: { game: Game; plugin?: StorePlugin; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void }) {
+  const { t } = useTranslation('game');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [backingUp, setBackingUp] = useState(false);
+  const backupNow = () => {
+    if (backingUp) return;
+    setBackingUp(true);
+    Effect.runPromise(LauncherApi.createSaveBackup(game))
+      .then(() => {
+        onNotify(t('game:storeTab.backupQueued'), 'busy');
+        setReloadKey((k) => k + 1);
+      })
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBackingUp(false));
+  };
+  const backupButton = (
+    <Button variant="neutral" size="sm" onClick={backupNow} disabled={backingUp} className="flex-none">
+      {backingUp ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
+    </Button>
+  );
+  return (
+    <div>
+      <BackupTable game={game} onNotify={onNotify} reloadKey={reloadKey} />
+      {plugin ? (
+        <CapabilitySurface plugin={plugin} capability="cloud-saves" game={game}>
+          <CloudSlimRow game={game} plain action={backupButton} />
+        </CapabilitySurface>
+      ) : (
+        <div className="flex items-center gap-[18px] border-t border-hairline px-6 py-3.5">
+          <span className="min-w-0 flex-1" />
+          {backupButton}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The Compatibility tab count: the fix-info row plus the ProtonDB notes and
+ *  the crash hints (the tab shows all three, so the count includes all). */
+export function compatTabCount(game: Game, notesLen: number, hintsLen: number): number {
+  return (game.fix_info?.description ? 1 : 0) + notesLen + hintsLen;
 }
 
 function CompatTab({ d, info }: { d: GameTabsData; info: ReturnType<typeof useCompat>['compat'] }) {
@@ -969,7 +1122,7 @@ export function GameTabsView(d: GameTabsData) {
 
   const hasAch = (d.progress?.total ?? d.ach?.total ?? 0) > 0;
   const achCount = hasAch ? `${d.progress?.unlocked ?? d.ach?.unlocked ?? 0}/${d.progress?.total ?? d.ach?.total ?? 0}` : undefined;
-  const compatCount = (info?.notes?.length ?? 0) + (crash?.hints?.length ?? 0);
+  const compatCount = compatTabCount(d.game, info?.notes?.length ?? 0, crash?.hints?.length ?? 0);
 
   const tabs: { id: TabId; label: string; count?: string | number }[] = [
     { id: 'store', label: t('game:tabs.store') },
@@ -1034,7 +1187,7 @@ export function GameTabsView(d: GameTabsData) {
             )}
           >
             {x.label}
-            {x.count != null && <span className="ml-1.5 text-[12px] font-medium tabular-nums text-text-faint">{x.count}</span>}
+            {x.count != null && <span className="ml-3 text-[12px] font-medium tabular-nums text-text-faint">{x.count}</span>}
           </button>
         ))}
       </div>

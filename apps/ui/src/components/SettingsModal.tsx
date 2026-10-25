@@ -18,7 +18,7 @@ interface Props {
   game: Game;
   runners: ProtonVersion[];
   onClose: () => void;
-  onSave: (s: GameSettings) => void;
+  onSave: (s: GameSettings) => void | Promise<void>;
   onCopied: () => void;
 }
 
@@ -125,7 +125,13 @@ export function useGameSettingsDraft(game: Game): GameSettingsDraft {
   const validEnv = useMemo(() => rowsToEnv(envRows), [envRows]);
   const current = useMemo(() => ({ ...draft, env_vars: validEnv }), [draft, validEnv]);
   const dirty = JSON.stringify(draft) !== initial.draft || rowsSig(envRows) !== initial.env;
-  const markClean = () => setInitial({ draft: JSON.stringify(draft), env: rowsSig(envRows) });
+  // The save writes `current` (valid env rows folded in), so the baseline
+  // remembers that: the draft's env_vars catch up, and Discard returns to
+  // the last save instead of stale vars.
+  const markClean = () => {
+    setDraft((d) => ({ ...d, env_vars: validEnv }));
+    setInitial({ draft: JSON.stringify(current), env: rowsSig(envRows) });
+  };
   const applySaved = (s: GameSettings) => {
     const n = s;
     const rows = envToRows(n.env_vars ?? {});
@@ -497,7 +503,11 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
 
           <div className="flex gap-2.5">
             <Button variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
-            <Button variant="primary" onClick={() => { onSave(current); markClean(); }} className="flex-1">{t('gameSettings:general.save')}</Button>
+            <Button variant="primary" onClick={() => {
+              const r = onSave(current) as unknown as Promise<void> | void;
+              if (r && typeof (r as Promise<void>).then === 'function') (r as Promise<void>).then(() => markClean(), () => {});
+              else markClean();
+            }} className="flex-1">{t('gameSettings:general.save')}</Button>
           </div>
           {dirty && <div role="status" className="font-mono text-hint text-accent-strong/80">{t('gameSettings:general.unsaved')}</div>}
           {/* The store client owns the prefix (issue #88): no footer naming one. */}

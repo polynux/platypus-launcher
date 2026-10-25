@@ -253,7 +253,7 @@ export function TuneFlyout({
       role="dialog"
       tabIndex={-1}
       aria-label={t('tune:title', { title: game.title })}
-      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-[10px] bg-surface text-[13.5px] text-text ring-1 ring-hairline shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal]"
+      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-[10px] bg-[color-mix(in_srgb,var(--color-raised)_50%,var(--color-surface))] text-[13.5px] text-text ring-1 ring-surface-strong shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal] outline-none"
     >
       <div className="border-b border-hairline px-3.5 py-3">
         <div className="mb-2 flex items-baseline justify-between gap-3">
