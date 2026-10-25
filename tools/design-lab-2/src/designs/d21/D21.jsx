@@ -18,7 +18,7 @@ const PRESETS = [
   { id: 'balanced', label: 'Balanced', set: { gamemode: true, gamescope: true, fsr: false } },
   { id: 'speed', label: 'Performance', set: { gamemode: true, gamescope: true, fsr: true } },
 ];
-function QuickSettings({ L, onAll, onClose }) {
+export function QuickSettings({ L, onAll, onClose }) {
   const g = L.game;
   const ref = useRef();
   useEffect(() => {
