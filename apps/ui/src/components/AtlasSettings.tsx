@@ -229,8 +229,8 @@ export function AtlasSSwitch({ label, desc, hint, checked, disabled, onChange, l
         {desc && <span className="text-text-muted text-[0.93em] leading-[1.5]">{desc}</span>}
         {hint && <span className="font-mono text-[11.5px] text-text-faint">{hint}</span>}
       </span>
-      <span aria-hidden className={cx('relative h-5 w-9 flex-none rounded-full transition-colors', checked ? 'bg-accent' : 'bg-surface-strong')}>
-        <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', checked ? 'translate-x-4 bg-on-accent' : 'bg-raised')} />
+      <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', checked ? 'bg-accent' : 'bg-surface-strong ring-1 ring-inset ring-hairline-strong')}>
+        <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', checked ? 'translate-x-[14px] bg-on-accent' : 'bg-text-muted')} />
       </span>
     </button>
   );
