@@ -123,6 +123,9 @@
   },
   "atlas": {
     "account": "Account",
-    "libraryList": "Library list"
+    "libraryList": "Library list",
+    "brings": "What it brings",
+    "loginNeeded": "Log in needed",
+    "versionBy": "Version {{version}}, by {{author}}"
   }
 }

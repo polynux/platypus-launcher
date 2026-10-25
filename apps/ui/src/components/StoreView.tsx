@@ -1,7 +1,7 @@
 // i18n: converted
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, ExternalLink, Home, Lock, RotateCw, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, RotateCw, TriangleAlert, X } from 'lucide-react';
 import { cx } from './ui';
 import { Button } from './ds/button';
 import { browserOpen, onStoreEvent, storeBridge, type StoreEvent } from '../effect/bridge';
@@ -36,6 +36,10 @@ interface StoreViewProps {
   initialUrl?: string;
   onClose: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  /** Atlas shop bar (issue #138): store switch and actions rendered into the
+   *  single browser row, so the page has one bar, not two tall rows. */
+  toolbarLead?: React.ReactNode;
+  toolbarTrail?: React.ReactNode;
 }
 
 /**
@@ -46,7 +50,7 @@ interface StoreViewProps {
  * declared domains. Navigation outside the domains never loads: the toolbar
  * shows a non-modal notice offering to open the address in the browser.
  */
-export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewProps) {
+export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, toolbarTrail }: StoreViewProps) {
   const { t } = useTranslation(['store', 'common']);
   const store = storeBridge();
   const [state, setState] = useState<Pick<StoreEvent, 'url' | 'canGoBack' | 'canGoForward' | 'title' | 'loading'>>({
@@ -169,6 +173,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
   return (
     <div className="flex h-full min-h-[480px] flex-col">
       <div className="flex flex-none items-center gap-1.5 px-5 pb-3 pt-5">
+        {toolbarLead}
         <ToolbarButton label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
           <ArrowLeft className="h-4 w-4" />
         </ToolbarButton>
@@ -183,18 +188,16 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
         </ToolbarButton>
         <div
           data-testid="store-address"
-          title={state.url}
+          title={`${plugin.name} · ${state.url}`}
           className={cx(
-            'mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 font-mono text-[12px] ring-1',
-            outside
-              ? 'bg-attention/[0.07] text-attention ring-attention/30'
-              : 'bg-surface text-text-muted ring-hairline',
+            'mx-1.5 flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface px-2.5 text-[12px] text-text-faint ring-1',
+            outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
           )}
         >
           {state.loading ? (
             <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-hairline-strong border-t-transparent" />
           ) : (
-            <Lock className="h-3 w-3 flex-none opacity-70" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
+            <Globe className="h-3 w-3 flex-none" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
           )}
           <span className="truncate">{host || '…'}</span>
           {outside && (
@@ -203,8 +206,9 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
               <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
             </span>
           )}
-          {state.title && <span className="hidden min-w-0 flex-1 truncate text-right text-text-faint lg:inline">{state.title}</span>}
+          {state.title && <span className="hidden min-w-0 flex-1 truncate text-right lg:inline">{state.title}</span>}
         </div>
+        {toolbarTrail}
         <ToolbarButton label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
         </ToolbarButton>

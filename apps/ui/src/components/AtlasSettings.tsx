@@ -308,7 +308,7 @@ function AtlasSteamAppIdRow({ game }: { game: Game }) {
           onBlur={save}
           disabled={busy}
           spellCheck={false}
-          className="w-[190px] flex-none font-sans text-[13px]"
+          className="w-[190px] flex-none bg-raised font-sans text-[13px] ring-1 ring-hairline-strong focus-visible:ring-2 focus-visible:ring-focus"
         />
         <Button type="submit" variant="neutral" size="sm" disabled={busy || draft.trim() === userSet}>
           {t('common:save')}
@@ -759,6 +759,15 @@ export function AtlasDrawer(props: Omit<AtlasBodyProps, 'cat' | 'onOpenGeneral' 
   const { t } = useTranslation(['gameSettings', 'atlas', 'common']);
   const { tabs, open, setOpen, game, runners, tweaks, job, shared } = props;
   const groups = useRunnerGroups(game);
+  // The open accordion shows the lab's accent edge: focusing its header
+  // paints the 1.5px accent ring (lab .acc-h:focus on open).
+  useEffect(() => {
+    if (!open) return;
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById(`gs-acc-${open}`)?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
   const summary = (cat: AtlasCategory) => {
     if ((['versions', 'options', 'plugin', 'customization', 'maintenance'] as AtlasCategory[]).includes(cat)) {
       if (cat === 'plugin') return props.plugin?.name ?? (t('gameSettings:summary.plugin') as string);
@@ -803,7 +812,7 @@ export function AtlasDrawer(props: Omit<AtlasBodyProps, 'cat' | 'onOpenGeneral' 
                       aria-controls={isOpen ? `gs-acc-panel-${cat}` : undefined}
                       aria-describedby={`gs-acc-sum-${cat}`}
                       onClick={() => setOpen(isOpen ? null : cat)}
-                      className="flex h-[46px] w-full items-center gap-2.5 rounded-[10px] px-3 text-left outline-none hover:bg-surface focus-visible:ring-2 focus-visible:ring-focus/60"
+                      className="flex h-[46px] w-full items-center gap-2.5 rounded-[10px] px-3 text-left outline-none hover:bg-surface focus:bg-surface focus:ring-[1.5px] focus:ring-accent"
                     >
                       <Icon className={cx('size-4 flex-none', isOpen ? 'text-accent' : 'text-text')} aria-hidden />
                       <span className="text-[13.5px] font-bold text-text">{atlasLabel(t as unknown as (k: string) => string, cat)}</span>

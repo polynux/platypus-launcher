@@ -17,5 +17,9 @@
   },
   "blocked": "{{host}} ne fait pas partie de {{name}}. L'ouvrir dans votre navigateur ?",
   "failed": "Impossible d'ouvrir {{name}} : {{error}}",
-  "needsShell": "La vue boutique a besoin de l'environnement de l'appli."
+  "needsShell": "La vue boutique a besoin de l'environnement de l'appli.",
+  "shop": {
+    "redeem": "Utiliser un code",
+    "storeLabel": "Boutique"
+  }
 }

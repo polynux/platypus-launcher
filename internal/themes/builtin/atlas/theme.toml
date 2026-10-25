@@ -23,6 +23,8 @@ supports = ["tokens", "variants"]
 "game.structure" = "tabs"
 "game-hero.logo" = "logo"
 "label.style" = "plain"
+"empty-state.chrome" = "plain"
+"empty-state.icon" = "on"
 
 [tokens]
 ground = "#13161b"

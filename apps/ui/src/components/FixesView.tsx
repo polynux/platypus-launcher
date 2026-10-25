@@ -2,6 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import type { Game } from '../types';
+import { AlertTriangle, Check, Info } from 'lucide-react';
 import { Cover, EmptyState, ListRow, Section, SegRow, TierBadge, TweakDot, ViewHeader } from './ui';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
@@ -88,25 +89,30 @@ function AtlasAttention({ games, onOpenGame }: { games: Game[]; onOpenGame: (id:
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('fixes:atlas.title')}</h1>
         <p className="mt-1 text-[13px] text-text-muted">
-          {issues.length > 0 ? t('fixes:atlas.sub', { count: issues.length }) : t('fixes:empty.clearTitle')}
+          {issues.length > 0 ? t('fixes:atlas.sub', { count: issues.length }) : t('fixes:atlas.emptySub')}
         </p>
       </header>
       {issues.length === 0 ? (
-        <EmptyState label={t('fixes:empty.clearTitle')}>{t('fixes:empty.clearBody', { allLabel: t('fixes:filter.all') })}</EmptyState>
+        <EmptyState icon={Check} label={t('fixes:atlas.emptyTitle')}>{t('fixes:atlas.emptyBody')}</EmptyState>
       ) : (
         <ul className="grid gap-2.5">
           {issues.map((g) => {
             const rating = g.compat_badges?.find((b) => b.kind === 'rating');
+            const isFix = !!g.fix_info;
             const kind = rating?.tone || g.fix_info?.tier
               ? t('fixes:atlas.kindRated', { source: rating?.source || g.fix_info?.source })
               : t('fixes:atlas.kindFix');
+            const KindIcon = isFix ? AlertTriangle : Info;
             return (
-              <li key={g.id} className="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3 ring-1 ring-hairline">
+              <li key={g.id} className="grid grid-cols-[116px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3 ring-1 ring-hairline">
                 <button type="button" onClick={() => onOpenGame(g.id)} className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label={g.title}>
-                  <Cover src={coverImages(g)} title={g.title} className="aspect-[16/7] w-full" />
+                  <Cover src={coverImages(g)} title={g.title} className="aspect-[116/64] w-full" />
                 </button>
                 <div className="min-w-0">
-                  <div className="text-[12.5px] font-semibold text-attention">{kind}</div>
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-attention">
+                    <KindIcon className="h-3 w-3 flex-none" aria-hidden />
+                    <span className="truncate">{kind}</span>
+                  </div>
                   <button type="button" onClick={() => onOpenGame(g.id)} className="truncate text-left text-[15px] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {g.title}
                   </button>

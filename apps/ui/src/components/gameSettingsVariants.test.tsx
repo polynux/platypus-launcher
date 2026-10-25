@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
@@ -300,12 +300,12 @@ describe('Game settings catalog variants', () => {
       expect(document.getElementById('gs-acc-saves')).toHaveAttribute('aria-expanded', 'true');
     });
 
-    it('leaves focus off the headers on open (no focus ring on mouse open), then Escape and a scrim click close it', async () => {
+    it('focuses the open header on open (the lab accent edge), then Escape and a scrim click close it', async () => {
       open();
       const closed = vi.fn();
       render(<GameSettingsModal {...modalProps({ onClose: closed })} />);
-      await tick();
-      expect(document.getElementById('gs-acc-compat')).not.toHaveFocus();
+      // The focus lands a frame after open (past the sheet's own autofocus).
+      await waitFor(() => expect(document.getElementById('gs-acc-compat')).toHaveFocus());
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(closed).toHaveBeenCalledTimes(1);
       clickBackdrop(screen.getByRole('dialog').parentElement!);

@@ -1,6 +1,9 @@
 import React, { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent } from './ds/dialog';
+import { useVariant } from '../lib/theme';
 
 /** The shared dialog widths: a dialog states a size instead of a class. Without
  *  one a dialog is `sm`, so a small dialog never stretches to the window's full width. */
@@ -68,4 +71,48 @@ export function Modal({ label, onClose, size = 'sm', className, dismissable = tr
  *  the game settings shows it. */
 export function ModalOrInline({ embedded, children, ...modal }: ModalProps & { embedded?: boolean }) {
   return embedded ? <>{children}</> : <Modal {...modal}>{children}</Modal>;
+}
+
+/** The shared dialog head (the lab's .dialog-head): title, muted sub under
+ *  it, and the X close button top right. A kicker renders only outside Atlas:
+ *  under `label.style = plain` it stays hidden, so Atlas dialogs stop
+ *  rebuilding it.
+ *
+ *  The head spans the Modal's inner padding (which is `p-7`): callers wrap
+ *  the dialog in `-m-7` and give the body its own padding. */
+export function ModalHead({ title, sub, kicker, onClose }: {
+  title: React.ReactNode;
+  sub?: React.ReactNode;
+  kicker?: React.ReactNode;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation('common');
+  const plain = useVariant('label.style') === 'plain';
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-hairline px-5 pb-2.5 pt-4">
+      <div className="min-w-0">
+        {kicker && !plain ? <div className="mb-1">{kicker}</div> : null}
+        <h2 className="text-[16px] font-extrabold text-text">{title}</h2>
+        {sub && <span className="mt-0.5 block text-[12.5px] text-text-muted">{sub}</span>}
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={t('common:close')}
+        className="grid size-8 flex-none place-items-center rounded-lg text-text-muted transition hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <X className="size-[15px]" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/** The shared dialog footer (the lab's .ap-dialog-foot): quiet Cancel on the
+ *  left, the primary action on the right. Never full-width equal buttons. */
+export function ModalFoot({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-end gap-2 border-t border-hairline px-4 py-3">
+      {children}
+    </div>
+  );
 }

@@ -2,11 +2,12 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
-import { ChevronDown } from 'lucide-react';
-import { Modal } from './Modal';
+import { ChevronDown, FolderOpen } from 'lucide-react';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
 import { Input } from '@/components/ds/input';
 import { MonoLabel, cx } from './ui';
+import { useVariant } from '../lib/theme';
 import { LauncherApi } from '../effect/runtime';
 
 /** Suggest a title from the executable's file name: the base without its
@@ -165,118 +166,138 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
     setSaving(false);
   };
 
+  // Atlas dialog chrome (issue #139): the shared head with the X and the
+  // right-aligned footer. Other themes keep the dialog. Artwork lookup has
+  // no per-game switch: the core looks art up automatically after an add
+  // (Settings → artwork), so the dialog has Program, Title and Advanced.
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
+
   return (
-    <Modal label={t('library:addDialog.title')} onClose={onClose} size="md">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <h2 className="text-[20px] font-extrabold tracking-tight">{t('library:addDialog.title')}</h2>
-        <p className="mt-1 text-[12.5px] text-text-muted">{t('library:addDialog.description')}</p>
-        <label className="mt-5 block">
-          <MonoLabel className="mb-1.5">{t('library:addDialog.titleSection')}</MonoLabel>
-          <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('library:addDialog.titlePlaceholder')} />
-        </label>
-        <div className="mt-4">
-          <MonoLabel className="mb-1.5">{t('library:addDialog.exeSection')}</MonoLabel>
-          <div className="flex items-center gap-2">
-            <Input
-              value={exe}
-              onChange={(e) => setExe(e.target.value)}
-              placeholder={t('library:addDialog.exePlaceholder')}
-              aria-label={t('library:addDialog.exeAria')}
-              className="min-w-0 flex-1"
-            />
-            <Button type="button" variant="neutral" onClick={browseExe} className="flex-none">
-              {t('library:addDialog.browse')}
-            </Button>
-          </div>
-        </div>
-        <div className="mt-4 border-t border-hairline pt-3">
-          <button
-            type="button"
-            aria-expanded={advancedOpen}
-            onClick={() => setAdvancedOpen((o) => !o)}
-            className="flex items-center gap-1.5 font-mono text-[12px] text-text-muted transition hover:text-text"
-          >
-            <ChevronDown className={cx('size-3.5 transition-transform', advancedOpen ? '' : '-rotate-90')} aria-hidden />
-            {t('library:addDialog.advanced')}
-            {advancedSet > 0 && <span className="tabular-nums text-attention">{t('library:addDialog.advancedSet', { count: advancedSet })}</span>}
-          </button>
-          <div hidden={!advancedOpen} className="mt-4 space-y-5">
-            <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.runWith')}</MonoLabel>
-              <select
-                aria-label={t('library:addDialog.runWith')}
-                value={runMode}
-                onChange={(e) => setRunMode(e.target.value)}
-                className="w-full rounded-lg bg-surface px-3 py-2 text-[13px] text-text outline-none ring-1 ring-hairline focus:ring-focus/40"
+    <Modal
+      label={t('library:addDialog.title')}
+      onClose={onClose}
+      size="md"
+      contentClassName={atlas ? 'bg-glass backdrop-blur-[22px] backdrop-saturate-[1.4] rounded-[14px] ring-hairline-strong' : undefined}
+    >
+      <div className="-m-7">
+        <ModalHead title={t('library:addDialog.title')} sub={t('library:addDialog.description')} onClose={onClose} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          <div className="grid gap-4 px-5 py-4">
+            <div className="grid gap-1.5">
+              <label htmlFor="add-game-exe" className="text-[13px] font-semibold text-text">
+                {t('library:addDialog.exeSection')}
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="add-game-exe"
+                  autoFocus
+                  value={exe}
+                  onChange={(e) => setExe(e.target.value)}
+                  placeholder={t('library:addDialog.exePlaceholder')}
+                  aria-label={t('library:addDialog.exeAria')}
+                  className="min-w-0 flex-1"
+                />
+                <Button type="button" variant="neutral" onClick={browseExe} className="flex-none">
+                  <FolderOpen className="h-3.5 w-3.5" /> {t('library:addDialog.browse')}
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <label htmlFor="add-game-title" className="text-[13px] font-semibold text-text">
+                {t('library:addDialog.titleSection')}
+              </label>
+              <Input id="add-game-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('library:addDialog.titlePlaceholder')} />
+            </div>
+            <div className="border-t border-hairline pt-1">
+              <button
+                type="button"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((o) => !o)}
+                className="flex items-center gap-1.5 py-1.5 text-[13px] font-semibold text-text-muted transition hover:text-text"
               >
-                <option value="auto">{detected == null ? t('library:addDialog.runAutoUnknown') : detected.native ? t('library:addDialog.runAutoNative') : t('library:addDialog.runAutoWine')}</option>
-                <option value="native">{t('library:addDialog.runNative')}</option>
-                <option value="wine">{t('library:addDialog.runWine')}</option>
-              </select>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.runHelp')}</p>
-            </div>
-            <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.workDir')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={workingDir}
-                  onChange={(e) => { setWorkingDir(e.target.value); setWorkError(null); }}
-                  placeholder={t('library:addDialog.workPlaceholder')}
-                  aria-label={t('library:addDialog.workAria')}
-                  className="min-w-0 flex-1"
-                />
-                <Button type="button" variant="neutral" onClick={browseWork} className="flex-none">
-                  {t('library:addDialog.browse')}
-                </Button>
+                <ChevronDown className={cx('size-3.5 transition-transform', advancedOpen ? '' : '-rotate-90')} aria-hidden />
+                {t('library:addDialog.advanced')}
+                {advancedSet > 0 && <span className="tabular-nums text-attention">{t('library:addDialog.advancedSet', { count: advancedSet })}</span>}
+              </button>
+              <div hidden={!advancedOpen} className="grid gap-5 pb-2 pt-2">
+                <div>
+                  <MonoLabel className="mb-1.5">{t('library:addDialog.runWith')}</MonoLabel>
+                  <select
+                    aria-label={t('library:addDialog.runWith')}
+                    value={runMode}
+                    onChange={(e) => setRunMode(e.target.value)}
+                    className="w-full rounded-lg bg-surface px-3 py-2 text-[13px] text-text outline-none ring-1 ring-hairline focus:ring-focus/40"
+                  >
+                    <option value="auto">{detected == null ? t('library:addDialog.runAutoUnknown') : detected.native ? t('library:addDialog.runAutoNative') : t('library:addDialog.runAutoWine')}</option>
+                    <option value="native">{t('library:addDialog.runNative')}</option>
+                    <option value="wine">{t('library:addDialog.runWine')}</option>
+                  </select>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.runHelp')}</p>
+                </div>
+                <div>
+                  <MonoLabel className="mb-1.5">{t('library:addDialog.workDir')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={workingDir}
+                      onChange={(e) => { setWorkingDir(e.target.value); setWorkError(null); }}
+                      placeholder={t('library:addDialog.workPlaceholder')}
+                      aria-label={t('library:addDialog.workAria')}
+                      className="min-w-0 flex-1"
+                    />
+                    <Button type="button" variant="neutral" onClick={browseWork} className="flex-none">
+                      {t('library:addDialog.browse')}
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.workHelp')}</p>
+                  {workError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{workError}</p>}
+                </div>
+                {!effectiveNative && (
+                <div>
+                  <MonoLabel className="mb-1.5">{t('library:addDialog.prefix')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={winePrefix}
+                      onChange={(e) => { setWinePrefix(e.target.value); setPrefixError(null); }}
+                      placeholder={t('library:addDialog.prefixPlaceholder')}
+                      aria-label={t('library:addDialog.prefixAria')}
+                      className="min-w-0 flex-1"
+                    />
+                    <Button type="button" variant="neutral" onClick={browsePrefix} className="flex-none">
+                      {t('library:addDialog.browse')}
+                    </Button>
+                  </div>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.prefixHelp')}</p>
+                  {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{prefixError}</p>}
+                </div>
+                )}
+                <div>
+                  <MonoLabel className="mb-1.5">{t('library:addDialog.year')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
+                  <Input
+                    value={releaseYear}
+                    onChange={(e) => { setReleaseYear(e.target.value); setYearError(null); }}
+                    placeholder={t('library:addDialog.yearPlaceholder')}
+                    aria-label={t('library:addDialog.yearAria')}
+                    inputMode="numeric"
+                    className="w-32"
+                  />
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.yearHelp')}</p>
+                  {yearError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{yearError}</p>}
+                </div>
               </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.workHelp')}</p>
-              {workError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{workError}</p>}
-            </div>
-            {!effectiveNative && (
-            <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.prefix')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={winePrefix}
-                  onChange={(e) => { setWinePrefix(e.target.value); setPrefixError(null); }}
-                  placeholder={t('library:addDialog.prefixPlaceholder')}
-                  aria-label={t('library:addDialog.prefixAria')}
-                  className="min-w-0 flex-1"
-                />
-                <Button type="button" variant="neutral" onClick={browsePrefix} className="flex-none">
-                  {t('library:addDialog.browse')}
-                </Button>
-              </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.prefixHelp')}</p>
-              {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{prefixError}</p>}
-            </div>
-            )}
-            <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.year')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
-              <Input
-                value={releaseYear}
-                onChange={(e) => { setReleaseYear(e.target.value); setYearError(null); }}
-                placeholder={t('library:addDialog.yearPlaceholder')}
-                aria-label={t('library:addDialog.yearAria')}
-                inputMode="numeric"
-                className="w-32"
-              />
-              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.yearHelp')}</p>
-              {yearError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{yearError}</p>}
             </div>
           </div>
-        </div>
-        <div className="mt-6 flex justify-end gap-2.5">
-          <Button variant="neutral" onClick={onClose}>{t('common:cancel')}</Button>
-          <Button type="submit" variant="primary" disabled={!valid || saving}>{t('library:addDialog.submit')}</Button>
-        </div>
-        {saveError && <p role="alert" className="mt-3 font-mono text-hint text-attention">{saveError}</p>}
-      </form>
+          <ModalFoot>
+            <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
+            <Button type="submit" variant="primary" disabled={!valid || saving} className="h-[34px] rounded-lg">{t('library:addDialog.submit')}</Button>
+          </ModalFoot>
+          {saveError && <p role="alert" className="mx-5 mb-4 font-mono text-hint text-attention">{saveError}</p>}
+        </form>
+      </div>
     </Modal>
   );
 }

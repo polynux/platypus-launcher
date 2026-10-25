@@ -78,7 +78,13 @@
   "atlas": {
     "queueSub_one": "{{count}} in the queue.",
     "queueSub_other": "{{count}} in the queue.",
+    "queueSubSpeed_one": "{{count}} in the queue. {{speed}}/s.",
+    "queueSubSpeed_other": "{{count}} in the queue. {{speed}}/s.",
+    "queueEmptySub": "Nothing downloading.",
+    "queue": "Queue",
     "pauseAll": "Pause all",
-    "recent": "Recent"
+    "recent": "Recent",
+    "emptyTitle": "Nothing downloading",
+    "emptyBody": "Installs, updates, moves and file checks show up here."
   }
 }

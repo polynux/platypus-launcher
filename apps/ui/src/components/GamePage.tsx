@@ -655,6 +655,9 @@ export function GamePage(p: GamePageProps) {
             facts={facts}
             onOpenRunner={() => setSettingsTab('general')}
             onOpenSettings={() => setSettingsTab('general')}
+            onOpenFixes={() => setSettingsTab('tweaks')}
+            tweaks={tweaks}
+            onChangeSettings={p.onChangeSettings}
             hideBack={p.hideBack}
             onTuneSaved={p.onTuneSaved}
             collections={p.collections}

@@ -370,10 +370,11 @@
     "finished": "Finished",
     "abandoned": "Abandoned",
     "notesLabel": "Your notes",
-    "notesPlaceholder": "Notes about this game, kept on this machine.",
+    "notesPlaceholder": "Only you see this",
     "saving": "Saving…",
     "saved": "Saved",
-    "failed": "Failed"
+    "failed": "Failed",
+    "privateNotes": "Private notes"
   },
   "achList": {
     "show": "Show",
@@ -417,7 +418,7 @@
     "lastPlayed": "Last played",
     "runsWith": "Runs with",
     "protondb": "ProtonDB",
-    "neverPlayed": "Never played",
+    "neverPlayed": "Never",
     "unknownRunner": "Unknown",
     "noRating": "No rating",
     "achievements": "Achievements",
@@ -445,6 +446,32 @@
     "cancel": "Cancel",
     "of": "of",
     "upNext": "Up next"
+  },
+  "saves": {
+    "cloudTitle": "Cloud saves",
+    "cloudStore": "{{store}} cloud",
+    "noCloudStore": "{{store}} has no cloud saves",
+    "localOnly": "Local backups below still protect your saves.",
+    "backupsTitle": "Backups on this PC",
+    "noBackups": "No backups yet. Platypus backs up before each sync once you've played.",
+    "locationTitle": "Save location",
+    "openFolder": "Open folder"
+  },
+  "sessions": {
+    "emptyTitle": "No sessions yet",
+    "emptyBody": "Play {{title}} once to start a history.",
+    "lead": "{{count}} sessions in the last two weeks, {{total}} in all.",
+    "quitNormally": "Quit normally",
+    "crashed": "Crashed"
+  },
+  "compatTab": {
+    "crashBanner": "{{count}} of the last runs crashed.",
+    "seeFixes": "See fixes",
+    "suggestedTitle": "Suggested tweaks",
+    "suggestedMeta": "{{count}} suggested",
+    "apply": "Apply",
+    "notesTitle": "Community notes",
+    "noNotes": "No notes yet."
   },
   "launchNotes": {
     "client": "Launches through {{name}}. Platypus starts it for you and waits.",

@@ -3,13 +3,13 @@ import React, { useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import type { RedeemResult, StorePlugin } from '../types';
-import { Modal } from './Modal';
+import { Modal, ModalFoot, ModalHead } from './Modal';
 import { Button } from '@/components/ds/button';
 import { Input } from './ds/input';
-import { MonoLabel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { useVariant } from '../lib/theme';
 
 /** Matches the core's cap (stats.MaxCodeLen): the input can't type past it. */
 export const MAX_CODE_LENGTH = 128;
@@ -41,64 +41,82 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
     ).finally(() => setBusy(false));
   };
 
+  // Atlas dialog chrome (issue #139): glass, 14px radius, the shared head
+  // with the X, and the right-aligned footer. Other themes keep the dialog.
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
+
   return (
-    <Modal label={t('common:redeem.label')} onClose={onClose}>
-      <div className="p-6">
-        <MonoLabel className="mb-2">{t('common:redeem.heading')}</MonoLabel>
-        <h2 className="mb-4 text-[18px] font-bold">{t('common:redeem.title')}</h2>
+    <Modal
+      label={t('common:redeem.label')}
+      onClose={onClose}
+      size="md"
+      contentClassName={atlas ? 'bg-glass backdrop-blur-[22px] backdrop-saturate-[1.4] rounded-[14px] ring-hairline-strong' : undefined}
+    >
+      <div className="-m-7">
+        <ModalHead title={t('common:redeem.title')} sub={t('common:redeem.sub')} onClose={onClose} />
         {result ? (
-          <div className="space-y-3 text-[14px]">
-            <p className="text-text-body">{result.message}</p>
-            {result.titles.length > 0 && (
-              <div>
-                <MonoLabel className="mb-1">{t('common:redeem.granted')}</MonoLabel>
-                <ul className="space-y-1">
-                  {result.titles.map((title) => (
-                    <li key={title} className="text-accent-strong">{title}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="mt-6 flex gap-2">
-              <Button variant="neutral" onClick={() => setResult(null)} className="flex-1">{t('common:redeem.redeemAnother')}</Button>
-              <Button variant="primary" onClick={onClose} className="flex-1">{t('common:done')}</Button>
+          <>
+            <div className="grid gap-3 px-5 py-4 text-[14px]">
+              <p className="text-text-body">{result.message}</p>
+              {result.titles.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[12px] font-semibold text-text-muted">{t('common:redeem.granted')}</div>
+                  <ul className="space-y-1">
+                    {result.titles.map((title) => (
+                      <li key={title} className="text-accent-strong">{title}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('common:redeem.error')} />}
             </div>
-          </div>
+            <ModalFoot>
+              <Button variant="ghost" onClick={() => setResult(null)}>{t('common:redeem.redeemAnother')}</Button>
+              <Button variant="primary" onClick={onClose} className="h-[34px] rounded-lg">{t('common:done')}</Button>
+            </ModalFoot>
+          </>
         ) : (
-          <form onSubmit={submit} className="space-y-3">
-            <label className="block text-[13px] text-text-muted">
-              {t('common:redeem.store')}
-              <select
-                value={plugin?.id ?? ''}
-                onChange={(e) => { setStoreId(e.target.value); setError(null); }}
-                disabled={busy || stores.length < 2}
-                className="mt-1.5 block w-full rounded-xl border border-hairline bg-surface px-3 py-2 text-[14px] text-text outline-none focus-visible:ring-2 focus-visible:ring-focus/50 disabled:opacity-60"
-              >
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-[13px] text-text-muted">
-              {t('common:redeem.code')}
-              <Input
-                value={code}
-                maxLength={MAX_CODE_LENGTH}
-                onChange={(e) => setCode(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                className="mt-1.5 font-mono"
-                placeholder={t('common:redeem.codePlaceholder')}
-                disabled={busy}
-              />
-            </label>
-            {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('common:redeem.error')} />}
-            <div className="mt-6 flex gap-2">
-              <Button type="button" variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
-              <Button type="submit" variant="primary" disabled={!plugin || !code.trim() || busy} className="flex-1">
+          <form onSubmit={submit}>
+            <div className="grid gap-4 px-5 py-4">
+              <div className="flex items-center justify-between gap-[18px]">
+                <span className="text-[13px] font-semibold text-text">{t('common:redeem.store')}</span>
+                <select
+                  value={plugin?.id ?? ''}
+                  onChange={(e) => { setStoreId(e.target.value); setError(null); }}
+                  disabled={busy || stores.length < 2}
+                  aria-label={t('common:redeem.store')}
+                  className="h-8 w-[220px] flex-none rounded-lg bg-surface px-2.5 text-[13px] text-text outline-none ring-1 ring-hairline focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-60"
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-1.5">
+                <label htmlFor="redeem-code" className="text-[13px] font-semibold text-text">
+                  {t('common:redeem.code')}
+                </label>
+                <Input
+                  id="redeem-code"
+                  value={code}
+                  maxLength={MAX_CODE_LENGTH}
+                  onChange={(e) => setCode(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-11 text-center font-mono text-[15px] tracking-[0.12em]"
+                  placeholder={t('common:redeem.codePlaceholder')}
+                  disabled={busy}
+                />
+                <p className="text-center text-[12px] text-text-faint">{t('common:redeem.codePlaceholder')}</p>
+              </div>
+              {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('common:redeem.error')} />}
+            </div>
+            <ModalFoot>
+              <Button type="button" variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>
+              <Button type="submit" variant="primary" disabled={!plugin || !code.trim() || busy} className="h-[34px] rounded-lg">
                 {busy ? t('common:redeem.redeeming') : t('common:redeem.redeem')}
               </Button>
-            </div>
+            </ModalFoot>
           </form>
         )}
       </div>

@@ -15,6 +15,7 @@
     "defaultLabel": "Défaut pour les nouveaux jeux",
     "defaultDesc": "Chaque jeu peut toujours choisir le sien.",
     "defaultBadge": "Défaut",
+    "systemNote": "De votre système",
     "installed": "Installés"
   }
 }

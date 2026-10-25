@@ -19,6 +19,7 @@ import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVarian
 import { useGameTone, type GameToneChoice } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 import { ViewHeader, cx } from './ui';
+import { AtlasSRow, AtlasSSwitch } from './AtlasSettings';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-hairline py-6';
@@ -90,6 +91,20 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <AppearanceSetting onNotify={onNotify} />,
     <GameFoldersSettings onNotify={onNotify} />,
     <PrefixesFolderSetting onNotify={onNotify} />,
+    atlas ? (
+      <section className={SECTION}>
+        <AtlasSRow label={t('cleanup.heading')} desc={t('cleanup.description')}>
+          <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>
+            <label className="flex items-center gap-2"><span className="text-[12.5px] text-text-body">{t('cleanup.keepFor')}</span>
+              <NumberField min={0} max={365} step={1} hideSteppers value={cleanupDays === '' ? undefined : cleanupDays} onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }} disabled={!saved} aria-label={t('cleanup.daysLabel')} className="w-24" />
+              <span className="text-[12.5px] text-text-body">{t('cleanup.days')}</span>
+            </label>
+            <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
+          </form>
+        </AtlasSRow>
+        <div className="mt-2.5 flex min-h-4 items-center gap-4">{cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}</div>
+      </section>
+    ) : (
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('cleanup.heading')}</h2>
       <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('cleanup.description')}</p>
@@ -101,7 +116,8 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
         <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
       </form>
       <div className="mt-2.5 flex min-h-4 items-center gap-4">{cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}</div>
-    </section>,
+    </section>
+    ),
     <RatingsSetting onNotify={onNotify} />,
     <ArtworkSetting onNotify={onNotify} />,
     <GameInfoSetting onNotify={onNotify} />,
@@ -178,7 +194,7 @@ function AtlasSettingsPage({ sections, loadError }: {
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('settings:title')}</h1>
       </header>
       {loadError && <ErrorNotice message={loadError} fallback={t('loadError')} />}
-      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid items-start gap-7 lg:grid-cols-[180px_minmax(0,1fr)]">
         <nav aria-label={t('sections.label')} className="grid gap-0.5">
           {ATLAS_CATS.map((c) => (
             <button
@@ -187,15 +203,15 @@ function AtlasSettingsPage({ sections, loadError }: {
               onClick={() => setCat(c)}
               aria-current={cat === c ? 'page' : undefined}
               className={cat === c
-                ? 'rounded-lg bg-accent/15 px-3 py-2 text-left text-[13px] font-bold text-text'
-                : 'rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-text-muted transition hover:bg-surface hover:text-text'}
+                ? 'h-8 rounded-lg bg-accent/15 px-2.5 text-left text-[13px] font-bold text-text'
+                : 'h-8 rounded-lg px-2.5 text-left text-[13px] font-semibold text-text-muted transition hover:bg-surface hover:text-text'}
             >
               {t(`atlas.cats.${c}`)}
             </button>
           ))}
         </nav>
         <section aria-label={t(`atlas.cats.${cat}`)} className="min-w-0">
-          <h2 className="mb-1 text-[18px] font-extrabold tracking-tight">{t(`atlas.cats.${cat}`)}</h2>
+          <h2 className="mb-1 text-[16px] font-extrabold tracking-tight">{t(`atlas.cats.${cat}`)}</h2>
           <div>{ATLAS_SECTIONS[cat].map((i) => <React.Fragment key={i}>{sections[i]}</React.Fragment>)}</div>
         </section>
       </div>
@@ -246,6 +262,32 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
     { value: 'fr', label: 'Français' },
   ];
   if (dev) options.push({ value: PSEUDO_LOCALE, label: `${PSEUDO_LOCALE} (pseudo)` });
+  // Atlas renders the row as a lab .srow: 600 label + muted desc left, a
+  // 210px Select right; the dev-only pseudo note sits inside the desc, sans.
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSRow
+          label={t('language.heading')}
+          desc={<>
+            {t('language.description')}
+            {dev && <span className="mt-1 block text-[12px] text-text-faint">{t('language.pseudoNote')}</span>}
+          </>}
+        >
+          <Select value={value || SYSTEM} onValueChange={(v) => change(v === SYSTEM ? '' : v)} disabled={value === null || busy}>
+            <SelectTrigger aria-label={t('language.label')} className="h-8 w-[210px] flex-none font-sans text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((o) => (
+                <SelectItem key={o.value} value={o.value} className="font-sans text-[13px]">{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </AtlasSRow>
+      </section>
+    );
+  }
   return (
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('language.heading')}</h2>
@@ -472,6 +514,24 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSSwitch
+          label={t('ratings.heading')}
+          desc={t('ratings.description')}
+          checked={on ?? true}
+          disabled={on === null || busy}
+          onChange={() => toggle(!(on ?? true))}
+        />
+        <div className="space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
+          <p>{t('ratings.creditCompat')}</p>
+          <p>{t('ratings.creditWiki')}</p>
+          <p>{t('ratings.creditAnticheat')}</p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
@@ -514,6 +574,22 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSSwitch
+          label={t('artwork.heading')}
+          desc={t('artwork.description')}
+          checked={on ?? true}
+          disabled={on === null || busy}
+          onChange={() => toggle(!(on ?? true))}
+        />
+        <div className="space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
+          <p>{t('artwork.creditArt')}</p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
@@ -553,6 +629,22 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSSwitch
+          label={t('gameInfo.heading')}
+          desc={t('gameInfo.description')}
+          checked={on ?? true}
+          disabled={on === null || busy}
+          onChange={() => toggle(!(on ?? true))}
+        />
+        <div className="space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
+          <p>{t('gameInfo.creditInfo')}</p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
@@ -592,6 +684,19 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSSwitch
+          label={t('chat.heading')}
+          desc={t('chat.description')}
+          checked={on ?? true}
+          disabled={on === null || busy}
+          onChange={() => toggle(!(on ?? true))}
+        />
+      </section>
+    );
+  }
   return (
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
@@ -628,6 +733,19 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSSwitch
+          label={t('tray.heading')}
+          desc={t('tray.description')}
+          checked={on ?? false}
+          disabled={on === null || busy}
+          onChange={() => toggle(!(on ?? false))}
+        />
+      </section>
+    );
+  }
   return (
     <section className={SECTION}>
       <div className="flex items-start justify-between gap-6">
@@ -679,6 +797,46 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
       .then((picked) => { if (picked) { setFolder(picked); setError(null); } })
       .catch((e) => setError(coreErrMsg(e)));
   };
+
+  // Atlas: the lab's wide .srow (label + desc up top, the folder controls below).
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return (
+      <section className={SECTION}>
+        <AtlasSRow label={t('prefixes.heading')} desc={t('prefixes.description')} wide>
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (dirty) save(folder.trim());
+            }}
+          >
+            <Input
+              aria-label={t('prefixes.label')}
+              value={folder}
+              onChange={(e) => { setFolder(e.target.value); setError(null); }}
+              placeholder={saved?.default_prefixes_folder || t('prefixes.placeholder')}
+              spellCheck={false}
+              disabled={!saved}
+              className="min-w-0 max-w-xl flex-1 font-sans text-[13px]"
+            />
+            <Button type="button" variant="neutral" onClick={browse} disabled={!saved || busy}>{t('prefixes.browse')}</Button>
+            <Button type="submit" variant="primary" disabled={!dirty || busy}>{t('prefixes.save')}</Button>
+            {custom && (
+              <Button type="button" variant="ghost" onClick={() => save('')} disabled={busy}>{t('prefixes.reset')}</Button>
+            )}
+          </form>
+          <div className="mt-2.5 flex min-h-4 flex-wrap items-center gap-4">
+            {error ? <ErrorNotice message={error} fallback={t('prefixError')} /> : <span />}
+            {saved && (
+              <span className="font-mono text-hint text-text-muted">
+                {t('prefixes.effective', { folder: folder.trim() || saved.prefixes_folder || saved.default_prefixes_folder || t('prefixes.placeholder') })}
+              </span>
+            )}
+          </div>
+        </AtlasSRow>
+      </section>
+    );
+  }
 
   return (
     <section className={SECTION}>

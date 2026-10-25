@@ -213,11 +213,11 @@ describe('atlas parity side sections (issue #132)', () => {
       />,
     );
     expect(await screen.findByText('Couch co-op')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Manage' }));
+    await user.click(screen.getByRole('button', { name: 'Add to collection' }));
     expect(onManage).toHaveBeenCalledWith(g.id);
   });
 
-  it('carries a Status and notes section that saves through the page', async () => {
+  it('carries a Status row and notes that save through the page', async () => {
     const user = userEvent.setup();
     const g = installedGame();
     render(
@@ -231,13 +231,13 @@ describe('atlas parity side sections (issue #132)', () => {
         onManageCollections={() => {}}
       />,
     );
-    expect(await screen.findByRole('heading', { name: 'Status & notes' })).toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByLabelText('Status'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
     fireEvent.click(screen.getByRole('option', { name: 'Backlog' }));
     await waitFor(() => expect(screen.getByLabelText('Status')).toHaveTextContent('Backlog'));
-    await user.click(screen.getByLabelText('Your notes'));
-    await user.type(screen.getByLabelText('Your notes'), 'loved it');
-    fireEvent.blur(screen.getByLabelText('Your notes'));
+    await user.click(screen.getByLabelText('Private notes'));
+    await user.type(screen.getByLabelText('Private notes'), 'loved it');
+    fireEvent.blur(screen.getByLabelText('Private notes'));
     expect(await screen.findByText('Saved')).toBeInTheDocument();
   });
 });
@@ -344,6 +344,6 @@ describe('atlas parity round 3 (issue #132)', () => {
       />,
     );
     expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('Finished');
-    expect(screen.getByLabelText('Your notes')).toHaveValue('loved it');
+    expect(screen.getByLabelText('Private notes')).toHaveValue('loved it');
   });
 });

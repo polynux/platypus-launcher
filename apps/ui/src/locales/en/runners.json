@@ -15,6 +15,7 @@
     "defaultLabel": "Default for new games",
     "defaultDesc": "Each game can still pick its own.",
     "defaultBadge": "Default",
+    "systemNote": "From your system",
     "installed": "Installed"
   }
 }

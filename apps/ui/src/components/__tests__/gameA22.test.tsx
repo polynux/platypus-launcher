@@ -229,10 +229,12 @@ describe('/22 hero, tabs and side (issue #137)', () => {
     expect(within(tablist).getByRole('tab', { name: /Compatibility/ })).toBeInTheDocument();
   });
 
-  it('store side: Pictures, You, Details headings all render', async () => {
+  it('store side: Pictures, You facts, Details headings all render', async () => {
     page(game());
     expect(await screen.findByText('Pictures')).toBeInTheDocument();
-    expect(screen.getByText('You')).toBeInTheDocument();
+    // The You block carries no heading of its own (the lab's YouPanel): the
+    // facts, Status row, notes and collections read as one block.
+    expect(screen.getByText('Last played')).toBeInTheDocument();
     expect(screen.getByText('Details')).toBeInTheDocument();
   });
 });

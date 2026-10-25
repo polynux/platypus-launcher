@@ -1,7 +1,7 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
-import { Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
+import { Download, Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
 import type { Game, Job } from '../types';
 import { Cover, EmptyState, ListRow, MonoLabel, Section, ViewHeader, cx, relTime } from './ui';
 import { Button } from './ds/button';
@@ -223,13 +223,18 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
   useEffect(() => {
     if (finished.length === 0) setClearing(false);
   }, [finished.length]);
+  const speed = active.reduce((a, j) => a + (j.speed > 0 ? j.speed : 0), 0);
   return (
     <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
           <p className="mt-1 text-[13px] text-text-muted">
-            {active.length > 0 ? t('downloads:atlas.queueSub', { count: active.length }) : t('downloads:header.subtitle')}
+            {active.length > 0
+              ? (speed > 0
+                ? t('downloads:atlas.queueSubSpeed', { count: active.length, speed: formatBytes(speed) })
+                : t('downloads:atlas.queueSub', { count: active.length }))
+              : t('downloads:atlas.queueEmptySub')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -251,12 +256,12 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
         </div>
       </header>
       {jobs.length === 0 ? (
-        <EmptyState label={t('downloads:empty.label')}>{t('downloads:empty.detail')}</EmptyState>
+        <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
       ) : (
         <>
           {active.length > 0 && (
-            <section aria-label={t('downloads:section.queue')}>
-              <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:section.queue')}</h2>
+            <section aria-label={t('downloads:atlas.queue')}>
+              <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.queue')}</h2>
               <ul className="grid gap-2">
                 {active.map((j) => {
                   const pct = j.percent >= 0 ? Math.round(j.percent) : null;
@@ -275,12 +280,12 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
                             <button onClick={() => onOpenGame(j.game_id)} className="truncate text-left text-[13px] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                               {j.title}
                             </button>
-                            <span className="truncate font-mono text-hint text-text-muted">{t(VERB_KEY[j.kind])}</span>
+                            <span className="truncate text-[12px] text-text-faint">{t(VERB_KEY[j.kind])}</span>
                           </div>
-                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: j.title })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
-                            <div className={cx('h-full rounded-full transition-[width]', paused ? 'bg-text-faint' : 'bg-dl', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+                          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: j.title })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+                            <div className={cx('h-full rounded-full bg-accent transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
                           </div>
-                          <div className="mt-1 truncate font-mono text-hint text-text-muted">
+                          <div className="mt-1 truncate text-[12px] text-text-faint">
                             {pct != null && `${pct}% · `}{meta}
                           </div>
                         </div>
@@ -306,23 +311,23 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
             </section>
           )}
           {finished.length > 0 && (
-            <section aria-label={t('downloads:section.finished')}>
+            <section aria-label={t('downloads:atlas.recent')}>
               <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
               <ul className="divide-y divide-hairline">
                 {finished.map((j) => (
                   <li key={j.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-3 py-1.5">
                     <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                      <Cover src={artOf(j.game_id)} title={j.title} className="h-8 w-14 flex-none rounded ring-1 ring-hairline" />
+                      <Cover src={artOf(j.game_id)} title={j.title} className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
                       <span className="truncate text-[13px] font-semibold">{j.title}</span>
                     </button>
                     <span className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}>
                       {j.state === 'failed' ? (j.error || t('downloads:state.failed')) : t(STATE_KEY[j.state])}
                     </span>
-                    <span className="font-mono text-hint tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
-                    <span className="font-mono text-hint text-text-muted">{relTime(j.updated_at)}</span>
+                    <span className="text-[12px] tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
+                    <span className="text-[12px] text-text-muted">{relTime(j.updated_at)}</span>
                     <span className="flex justify-end gap-1.5">
                       {(j.state === 'failed' || j.state === 'canceled') && (
-                        <Button variant="neutral" size="sm" onClick={() => onAction('retry', j.id)}>
+                        <Button variant="ghost" size="sm" onClick={() => onAction('retry', j.id)} className="text-danger">
                           <RotateCcw className="h-3 w-3" /> {t('common:retry')}
                         </Button>
                       )}

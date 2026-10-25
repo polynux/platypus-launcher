@@ -53,6 +53,15 @@
     "dismiss": "Ne plus suggérer",
     "waitingForYou": "En attente",
     "toFinish": "À finir",
-    "toInstall": "À installer"
+    "toInstall": "À installer",
+    "yourLibrary": "Votre bibliothèque",
+    "openLibrary": "Ouvrir la bibliothèque",
+    "statGames": "Jeux",
+    "statInstalled": "Installés",
+    "statPlayed": "Joués",
+    "statOnDisk": "Sur le disque",
+    "needsAttention": "À surveiller",
+    "seeAll": "Tout voir ({{count}})",
+    "everythingWorks": "Tout fonctionne."
   }
 }
