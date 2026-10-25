@@ -2,14 +2,17 @@
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
 import { Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
-import type { Job } from '../types';
-import { EmptyState, ListRow, MonoLabel, Section, ViewHeader, cx } from './ui';
+import type { Game, Job } from '../types';
+import { Cover, EmptyState, ListRow, MonoLabel, Section, ViewHeader, cx, relTime } from './ui';
 import { Button } from './ds/button';
-import { formatBytes } from '../lib/games';
+import { formatBytes, heroImages } from '../lib/games';
 import { currentLocale } from '../lib/format';
+import { useVariant } from '../lib/theme';
 
 interface DownloadsViewProps {
   jobs: Job[];
+  /** The library, for the queue art and recent thumbnails. Optional: without it the rows render text-only. */
+  games?: Game[];
   onAction: (action: 'cancel' | 'retry' | 'pause' | 'resume' | 'discard', id: string) => void;
   onClear: () => void;
   onOpenGame: (gameId: string) => void;
@@ -38,12 +41,12 @@ const KIND_KEY: Record<Job['kind'], string> = {
 };
 
 const STATE_STYLE: Record<Job['state'], string> = {
-  queued: 'text-white/55',
-  running: 'text-amber-200',
-  paused: 'text-sky-300',
-  done: 'text-emerald-300',
-  failed: 'text-red-300',
-  canceled: 'text-white/55',
+  queued: 'text-text-muted',
+  running: 'text-dl',
+  paused: 'text-info',
+  done: 'text-ok',
+  failed: 'text-danger',
+  canceled: 'text-text-muted',
 };
 
 const STATE_KEY: Record<Job['state'], string> = {
@@ -82,7 +85,7 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
     <ListRow kind="job">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-amber-200">
+          <button onClick={() => onOpenGame(job.game_id)} className="truncate text-left text-[13px] font-bold hover:text-dl">
             {t(VERB_KEY[job.kind])} · {job.title}
           </button>
           <div className={cx('truncate font-mono text-hint', STATE_STYLE[job.state])} title={detail}>
@@ -90,13 +93,13 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
             {job.attempts > 1 && active ? ` · ${t('downloads:job.attempt', { count: job.attempts })}` : ''}
           </div>
           {job.state === 'canceled' && job.leftover && (
-            <div className="mt-0.5 truncate font-mono text-hint text-orange-300/80" title={job.leftover}>
+            <div className="mt-0.5 truncate font-mono text-hint text-attention/80" title={job.leftover}>
               {job.leftover}
             </div>
           )}
         </div>
         <div className="flex flex-none items-center gap-2">
-          {pct != null && job.state === 'running' && <span className="font-mono text-[12px] tabular-nums text-white/70">{pct}%</span>}
+          {pct != null && job.state === 'running' && <span className="font-mono text-[12px] tabular-nums text-text-muted">{pct}%</span>}
           {job.state === 'running' && (
             <Button variant="neutral" size="sm" onClick={() => onAction('pause', job.id)} aria-label={t('downloads:aria.pauseJob', { title: job.title })}>
               <Pause className="h-3 w-3" /> {t('downloads:job.pause')}
@@ -133,18 +136,22 @@ function JobRow({ job, onAction, onOpenGame }: { job: Job } & Pick<DownloadsView
         </div>
       </div>
       {(job.state === 'running' || job.state === 'paused') && (
-        <div className="mt-2.5 h-1.5 rounded-full bg-white/10" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: job.title })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
-          <div className={cx('h-full rounded-full transition-[width]', job.state === 'paused' ? 'bg-sky-300' : 'bg-amber-300', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+        <div className="mt-2.5 h-1.5 rounded-full bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: job.title })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+          <div className={cx('h-full rounded-full transition-[width]', job.state === 'paused' ? 'bg-info' : 'bg-dl', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
         </div>
       )}
-      {job.install_dir && job.kind !== 'uninstall' && job.kind !== 'move' && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir}</div>}
-      {job.kind === 'move' && job.destination && <div className="mt-1.5 truncate font-mono text-[12px] text-white/55">{job.install_dir} → {job.destination}</div>}
+      {job.install_dir && job.kind !== 'uninstall' && job.kind !== 'move' && <div className="mt-1.5 truncate font-mono text-[12px] text-text-muted">{job.install_dir}</div>}
+      {job.kind === 'move' && job.destination && <div className="mt-1.5 truncate font-mono text-[12px] text-text-muted">{job.install_dir} → {job.destination}</div>}
     </ListRow>
   );
 }
 
-export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: DownloadsViewProps) {
+export function DownloadsView({ jobs, games = [], onAction, onClear, onOpenGame }: DownloadsViewProps) {
   const { t } = useTranslation(['downloads', 'nav']);
+  // Atlas renders the /22 Downloads page (issue #138); other themes keep the groups below.
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return <AtlasDownloads jobs={jobs} games={games} onAction={onAction} onClear={onClear} onOpenGame={onOpenGame} />;
+  }
   const active = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
   const finished = jobs.filter((j) => !active.includes(j)).sort((a, b) => b.updated_at - a.updated_at);
   const [clearing, setClearing] = useState(false);
@@ -156,7 +163,7 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
     <div className="p-7">
       <ViewHeader
         title={t('nav:title.downloads')}
-        subtitle={<p className="mt-0.5 text-[12.5px] text-white/70">{t('downloads:header.subtitle')}</p>}
+        subtitle={<p className="mt-0.5 text-[12.5px] text-text-muted">{t('downloads:header.subtitle')}</p>}
         actions={<div className="flex items-center gap-2">
           {pausedCount > 0 && (
             <Button variant="neutral" onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}>
@@ -197,4 +204,141 @@ export function DownloadsView({ jobs, onAction, onClear, onOpenGame }: Downloads
  *  so the activity log in App reuses the same words. */
 export function jobKindKey(kind: Job['kind']): string {
   return KIND_KEY[kind];
+}
+
+/** The /22 Downloads page (issue #138, Atlas only): the queue as cards with
+ *  art and progress, then the finished jobs as a recent table. Same jobs and
+ *  actions; only the markup is /22. There is no separate background-work
+ *  feed in the app: every job is a queue job, so that lab row has no card. */
+function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required<Pick<DownloadsViewProps, 'jobs' | 'games' | 'onAction' | 'onClear' | 'onOpenGame'>>) {
+  const { t } = useTranslation(['downloads', 'nav', 'common']);
+  const active = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
+  const finished = jobs.filter((j) => !active.includes(j)).sort((a, b) => b.updated_at - a.updated_at);
+  const byId = React.useMemo(() => new Map(games.map((g) => [g.id, g])), [games]);
+  const artOf = (gameId: string): string[] => {
+    const g = byId.get(gameId);
+    return g ? heroImages(g) : [];
+  };
+  const [clearing, setClearing] = useState(false);
+  useEffect(() => {
+    if (finished.length === 0) setClearing(false);
+  }, [finished.length]);
+  return (
+    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
+          <p className="mt-1 text-[13px] text-text-muted">
+            {active.length > 0 ? t('downloads:atlas.queueSub', { count: active.length }) : t('downloads:header.subtitle')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {active.some((j) => j.state === 'running' || j.state === 'queued') && (
+            <Button variant="neutral" onClick={() => active.forEach((j) => onAction('pause', j.id))}>
+              <Pause className="h-3.5 w-3.5" /> {t('downloads:atlas.pauseAll')}
+            </Button>
+          )}
+          {active.some((j) => j.state === 'paused') && (
+            <Button variant="neutral" onClick={() => active.filter((j) => j.state === 'paused').forEach((j) => onAction('resume', j.id))}>
+              {t('downloads:header.resumeAll')}
+            </Button>
+          )}
+          {finished.length > 0 && (
+            <Button variant="neutral" onClick={() => { setClearing(true); onClear(); }} disabled={clearing}>
+              {clearing ? t('downloads:header.clearing') : t('downloads:header.clearFinished')}
+            </Button>
+          )}
+        </div>
+      </header>
+      {jobs.length === 0 ? (
+        <EmptyState label={t('downloads:empty.label')}>{t('downloads:empty.detail')}</EmptyState>
+      ) : (
+        <>
+          {active.length > 0 && (
+            <section aria-label={t('downloads:section.queue')}>
+              <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:section.queue')}</h2>
+              <ul className="grid gap-2">
+                {active.map((j) => {
+                  const pct = j.percent >= 0 ? Math.round(j.percent) : null;
+                  const paused = j.state === 'paused';
+                  const meta = paused
+                    ? t('downloads:state.paused')
+                    : j.state === 'queued'
+                      ? t('downloads:state.queued')
+                      : [j.speed > 0 ? t('downloads:job.speedPerSec', { speed: formatBytes(j.speed) }) : '', j.phase].filter(Boolean).join(' · ');
+                  return (
+                    <li key={j.id} className={paused ? 'opacity-70' : undefined}>
+                      <div className="flex items-center gap-3.5 rounded-xl bg-surface px-2.5 py-2.5 ring-1 ring-hairline">
+                        <Cover src={artOf(j.game_id)} title={j.title} className="h-14 w-28 flex-none rounded-lg ring-1 ring-hairline" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-x-2">
+                            <button onClick={() => onOpenGame(j.game_id)} className="truncate text-left text-[13px] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                              {j.title}
+                            </button>
+                            <span className="truncate font-mono text-hint text-text-muted">{t(VERB_KEY[j.kind])}</span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: j.title })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+                            <div className={cx('h-full rounded-full transition-[width]', paused ? 'bg-text-faint' : 'bg-dl', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+                          </div>
+                          <div className="mt-1 truncate font-mono text-hint text-text-muted">
+                            {pct != null && `${pct}% · `}{meta}
+                          </div>
+                        </div>
+                        <div className="flex flex-none items-center gap-1">
+                          {j.state === 'running' || j.state === 'queued' ? (
+                            <Button variant="ghost" size="icon" className="size-8" onClick={() => onAction('pause', j.id)} aria-label={t('downloads:aria.pauseJob', { title: j.title })}>
+                              <Pause className="size-4" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" className="size-8" onClick={() => onAction('resume', j.id)} aria-label={t('downloads:aria.resumeJob', { title: j.title })}>
+                              <Play className="size-4" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="size-8" onClick={() => onAction('cancel', j.id)} aria-label={t('downloads:aria.cancelJob', { title: j.title })}>
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+          {finished.length > 0 && (
+            <section aria-label={t('downloads:section.finished')}>
+              <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
+              <ul className="divide-y divide-hairline">
+                {finished.map((j) => (
+                  <li key={j.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-3 py-1.5">
+                    <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                      <Cover src={artOf(j.game_id)} title={j.title} className="h-8 w-14 flex-none rounded ring-1 ring-hairline" />
+                      <span className="truncate text-[13px] font-semibold">{j.title}</span>
+                    </button>
+                    <span className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}>
+                      {j.state === 'failed' ? (j.error || t('downloads:state.failed')) : t(STATE_KEY[j.state])}
+                    </span>
+                    <span className="font-mono text-hint tabular-nums text-text-muted">{j.total > 0 ? formatBytes(j.total) : ''}</span>
+                    <span className="font-mono text-hint text-text-muted">{relTime(j.updated_at)}</span>
+                    <span className="flex justify-end gap-1.5">
+                      {(j.state === 'failed' || j.state === 'canceled') && (
+                        <Button variant="neutral" size="sm" onClick={() => onAction('retry', j.id)}>
+                          <RotateCcw className="h-3 w-3" /> {t('common:retry')}
+                        </Button>
+                      )}
+                      {j.state === 'canceled' && j.cleaned_at == null && j.kind !== 'verify' && j.kind !== 'move' && j.kind !== 'remove' && (
+                        <Button variant="neutral" size="sm" onClick={() => onAction('discard', j.id)} aria-label={t('downloads:aria.discardJob', { title: j.title })}>
+                          <Trash2 className="h-3 w-3" /> {t('downloads:job.discard')}
+                        </Button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
 }

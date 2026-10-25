@@ -16,5 +16,13 @@
   "attention": {
     "borked": "{{source}} signale ce titre comme borked. Essayez un autre runner ou consultez les rapports.",
     "bronze": "{{source}} note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner."
+  },
+  "atlas": {
+    "title": "À surveiller",
+    "sub_one": "{{count}} jeu ne démarre pas ou attend une décision.",
+    "sub_other": "{{count}} jeux ne démarrent pas ou attendent une décision.",
+    "kindRated": "Note {{source}}",
+    "kindFix": "Correctif communautaire",
+    "openGame": "Ouvrir le jeu"
   }
 }

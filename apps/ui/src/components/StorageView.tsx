@@ -3,16 +3,16 @@ import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { FolderInput, FolderOpen, Loader2, RefreshCw, ScanLine, Trash2 } from 'lucide-react';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
-import { EmptyState, MonoLabel, ViewHeader } from './ui';
+import { Cover, EmptyState, MonoLabel, ViewHeader, relTime } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { RemoveConfirmPanel, RemoveFirstRow, parentFolder, useRemoveCheck } from './MaintenanceTab';
 import { MoveDialog } from './MoveDialog';
-import { formatBytes, isPluginGame, storeLabel } from '../lib/games';
+import { formatBytes, heroImages, isPluginGame, storeLabel } from '../lib/games';
 import { ThemeLayout } from '../lib/layout';
-import { useThemeLayout } from '../lib/theme';
+import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
-import { useStorageData } from './useStorageData';
+import { useStorageData, type StorageData } from './useStorageData';
 
 /** The figure for a byte count: formatBytes has no output for 0, and an
  *  unreadable disk (-1) shows an em dash instead of a made-up size. */
@@ -38,6 +38,10 @@ interface StorageViewProps {
  *  background and emits a snapshot when a pass ends; this view only reads. */
 export function StorageView(props: StorageViewProps) {
   const data = useStorageData(props);
+  // Atlas renders the /22 Storage page (issue #138); other themes keep the layout blocks below.
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    return <AtlasStorage data={data} />;
+  }
   // The built-in arrangement is the initial layout, so the first paint
   // already shows today's storage before the core answers over RPC.
   const layout = useThemeLayout('storage') ?? BUILTIN_LAYOUTS['storage'];
@@ -92,8 +96,8 @@ export function StorageHeader({ scanning, onRescan }: { scanning: boolean; onRes
   return (
     <ViewHeader
       title={t('nav:title.storage')}
-      subtitle={<><p className="mt-0.5 text-[12.5px] text-white/70">{t('storage:intro')}</p>
-      <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-white/70">{t('storage:about')}</p></>}
+      subtitle={<><p className="mt-0.5 text-[12.5px] text-text-muted">{t('storage:intro')}</p>
+      <p className="mt-1.5 max-w-xl text-[12px] leading-relaxed text-text-muted">{t('storage:about')}</p></>}
       actions={<Button variant="neutral" onClick={onRescan} disabled={scanning}>
         {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
         {scanning ? t('storage:scanning') : t('storage:rescan')}
@@ -142,8 +146,8 @@ export function StorageGames({ sorted, scanning, byId, measuring, moveId, setMov
         scanning ? (
           <div className="space-y-2" role="status">
             <span className="sr-only">{t('storage:scanning')}</span>
-            <div className="h-16 animate-pulse rounded-2xl bg-white/[0.045] ring-1 ring-white/[0.07]" />
-            <div className="h-16 animate-pulse rounded-2xl bg-white/[0.045] ring-1 ring-white/[0.07]" />
+            <div className="h-16 animate-pulse rounded-2xl bg-surface ring-1 ring-hairline" />
+            <div className="h-16 animate-pulse rounded-2xl bg-surface ring-1 ring-hairline" />
           </div>
         ) : (
           <EmptyState label={t('storage:emptyTitle')}>{t('storage:emptyBody')}</EmptyState>
@@ -155,22 +159,22 @@ export function StorageGames({ sorted, scanning, byId, measuring, moveId, setMov
             return (
               <li
                 key={row.game_id}
-                className="rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]"
+                className="rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[13px] font-bold">{row.title}</span>
                       <Badge variant="neutral">{storeLabel(row.store)}</Badge>
-                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-text-muted">
                         {row.from_plugin ? t('storage:size.fromStore') : t('storage:size.scanned')}
                       </span>
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-hint text-white/55 select-text">
+                    <div className="mt-0.5 truncate font-mono text-hint text-text-muted select-text">
                       {row.install_dir}
                     </div>
                     {row.prefix_bytes > 0 && (
-                      <div className="mt-1 text-[12px] text-white/70">
+                      <div className="mt-1 text-[12px] text-text-muted">
                         {t('storage:size.prefix')}{' '}
                         <span className="tabular-nums">{figure(row.prefix_bytes)}</span>
                       </div>
@@ -256,7 +260,7 @@ export function StorageGames({ sorted, scanning, byId, measuring, moveId, setMov
                   />
                 )}
                 {removeId === row.game_id && game && (
-                  <div className="mt-3 border-t border-white/[0.06] pt-3">
+                  <div className="mt-3 border-t border-hairline pt-3">
                     <RemoveFlow
                       key={game.id}
                       game={game}
@@ -269,8 +273,8 @@ export function StorageGames({ sorted, scanning, byId, measuring, moveId, setMov
                   </div>
                 )}
                 {uninstallId === row.game_id && game && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">
-                    <p className="min-w-0 flex-1 basis-64 text-[12.5px] text-white/60">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
+                    <p className="min-w-0 flex-1 basis-64 text-[12.5px] text-text-muted">
                       {t('storage:uninstallAsk', { title: game.title })}
                     </p>
                     <Button variant="ghost" size="sm" onClick={() => setUninstallId(null)}>
@@ -329,10 +333,10 @@ function DriveCard({ drive: d }: { drive: DiskUsage['drives'][number] }) {
   const gamesPct = known ? Math.min(100, (d.games_bytes / d.total_bytes) * 100) : 0;
   const otherPct = known ? Math.min(100 - gamesPct, (d.other_bytes / d.total_bytes) * 100) : 0;
   return (
-    <div className="rounded-2xl bg-white/[0.045] px-4 py-3 ring-1 ring-white/[0.07]">
+    <div className="rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="text-[13px] font-bold">{d.mount}</span>
-        <span className="min-w-0 truncate font-mono text-hint text-white/55 select-text">
+        <span className="min-w-0 truncate font-mono text-hint text-text-muted select-text">
           {d.folders.join(' · ')}
         </span>
       </div>
@@ -342,19 +346,19 @@ function DriveCard({ drive: d }: { drive: DiskUsage['drives'][number] }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(gamesPct)}
-        className={known ? 'mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-white/15' : 'mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/15 animate-pulse'}
+        className={known ? 'mt-2.5 flex h-1.5 overflow-hidden rounded-full bg-surface-strong' : 'mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-strong animate-pulse'}
       >
         {known && (
           <>
-            <div className="bg-amber-300 transition-[width]" style={{ width: `${gamesPct}%` }} />
-            <div className="bg-white/25 transition-[width]" style={{ width: `${otherPct}%` }} />
+            <div className="bg-dl transition-[width]" style={{ width: `${gamesPct}%` }} />
+            <div className="bg-surface-strong transition-[width]" style={{ width: `${otherPct}%` }} />
           </>
         )}
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-white/70">
-        <Legend dot="bg-amber-300" label={t('storage:legend.games')} value={figure(d.games_bytes)} />
-        <Legend dot="bg-white/25" label={t('storage:legend.other')} value={figure(d.other_bytes)} />
-        <Legend dot="bg-white/15" label={t('storage:legend.free')} value={figure(d.free_bytes)} />
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-text-muted">
+        <Legend dot="bg-dl" label={t('storage:legend.games')} value={figure(d.games_bytes)} />
+        <Legend dot="bg-surface-strong" label={t('storage:legend.other')} value={figure(d.other_bytes)} />
+        <Legend dot="bg-hairline-strong" label={t('storage:legend.free')} value={figure(d.free_bytes)} />
       </div>
     </div>
   );
@@ -366,7 +370,202 @@ function Legend({ dot, label, value }: { dot: string; label: string; value: stri
     <span className="inline-flex items-center gap-1.5">
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${dot}`} />
       {label}
-      <span className="tabular-nums text-white/85">{value}</span>
+      <span className="tabular-nums text-text">{value}</span>
     </span>
+  );
+}
+
+/** The /22 Storage page (issue #138, Atlas only): one card per drive with
+ *  its share bar and game rows (art, last played, size, actions), then the
+ *  same rescan/move/remove/uninstall flows. The lab's per-game bar segments,
+ *  outside-folder panel and leftovers cleaner have no backing in the usage
+ *  snapshot, so the card keeps the aggregate bar and the full row actions. */
+function AtlasStorage({ data }: { data: StorageData }) {
+  const { t } = useTranslation(['nav', 'storage', 'common']);
+  return (
+    <div className="mx-auto grid w-full max-w-6xl content-start gap-5 px-7 py-7">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.storage')}</h1>
+          <p className="mt-1 text-[13px] text-text-muted">{t('storage:intro')}</p>
+        </div>
+        <Button variant="neutral" onClick={data.rescan} disabled={data.scanning}>
+          {data.scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {data.scanning ? t('storage:scanning') : t('storage:rescan')}
+        </Button>
+      </header>
+      {data.drives.length === 0 && data.sorted.length === 0 ? (
+        data.scanning ? (
+          <div className="space-y-2" role="status">
+            <span className="sr-only">{t('storage:scanning')}</span>
+            <div className="h-16 animate-pulse rounded-2xl bg-surface ring-1 ring-hairline" />
+            <div className="h-16 animate-pulse rounded-2xl bg-surface ring-1 ring-hairline" />
+          </div>
+        ) : (
+          <EmptyState label={t('storage:emptyTitle')}>{t('storage:emptyBody')}</EmptyState>
+        )
+      ) : (
+        <>
+          {data.drives.map((d) => (
+            <AtlasDriveCard key={d.id} drive={d} />
+          ))}
+          <AtlasGameRows data={data} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function AtlasDriveCard({ drive: d }: { drive: DiskUsage['drives'][number] }) {
+  const { t } = useTranslation('storage');
+  const known = d.total_bytes > 0;
+  const gamesPct = known ? Math.min(100, (d.games_bytes / d.total_bytes) * 100) : 0;
+  const otherPct = known ? Math.min(100 - gamesPct, (d.other_bytes / d.total_bytes) * 100) : 0;
+  return (
+    <section aria-label={d.mount} className="grid gap-2.5 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <span className="text-[14px] font-bold">{d.mount}</span>
+        <span className="text-[12.5px] text-text-muted">
+          <strong className="font-bold text-text">{figure(d.free_bytes)}</strong> {t('storage:atlas.freeOf', { total: figure(d.total_bytes) })}
+        </span>
+      </header>
+      <div className="min-w-0 truncate font-mono text-hint text-text-faint select-text">{d.folders.join(' · ')}</div>
+      <div
+        role="progressbar"
+        aria-label={d.mount}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(gamesPct)}
+        className={known ? 'flex h-1.5 overflow-hidden rounded-full bg-surface-strong' : 'h-1.5 overflow-hidden rounded-full bg-surface-strong animate-pulse'}
+      >
+        {known && (
+          <>
+            <div className="bg-dl transition-[width]" style={{ width: `${gamesPct}%` }} />
+            <div className="bg-hairline-strong transition-[width]" style={{ width: `${otherPct}%` }} />
+          </>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-text-muted">
+        <Legend dot="bg-dl" label={t('storage:legend.games')} value={figure(d.games_bytes)} />
+        <Legend dot="bg-surface-strong" label={t('storage:legend.other')} value={figure(d.other_bytes)} />
+        <Legend dot="bg-hairline-strong" label={t('storage:legend.free')} value={figure(d.free_bytes)} />
+      </div>
+    </section>
+  );
+}
+
+function AtlasGameRows({ data }: { data: StorageData }) {
+  const { t } = useTranslation(['storage', 'gameSettings', 'common']);
+  if (data.sorted.length === 0) return null;
+  return (
+    <section aria-label={t('storage:gamesTitle')} className="rounded-2xl bg-surface px-4 py-2 ring-1 ring-hairline">
+      <ul className="divide-y divide-hairline">
+        {data.sorted.map((row) => {
+          const game = data.byId.get(row.game_id);
+          return (
+            <li key={row.game_id} className="py-1.5">
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => game && data.openFolder(game)}
+                  className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  aria-label={game ? t('storage:action.open', { title: game.title }) : row.title}
+                  disabled={!game}
+                >
+                  <Cover src={game ? heroImages(game) : []} title={row.title} className="h-9 w-16 rounded-lg ring-1 ring-hairline" />
+                </button>
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-bold">{row.title}</div>
+                  <div className="truncate text-[12px] text-text-faint">
+                    {game?.last_played_at ? t('storage:atlas.played', { ago: relTime(game.last_played_at) }) : t('storage:size.scanned')}
+                  </div>
+                </div>
+                <span className="text-[13px] tabular-nums text-text-muted">{figure(row.size_bytes + row.prefix_bytes)}</span>
+                {game ? (
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.open', { title: game.title })} onClick={() => data.openFolder(game)}>
+                      <FolderOpen className="h-4 w-4" />
+                    </Button>
+                    {game.is_installed && isPluginGame(game) && (
+                      <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.move', { title: game.title })} onClick={() => data.setMoveId(row.game_id)}>
+                        <FolderInput className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {game.is_installed && (
+                      <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.scan', { title: game.title })} onClick={() => data.scan(game)}>
+                        {data.measuring.has(game.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+                      </Button>
+                    )}
+                    {(game.store === 'custom' || game.is_installed) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7"
+                        aria-label={game.store === 'custom' ? t('storage:action.remove', { title: game.title }) : t('storage:action.uninstall', { title: game.title })}
+                        onClick={() => {
+                          data.setRemoveId(null);
+                          data.setMoveId(null);
+                          data.setUninstallId(game.store === 'custom' ? null : row.game_id);
+                          data.setRemoveId(game.store === 'custom' ? row.game_id : null);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="w-[76px]" />
+                )}
+              </div>
+              {data.moveId === row.game_id && game && (
+                <MoveDialog
+                  game={game}
+                  startFolder={parentFolder(game.install_dir)}
+                  onClose={() => data.setMoveId(null)}
+                  onQueued={() => {
+                    data.setMoveId(null);
+                    data.onNotify(t('gameSettings:maintenance.moving', { title: game.title }), 'busy');
+                  }}
+                />
+              )}
+              {data.removeId === row.game_id && game && (
+                <div className="mt-2 border-t border-hairline pt-2">
+                  <RemoveFlow
+                    key={game.id}
+                    game={game}
+                    onCancel={() => data.setRemoveId(null)}
+                    onRemove={(opts) => {
+                      data.setRemoveId(null);
+                      data.onRemove(game, opts);
+                    }}
+                  />
+                </div>
+              )}
+              {data.uninstallId === row.game_id && game && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-hairline pt-2">
+                  <p className="min-w-0 flex-1 basis-64 text-[12.5px] text-text-muted">
+                    {t('storage:uninstallAsk', { title: game.title })}
+                  </p>
+                  <Button variant="ghost" size="sm" onClick={() => data.setUninstallId(null)}>
+                    {t('common:cancel')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    autoFocus
+                    onClick={() => {
+                      data.setUninstallId(null);
+                      data.onUninstall(game);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> {t('storage:uninstallGo')}
+                  </Button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

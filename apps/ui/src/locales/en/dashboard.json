@@ -45,5 +45,14 @@
     "epic": "Epic",
     "ubisoft": "Ubisoft",
     "custom": "Sideloaded"
+  },
+  "home": {
+    "ready_one": "{{count}} game ready to play.",
+    "ready_other": "{{count}} games ready to play.",
+    "fromBacklog": "From your backlog",
+    "dismiss": "Don't suggest this",
+    "waitingForYou": "Waiting for you",
+    "toFinish": "To finish",
+    "toInstall": "To install"
   }
 }

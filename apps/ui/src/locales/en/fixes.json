@@ -16,5 +16,13 @@
   "attention": {
     "borked": "{{source}} reports this title as borked. Try a different runner or check the reports.",
     "bronze": "{{source}} rates this title bronze. It may need tweaks to run well."
+  },
+  "atlas": {
+    "title": "Needs attention",
+    "sub_one": "{{count}} game can't start or needs a decision.",
+    "sub_other": "{{count}} games can't start or need a decision.",
+    "kindRated": "{{source}} rating",
+    "kindFix": "Community fix",
+    "openGame": "Open game"
   }
 }

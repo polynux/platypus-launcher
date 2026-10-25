@@ -187,23 +187,23 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
           className={cx(
             'mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 font-mono text-[12px] ring-1',
             outside
-              ? 'bg-amber-300/[0.07] text-amber-200 ring-amber-300/30'
-              : 'bg-black/40 text-white/70 ring-white/[0.08]',
+              ? 'bg-attention/[0.07] text-attention ring-attention/30'
+              : 'bg-surface text-text-muted ring-hairline',
           )}
         >
           {state.loading ? (
-            <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-white/30 border-t-transparent" />
+            <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-hairline-strong border-t-transparent" />
           ) : (
             <Lock className="h-3 w-3 flex-none opacity-70" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
           )}
           <span className="truncate">{host || '…'}</span>
           {outside && (
-            <span className="flex flex-none items-center gap-1 text-amber-200/90">
+            <span className="flex flex-none items-center gap-1 text-attention/90">
               <TriangleAlert className="h-3 w-3" />
               <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
             </span>
           )}
-          {state.title && <span className="hidden min-w-0 flex-1 truncate text-right text-white/40 lg:inline">{state.title}</span>}
+          {state.title && <span className="hidden min-w-0 flex-1 truncate text-right text-text-faint lg:inline">{state.title}</span>}
         </div>
         <ToolbarButton label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
@@ -216,7 +216,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
         <div
           data-testid="store-blocked"
           role="note"
-          className="mx-5 mb-3 flex flex-none items-center gap-2 rounded-xl bg-amber-300/[0.07] px-3 py-2 text-[12px] text-amber-200 ring-1 ring-amber-300/30"
+          className="mx-5 mb-3 flex flex-none items-center gap-2 rounded-xl bg-attention/[0.07] px-3 py-2 text-[12px] text-attention ring-1 ring-attention/30"
         >
           <TriangleAlert className="h-3.5 w-3.5 flex-none" />
           <span className="min-w-0 flex-1 truncate">
@@ -226,7 +226,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
             type="button"
             onClick={openBlocked}
             data-testid="store-blocked-open"
-            className="flex-none rounded-lg bg-amber-300/20 px-2.5 py-1 font-medium hover:bg-amber-300/30"
+            className="flex-none rounded-lg bg-attention/20 px-2.5 py-1 font-medium hover:bg-attention/30"
           >
             {t('common:open')}
           </button>
@@ -234,18 +234,18 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
             type="button"
             onClick={() => setBlocked(null)}
             aria-label={t('common:dismiss')}
-            className="grid h-6 w-6 flex-none place-items-center rounded-lg hover:bg-white/10"
+            className="grid h-6 w-6 flex-none place-items-center rounded-lg hover:bg-attention/20"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
       {failed ? (
-        <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-white/[0.03] px-6 text-center text-[13px] text-white/60 ring-1 ring-white/[0.07]">
+        <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-surface px-6 text-center text-[13px] text-text-muted ring-1 ring-hairline">
           <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
         </div>
       ) : (
-        <div ref={area} data-testid="store-area" className="mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-black/30 ring-1 ring-white/[0.07]" />
+        <div ref={area} data-testid="store-area" className="mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-surface ring-1 ring-hairline" />
       )}
     </div>
   );
@@ -264,7 +264,7 @@ function ToolbarButton({ label, children, ...rest }: {
       size="none"
       title={label}
       aria-label={label}
-      className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-black/50 text-white/80 hover:bg-black/70 disabled:opacity-35 disabled:hover:bg-black/50"
+      className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-surface text-text-muted ring-1 ring-hairline transition hover:bg-surface-strong hover:text-text disabled:opacity-35"
       {...rest}
     >
       {children}

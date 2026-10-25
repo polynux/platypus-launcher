@@ -120,5 +120,9 @@
   },
   "builtIn": {
     "protondb": "Compatibility ratings and community notes for Steam games."
+  },
+  "atlas": {
+    "account": "Account",
+    "libraryList": "Library list"
   }
 }

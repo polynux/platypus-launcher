@@ -44,6 +44,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const { t } = useTranslation('settings');
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
   const [, setRenderTick] = useState(0);
   const setActiveSection = (index: number) => {
@@ -112,6 +113,13 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.appearance'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
   const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-hairline-strong [&>section]:bg-surface [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
 
+  // Atlas renders the /22 Settings page (issue #138): the lab's six backed
+  // categories in the left nav. The lab's "Store clients" row has no backing
+  // setting in the core, so it has no category here.
+  if (atlas) {
+    return <AtlasSettingsPage sections={sections} loadError={error} />;
+  }
+
   return (
     <div className="p-7">
       <ViewHeader
@@ -137,6 +145,60 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
       ) : (
         <div className={chromeClass}>{sections.map((section, index) => <React.Fragment key={sectionNames[index]}>{section}</React.Fragment>)}</div>
       )}
+    </div>
+  );
+}
+
+/** The /22 Settings page (issue #138, Atlas only): the left category nav and
+ *  the right body reusing the same section components as the classic view.
+ *  Appearance comes from #134 and stays untouched. */
+const ATLAS_CATS = ['general', 'appearance', 'folders', 'saves', 'data', 'social'] as const;
+type AtlasCat = (typeof ATLAS_CATS)[number];
+const ATLAS_SECTIONS: Record<AtlasCat, number[]> = {
+  // Indexes into the sections array above: language, tray / theme, appearance
+  // / folders, prefixes, cleanup / backups, cloud / ratings, artwork,
+  // gameInfo / chat.
+  general: [0, 10],
+  appearance: [1, 2],
+  folders: [3, 4, 5],
+  saves: [11, 12],
+  data: [6, 7, 8],
+  social: [9],
+};
+
+function AtlasSettingsPage({ sections, loadError }: {
+  sections: React.ReactNode[];
+  loadError: string | null;
+}) {
+  const { t } = useTranslation('settings');
+  const [cat, setCat] = useState<AtlasCat>('general');
+  return (
+    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+      <header>
+        <h1 className="text-[24px] font-extrabold tracking-tight">{t('settings:title')}</h1>
+      </header>
+      {loadError && <ErrorNotice message={loadError} fallback={t('loadError')} />}
+      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <nav aria-label={t('sections.label')} className="grid gap-0.5">
+          {ATLAS_CATS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCat(c)}
+              aria-current={cat === c ? 'page' : undefined}
+              className={cat === c
+                ? 'rounded-lg bg-accent/15 px-3 py-2 text-left text-[13px] font-bold text-text'
+                : 'rounded-lg px-3 py-2 text-left text-[13px] font-semibold text-text-muted transition hover:bg-surface hover:text-text'}
+            >
+              {t(`atlas.cats.${c}`)}
+            </button>
+          ))}
+        </nav>
+        <section aria-label={t(`atlas.cats.${cat}`)} className="min-w-0">
+          <h2 className="mb-1 text-[18px] font-extrabold tracking-tight">{t(`atlas.cats.${cat}`)}</h2>
+          <div>{ATLAS_SECTIONS[cat].map((i) => <React.Fragment key={i}>{sections[i]}</React.Fragment>)}</div>
+        </section>
+      </div>
     </div>
   );
 }

@@ -203,7 +203,7 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
     expect(container.querySelector('[data-region="topbar"]')).toBeNull();
     // Top bar: brand, nav and command button.
     expect(screen.getByText('Platypus')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Library' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Store' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Search or run a command/ })).toBeInTheDocument();
@@ -229,7 +229,7 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
     shellState.navigation = 'sourcebar';
     const { container } = render(<Shell {...sourcebarProps} view={{ name: 'dashboard' }} />);
     // The top bar stays; only the library/views bar is gone.
-    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
     expect(container.querySelector('nav[aria-label="Library"]')).toBeNull();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
   });
@@ -273,10 +273,10 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
       />
     );
     // Home, Library and Store nav.
-    await user.click(screen.getByRole('button', { name: 'Dashboard' }));
+    await user.click(screen.getByRole('button', { name: 'Home' }));
     await user.click(screen.getByRole('button', { name: 'Library' }));
     expect(navigated).toEqual(['dashboard', 'library']);
-    // Store opens the first storefront (#138 gives Store its own page).
+    // Store opens the first storefront; the /22 stores page (#138) lists every storefront above it.
     await user.click(screen.getByRole('button', { name: 'Store' }));
     expect(openedStores).toEqual(['echo']);
     // Downloads and Attention icons.

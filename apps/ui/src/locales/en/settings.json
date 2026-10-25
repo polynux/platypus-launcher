@@ -161,5 +161,15 @@
   "gameDescription": "Take colour from the selected game’s art.",
   "gameSaved": "Game colour saved",
   "none": "This theme has no appearance options."
+ },
+ "atlas": {
+  "cats": {
+   "general": "General",
+   "appearance": "Appearance",
+   "folders": "Game folders",
+   "saves": "Save backups",
+   "data": "Ratings and game info",
+   "social": "Friends and chat"
+  }
  }
 }

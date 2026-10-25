@@ -74,5 +74,11 @@
     "cancelKind": "Cancel {{kind}}"
   },
   "backedUp": "Backed up {{title}}",
-  "restored": "Restored {{title}}"
+  "restored": "Restored {{title}}",
+  "atlas": {
+    "queueSub_one": "{{count}} in the queue.",
+    "queueSub_other": "{{count}} in the queue.",
+    "pauseAll": "Pause all",
+    "recent": "Recent"
+  }
 }
