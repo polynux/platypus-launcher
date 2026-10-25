@@ -1,0 +1,48 @@
+{
+  "cats": {
+    "compat": "Compatibilité",
+    "performance": "Performance",
+    "display": "Affichage",
+    "saves": "Sauvegardes",
+    "layers": "Couches de traduction",
+    "fixes": "Correctifs",
+    "env": "Environnement",
+    "launch": "Options de lancement"
+  },
+  "summary": {
+    "default": "Par défaut",
+    "none": "Aucun",
+    "noneApplied": "Aucun appliqué",
+    "applied_one": "{{count}} appliqué",
+    "applied_other": "{{count}} appliqués",
+    "setCount_one": "{{count}} définie",
+    "setCount_other": "{{count}} définies",
+    "noArgs": "Aucun argument",
+    "bundled": "Intégré",
+    "notUsed": "Non utilisé",
+    "notNeeded": "Inutile"
+  },
+  "compat": {
+    "runner": "Couche de compatibilité",
+    "rating": "Note de la communauté",
+    "ratedAs": "Les joueurs notent ce jeu",
+    "unrated": "Pas encore de note ProtonDB",
+    "tip": "Dernier conseil"
+  },
+  "performance": {
+    "gamemodeDesc": "Garde le CPU et le GPU à pleine vitesse pendant le jeu (GameMode).",
+    "mangohud": "Afficher FPS et températures",
+    "mangohudDesc": "Un petit incrusteur dans un coin du jeu (MangoHud)."
+  },
+  "display": {
+    "gamescopeDesc": "Lance le jeu dans sa propre session d'affichage. Aide les jeux qui choisissent le mauvais mode d'écran (Gamescope).",
+    "resolution": "Résolution et taux de rafraîchissement",
+    "upscaler": "Mise à l'échelle plus nette",
+    "needsScope": "Nécessite Gamescope."
+  },
+  "footer": {
+    "unsaved": "Modifications non enregistrées",
+    "discard": "Annuler",
+    "save": "Enregistrer"
+  }
+}

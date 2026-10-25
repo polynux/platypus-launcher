@@ -27,12 +27,17 @@ interface ModalProps {
    *  their own panel instead of the first control, so a mouse open shows no
    *  focus ring. */
   onOpenAutoFocus?: (e: Event) => void;
+  /** Atlas drawer chrome (game-settings.tabs = accordion only): scrim, radius
+   *  and inner scroll. Other sheets keep the shared look. */
+  overlayClassName?: string;
+  contentClassName?: string;
+  innerClassName?: string;
   children: React.ReactNode;
 }
 
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`. */
-export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, children }: ModalProps) {
+export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, overlayClassName, contentClassName, innerClassName, children }: ModalProps) {
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -40,6 +45,9 @@ export function Modal({ label, onClose, size = 'sm', className, dismissable = tr
         label={label}
         sheet={presentation === 'sheet'}
         sheetWidth={sheetWidth}
+        overlayClassName={overlayClassName}
+        contentClassName={contentClassName}
+        innerClassName={innerClassName}
         className={cn(MODAL_SIZES[size], className)}
         onEscapeKeyDown={(e) => !dismissable && e.preventDefault()}
         onInteractOutside={(e) => !dismissable && e.preventDefault()}

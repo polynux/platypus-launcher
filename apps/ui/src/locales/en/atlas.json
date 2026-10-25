@@ -1,0 +1,48 @@
+{
+  "cats": {
+    "compat": "Compatibility",
+    "performance": "Performance",
+    "display": "Display",
+    "saves": "Saves",
+    "layers": "Translation layers",
+    "fixes": "Fixes",
+    "env": "Environment",
+    "launch": "Launch options"
+  },
+  "summary": {
+    "default": "Default",
+    "none": "None",
+    "noneApplied": "None applied",
+    "applied_one": "{{count}} applied",
+    "applied_other": "{{count}} applied",
+    "setCount_one": "{{count}} set",
+    "setCount_other": "{{count}} set",
+    "noArgs": "No arguments",
+    "bundled": "Bundled",
+    "notUsed": "Not used",
+    "notNeeded": "Not needed"
+  },
+  "compat": {
+    "runner": "Compatibility layer",
+    "rating": "Community rating",
+    "ratedAs": "Players rate this game",
+    "unrated": "No ProtonDB rating yet",
+    "tip": "Latest tip"
+  },
+  "performance": {
+    "gamemodeDesc": "Keeps the CPU and GPU at full speed while you play (GameMode).",
+    "mangohud": "Show FPS and temperatures",
+    "mangohudDesc": "A small overlay in the corner of the game (MangoHud)."
+  },
+  "display": {
+    "gamescopeDesc": "Runs the game in its own display session. Helps with games that pick the wrong screen mode (Gamescope).",
+    "resolution": "Resolution and refresh rate",
+    "upscaler": "Sharper upscaling",
+    "needsScope": "Needs Gamescope."
+  },
+  "footer": {
+    "unsaved": "Unsaved changes",
+    "discard": "Discard",
+    "save": "Save"
+  }
+}

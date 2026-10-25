@@ -108,6 +108,8 @@ export interface GameSettingsDraft {
   markClean: () => void;
   /** A save from the other tab landed: adopt it wholesale and rebase. */
   applySaved: (s: GameSettings) => void;
+  /** Drop unsaved edits and return to the last save (atlas footer Discard). */
+  discard: () => void;
 }
 
 function rowsSig(rows: EnvRow[]): string {
@@ -132,6 +134,29 @@ export function useGameSettingsDraft(game: Game): GameSettingsDraft {
     setEnvRows(rows);
     setInitial({ draft: JSON.stringify(n), env: rowsSig(rows) });
   };
+  // Drop unsaved edits: the draft returns to the last save (or the game's
+  // settings when nothing was saved yet). The baseline stays, so the form
+  // reads clean afterwards.
+  const discard = () => {
+    try {
+      const d = JSON.parse(initial.draft) as GameSettings;
+      setDraft(d);
+    } catch {
+      setDraft(game.settings);
+    }
+    // Rebuild rows from the baseline draft's env: ids restart, values match
+    // the last save.
+    try {
+      const d = JSON.parse(initial.draft) as GameSettings;
+      const rows = envToRows(d.env_vars ?? {});
+      nextRowId.current = rows.length;
+      setEnvRows(rows);
+    } catch {
+      const rows = envToRows(game.settings.env_vars ?? {});
+      nextRowId.current = rows.length;
+      setEnvRows(rows);
+    }
+  };
   // The game changed under the dialog (the other tab saved and the new
   // settings came back as props, or the library reloaded): a clean form
   // follows them, unsaved edits stay put so no save drops them.
@@ -148,7 +173,7 @@ export function useGameSettingsDraft(game: Game): GameSettingsDraft {
       if (idChanged || !dirtyRef.current) applySaved(game.settings);
     }
   }, [game.id, sig]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { draft, setDraft, envRows, setEnvRows, nextRowId, current, dirty, markClean, applySaved };
+  return { draft, setDraft, envRows, setEnvRows, nextRowId, current, dirty, markClean, applySaved, discard };
 }
 
 /** The launcher's own settings for one game (runner, wrappers, env…): the form
@@ -494,7 +519,7 @@ export function GeneralSettings({ game, runners, onClose, onSave, onCopied, onDi
  *  preset (which can then be deleted; built-ins are read-only). It lives
  *  inside the prefix block, which is hidden for native games and store
  *  client launches — exactly the games core refuses. */
-function PrefixPresets({ game, current, dirty, onApplied }: {
+export function PrefixPresets({ game, current, dirty, onApplied }: {
   game: Game;
   /** The form's current settings: what a preview compares the preset with. */
   current: GameSettings;
@@ -663,7 +688,7 @@ function PrefixPresets({ game, current, dirty, onApplied }: {
 
 /** A sideloaded game's program (issue #47): its executable, how it runs
  *  (detected by content, overridable per game), and the execute bit. */
-function CustomProgram({ game, detected, runMode, onRunMode, onChanged }: {
+export function CustomProgram({ game, detected, runMode, onRunMode, onChanged }: {
   game: Game;
   detected: { native: boolean; kind: string } | null;
   runMode: string;

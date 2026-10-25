@@ -27,6 +27,13 @@ const api = vi.hoisted(() => ({
   getCustomization: vi.fn(),
   previewCommand: vi.fn(),
   getLauncherSettings: vi.fn(),
+  getRunnerOptions: vi.fn(),
+  getRunnerEnv: vi.fn(),
+  listSaveBackups: vi.fn(),
+  getSavePaths: vi.fn(),
+  getGameSaveBackup: vi.fn(),
+  getAutoBackupState: vi.fn(),
+  getGameSettings: vi.fn(),
 }));
 
 vi.mock('../lib/theme', async (importOriginal) => ({
@@ -51,8 +58,22 @@ vi.mock('../effect/runtime', () => ({
 }));
 vi.mock('./SettingsModal', () => ({
   GeneralSettings: () => <div>General fixture</div>,
-  useGameSettingsDraft: (game: Game) => ({ current: game.settings, applySaved: () => {} }),
+  useGameSettingsDraft: (game: Game) => ({
+    draft: game.settings,
+    setDraft: () => {},
+    envRows: [],
+    setEnvRows: () => {},
+    nextRowId: { current: 0 },
+    current: game.settings,
+    dirty: false,
+    markClean: () => {},
+    applySaved: () => {},
+    discard: () => {},
+  }),
+  CustomProgram: () => null,
+  PrefixPresets: () => null,
 }));
+vi.mock('./CustomGameYear', () => ({ CustomGameYear: () => null }));
 vi.mock('./LegalSection', () => ({ LegalSection: () => null }));
 vi.mock('./maintenancePrefetch', () => ({
   MaintenancePrefetchProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -85,6 +106,13 @@ beforeEach(() => {
   api.getCustomization.mockResolvedValue({ title: '', sort_title: '', art: {} });
   api.previewCommand.mockResolvedValue('wine game.exe');
   api.getLauncherSettings.mockResolvedValue({ prefixes_folder: '', default_prefixes_folder: '/home/you/.local/share/platypus/prefixes' });
+  api.getRunnerOptions.mockResolvedValue([]);
+  api.getRunnerEnv.mockResolvedValue({ env: {}, wrappers: [] });
+  api.listSaveBackups.mockResolvedValue([]);
+  api.getSavePaths.mockResolvedValue([]);
+  api.getGameSaveBackup.mockResolvedValue('');
+  api.getAutoBackupState.mockResolvedValue({ on: false, reason: '' });
+  api.getGameSettings.mockResolvedValue({});
 });
 
 const ALL = ['install', 'cloud-saves', 'versions', 'verify', 'install-options', 'settings', 'move'];
@@ -205,15 +233,15 @@ describe('Game settings catalog variants', () => {
     expect(closed).toHaveBeenCalledOnce();
   });
 
-  // The accordion variant (issue #129): a 520px drawer from the right, with
-  // the categories grouped Everyday / Advanced and one open at a time.
+  // The accordion variant (atlas drawer, /21): Everyday / Advanced / Game,
+  // 13 categories, one open at a time, 520px drawer, summaries from real values.
   describe('accordion', () => {
     const open = () => {
       state.variants['game-settings.presentation'] = 'sheet';
       state.variants['game-settings.tabs'] = 'accordion';
     };
 
-    it('renders the categories in Everyday and Advanced groups in the drawer, without axe violations', async () => {
+    it('renders the /21 categories in Everyday, Advanced and Game groups in the drawer, without axe violations', async () => {
       open();
       render(<GameSettingsModal {...modalProps()} />);
       const dialog = screen.getByRole('dialog', { name: 'Settings for Echo Tiny' });
@@ -222,23 +250,29 @@ describe('Game settings catalog variants', () => {
       expect(screen.queryByRole('tablist')).toBeNull();
       expect(screen.getByText('Everyday')).toBeInTheDocument();
       expect(screen.getByText('Advanced')).toBeInTheDocument();
+      expect(screen.getByText('Game')).toBeInTheDocument();
       const headers = screen.getAllByRole('button').filter((b) => b.hasAttribute('data-gs-accordion-header'));
       expect(headers.map((h) => h.id)).toEqual([
-        'gs-acc-general', 'gs-acc-cloud', 'gs-acc-customization',
-        'gs-acc-versions', 'gs-acc-options', 'gs-acc-plugin', 'gs-acc-tweaks', 'gs-acc-maintenance',
+        'gs-acc-compat', 'gs-acc-performance', 'gs-acc-display', 'gs-acc-saves',
+        'gs-acc-layers', 'gs-acc-fixes', 'gs-acc-env', 'gs-acc-launch',
+        'gs-acc-versions', 'gs-acc-options', 'gs-acc-plugin', 'gs-acc-customization', 'gs-acc-maintenance',
       ]);
       // Each header carries its one-line summary of the current values.
       const summaries = headers.map((h) => h.textContent ?? '');
       expect(summaries[0]).toContain('Automatic runner');
-      expect(summaries[1]).toContain('Synced by Platypus');
-      expect(summaries[2]).toContain('Art, title and sort');
-      expect(summaries[6]).toContain('1 suggested');
-      expect(summaries[7]).toContain('Verify, move, backups');
-      // One section open at a time: General is the first, the rest are closed.
-      expect(document.getElementById('gs-acc-general')).toHaveAttribute('aria-expanded', 'true');
-      for (const id of ['cloud', 'versions', 'options', 'plugin', 'tweaks', 'customization', 'maintenance']) {
+      expect(summaries[3]).toContain('Synced by Platypus');
+      expect(summaries[5]).toContain('None applied');
+      expect(summaries[12]).toContain('Verify, move, backups');
+      // Labels and summaries match /21 sizes: 13.5px labels, 12.5px summaries.
+      expect(headers[0].querySelector('span')?.className).toMatch(/text-\[13\.5px\]/);
+      expect(document.getElementById('gs-acc-sum-compat')?.className).toMatch(/text-\[12\.5px\]/);
+      // One section open at a time: Compatibility first, the rest closed.
+      expect(document.getElementById('gs-acc-compat')).toHaveAttribute('aria-expanded', 'true');
+      for (const id of ['performance', 'display', 'saves', 'layers', 'fixes', 'env', 'launch', 'versions', 'options', 'plugin', 'customization', 'maintenance']) {
         expect(document.getElementById(`gs-acc-${id}`)).toHaveAttribute('aria-expanded', 'false');
       }
+      // Drawer chrome: ghost 28px close, hairline header, single scroller.
+      expect(screen.getByRole('button', { name: 'Close' })).toHaveClass('size-7');
       (expect(await (await import('vitest-axe')).axe(document.body)) as any).toHaveNoViolations();
     });
 
@@ -249,11 +283,21 @@ describe('Game settings catalog variants', () => {
       const versions = screen.getByRole('button', { name: /^Versions/ });
       await user.click(versions);
       expect(versions).toHaveAttribute('aria-expanded', 'true');
-      expect(document.getElementById('gs-acc-general')).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById('gs-acc-compat')).toHaveAttribute('aria-expanded', 'false');
       expect(document.getElementById('gs-acc-panel-versions')).not.toBeNull();
       await user.click(versions);
       expect(versions).toHaveAttribute('aria-expanded', 'false');
       expect(document.getElementById('gs-acc-panel-versions')).toBeNull();
+    });
+
+    it('opens on the category matching the requested tab', async () => {
+      open();
+      render(<GameSettingsModal {...modalProps({ initialTab: 'maintenance' })} />);
+      expect(document.getElementById('gs-acc-maintenance')).toHaveAttribute('aria-expanded', 'true');
+      expect(document.getElementById('gs-acc-compat')).toHaveAttribute('aria-expanded', 'false');
+      cleanup();
+      render(<GameSettingsModal {...modalProps({ initialTab: 'cloud' })} />);
+      expect(document.getElementById('gs-acc-saves')).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('leaves focus off the headers on open (no focus ring on mouse open), then Escape and a scrim click close it', async () => {
@@ -261,7 +305,7 @@ describe('Game settings catalog variants', () => {
       const closed = vi.fn();
       render(<GameSettingsModal {...modalProps({ onClose: closed })} />);
       await tick();
-      expect(document.getElementById('gs-acc-general')).not.toHaveFocus();
+      expect(document.getElementById('gs-acc-compat')).not.toHaveFocus();
       fireEvent.keyDown(document, { key: 'Escape' });
       expect(closed).toHaveBeenCalledTimes(1);
       clickBackdrop(screen.getByRole('dialog').parentElement!);
