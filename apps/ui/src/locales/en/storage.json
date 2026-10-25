@@ -27,7 +27,7 @@
   "uninstallAsk": "Uninstall {{title}}? Its files leave the disk.",
   "uninstallGo": "Uninstall",
   "atlas": {
-    "freeOf": "free of {total}",
-    "played": "Played {ago}"
+    "freeOf": "free of {{total}}",
+    "played": "Played {{ago}}"
   }
 }

@@ -9,6 +9,9 @@
 @import "@fontsource-variable/geist-mono";
 @import "tailwindcss";
 
+@custom-variant plain (&:where([data-label-style=plain], [data-label-style=plain] *));
+@custom-variant light (&:where([data-scheme=light], [data-scheme=light] *));
+
 @theme {
   --font-sans: "Hanken Grotesk", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -377,6 +380,7 @@
 @property --color-text-body { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.7); }
 @property --color-text-muted { syntax: "<color>"; inherits: true; initial-value: rgba(255, 255, 255, 0.55); }
 @property --color-text-faint { syntax: "<color>"; inherits: true; initial-value: #78716c; }
+@property --foreground { syntax: "<color>"; inherits: true; initial-value: #ece6da; }
 @property --color-accent { syntax: "<color>"; inherits: true; initial-value: oklch(82.8% 0.189 84.429); }
 @property --color-accent-strong { syntax: "<color>"; inherits: true; initial-value: oklch(87.9% 0.169 91.605); }
 @property --color-accent-dim { syntax: "<color>"; inherits: true; initial-value: #2f240d; }
@@ -402,7 +406,7 @@
     --color-ground, --color-raised, --color-surface, --color-surface-strong,
     --color-hairline, --color-text, --color-text-body, --color-text-muted,
     --color-text-faint, --color-accent, --color-accent-strong,
-    --color-accent-dim, --color-on-accent, --background, --card, --card-foreground, --popover,
+    --color-accent-dim, --color-on-accent, --foreground, --background, --card, --card-foreground, --popover,
     --popover-foreground, --primary, --primary-foreground, --accent-foreground,
     --secondary, --muted, --muted-foreground, --border, --input;
   transition-duration: 600ms;

@@ -232,10 +232,10 @@ function StripPlay({ d }: { d: GameTabsData }) {
         size="none"
         onClick={d.onPlay}
         disabled={launching || game.outside_folder}
-        className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110 disabled:opacity-80"
+        className="group inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110 disabled:opacity-100"
       >
         {launching ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Play className="h-[15px] w-[15px] fill-current" aria-hidden />}
-        <span>{launching ? t('game:play.launching') : t('game:play.play')}</span>
+        <span className="group-disabled:opacity-60">{launching ? t('game:play.launching') : t('game:play.play')}</span>
       </Button>
     );
   }
@@ -281,7 +281,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
   return (
     <>
       {copies.length > 1 ? (
-        <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-glass p-[3px]">
+        <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-black/[.28] p-[3px] light:bg-white/55">
           {copies.map((c) => {
             const on = c.owner_id === played;
             return (
@@ -295,7 +295,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
                 title={c.note || c.owner_name}
                 className={cx(
                   'inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                  on ? 'bg-accent/[0.22] text-text ring-1 ring-accent/50' : 'text-text-muted hover:text-text',
+                  on ? 'bg-[color-mix(in_srgb,var(--color-accent)_22%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/45' : 'text-text-muted hover:text-text',
                 )}
               >
                 <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={c.owner_name} size="xs" />
@@ -305,7 +305,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
           })}
         </div>
       ) : (
-        <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-glass px-3 text-[13px] font-semibold text-text">
+        <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-black/[.28] px-3 text-[13px] font-semibold text-text light:bg-white/55">
           <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={storeName} size="xs" />
           {storeName}
           {plugin && game.source !== game.store && <span className="text-text-muted">· {plugin.name}</span>}
@@ -317,7 +317,7 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
           onClick={() => setComparing(true)}
           aria-label={t('gameOps:copies.compare')}
           title={t('gameOps:copies.compare')}
-          className="inline-flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[10px] bg-glass text-text ring-1 ring-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="inline-flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[10px] bg-black/[.28] text-text transition hover:bg-black/[.42] light:bg-white/55 light:hover:bg-white/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <GitCompare className="h-[15px] w-[15px]" aria-hidden />
         </button>
@@ -393,8 +393,8 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             aria-haspopup="dialog"
             onClick={() => setTuneOpen((v) => !v)}
             className={cx(
-              'inline-flex h-[42px] items-center gap-1.5 rounded-[9px] bg-glass px-3 pl-3.5 text-[14px] font-bold text-text transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              tuneOpen && 'bg-surface-strong',
+              'inline-flex h-[42px] items-center gap-1.5 rounded-[9px] bg-black/[.28] px-3 pl-3.5 text-[14px] font-bold text-text transition hover:bg-black/[.42] light:bg-white/55 light:hover:bg-white/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              tuneOpen && 'bg-black/[.42] light:bg-white/75',
             )}
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden />

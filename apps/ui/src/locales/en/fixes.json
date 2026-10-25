@@ -23,6 +23,8 @@
     "sub_other": "{{count}} games can't start or need a decision.",
     "kindRated": "{{source}} rating",
     "kindFix": "Community fix",
-    "openGame": "Open game"
+    "openGame": "Open game",
+    "emptyTitle": "Everything works",
+    "emptyBody": "Games that fail to install, lose their runner or need an update show up here."
   }
 }

@@ -82,6 +82,16 @@
     "lastPlayed": "last played",
     "notInstalled": "not installed"
   },
+  "atlasTable": {
+    "title": "Title",
+    "stores": "Stores",
+    "status": "Status",
+    "played": "Played",
+    "lastPlayed": "Last played",
+    "size": "Size",
+    "runs": "Runs",
+    "year": "Year"
+  },
   "recency": {
     "today": "today",
     "yesterday": "yesterday",
@@ -169,12 +179,16 @@
     "filterLentOnly": "Only lent to me",
     "filterAny": "Any",
     "filterReset": "Reset filters",
+    "filterTiers": "Runs on Linux",
+    "filterStatuses": "Your status",
+    "filterFamily": "Family",
+    "filterClear": "Clear filters",
     "rowCollections": "Collections…"
   },
   "atlasViews": {
     "filterPlaceholder": "Filter the library",
     "blocks": {
-      "continue": "Continue playing",
+      "continue": "Last played",
       "recent": "Recently added"
     },
     "chips": {
@@ -190,5 +204,5 @@
       "downloading": "Downloading, {{percent}}%"
     }
   },
-  "scannedFooter": "Scanned {{time}}"
+  "scannedFooter": "Library scanned {{time}}"
 }

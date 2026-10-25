@@ -19,7 +19,7 @@ import { TIER_MEANING } from '../lib/compat';
 export const cx = cn;
 
 /** The launcher version stamped in the shell footers (sidebar, topbar, sourcebar). */
-export const APP_VERSION = 'platypus v0.2';
+export const APP_VERSION = 'Platypus v0.2';
 
 export function Panel({ className, children, as: Tag = 'div' }: { className?: string; children: React.ReactNode; as?: 'div' | 'section' | 'aside' }) {
   return <Tag className={cx('rounded-3xl bg-surface p-5 ring-1 ring-hairline', className)}>{children}</Tag>;
@@ -162,18 +162,33 @@ export const EVENT_DOT: Record<ActivityType, string> = {
   cloud: 'bg-info',
 };
 
-export function EmptyState({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function EmptyState({ label, children, action, icon: Glyph }: { label: string; children?: React.ReactNode; action?: React.ReactNode; icon?: React.ComponentType<{ className?: string }> }) {
   const chrome = useVariant('empty-state.chrome');
-  const icon = useVariant('empty-state.icon');
+  const showIcon = useVariant('empty-state.icon');
+  const Icon = Glyph ?? Inbox;
+  // The lab's empty state has no border and no label chrome.
+  if (chrome === 'plain') {
+    return (
+      <div className="rounded-3xl px-6 py-14 text-center">
+        {showIcon === 'on' && <Icon aria-hidden className="mx-auto mb-3 h-5 w-5 text-text-faint" />}
+        <h3 className="text-[15px] font-bold text-text">{label}</h3>
+        {children && <p className="mx-auto mt-2 max-w-[46ch] text-[13px] leading-relaxed text-text-muted">{children}</p>}
+        {action && <div className="mt-4">{action}</div>}
+      </div>
+    );
+  }
   return (
-    <div className={chrome === 'plain' ? 'rounded-3xl p-10 text-center' : 'rounded-3xl border border-dashed border-hairline p-10 text-center'}>
-      {icon === 'on' && <Inbox aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />}
+    <div className="rounded-3xl border border-dashed border-hairline p-10 text-center">
+      {showIcon === 'on' && <Icon aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />}
       <MonoLabel>{label}</MonoLabel>
-      <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-body">{children}</p>
+      {children && <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-body">{children}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
+
+/** The /22 page frame (lab `.ap-page`): every Atlas page shares it. */
+export const ATLAS_PAGE = 'mx-auto grid w-full max-w-[1240px] content-start gap-6 px-[30px] pt-[26px] pb-12';
 
 /** A view's header (issue #100): title, subtitle and right-side actions.
  *  The subtitle and actions are the caller's own nodes, so each view keeps

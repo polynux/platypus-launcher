@@ -18,7 +18,7 @@ import { coreErrMsg } from '../lib/coreError';
 import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
 import { useGameTone, type GameToneChoice } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
-import { ViewHeader, cx } from './ui';
+import { ATLAS_PAGE, ViewHeader, cx } from './ui';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
 const SECTION = 'max-w-2xl border-t border-hairline py-6';
@@ -173,7 +173,7 @@ function AtlasSettingsPage({ sections, loadError }: {
   const { t } = useTranslation('settings');
   const [cat, setCat] = useState<AtlasCat>('general');
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('settings:title')}</h1>
       </header>

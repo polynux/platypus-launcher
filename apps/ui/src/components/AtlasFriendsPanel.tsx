@@ -6,16 +6,18 @@
 // open chat first, then closes the panel.
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, X } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import { Button } from './ds/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { Input } from './ds/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { Switch } from './ds/switch';
 import { ChatPanel } from './ChatPanel';
 import { FamiliesPanel } from './FamiliesPanel';
 import { agoLabel } from '../lib/cloud';
 import { LinkButton, cx } from './ui';
+import { PluginLogo } from './PluginLogo';
 import {
+  avatarHueStyle,
   canSetStatus,
   connectionLine,
   friendStateLabel,
@@ -73,11 +75,11 @@ function tokenDot(state: string): string {
 
 function PanelAvatar({ name, url, dot }: { name: string; url?: string; dot: string }) {
   return (
-    <span className="relative h-8 w-8 flex-none">
-      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-surface-strong font-mono text-hint font-bold text-text-muted">
+    <span className="relative h-[26px] w-[26px] flex-none">
+      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full text-[12px] font-bold text-white" style={avatarHueStyle(name)}>
         {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
       </span>
-      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-ground', dot)} />
+      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-ground-2', dot)} />
     </span>
   );
 }
@@ -155,7 +157,7 @@ export function AtlasFriendsPanel(p: AtlasFriendsPanelProps) {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={t('chat:modal.searchPlaceholder')}
-                  className="pl-8.5 font-sans"
+                  className="h-[30px] rounded-[7px] bg-surface pl-8.5"
                 />
               </label>
               {p.views.map((v) => (
@@ -178,30 +180,39 @@ export function AtlasFriendsPanel(p: AtlasFriendsPanelProps) {
 }
 
 // The current user above the tabs (D22 MeCard): the first enabled store with
-// a self, with the status picker from the modal.
+// a self, with a chevron menu for the status (the lab has no separate Select).
 function MeCard({ views, labels, onSetStatus }: Pick<AtlasFriendsPanelProps, 'views' | 'labels' | 'onSetStatus'>) {
   const { t } = useTranslation('chat');
   const view = views.find((v) => v.enabled && v.self) ?? views.find((v) => v.self);
   if (!view?.self) return null;
+  const label = labels[view.plugin] ?? view.plugin;
   return (
     <div className="flex flex-none items-center gap-3 px-[18px] pb-3">
       <PanelAvatar name={view.self.name} url={view.self.avatarUrl} dot={tokenDot(view.self.state)} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold text-text">{view.self.name}</div>
-        <div className="truncate text-hint text-text-faint">{labels[view.plugin] ?? view.plugin}</div>
+        <div className="truncate text-hint text-text-faint">{label}</div>
       </div>
-      <Select value={view.self.state} disabled={!canSetStatus(view)} onValueChange={(v) => onSetStatus(view.plugin, v as SocialStatus)}>
-        <SelectTrigger aria-label={t('chat:modal.statusLabel', { label: labels[view.plugin] ?? view.plugin })} className="h-8 w-32 font-sans text-[13px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={t('chat:modal.statusLabel', { label })}
+            disabled={!canSetStatus(view)}
+            className="inline-flex h-8 flex-none items-center gap-1 rounded-lg px-2 text-[13px] text-text-muted transition hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-40"
+          >
+            <span className="max-w-24 truncate">{statusLabel(view.self.state)}</span>
+            <ChevronDown className="h-3.5 w-3.5 flex-none" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
           {SOCIAL_STATUSES.map((s) => (
-            <SelectItem key={s} value={s} className="font-sans text-[13px]">
-              {statusLabel(s)}
-            </SelectItem>
+            <DropdownMenuItem key={s} onSelect={() => onSetStatus(view.plugin, s)}>
+              <span>{statusLabel(s)}</span>
+            </DropdownMenuItem>
           ))}
-        </SelectContent>
-      </Select>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -214,10 +225,11 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
   const groups = useMemo(() => groupFriends(view.friends, query), [view.friends, query]);
   const total = groups.inGame.length + groups.online.length + groups.offline.length;
   const canReconnect = view.connection.state === 'replaced' || view.connection.state === 'loggedOut';
+  const logoUrl = useMemo(() => plugins.find((pl) => pl.id === view.plugin)?.icon_url ?? undefined, [plugins, view.plugin]);
   return (
     <section aria-label={t('chat:modal.section', { label })} className="flex flex-col gap-2.5">
       <header className="flex items-center justify-between gap-3">
-        <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-text-muted">{label}</h3>
+        <h3 className="text-[12px] font-bold text-text-faint">{label}</h3>
         <Button variant="ghost" size="sm" onClick={() => onSetEnabled(view.plugin, !view.enabled)}>
           {view.enabled ? t('chat:modal.turnOff') : t('chat:modal.turnOn')}
         </Button>
@@ -227,44 +239,48 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
         <p className="text-[12.5px] text-text-muted">{t('chat:modal.friendsOff', { label })}</p>
       ) : (
         <>
-          {line && (
-            <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-attention/[0.08] px-3 py-2 text-[12px] text-text-body ring-1 ring-attention/25">
-              <span>{line}</span>
-              {canReconnect && (
-                <Button variant="ghost" size="sm" onClick={() => onReconnect(view.plugin)}>
-                  {t('chat:modal.reconnect')}
-                </Button>
-              )}
-            </div>
-          )}
-          <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-muted">
-            <span>{t('chat:modal.showPlaying')}</span>
-            <Switch
-              aria-label={t('chat:modal.showPlayingLabel', { label })}
-              checked={view.showPlaying}
-              onCheckedChange={(show) => onSetPlaying(view.plugin, show)}
-            />
-          </label>
-          {chatAlerts && onSetChatAlerts && view.plugin in chatAlerts && (
-            <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-muted">
-              <span>{t('chat:modal.chatAlerts')}</span>
-              <Switch
-                aria-label={t('chat:modal.chatAlertsLabel', { label })}
-                checked={chatAlerts[view.plugin]}
-                onCheckedChange={(on) => onSetChatAlerts(view.plugin, on)}
-              />
-            </label>
-          )}
-
           {total === 0 && (
             <p className="text-[12.5px] text-text-muted">
               {view.friends.length === 0 ? t('chat:modal.noFriends', { label }) : t('chat:modal.noMatch', { query: query.trim() })}
             </p>
           )}
 
-          <FriendGroup title={t('chat:group.inGame')} friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
-          <FriendGroup title={t('chat:group.online')} friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
-          <FriendGroup title={t('chat:group.offline')} friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.playing')} friends={groups.inGame} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.online')} friends={groups.online} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+          <FriendGroup title={t('chat:group.offline')} friends={groups.offline} inLibrary={inLibrary} onOpenGame={onOpenGame} plugin={view.plugin} logoUrl={logoUrl} unreadOf={unreadOf} onOpenChat={onOpenChat} />
+
+          {/* Store state lives at the bottom (the lab's notices row): the
+              presence toggles stay reachable here instead of Settings. */}
+          <div className="flex flex-col gap-2.5 border-t border-hairline pt-2.5">
+            {line && (
+              <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-attention/[0.08] px-3 py-2 text-[12px] text-text-body ring-1 ring-attention/25">
+                <span>{line}</span>
+                {canReconnect && (
+                  <Button variant="ghost" size="sm" onClick={() => onReconnect(view.plugin)}>
+                    {t('chat:modal.reconnect')}
+                  </Button>
+                )}
+              </div>
+            )}
+            <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-muted">
+              <span>{t('chat:modal.showPlaying')}</span>
+              <Switch
+                aria-label={t('chat:modal.showPlayingLabel', { label })}
+                checked={view.showPlaying}
+                onCheckedChange={(show) => onSetPlaying(view.plugin, show)}
+              />
+            </label>
+            {chatAlerts && onSetChatAlerts && view.plugin in chatAlerts && (
+              <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-muted">
+                <span>{t('chat:modal.chatAlerts')}</span>
+                <Switch
+                  aria-label={t('chat:modal.chatAlertsLabel', { label })}
+                  checked={chatAlerts[view.plugin]}
+                  onCheckedChange={(on) => onSetChatAlerts(view.plugin, on)}
+                />
+              </label>
+            )}
+          </div>
         </>
       )}
     </section>
@@ -296,7 +312,7 @@ function ChatsTab(p: AtlasFriendsPanelProps) {
               <span className="truncate text-[13px] font-semibold text-text">{f.name}</span>
               <span className="truncate text-hint text-text-faint">{p.labels[view.plugin] ?? view.plugin}</span>
             </span>
-            <span aria-label={t('chat:row.unread', { count: unread })} className="rounded-full bg-danger px-1.5 font-mono text-hint font-bold tabular-nums text-on-accent">
+            <span aria-label={t('chat:row.unread', { count: unread })} className="rounded-full bg-danger px-1.5 text-hint font-bold tabular-nums text-on-accent">
               {unread}
             </span>
           </button>
@@ -306,12 +322,13 @@ function ChatsTab(p: AtlasFriendsPanelProps) {
   );
 }
 
-function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, onOpenChat }: {
+function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, logoUrl, unreadOf, onOpenChat }: {
   title: string;
   friends: SocialFriend[];
   inLibrary: (gameId: string) => boolean;
   onOpenGame: (gameId: string) => void;
   plugin: string;
+  logoUrl?: string;
   unreadOf?: (plugin: string, friendId: string) => number;
   onOpenChat?: (plugin: string, friend: SocialFriend) => void;
 }) {
@@ -320,15 +337,16 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
   if (friends.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
-      <h4 className="px-1 font-mono text-micro uppercase tracking-[0.16em] text-text-muted">
-        {title} · {friends.length}
+      <h4 className="flex items-center justify-between px-1 text-[12px] font-bold text-text-faint">
+        <span>{title}</span>
+        <span>{friends.length}</span>
       </h4>
       <ul className="flex flex-col">
         {friends.slice(0, shown).map((f) => (
           <li key={f.id} className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-surface">
-            <FriendRowMain friend={f} onOpenChat={onOpenChat && (() => onOpenChat(plugin, f))} />
+            <FriendRowMain friend={f} plugin={plugin} logoUrl={logoUrl} onOpenChat={onOpenChat && (() => onOpenChat(plugin, f))} />
             {unreadOf && unreadOf(plugin, f.id) > 0 && (
-              <span aria-label={t('chat:row.unread', { count: unreadOf(plugin, f.id) })} className="rounded-full bg-danger px-1.5 font-mono text-hint font-bold tabular-nums text-on-accent">
+              <span aria-label={t('chat:row.unread', { count: unreadOf(plugin, f.id) })} className="rounded-full bg-danger px-1.5 text-hint font-bold tabular-nums text-on-accent">
                 {unreadOf(plugin, f.id)}
               </span>
             )}
@@ -347,15 +365,20 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
   );
 }
 
-function FriendRowMain({ friend: f, onOpenChat }: { friend: SocialFriend; onOpenChat?: () => void }) {
+function FriendRowMain({ friend: f, plugin, logoUrl, onOpenChat }: { friend: SocialFriend; plugin: string; logoUrl?: string; onOpenChat?: () => void }) {
   const { t } = useTranslation('chat');
   const body = (
     <>
       <PanelAvatar name={f.name} url={f.avatarUrl} dot={tokenDot(f.state)} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-semibold text-text">{f.name}</div>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[13px] font-semibold text-text">{f.name}</span>
+          <PluginLogo src={logoUrl} name={plugin} size="glyph" />
+        </div>
         <div className="truncate text-hint text-text-muted">
-          {f.game ? t('chat:row.playing', { title: f.game.title }) : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? t('chat:row.lastSeen', { when: agoLabel(f.lastSeen) }) : t('chat:row.offline')) : friendStateLabel(f.state)}
+          {f.game ? (
+            <span className="text-accent">{t('chat:row.playing', { title: f.game.title })}</span>
+          ) : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? t('chat:row.lastSeen', { when: agoLabel(f.lastSeen) }) : t('chat:row.offline')) : friendStateLabel(f.state)}
         </div>
       </div>
     </>

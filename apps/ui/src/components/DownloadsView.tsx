@@ -1,9 +1,9 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useState } from 'react';
-import { Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
+import { Download, Pause, Play, RotateCcw, Trash2, X } from 'lucide-react';
 import type { Game, Job } from '../types';
-import { Cover, EmptyState, ListRow, MonoLabel, Section, ViewHeader, cx, relTime } from './ui';
+import { ATLAS_PAGE, Cover, EmptyState, ListRow, MonoLabel, Section, ViewHeader, cx, relTime } from './ui';
 import { Button } from './ds/button';
 import { formatBytes, heroImages } from '../lib/games';
 import { currentLocale } from '../lib/format';
@@ -224,11 +224,11 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
     if (finished.length === 0) setClearing(false);
   }, [finished.length]);
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.downloads')}</h1>
-          <p className="mt-1 text-[13px] text-text-muted">
+          <p className="mt-[3px] text-[13px] text-text-muted">
             {active.length > 0 ? t('downloads:atlas.queueSub', { count: active.length }) : t('downloads:header.subtitle')}
           </p>
         </div>
@@ -251,7 +251,7 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
         </div>
       </header>
       {jobs.length === 0 ? (
-        <EmptyState label={t('downloads:empty.label')}>{t('downloads:empty.detail')}</EmptyState>
+        <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
       ) : (
         <>
           {active.length > 0 && (

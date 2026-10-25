@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import React from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import type { ProtonVersion } from '../types';
-import { EmptyState, ListRow, Section, ViewHeader } from './ui';
+import { ATLAS_PAGE, EmptyState, ListRow, Section, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { useVariant } from '../lib/theme';
@@ -70,11 +70,11 @@ function AtlasRunners({ runners, onRefresh, scanning }: SystemViewProps) {
   const { t } = useTranslation(['nav', 'runners']);
   const fallback = runners.find((r) => r.is_default) ?? runners[0];
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.runners')}</h1>
-          <p className="mt-1 text-[13px] text-text-muted">{t('runners:atlas.sub')}</p>
+          <p className="mt-[3px] text-[13px] text-text-muted">{t('runners:atlas.sub')}</p>
         </div>
         <Button variant="neutral" onClick={onRefresh} disabled={scanning}>
           {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}

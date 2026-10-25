@@ -31,6 +31,7 @@
   },
   "group": {
     "inGame": "In game",
+    "playing": "Playing",
     "online": "Online",
     "offline": "Offline",
     "showMore": "Show {{count}} more"

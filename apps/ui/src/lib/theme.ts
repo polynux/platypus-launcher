@@ -46,7 +46,7 @@ export const TOKEN_VARS: Record<string, string[]> = {
   'hairline-strong': ['--color-hairline-strong'],
   popover: ['--popover', '--color-popover'],
   glass: ['--color-glass'],
-  text: ['--color-text', '--card-foreground', '--popover-foreground'],
+  text: ['--color-text', '--foreground', '--card-foreground', '--popover-foreground'],
   'text-body': ['--color-text-body'],
   'text-muted': ['--color-text-muted', '--muted-foreground'],
   'text-faint': ['--color-text-faint'],
@@ -267,6 +267,11 @@ export function applyTheme(theme: ThemeTokens): void {
     document.documentElement.dataset.scheme = effectiveScheme;
   } catch {
     // No DOM (a test without a document): the variables still apply.
+  }
+  try {
+    document.documentElement.dataset.labelStyle = currentVariants['label.style'];
+  } catch {
+    // No DOM: the variant hook still reads the cached value.
   }
   loadThemeFonts(theme.fonts);
   // The core sends every axis resolved; a cached theme from an older build

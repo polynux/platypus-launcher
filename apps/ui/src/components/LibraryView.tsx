@@ -160,7 +160,7 @@ function FilterGroup({ label, labelClass, children }: { label: string; labelClas
   );
 }
 
-function tierOptionLabel(t: T, v: TierFilter): string {
+export function tierOptionLabel(t: T, v: TierFilter): string {
   switch (v) {
     case 'all':
       return t('library:tierAll');
@@ -216,7 +216,7 @@ export function TierFilterControl({ value, onChange, triggerClassName = 'w-40 up
 export type StatusFilter = 'all' | 'none' | 'backlog' | 'playing' | 'finished' | 'abandoned';
 export const STATUS_FILTERS: StatusFilter[] = ['all', 'none', 'backlog', 'playing', 'finished', 'abandoned'];
 
-function statusOptionLabel(t: T, v: StatusFilter): string {
+export function statusOptionLabel(t: T, v: StatusFilter): string {
   switch (v) {
     case 'all':
       return t('library:statusFilter.all');

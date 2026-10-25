@@ -3,12 +3,12 @@ import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
 import { FolderInput, FolderOpen, Loader2, RefreshCw, ScanLine, Trash2 } from 'lucide-react';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
-import { Cover, EmptyState, MonoLabel, ViewHeader, relTime } from './ui';
+import { ATLAS_PAGE, Cover, EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { RemoveConfirmPanel, RemoveFirstRow, parentFolder, useRemoveCheck } from './MaintenanceTab';
 import { MoveDialog } from './MoveDialog';
-import { formatBytes, heroImages, isPluginGame, storeLabel } from '../lib/games';
+import { formatBytes, heroImages, isPluginGame, lastPlayedAgo, storeLabel } from '../lib/games';
 import { ThemeLayout } from '../lib/layout';
 import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
@@ -383,11 +383,11 @@ function Legend({ dot, label, value }: { dot: string; label: string; value: stri
 function AtlasStorage({ data }: { data: StorageData }) {
   const { t } = useTranslation(['nav', 'storage', 'common']);
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-5 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.storage')}</h1>
-          <p className="mt-1 text-[13px] text-text-muted">{t('storage:intro')}</p>
+          <p className="mt-[3px] text-[13px] text-text-muted">{t('storage:intro')}</p>
         </div>
         <Button variant="neutral" onClick={data.rescan} disabled={data.scanning}>
           {data.scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -477,7 +477,7 @@ function AtlasGameRows({ data }: { data: StorageData }) {
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-bold">{row.title}</div>
                   <div className="truncate text-[12px] text-text-faint">
-                    {game?.last_played_at ? t('storage:atlas.played', { ago: relTime(game.last_played_at) }) : t('storage:size.scanned')}
+                    {game?.last_played_at ? t('storage:atlas.played', { ago: lastPlayedAgo(game) ?? '' }) : t('storage:size.scanned')}
                   </div>
                 </div>
                 <span className="text-[13px] tabular-nums text-text-muted">{figure(row.size_bytes + row.prefix_bytes)}</span>

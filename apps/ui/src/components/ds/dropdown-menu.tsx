@@ -14,7 +14,7 @@ export function DropdownMenuContent({ className, sideOffset = 4, children, ...pr
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          'z-50 min-w-44 overflow-hidden rounded-xl bg-raised p-1.5 text-text ring-1 ring-hairline animate-modal-in motion-reduce:animate-none',
+          'z-50 min-w-44 overflow-hidden rounded-xl bg-raised p-1.5 text-text ring-1 ring-hairline animate-modal-in motion-reduce:animate-none plain:bg-popover plain:ring-hairline-strong plain:rounded-[10px] plain:min-w-[210px]',
           className,
         )}
         style={{ boxShadow: '0 20px 50px rgba(0,0,0,.55)' }}
@@ -31,7 +31,7 @@ export function DropdownMenuItem({ className, ...props }: React.ComponentProps<t
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
       className={cn(
-        'relative flex w-full cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-text-body outline-none select-none data-[highlighted]:bg-surface-strong data-[highlighted]:text-text data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
+        'relative flex w-full cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold text-text-body outline-none select-none data-[highlighted]:bg-surface-strong data-[highlighted]:text-text data-[disabled]:pointer-events-none data-[disabled]:opacity-40 plain:h-8 plain:text-[13.5px] plain:font-normal plain:text-text plain:gap-[9px]',
         className,
       )}
       {...props}

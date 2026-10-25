@@ -5,14 +5,14 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { ActivityEvent, Game, ProtonVersion, ThemeLayout as DashboardLayoutData, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
-import { Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx, relTime } from './ui';
+import { ATLAS_PAGE, Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
 import { GameTile } from './GameTile';
 import { Hero, heroChipClass } from './Hero';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { X, Play } from 'lucide-react';
-import { byRecent, coverImages, heroImages, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
+import { byRecent, coverImages, heroImages, lastPlayedAgo, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
 import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
@@ -428,10 +428,10 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
     );
   }
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{greeting}, polynux</h1>
-        <p className="mt-1 text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
+        <p className="mt-[3px] text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
       </header>
       {suggested && (
         <Hero site="dashboard" art={heroImages(suggested)} title={suggested.title}>
@@ -465,7 +465,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-bold">{g.title}</div>
                   <div className="truncate text-[12px] text-text-faint">
-                    {g.last_played_at ? `${relTime(g.last_played_at)} · ` : ''}{g.playtime_minutes ? formatHours(g.playtime_minutes) : ''}
+                    {g.last_played_at ? `${lastPlayedAgo(g) ?? ''} · ` : ''}{g.playtime_minutes ? formatHours(g.playtime_minutes) : ''}
                   </div>
                 </div>
                 <button

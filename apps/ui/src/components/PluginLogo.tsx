@@ -24,11 +24,15 @@ export function monogramFor(name: string): string {
   return t ? t.charAt(0).toUpperCase() : '?';
 }
 
-const BOX: Record<'xs' | 'md', string> = {
+const BOX: Record<'xs' | 'md' | 'store' | 'glyph', string> = {
   // Sidebar Sources rows (~16 px).
   xs: 'h-4 w-4 rounded text-[9px]',
   // Plugins view cards.
   md: 'h-10 w-10 rounded-xl text-[15px]',
+  // Library table Stores column (13 px glyphs).
+  store: 'h-[13px] w-[13px] rounded-[4px] text-[8px]',
+  // Friends panel rows (11 px glyphs).
+  glyph: 'h-[11px] w-[11px] rounded-[3px] text-[7px]',
 };
 
 /**
@@ -55,7 +59,7 @@ export function PluginLogo({ src, name, size = 'md' }: { src?: string | null; na
       loading="lazy"
       decoding="async"
       onError={() => setBroken(true)}
-      className={cx('flex-none object-contain', box)}
+      className={cx('flex-none object-contain light:invert light:opacity-80', box)}
     />
   );
 }

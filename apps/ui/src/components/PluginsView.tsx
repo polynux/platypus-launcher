@@ -7,7 +7,7 @@ import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin }
 import { LauncherApi, onAuth } from '../effect/runtime';
 import { openExternal } from '../lib/external';
 import { Modal } from './Modal';
-import { EmptyState, MonoLabel, Panel, ViewHeader, cx } from './ui';
+import { ATLAS_PAGE, EmptyState, MonoLabel, Panel, ViewHeader, cx } from './ui';
 import { Button } from './ds/button';
 import { Badge, type badgeVariants } from './ds/badge';
 import { Input } from './ds/input';
@@ -271,11 +271,11 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
     return t('plugins:auth.loggedOut');
   };
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
-          <p className="mt-1 text-[13px] text-text-muted">{t('plugins:header.subtitle')}</p>
+          <p className="mt-[3px] text-[13px] text-text-muted">{t('plugins:header.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="neutral" onClick={() => {

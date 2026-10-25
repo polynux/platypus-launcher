@@ -82,6 +82,16 @@
     "lastPlayed": "dernière session",
     "notInstalled": "non installé"
   },
+  "atlasTable": {
+    "title": "Titre",
+    "stores": "Boutiques",
+    "status": "État",
+    "played": "Joué",
+    "lastPlayed": "Dernière session",
+    "size": "Taille",
+    "runs": "Niveau",
+    "year": "Année"
+  },
   "recency": {
     "today": "aujourd'hui",
     "yesterday": "hier",
@@ -169,12 +179,16 @@
     "filterLentOnly": "Seulement prêtés",
     "filterAny": "Tous",
     "filterReset": "Réinitialiser les filtres",
+    "filterTiers": "Fonctionne sous Linux",
+    "filterStatuses": "Votre statut",
+    "filterFamily": "Famille",
+    "filterClear": "Effacer les filtres",
     "rowCollections": "Collections…"
   },
   "atlasViews": {
     "filterPlaceholder": "Filtrer la bibliothèque",
     "blocks": {
-      "continue": "Reprendre",
+      "continue": "Joués récemment",
       "recent": "Ajouts récents"
     },
     "chips": {
@@ -190,5 +204,5 @@
       "downloading": "Téléchargement, {{percent}} %"
     }
   },
-  "scannedFooter": "Analysée {{time}}"
+  "scannedFooter": "Bibliothèque analysée {{time}}"
 }

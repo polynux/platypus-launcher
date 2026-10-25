@@ -5,11 +5,12 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Cloud, Download, FolderPlus, Play, Search, Settings2, X } from 'lucide-react';
-import type { Collection, Game, Job, ProtonVersion, StoreType } from '../types';
-import { Cover, cx } from './ui';
-import { coverImages, formatBytes, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason, byRecent } from '../lib/games';
+import type { ActivityEvent, Collection, Game, Job, ProtonVersion, StoreType } from '../types';
+import { Cover, cx, relTime } from './ui';
+import { PluginLogo } from './PluginLogo';
+import { coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason, byRecent, storeLabel } from '../lib/games';
 import { formatCount } from '../lib/format';
-import { tierFilterValue } from '../lib/compat';
+import { TIER_LABEL, tierFilterValue } from '../lib/compat';
 import { collectionPredicate } from '../lib/collections';
 import { matchesExtraFilters, sortGames, type Sort, type SortKey, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
@@ -215,10 +216,16 @@ export function AtlasSortMenu({ sort, dir, onSort, onDir }: {
         type="button"
         aria-label={dir === 'asc' ? t('library:ascToDesc') : t('library:descToAsc')}
         title={dir === 'asc' ? t('library:ascending') : t('library:descending')}
+        aria-pressed={dir === 'desc'}
         onClick={() => onDir(dir === 'asc' ? 'desc' : 'asc')}
-        className="grid h-[32px] w-7 flex-none place-items-center rounded-r-lg bg-surface text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className={cx(
+          'grid h-[32px] w-7 flex-none place-items-center rounded-r-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+          dir === 'desc'
+            ? 'bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/40'
+            : 'bg-surface text-text-faint hover:text-text'
+        )}
       >
-        {dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
+        <ArrowUpDown className="h-3.5 w-3.5" aria-hidden />
       </button>
     </span>
   );
@@ -252,28 +259,45 @@ export function AtlasLibBar({ query, onQuery, sort, dir, onSort, onDir }: {
 }
 
 /** Continue playing / Recently added above the grid when no filter is active. */
-export function AtlasLibraryBlocks({ games, onOpen }: { games: Game[]; onOpen: (id: string) => void }) {
+export function AtlasLibraryBlocks({ games, activity = [], onOpen }: { games: Game[]; activity?: ActivityEvent[]; onOpen: (id: string) => void }) {
   const { t } = useTranslation('library');
   const continued = useMemo(
     () => games.filter((g) => g.is_installed && g.last_played_at).sort(byRecent).slice(0, 4),
     [games],
   );
-  const added = useMemo(() => games.filter((g) => g.store === 'custom').slice(0, 6), [games]);
+  // No added_at on Game: the newest install/add activity is the recency
+  // signal, custom games the fallback. Long term, core should stamp added_at.
+  const added = useMemo(() => {
+    const byId = new Map(games.map((g) => [g.id, g]));
+    const byTitle = new Map(games.map((g) => [g.title, g]));
+    const seen = new Set<string>();
+    const out: { game: Game; at: number }[] = [];
+    for (const e of [...activity].sort((a, b) => b.ts - a.ts)) {
+      if (e.type !== 'download' && e.type !== 'add') continue;
+      const g = (e.game != null && (byId.get(e.game) ?? byTitle.get(e.game))) || undefined;
+      if (!g || seen.has(g.id)) continue;
+      seen.add(g.id);
+      out.push({ game: g, at: e.ts });
+      if (out.length >= 4) break;
+    }
+    if (out.length > 0) return out;
+    return games.filter((g) => g.store === 'custom').slice(0, 4).map((game) => ({ game, at: 0 }));
+  }, [games, activity]);
   if (continued.length === 0 && added.length === 0) return null;
   return (
-    <div className="grid gap-5 md:grid-cols-2">
+    <div className="grid gap-5 md:grid-cols-2 mb-[26px]">
       {continued.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-[13px] font-bold uppercase tracking-[0.12em] text-text-muted">{t('library:atlasViews.blocks.continue')}</h2>
+          <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('library:atlasViews.blocks.continue')}</h2>
           <ul className="grid gap-1.5">
             {continued.map((g) => (
               <li key={g.id}>
                 <button
                   type="button"
                   onClick={() => onOpen(g.id)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  className="flex w-full items-center gap-2.5 rounded-[7px] p-1 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
-                  <Cover src={coverImages(g)} title="" className="h-8 w-14 flex-none rounded-md" />
+                  <Cover src={heroImages(g)} title="" className="h-[30px] w-16 flex-none rounded-[5px]" />
                   <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text">{g.title}</span>
                   <span className="flex-none text-[12px] tabular-nums text-text-faint">{lastPlayedAgo(g)}</span>
                 </button>
@@ -284,17 +308,18 @@ export function AtlasLibraryBlocks({ games, onOpen }: { games: Game[]; onOpen: (
       )}
       {added.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-[13px] font-bold uppercase tracking-[0.12em] text-text-muted">{t('library:atlasViews.blocks.recent')}</h2>
+          <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('library:atlasViews.blocks.recent')}</h2>
           <ul className="grid gap-1.5">
-            {added.map((g) => (
+            {added.map(({ game: g, at }) => (
               <li key={g.id}>
                 <button
                   type="button"
                   onClick={() => onOpen(g.id)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  className="flex w-full items-center gap-2.5 rounded-[7px] p-1 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
-                  <Cover src={coverImages(g)} title="" className="h-8 w-14 flex-none rounded-md" />
+                  <Cover src={heroImages(g)} title="" className="h-[30px] w-16 flex-none rounded-[5px]" />
                   <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text">{g.title}</span>
+                  {at > 0 && <span className="flex-none text-[12px] tabular-nums text-text-faint">{relTime(at)}</span>}
                 </button>
               </li>
             ))}
@@ -326,7 +351,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
   const hasActions = !!(onPlay || onInstall || onOpenSettings || onManageCollections);
   if (!hasActions) return null;
   return (
-    <span className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+    <span className="absolute bottom-12 left-2 right-2 flex items-center justify-end gap-1 rounded-[10px] bg-[rgba(10,12,16,.72)] p-1 opacity-0 backdrop-blur transition focus-within:opacity-100 group-hover:opacity-100 light:bg-white/85">
       {game.is_installed ? (
         onPlay && (
           <button
@@ -390,7 +415,7 @@ export function AtlasLibraryGrid({ games, jobs, onOpen, onPlay, onInstall, onOpe
 }) {
   const { t } = useTranslation('library');
   return (
-    <ul aria-label={t('library:table.label')} className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr))]">
+    <ul aria-label={t('library:table.label')} className="grid gap-x-4 gap-y-[22px] [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
       {games.map((g) => (
         <li key={g.id} className={cx(!g.is_installed && 'opacity-90')}>
           <div className="group relative">
@@ -399,15 +424,15 @@ export function AtlasLibraryGrid({ games, jobs, onOpen, onPlay, onInstall, onOpe
               data-game-row={g.id}
               onClick={() => onOpen(g.id)}
               aria-label={g.title}
-              className="block w-full overflow-hidden rounded-xl text-left ring-1 ring-hairline transition hover:ring-accent-strong/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              className="block w-full overflow-hidden rounded-[10px] text-left ring-1 ring-hairline transition hover:ring-accent-strong/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
               <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[3/4] w-full', !g.is_installed && 'brightness-[0.55] grayscale')} />
             </button>
             <AtlasQuickActions game={g} onPlay={onPlay} onInstall={onInstall} onOpenSettings={onOpenSettings} onManageCollections={onManageCollections} />
           </div>
-          <div className="mt-1.5 flex items-start gap-1.5 px-0.5">
+          <div className="mt-[7px] flex items-start gap-1.5 px-0.5">
             <div className="min-w-0 flex-1">
-              <p className={cx('truncate text-[13px] font-semibold', g.is_installed ? 'text-text' : 'text-text-faint')}>{g.title}</p>
+              <p className={cx('truncate text-[13px] font-[650]', g.is_installed ? 'text-text' : 'text-text-faint')}>{g.title}</p>
               <p className="truncate text-[12px] tabular-nums text-text-faint">{atlasSubLine(t, g)}</p>
             </div>
             <AtlasGameBadges game={g} job={jobs.get(g.id)} />
@@ -420,17 +445,18 @@ export function AtlasLibraryGrid({ games, jobs, onOpen, onPlay, onInstall, onOpe
 
 type AtlasTableSort = { key: SortKey; dir: 'asc' | 'desc' } | null;
 
-function AtlasTableHead({ label, sortKey, sort, onSort, right }: {
+function AtlasTableHead({ label, sortKey, sort, onSort, right, first }: {
   label: string;
   sortKey: SortKey | null;
   sort: AtlasTableSort;
   onSort: (k: SortKey) => void;
   right?: boolean;
+  first?: boolean;
 }) {
   const active = sortKey != null && sort?.key === sortKey;
-  if (!sortKey) return <th className={right ? 'text-right font-medium' : 'font-medium'}>{label}</th>;
+  if (!sortKey) return <th className={cx(right ? 'text-right' : undefined, first ? 'pl-0 pr-2 font-medium' : 'px-2 font-medium')}>{label}</th>;
   return (
-    <th aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'} className={right ? 'text-right' : undefined}>
+    <th aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'} className={cx(right ? 'text-right' : undefined, first ? 'pl-0 pr-2' : 'px-2')}>
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -443,8 +469,18 @@ function AtlasTableHead({ label, sortKey, sort, onSort, right }: {
   );
 }
 
+/** Tier text colours (lab `.tier-*`), from tokens only. */
+const TIER_TEXT: Record<string, string> = {
+  native: 'text-ok',
+  platinum: 'text-text',
+  gold: 'text-attention',
+  silver: 'text-text-muted',
+  bronze: 'text-attention',
+  borked: 'text-danger',
+};
+
 /** Atlas table with sortable columns (D22 `LibraryTable`) on real data. */
-export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections }: {
+export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections, sourceLogos }: {
   games: Game[];
   runners: ProtonVersion[];
   sort: AtlasTableSort;
@@ -455,31 +491,35 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, 
   onInstall?: (game: Game) => void;
   onOpenSettings?: (id: string) => void;
   onManageCollections?: (id: string) => void;
+  sourceLogos?: Record<string, string | undefined>;
 }) {
   const { t } = useTranslation(['library', 'game']);
   void runners;
   const rows = useMemo(() => sortGames(games, sort), [games, sort]);
+  // Sentence case for the app's lowercase status words.
+  const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   const statusLabel = (g: Game): string => {
     switch (g.status) {
-      case 'backlog': return t('library:statusFilter.backlog');
-      case 'playing': return t('library:statusFilter.playing');
-      case 'finished': return t('library:statusFilter.finished');
-      case 'abandoned': return t('library:statusFilter.abandoned');
-      default: return t('library:statusFilter.none');
+      case 'backlog': return cap(t('library:statusFilter.backlog'));
+      case 'playing': return cap(t('library:statusFilter.playing'));
+      case 'finished': return cap(t('library:statusFilter.finished'));
+      case 'abandoned': return cap(t('library:statusFilter.abandoned'));
+      default: return cap(t('library:statusFilter.none'));
     }
   };
   return (
-    <div className="overflow-x-auto rounded-xl ring-1 ring-hairline">
-      <table className="w-full min-w-[820px] border-collapse bg-raised text-[13px]">
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[820px] border-collapse text-[13px]">
         <thead>
-          <tr className="group border-b border-hairline text-left font-mono text-[11px] uppercase tracking-[0.12em] text-text-muted">
-            <AtlasTableHead label={t('library:table.title')} sortKey="title" sort={sort} onSort={onSort} />
-            <AtlasTableHead label={t('library:table.statusSr')} sortKey={null} sort={sort} onSort={onSort} />
-            <AtlasTableHead label={t('library:table.hours')} sortKey="hours" sort={sort} onSort={onSort} right />
-            <AtlasTableHead label={t('library:table.lastPlayed')} sortKey="last" sort={sort} onSort={onSort} right />
-            <AtlasTableHead label={t('library:table.size')} sortKey="size" sort={sort} onSort={onSort} right />
-            <AtlasTableHead label={t('library:table.tier')} sortKey="tier" sort={sort} onSort={onSort} />
-            <AtlasTableHead label={t('library:table.year')} sortKey="year" sort={sort} onSort={onSort} right />
+          <tr className="h-[30px] border-b border-hairline text-left text-[13.5px] font-medium text-text-faint">
+            <AtlasTableHead label={t('library:atlasTable.title')} sortKey="title" sort={sort} onSort={onSort} first />
+            <AtlasTableHead label={t('library:atlasTable.stores')} sortKey={null} sort={sort} onSort={onSort} />
+            <AtlasTableHead label={t('library:atlasTable.status')} sortKey={null} sort={sort} onSort={onSort} />
+            <AtlasTableHead label={t('library:atlasTable.played')} sortKey="hours" sort={sort} onSort={onSort} right />
+            <AtlasTableHead label={t('library:atlasTable.lastPlayed')} sortKey="last" sort={sort} onSort={onSort} right />
+            <AtlasTableHead label={t('library:atlasTable.size')} sortKey="size" sort={sort} onSort={onSort} right />
+            <AtlasTableHead label={t('library:atlasTable.runs')} sortKey="tier" sort={sort} onSort={onSort} />
+            <AtlasTableHead label={t('library:atlasTable.year')} sortKey="year" sort={sort} onSort={onSort} right />
             <th aria-label={t('library:table.statusSr')} />
           </tr>
         </thead>
@@ -487,11 +527,12 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, 
           {rows.map((g) => {
             const h = hoursPlayed(g);
             const tier = tierFilterValue(g);
+            const tierText = tier === 'none' ? '—' : tier === 'native' ? t('game:compat.native') : (TIER_LABEL[tier] ?? tier);
             return (
-              <tr key={g.id} className={cx('border-b border-hairline/60 last:border-0 transition hover:bg-surface/60', !g.is_installed && 'text-text-faint')}>
-                <td className="max-w-[280px] px-3 py-2">
+              <tr key={g.id} className={cx('group h-11 border-b border-hairline last:border-0 transition hover:bg-surface/60', !g.is_installed && 'text-text-faint')}>
+                <td className="max-w-[280px] py-2 pl-0 pr-3">
                   <span className="flex items-center gap-2.5">
-                    <Cover src={coverImages(g)} title="" className="h-7 w-[52px] flex-none rounded" />
+                    <Cover src={heroImages(g)} title="" className="h-[26px] w-14 flex-none rounded-[4px]" />
                     <button
                       type="button"
                       data-game-row={g.id}
@@ -502,11 +543,16 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, 
                     </button>
                   </span>
                 </td>
+                <td className="whitespace-nowrap px-2 py-2">
+                  <span className="flex items-center gap-1.5 text-text-muted">
+                    <PluginLogo src={sourceLogos?.[g.store]} name={storeLabel(g.store)} size="store" />
+                  </span>
+                </td>
                 <td className="whitespace-nowrap px-2 py-2 text-text-muted">{statusLabel(g)}</td>
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{h != null ? `${formatCount(Math.round(h * 10) / 10)} h` : '—'}</td>
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{lastPlayedAgo(g) ?? '—'}</td>
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.is_installed ? (g.size_bytes != null ? formatBytes(g.size_bytes) : '—') : t('library:table.notInstalled')}</td>
-                <td className="whitespace-nowrap px-2 py-2 text-text-muted">{tier ?? '—'}</td>
+                <td className={cx('whitespace-nowrap px-2 py-2', tier === 'none' ? 'text-text-faint' : TIER_TEXT[tier] ?? 'text-text-muted')}>{tierText}</td>
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.release_year ?? '—'}</td>
                 <td className="px-2 py-2">
                   <span className="flex items-center justify-end gap-1">
@@ -514,24 +560,24 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, 
                     <span className="relative hidden items-center gap-0.5 group-hover:inline-flex">
                       {g.is_installed ? (
                         onPlay && (
-                          <button type="button" aria-label={`${t('game:play.play')}: ${g.title}`} onClick={() => onPlay(g.id)} className="grid size-7 place-items-center rounded-md text-text-faint hover:text-text">
+                          <button type="button" aria-label={`${t('game:play.play')}: ${g.title}`} onClick={() => onPlay(g.id)} className="grid size-7 place-items-center rounded-[7px] bg-accent text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                             <Play className="h-3.5 w-3.5 fill-current" aria-hidden />
                           </button>
                         )
                       ) : (
                         g.installable && onInstall && (
-                          <button type="button" aria-label={`${t('game:install.install')}: ${g.title}`} onClick={() => onInstall(g)} className="grid size-7 place-items-center rounded-md text-text-faint hover:text-text">
+                          <button type="button" aria-label={`${t('game:install.install')}: ${g.title}`} onClick={() => onInstall(g)} className="grid size-7 place-items-center rounded-[7px] bg-accent text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                             <Download className="h-3.5 w-3.5" aria-hidden />
                           </button>
                         )
                       )}
                       {onOpenSettings && (
-                        <button type="button" aria-label={t('game:hero.gameSettings')} onClick={() => onOpenSettings(g.id)} className="grid size-7 place-items-center rounded-md text-text-faint hover:text-text">
+                        <button type="button" aria-label={t('game:hero.gameSettings')} onClick={() => onOpenSettings(g.id)} className="grid size-7 place-items-center rounded-[7px] text-text-faint transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                           <Settings2 className="h-3.5 w-3.5" aria-hidden />
                         </button>
                       )}
                       {onManageCollections && (
-                        <button type="button" aria-label={t('library:listDetail.rowCollections')} onClick={() => onManageCollections(g.id)} className="grid size-7 place-items-center rounded-md text-text-faint hover:text-text">
+                        <button type="button" aria-label={t('library:listDetail.rowCollections')} onClick={() => onManageCollections(g.id)} className="grid size-7 place-items-center rounded-[7px] text-text-faint transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                           <FolderPlus className="h-3.5 w-3.5" aria-hidden />
                         </button>
                       )}
@@ -551,7 +597,7 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, 
 export function AtlasSkeleton({ view }: { view: 'list' | 'grid' | 'table' }) {
   if (view === 'grid') {
     return (
-      <ul aria-busy="true" aria-label="Loading" className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(100%,180px),1fr))]">
+      <ul aria-busy="true" aria-label="Loading" className="grid gap-x-4 gap-y-[22px] [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
         {Array.from({ length: 8 }, (_, i) => (
           <li key={i} className="animate-pulse rounded-xl bg-surface ring-1 ring-hairline motion-reduce:animate-none">
             <span className="block aspect-[3/4] rounded-xl bg-surface-strong" />
@@ -614,6 +660,8 @@ export function AtlasLibraryPage(p: {
   onOpenPlugins: () => void;
   jobs: Job[];
   runners: ProtonVersion[];
+  activity?: ActivityEvent[];
+  sourceLogos?: Record<string, string | undefined>;
   view: AtlasPageView;
   onOpen: (id: string) => void;
   onPlay?: (id: string) => void;
@@ -690,7 +738,7 @@ export function AtlasLibraryPage(p: {
         </p>
       ) : (
         <>
-          {showBlocks && <AtlasLibraryBlocks games={p.games} onOpen={p.onOpen} />}
+          {showBlocks && <AtlasLibraryBlocks games={p.games} activity={p.activity} onOpen={p.onOpen} />}
           {p.view === 'grid' ? (
             <AtlasLibraryGrid
               games={filtered}
@@ -713,6 +761,7 @@ export function AtlasLibraryPage(p: {
               onInstall={p.onInstall}
               onOpenSettings={p.onOpenSettings}
               onManageCollections={p.onManageCollections}
+              sourceLogos={p.sourceLogos}
             />
           )}
         </>

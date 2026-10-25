@@ -23,6 +23,8 @@
     "sub_other": "{{count}} jeux ne démarrent pas ou attendent une décision.",
     "kindRated": "Note {{source}}",
     "kindFix": "Correctif communautaire",
-    "openGame": "Ouvrir le jeu"
+    "openGame": "Ouvrir le jeu",
+    "emptyTitle": "Tout fonctionne",
+    "emptyBody": "Les jeux qui ne s’installent pas, perdent leur runner ou attendent une mise à jour apparaissent ici."
   }
 }

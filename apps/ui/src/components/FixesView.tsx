@@ -1,8 +1,9 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
+import { Check } from 'lucide-react';
 import type { Game } from '../types';
-import { Cover, EmptyState, ListRow, Section, SegRow, TierBadge, TweakDot, ViewHeader } from './ui';
+import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, SegRow, TierBadge, TweakDot, ViewHeader } from './ui';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
 import { attentionReason, coverImages, needsAttention, storeLabel } from '../lib/games';
@@ -84,15 +85,15 @@ function AtlasAttention({ games, onOpenGame }: { games: Game[]; onOpenGame: (id:
   const { t } = useTranslation(['nav', 'fixes']);
   const issues = games.filter(needsAttention);
   return (
-    <div className="mx-auto grid w-full max-w-6xl content-start gap-6 px-7 py-7">
+    <div className={ATLAS_PAGE}>
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('fixes:atlas.title')}</h1>
-        <p className="mt-1 text-[13px] text-text-muted">
+        <p className="mt-[3px] text-[13px] text-text-muted">
           {issues.length > 0 ? t('fixes:atlas.sub', { count: issues.length }) : t('fixes:empty.clearTitle')}
         </p>
       </header>
       {issues.length === 0 ? (
-        <EmptyState label={t('fixes:empty.clearTitle')}>{t('fixes:empty.clearBody', { allLabel: t('fixes:filter.all') })}</EmptyState>
+        <EmptyState icon={Check} label={t('fixes:atlas.emptyTitle')}>{t('fixes:atlas.emptyBody')}</EmptyState>
       ) : (
         <ul className="grid gap-2.5">
           {issues.map((g) => {

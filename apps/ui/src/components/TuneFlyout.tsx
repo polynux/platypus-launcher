@@ -367,12 +367,12 @@ export function TuneFlyout({
           <small className="flex-none text-[12px] text-text-muted">{t('game:facts.steamRunner')}</small>
         ) : runnerField?.options?.length ? (
           <Select value={draft.runner_id || 'auto'} onValueChange={(v) => write({ ...draftRef.current, runner_id: v })}>
-            <SelectTrigger aria-label={t('tune:runner.label')} className="h-8 w-[180px] flex-none font-sans text-[13px]">
+            <SelectTrigger aria-label={t('tune:runner.label')} className="h-8 w-[180px] flex-none text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {runnerField.options.map((o) => (
-                <SelectItem key={o.id} value={o.id} className="font-sans text-[13px]">{o.label}</SelectItem>
+                <SelectItem key={o.id} value={o.id} className="text-[13px]">{o.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
