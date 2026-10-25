@@ -151,7 +151,7 @@ export function TuneFlyout({
     ref.current?.focus({ preventScroll: true });
   }, [open, game.id]);
 
-  // The flyout lives in a portal with fixed positioning, anchored to the
+  // The flyout uses fixed positioning (no portal), anchored to the
   // Tune button: inside the stage scroll container an absolute panel would
   // add to the stage's scroll height, a scrollbar would appear and the stage
   // would shift (a1 -> a2). Fixed positioning keeps the stage's scroll
@@ -166,7 +166,11 @@ export function TuneFlyout({
       const width = 380;
       const margin = 8;
       const vw = window.innerWidth || 1280;
-      const vh = window.innerHeight || 800;
+      // The bottom edge is the stage's, not the window's: the panel stops
+      // above the activity footer as in /21.
+      let scroller = anchor?.parentElement ?? null;
+      while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+      const vh = scroller?.getBoundingClientRect().bottom ?? (window.innerHeight || 800);
       // getBoundingClientRect is viewport-relative: fixed positioning uses
       // the same origin, so no scroll offset is added.
       let left = r?.left ?? margin;

@@ -1,5 +1,5 @@
 // i18n: converted
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { ArrowLeft, AlertTriangle, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
@@ -1176,7 +1176,7 @@ export function AboutSection({ game, details, loading, error, compatUrls, onOpen
   const wrapRef = useRef<HTMLDivElement>(null);
   const [overflows, setOverflows] = useState(false);
   useEffect(() => { setOverflows(false); }, [game.id, details]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hideDetails) return;
     const el = wrapRef.current;
     if (!el) return;
