@@ -48,6 +48,8 @@
     "addStore": "Ajouter une boutique",
     "friends": "Amis",
     "chat": "Discussion",
-    "shiftHint": "Maj-clic pour combiner les boutiques"
+    "shiftHint": "Maj-clic pour combiner les boutiques",
+    "stores": "Boutiques",
+    "redeem": "Utiliser un code…"
   }
 }

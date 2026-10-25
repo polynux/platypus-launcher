@@ -762,6 +762,9 @@ export function App() {
       renderStage={(g) => renderGamePage(g, view.name === 'game' && view.from ? view.from : 'library', true)}
       initialSelectedId={initialSelectedId}
       onStageChange={setStagedGameId}
+      onAddGame={() => setAddOpen(true)}
+      warnings={warnings}
+      onOpenPlugins={() => setView({ name: 'plugins' })}
       onResetFilters={() => {
         setOwnership('owned');
         setSelectedStores([]);
@@ -915,6 +918,11 @@ export function App() {
     }
   };
 
+  // Atlas parity (issue #132): the list and stage scroll inside themselves,
+  // so App's main clips only on the library/game views in list-detail mode;
+  // every other view scrolls like warm.
+  const listDetailActive = isListDetail && (view.name === 'library' || view.name === 'game');
+
   return (
     <TooltipProvider delayDuration={300}>
     <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', (shellNavigation === 'topbar' || shellNavigation === 'sourcebar') && 'flex-col')}>
@@ -965,7 +973,7 @@ export function App() {
         </Modal>
       )}
 
-      <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', isListDetail ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+      <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
         {migration && (
           <div className="px-7 pt-7">
             <MigrationBanner
@@ -982,6 +990,7 @@ export function App() {
           sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
           jobs={activeJobs}
           sessionStartedAt={{ ...sessionStart.current }}
+          onStop={(id) => stop(id, false)}
         />
       )}
 
@@ -1002,6 +1011,9 @@ export function App() {
         onStop={(id) => stop(id, false)}
         onInstall={(game) => runJob('install', game)}
         onOpenGameSettings={openGameSettings}
+        onRedeem={redeemStores.length > 0 ? () => setRedeemOpen(true) : undefined}
+        onManageCollections={() => setCollectionsDialog({})}
+        onAddGame={() => setAddOpen(true)}
       />
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />

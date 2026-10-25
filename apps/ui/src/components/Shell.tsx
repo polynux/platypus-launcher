@@ -7,8 +7,8 @@
 // a 44px top bar, a 48px source bar and a 28px activity footer.
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownToLine, ChevronDown, CircleAlert, HardDrive, LibraryBig, Plus, Search, Settings, Square, Ticket } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ds/dropdown-menu';
+import { ArrowDownToLine, ChevronDown, CircleAlert, HardDrive, Layers, LibraryBig, Plus, Search, Settings, ShoppingBag, Square, Ticket } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -383,6 +383,7 @@ function SourcebarChrome(p: ShellProps) {
         <div className="flex items-center justify-end gap-2">
           {/* Game colour switch (#123): hidden unless the theme supports "whole". */}
           {p.gameTone && <GameToneSwitch tone={p.gameTone} />}
+          <StoresMenu p={p} />
           <PlacesMenu p={p} active={active} />
         </div>
       </header>
@@ -458,14 +459,120 @@ function SourcebarChrome(p: ShellProps) {
             {t('nav:sourcebar.addStore')}
           </button>
         </div>
+        <CollectionsMenu p={p} />
       </nav>
     </div>
+  );
+}
+
+// Atlas parity (issue #132): the storefront plugins and redeem live in the
+// top bar between the game-tone switch and the places menu, like the
+// sidebar's Store section and redeem entry. Hidden when there is nothing.
+function StoresMenu({ p }: { p: ShellProps }) {
+  const { t } = useTranslation(['nav']);
+  const [open, setOpen] = useState(false);
+  const stores = p.stores ?? [];
+  if (stores.length === 0 && !p.canRedeem) return null;
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={t('nav:sourcebar.stores')}
+          className="grid size-7 place-items-center rounded-lg text-text-muted transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <ShoppingBag className="h-4 w-4" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="bottom" align="end">
+        {stores.map((s) => (
+          <DropdownMenuItem key={s.id} asChild onSelect={() => p.onOpenStore?.(s.id)}>
+            <button aria-current={p.activeStore === s.id ? 'page' : undefined} className={cx('w-full', p.activeStore === s.id && 'text-accent-strong')}>
+              <PluginLogo src={s.icon_url} name={s.name} size="xs" />
+              <span>{s.name}</span>
+            </button>
+          </DropdownMenuItem>
+        ))}
+        {stores.length > 0 && p.canRedeem && <DropdownMenuSeparator />}
+        {p.canRedeem && (
+          <DropdownMenuItem asChild onSelect={() => p.onRedeem?.()}>
+            <button>
+              <Ticket className="h-3.5 w-3.5" aria-hidden />
+              <span>{t('nav:sourcebar.redeem')}</span>
+            </button>
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// Atlas parity (issue #132): collections pinned at the right edge of the
+// source bar, outside the scrolling store strip, in the same 34px tab style
+// with the accent underline when a collection is active.
+function CollectionsMenu({ p }: { p: ShellProps }) {
+  const { t } = useTranslation(['nav', 'collections']);
+  const [open, setOpen] = useState(false);
+  if (!p.onManageCollections && (p.collections ?? []).length === 0) return null;
+  const activeId = p.view.name === 'library' ? p.view.collection : undefined;
+  const active = (p.collections ?? []).find((c) => c.id === activeId);
+  const label = active ? (active.builtin ? t(`collections:builtin.${active.id}`) : active.name) : t('collections:title');
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-pressed={active != null}
+          className={cx(
+            'relative inline-flex h-[34px] flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+            active ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text'
+          )}
+        >
+          <Layers className="h-[15px] w-[15px]" aria-hidden />
+          <span className="max-w-40 truncate">{label}</span>
+          {active && <span aria-hidden className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-accent" />}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="bottom" align="end">
+        <DropdownMenuItem asChild onSelect={() => p.onOpenCollection?.(undefined)}>
+          <button>
+            <span>{t('collections:allGames')}</span>
+          </button>
+        </DropdownMenuItem>
+        {(p.collections ?? []).map((c) => {
+          const on = c.id === activeId;
+          return (
+            <DropdownMenuItem key={c.id} asChild onSelect={() => p.onOpenCollection?.(c.id)}>
+              <button aria-current={on ? 'page' : undefined} className={cx('w-full', on && 'text-accent-strong')}>
+                <span className="min-w-0 flex-1 truncate text-left">{c.builtin ? t(`collections:builtin.${c.id}`) : c.name}</span>
+                <span className="font-medium tabular-nums text-[12px] text-text-faint">{p.collectionCounts?.[c.id] ?? 0}</span>
+              </button>
+            </DropdownMenuItem>
+          );
+        })}
+        {p.onManageCollections && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.()}>
+              <button>
+                <span>{t('collections:manage')}</span>
+              </button>
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) {
   const { t } = useTranslation(['nav', 'chat']);
   const [open, setOpen] = useState(false);
+  // Atlas parity (issue #132): the Friends entry carries the unread count and
+  // the trigger shows a dot while there are unread messages; the duplicate
+  // Chat entry opened the same modal, so it is gone. The auth dot mirrors the
+  // sidebar/tools attention when a plugin needs approval or login.
+  const friendsLabel = p.friendsUnread > 0 ? `${t('nav:sourcebar.friends')} (${p.friendsUnread})` : t('nav:sourcebar.friends');
   const items: { key: string; label: string; onSelect: () => void; current?: boolean }[] = [
     { key: 'dashboard', label: t('nav:dashboard'), onSelect: () => p.onNavigate({ name: 'dashboard' }), current: active === 'dashboard' },
     { key: 'storage', label: t('nav:storage'), onSelect: () => p.onNavigate({ name: 'storage' }), current: active === 'storage' },
@@ -478,8 +585,7 @@ function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) 
     },
     { key: 'activity', label: t('nav:activity'), onSelect: () => p.onNavigate({ name: 'activity' }), current: active === 'activity' },
     { key: 'runners', label: t('nav:runners'), onSelect: () => p.onNavigate({ name: 'runners' }), current: active === 'runners' },
-    { key: 'friends', label: t('nav:sourcebar.friends'), onSelect: () => p.onOpenFriends() },
-    { key: 'chat', label: t('nav:sourcebar.chat'), onSelect: () => p.onOpenFriends() },
+    { key: 'friends', label: friendsLabel, onSelect: () => p.onOpenFriends() },
   ];
   return (
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
@@ -487,9 +593,12 @@ function PlacesMenu({ p, active }: { p: ShellProps; active: NavKey | 'store' }) 
         <button
           type="button"
           aria-label={t('nav:sourcebar.places')}
-          className="grid size-7 place-items-center rounded-lg text-text-muted transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="relative grid size-7 place-items-center rounded-lg text-text-muted transition hover:bg-surface-strong hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <Settings className="h-4 w-4" aria-hidden />
+          {((p.friendsUnread ?? 0) > 0 || p.authNeeded) && (
+            <span aria-label={t('nav:needsAttention')} className="absolute right-1 top-1 size-1.5 rounded-full bg-accent-strong" />
+          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="end">
@@ -523,7 +632,9 @@ function formatElapsed(ms: number): string {
 
 // The activity footer (28px, D21 `.tele`): the running game with its elapsed
 // time, plus one item per job with its percentage and a 2px progress line.
-export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionStartedAt'>) {
+// Atlas parity (issue #132): each session carries the same Stop action as the
+// sidebar rows, so a running game can be stopped without leaving Atlas.
+export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionStartedAt'> & { onStop?: (gameId: string) => void }) {
   const { t } = useTranslation('nav');
   const now = useNow();
   const sessions = p.sessions ?? [];
@@ -535,11 +646,22 @@ export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionS
     <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch overflow-hidden whitespace-nowrap border-t border-hairline bg-ground text-[12px] text-text-faint">
       {sessions.map((e) => {
         const started = p.sessionStartedAt?.[e.game_id];
+        const title = (e as SessionEvent & { title: string }).title;
         return (
           <span key={e.game_id} className="relative inline-flex items-center gap-2 border-r border-hairline px-3.5">
             <span aria-hidden className="size-[7px] rounded-full bg-ok" />
-            <span className="font-semibold text-text">{(e as SessionEvent & { title: string }).title}</span>
+            <span className="font-semibold text-text">{title}</span>
             {started != null && <b className="font-medium tabular-nums text-text">{formatElapsed(now - started)}</b>}
+            {p.onStop && e.state !== 'stopping' && (
+              <button
+                type="button"
+                onClick={() => p.onStop?.(e.game_id)}
+                aria-label={t('nav:stopGame', { title })}
+                className="grid size-5 place-items-center rounded text-text-faint transition hover:bg-surface-strong hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <Square className="h-2.5 w-2.5 fill-current" aria-hidden />
+              </button>
+            )}
           </span>
         );
       })}

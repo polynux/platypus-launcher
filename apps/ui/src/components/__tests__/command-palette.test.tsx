@@ -184,3 +184,30 @@ describe('command palette', () => {
     void calls;
   });
 });
+
+describe('atlas parity actions (issue #132)', () => {
+  it('offers redeem, collections and add-game actions when provided', async () => {
+    const redeem = vi.fn();
+    const manage = vi.fn();
+    const add = vi.fn();
+    setup({ onRedeem: redeem, onManageCollections: manage, onAddGame: add });
+    openWithCtrlK();
+    await screen.findByRole('dialog');
+    expect(screen.getByRole('option', { name: 'Redeem a code' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Manage collections' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Add a game' })).toBeInTheDocument();
+    fireEvent.change(input(), { target: { value: 'redeem' } });
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(redeem).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('hides the atlas actions without their providers', async () => {
+    setup();
+    openWithCtrlK();
+    await screen.findByRole('dialog');
+    expect(screen.queryByRole('option', { name: 'Redeem a code' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Manage collections' })).toBeNull();
+    expect(screen.queryByRole('option', { name: 'Add a game' })).toBeNull();
+  });
+});

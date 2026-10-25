@@ -2,7 +2,7 @@
 // Library list-detail selection and keys (issue #126).
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { cleanup, render as rtlRender, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as rtlRender, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LibraryListDetail } from '../LibraryListDetail';
 import { TooltipProvider } from '../ds/tooltip';
@@ -122,5 +122,39 @@ describe('library list-detail', () => {
     list({ initialSelectedId: 'gamma' });
     expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
     expect(screen.getByRole('button', { name: /Gamma/ }).getAttribute('aria-current')).toBe('true');
+  });
+});
+
+describe('atlas parity (issue #132)', () => {
+  it('adds a game from the list header', async () => {
+    const user = userEvent.setup();
+    const onAddGame = vi.fn();
+    list({ onAddGame });
+    await user.click(screen.getByRole('button', { name: 'Add a game' }));
+    expect(onAddGame).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters by tier with a count badge and resets with Show all games', async () => {
+    const user = userEvent.setup();
+    list();
+    expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+    // None of the fixture games has a tier, so platinum empties the list.
+    await user.click(screen.getByRole('button', { name: 'Library filters' }));
+    fireEvent.pointerDown(screen.getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    fireEvent.click(screen.getByRole('option', { name: 'Platinum' }));
+    expect(screen.getByText('Nothing here.')).toBeInTheDocument();
+    // The filter button carries the active-filter count as a badge.
+    expect(screen.getByRole('button', { name: 'Library filters' }).textContent).toMatch('1');
+    await user.click(screen.getByRole('button', { name: 'Show all games' }));
+    expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+  });
+
+  it('shows source warnings with a link to Plugins', async () => {
+    const user = userEvent.setup();
+    const onOpenPlugins = vi.fn();
+    list({ warnings: [{ source: 'steam', needs_auth: true, message: 'logged out' }], onOpenPlugins });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Plugins' }));
+    expect(onOpenPlugins).toHaveBeenCalledTimes(1);
   });
 });

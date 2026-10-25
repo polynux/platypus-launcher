@@ -48,6 +48,8 @@
     "addStore": "Add store",
     "friends": "Friends",
     "chat": "Chat",
-    "shiftHint": "Shift-click to combine stores"
+    "shiftHint": "Shift-click to combine stores",
+    "stores": "Stores",
+    "redeem": "Redeem a code…"
   }
 }

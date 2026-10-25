@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
 import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, EyeOff, Loader2, Lock, Play, RefreshCw, SlidersHorizontal, Square, Trophy } from 'lucide-react';
-import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Game, GameDetails, GameJobKind, GameSettings, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
+import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Game, GameDetails, GameJobKind, GameSettings, GameStatus, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -101,6 +101,16 @@ export interface GameTabsData {
   onTuneSaved?: (settings: GameSettings) => void;
   /** The list-detail stage shows no back link (it would go nowhere). */
   hideBack?: boolean;
+  /** Atlas parity (issue #132): the game's collections for the side section. */
+  collections?: Collection[];
+  /** Opens the collections dialog for this game. */
+  onManageCollections?: (gameId: string) => void;
+  /** Saves the user status through the page (the core call lives there). */
+  onSaveStatus?: (id: string, status: GameStatus) => Promise<{ status: GameStatus }>; // i18n:allow: Promise return type, not user-facing text
+  /** Saves the user notes through the page (the core call lives there). */
+  onSaveNotes?: (id: string, text: string) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  /** The status or notes changed: the library should reload to carry it. */
+  onStatusChanged?: () => void;
 }
 
 /** Ticks once a second while mounted, so the strip elapsed time stays live. */
@@ -722,6 +732,112 @@ function DetailsSide({ d }: { d: GameTabsData }) {
   );
 }
 
+// Atlas parity (issue #132): the game's collections as small chips with a
+// Manage entry, in the /21 side-section language (13px muted heading).
+function AtlasCollections({ d }: { d: GameTabsData }) {
+  const { t } = useTranslation('collections');
+  if (!d.onManageCollections && (d.collections ?? []).length === 0) return null;
+  const mine = (d.collections ?? []).filter((c) => !c.smart && c.games?.includes(d.game.id));
+  return (
+    <section aria-label={t('collections:gameHeading')}>
+      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('collections:gameHeading')}</h2>
+      {mine.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {mine.map((c) => (
+            <li key={c.id} className="rounded-lg bg-surface-strong px-2 py-1 text-[12.5px] font-medium text-text">
+              {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12.5px] text-text-faint">{t('collections:notInCollections')}</p>
+      )}
+      {d.onManageCollections && (
+        <button
+          type="button"
+          onClick={() => d.onManageCollections?.(d.game.id)}
+          className="mt-2 text-[12.5px] font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {t('collections:addToCollection')}
+        </button>
+      )}
+    </section>
+  );
+}
+
+// Atlas parity (issue #132): the classic Status & notes section has no other
+// Atlas surface, so the store tab carries a small version: a status select
+// that saves at once and notes that save on blur.
+function AtlasStatusNotes({ d }: { d: GameTabsData }) {
+  const { t } = useTranslation('game');
+  const [status, setStatus] = useState(d.game.status ?? '');
+  const [notes, setNotes] = useState(d.game.user_notes ?? '');
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  useEffect(() => {
+    setStatus(d.game.status ?? '');
+    setNotes(d.game.user_notes ?? '');
+    setState('idle');
+  }, [d.game.id]);
+  if (!d.onSaveStatus && !d.onSaveNotes) return null;
+  const saveStatus = (next: GameStatus) => {
+    setStatus(next);
+    if (!d.onSaveStatus) return;
+    d.onSaveStatus(d.game.id, next).then(
+      (info) => { setStatus(info.status); d.onStatusChanged?.(); },
+      () => { setStatus(d.game.status ?? ''); },
+    );
+  };
+  const saveNotes = () => {
+    const text = notes;
+    if (text === (d.game.user_notes ?? '') || !d.onSaveNotes) return;
+    setState('saving');
+    d.onSaveNotes(d.game.id, text).then(
+      () => { setState('saved'); d.onStatusChanged?.(); },
+      () => { setState('failed'); },
+    );
+  };
+  return (
+    <section aria-label={t('game:status.heading')}>
+      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:status.heading')}</h2>
+      <div className="grid gap-2">
+        {d.onSaveStatus && (
+          <Select value={status || 'none'} onValueChange={(v) => saveStatus((v === 'none' ? '' : v) as GameStatus)}>
+            <SelectTrigger aria-label={t('game:status.aria')} className="h-8 w-full font-sans text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(['none', 'backlog', 'playing', 'finished', 'abandoned'] as const).map((v) => (
+                <SelectItem key={v} value={v} className="font-sans text-[13px]">
+                  {t(`game:status.${v}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {d.onSaveNotes && (
+          <div className="grid gap-1">
+            <label htmlFor={`atlas-notes-${d.game.id}`} className="text-[12px] text-text-muted">{t('game:status.notesLabel')}</label>
+            <textarea
+              id={`atlas-notes-${d.game.id}`}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={saveNotes}
+              placeholder={t('game:status.notesPlaceholder')}
+              rows={2}
+              className="min-h-16 w-full resize-y rounded-[7px] bg-surface px-2.5 py-2 text-[13px] text-text outline-none ring-1 ring-hairline placeholder:text-text-faint focus:ring-2 focus:ring-focus"
+            />
+            {state !== 'idle' && (
+              <span role="status" className="text-[12px] text-text-faint">
+                {state === 'saving' ? t('game:status.saving') : state === 'saved' ? t('game:status.saved') : t('game:status.failed')}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* Flat tables like `.tbl` in the design lab's kit.css: header cells 30px,
  * weight 500, faint, with a hairline bottom border; rows 36px with hairline
  * borders; the first column padded 24px; numbers right-aligned in mono
@@ -1222,6 +1338,8 @@ export function GameTabsView(d: GameTabsData) {
               <YouGrid d={d} />
               {hasAch && <AchSummary d={d} onOpen={() => setTab('achievements')} />}
               <DetailsSide d={d} />
+              <AtlasCollections d={d} />
+              <AtlasStatusNotes d={d} />
             </aside>
           </div>
         )}

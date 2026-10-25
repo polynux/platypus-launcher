@@ -155,6 +155,10 @@
     "showAll": "Afficher tous les jeux",
     "notInstalled": "Non installé",
     "neverPlayed": "Jamais joué",
-    "needsAttention": "Nécessite votre attention"
+    "needsAttention": "Nécessite votre attention",
+    "addGame": "Ajouter un jeu",
+    "filtersAria": "Filtres de la bibliothèque",
+    "warnings_one": "Une source nécessite votre attention",
+    "warnings_other": "{count} sources nécessitent votre attention"
   }
 }

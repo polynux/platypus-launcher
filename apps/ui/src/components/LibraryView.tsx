@@ -182,7 +182,7 @@ function tierOptionLabel(t: T, v: TierFilter): string {
 }
 
 /** Filters the library by compatibility: native builds, a ProtonDB tier, or none. */
-function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (v: TierFilter) => void }) {
+export function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (v: TierFilter) => void }) {
   const { t } = useTranslation('library');
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TierFilter)}>
@@ -202,8 +202,8 @@ function TierFilterControl({ value, onChange }: { value: TierFilter; onChange: (
 
 /** The status the user gave a game (issue #51): 'all' and 'none' are filter
  *  values only; the rest are the game statuses. */
-type StatusFilter = 'all' | 'none' | 'backlog' | 'playing' | 'finished' | 'abandoned';
-const STATUS_FILTERS: StatusFilter[] = ['all', 'none', 'backlog', 'playing', 'finished', 'abandoned'];
+export type StatusFilter = 'all' | 'none' | 'backlog' | 'playing' | 'finished' | 'abandoned';
+export const STATUS_FILTERS: StatusFilter[] = ['all', 'none', 'backlog', 'playing', 'finished', 'abandoned'];
 
 function statusOptionLabel(t: T, v: StatusFilter): string {
   switch (v) {
@@ -224,7 +224,7 @@ function statusOptionLabel(t: T, v: StatusFilter): string {
 
 /** Filters the library by the user's own status (issue #51): all games, only
  *  the ones without one, or only one status. */
-function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChange: (v: StatusFilter) => void }) {
+export function StatusFilterControl({ value, onChange }: { value: StatusFilter; onChange: (v: StatusFilter) => void }) {
   const { t } = useTranslation('library');
   return (
     <Select value={value} onValueChange={(v) => onChange(v as StatusFilter)}>
@@ -248,6 +248,14 @@ function displayStore(t: T, s: string): string {
 }
 
 /** The compact recency word for a game ("today", "5d ago"), through the library catalog. */
+export function matchesExtraFilters(g: Game, tier: TierFilter, status: StatusFilter, lending: 'all' | 'with-me'): boolean {
+  return (
+    (tier === 'all' || tierFilterValue(g) === tier) &&
+    (status === 'all' || (status === 'none' ? !g.status : g.status === status)) &&
+    (lending === 'all' || g.shared_by != null)
+  );
+}
+
 function recencyWord(t: T, g: Game): string | undefined {
   const r = recencyOf(g.last_played_at);
   return r ? renderRecency(t, 'library:recency', r) : undefined;

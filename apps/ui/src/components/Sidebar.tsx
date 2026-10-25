@@ -53,7 +53,7 @@ interface SidebarProps {
   collections?: Collection[];
   /** Library games per collection id, for the counts. */
   collectionCounts?: Record<string, number>;
-  onOpenCollection?: (id: string) => void;
+  onOpenCollection?: (id: string | undefined) => void;
   onManageCollections?: () => void;
 }
 

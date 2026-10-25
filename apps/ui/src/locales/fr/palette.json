@@ -12,7 +12,10 @@
     "play": "Jouer à {{title}}",
     "stop": "Arrêter {{title}}",
     "install": "Installer {{title}}",
-    "gameSettings": "Ouvrir les paramètres du jeu"
+    "gameSettings": "Ouvrir les paramètres du jeu",
+    "redeem": "Utiliser un code",
+    "manageCollections": "Gérer les collections",
+    "addGame": "Ajouter un jeu"
   },
   "hint": {
     "move": "se déplacer",

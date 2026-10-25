@@ -5,14 +5,16 @@
 // slate render as before.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CircleAlert, Search } from 'lucide-react';
-import type { Collection, Game, StoreType } from '../types';
+import { CircleAlert, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import type { Collection, Game, SourceWarning, StoreType } from '../types';
 import { Input } from './ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { cx } from './ui';
 import { byRecent, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason } from '../lib/games';
 import { sortKey } from '../lib/customize';
 import { collectionPredicate } from '../lib/collections';
+import { TierFilterControl, StatusFilterControl, matchesExtraFilters, type StatusFilter } from './LibraryView';
+import type { TierFilter } from '../lib/compat';
 
 type ListSort = 'recent' | 'title' | 'hours';
 
@@ -34,6 +36,12 @@ interface ListDetailProps {
   onStageChange?: (id: string | null) => void;
   /** "Show all games" resets the source-bar filters too. */
   onResetFilters?: () => void;
+  /** Atlas parity (issue #132): the list header adds a game like the library mode switch does. */
+  onAddGame?: () => void;
+  /** Source warnings (issue #132): the classic LibraryWarnings content as a compact one-line notice. */
+  warnings?: SourceWarning[];
+  /** Opens the Plugins view for a warning's login/plugins action. */
+  onOpenPlugins?: () => void;
 }
 
 function sortList(games: Game[], sort: ListSort): Game[] {
@@ -57,6 +65,16 @@ export function LibraryListDetail(p: ListDetailProps) {
   const { t } = useTranslation('library');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<ListSort>('recent');
+  // Atlas parity (issue #132): the classic tier/status/lending filters, reused
+  // from LibraryView (no duplicated predicates).
+  const [tier, setTier] = useState<TierFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [lending, setLending] = useState<'all' | 'with-me'>('all');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const hasBorrowed = p.games.some((g) => g.shared_by != null);
+  const lendingFilter = hasBorrowed ? lending : 'all';
+  const extraCount = [tier !== 'all', statusFilter !== 'all', lendingFilter !== 'all'].filter(Boolean).length;
+  const resetExtra = () => { setTier('all'); setStatusFilter('all'); setLending('all'); };
   const [selectedId, setSelectedId] = useState<string | null>(p.initialSelectedId ?? null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -80,10 +98,11 @@ export function LibraryListDetail(p: ListDetailProps) {
         (p.ownership === 'owned' || g.is_installed) &&
         (multi !== undefined ? multi.length === 0 || multi.includes(g.store) : p.source === 'all' || g.store === p.source) &&
         (!inCollection || inCollection(g)) &&
+        matchesExtraFilters(g, tier, statusFilter, lendingFilter) &&
         (q === '' || g.title.toLowerCase().includes(q)),
     );
     return sortList(list, sort);
-  }, [p.games, p.ownership, p.source, p.storeSelection, inCollection, query, sort]);
+  }, [p.games, p.ownership, p.source, p.storeSelection, inCollection, query, sort, tier, statusFilter, lendingFilter]);
 
   // The selection is kept across filter changes when possible.
   useEffect(() => {
@@ -157,13 +176,69 @@ export function LibraryListDetail(p: ListDetailProps) {
               <SelectItem value="hours" className="font-sans text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
             </SelectContent>
           </Select>
+          <button
+            type="button"
+            aria-expanded={filtersOpen}
+            aria-label={t('library:listDetail.filtersAria')}
+            onClick={() => setFiltersOpen((v) => !v)}
+            className={cx(
+              'relative grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              filtersOpen || extraCount > 0 ? 'bg-surface-strong text-text' : 'bg-surface text-text-faint hover:text-text-muted'
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+            {extraCount > 0 && (
+              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-mono text-[10px] font-bold tabular-nums text-on-accent">{extraCount}</span>
+            )}
+          </button>
+          {p.onAddGame && (
+            <button
+              type="button"
+              aria-label={t('library:listDetail.addGame')}
+              title={t('library:listDetail.addGame')}
+              onClick={() => p.onAddGame?.()}
+              className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] bg-surface text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          )}
         </div>
+        {filtersOpen && (
+          <div className="mx-2.5 mb-2 grid gap-2 rounded-[7px] bg-surface p-2.5 ring-1 ring-hairline">
+            <TierFilterControl value={tier} onChange={setTier} />
+            <StatusFilterControl value={statusFilter} onChange={setStatusFilter} />
+            {hasBorrowed && (
+              <Select value={lendingFilter} onValueChange={(v) => setLending(v as 'all' | 'with-me')}>
+                <SelectTrigger aria-label={t('library:family')} className="font-sans text-[13px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="font-sans text-[13px]">{t('library:all')}</SelectItem>
+                  <SelectItem value="with-me" className="font-sans text-[13px]">{t('library:sharedWithMe')}</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
+        {(p.warnings ?? []).length > 0 && (
+          <div role="status" className="mx-2.5 mb-2 flex items-center gap-2 rounded-[7px] bg-danger/[0.08] px-2.5 py-2 text-[12px] ring-1 ring-danger/25">
+            <CircleAlert className="h-3.5 w-3.5 flex-none text-danger" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-text-body">{t('library:listDetail.warnings', { count: (p.warnings ?? []).length })}</span>
+            <button
+              type="button"
+              onClick={() => p.onOpenPlugins?.()}
+              className="flex-none font-semibold text-accent-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              {t('library:plugins')}
+            </button>
+          </div>
+        )}
         {filtered.length === 0 ? (
           <p className="px-4 py-4 text-[13px] text-text-muted">
             {t('library:listDetail.empty')}{' '}
             <button
               type="button"
-              onClick={() => { setQuery(''); p.onResetFilters?.(); }}
+              onClick={() => { setQuery(''); resetExtra(); p.onResetFilters?.(); }}
               className="text-accent-strong underline decoration-accent-strong/40 underline-offset-2 hover:text-text"
             >
               {t('library:listDetail.showAll')}

@@ -155,6 +155,10 @@
     "showAll": "Show all games",
     "notInstalled": "Not installed",
     "neverPlayed": "Never played",
-    "needsAttention": "Needs attention"
+    "needsAttention": "Needs attention",
+    "addGame": "Add a game",
+    "filtersAria": "Library filters",
+    "warnings_one": "One source needs attention",
+    "warnings_other": "{count} sources need attention"
   }
 }

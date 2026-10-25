@@ -4,7 +4,7 @@
 // today's path (see gameLayout.test.tsx).
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { render as rtlRender, cleanup, screen, within } from '@testing-library/react';
+import { render as rtlRender, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
@@ -36,6 +36,8 @@ vi.mock('../../effect/runtime', () => ({
     getCloudInfo: () => Effect.succeed({ mode: 'auto', plugin_mode: 'auto', game_mode: '', status: null, running: false } as never),
     checkCloudSaves: () => Effect.succeed({ mode: 'auto', plugin_mode: 'auto', game_mode: '', status: null, running: false } as never),
     listSaveBackups: () => Effect.succeed([] as never),
+    setGameStatus: () => Effect.succeed({ status: 'backlog', user_notes: '' } as never),
+    setGameNotes: () => Effect.succeed(undefined as never),
     getThemeLayout: () => Effect.succeed(null as never),
   },
   onJobs: () => () => {},
@@ -191,5 +193,51 @@ describe('game page tabs variant', () => {
     // Sections have no tablist; tabs do.
     expect(screen.queryByRole('tablist', { name: 'Game page' })).toBeNull();
     expect(container.querySelector('[data-region="main"]')).toBeTruthy();
+  });
+});
+
+describe('atlas parity side sections (issue #132)', () => {
+  it('lists the game collections with a Manage entry in the side column', async () => {
+    const user = userEvent.setup();
+    const onManage = vi.fn();
+    const g = installedGame();
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[{ id: 'couch', name: 'Couch co-op', games: [g.id] }]}
+        onManageCollections={onManage}
+      />,
+    );
+    expect(await screen.findByText('Couch co-op')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add to collection' }));
+    expect(onManage).toHaveBeenCalledWith(g.id);
+  });
+
+  it('carries a Status and notes section that saves through the page', async () => {
+    const user = userEvent.setup();
+    const g = installedGame();
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    expect(await screen.findByRole('heading', { name: 'Status & notes' })).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByLabelText('Status'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    fireEvent.click(screen.getByRole('option', { name: 'Backlog' }));
+    await waitFor(() => expect(screen.getByLabelText('Status')).toHaveTextContent('Backlog'));
+    await user.click(screen.getByLabelText('Your notes'));
+    await user.type(screen.getByLabelText('Your notes'), 'loved it');
+    fireEvent.blur(screen.getByLabelText('Your notes'));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
   });
 });
