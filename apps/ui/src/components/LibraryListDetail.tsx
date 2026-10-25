@@ -200,8 +200,10 @@ export function LibraryListDetail(p: ListDetailProps) {
               }}
             />
           </label>
+          {/* Sort key and direction as one joined control, so the filter field keeps its width. */}
+          <div className="flex flex-none">
           <Select value={sort} onValueChange={(v) => { const next = v as ListSort; setSort(next); setDir(defaultDir(next === 'recent' ? 'last' : next)); }}>
-            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[120px] flex-none bg-surface font-sans text-[13px]">
+            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[92px] flex-none rounded-r-none bg-surface font-sans text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -218,10 +220,11 @@ export function LibraryListDetail(p: ListDetailProps) {
             aria-label={dir === 'asc' ? t('library:ascToDesc') : t('library:descToAsc')}
             title={dir === 'asc' ? t('library:ascending') : t('library:descending')}
             onClick={() => setDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-            className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] bg-surface text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="grid h-[30px] w-6 flex-none place-items-center rounded-r-[7px] border-l border-hairline bg-surface text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             {dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
           </button>
+          </div>
           <DropdownMenu open={filtersOpen} onOpenChange={setFiltersOpen} modal={false}>
             <DropdownMenuTrigger asChild>
               <button
