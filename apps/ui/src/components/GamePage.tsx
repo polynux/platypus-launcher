@@ -1169,6 +1169,33 @@ export function AboutSection({ game, details, loading, error, compatUrls, onOpen
   const [expanded, setExpanded] = useState(false);
   const [reqTab, setReqTab] = useState<'minimum' | 'recommended'>('minimum');
   useEffect(() => { setExpanded(false); setReqTab('minimum'); }, [game.id]);
+  // The tabs clamp (760px) applies only when the description actually
+  // overflows it: a short store description shows with no mask and no
+  // "Read the full description" toggle. Measured off scrollHeight (the full
+  // content height even when clamped).
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useEffect(() => { setOverflows(false); }, [game.id, details]);
+  useEffect(() => {
+    if (!hideDetails) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const check = () => {
+      if (expanded) return;
+      setOverflows(el.scrollHeight > 761);
+    };
+    check();
+    window.addEventListener('resize', check);
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(check);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener('resize', check);
+      ro?.disconnect();
+    };
+  }, [hideDetails, details, expanded]);
   const d = details as unknown as (GameDetails & {
     description_html?: string; website?: string; store_url?: string;
     info_source?: string; info_source_name?: string; info_stale?: boolean;
@@ -1219,12 +1246,14 @@ export function AboutSection({ game, details, loading, error, compatUrls, onOpen
           </div>
         ) : html ? (
           <>
-            <div className={expanded ? '' : 'max-h-[760px] overflow-hidden [mask-image:linear-gradient(#000_70%,transparent)]'} data-testid="about-html-wrap">
+            <div ref={wrapRef} className={expanded || !overflows ? '' : 'max-h-[760px] overflow-hidden [mask-image:linear-gradient(#000_70%,transparent)]'} data-testid="about-html-wrap">
               <SafeHtml html={html} testid="about-html" className="text-[14px] leading-[1.62] !space-y-3.5 [&_h2]:!text-[15px] [&_h2]:!font-[750] [&_h2]:!mt-2.5 [&_h3]:!text-[15px] [&_h3]:!font-[750] [&_h3]:!mt-2.5 [&_h4]:text-[13px] [&_li]:text-[14px] [&_li]:leading-[1.62] [&_li::marker]:!text-accent [&_p]:text-[14px] [&_p]:leading-[1.62] [&_ul]:text-[14px] [&_a]:!text-accent" />
             </div>
-            <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-2.5 rounded px-0 font-sans text-[14px] font-semibold text-accent hover:bg-transparent hover:text-text hover:underline hover:underline-offset-[3px]">
-              {expanded ? t('game:about.showLess') : t('game:about.readFull')}
-            </Button>
+            {overflows && (
+              <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-2.5 rounded px-0 font-sans text-[14px] font-semibold text-accent hover:bg-transparent hover:text-text hover:underline hover:underline-offset-[3px]">
+                {expanded ? t('game:about.showLess') : t('game:about.readFull')}
+              </Button>
+            )}
           </>
         ) : summary ? (
           <p className="leading-[1.62]">{summary}</p>

@@ -719,7 +719,10 @@ export function App() {
       sessionStartedAt={sessionStart.current[game.id]}
       refreshing={scanning}
       tweaks={tweaks}
-      onChangeSettings={(st, what) => saveSettings(game.id, st, what)}
+      // saveSettings rethrows after its toast so the settings drawer can
+      // keep its dirty state; the tweak switch has no such state, so a
+      // failed tweak save must not leave an unhandled rejection here.
+      onChangeSettings={(st, what) => { void saveSettings(game.id, st, what).catch(() => {}); }}
       onSaveSettings={(st) => saveSettings(game.id, st)}
       onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
       plugin={plugins.find((x) => x.id === game.source)}

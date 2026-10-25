@@ -334,7 +334,10 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   // Another game on the stage never inherits the open flyout.
   useEffect(() => setTuneOpen(false), [d.game.id]);
   const active = d.job && (d.job.state === 'queued' || d.job.state === 'running');
-  const showNote = !active && (d.game.note || d.installing);
+  // The outside-folder alert below already names the folders: repeating the
+  // store note here would show the same long paths twice (a5).
+  const outside = !!d.game.outside_folder;
+  const showNote = !active && ((d.game.note && !outside) || d.installing);
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-accent-dim py-3 pl-6 pr-5">
       <div className="mr-2 flex items-center gap-1.5">
@@ -366,20 +369,24 @@ function ActionStrip({ d }: { d: GameTabsData }) {
       <StoreSwitch d={d} />
       <SaveState d={d} />
       {/* /21 has no row between the strip and the tabs: the install note
-          and folder/version links sit inline at the end of the strip. */}
+          and folder/version links sit inline at the end of the strip. Only
+          the short links show here (the long folder path would truncate
+          them): the full path lives in the title tooltip. */}
       {(showNote || d.refreshing) && (
-        <span className="ml-auto min-w-0 max-w-[38%] truncate text-[12.5px] text-text-muted">
+        <span
+          className="ml-auto min-w-0 max-w-[38%] truncate text-[12.5px] text-text-muted"
+          title={d.refreshing || !d.installing || !d.plugin ? undefined : d.plugin.install_folder}
+        >
           {d.refreshing ? (
             t('game:refreshing')
           ) : (
             <>
-              {d.game.note && <span>{d.game.note} </span>}
+              {d.game.note && !outside && <span>{d.game.note} </span>}
               {d.installing && d.plugin && (
                 <span>
                   {d.canChooseVersion ? (
                     <Trans
-                      i18nKey="game:install.noteWithVersion"
-                      values={{ folder: d.plugin.install_folder }}
+                      i18nKey="game:install.stripWithVersion"
                       components={{
                         v: <TabsNoteLink onClick={d.onOpenVersions} />,
                         d: <TabsNoteLink onClick={d.onOpenPlugins} />,
@@ -387,8 +394,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
                     />
                   ) : (
                     <Trans
-                      i18nKey="game:install.notePlain"
-                      values={{ folder: d.plugin.install_folder }}
+                      i18nKey="game:install.stripPlain"
                       components={{ d: <TabsNoteLink onClick={d.onOpenPlugins} /> }}
                     />
                   )}
@@ -577,12 +583,14 @@ interface AchRow {
  *  segment controls (All/Unlocked/Locked + Recent/Rarest) above the rows.
  *  Atlas-only (this file renders only for game.structure = tabs). Locked
  *  hidden achievements stay secret until unlocked, like the lab. */
-function AchRowIcon({ a }: { a: AchRow }) {
+/** The achievement row icon with the locked dim + lock overlay. Exported for tests. */
+export function AchRowIcon({ a }: { a: AchRow }) {
   const [broken, setBroken] = useState(false);
   if (!a.icon || broken) {
     return (
       <span className="relative block h-11 w-11 flex-none overflow-hidden rounded-md bg-surface-strong">
         <span className="grid h-full w-full place-items-center"><Trophy className="h-4 w-4 text-text-muted" aria-hidden /></span>
+        {!a.unlocked && <Lock className="absolute bottom-[3px] right-[3px] h-3.5 w-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,1)]" aria-hidden />}
       </span>
     );
   }

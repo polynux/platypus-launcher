@@ -1,5 +1,5 @@
 // i18n: converted
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
 import { Activity, ChevronRight, Gauge, MonitorPlay, Sparkles, type LucideIcon } from 'lucide-react';
@@ -151,6 +151,48 @@ export function TuneFlyout({
     ref.current?.focus({ preventScroll: true });
   }, [open, game.id]);
 
+  // The flyout lives in a portal with fixed positioning, anchored to the
+  // Tune button: inside the stage scroll container an absolute panel would
+  // add to the stage's scroll height, a scrollbar would appear and the stage
+  // would shift (a1 -> a2). Fixed positioning keeps the stage's scroll
+  // height untouched. Reposition on scroll and resize so it follows the
+  // anchor, and cap the height so it scrolls inside itself.
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return; }
+    const place = () => {
+      const anchor = document.querySelector<HTMLElement>('[data-tune-anchor]');
+      const r = anchor?.getBoundingClientRect();
+      const width = 380;
+      const margin = 8;
+      const vw = window.innerWidth || 1280;
+      const vh = window.innerHeight || 800;
+      // getBoundingClientRect is viewport-relative: fixed positioning uses
+      // the same origin, so no scroll offset is added.
+      let left = r?.left ?? margin;
+      left = Math.max(margin, Math.min(left, vw - width - margin));
+      let top = r ? r.bottom + 6 : margin;
+      let maxHeight = vh - top - margin;
+      // Too little room below: open above the anchor when that fits better.
+      if (r && maxHeight < 240) {
+        const above = r.top - 6 - margin;
+        if (above > maxHeight) {
+          maxHeight = Math.min(520, above);
+          top = Math.max(margin, r.top - 6 - maxHeight);
+        }
+      }
+      maxHeight = Math.max(200, Math.min(520, maxHeight));
+      setPos({ left, top, maxHeight });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, game.id]);
+
   // Esc and a click outside close. Radix's own listbox handles Escape itself
   // (it preventDefaults), and the anchor toggles. The runner pick's portaled
   // listbox is not inside the flyout, so a pointer down there must not close
@@ -247,13 +289,14 @@ export function TuneFlyout({
       ? t('tune:tier.rated', { tier: t(`game:tier.${compat.tier}`, { defaultValue: TIER_LABEL[compat.tier] ?? compat.tier }) })
       : t('tune:tier.none');
 
-  return (
+  const panel = (
     <div
       ref={ref}
       role="dialog"
       tabIndex={-1}
       aria-label={t('tune:title', { title: game.title })}
-      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-[10px] bg-[color-mix(in_srgb,var(--color-raised)_50%,var(--color-surface))] text-[13.5px] text-text ring-1 ring-surface-strong shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal] outline-none"
+      style={pos ? { position: 'fixed', left: pos.left, top: pos.top, maxHeight: pos.maxHeight, overflowY: 'auto' } : { position: 'fixed', left: 8, top: 8, visibility: 'hidden' }}
+      className="z-[60] w-[380px] animate-modal-in overflow-x-hidden rounded-[10px] bg-[color-mix(in_srgb,var(--color-raised)_50%,var(--color-surface))] text-[13.5px] text-text ring-1 ring-surface-strong shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal] outline-none"
     >
       <div className="border-b border-hairline px-3.5 py-3">
         <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -343,4 +386,6 @@ export function TuneFlyout({
       </button>
     </div>
   );
+
+  return panel;
 }

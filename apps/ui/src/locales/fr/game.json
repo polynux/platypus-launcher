@@ -226,6 +226,8 @@
     "cantInstall": "Installation impossible ici",
     "noteWithVersion": "s'installe dans {{folder}} · <v>Choisir la version</v> · <d>changer le défaut</d>",
     "notePlain": "s'installe dans {{folder}} · <d>changer le défaut</d>",
+    "stripWithVersion": "<v>Choisir la version</v> · <d>Changer de dossier</d>",
+    "stripPlain": "<d>Changer de dossier</d>",
     "lastAttempt": "La dernière tentative n'a pas abouti."
   },
   "installSize": {
