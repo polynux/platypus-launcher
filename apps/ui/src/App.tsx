@@ -56,8 +56,14 @@ import { useGameTone } from './lib/gameTone';
 import type { GameSettingsTab } from './lib/gameSettingsTabs';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
 import { X } from 'lucide-react';
+import { RouterProvider, useRouter } from '@tanstack/react-router';
+import { createAppRouter, useSetView, useView, viewToLocation } from './router';
 
-export function App() {
+export function AppContent() {
+  const view = useView();
+  const setView = useSetView();
+  const router = useRouter();
+  const viewKey = JSON.stringify(view);
   const { t } = useTranslation(['nav', 'common', 'activity']);
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
@@ -76,7 +82,6 @@ export function App() {
   const [lastScan, setLastScan] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
 
-  const [view, setView] = useState<View>({ name: 'dashboard' });
   // Atlas parity (issue #132): the footer shows the last scan and the
   // offline marker, from the same sources as the classic header.
   const { online } = useNetState();
@@ -88,14 +93,33 @@ export function App() {
   // the main column.
   const shellNavigation = useVariant('shell.navigation');
   useEffect(() => {
+    // The settings bounce replaces history (issue #140): going back from the
+    // return view must not land on the bounced settings URL again.
     if (settingsPresentation !== 'page' && view.name === 'settings') {
       setSettingsOpen(true);
-      setView(settingsReturnView.name === 'settings' ? { name: 'dashboard' } : settingsReturnView);
+      const back = settingsReturnView.name === 'settings' ? { name: 'dashboard' } as View : settingsReturnView;
+      void router.navigate({ ...(viewToLocation(back) as object), replace: true } as never);
     } else if (settingsPresentation === 'page' && settingsOpen) {
       setSettingsOpen(false);
-      setView({ name: 'settings' });
+      void router.navigate({ to: '/settings', replace: true } as never);
     }
-  }, [settingsPresentation, settingsOpen, settingsReturnView, view.name]);
+  }, [settingsPresentation, settingsOpen, settingsReturnView, view.name, router]);
+  // Mouse back/forward buttons (issue #140): Chromium fires mouseup 3/4 for
+  // them; Electron doesn't always turn those into history navigations, so do
+  // it here. Browser Alt+Left/Right already navigates natively.
+  useEffect(() => {
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        router.history.back();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        router.history.forward();
+      }
+    };
+    window.addEventListener('mouseup', onMouseUp);
+    return () => window.removeEventListener('mouseup', onMouseUp);
+  }, [router]);
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<StoreType | 'all'>('all');
   // The sourcebar's multi-store selection (issue #125, D21 empty = every
@@ -157,7 +181,7 @@ export function App() {
   }, [t]);
 
   const main = useRef<HTMLElement>(null);
-  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
+  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [viewKey]);
 
   // Friends lists: the snapshot of every store that offers one, then each push.
   // A snapshot is merged with what the pushes already brought in, and it drops
@@ -1172,6 +1196,14 @@ export function App() {
     </div>
     </TooltipProvider>
   );
+}
+
+// The app root (issue #140): the router provider, so AppContent's useView()
+// always has context. Each mount builds its own hash-history router, so a
+// reload restores the route from the current hash and tests stay isolated.
+export function App() {
+  const [router] = useState(() => createAppRouter(AppContent));
+  return <RouterProvider router={router} />;
 }
 
 export default App;
