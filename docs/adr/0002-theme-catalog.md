@@ -190,6 +190,15 @@ How the accepted decisions landed, without changing them.
   (#108), tile polish and row spans (#109), validator gaps (#110). Still
   open: the store view, the smaller views as layout views, and the native
   renderer (§9).
+- Colour schemes and game colour (issue #134): `[schemes.light]` and
+  `[schemes.black]` token overrides in `theme.toml`, validated like
+  `[tokens]` and contrast-checked over their own resolved tokens; the UI
+  paints `theme.tokens`, then the scheme overrides, then the game tone
+  (`off` = scheme accent, `accent` = tone accent + accent-dim per scheme,
+  `whole` = every surface/text token from the tone per scheme, with the
+  light and black `d=0.5` formulas from `tintVars`). The scheme pick
+  (`dark|light|black`, default dark) and the game colour pick
+  (`off|accent|whole`, default accent) are persisted launcher settings.
 
 Source: `internal/themes/catalog.go`, `internal/themes/builtin_layout.go`,
 `apps/ui/src/gen/catalog.ts`, `apps/ui/src/lib/theme.ts`,

@@ -13,9 +13,10 @@ import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, loadThemeFon
 const warm: ThemeTokens = {
   id: 'warm',
   tokens: {
-    ground: '#130f0a', raised: '#191410', surface: 'rgba(255, 255, 255, 0.045)', 'surface-strong': 'rgba(255, 255, 255, 0.06)',
-    hairline: 'rgba(255, 255, 255, 0.07)', text: 'rgba(255, 255, 255, 0.9)', 'text-body': 'rgba(255, 255, 255, 0.7)', 'text-muted': 'rgba(255, 255, 255, 0.55)',
-    'text-faint': '#78716c', accent: 'oklch(82.8% 0.189 84.429)', 'accent-strong': 'oklch(87.9% 0.169 91.605)', 'on-accent': '#130f0a', ok: 'oklch(76.5% 0.177 163.223)',
+    ground: '#130f0a', 'ground-2': '#191410', raised: '#191410', surface: 'rgba(255, 255, 255, 0.045)', 'surface-strong': 'rgba(255, 255, 255, 0.06)',
+    hairline: 'rgba(255, 255, 255, 0.07)', 'hairline-strong': 'rgba(255, 255, 255, 0.12)', popover: '#191410', glass: 'rgba(25, 20, 16, 0.82)',
+    text: 'rgba(255, 255, 255, 0.9)', 'text-body': 'rgba(255, 255, 255, 0.7)', 'text-muted': 'rgba(255, 255, 255, 0.55)',
+    'text-faint': '#78716c', accent: 'oklch(82.8% 0.189 84.429)', 'accent-strong': 'oklch(87.9% 0.169 91.605)', 'accent-dim': '#2f240d', 'on-accent': '#130f0a', ok: 'oklch(76.5% 0.177 163.223)',
     attention: 'oklch(75% 0.183 55.934)', info: 'oklch(82.8% 0.111 230.318)', dl: 'oklch(70.2% 0.183 293.541)', danger: 'oklch(63.7% 0.237 25.331)', focus: 'oklch(87.9% 0.169 91.605)',
     'radius-chip': '0.75rem', 'radius-card': '1rem', 'radius-panel': '1.5rem',
     'font-sans': '"Hanken Grotesk", system-ui, sans-serif', 'font-mono': '"JetBrains Mono", ui-monospace, monospace',
@@ -131,8 +132,9 @@ describe('theme variables', () => {
   it('keeps the warm theme colors equal to style.css defaults', () => {
     const css = readFileSync(path.join(__dirname, '../style.css'), 'utf8');
     const toml = readFileSync(path.join(__dirname, '../../../../internal/themes/builtin/warm/theme.toml'), 'utf8');
-    for (const token of ['ground', 'raised', 'surface', 'surface-strong', 'hairline', 'text', 'text-body', 'text-muted', 'text-faint', 'accent', 'accent-strong', 'accent-dim', 'on-accent', 'ok', 'attention', 'info', 'dl', 'danger', 'focus']) {
-      const cssValue = new RegExp(`--color-${token}:\\s*([^;]+);`).exec(css)?.[1].trim();
+    for (const token of ['ground', 'ground-2', 'raised', 'surface', 'surface-strong', 'hairline', 'hairline-strong', 'popover', 'glass', 'text', 'text-body', 'text-muted', 'text-faint', 'accent', 'accent-strong', 'accent-dim', 'on-accent', 'ok', 'attention', 'info', 'dl', 'danger', 'focus']) {
+      const cssName = token === 'popover' ? '--popover' : `--color-${token}`;
+      const cssValue = new RegExp(`${cssName}:\\s*([^;]+);`).exec(css)?.[1].trim();
       const tomlValue = new RegExp(`^${token}\\s*=\\s*"([^"]+)"`, 'm').exec(toml)?.[1];
       expect(cssValue, `style.css ${token}`).toBe(tomlValue);
     }
@@ -201,5 +203,63 @@ describe('applying a theme', () => {
     });
     await expect(loadTheme()).resolves.toBeUndefined();
     expect(root().getPropertyValue('--color-accent')).toBe('oklch(82.8% 0.189 84.429)');
+  });
+});
+
+describe('colour schemes (issue #134)', () => {
+  const atlas = {
+    ...warm,
+    id: 'atlas',
+    tokens: {
+      ...warm.tokens,
+      ground: '#13161b', 'ground-2': '#15181d', raised: '#181b21', surface: '#1f232a',
+      'surface-strong': '#293039', hairline: '#262b33', 'hairline-strong': '#36404b',
+      popover: '#1b1f26', glass: 'rgba(24, 27, 33, 0.82)',
+      text: '#e9edf2', 'text-body': '#c3ccd8', 'text-muted': '#9ca7b5', 'text-faint': '#687384',
+      accent: '#9db0ff', 'accent-strong': '#bccdff', 'accent-dim': '#1f232a', 'on-accent': '#0f1218',
+      focus: '#9db0ff', danger: '#f0756a',
+    },
+    schemes: {
+      light: {
+        ground: '#e9ecf0', 'ground-2': '#f1f3f6', raised: '#f7f8fa', surface: '#eceff3',
+        'surface-strong': '#dfe3e9', hairline: '#dde1e7', 'hairline-strong': '#c4cad3',
+        popover: '#ffffff', glass: 'rgba(250, 251, 252, 0.86)',
+        text: '#161a20', 'text-body': '#333f4e', 'text-muted': '#525c6a', 'text-faint': '#7a8494',
+        accent: '#3b5bdb', 'accent-strong': '#3b5bdb', 'accent-dim': '#dfe5f5',
+        'on-accent': '#ffffff', focus: '#3b5bdb', danger: '#9d2a1e',
+      },
+      black: {
+        ground: '#000000', 'ground-2': '#05060a', raised: '#08090c', surface: '#121418',
+        'surface-strong': '#1c1f25', hairline: '#181b20', 'hairline-strong': '#2a2f37',
+        popover: '#101216', glass: 'rgba(8, 9, 12, 0.82)',
+        accent: '#9db0ff', 'accent-strong': '#bccdff', 'accent-dim': '#0e1016', 'on-accent': '#0f1218',
+      },
+    },
+  };
+
+  it('maps the new tokens onto CSS variables', () => {
+    const v = themeVariables(warm);
+    expect(v['--color-ground-2']).toBe('#191410');
+    expect(v['--color-hairline-strong']).toBe('rgba(255, 255, 255, 0.12)');
+    expect(v['--color-glass']).toBe('rgba(25, 20, 16, 0.82)');
+    expect(v['--popover']).toBe('#191410');
+    expect(v['--color-popover']).toBe('#191410');
+  });
+
+  it('paints the scheme overrides over the theme tokens', () => {
+    expect(themeVariables(atlas, 'dark')['--color-ground']).toBe('#13161b');
+    expect(themeVariables(atlas, 'light')['--color-ground']).toBe('#e9ecf0');
+    expect(themeVariables(atlas, 'light')['--color-ground-2']).toBe('#f1f3f6');
+    expect(themeVariables(atlas, 'light')['--popover']).toBe('#ffffff');
+    expect(themeVariables(atlas, 'black')['--color-ground']).toBe('#000000');
+    expect(themeVariables(atlas, 'black')['--color-accent-dim']).toBe('#0e1016');
+    // A theme without the scheme falls back to dark.
+    expect(themeVariables(warm, 'light')['--color-ground']).toBe('#130f0a');
+  });
+
+  it('sets color-scheme light for the light scheme and dark otherwise', () => {
+    applyTheme(atlas);
+    // The stored pick starts dark; the scheme module defaults to it.
+    expect(document.documentElement.style.getPropertyValue('color-scheme')).toBe('dark');
   });
 });

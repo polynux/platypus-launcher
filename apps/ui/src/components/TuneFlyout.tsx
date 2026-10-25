@@ -347,7 +347,7 @@ export function TuneFlyout({
                   <span className="text-[13.5px] font-semibold text-text">{label}</span>
                   <small className="truncate text-[12px] text-text-faint">{disabledReason ?? sub}</small>
                 </span>
-                <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', on ? 'bg-accent' : 'bg-white/15')}>
+                <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', on ? 'bg-accent' : 'bg-surface-strong')}>
                   <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', on ? 'translate-x-[14px] bg-on-accent' : 'bg-raised')} />
                 </span>
               </button>

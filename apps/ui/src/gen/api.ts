@@ -153,6 +153,7 @@ export interface CoreApi {
   SetChatDesktopNotify(on: boolean): Promise<types.LauncherSettings>;
   SetCloudGameMode(gameID: string, mode: string): Promise<void>;
   SetCloudPluginMode(pluginID: string, mode: string): Promise<void>;
+  SetColorScheme(scheme: string): Promise<types.LauncherSettings>;
   SetCustomArt(gameID: string, kind: string, path: string): Promise<types.Customization>;
   SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
@@ -337,6 +338,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetChatDesktopNotify',
   'SetCloudGameMode',
   'SetCloudPluginMode',
+  'SetColorScheme',
   'SetCustomArt',
   'SetCustomGameYear',
   'SetCustomTitle',

@@ -1,7 +1,22 @@
 {
  "title": "Paramètres",
  "subtitle": "Réglages généraux de Platypus, enregistrés dans ~/.local/share/platypus/settings.json.",
- "sections": { "label": "Sections des paramètres", "language": "Langue", "theme": "Thème", "folders": "Dossiers de jeux", "prefixes": "Préfixe Wine", "cleanup": "Téléchargements annulés", "ratings": "Informations sur les jeux", "artwork": "Illustrations", "gameInfo": "Détails des jeux", "chat": "Discussion", "tray": "Zone de notification", "backups": "Sauvegardes", "cloud": "Sauvegardes cloud" },
+ "sections": {
+  "label": "Sections des paramètres",
+  "language": "Langue",
+  "theme": "Thème",
+  "appearance": "Apparence",
+  "folders": "Dossiers de jeux",
+  "prefixes": "Préfixe Wine",
+  "cleanup": "Téléchargements annulés",
+  "ratings": "Informations sur les jeux",
+  "artwork": "Illustrations",
+  "gameInfo": "Détails des jeux",
+  "chat": "Discussion",
+  "tray": "Zone de notification",
+  "backups": "Sauvegardes",
+  "cloud": "Sauvegardes cloud"
+ },
  "language": {
   "heading": "Langue",
   "description": "La langue du lanceur. Système suit la langue de votre bureau. S'applique aussitôt, sans redémarrage.",
@@ -85,18 +100,18 @@
   "on": "Platypus se cachera dans la zone de notification pendant un jeu",
   "off": "Platypus reste ouvert pendant un jeu"
  },
-  "theme": {
-    "heading": "Thème",
-    "description": "L'apparence du lanceur : couleurs, angles et fond. S'applique aussitôt, sans redémarrage.",
-    "label": "Thème",
-    "saved": "Thème appliqué",
-    "warningsLabel": "Problèmes du thème",
-    "source": "de {{plugin}}",
-    "status": {
-      "newer": "demande une version plus récente de Platypus",
-      "invalid": "son fichier ne peut pas être utilisé"
-    }
-  },
+ "theme": {
+  "heading": "Thème",
+  "description": "L'apparence du lanceur : couleurs, angles et fond. S'applique aussitôt, sans redémarrage.",
+  "label": "Thème",
+  "saved": "Thème appliqué",
+  "warningsLabel": "Problèmes du thème",
+  "source": "de {{plugin}}",
+  "status": {
+   "newer": "demande une version plus récente de Platypus",
+   "invalid": "son fichier ne peut pas être utilisé"
+  }
+ },
  "loadError": "Platypus n'a pas pu charger les paramètres.",
  "prefixError": "Platypus n'a pas pu changer le dossier des préfixes Wine.",
  "cleanupError": "Platypus n'a pas pu nettoyer ces dossiers.",
@@ -130,5 +145,21 @@
   "updating": "Mise à jour…",
   "saved": "Réglages de sauvegarde enregistrés.",
   "saveError": "Enregistrement des réglages impossible."
+ },
+ "appearance": {
+  "heading": "Apparence",
+  "description": "Schéma de couleurs et couleur du jeu. S’applique aussitôt, sans redémarrage.",
+  "schemeLabel": "Schéma de couleurs",
+  "schemeDescription": "Sombre, clair ou noir. Seuls les thèmes qui déclarent un autre schéma le proposent.",
+  "scheme": {
+   "dark": "Sombre",
+   "light": "Clair",
+   "black": "Noir"
+  },
+  "schemeSaved": "Schéma de couleurs appliqué",
+  "gameLabel": "Couleur du jeu",
+  "gameDescription": "Prend la couleur de l’illustration du jeu sélectionné.",
+  "gameSaved": "Couleur du jeu enregistrée",
+  "none": "Ce thème n’a aucune option d’apparence."
  }
 }

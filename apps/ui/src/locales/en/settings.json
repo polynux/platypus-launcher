@@ -1,7 +1,22 @@
 {
  "title": "Settings",
  "subtitle": "Platypus-wide settings, saved in ~/.local/share/platypus/settings.json.",
- "sections": { "label": "Settings sections", "language": "Language", "theme": "Theme", "folders": "Game folders", "prefixes": "Wine prefix", "cleanup": "Canceled downloads", "ratings": "Game information", "artwork": "Artwork", "gameInfo": "Game details", "chat": "Chat", "tray": "System tray", "backups": "Save backups", "cloud": "Cloud saves" },
+ "sections": {
+  "label": "Settings sections",
+  "language": "Language",
+  "theme": "Theme",
+  "appearance": "Appearance",
+  "folders": "Game folders",
+  "prefixes": "Wine prefix",
+  "cleanup": "Canceled downloads",
+  "ratings": "Game information",
+  "artwork": "Artwork",
+  "gameInfo": "Game details",
+  "chat": "Chat",
+  "tray": "System tray",
+  "backups": "Save backups",
+  "cloud": "Cloud saves"
+ },
  "language": {
   "heading": "Language",
   "description": "The language of the launcher. System follows your desktop language. Applies right away, without a restart.",
@@ -85,18 +100,18 @@
   "on": "Platypus will hide to the tray while a game runs",
   "off": "Platypus stays open while a game runs"
  },
-  "theme": {
-    "heading": "Theme",
-    "description": "The look of the launcher: colours, corners and the background. Applies right away, without a restart.",
-    "label": "Theme",
-    "saved": "Theme applied",
-    "warningsLabel": "Theme problems",
-    "source": "from {{plugin}}",
-    "status": {
-      "newer": "needs a newer Platypus",
-      "invalid": "its file can't be used"
-    }
-  },
+ "theme": {
+  "heading": "Theme",
+  "description": "The look of the launcher: colours, corners and the background. Applies right away, without a restart.",
+  "label": "Theme",
+  "saved": "Theme applied",
+  "warningsLabel": "Theme problems",
+  "source": "from {{plugin}}",
+  "status": {
+   "newer": "needs a newer Platypus",
+   "invalid": "its file can't be used"
+  }
+ },
  "loadError": "Platypus couldn't load the settings.",
  "prefixError": "Platypus couldn't change the Wine prefix folder.",
  "cleanupError": "Platypus couldn't clean up those folders.",
@@ -130,5 +145,21 @@
   "updating": "Updating…",
   "saved": "Backups settings saved.",
   "saveError": "Couldn’t save the backups settings."
+ },
+ "appearance": {
+  "heading": "Appearance",
+  "description": "Colour scheme and game colour. Applies right away, without a restart.",
+  "schemeLabel": "Colour scheme",
+  "schemeDescription": "Dark, light or black. Only themes that declare another scheme offer it.",
+  "scheme": {
+   "dark": "Dark",
+   "light": "Light",
+   "black": "Black"
+  },
+  "schemeSaved": "Colour scheme applied",
+  "gameLabel": "Game colour",
+  "gameDescription": "Take colour from the selected game’s art.",
+  "gameSaved": "Game colour saved",
+  "none": "This theme has no appearance options."
  }
 }

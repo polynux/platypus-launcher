@@ -38,10 +38,14 @@ export function onThemeApplied(listener: () => void): () => void {
  *  variables the ds/ components and Tailwind's radius classes read. */
 export const TOKEN_VARS: Record<string, string[]> = {
   ground: ['--color-ground', '--background'],
-  raised: ['--color-raised', '--card', '--popover'],
+  'ground-2': ['--color-ground-2'],
+  raised: ['--color-raised', '--card'],
   surface: ['--color-surface', '--secondary', '--muted'],
   'surface-strong': ['--color-surface-strong'],
   hairline: ['--color-hairline', '--border', '--input'],
+  'hairline-strong': ['--color-hairline-strong'],
+  popover: ['--popover', '--color-popover'],
+  glass: ['--color-glass'],
   text: ['--color-text', '--card-foreground', '--popover-foreground'],
   'text-body': ['--color-text-body'],
   'text-muted': ['--color-text-muted', '--muted-foreground'],
@@ -62,6 +66,101 @@ export const TOKEN_VARS: Record<string, string[]> = {
   'font-sans': ['--font-sans'],
   'font-mono': ['--font-mono'],
 };
+
+/** Colour schemes (issue #134): dark is the theme's own tokens, light and
+ *  black are the [schemes.*] overrides. Themes without schemes are dark only. */
+export type ColorScheme = 'dark' | 'light' | 'black';
+
+const SCHEME_CACHE_KEY = 'platypus.scheme';
+let schemeChoice: ColorScheme = 'dark';
+let effectiveScheme: ColorScheme = 'dark';
+let currentThemeTokens: ThemeTokens | null = null;
+const schemeListeners = new Set<() => void>();
+
+function normalizeScheme(s: string | null | undefined): ColorScheme {
+  return s === 'light' ? 'light' : s === 'black' ? 'black' : 'dark';
+}
+
+/** The stored scheme pick, dark when nothing is stored. */
+export function getColorSchemeChoice(): ColorScheme {
+  return schemeChoice;
+}
+
+/** The scheme actually painted: the stored pick when the theme declares it,
+ *  else dark. Dark is always valid: it is the theme's own tokens. */
+export function getEffectiveScheme(): ColorScheme {
+  return effectiveScheme;
+}
+
+function computeEffective(choice: ColorScheme, theme: ThemeTokens | null): ColorScheme {
+  if (choice === 'dark') return 'dark';
+  if (theme?.schemes?.[choice] && Object.keys(theme.schemes[choice]).length > 0) return choice;
+  return 'dark';
+}
+
+function notifyScheme(): void {
+  for (const listener of schemeListeners) listener();
+}
+
+/** Reads the stored scheme pick and updates when it changes. */
+export function useColorScheme(): ColorScheme {
+  return useSyncExternalStore(
+    (listener) => { schemeListeners.add(listener); return () => schemeListeners.delete(listener); },
+    () => schemeChoice,
+    () => 'dark' as ColorScheme,
+  );
+}
+
+/** The schemes the applied theme declares (dark plus its overrides). */
+export function useThemeSchemes(): ColorScheme[] {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const bump = (): void => tick((n) => n + 1);
+    schemeListeners.add(bump);
+    variantListeners.add(bump);
+    return () => { schemeListeners.delete(bump); variantListeners.delete(bump); };
+  }, []);
+  const out: ColorScheme[] = ['dark'];
+  if (currentThemeTokens?.schemes?.light) out.push('light');
+  if (currentThemeTokens?.schemes?.black) out.push('black');
+  return out;
+}
+
+/** The stored scheme pick, or dark when nothing is stored. */
+export function loadColorSchemeChoice(): Promise<ColorScheme> {
+  try {
+    return Effect.runPromise(LauncherApi.getLauncherSettings())
+      .then((s) => {
+        const next = normalizeScheme((s as { color_scheme?: string })?.color_scheme ?? '');
+        schemeChoice = next;
+        if (currentThemeTokens) effectiveScheme = computeEffective(next, currentThemeTokens);
+        notifyScheme();
+        return next;
+      })
+      .catch(() => schemeChoice);
+  } catch {
+    return Promise.resolve(schemeChoice);
+  }
+}
+
+/** Saves the scheme pick. A failed write keeps what is on screen. */
+export function saveColorSchemeChoice(next: ColorScheme): Promise<void> {
+  schemeChoice = next;
+  try {
+    window.localStorage.setItem(SCHEME_CACHE_KEY, next);
+  } catch {
+    // No storage: the next boot starts dark.
+  }
+  if (currentThemeTokens) effectiveScheme = computeEffective(next, currentThemeTokens);
+  notifyScheme();
+  // Repaint with the new scheme at once; the settings answer confirms it.
+  if (currentThemeTokens) applyTheme(currentThemeTokens);
+  try {
+    return Effect.runPromise(LauncherApi.setColorScheme(next)).then(() => {}).catch(() => {});
+  } catch {
+    return Promise.resolve();
+  }
+}
 
 /** Tailwind 4's amber ramp as exact offsets from the accent (amber-400):
  *  [step, lightness, chroma factor, hue]. Each step is `oklch(from accent …)`,
@@ -122,11 +221,16 @@ export function loadThemeFonts(fonts?: Record<string, string>): void {
   }
 }
 
-/** Every custom property the theme sets, name to value. Pure: no DOM. */
-export function themeVariables(theme: ThemeTokens): Record<string, string> {
+/** Every custom property the theme sets, name to value. Pure: no DOM.
+ *  The scheme overrides the theme's tokens (issue #134): dark is the theme
+ *  itself, light and black are the [schemes.*] tables. */
+export function themeVariables(theme: ThemeTokens, scheme: ColorScheme = 'dark'): Record<string, string> {
+  const tokens: Record<string, string> = { ...(theme.tokens ?? {}) };
+  const over = scheme === 'dark' ? undefined : theme.schemes?.[scheme];
+  if (over) for (const [token, value] of Object.entries(over)) tokens[token] = value;
   const vars: Record<string, string> = {};
   for (const [token, names] of Object.entries(TOKEN_VARS)) {
-    const value = theme.tokens[token];
+    const value = tokens[token];
     if (value) for (const name of names) vars[name] = value;
   }
   for (const [step, dl, kc, dh] of AMBER_RAMP) {
@@ -149,17 +253,27 @@ export function currentThemeVariables(): Record<string, string> {
 
 /** Sets the theme on :root. Live: calling it again restyles what is on screen. */
 export function applyTheme(theme: ThemeTokens): void {
+  currentThemeTokens = theme;
+  effectiveScheme = computeEffective(schemeChoice, theme);
   const style = document.documentElement.style;
-  const vars = themeVariables(theme);
+  const vars = themeVariables(theme, effectiveScheme);
   // Kept before the listeners run, so a tone repainted from one of them
   // restores this theme's values, not the previous theme's.
   appliedThemeVars = vars;
   for (const [name, value] of Object.entries(vars)) style.setProperty(name, value);
+  // Native controls and scrollbars follow the scheme (issue #134).
+  style.setProperty('color-scheme', effectiveScheme === 'light' ? 'light' : 'dark');
+  try {
+    document.documentElement.dataset.scheme = effectiveScheme;
+  } catch {
+    // No DOM (a test without a document): the variables still apply.
+  }
   loadThemeFonts(theme.fonts);
   // The core sends every axis resolved; a cached theme from an older build
   // may lack new axes, which keep their built-in value.
   currentVariants = { ...VARIANT_DEFAULTS, ...(theme.variants ?? {}) } as VariantValues;
   for (const listener of variantListeners) listener();
+  notifyScheme();
 }
 
 /** Applies a theme and remembers it, so the next boot can paint it before the
@@ -177,6 +291,12 @@ export function applyAndRemember(theme: ThemeTokens): void {
  *  nothing cached, style.css's own values stand, and those are the warm theme. */
 export function applyCachedTheme(): void {
   try {
+    const rawScheme = window.localStorage.getItem(SCHEME_CACHE_KEY);
+    if (rawScheme === 'light' || rawScheme === 'black' || rawScheme === 'dark') schemeChoice = rawScheme;
+  } catch {
+    // No storage: the scheme starts dark.
+  }
+  try {
     const raw = window.localStorage.getItem(CACHE_KEY);
     if (raw) applyTheme(JSON.parse(raw) as ThemeTokens);
   } catch {
@@ -188,12 +308,33 @@ export function applyCachedTheme(): void {
  *  what is applied: a theme is never a reason to break startup (or tests with
  *  a partial core mock, which throws here instead of rejecting). */
 export function loadTheme(): Promise<void> {
+  const loadScheme = (): Promise<void> => {
+    try {
+      return Effect.runPromise(LauncherApi.getLauncherSettings())
+        .then((s) => {
+          const next = normalizeScheme((s as { color_scheme?: string })?.color_scheme ?? '');
+          schemeChoice = next;
+          try {
+            window.localStorage.setItem(SCHEME_CACHE_KEY, next);
+          } catch {
+            // No storage: the next boot starts dark.
+          }
+          if (currentThemeTokens) applyTheme(currentThemeTokens);
+        })
+        .catch(() => {});
+    } catch {
+      return Promise.resolve();
+    }
+  };
   try {
     return Effect.runPromise(LauncherApi.getTheme(''))
-      .then(applyAndRemember)
-      .catch(() => {});
+      .then((theme) => {
+        applyAndRemember(theme);
+        return loadScheme();
+      })
+      .catch(() => loadScheme());
   } catch {
-    return Promise.resolve();
+    return loadScheme();
   }
 }
 

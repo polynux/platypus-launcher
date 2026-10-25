@@ -371,10 +371,14 @@ type LauncherSettings struct {
 	MinimizeToTray bool `json:"minimize_to_tray"`
 	// Theme is the picked theme's id (issue #93): "" is the built-in default.
 	Theme string `json:"theme"`
-	// GameTone is the "Accent / Whole app" choice (issue #123): "accent" or
-	// "whole". "" means accent. The theme's color.game-tone axis decides how
-	// far it applies.
+	// GameTone is the game colour choice (issue #123, #134): "off", "accent"
+	// or "whole". "" means accent. The theme's color.game-tone axis decides
+	// how far it applies.
 	GameTone string `json:"game_tone"`
+	// ColorScheme is the colour scheme (issue #134): "dark", "light" or
+	// "black". "" means dark. Only themes that declare [schemes.light] or
+	// [schemes.black] offer another; the rest are dark only.
+	ColorScheme string `json:"color_scheme"`
 }
 
 // ThemeInfo is one theme in the Settings picker (issue #93). Status is "ok"
@@ -396,12 +400,15 @@ type ThemeInfo struct {
 // value, the built-in one where the theme's is missing or invalid. The UI sets
 // them as CSS custom properties. Fonts maps a shipped family to its art URL
 // (issue #105); empty for the built-ins, whose families come from @fontsource.
+// Schemes holds the scheme token overrides (issue #134): "light" and "black"
+// tables from theme.toml, validated like [tokens]; the dark scheme is Tokens.
 type ThemeTokens struct {
-	ID       string            `json:"id"`
-	Tokens   map[string]string `json:"tokens"`
-	Wash     []WashLayer       `json:"wash"`
-	Variants map[string]string `json:"variants"`
-	Fonts    map[string]string `json:"fonts,omitempty"`
+	ID       string                       `json:"id"`
+	Tokens   map[string]string            `json:"tokens"`
+	Wash     []WashLayer                  `json:"wash"`
+	Variants map[string]string            `json:"variants"`
+	Fonts    map[string]string            `json:"fonts,omitempty"`
+	Schemes  map[string]map[string]string `json:"schemes,omitempty"`
 }
 
 type ThemeCatalogEntry struct {

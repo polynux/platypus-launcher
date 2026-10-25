@@ -15,11 +15,13 @@ import { GameFoldersSettings } from './GameFoldersSettings';
 import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
-import { DEFAULT_THEME_ID, loadTheme, useVariant } from '../lib/theme';
-import { ViewHeader } from './ui';
+import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
+import { useGameTone, type GameToneChoice } from '../lib/gameTone';
+import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
+import { ViewHeader, cx } from './ui';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
-const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
+const SECTION = 'max-w-2xl border-t border-hairline py-6';
 
 // The active Settings section survives a Settings re-mount (issue #111): a
 // theme switch can move Settings from page to sheet/dialog (App mounts a new
@@ -42,7 +44,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const { t } = useTranslation('settings');
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
-  const sectionNames = ['language', 'theme', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
+  const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'tray', 'backups', 'cloud'];
   const [, setRenderTick] = useState(0);
   const setActiveSection = (index: number) => {
     persistedSettingsSection = sectionNames[index] ?? persistedSettingsSection;
@@ -84,15 +86,16 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const sections = [
     <LanguageSetting onNotify={onNotify} />,
     <ThemeSetting onNotify={onNotify} />,
+    <AppearanceSetting onNotify={onNotify} />,
     <GameFoldersSettings onNotify={onNotify} />,
     <PrefixesFolderSetting onNotify={onNotify} />,
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('cleanup.heading')}</h2>
-      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('cleanup.description')}</p>
+      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('cleanup.description')}</p>
       <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>
-        <label className="flex items-center gap-2"><span className="text-[12.5px] text-white/70">{t('cleanup.keepFor')}</span>
+        <label className="flex items-center gap-2"><span className="text-[12.5px] text-text-body">{t('cleanup.keepFor')}</span>
           <NumberField min={0} max={365} step={1} hideSteppers value={cleanupDays === '' ? undefined : cleanupDays} onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }} disabled={!saved} aria-label={t('cleanup.daysLabel')} className="w-24" />
-          <span className="text-[12.5px] text-white/70">{t('cleanup.days')}</span>
+          <span className="text-[12.5px] text-text-body">{t('cleanup.days')}</span>
         </label>
         <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
       </form>
@@ -106,15 +109,15 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <BackupsSetting onNotify={onNotify} />,
     <CloudSavesDefaults plugins={plugins} />,
   ];
-  const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
-  const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-white/10 [&>section]:bg-white/[0.035] [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
+  const sectionLabels = [t('sections.language'), t('sections.theme'), t('sections.appearance'), t('sections.folders'), t('sections.prefixes'), t('sections.cleanup'), t('sections.ratings'), t('sections.artwork'), t('sections.gameInfo'), t('sections.chat'), t('sections.tray'), t('sections.backups'), t('sections.cloud')];
+  const chromeClass = chrome === 'framed' ? '[&>section]:rounded-2xl [&>section]:border [&>section]:border-hairline-strong [&>section]:bg-surface [&>section]:px-5' : chrome === 'plain' ? '[&>section]:border-t-0' : '';
 
   return (
     <div className="p-7">
       <ViewHeader
         tight
         title={t('settings:title')}
-        subtitle={<p className="mt-0.5 max-w-[75ch] text-[12.5px] text-white/70">{t('subtitle')}</p>}
+        subtitle={<p className="mt-0.5 max-w-[75ch] text-[12.5px] text-text-body">{t('subtitle')}</p>}
       />
       {error && <ErrorNotice className="mt-2" message={error} fallback={t('loadError')} />}
 
@@ -184,7 +187,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
   return (
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('language.heading')}</h2>
-      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('language.description')}</p>
+      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('language.description')}</p>
       <Select value={value || SYSTEM} onValueChange={(v) => change(v === SYSTEM ? '' : v)} disabled={value === null || busy}>
         <SelectTrigger aria-label={t('language.label')} className="w-64">
           <SelectValue />
@@ -195,7 +198,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
           ))}
         </SelectContent>
       </Select>
-      {dev && <p className="mt-2 font-mono text-hint text-white/55">{t('language.pseudoNote')}</p>}
+      {dev && <p className="mt-2 font-mono text-hint text-text-muted">{t('language.pseudoNote')}</p>}
     </section>
   );
 }
@@ -262,7 +265,7 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
   return (
     <section className={SECTION} id="settings-section-theme">
       <h2 className="text-[14px] font-bold">{t('theme.heading')}</h2>
-      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('theme.description')}</p>
+      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('theme.description')}</p>
       <Select value={shown} onValueChange={change} disabled={themes === null || value === null || busy}>
         <SelectTrigger
           ref={triggerRef}
@@ -281,10 +284,107 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
         </SelectContent>
       </Select>
       {warnings.length > 0 && (
-        <ul aria-label={t('theme.warningsLabel')} className="mt-3 space-y-1 font-mono text-hint leading-relaxed text-white/55">
+        <ul aria-label={t('theme.warningsLabel')} className="mt-3 space-y-1 font-mono text-hint leading-relaxed text-text-muted">
           {warnings.map((w) => <li key={w.key}>{w.text}</li>)}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Appearance (issue #134): the colour scheme and the game colour, as segmented
+ *  controls in the Atlas look. The scheme picker shows only when the theme
+ *  declares schemes; the game colour picker only when the theme's
+ *  color.game-tone allows it. Both save through the settings API, so the
+ *  top-bar switch (which shares the game-colour pick) stays in agreement. */
+export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
+  const { t: tTone } = useTranslation('gameTone');
+  const schemes = useThemeSchemes();
+  const scheme = useColorScheme();
+  const tone = useGameTone(null);
+  const [busy, setBusy] = useState(false);
+  const showScheme = schemes.length > 1;
+  const showTone = tone.supported !== 'off';
+  if (!showScheme && !showTone) {
+    return (
+      <section className={SECTION} id="settings-section-appearance">
+        <h2 className="text-[14px] font-bold">{t('appearance.heading')}</h2>
+        <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('appearance.none')}</p>
+      </section>
+    );
+  }
+  const segWrap = 'gap-0.5 rounded-lg bg-surface p-0.5';
+  const segItem =
+    'gap-1.5 rounded-md bg-transparent px-2.5 py-0 font-sans text-[12.5px] font-semibold text-text-muted transition hover:bg-transparent hover:text-text ' +
+    'data-[state=on]:bg-surface-strong data-[state=on]:font-semibold data-[state=on]:text-text ' +
+    'data-[state=on]:shadow-[inset_0_-2px_0_var(--color-accent)]';
+  const pickScheme = (next: string) => {
+    if (next !== 'dark' && next !== 'light' && next !== 'black') return;
+    persistedSettingsSection = 'appearance';
+    setBusy(true);
+    void saveColorSchemeChoice(next as ColorScheme)
+      .then(() => onNotify(t('appearance.schemeSaved')))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'))
+      .finally(() => setBusy(false));
+  };
+  const pickTone = (next: string) => {
+    if (next !== 'off' && next !== 'accent' && next !== 'whole') return;
+    persistedSettingsSection = 'appearance';
+    tone.setChoice(next as GameToneChoice);
+    onNotify(t('appearance.gameSaved'));
+  };
+  return (
+    <section className={SECTION} id="settings-section-appearance">
+      <h2 className="text-[14px] font-bold">{t('appearance.heading')}</h2>
+      <p className="mb-4 mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('appearance.description')}</p>
+      <div className="grid gap-5">
+        {showScheme && (
+          <div>
+            <div className="mb-1.5 text-[13px] font-semibold">{t('appearance.schemeLabel')}</div>
+            <p className="mb-2 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('appearance.schemeDescription')}</p>
+            <ToggleGroup
+              type="single"
+              value={scheme}
+              onValueChange={(v) => { if (v) pickScheme(v); }}
+              aria-label={t('appearance.schemeLabel')}
+              className={cx(segWrap)}
+              disabled={busy}
+            >
+              {(['dark', 'light', 'black'] as const).filter((s) => schemes.includes(s)).map((s) => (
+                <ToggleGroupItem key={s} value={s} aria-label={t(`appearance.scheme.${s}`)} className={cx('h-[26px]', segItem)}>
+                  {t(`appearance.scheme.${s}`)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+        )}
+        {showTone && (
+          <div>
+            <div className="mb-1.5 text-[13px] font-semibold">{t('appearance.gameLabel')}</div>
+            <p className="mb-2 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">{t('appearance.gameDescription')}</p>
+            <ToggleGroup
+              type="single"
+              value={tone.choice}
+              onValueChange={(v) => { if (v === 'off' || v === 'accent' || v === 'whole') pickTone(v); }}
+              aria-label={tTone('label')}
+              className={cx(segWrap)}
+            >
+              <ToggleGroupItem value="off" title={tTone('offHint')} className={cx('h-[26px]', segItem)}>
+                {tTone('off')}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="accent" title={tTone('accentHint')} className={cx('h-[26px]', segItem)}>
+                {tTone('accent')}
+              </ToggleGroupItem>
+              {tone.supported === 'whole' && (
+                <ToggleGroupItem value="whole" title={tTone('wholeHint')} className={cx('h-[26px]', segItem)}>
+                  {tTone('whole')}
+                </ToggleGroupItem>
+              )}
+            </ToggleGroup>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -315,13 +415,13 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">{t('ratings.heading')}</h2>
-          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
 {t('ratings.description')}
           </p>
         </div>
         <Switch aria-label={t('ratings.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
-      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
+      <div className="mt-4 space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
         <p>{t('ratings.creditCompat')}</p>
         <p>{t('ratings.creditWiki')}</p>
         <p>{t('ratings.creditAnticheat')}</p>
@@ -357,13 +457,13 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">{t('artwork.heading')}</h2>
-          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
 {t('artwork.description')}
           </p>
         </div>
         <Switch aria-label={t('artwork.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
-      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
+      <div className="mt-4 space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
         <p>{t('artwork.creditArt')}</p>
       </div>
     </section>
@@ -396,13 +496,13 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">{t('gameInfo.heading')}</h2>
-          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
 {t('gameInfo.description')}
           </p>
         </div>
         <Switch aria-label={t('gameInfo.label')} checked={on ?? true} disabled={on === null || busy} onCheckedChange={toggle} />
       </div>
-      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3 font-mono text-hint leading-relaxed text-white/55">
+      <div className="mt-4 space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
         <p>{t('gameInfo.creditInfo')}</p>
       </div>
     </section>
@@ -435,7 +535,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">{t('chat.heading')}</h2>
-          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
 {t('chat.description')}
           </p>
         </div>
@@ -471,7 +571,7 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-[14px] font-bold">{t('tray.heading')}</h2>
-          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+          <p className="mt-1 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
 {t('tray.description')}
           </p>
         </div>
@@ -521,7 +621,7 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
   return (
     <section className={SECTION}>
       <h2 className="text-[14px] font-bold">{t('prefixes.heading')}</h2>
-      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
+      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-text-body">
 {t('prefixes.description')}
       </p>
       <form
@@ -549,7 +649,7 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
       <div className="mt-2.5 flex min-h-4 flex-wrap items-center gap-4">
         {error ? <ErrorNotice message={error} fallback={t('prefixError')} /> : <span />}
         {saved && (
-          <span className="font-mono text-hint text-white/55">
+          <span className="font-mono text-hint text-text-muted">
 {t('prefixes.effective', { folder: folder.trim() || saved.prefixes_folder || saved.default_prefixes_folder || t('prefixes.placeholder') })}
           </span>
         )}

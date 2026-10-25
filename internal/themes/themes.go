@@ -51,11 +51,16 @@ var supportsLevels = []string{"tokens", "variants", "layouts"}
 // The token set v1 (issue #90), by kind. The names match the @theme variables
 // in apps/ui/src/style.css where those exist.
 var (
-	colorTokens  = []string{"ground", "raised", "surface", "surface-strong", "hairline", "text", "text-body", "text-muted", "text-faint", "accent", "accent-strong", "accent-dim", "on-accent", "ok", "attention", "info", "dl", "danger", "focus"}
+	colorTokens = []string{"ground", "ground-2", "raised", "surface", "surface-strong", "hairline", "hairline-strong", "popover", "glass", "text", "text-body", "text-muted", "text-faint", "accent", "accent-strong", "accent-dim", "on-accent", "ok", "attention", "info", "dl", "danger", "focus"}
 	radiusTokens = []string{"radius-chip", "radius-card", "radius-panel"}
 	fontTokens   = []string{"font-sans", "font-mono"}
 	allTokens    = slices.Concat(colorTokens, radiusTokens, fontTokens)
 )
+
+// schemeNames are the [schemes.*] tables a theme may declare (issue #134):
+// light and black token overrides, validated like [tokens]. Dark is the
+// theme's own [tokens]; themes without schemes are dark only.
+var schemeNames = []string{"light", "black"}
 
 // bundledFonts are the families the app ships (style.css @font-face): the only
 // names a font token may use. genericFonts are the fallbacks it may end with.
@@ -86,7 +91,8 @@ var (
 // holds the validated layouts/<view>.xml files by view. Fonts maps a shipped
 // family to its file inside the theme folder (issue #105); Wash image paths
 // live in the wash layers. Both stay relative here; the app turns them into
-// art URLs when it resolves the theme.
+// art URLs when it resolves the theme. Schemes holds the [schemes.*] token
+// overrides (issue #134), validated like Tokens.
 type Theme struct {
 	Info     types.ThemeInfo
 	Tokens   map[string]string
@@ -94,11 +100,14 @@ type Theme struct {
 	Variants map[string]string
 	Layouts  map[string]types.ThemeLayout
 	Fonts    map[string]string
+	Schemes  map[string]map[string]string
 }
 
 // file is the theme.toml shape. Tokens and wash layers decode as loose maps so
 // one bad value costs only that token, not the whole file. Fonts maps a
-// family to its woff2 file, validated like the wash images.
+// family to its woff2 file, validated like the wash images. Schemes holds the
+// [schemes.light] and [schemes.black] tables as loose maps for the same
+// per-token validation.
 type file struct {
 	Theme struct {
 		ID       string   `toml:"id"`
@@ -107,10 +116,11 @@ type file struct {
 		Catalog  string   `toml:"catalog"`
 		Supports []string `toml:"supports"`
 	} `toml:"theme"`
-	Tokens   map[string]any   `toml:"tokens"`
-	Fonts    map[string]any   `toml:"fonts"`
-	Wash     []map[string]any `toml:"wash"`
-	Variants map[string]any   `toml:"variants"`
+	Tokens   map[string]any            `toml:"tokens"`
+	Fonts    map[string]any            `toml:"fonts"`
+	Wash     []map[string]any          `toml:"wash"`
+	Variants map[string]any            `toml:"variants"`
+	Schemes  map[string]map[string]any `toml:"schemes"`
 }
 
 // Parse reads one theme.toml. It never fails: a file it can't use comes back
@@ -235,6 +245,9 @@ func parseThemeFS(src []byte, fsys fs.FS, themeDir string, checkContrast bool) T
 	}
 	for _, name := range slices.Sorted(maps.Keys(f.Tokens)) {
 		t.setToken(name, f.Tokens[name])
+	}
+	for _, name := range slices.Sorted(maps.Keys(f.Schemes)) {
+		t.setScheme(name, f.Schemes[name])
 	}
 	if checkContrast {
 		t.checkContrast()
@@ -365,6 +378,56 @@ func (t *Theme) setToken(name string, raw any) {
 		return
 	}
 	t.Tokens[name] = val
+}
+
+// setScheme validates one [schemes.<name>] table (issue #134): the name must
+// be light or black, and each token inside validates like [tokens]. One bad
+// token costs only that token, like one bad [tokens] entry. Unknown scheme
+// names warn and are ignored.
+func (t *Theme) setScheme(name string, raw map[string]any) {
+	if !slices.Contains(schemeNames, name) {
+		t.warn("unknown scheme %q, ignored", name)
+		return
+	}
+	for _, token := range slices.Sorted(maps.Keys(raw)) {
+		if !slices.Contains(allTokens, token) {
+			t.warn("unknown token %q in scheme %s, ignored", token, name)
+			continue
+		}
+		v, ok := raw[token].(string)
+		if !ok {
+			t.warn("token %s in scheme %s must be a string, using the built-in value", token, name)
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if slices.Contains(fontTokens, token) {
+			val, err := t.fontStackCustom(v)
+			if err != nil {
+				t.warn("token %s in scheme %s: %v, using the built-in value", token, name, err)
+				continue
+			}
+			if t.Schemes == nil {
+				t.Schemes = map[string]map[string]string{}
+			}
+			if t.Schemes[name] == nil {
+				t.Schemes[name] = map[string]string{}
+			}
+			t.Schemes[name][token] = val
+			continue
+		}
+		val, err := checkToken(token, v)
+		if err != nil {
+			t.warn("token %s in scheme %s: %v, using the built-in value", token, name, err)
+			continue
+		}
+		if t.Schemes == nil {
+			t.Schemes = map[string]map[string]string{}
+		}
+		if t.Schemes[name] == nil {
+			t.Schemes[name] = map[string]string{}
+		}
+		t.Schemes[name][token] = val
+	}
 }
 
 // setFonts validates the [fonts] table: family to woff2 file inside the
@@ -644,6 +707,12 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 	out.ID = t.Info.ID
 	for name, v := range t.Tokens {
 		out.Tokens[name] = v
+	}
+	if len(t.Schemes) > 0 {
+		out.Schemes = map[string]map[string]string{}
+		for name, over := range t.Schemes {
+			out.Schemes[name] = maps.Clone(over)
+		}
 	}
 	if t.Wash != nil {
 		out.Wash = t.Wash

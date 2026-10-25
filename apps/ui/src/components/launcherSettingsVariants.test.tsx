@@ -6,7 +6,8 @@ import { Modal } from './Modal';
 
 const state = vi.hoisted(() => ({ variants: { 'settings.presentation': 'page', 'settings.navigation': 'scroll', 'section.chrome': 'hairline' } as Record<string, string> }));
 vi.mock('effect', () => ({ Effect: { runPromise: (value: unknown) => Promise.resolve(value) } }));
-vi.mock('../lib/theme', () => ({ DEFAULT_THEME_ID: 'warm', loadTheme: vi.fn(), useVariant: (axis: string) => state.variants[axis] }));
+vi.mock('../lib/theme', () => ({ DEFAULT_THEME_ID: 'warm', loadTheme: vi.fn(), useVariant: (axis: string) => state.variants[axis] ?? (axis === 'color.game-tone' ? 'off' : 'page'), useThemeSchemes: () => ['dark'], useColorScheme: () => 'dark', saveColorSchemeChoice: vi.fn(async () => {}) }));
+vi.mock('../lib/gameTone', () => ({ useGameTone: () => ({ supported: 'off', mode: 'off', choice: 'accent', tone: null, setChoice: vi.fn() }) }));
 vi.mock('../lib/i18n', () => ({ PSEUDO_LOCALE: 'pseudo', applyLanguage: vi.fn(), loadSessionInfo: async () => {}, pseudoAvailable: () => false }));
 vi.mock('../effect/runtime', () => ({
   LauncherApi: new Proxy({}, { get: (_target, name: string) => () => name === 'listThemes'

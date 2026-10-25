@@ -1184,6 +1184,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		MinimizeToTray:        a.settings.MinimizeToTray(),
 		Theme:                 a.settings.Theme(),
 		GameTone:              a.settings.GameTone(),
+		ColorScheme:           a.settings.ColorScheme(),
 	}
 }
 

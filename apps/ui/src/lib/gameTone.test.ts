@@ -90,6 +90,12 @@ describe('the mode a theme allows', () => {
     expect(effectiveTone('whole', 'accent')).toBe('accent');
     expect(effectiveTone('whole', 'whole')).toBe('whole');
   });
+
+  it('leaves no colour when the user picks off, whatever the theme allows', () => {
+    expect(effectiveTone('whole', 'off')).toBe('off');
+    expect(effectiveTone('accent', 'off')).toBe('off');
+    expect(effectiveTone('off', 'off')).toBe('off');
+  });
 });
 
 describe('tone variables', () => {
@@ -121,6 +127,70 @@ describe('tone variables', () => {
     }
     expect(vars['--color-ground']).toBe(vars['--background']);
     expect(vars['--color-text']).toBe(vars['--card-foreground']);
+  });
+
+  it('paints the new tokens in whole mode so the light scheme has no gaps', () => {
+    const vars = toneVariables('whole', tone);
+    for (const name of ['--color-ground-2', '--color-hairline-strong', '--color-popover']) {
+      expect(vars[name], name).toMatch(/^rgb\(\d+ \d+ \d+\)$/);
+    }
+  });
+});
+
+describe('schemes x tints (issue #134: 3 schemes, 3 tints)', () => {
+  const tone: Tone = [60, 120, 200];
+
+  it('off sets nothing in any scheme: the scheme tokens stand', () => {
+    for (const scheme of ['dark', 'light', 'black'] as const) {
+      expect(toneVariables('off', tone, scheme)).toEqual({});
+      expect(toneVariables('off', null, scheme)).toEqual({});
+    }
+  });
+
+  it('accent sets the accent pair per scheme and leaves the surfaces alone', () => {
+    for (const scheme of ['dark', 'light', 'black'] as const) {
+      const vars = toneVariables('accent', tone, scheme);
+      expect(vars['--color-accent'], `${scheme} accent`).toMatch(/^rgb\(\d+ \d+ \d+\)$/);
+      expect(vars['--color-accent-dim'], `${scheme} accent-dim`).toMatch(/^rgb\(\d+ \d+ \d+\)$/);
+      expect(vars['--color-ground'], `${scheme} ground`).toBeUndefined();
+      expect(vars['--color-text'], `${scheme} text`).toBeUndefined();
+    }
+    // Light takes the tone at (0.75, 0.38); dark takes vivid. Black dims the dim shade.
+    const darkDim = rgb(toneVariables('accent', tone, 'dark')['--color-accent-dim']);
+    const blackDim = rgb(toneVariables('accent', tone, 'black')['--color-accent-dim']);
+    const lightDim = rgb(toneVariables('accent', tone, 'light')['--color-accent-dim']);
+    expect(contrastRatio(blackDim, [0, 0, 0])).toBeLessThan(contrastRatio(darkDim, [0, 0, 0]));
+    expect(contrastRatio(lightDim, [0, 0, 0])).toBeGreaterThan(contrastRatio(darkDim, [0, 0, 0]));
+  });
+
+  it('whole sets every surface and text token per scheme', () => {
+    const expected = ['--color-ground', '--color-ground-2', '--color-raised', '--color-surface',
+      '--color-surface-strong', '--color-hairline', '--color-hairline-strong', '--popover',
+      '--color-text', '--color-text-body', '--color-text-muted', '--color-text-faint',
+      '--color-accent', '--color-accent-dim'];
+    for (const scheme of ['dark', 'light', 'black'] as const) {
+      const vars = toneVariables('whole', tone, scheme);
+      for (const name of expected) expect(vars[name], `${scheme} ${name}`).toMatch(/^rgb\(\d+ \d+ \d+\)$/);
+    }
+    // Light grounds are light, dark grounds are dark, black grounds are darker still.
+    const lightGround = rgb(toneVariables('whole', tone, 'light')['--color-ground']);
+    const darkGround = rgb(toneVariables('whole', tone, 'dark')['--color-ground']);
+    const blackGround = rgb(toneVariables('whole', tone, 'black')['--color-ground']);
+    const lum = (t: Tone): number => (0.2126 * t[0] + 0.7152 * t[1] + 0.0722 * t[2]) / 255;
+    expect(lum(lightGround)).toBeGreaterThan(0.6);
+    expect(lum(darkGround)).toBeLessThan(0.2);
+    expect(lum(blackGround)).toBeLessThanOrEqual(lum(darkGround));
+  });
+
+  it('keeps whole-mode text readable in every scheme', () => {
+    for (const scheme of ['dark', 'light', 'black'] as const) {
+      for (const sample of [[60, 120, 200], [250, 240, 246], [14, 10, 12]] as Tone[]) {
+        const vars = toneVariables('whole', sample, scheme);
+        const ground = rgb(vars['--color-ground']);
+        expect(contrastRatio(rgb(vars['--color-text']), ground), `${scheme} text`).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(rgb(vars['--color-text-muted']), ground), `${scheme} muted`).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
 

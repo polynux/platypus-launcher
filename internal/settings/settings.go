@@ -122,10 +122,13 @@ type file struct {
 	// Theme is the picked theme's id (issue #93). Empty means the built-in
 	// default; the app checks the id (see app_theme.go).
 	Theme string `json:"theme,omitempty"`
-	// GameTone is the "Accent / Whole app" choice (issue #123): "" or
-	// "accent" for the accent only, "whole" for the whole app. The theme's
-	// color.game-tone axis decides how far it applies (see gametone.go).
+	// GameTone is the game colour choice (issues #123, #134): "" or "accent"
+	// for the accent only, "whole" for the whole app, "off" for none. The
+	// theme's color.game-tone axis decides how far it applies (see gametone.go).
 	GameTone string `json:"game_tone,omitempty"`
+	// ColorScheme is the colour scheme choice (issue #134): "" or "dark" for
+	// dark, "light" or "black". Themes without schemes are dark only.
+	ColorScheme string `json:"color_scheme,omitempty"`
 	// MigrationNoticeDismissed remembers that the user dismissed the one-time
 	// Hydra→Platypus migration notice (issue #14), so it never returns.
 	MigrationNoticeDismissed bool `json:"migration_notice_dismissed,omitempty"`

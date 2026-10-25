@@ -234,9 +234,13 @@ export const LauncherApi = {
   listThemes: () => call<ThemeInfo[]>('ListThemes', () => App.ListThemes()),
   getTheme: (id: string) => call<ThemeTokens>('GetTheme', () => App.GetTheme(id)),
   setTheme: (id: string) => call<LauncherSettings>('SetTheme', () => App.SetTheme(id)),
-  // The game colour from the art (issue #123): "accent" or "whole", "" for
-  // accent. The picked theme's color.game-tone axis caps how far it applies.
+  // The game colour from the art (issues #123, #134): "off", "accent" or
+  // "whole", "" for accent. The picked theme's color.game-tone axis caps how
+  // far it applies.
   setGameTone: (tone: string) => call<LauncherSettings>('SetGameTone', () => App.SetGameTone(tone)),
+  // The colour scheme (issue #134): "dark", "light" or "black", "" for dark.
+  // Only themes that declare the scheme offer it; the rest stay dark.
+  setColorScheme: (scheme: string) => call<LauncherSettings>('SetColorScheme', () => App.SetColorScheme(scheme)),
   // Layouts (issue #96): one view's validated layout, or null when the theme
   // ships none. Go marshals the nil layout as null, like MigrationNotice.
   getThemeLayout: (view: string) =>

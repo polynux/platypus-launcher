@@ -3,5 +3,7 @@
   "accent": "Accent",
   "accentHint": "The game's colour on buttons and highlights",
   "whole": "Whole app",
-  "wholeHint": "The game's colour across the whole app"
+  "wholeHint": "The game's colour across the whole app",
+  "off": "Off",
+  "offHint": "The theme’s own colours, no game colour"
 }
