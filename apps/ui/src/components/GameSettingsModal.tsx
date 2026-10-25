@@ -1,16 +1,12 @@
 // i18n: converted
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, ArrowLeft, ChevronDown, Cloud, GitBranch, Palette, Plug, Puzzle, SlidersHorizontal, Wand2, Wrench } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
 import type { Game, GameJobKind, GameSettings, Job, ProtonVersion, RemoveOptions, StorePlugin, Tweak } from '../types';
 import { Modal, type ModalSize } from './Modal';
 import { Button } from '@/components/ds/button';
-import { Input } from '@/components/ds/input';
-import { Effect } from 'effect';
-import { LauncherApi } from '../effect/runtime';
-import { ErrorNotice } from './ErrorNotice';
-import { parseReleaseYear } from './AddGameModal';
 import { GeneralSettings, useGameSettingsDraft, type GameSettingsDraft } from './SettingsModal';
+import { CustomGameYear } from './CustomGameYear';
 import { CloudSavesPanel } from './CloudSavesPanel';
 import { GameSettingsPanel } from './PluginSettings';
 import { VersionsDialog } from './VersionsDialog';
@@ -19,10 +15,10 @@ import { CustomizationTab } from './CustomizationTab';
 import { MaintenanceTab } from './MaintenanceTab';
 import { TweaksPanel } from './TweaksPanel';
 import { LegalSection } from './LegalSection';
-import { cx } from './ui';
-import { tabLabel, pickTab, settingsTabs, settingsGroups, tabSummary, type GameSettingsTab } from '../lib/gameSettingsTabs';
+import { tabLabel, pickTab, settingsTabs, type GameSettingsTab } from '../lib/gameSettingsTabs';
 import { useVariant } from '../lib/theme';
 import { MaintenancePrefetchProvider, useMaintenancePrefetchSource } from './maintenancePrefetch';
+import { AtlasDrawer, atlasCategoryForTab, type AtlasCategory } from './AtlasSettings';
 
 export interface GameSettingsModalProps {
   game: Game;
@@ -53,18 +49,6 @@ export interface GameSettingsModalProps {
   /** The game is starting or running: destructive actions wait. */
   running?: boolean;
 }
-
-/** The icon an accordion header shows (issue #129), one per category. */
-const TAB_ICONS: Record<GameSettingsTab, React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>> = {
-  general: SlidersHorizontal,
-  cloud: Cloud,
-  versions: GitBranch,
-  options: Puzzle,
-  plugin: Plug,
-  tweaks: Wand2,
-  customization: Palette,
-  maintenance: Wrench,
-};
 
 /** Everything about one game that is not playing it, in one place. A tab shows
  *  only where its content is on offer (see settingsTabs); the page keeps just
@@ -103,17 +87,19 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   const presentation = useVariant('game-settings.presentation');
   const tabsVariant = useVariant('game-settings.tabs');
   const horizontalTabs = tabsVariant === 'horizontal';
-  // The accordion (issue #129): the same categories, in two groups, one open
-  // at a time, each header carrying its current values. Atlas draws it in the
-  // sheet presentation; the axis itself only picks the arrangement.
+  // The accordion (issue #129, atlas drawer): /21 categories in three groups,
+  // one open at a time. Atlas-only (game-settings.tabs = accordion).
   const accordion = tabsVariant === 'accordion';
-  const [open, setOpen] = useState<GameSettingsTab | null>(() => pickTab(tabs, p.initialTab));
-  // A section that goes away (a capability switched off meanwhile) closes to General.
-  useEffect(() => { if (open && !tabs.includes(open)) setOpen('general'); }, [open, tabs]);
-  // Opening another section closes the last one; General keeps its unsaved
-  // edits because its panel stays mounted (hidden) below.
-  const showTab = (name: GameSettingsTab) => { setTab(name); setOpen(name); };
-  const accordionRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState<AtlasCategory | null>(() => atlasCategoryForTab(pickTab(tabs, p.initialTab)));
+  // A section that goes away (a capability switched off meanwhile) falls back
+  // to Compatibility; Everyday/Advanced categories are always present.
+  useEffect(() => {
+    if (open && ['versions', 'options', 'plugin', 'customization', 'maintenance'].includes(open)
+      && !(tabs as string[]).includes(open)) setOpen('compat');
+  }, [open, tabs]);
+  // Opening another section closes the last one; the shared draft keeps
+  // unsaved edits across sections.
+  const showTab = (name: GameSettingsTab) => { setTab(name); };
   // The drawer focuses its own panel on open (/21 `.drawer`): no focus ring
   // on mouse open, and keyboard users land inside the trapped sheet.
   const panelRef = useRef<HTMLDivElement>(null);
@@ -142,8 +128,8 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     document.getElementById(`gs-tab-${shown}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [shown, horizontalTabs]);
 
-  const summary = (name: GameSettingsTab) => tabSummary(t, name, { game, plugin, runners: p.runners, tweaks: p.tweaks, job: p.job });
-  // One body per category, shared by the tabs and the accordion.
+  // One body per tab, for the tab presentations (dialog/sheet/page). The
+  // accordion (atlas drawer) uses AtlasDrawer instead.
   const body = (name: GameSettingsTab) => (name === 'general' ? (
     <>
       {game.store === 'custom' && <CustomGameYear game={game} onChanged={p.onCustomized} />}
@@ -182,67 +168,63 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     </div>
   );
 
-  // The accordion (issue #129): group headings, then one collapsible per
-  // category. General's panel stays mounted while closed, like its tab, so
-  // unsaved edits survive opening another section. The groups read the
-  // label.style axis (/21 plain: 12px/700/faint, never a mono kicker).
-  const plainLabels = useVariant('label.style') === 'plain';
-  const accordionBody = (
-    <div ref={accordionRef} data-testid="gs-accordion" className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-4 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]">
-      {settingsGroups(tabs).map((group) => (
-        <div key={group.level}>
-          <div className={plainLabels ? 'px-2 pb-1.5 pt-4 text-[12px] font-bold text-text-faint' : 'px-2 pb-1.5 pt-4 font-mono text-micro uppercase tracking-[0.14em] text-text-faint'}>
-            {t(`gameSettings:accordion.${group.level}`)}
+  // Atlas drawer chrome (/21 `.drawer`): header 18/16/14/24 with a hairline
+  // bottom border, body 4/16/30 with one scroller, ghost 28px close button.
+  // Other presentations keep the shared dialog chrome below.
+  if (accordion) {
+    const drawer = (
+      <div ref={panelRef} tabIndex={-1} className="@container flex h-full min-h-0 flex-col outline-none">
+        <div className="flex flex-none items-center justify-between gap-4 border-b border-hairline pb-[14px] pl-6 pr-4 pt-[18px]">
+          <div className="min-w-0">
+            <h2 className="text-[18px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.allSettings')}</h2>
+            <div className="truncate text-[13px] text-text-muted">{game.title}</div>
           </div>
-          {group.tabs.map((name) => {
-            const isOpen = open === name;
-            const Icon = TAB_ICONS[name];
-            return (
-              <section key={name} className={cx('rounded-[10px]', isOpen && 'bg-surface')}>
-                <h3 className="font-sans">
-                  <button
-                    type="button"
-                    id={`gs-acc-${name}`}
-                    data-gs-accordion-header
-                    aria-expanded={isOpen}
-                    aria-controls={isOpen || name === 'general' ? `gs-acc-panel-${name}` : undefined}
-                    aria-describedby={`gs-acc-sum-${name}`}
-                    onClick={() => setOpen(isOpen ? null : name)}
-                    className="flex h-[46px] w-full items-center gap-2.5 rounded-[10px] px-3 text-left outline-none hover:bg-surface-strong focus-visible:ring-2 focus-visible:ring-focus/60"
-                  >
-                    <Icon className={cx('size-4 flex-none', isOpen ? 'text-accent' : 'text-text-muted')} aria-hidden />
-                    <span className="text-[13px] font-bold text-text">{tabLabel(t, name)}</span>
-                    <span id={`gs-acc-sum-${name}`} className="ml-auto max-w-[46%] truncate text-hint text-text-faint">{summary(name)}</span>
-                    <ChevronDown className={cx('size-4 flex-none text-text-faint transition-transform', isOpen && 'rotate-180')} aria-hidden />
-                  </button>
-                </h3>
-                {(isOpen || name === 'general') && (
-                  <div
-                    id={`gs-acc-panel-${name}`}
-                    role="region"
-                    aria-labelledby={`gs-acc-${name}`}
-                    hidden={!isOpen}
-                    className="px-3.5 pb-3 pl-[39px]"
-                  >
-                    {body(name)}
-                  </div>
-                )}
-              </section>
-            );
-          })}
+          {presentation !== 'page' && (
+            <Button variant="ghost" size="icon" onClick={p.onClose} aria-label={t('common:close')} className="size-7 flex-none">
+              <X className="size-4" />
+            </Button>
+          )}
         </div>
-      ))}
-    </div>
-  );
+        <MaintenancePrefetchProvider pre={maintenance}>
+          <AtlasDrawer
+            game={game} plugin={plugin} runners={p.runners} tweaks={p.tweaks} jobs={p.jobs} job={p.job}
+            tabs={tabs} initialTab={p.initialTab} open={open} setOpen={setOpen}
+            shared={shared} onSaveSettings={p.onSaveSettings} onChangeSettings={handleTweakChange}
+            onJob={p.onJob} onJobAction={p.onJobAction} onNotify={p.onNotify}
+            onChanged={p.onChanged} onCustomized={p.onCustomized} onCopied={p.onCopied}
+            onClose={p.onClose} onRemove={p.onRemove} running={p.running}
+          />
+        </MaintenancePrefetchProvider>
+      </div>
+    );
+    if (presentation === 'page') {
+      return (
+        <div className="p-7">
+          <Button variant="ghost" size="none" onClick={p.onClose} className="gap-1.5 rounded px-0 text-[12px] font-semibold text-text-muted hover:bg-transparent hover:text-white">
+            <ArrowLeft className="h-3.5 w-3.5" /> {t('common:back')}
+          </Button>
+          <div className="mt-4">{drawer}</div>
+        </div>
+      );
+    }
+    return (
+      <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!shared.dirty}
+        size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth}
+        onOpenAutoFocus={drawerAutoFocus}
+        overlayClassName="bg-[rgba(0,0,0,0.38)]"
+        contentClassName="rounded-none rounded-l-none rounded-r-none ring-hairline"
+        innerClassName="overflow-hidden p-0 [scrollbar-width:thin]">
+        {drawer}
+      </Modal>
+    );
+  }
 
   const content = (
     <div ref={panelRef} tabIndex={-1} className="@container flex h-full min-h-0 flex-col outline-none">
       <div className="mb-5 flex flex-none items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className={accordion ? 'text-[18px] font-extrabold tracking-tight' : 'text-[20px] font-extrabold tracking-tight'}>
-            {accordion ? t('gameSettings:settingsModal.allSettings') : t('gameSettings:settingsModal.heading')}
-          </h2>
-          <div className={accordion ? 'truncate text-[13px] text-text-muted' : 'truncate font-mono text-hint text-white/55'}>{game.title}</div>
+          <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameSettings:settingsModal.heading')}</h2>
+          <div className="truncate font-mono text-hint text-white/55">{game.title}</div>
         </div>
         {presentation !== 'page' && (
           <Button variant="neutral" size="icon" onClick={p.onClose} aria-label={t('common:close')} className="size-8 flex-none">
@@ -257,7 +239,6 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
           Narrow widths stack the tabs above the content and keep the same
           outer height, with the content scrolling under the tabs. */}
       <MaintenancePrefetchProvider pre={maintenance}>
-      {accordion ? accordionBody : (
         <div className={tabsRootClass}>
           <div
             role="tablist"
@@ -283,11 +264,11 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
                   setTab(next);
                   document.getElementById(`gs-tab-${next}`)?.focus();
                 }}
-                className={cx(
-                  'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition',
-                  horizontalTabs && 'shrink-0',
-                  name === shown ? 'bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : 'text-white/60 hover:bg-white/[0.06] hover:text-white/90',
-                )}
+                className={
+                  'rounded-xl px-3 py-2 text-left text-[12.5px] font-semibold transition' +
+                  (horizontalTabs ? ' shrink-0' : '') +
+                  (name === shown ? ' bg-amber-300/[0.1] text-amber-100 ring-1 ring-amber-300/30' : ' text-white/60 hover:bg-white/[0.06] hover:text-white/90')
+                }
               >
                 {tabLabel(t, name)}
               </button>
@@ -296,7 +277,6 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
 
           {tabsBody}
         </div>
-      )}
       </MaintenancePrefetchProvider>
       </div>
   );
@@ -324,76 +304,6 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} onOpenAutoFocus={drawerAutoFocus} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
       {content}
     </Modal>
-  );
-}
-
-/** A sideloaded game's release year, editable in the General tab (issue #35).
- *  Empty clears it back to unknown. Saving reloads the library entry quietly,
- *  like a customization change. */
-function CustomGameYear({ game, onChanged }: { game: Game; onChanged: () => void }) {
-  const { t } = useTranslation('gameSettings');
-  const plainKicker = useVariant('label.style') === 'plain';
-  const [raw, setRaw] = useState(game.release_year ? String(game.release_year) : '');
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => { setRaw(game.release_year ? String(game.release_year) : ''); }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const parsed = parseReleaseYear(raw);
-  const saved = game.release_year ?? 0;
-  const dirty = !parsed.error && (parsed.year ?? 0) !== saved;
-  const save = () => {
-    if (parsed.error || !dirty || saving) return;
-    setSaving(true);
-    setError(null);
-    Effect.runPromise(LauncherApi.setCustomGameYear(game.id, parsed.year ?? 0)).then(
-      () => { setSaving(false); onChanged(); },
-      (e) => { setSaving(false); setError(e instanceof Error ? e.message : String(e)); },
-    );
-  };
-  return (
-    <div className="mb-6">
-      {plainKicker ? (
-        <div className="mb-1.5 text-[12px] font-bold text-text-faint">{t('gameSettings:year.kicker')}</div>
-      ) : (
-        <span className="mb-1.5 block font-mono text-[12px] uppercase tracking-[0.14em] text-white/55">{t('gameSettings:year.kicker')}</span>
-      )}
-      <form
-        className="flex flex-wrap items-center gap-2"
-        onSubmit={(e) => { e.preventDefault(); save(); }}
-      >
-        <Input
-          aria-label={t('gameSettings:year.aria')}
-          value={raw}
-          onChange={(e) => { setRaw(e.target.value); setError(null); }}
-          placeholder={t('gameSettings:year.placeholder')}
-          inputMode="numeric"
-          className="w-32"
-        />
-        <Button type="submit" variant="primary" size="sm" disabled={!dirty || saving}>{t('gameSettings:year.save')}</Button>
-        {saved > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={saving}
-            onClick={() => {
-              setSaving(true);
-              setError(null);
-              Effect.runPromise(LauncherApi.setCustomGameYear(game.id, 0)).then(
-                () => { setRaw(''); setSaving(false); onChanged(); },
-                (e) => { setSaving(false); setError(e instanceof Error ? e.message : String(e)); },
-              );
-            }}
-          >
-            {t('gameSettings:year.clear')}
-          </Button>
-        )}
-      </form>
-      {parsed.error
-        // The message comes from the shared release-year check (owned by the
-        // library area's AddGameModal): it turns French with that conversion.
-        ? <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{parsed.error}</p>
-        : error && <ErrorNotice message={error} fallback={t('gameSettings:year.saveError')} />}
-    </div>
   );
 }
 

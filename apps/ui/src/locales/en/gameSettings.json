@@ -86,7 +86,8 @@
   },
   "accordion": {
     "everyday": "Everyday",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "game": "Game"
   },
   "summary": {
     "native": "Native Linux",
