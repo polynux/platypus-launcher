@@ -300,7 +300,7 @@ export function TuneFlyout({
       tabIndex={-1}
       aria-label={t('tune:title', { title: game.title })}
       style={pos ? { position: 'fixed', left: pos.left, top: pos.top, maxHeight: pos.maxHeight, overflowY: 'auto' } : { position: 'fixed', left: 8, top: 8, visibility: 'hidden' }}
-      className="z-[60] w-[380px] animate-modal-in overflow-x-hidden rounded-[10px] bg-[color-mix(in_srgb,var(--color-raised)_50%,var(--color-surface))] text-[13.5px] text-text ring-1 ring-surface-strong shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal] outline-none"
+      className="z-[60] w-[380px] animate-modal-in overflow-x-hidden rounded-[10px] bg-popover text-[13.5px] text-text ring-1 ring-hairline-strong shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal] outline-none"
     >
       <div className="border-b border-hairline px-3.5 py-3">
         <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -347,8 +347,8 @@ export function TuneFlyout({
                   <span className="text-[13.5px] font-semibold text-text">{label}</span>
                   <small className="truncate text-[12px] text-text-faint">{disabledReason ?? sub}</small>
                 </span>
-                <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', on ? 'bg-accent' : 'bg-surface-strong')}>
-                  <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', on ? 'translate-x-[14px] bg-on-accent' : 'bg-raised')} />
+                <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', on ? 'bg-accent' : 'bg-surface-strong ring-1 ring-inset ring-hairline-strong')}>
+                  <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', on ? 'translate-x-[14px] bg-on-accent' : 'bg-text-muted')} />
                 </span>
               </button>
             </li>

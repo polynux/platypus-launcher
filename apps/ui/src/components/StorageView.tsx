@@ -1,7 +1,7 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
-import React, { useState } from 'react';
-import { FolderInput, FolderOpen, Loader2, RefreshCw, ScanLine, Trash2 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { FolderInput, FolderOpen, HardDriveDownload, Loader2, RefreshCw, ScanLine, Trash2 } from 'lucide-react';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
@@ -382,6 +382,23 @@ function Legend({ dot, label, value }: { dot: string; label: string; value: stri
  *  snapshot, so the card keeps the aggregate bar and the full row actions. */
 function AtlasStorage({ data }: { data: StorageData }) {
   const { t } = useTranslation(['nav', 'storage', 'common']);
+  // One card per drive with its games inside (the lab's StoragePage): a row
+  // belongs to the drive whose folder holds its install dir, falling back to
+  // the mount prefix and then the first card, so no measured game vanishes.
+  const gamesByDrive = useMemo(() => {
+    const rest = [...data.sorted];
+    const groups = data.drives.map((d) => {
+      const mine = rest.filter((row) => {
+        const dir = data.byId.get(row.game_id)?.install_dir || row.install_dir;
+        if (d.folders.some((f) => dir.startsWith(f))) return true;
+        return d.mount !== '/' && dir.startsWith(d.mount) && !data.drives.some((o) => o !== d && o.folders.some((f) => dir.startsWith(f)));
+      });
+      for (const m of mine) rest.splice(rest.indexOf(m), 1);
+      return { drive: d, rows: mine };
+    });
+    if (rest.length > 0 && groups.length > 0) groups[0].rows.push(...rest);
+    return groups;
+  }, [data.drives, data.sorted, data.byId]);
   return (
     <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -391,7 +408,7 @@ function AtlasStorage({ data }: { data: StorageData }) {
         </div>
         <Button variant="neutral" onClick={data.rescan} disabled={data.scanning}>
           {data.scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {data.scanning ? t('storage:scanning') : t('storage:rescan')}
+          {data.scanning ? t('storage:scanning') : t('storage:atlas.rescan')}
         </Button>
       </header>
       {data.drives.length === 0 && data.sorted.length === 0 ? (
@@ -406,166 +423,170 @@ function AtlasStorage({ data }: { data: StorageData }) {
         )
       ) : (
         <>
-          {data.drives.map((d) => (
-            <AtlasDriveCard key={d.id} drive={d} />
+          {gamesByDrive.map(({ drive, rows }) => (
+            <AtlasDriveCard key={drive.id} drive={drive} rows={rows} data={data} />
           ))}
-          <AtlasGameRows data={data} />
         </>
       )}
     </div>
   );
 }
 
-function AtlasDriveCard({ drive: d }: { drive: DiskUsage['drives'][number] }) {
-  const { t } = useTranslation('storage');
+function AtlasDriveCard({ drive: d, rows, data }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData }) {
+  const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const known = d.total_bytes > 0;
-  const gamesPct = known ? Math.min(100, (d.games_bytes / d.total_bytes) * 100) : 0;
-  const otherPct = known ? Math.min(100 - gamesPct, (d.other_bytes / d.total_bytes) * 100) : 0;
+  const shown = rows.slice(0, 6);
+  const hidden = rows.length - shown.length;
+  const total = rows.reduce((a, r) => a + r.size_bytes + r.prefix_bytes, 0);
   return (
     <section aria-label={d.mount} className="grid gap-2.5 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="text-[14px] font-bold">{d.mount}</span>
+        <span className="inline-flex items-center gap-2 text-[14px] font-bold">
+          <HardDriveDownload className="h-4 w-4 text-text-muted" aria-hidden />
+          {d.mount}
+        </span>
         <span className="text-[12.5px] text-text-muted">
           <strong className="font-bold text-text">{figure(d.free_bytes)}</strong> {t('storage:atlas.freeOf', { total: figure(d.total_bytes) })}
         </span>
       </header>
-      <div className="min-w-0 truncate font-mono text-hint text-text-faint select-text">{d.folders.join(' · ')}</div>
+      <div className="min-w-0 truncate text-[12px] text-text-faint select-text">{d.folders.join(' · ')}</div>
       <div
         role="progressbar"
         aria-label={d.mount}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(gamesPct)}
-        className={known ? 'flex h-1.5 overflow-hidden rounded-full bg-surface-strong' : 'h-1.5 overflow-hidden rounded-full bg-surface-strong animate-pulse'}
+        aria-valuenow={known ? Math.round((d.games_bytes / d.total_bytes) * 100) : undefined}
+        className={known ? 'flex h-2.5 gap-px overflow-hidden rounded-full bg-hairline' : 'h-2.5 overflow-hidden rounded-full bg-surface-strong animate-pulse'}
       >
-        {known && (
-          <>
-            <div className="bg-dl transition-[width]" style={{ width: `${gamesPct}%` }} />
-            <div className="bg-hairline-strong transition-[width]" style={{ width: `${otherPct}%` }} />
-          </>
-        )}
+        {known && total > 0 && shown.map((r, i) => (
+          <div
+            key={r.game_id}
+            className="bg-accent transition-[width]"
+            style={{ width: `${Math.max(1, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, opacity: Math.max(0.35, 1 - i * 0.12) }}
+            title={`${r.title} · ${figure(r.size_bytes + r.prefix_bytes)}`}
+          />
+        ))}
+        {known && <div className="min-w-1 flex-1 bg-hairline" />}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-text-muted">
-        <Legend dot="bg-dl" label={t('storage:legend.games')} value={figure(d.games_bytes)} />
-        <Legend dot="bg-surface-strong" label={t('storage:legend.other')} value={figure(d.other_bytes)} />
-        <Legend dot="bg-hairline-strong" label={t('storage:legend.free')} value={figure(d.free_bytes)} />
-      </div>
+      {shown.length > 0 && (
+        <ul className="divide-y divide-hairline">
+          {shown.map((row) => (
+            <AtlasGameRow key={row.game_id} row={row} data={data} />
+          ))}
+        </ul>
+      )}
+      {hidden > 0 && (
+        <p className="text-[12px] text-text-faint">{t('storage:atlas.andMore', { count: hidden })}</p>
+      )}
     </section>
   );
 }
 
-function AtlasGameRows({ data }: { data: StorageData }) {
+function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: StorageData }) {
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
-  if (data.sorted.length === 0) return null;
+  const game = data.byId.get(row.game_id);
   return (
-    <section aria-label={t('storage:gamesTitle')} className="rounded-2xl bg-surface px-4 py-2 ring-1 ring-hairline">
-      <ul className="divide-y divide-hairline">
-        {data.sorted.map((row) => {
-          const game = data.byId.get(row.game_id);
-          return (
-            <li key={row.game_id} className="py-1.5">
-              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => game && data.openFolder(game)}
-                  className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  aria-label={game ? t('storage:action.open', { title: game.title }) : row.title}
-                  disabled={!game}
-                >
-                  <Cover src={game ? heroImages(game) : []} title={row.title} className="h-9 w-16 rounded-lg ring-1 ring-hairline" />
-                </button>
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-bold">{row.title}</div>
-                  <div className="truncate text-[12px] text-text-faint">
-                    {game?.last_played_at ? t('storage:atlas.played', { ago: lastPlayedAgo(game) ?? '' }) : t('storage:size.scanned')}
-                  </div>
-                </div>
-                <span className="text-[13px] tabular-nums text-text-muted">{figure(row.size_bytes + row.prefix_bytes)}</span>
-                {game ? (
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.open', { title: game.title })} onClick={() => data.openFolder(game)}>
-                      <FolderOpen className="h-4 w-4" />
-                    </Button>
-                    {game.is_installed && isPluginGame(game) && (
-                      <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.move', { title: game.title })} onClick={() => data.setMoveId(row.game_id)}>
-                        <FolderInput className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {game.is_installed && (
-                      <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.scan', { title: game.title })} onClick={() => data.scan(game)}>
-                        {data.measuring.has(game.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-                      </Button>
-                    )}
-                    {(game.store === 'custom' || game.is_installed) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7"
-                        aria-label={game.store === 'custom' ? t('storage:action.remove', { title: game.title }) : t('storage:action.uninstall', { title: game.title })}
-                        onClick={() => {
-                          data.setRemoveId(null);
-                          data.setMoveId(null);
-                          data.setUninstallId(game.store === 'custom' ? null : row.game_id);
-                          data.setRemoveId(game.store === 'custom' ? row.game_id : null);
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <span className="w-[76px]" />
-                )}
-              </div>
-              {data.moveId === row.game_id && game && (
-                <MoveDialog
-                  game={game}
-                  startFolder={parentFolder(game.install_dir)}
-                  onClose={() => data.setMoveId(null)}
-                  onQueued={() => {
-                    data.setMoveId(null);
-                    data.onNotify(t('gameSettings:maintenance.moving', { title: game.title }), 'busy');
-                  }}
-                />
+    <li className="group py-1.5">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3">
+        <button
+          type="button"
+          onClick={() => game && data.openFolder(game)}
+          className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          aria-label={game ? t('storage:action.open', { title: game.title }) : row.title}
+          disabled={!game}
+        >
+          <Cover src={game ? heroImages(game) : []} title={row.title} className="h-5 w-11 rounded ring-1 ring-hairline" />
+        </button>
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold">{row.title}</div>
+          <div className="truncate text-[12px] text-text-muted">
+            {game?.last_played_at ? t('storage:atlas.played', { ago: lastPlayedAgo(game) ?? '' }) : t('storage:size.scanned')}
+          </div>
+        </div>
+        <span className="text-[13px] tabular-nums text-text-muted">{figure(row.size_bytes + row.prefix_bytes)}</span>
+        {game ? (
+          <div className="flex items-center gap-1">
+            <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.open', { title: game.title })} onClick={() => data.openFolder(game)}>
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+              {game.is_installed && isPluginGame(game) && (
+                <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.move', { title: game.title })} onClick={() => data.setMoveId(row.game_id)}>
+                  <FolderInput className="h-4 w-4" />
+                </Button>
               )}
-              {data.removeId === row.game_id && game && (
-                <div className="mt-2 border-t border-hairline pt-2">
-                  <RemoveFlow
-                    key={game.id}
-                    game={game}
-                    onCancel={() => data.setRemoveId(null)}
-                    onRemove={(opts) => {
-                      data.setRemoveId(null);
-                      data.onRemove(game, opts);
-                    }}
-                  />
-                </div>
+              {game.is_installed && (
+                <Button variant="ghost" size="icon" className="size-7" aria-label={t('storage:action.scan', { title: game.title })} onClick={() => data.scan(game)}>
+                  {data.measuring.has(game.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+                </Button>
               )}
-              {data.uninstallId === row.game_id && game && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-hairline pt-2">
-                  <p className="min-w-0 flex-1 basis-64 text-[12.5px] text-text-muted">
-                    {t('storage:uninstallAsk', { title: game.title })}
-                  </p>
-                  <Button variant="ghost" size="sm" onClick={() => data.setUninstallId(null)}>
-                    {t('common:cancel')}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    autoFocus
-                    onClick={() => {
-                      data.setUninstallId(null);
-                      data.onUninstall(game);
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> {t('storage:uninstallGo')}
-                  </Button>
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+            </span>
+            {(game.store === 'custom' || game.is_installed) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="font-semibold text-text-muted hover:text-text"
+                aria-label={game.store === 'custom' ? t('storage:action.remove', { title: game.title }) : t('storage:action.uninstall', { title: game.title })}
+                onClick={() => {
+                  data.setRemoveId(null);
+                  data.setMoveId(null);
+                  data.setUninstallId(game.store === 'custom' ? null : row.game_id);
+                  data.setRemoveId(game.store === 'custom' ? row.game_id : null);
+                }}
+              >
+                {t('storage:uninstallGo')}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <span className="w-[76px]" />
+        )}
+      </div>
+      {data.moveId === row.game_id && game && (
+        <MoveDialog
+          game={game}
+          startFolder={parentFolder(game.install_dir)}
+          onClose={() => data.setMoveId(null)}
+          onQueued={() => {
+            data.setMoveId(null);
+            data.onNotify(t('gameSettings:maintenance.moving', { title: game.title }), 'busy');
+          }}
+        />
+      )}
+      {data.removeId === row.game_id && game && (
+        <div className="mt-2 border-t border-hairline pt-2">
+          <RemoveFlow
+            key={game.id}
+            game={game}
+            onCancel={() => data.setRemoveId(null)}
+            onRemove={(opts) => {
+              data.setRemoveId(null);
+              data.onRemove(game, opts);
+            }}
+          />
+        </div>
+      )}
+      {data.uninstallId === row.game_id && game && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-hairline pt-2">
+          <p className="min-w-0 flex-1 basis-64 text-[12.5px] text-text-muted">
+            {t('storage:uninstallAsk', { title: game.title })}
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => data.setUninstallId(null)}>
+            {t('common:cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            autoFocus
+            onClick={() => {
+              data.setUninstallId(null);
+              data.onUninstall(game);
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> {t('storage:uninstallGo')}
+          </Button>
+        </div>
+      )}
+    </li>
   );
 }

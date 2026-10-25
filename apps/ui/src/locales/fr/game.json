@@ -370,10 +370,11 @@
     "finished": "Terminé",
     "abandoned": "Abandonné",
     "notesLabel": "Vos notes",
-    "notesPlaceholder": "Vos remarques sur ce jeu, conservées sur cette machine.",
+    "notesPlaceholder": "Vous seul pouvez voir ceci.",
     "saving": "Enregistrement…",
     "saved": "Enregistré",
-    "failed": "Échec"
+    "failed": "Échec",
+    "privateNotes": "Notes privées"
   },
   "achList": {
     "show": "Afficher",
@@ -417,7 +418,7 @@
     "lastPlayed": "Dernière partie",
     "runsWith": "Fonctionne avec",
     "protondb": "ProtonDB",
-    "neverPlayed": "Jamais joué",
+    "neverPlayed": "Jamais",
     "unknownRunner": "Inconnu",
     "noRating": "Sans évaluation",
     "achievements": "Succès",
@@ -445,6 +446,32 @@
     "cancel": "Annuler",
     "of": "sur",
     "upNext": "À suivre"
+  },
+  "saves": {
+    "cloudTitle": "Sauvegardes cloud",
+    "cloudStore": "Cloud {{store}}",
+    "noCloudStore": "{{store}} n'a pas de sauvegardes cloud",
+    "localOnly": "Les sauvegardes locales ci-dessous protègent quand même vos sauvegardes.",
+    "backupsTitle": "Sauvegardes sur ce PC",
+    "noBackups": "Aucune sauvegarde pour l'instant. Platypus sauvegarde avant chaque synchronisation une fois que vous avez joué.",
+    "locationTitle": "Emplacement des sauvegardes",
+    "openFolder": "Ouvrir le dossier"
+  },
+  "sessions": {
+    "emptyTitle": "Aucune session pour l'instant",
+    "emptyBody": "Jouez à {{title}} une fois pour commencer un historique.",
+    "lead": "{{count}} sessions ces deux dernières semaines, {{total}} en tout.",
+    "quitNormally": "Quitté normalement",
+    "crashed": "Planté"
+  },
+  "compatTab": {
+    "crashBanner": "{{count}} des derniers lancements ont planté.",
+    "seeFixes": "Voir les correctifs",
+    "suggestedTitle": "Ajustements suggérés",
+    "suggestedMeta": "{{count}} suggérés",
+    "apply": "Appliquer",
+    "notesTitle": "Notes de la communauté",
+    "noNotes": "Aucune note pour l'instant."
   },
   "launchNotes": {
     "client": "Se lance via {{name}}. Platypus le démarre pour vous et attend.",

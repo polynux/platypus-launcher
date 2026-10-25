@@ -78,6 +78,10 @@
   "atlas": {
     "queueSub_one": "{{count}} dans la file.",
     "queueSub_other": "{{count}} dans la file.",
+    "queueSubSpeed_one": "{{count}} dans la file. {{speed}}/s.",
+    "queueSubSpeed_other": "{{count}} dans la file. {{speed}}/s.",
+    "queueEmptySub": "Rien ne télécharge.",
+    "queue": "File d'attente",
     "pauseAll": "Tout mettre en pause",
     "recent": "Récents",
     "emptyTitle": "Rien à télécharger",

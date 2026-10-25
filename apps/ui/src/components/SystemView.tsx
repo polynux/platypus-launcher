@@ -85,12 +85,12 @@ function AtlasRunners({ runners, onRefresh, scanning }: SystemViewProps) {
         <EmptyState label={t('runners:emptyTitle')}>{t('runners:emptyBody')}</EmptyState>
       ) : (
         <>
-          <section aria-label={t('runners:atlas.defaultLabel')} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-hairline pb-4">
-            <div>
-              <h2 className="text-[13px] font-bold">{t('runners:atlas.defaultLabel')}</h2>
-              <p className="mt-0.5 text-[12.5px] text-text-muted">{t('runners:atlas.defaultDesc')}</p>
+          <section aria-label={t('runners:atlas.defaultLabel')} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
+            <div className="grid min-w-0 gap-[3px]">
+              <h2 className="text-[13px] font-semibold text-text">{t('runners:atlas.defaultLabel')}</h2>
+              <p className="text-[0.93em] leading-normal text-text-muted">{t('runners:atlas.defaultDesc')}</p>
             </div>
-            <span className="rounded-lg bg-surface px-3 py-1.5 text-[13px] font-semibold ring-1 ring-hairline" aria-live="polite">
+            <span className="w-[190px] truncate text-[13px] font-semibold text-text-muted" aria-live="polite">
               {fallback?.name ?? '—'}
             </span>
           </section>
@@ -101,20 +101,20 @@ function AtlasRunners({ runners, onRefresh, scanning }: SystemViewProps) {
                 <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-bold">{r.name}</span>
+                      <span className="text-[13px] font-semibold text-text">{r.name}</span>
                       {r.is_default && (
                         <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[11.5px] font-semibold text-text-muted">
                           {t('runners:atlas.defaultBadge')}
                         </span>
                       )}
-                      {r.is_custom && <Badge variant="gold">{t('runners:badge.custom')}</Badge>}
-                      {r.is_system && <Badge variant="neutral">{t('runners:badge.system')}</Badge>}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-hint text-text-faint select-text">{r.path}</div>
+                    <div className="mt-0.5 truncate text-[12px] text-text-faint select-text">{r.path}</div>
                   </div>
-                  <Badge variant="ok" className="flex-none gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-ok" /> {t('runners:badge.found')}
-                  </Badge>
+                  {r.is_system ? (
+                    <span className="flex-none text-[12px] text-text-faint">{t('runners:atlas.systemNote')}</span>
+                  ) : (
+                    <span className="w-[76px] flex-none" />
+                  )}
                 </li>
               ))}
             </ul>

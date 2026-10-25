@@ -12,7 +12,7 @@ import { Hero, heroChipClass } from './Hero';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { X, Play } from 'lucide-react';
-import { byRecent, coverImages, heroImages, lastPlayedAgo, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
+import { byRecent, coverImages, formatBytes, heroImages, lastPlayedAgo, needsAttention, storeLabel as storeLabelFallback } from '../lib/games';
 import { formatHours } from '../lib/format';
 import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
@@ -401,17 +401,43 @@ export function RecentList({ games, onOpenGame }: { games: Game[]; onOpenGame: (
  *  data and handlers as the layout blocks above; only the markup is /22.
  *  The Play button opens the game page, where Play lives: Home gets no new
  *  launch wiring of its own. */
+/** Recently added from the activity log's install/add events (issue #138):
+ *  newest first, matched back to library games by title. Without log events
+ *  (or matches), sideloaded games stand in: they have no store record. */
+function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
+  const byTitle = new Map(games.map((g) => [g.title, g]));
+  const seen = new Set<string>();
+  const out: Game[] = [];
+  for (const e of activity) {
+    if (e.type !== 'download' && e.type !== 'add') continue;
+    const g = (e.game && byTitle.get(e.game)) || undefined;
+    if (g && !seen.has(g.id)) {
+      seen.add(g.id);
+      out.push(g);
+      if (out.length >= 5) break;
+    }
+  }
+  if (out.length > 0) return out;
+  return games.filter((g) => g.store === 'custom').slice(0, 5);
+}
+
 function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps & { allGames: Game[] }) {
   const { t } = useTranslation(['dashboard', 'common', 'game', 'activity']);
   const waiting = games.filter(needsAttention);
   const pending = waiting.filter((g) => !dismissedHero.has(g.id));
-  const suggested = pending[0];
+  // The lab's suggestion: the first owned, not-installed game, else an
+  // installed never-played one, skipping dismissed ones, else the game
+  // needing attention.
+  const owned = allGames.length > 0 ? allGames : games;
+  const suggested = owned.find((g) => !g.is_installed && !dismissedHero.has(g.id))
+    ?? games.find((g) => g.is_installed && !g.last_played_at && !dismissedHero.has(g.id))
+    ?? pending[0];
   const installed = games.length;
   const hasPlayData = games.some((g) => g.last_played_at);
   const continueGames = [...games].sort(hasPlayData ? byRecent : byTitle).slice(0, 3);
-  const recentlyAdded = games.filter((g) => g.store === 'custom').slice(0, 5);
+  const added = recentAdded(owned, activity);
   const toFinish = [...games].filter((g) => (g.playtime_minutes ?? 0) > 0).sort(byRecent).slice(0, 5);
-  const toInstall = allGames.filter((g) => !g.is_installed).slice(0, 5);
+  const toInstall = owned.filter((g) => !g.is_installed).slice(0, 5);
   const hour = new Date().getHours();
   const greeting = hour < 5
     ? t('dashboard:greeting.night')
@@ -427,6 +453,8 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
       </div>
     );
   }
+  const reason = suggested ? attentionReason(suggested, t) : '';
+  const installSize = suggested && !suggested.is_installed && suggested.size_bytes ? formatBytes(suggested.size_bytes) : null;
   return (
     <div className={ATLAS_PAGE}>
       <header>
@@ -434,60 +462,68 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
         <p className="mt-[3px] text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
       </header>
       {suggested && (
-        <Hero site="dashboard" art={heroImages(suggested)} title={suggested.title}>
-          <div className="absolute left-7 top-6 max-w-md">
-            <span className="font-mono text-micro uppercase tracking-widest text-text-muted">{t('dashboard:home.fromBacklog')}</span>
-            <h2 className="mt-1 text-[22px] font-extrabold tracking-tight text-white">{suggested.title}</h2>
-            <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-white/85">{attentionReason(suggested, t)}</p>
-            <div className="mt-3 flex gap-2.5">
-              <Button variant="primary" onClick={() => onOpenGame(suggested.id)}>{t('dashboard:hero.openGame')}</Button>
+        <section aria-label={suggested.title} className="relative overflow-hidden rounded-xl text-white">
+          <img src={heroImages(suggested)[0]} alt="" aria-hidden loading="lazy" className="h-[180px] w-full object-cover" style={{ objectPosition: 'center 30%' }} />
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 grid max-w-[52ch] content-end gap-2 p-5">
+            <small className="text-[12px] font-semibold text-white opacity-70">{t('dashboard:home.fromBacklog')}</small>
+            <h2 className="text-[24px] font-extrabold leading-tight">{suggested.title}</h2>
+            {reason && <p className="line-clamp-2 text-[13.5px] leading-relaxed text-white/85">{reason}</p>}
+            <div className="mt-1 flex gap-2.5">
+              <Button variant="primary" onClick={() => onOpenGame(suggested.id)}>
+                {suggested.is_installed ? t('game:play.play') : installSize ? `${t('game:install.install')} ${installSize}` : t('game:install.install')}
+              </Button>
+              <Button variant="neutral" onClick={() => onOpenGame(suggested.id)} className="bg-white/10 text-white ring-white/20 hover:bg-white/20">
+                {t('dashboard:hero.openGame')}
+              </Button>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onDismissHero([suggested.id])}
             aria-label={t('dashboard:home.dismiss')}
-            className="absolute right-4 top-4 grid size-8 place-items-center rounded-lg bg-glass text-text ring-1 ring-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="absolute right-3 top-3 grid size-8 place-items-center rounded-lg bg-black/35 text-white transition hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <X className="size-4" aria-hidden />
           </button>
-        </Hero>
+        </section>
       )}
       <section aria-label={t('dashboard:continuePlaying')}>
         <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{hasPlayData ? t('dashboard:continuePlaying') : t('dashboard:yourGames')}</h2>
         <ul className="grid gap-3.5 md:grid-cols-3">
-          {continueGames.map((g) => (
-            <li key={g.id}>
-              <button type="button" onClick={() => onOpenGame(g.id)} aria-label={t('dashboard:hero.openGame') + ': ' + g.title} className="block w-full overflow-hidden rounded-xl text-left ring-1 ring-hairline transition hover:ring-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                <Cover src={heroImages(g)} title={g.title} className="aspect-[16/7] w-full" />
-              </button>
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-bold">{g.title}</div>
-                  <div className="truncate text-[12px] text-text-faint">
-                    {g.last_played_at ? `${lastPlayedAgo(g) ?? ''} · ` : ''}{g.playtime_minutes ? formatHours(g.playtime_minutes) : ''}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenGame(g.id)}
-                  aria-label={`${t('game:play.play')}: ${g.title}`}
-                  className="inline-flex h-[34px] flex-none items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  <Play className="size-3.5 fill-current" aria-hidden />
-                  {t('game:play.play')}
+          {continueGames.map((g) => {
+            const sub = [lastPlayedAgo(g), g.playtime_minutes ? `${Math.round(g.playtime_minutes / 60)} h` : ''].filter(Boolean).join(' · ') || '—';
+            return (
+              <li key={g.id}>
+                <button type="button" onClick={() => onOpenGame(g.id)} aria-label={t('dashboard:hero.openGame') + ': ' + g.title} className="block w-full overflow-hidden rounded-xl text-left ring-1 ring-hairline transition hover:ring-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                  <Cover src={heroImages(g)} title={g.title} className="aspect-[16/7] w-full" />
                 </button>
-              </div>
-            </li>
-          ))}
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-bold">{g.title}</div>
+                    <div className="truncate text-[12px] text-text-faint">{sub}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenGame(g.id)}
+                    aria-label={`${t('game:play.play')}: ${g.title}`}
+                    className="inline-flex h-[34px] flex-none items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    <Play className="size-3.5 fill-current" aria-hidden />
+                    {t('game:play.play')}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </section>
       <div className="grid gap-6 lg:grid-cols-2">
-        {recentlyAdded.length > 0 && (
+        {added.length > 0 && (
           <section aria-label={t('dashboard:recentlyAdded')}>
             <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('dashboard:recentlyAdded')}</h2>
             <ul className="grid grid-cols-5 gap-2.5">
-              {recentlyAdded.map((g) => (
+              {added.map((g) => (
                 <li key={g.id}>
                   <button type="button" onClick={() => onOpenGame(g.id)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus rounded-lg">
                     <Cover src={coverImages(g)} title={g.title} className="aspect-[2/3] w-full rounded-lg ring-1 ring-hairline" />
@@ -521,7 +557,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
                   <li key={g.id}>
                     <button type="button" onClick={() => onOpenGame(g.id)} className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                       <span className="truncate text-[13px] font-semibold">{g.title}</span>
-                      <span className="flex-none text-[12px] text-text-faint">{storeLabel(g.store, t)}</span>
+                      <span className="flex-none text-[12px] text-text-faint">{g.size_bytes ? formatBytes(g.size_bytes) : ''}</span>
                     </button>
                   </li>
                 ))}
@@ -530,15 +566,65 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
           </div>
         </section>
       </div>
-      {activity.length > 0 && (
-        <section aria-label={t('activity:panel.title')} className="rounded-2xl bg-surface p-4 ring-1 ring-hairline">
-          <div className="mb-1 flex items-center justify-between">
-            <h2 className="text-[14px] font-bold">{t('activity:panel.title')}</h2>
-            <Button variant="link" onClick={() => onNavigate({ name: 'activity' })}>{t('activity:panel.fullLog')}</Button>
+      <div className="grid gap-4 md:grid-cols-2">
+        <section aria-label={t('dashboard:home.yourLibrary')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
+          <div className="flex items-center justify-between gap-2.5">
+            <h2 className="text-[14px] font-bold">{t('dashboard:home.yourLibrary')}</h2>
+            <Button variant="link" onClick={() => onNavigate({ name: 'library' })}>{t('dashboard:home.openLibrary')}</Button>
           </div>
-          <DashboardActivity events={activity} limit={5} onNavigate={onNavigate} />
+          <dl className="grid grid-cols-4 gap-2">
+            {([
+              [t('dashboard:home.statGames'), String(owned.length)],
+              [t('dashboard:home.statInstalled'), String(installed)],
+              [t('dashboard:home.statPlayed'), `${Math.round(games.reduce((a, g) => a + (g.playtime_minutes ?? 0), 0) / 60)} h`],
+              [t('dashboard:home.statOnDisk'), formatBytes(games.reduce((a, g) => a + (g.size_bytes ?? 0), 0)) || '—'],
+            ] as [string, string][]).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-[11.5px] text-text-faint">{k}</dt>
+                <dd className="truncate text-[15px] font-bold tabular-nums" title={v}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="flex gap-1" aria-hidden>
+            {(['steam', 'gog', 'epic', 'ubisoft', 'custom'] as const).map((s) => {
+              const n = owned.filter((g) => g.store === s).length;
+              if (!n) return null;
+              return (
+                <span key={s} title={`${storeLabel(s, t)}: ${n}`} style={{ flex: n }} className="grid h-5 place-items-center overflow-hidden rounded bg-surface-strong text-[11px] tabular-nums text-text-muted">
+                  {n}
+                </span>
+              );
+            })}
+          </div>
         </section>
-      )}
+        <section aria-label={t('dashboard:home.needsAttention')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
+          <div className="flex items-center justify-between gap-2.5">
+            <h2 className="text-[14px] font-bold">{t('dashboard:home.needsAttention')}</h2>
+            {waiting.length > 0 && (
+              <Button variant="link" onClick={() => onNavigate({ name: 'fixes' })}>
+                {t('dashboard:home.seeAll', { count: waiting.length })}
+              </Button>
+            )}
+          </div>
+          {waiting.length === 0 ? (
+            <p className="text-[13px] text-text-muted">{t('dashboard:home.everythingWorks')}</p>
+          ) : (
+            <ul className="grid gap-2">
+              {waiting.slice(0, 3).map((g) => (
+                <li key={g.id} className="flex items-center gap-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-bold">{g.title}</span>
+                    <span className="block truncate text-[12px] text-text-muted">{attentionReason(g, t)}</span>
+                  </span>
+                  <Button variant="neutral" size="sm" className="flex-none" onClick={() => onOpenGame(g.id)}>
+                    {t('dashboard:hero.openGame')}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

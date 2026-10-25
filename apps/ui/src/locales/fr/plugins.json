@@ -123,6 +123,9 @@
   },
   "atlas": {
     "account": "Compte",
-    "libraryList": "Liste de jeux"
+    "libraryList": "Liste de jeux",
+    "brings": "Ce qu'elle apporte",
+    "loginNeeded": "Connexion requise",
+    "versionBy": "Version {{version}}, par {{author}}"
   }
 }

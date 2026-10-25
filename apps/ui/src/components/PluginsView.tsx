@@ -302,12 +302,14 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
                   onClick={() => setSelected(p.id)}
                   className={cx(
                     'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                    on ? 'bg-accent/15' : 'hover:bg-surface',
+                    on ? 'bg-[color-mix(in_srgb,var(--color-accent)_15%,var(--color-surface))]' : 'hover:bg-surface',
                   )}
                 >
-                  <PluginLogo src={p.icon_url} name={p.name} />
+                  <span className="grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-lg bg-surface-strong">
+                    <PluginLogo src={p.icon_url} name={p.name} size="xs" />
+                  </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-bold">{p.name}</span>
+                    <span className="block truncate text-[13px] font-semibold">{p.name}</span>
                     <span className="block truncate text-[12px] text-text-faint">{accountOf(p)}</span>
                   </span>
                   {dot && <span aria-hidden className={cx('size-1.5 flex-none rounded-full', dot)} />}
@@ -372,20 +374,28 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
     'needs-newer-platypus': 'bg-attention',
     'too-old': 'bg-attention',
   };
+  const needsLogin = p.status === 'ready' && hasAuth(p) && a !== undefined && !('error' in a) && !a.loggedIn;
+  const pill = p.status !== 'ready' || needsLogin;
   return (
     <div className="grid content-start gap-4">
       <header className="flex items-center gap-3.5">
-        <PluginLogo src={p.icon_url} name={p.name} />
+        <span className="grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-lg bg-surface-strong">
+          <PluginLogo src={p.icon_url} name={p.name} size="xs" />
+        </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[19px] font-extrabold tracking-tight">{p.name}</h2>
-          <p className="truncate font-mono text-hint text-text-muted">
-            v{p.version}{p.author ? ` · ${p.author}` : ''}
+          <p className="truncate text-[13px] text-text-muted">
+            {p.author
+              ? t('plugins:atlas.versionBy', { version: `v${p.version}`, author: p.author })
+              : `v${p.version}`}
           </p>
         </div>
-        <span className="flex flex-none items-center gap-1.5 text-[12.5px] font-semibold text-attention">
-          {p.status !== 'ready' && <span aria-hidden className={cx('size-1.5 rounded-full', dot[p.status] ?? 'bg-attention')} />}
-          {p.status === 'ready' ? '' : t(st.key)}
-        </span>
+        {pill && (
+          <span className="flex flex-none items-center gap-1.5 text-[12.5px] font-semibold text-attention">
+            <span aria-hidden className={cx('size-1.5 rounded-full', dot[p.status] ?? 'bg-attention')} />
+            {needsLogin ? t('plugins:atlas.loginNeeded') : t(st.key)}
+          </span>
+        )}
       </header>
       {p.problem && (
         <p className={cx('rounded-xl px-3.5 py-2.5 text-[12.5px] ring-1', p.status === 'invalid' ? 'bg-danger/10 text-danger ring-danger/25' : 'bg-attention/10 text-attention ring-attention/25')}>
@@ -401,10 +411,10 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
         </div>
       )}
       {p.status === 'ready' && hasAuth(p) && (
-        <div className="flex items-center justify-between gap-3 border-t border-hairline pt-4">
-          <span className="min-w-0 truncate text-[13px] font-semibold">{t('plugins:atlas.account')}</span>
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="truncate text-[12.5px] text-text-muted">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
+          <div className="grid min-w-0 gap-[3px]">
+            <span className="text-[13px] font-semibold text-text">{t('plugins:atlas.account')}</span>
+            <span className="truncate text-[0.93em] text-text-muted">
               {!a ? (
                 <span className="flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> {t('plugins:auth.checking')}</span>
               ) : 'error' in a ? (
@@ -417,6 +427,8 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
                 <span className="text-attention">{warning?.needs_auth ? t('plugins:auth.loggedOutHidden') : t('plugins:auth.loggedOut')}</span>
               )}
             </span>
+          </div>
+          <span className="flex min-w-0 items-center gap-2">
             {a && !('error' in a) && a.loggedIn ? (
               <Button variant="neutral" size="sm" className="flex-none" onClick={onLogout} disabled={busy === p.id + 'logout'}>
                 <LogOut className="h-3 w-3" /> {t('plugins:auth.logOut')}
@@ -429,13 +441,21 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
           </span>
         </div>
       )}
+      {p.capabilities.length > 0 && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
+          <div className="grid min-w-0 gap-[3px]">
+            <span className="text-[13px] font-semibold text-text">{t('plugins:atlas.brings')}</span>
+            <span className="text-[0.93em] leading-normal text-text-muted">{p.capabilities.map((c) => c.replace(/-/g, ' ')).join(', ')}</span>
+          </div>
+        </div>
+      )}
       {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}
       {offers(p, 'install') && p.status !== 'invalid' && p.status !== 'unapproved' && (
-        <div className="flex items-center justify-between gap-3 border-t border-hairline pt-4">
-          <span className="min-w-0">
-            <span className="block text-[13px] font-semibold">{t('plugins:atlas.libraryList')}</span>
-            <span className="block truncate font-mono text-hint text-text-muted select-text" title={p.install_folder}>{p.install_folder}</span>
-          </span>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
+          <div className="grid min-w-0 gap-[3px]">
+            <span className="text-[13px] font-semibold text-text">{t('plugins:atlas.libraryList')}</span>
+            <span className="truncate text-[0.93em] text-text-faint select-text" title={p.install_folder}>{p.install_folder}</span>
+          </div>
           <span className="flex flex-none gap-2">
             <Button variant="neutral" size="sm" onClick={onChooseFolder}>{t('plugins:card.change')}</Button>
             <Button variant="neutral" size="sm" onClick={onRescan}>

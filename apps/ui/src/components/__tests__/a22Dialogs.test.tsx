@@ -149,9 +149,9 @@ describe('a22 dialogs under Atlas (issue #139)', () => {
     const onClose = vi.fn();
     render(<AddGameModal onClose={onClose} onAdd={onAdd} />);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText('My Game'), { target: { value: 'Doom' } });
-    fireEvent.change(screen.getByLabelText('executable'), { target: { value: '/g/doom.exe' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add game' }));
+    fireEvent.change(screen.getByPlaceholderText('Found from the file name'), { target: { value: 'Doom' } });
+    fireEvent.change(screen.getByLabelText('Program'), { target: { value: '/g/doom.exe' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to library' }));
     expect(onAdd).toHaveBeenCalled();
     expectNoRawPalette();
   });

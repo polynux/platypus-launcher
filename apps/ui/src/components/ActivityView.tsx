@@ -89,7 +89,7 @@ function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game
     <div className={ATLAS_PAGE}>
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.activity')}</h1>
-        <p className="mt-[3px] text-[13px] text-text-muted">{t('activity:view.subtitle')}</p>
+        <p className="mt-[3px] text-[13px] text-text-muted">{t('activity:atlas.sub')}</p>
       </header>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('activity:atlas.filterKinds')}>
@@ -140,18 +140,18 @@ function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game
       ) : (
         days.map((d) => (
           <section key={d.key} aria-label={d.label}>
-            <h2 className="mb-1.5 text-[13px] font-bold text-text-muted">{d.label}</h2>
+            <h2 className="mb-1.5 text-[13px] font-bold">{d.label}</h2>
             <ul>
               {d.items.map((e) => {
                 const Icon = KIND_ICON[e.type] ?? CircleDot;
                 const title = (e.game && byId.get(e.game)?.title) || e.game || '';
                 return (
-                  <li key={e.id} className="grid grid-cols-[28px_52px_minmax(140px,220px)_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-2 py-1 transition hover:bg-surface">
-                    <span className="grid size-[26px] place-items-center rounded-lg bg-surface-strong text-text-muted">
+                  <li key={e.id} className="grid h-[30px] grid-cols-[22px_48px_180px_1fr] items-center gap-3 rounded-lg px-2 transition hover:bg-surface">
+                    <span className="grid size-[22px] place-items-center rounded-full bg-surface-strong text-text-muted">
                       <Icon className="size-3.5" />
                     </span>
-                    <time className="font-mono text-hint tabular-nums text-text-faint">{clock(e.ts)}</time>
-                    <span className="truncate text-left text-[13px] font-semibold">{title}</span>
+                    <time className="text-[12px] tabular-nums text-text-faint">{clock(e.ts)}</time>
+                    <span className="truncate text-left text-[13px] font-bold">{title}</span>
                     <span className="truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>
                   </li>
                 );

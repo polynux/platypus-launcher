@@ -10,8 +10,8 @@ import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
-import { AlertTriangle, ChevronDown, ChevronLeft, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, GitCompare, Loader2, Lock, Play, RefreshCw, SlidersHorizontal, Square, Trophy } from 'lucide-react';
-import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Game, GameDetails, GameJobKind, GameSettings, GameStatus, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
+import { AlertTriangle, ChevronDown, ChevronLeft, Clock, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, FolderOpen, GitCompare, Info, Loader2, Lock, Play, Plus, RefreshCw, SlidersHorizontal, Square, Star, Trophy } from 'lucide-react';
+import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Compat, CrashHints, Game, GameDetails, GameJobKind, GameSettings, GameStatus, Job, SaveBackup, SessionEvent, StorePlugin, Tweak } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
@@ -19,7 +19,7 @@ import { CopyCompareDialog } from './CopyCompareDialog';
 import { PluginLogo } from './PluginLogo';
 import { ErrorNotice } from './ErrorNotice';
 import { CrashHintsPanel } from './CrashHints';
-import { CapabilitySurface } from '../lib/capabilities';
+import { CapabilitySurface, offers } from '../lib/capabilities';
 import { agoLabel, asCloudMode, modeHelp, modeName, stateChip } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
@@ -28,12 +28,12 @@ import { useCrashHints } from '../lib/useCrashHints';
 import { useCompat } from '../lib/useCompat';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { useVariant } from '../lib/theme';
-import { formatBytes, hoursPlayed, storeLabel } from '../lib/games';
+import { formatBytes, lastPlayedAgo, storeLabel } from '../lib/games';
 import { currentLocale, formatClock, formatDate, formatPercentValue } from '../lib/format';
-import { formatDecimal1 } from '../lib/gameLocale';
 import { playedCopy, pickableCopies } from '../lib/family';
+import { setTweak, tweakApplied } from '../lib/settings';
 import { coreErrMsg } from '../lib/coreError';
-import { cx } from './ui';
+import { EmptyState, cx } from './ui';
 import {
   AboutSection,
   GameInstallNote,
@@ -98,6 +98,12 @@ export interface GameTabsData {
   onOpenRunner: () => void;
   /** Opens the game settings (the drawer in atlas). */
   onOpenSettings: () => void;
+  /** Opens the drawer at Fixes (the compat crash banner's "See fixes"). */
+  onOpenFixes?: () => void;
+  /** The fixes suggestions the compat tab lists (the drawer's TweaksPanel data). */
+  tweaks?: Tweak[];
+  /** Applies a tweak from the compat tab (the drawer's settings writer). */
+  onChangeSettings?: (s: GameSettings, what: string) => void;
   /** The staged game writes through here, so App's copy stays current. */
   onTuneSaved?: (settings: GameSettings) => void;
   /** The list-detail stage shows no back link (it would go nowhere). */
@@ -194,7 +200,7 @@ function AtlasHero({ game, hero, details, backLabel, onBack, hideBack }: { game:
           style={{ maxWidth: 'min(340px, 38%)', filter: 'drop-shadow(0 3px 14px rgba(0, 0, 0, 0.6))' }}
         />
       ) : (
-        <h1 className="absolute bottom-[22px] left-7 max-w-[min(640px,80%)] truncate text-[32px] font-extrabold tracking-tight text-text">{game.title}</h1>
+        <h1 className="absolute bottom-[22px] left-7 max-w-[min(640px,80%)] truncate text-[28px] font-bold leading-[1.05] text-white" style={{ textShadow: '0 2px 12px rgba(0, 0, 0, 0.6)' }}>{game.title}</h1>
       )}
     </div>
   );
@@ -380,7 +386,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   // The outside-folder alert below already names the folders: repeating the
   // store note here would show the same long paths twice (a5).
   const outside = !!d.game.outside_folder;
-  const showNote = !active && ((d.game.note && !outside) || d.installing);
+  const showNote = !active && ((d.game.note && !outside && !d.game.client_launch) || d.installing);
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-accent-dim py-3 pl-6 pr-5">
       <div className="mr-2 flex items-center gap-1.5">
@@ -416,10 +422,11 @@ function ActionStrip({ d }: { d: GameTabsData }) {
           the short links show here (the long folder path would truncate
           them): the full path lives in the title tooltip. */}
       {(showNote || d.refreshing) && (
-        <span
-          className="ml-auto min-w-0 max-w-[38%] truncate text-[12.5px] text-text-muted"
-          title={d.refreshing || !d.installing || !d.plugin ? undefined : d.plugin.install_folder}
+        <p
+          className="flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] text-text-muted"
         >
+          <Info className="h-[13px] w-[13px] flex-none text-text-faint" aria-hidden />
+          <span className="min-w-0 truncate">
           {d.refreshing ? (
             t('game:refreshing')
           ) : (
@@ -445,7 +452,8 @@ function ActionStrip({ d }: { d: GameTabsData }) {
               )}
             </>
           )}
-        </span>
+          </span>
+        </p>
       )}
     </div>
   );
@@ -464,7 +472,7 @@ function LaunchNotesRow({ d }: { d: GameTabsData }) {
     notes.push(
       <li key="client" className="inline-flex items-center gap-[7px]">
         <ExternalLinkIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
-        <span>{t('game:launchNotes.client', { name })}</span>
+        <span>{d.game.note || t('game:launchNotes.client', { name })}</span>
       </li>,
     );
   }
@@ -516,18 +524,17 @@ function GallerySheet({ media, title }: { media: MediaItem[]; title: string }) {
   );
 }
 
-function YouGrid({ d }: { d: GameTabsData }) {
+function YouFacts({ d }: { d: GameTabsData }) {
   const { t } = useTranslation('game');
-  const played = d.hours != null ? t('game:hero.hoursLogged', { hours: formatDecimal1(d.hours) }) : '—';
+  const played = d.hours ? `${Math.round(d.hours)} h` : '—';
+  const last = lastPlayedAgo(d.game) ?? t('game:storeTab.neverPlayed');
   const cells: [string, string][] = [
     [t('game:storeTab.played'), played],
-    [t('game:storeTab.lastPlayed'), d.last ?? t('game:storeTab.neverPlayed')],
+    [t('game:storeTab.lastPlayed'), last],
     [t('game:storeTab.runsWith'), d.runsWith || t('game:storeTab.unknownRunner')],
     [t('game:storeTab.protondb'), d.protondb || t('game:storeTab.noRating')],
   ];
   return (
-    <section aria-label={t('game:storeTab.you')}>
-      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:storeTab.you')}</h2>
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline text-[13.5px] leading-[normal]">
       {cells.map(([k, v]) => (
         <div key={k} className="bg-surface px-3 py-2.5">
@@ -536,7 +543,117 @@ function YouGrid({ d }: { d: GameTabsData }) {
         </div>
       ))}
     </dl>
-    </section>
+  );
+}
+
+// Atlas parity (issue #132) in the lab's You order (appLibrary YouPanel):
+// the 2x2 facts, then a Status row, Private notes and the Collections chips
+// in one block (no separate "Collections" / "Status & notes" sections).
+function YouSection({ d }: { d: GameTabsData }) {
+  const { t } = useTranslation(['game', 'collections']);
+  const tg = useTranslation('game');
+  const [status, setStatus] = useState(d.game.status ?? '');
+  const [notes, setNotes] = useState(d.game.user_notes ?? '');
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  // A save in flight owns the draft: an external change landing mid-save
+  // must not clobber it.
+  const savingRef = useRef(false);
+  useEffect(() => {
+    setStatus(d.game.status ?? '');
+    setNotes(d.game.user_notes ?? '');
+    setState('idle');
+    savingRef.current = false;
+  }, [d.game.id]);
+  // Another surface saved while this game sits on the stage (the drawer, a
+  // rescan): follow it, unless a save from here is still running.
+  useEffect(() => {
+    if (savingRef.current) return;
+    setStatus(d.game.status ?? '');
+    setNotes(d.game.user_notes ?? '');
+  }, [d.game.status, d.game.user_notes]);
+  const saveStatus = (next: GameStatus) => {
+    setStatus(next);
+    if (!d.onSaveStatus) return;
+    savingRef.current = true;
+    d.onSaveStatus(d.game.id, next).then(
+      (info) => { savingRef.current = false; setStatus(info.status); d.onStatusChanged?.(); },
+      () => { savingRef.current = false; setStatus(d.game.status ?? ''); },
+    );
+  };
+  const saveNotes = () => {
+    const text = notes;
+    if (text === (d.game.user_notes ?? '') || !d.onSaveNotes) return;
+    setState('saving');
+    savingRef.current = true;
+    d.onSaveNotes(d.game.id, text).then(
+      () => { savingRef.current = false; setState('saved'); d.onStatusChanged?.(); },
+      () => { savingRef.current = false; setState('failed'); },
+    );
+  };
+  const mine = (d.collections ?? []).filter((c) => !c.smart && c.games?.includes(d.game.id));
+  return (
+    <div className="grid content-start gap-3">
+      <YouFacts d={d} />
+      {d.onSaveStatus && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] font-semibold text-text-faint">{tg.t('game:status.aria')}</span>
+          <Select value={status || 'none'} onValueChange={(v) => saveStatus((v === 'none' ? '' : v) as GameStatus)}>
+            <SelectTrigger aria-label={tg.t('game:status.aria')} className="h-8 w-[190px] flex-none font-sans text-[13px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(['none', 'backlog', 'playing', 'finished', 'abandoned'] as const).map((v) => (
+                <SelectItem key={v} value={v} className="font-sans text-[13px]">
+                  {tg.t(`game:status.${v}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {d.onSaveNotes && (
+        <label className="grid gap-1.5">
+          <span className="text-[12px] font-semibold text-text-faint">{tg.t('game:status.privateNotes')}</span>
+          <textarea
+            id={`atlas-notes-${d.game.id}`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={saveNotes}
+            placeholder={tg.t('game:status.notesPlaceholder')}
+            rows={3}
+            className="min-h-16 w-full resize-y rounded-[7px] bg-surface px-2.5 py-2 text-[13px] text-text outline-none ring-1 ring-hairline placeholder:text-text-faint focus:ring-2 focus:ring-focus"
+          />
+          {state !== 'idle' && (
+            <span role="status" className="text-[12px] text-text-faint">
+              {state === 'saving' ? tg.t('game:status.saving') : state === 'saved' ? tg.t('game:status.saved') : tg.t('game:status.failed')}
+            </span>
+          )}
+        </label>
+      )}
+      {(mine.length > 0 || d.onManageCollections) && (
+        <div className="grid gap-1.5">
+          <span className="text-[12px] font-semibold text-text-faint">{t('collections:gameHeading')}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {mine.map((c) => (
+              <span key={c.id} className="inline-flex items-center gap-1 rounded-md bg-surface-strong px-2 py-1 text-[12.5px] font-medium text-text">
+                {c.builtin && c.id === 'favourites' && <Star className="h-[11px] w-[11px]" aria-hidden />}
+                {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
+              </span>
+            ))}
+            {d.onManageCollections && (
+              <button
+                type="button"
+                onClick={() => d.onManageCollections?.(d.game.id)}
+                className="inline-flex items-center gap-1 rounded-md bg-surface-strong px-2 py-1 text-[12.5px] font-medium text-text-muted ring-1 ring-dashed ring-hairline transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                <Plus className="h-[11px] w-[11px]" aria-hidden />
+                {t('collections:addToCollection')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -800,125 +917,6 @@ function DetailsSide({ d }: { d: GameTabsData }) {
   );
 }
 
-// Atlas parity (issue #132): the game's collections as small chips with a
-// Manage entry, in the /21 side-section language (13px muted heading).
-function AtlasCollections({ d }: { d: GameTabsData }) {
-  const { t } = useTranslation('collections');
-  if (!d.onManageCollections && (d.collections ?? []).length === 0) return null;
-  const mine = (d.collections ?? []).filter((c) => !c.smart && c.games?.includes(d.game.id));
-  return (
-    <section aria-label={t('collections:gameHeading')}>
-      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('collections:gameHeading')}</h2>
-      {mine.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5">
-          {mine.map((c) => (
-            <li key={c.id} className="rounded-lg bg-surface-strong px-2 py-1 text-[12.5px] font-medium text-text">
-              {c.builtin ? t(`collections:builtin.${c.id}`) : c.name}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[12.5px] text-text-faint">{t('collections:notInCollections')}</p>
-      )}
-      {d.onManageCollections && (
-        <button
-          type="button"
-          onClick={() => d.onManageCollections?.(d.game.id)}
-          className="mt-2 text-[12.5px] font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        >
-          {mine.length > 0 ? t('collections:manage') : t('collections:addToCollection')}
-        </button>
-      )}
-    </section>
-  );
-}
-
-// Atlas parity (issue #132): the classic Status & notes section has no other
-// Atlas surface, so the store tab carries a small version: a status select
-// that saves at once and notes that save on blur.
-function AtlasStatusNotes({ d }: { d: GameTabsData }) {
-  const { t } = useTranslation('game');
-  const [status, setStatus] = useState(d.game.status ?? '');
-  const [notes, setNotes] = useState(d.game.user_notes ?? '');
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
-  // A save in flight owns the draft: an external change landing mid-save
-  // must not clobber it.
-  const savingRef = useRef(false);
-  useEffect(() => {
-    setStatus(d.game.status ?? '');
-    setNotes(d.game.user_notes ?? '');
-    setState('idle');
-    savingRef.current = false;
-  }, [d.game.id]);
-  // Another surface saved while this game sits on the stage (the drawer, a
-  // rescan): follow it, unless a save from here is still running.
-  useEffect(() => {
-    if (savingRef.current) return;
-    setStatus(d.game.status ?? '');
-    setNotes(d.game.user_notes ?? '');
-  }, [d.game.status, d.game.user_notes]);
-  if (!d.onSaveStatus && !d.onSaveNotes) return null;
-  const saveStatus = (next: GameStatus) => {
-    setStatus(next);
-    if (!d.onSaveStatus) return;
-    savingRef.current = true;
-    d.onSaveStatus(d.game.id, next).then(
-      (info) => { savingRef.current = false; setStatus(info.status); d.onStatusChanged?.(); },
-      () => { savingRef.current = false; setStatus(d.game.status ?? ''); },
-    );
-  };
-  const saveNotes = () => {
-    const text = notes;
-    if (text === (d.game.user_notes ?? '') || !d.onSaveNotes) return;
-    setState('saving');
-    savingRef.current = true;
-    d.onSaveNotes(d.game.id, text).then(
-      () => { savingRef.current = false; setState('saved'); d.onStatusChanged?.(); },
-      () => { savingRef.current = false; setState('failed'); },
-    );
-  };
-  return (
-    <section aria-label={t('game:status.heading')}>
-      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:status.heading')}</h2>
-      <div className="grid gap-2">
-        {d.onSaveStatus && (
-          <Select value={status || 'none'} onValueChange={(v) => saveStatus((v === 'none' ? '' : v) as GameStatus)}>
-            <SelectTrigger aria-label={t('game:status.aria')} className="h-8 w-full font-sans text-[13px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(['none', 'backlog', 'playing', 'finished', 'abandoned'] as const).map((v) => (
-                <SelectItem key={v} value={v} className="font-sans text-[13px]">
-                  {t(`game:status.${v}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {d.onSaveNotes && (
-          <div className="grid gap-1">
-            <label htmlFor={`atlas-notes-${d.game.id}`} className="text-[12px] text-text-muted">{t('game:status.notesLabel')}</label>
-            <textarea
-              id={`atlas-notes-${d.game.id}`}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={saveNotes}
-              placeholder={t('game:status.notesPlaceholder')}
-              rows={2}
-              className="min-h-16 w-full resize-y rounded-[7px] bg-surface px-2.5 py-2 text-[13px] text-text outline-none ring-1 ring-hairline placeholder:text-text-faint focus:ring-2 focus:ring-focus"
-            />
-            {state !== 'idle' && (
-              <span role="status" className="text-[12px] text-text-faint">
-                {state === 'saving' ? t('game:status.saving') : state === 'saved' ? t('game:status.saved') : t('game:status.failed')}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 /* Flat tables like `.tbl` in the design lab's kit.css: header cells 30px,
  * weight 500, faint, with a hairline bottom border; rows 36px with hairline
  * borders; the first column padded 24px; numbers right-aligned in mono
@@ -933,37 +931,81 @@ function TblEmpty({ text }: { text: string }) {
   return <p className="px-6 py-4 text-[13px] text-text-muted">{text}</p>;
 }
 
-function ActivityTab({ events }: { events: ActivityEvent[] }) {
+/** A finished play session read off an activity event (issue #138): the app
+ *  logs `session` events with the length in the meta ("12 min session", from
+ *  `activity:log.sessionMinutes`), a pid while it starts, and a message when
+ *  it fails. Anything else counts as a crash. */
+interface PlaySession {
+  key: number;
+  ts: number;
+  minutes: number;
+  crashed: boolean;
+}
+
+function playSessions(events: ActivityEvent[]): PlaySession[] {
+  return events
+    .filter((e) => e.type === 'session')
+    .map((e) => {
+      const m = e.meta?.match(/(\d+)\s*min/);
+      const minutes = m ? Number.parseInt(m[1], 10) : 0;
+      const starting = /pid/i.test(e.meta ?? '');
+      return { key: e.id, ts: e.ts, minutes, crashed: minutes <= 0 && !starting };
+    });
+}
+
+/** Minutes as "45 min" or "3 h 12 min" (the lab's dur()). */
+function durLabel(totalMin: number): string {
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+function ActivityTab({ game, events }: { game: Game; events: ActivityEvent[] }) {
   const { t } = useTranslation('game');
   const locale = currentLocale();
-  if (events.length === 0) return <TblEmpty text={t('game:storeTab.noActivity')} />;
+  const sessions = playSessions(events);
+  if (sessions.length === 0) {
+    return (
+      <div className="grid max-w-[900px] gap-3.5 px-6 py-6">
+        <EmptyState icon={Clock} label={t('game:sessions.emptyTitle')}>
+          {t('game:sessions.emptyBody', { title: game.title })}
+        </EmptyState>
+      </div>
+    );
+  }
+  const total = sessions.reduce((a, s) => a + s.minutes, 0);
+  const max = Math.max(...sessions.map((s) => s.minutes), 1);
   return (
-    <table className="w-full">
-      <thead>
-        <tr>
-          <th className={TBL_HEAD_FIRST}>{t('game:storeTab.activityStarted')}</th>
-          <th className={TBL_HEAD}>{t('game:storeTab.activityEvent')}</th>
-          <th className={TBL_HEAD}>{t('game:storeTab.activityInfo')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {events.map((e) => (
-          <tr key={e.id}>
-            <td className={cx(TBL_CELL_FIRST, 'tabular-nums text-text-muted')}>
-              {formatDate(Math.floor(e.ts / 1000), locale)} {formatClock(e.ts, locale)}
-            </td>
-            <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
-              <span className="block whitespace-normal leading-relaxed">{e.detail}</span>
-            </td>
-            <td className={cx(TBL_CELL, 'text-text-muted')}>{e.meta ?? ''}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="grid max-w-[900px] gap-3.5 px-6 pt-[18px] pb-9">
+      <p className="text-[13.5px] text-text-muted">
+        {t('game:sessions.lead', { count: sessions.length, total: durLabel(total) })}
+      </p>
+      <ul className="grid gap-0.5">
+        {sessions.map((s) => {
+          const d = new Date(s.ts);
+          const day = d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });
+          const time = formatClock(s.ts, locale);
+          return (
+            <li key={s.key} className="grid h-9 grid-cols-[110px_54px_minmax(80px,1fr)_70px_110px] items-center gap-3 rounded-[7px] px-2.5 hover:bg-surface">
+              <span className="truncate text-[13px] font-semibold text-text">{day}</span>
+              <span className="truncate text-[12px] tabular-nums text-text-faint">{time}</span>
+              <span className="h-1.5 overflow-hidden rounded-full bg-surface-strong" role="img" aria-hidden>
+                <span className={`block h-full rounded-full ${s.crashed ? 'bg-danger' : 'bg-accent'}`} style={{ width: `${Math.max(4, (s.minutes / max) * 100)}%` }} />
+              </span>
+              <span className="truncate text-right text-[12.5px] tabular-nums text-text-muted">{s.minutes > 0 ? durLabel(s.minutes) : '—'}</span>
+              <span className={`truncate text-right text-[12.5px] ${s.crashed ? 'text-danger' : 'text-text-faint'}`}>
+                {s.crashed ? t('game:sessions.crashed') : t('game:sessions.quitNormally')}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
-export function BackupTable({ game, onNotify, onCount, reloadKey }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; onCount?: (n: number | undefined) => void; reloadKey?: number }) {
+export function BackupTable({ game, onNotify, onCount, reloadKey, emptyText }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void; onCount?: (n: number | undefined) => void; reloadKey?: number; emptyText?: string }) {
   const { t } = useTranslation('game');
   const [backups, setBackups] = useState<SaveBackup[] | null>(null);
   const [confirm, setConfirm] = useState<{ id: string; what: 'restore' | 'delete' } | null>(null);
@@ -988,11 +1030,11 @@ export function BackupTable({ game, onNotify, onCount, reloadKey }: { game: Game
       (e) => { setConfirm(null); onNotify(coreErrMsg(e), 'err'); },
     );
   };
-  if (backups == null) return <TblEmpty text={t('game:storeTab.noSaves')} />;
+  if (backups == null) return <TblEmpty text={emptyText ?? t('game:storeTab.noSaves')} />;
   return (
     <div>
       {backups.length === 0 ? (
-        <TblEmpty text={t('game:storeTab.noSaves')} />
+        <TblEmpty text={emptyText ?? t('game:storeTab.noSaves')} />
       ) : (
         <table className="w-full">
           <thead>
@@ -1048,7 +1090,8 @@ export function BackupTable({ game, onNotify, onCount, reloadKey }: { game: Game
  *  (the lab's .srow: plain text on the left, a 190px select on the right).
  *  Atlas-only (this file renders only for game.structure = tabs). The badge
  *  stays hidden under label.style = plain: the status reads as plain text. */
-export function CloudSlimRow({ game, plain, action }: { game: Game; plain: boolean; action?: React.ReactNode }) {
+export function CloudSlimRow({ game, plain, action, syncControl = 'select' }: { game: Game; plain: boolean; action?: React.ReactNode; /** The lab's Saves card uses a segmented control, not the 190px select. */
+  syncControl?: 'select' | 'segmented' }) {
   const { t } = useTranslation('cloud');
   const [info, setInfo] = useState<CloudInfo | null>(null);
   const [checking, setChecking] = useState(false);
@@ -1156,6 +1199,26 @@ export function CloudSlimRow({ game, plain, action }: { game: Game; plain: boole
         {info && !conflicted && <span className="sr-only">{modeHelp(info.mode)}</span>}
       </div>
       {action}
+      {syncControl === 'segmented' ? (
+        <div role="group" aria-label={t('cloud:panel.modeLabel')} className="inline-flex flex-none gap-0.5 rounded-lg bg-surface p-0.5 ring-1 ring-hairline">
+          {(['auto', 'ask', 'off'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={mode === v}
+              disabled={!info}
+              onClick={() => setMode(v)}
+              className={cx(
+                'h-[26px] rounded-md px-2.5 text-[13px] tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                mode === v ? 'bg-surface-strong text-text ring-1 ring-hairline' : 'text-text-muted hover:text-text',
+              )}
+            >
+              {t(`cloud:mode.${v}`)}
+            </button>
+          ))}
+        </div>
+      ) : (
       <Select value={mode} onValueChange={(v) => setMode(v as CloudMode | 'default')} disabled={!info}>
         <SelectTrigger aria-label={t('cloud:panel.modeLabel')} className="h-8 w-[190px] flex-none font-sans text-[13px]">
           <SelectValue />
@@ -1167,6 +1230,7 @@ export function CloudSlimRow({ game, plain, action }: { game: Game; plain: boole
           <SelectItem value="auto" className="font-sans text-[13px]">{t('cloud:mode.auto')}</SelectItem>
         </SelectContent>
       </Select>
+      )}
       {resolving && st && (
         <CloudConflictDialog
           game={game}
@@ -1204,30 +1268,71 @@ function SavesTab({ d, onCount }: { d: GameTabsData; onCount?: (n: number | unde
       .catch((e) => (d.onNotify ?? (() => {}))(coreErrMsg(e), 'err'))
       .finally(() => setBackingUp(false));
   };
-  // The lab's SavesTable has no button row: "Back up now" lives in the slim
-  // row with the cloud status and the 190px mode select.
-  const backupButton = (
-    <Button variant="neutral" size="sm" onClick={backupNow} disabled={backingUp} className="flex-none">
-      {backingUp ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
-    </Button>
-  );
+  // The lab's SavesPanel (appLibrary): three ap-panel cards (cloud, backups,
+  // location), gap 14px, max-width 900. AtlasSavesBlock below stays the
+  // drawer's slim table + row.
+  const cloud = d.plugin && offers(d.plugin, 'cloud-saves', { game: d.game });
+  const storeName = d.plugin?.name ?? storeLabel(d.game.store);
   return (
-    <div>
-      {/* The backups table first, then the cloud status, backup action and
-          mode as one slim row (the lab's SavesTable over .tbl, with .srow
-          controls). */}
-      <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} onCount={onCount} reloadKey={reloadKey} />
-      {d.plugin ? (
-        <CapabilitySurface plugin={d.plugin} capability="cloud-saves" game={d.game}>
-          <CloudSlimRow game={d.game} plain={plain} action={backupButton} />
-        </CapabilitySurface>
-      ) : (
-        <div className="flex items-center gap-[18px] border-t border-hairline px-6 py-3.5">
-          <span className="min-w-0 flex-1" />
-          {backupButton}
-        </div>
-      )}
+    <div className="grid max-w-[900px] gap-3.5 px-6 pt-[18px] pb-9">
+      <section className="grid gap-2.5 rounded-xl bg-surface p-4" aria-label={t('game:saves.cloudTitle')}>
+        <header className="flex min-h-[30px] items-center justify-between gap-2.5">
+          <h3 className="text-[14px] font-bold text-text">{t('game:saves.cloudTitle')}</h3>
+          <span className="truncate text-[13px] text-text-muted">
+            {cloud ? t('game:saves.cloudStore', { store: storeName }) : t('game:saves.noCloudStore', { store: storeName })}
+          </span>
+        </header>
+        {d.plugin && cloud ? (
+          <CapabilitySurface plugin={d.plugin} capability="cloud-saves" game={d.game}>
+            <div className="-mx-4 -mb-4">
+              <CloudSlimRow game={d.game} plain={plain} syncControl="segmented" />
+            </div>
+          </CapabilitySurface>
+        ) : (
+          <p className="text-[13px] text-text-muted">{t('game:saves.localOnly')}</p>
+        )}
+      </section>
+      <section className="grid gap-2.5 rounded-xl bg-surface p-4" aria-label={t('game:saves.backupsTitle')}>
+        <header className="flex min-h-[30px] items-center justify-between gap-2.5">
+          <h3 className="text-[14px] font-bold text-text">{t('game:saves.backupsTitle')}</h3>
+          <Button variant="neutral" size="sm" onClick={backupNow} disabled={backingUp} className="flex-none">
+            {backingUp ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
+          </Button>
+        </header>
+        <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} onCount={onCount} reloadKey={reloadKey} emptyText={t('game:saves.noBackups')} />
+      </section>
+      <SaveLocationCard game={d.game} onNotify={d.onNotify ?? (() => {})} />
     </div>
+  );
+}
+
+/** The saves tab's "Save location" card (the lab's third ap-panel): the path
+ *  in `code.ap-path` (the one place mono stays) with a quiet Open folder
+ *  button. The path is the first known save folder, else the install dir. */
+function SaveLocationCard({ game, onNotify }: { game: Game; onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void }) {
+  const { t } = useTranslation('game');
+  const [path, setPath] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    Effect.runPromise(LauncherApi.getSavePaths(game)).then(
+      (v) => { if (live) setPath((v ?? []).find((p) => p.exists)?.path ?? (v ?? [])[0]?.path ?? game.install_dir ?? null); },
+      () => { if (live) setPath(game.install_dir ?? null); },
+    );
+    return () => { live = false; };
+  }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const open = () => {
+    Effect.runPromise(LauncherApi.openGameFolder(game)).catch((e) => onNotify(coreErrMsg(e), 'err'));
+  };
+  return (
+    <section className="grid gap-2.5 rounded-xl bg-surface p-4" aria-label={t('game:saves.locationTitle')}>
+      <header className="flex min-h-[30px] items-center justify-between gap-2.5">
+        <h3 className="text-[14px] font-bold text-text">{t('game:saves.locationTitle')}</h3>
+        <Button variant="ghost" size="sm" onClick={open} className="flex-none">
+          <FolderOpen className="h-3.5 w-3.5" /> {t('game:saves.openFolder')}
+        </Button>
+      </header>
+      <code className="block overflow-x-auto rounded-[7px] bg-ground px-2.5 py-2 font-mono text-[12px] text-text-muted select-text">{path ?? '…'}</code>
+    </section>
   );
 }
 
@@ -1276,53 +1381,85 @@ export function compatTabCount(game: Game, notesLen: number, hintsLen: number): 
   return (game.fix_info?.description ? 1 : 0) + notesLen + hintsLen;
 }
 
-function CompatTab({ d, info }: { d: GameTabsData; info: ReturnType<typeof useCompat>['compat'] }) {
+function CompatTab({ d, info, crash }: { d: GameTabsData; info: Compat | null; crash: CrashHints | null }) {
   const { t } = useTranslation('game');
-  const rows: { source: string; note: string }[] = [];
-  if (d.game.fix_info?.description) rows.push({ source: d.game.fix_info.source, note: d.game.fix_info.description });
   const rating = info?.badges?.find((b) => b.kind === 'rating');
-  for (const n of info?.notes ?? []) {
-    rows.push({ source: rating?.source ?? d.game.fix_info?.source ?? 'Platypus', note: n });
+  const notes = info?.notes ?? [];
+  // The fixes suggestions the drawer lists: applied ones are hidden, the rest
+  // get an Apply button (the app's tweaks have no source/vote line, so the
+  // reason stands in for it).
+  const suggested = (d.tweaks ?? []).filter((tw) => d.onChangeSettings && !tweakApplied(d.game.settings, tw));
+  const hasFacts = d.facts.length > 0;
+  if (!hasFacts && (crash?.hints?.length ?? 0) === 0 && suggested.length === 0 && notes.length === 0) {
+    return <div className="grid max-w-[900px] px-6 pt-[18px] pb-9"><TblEmpty text={t('game:storeTab.noCompat')} /></div>;
   }
-  if (d.facts.length === 0 && rows.length === 0) return <TblEmpty text={t('game:storeTab.noCompat')} />;
   return (
-    <div>
-      {/* The classic facts (DirectX, wrappers, launch-via, …) as a flat
-          two-column table above the notes (issue #132). */}
-      {d.facts.length > 0 && (
-        <table className="w-full" aria-label={t('game:storeTab.details')}>
-          <tbody>
-            {d.facts.map(([k, v]) => (
-              <tr key={k}>
-                <td className={cx(TBL_CELL_FIRST, 'w-44 text-text-muted')}>{k}</td>
-                <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
-                  <span className="block whitespace-normal leading-relaxed">{v}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="grid max-w-[900px] gap-3.5 px-6 pt-[18px] pb-9">
+      {hasFacts && (
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-hairline min-[1100px]:grid-cols-3">
+          {d.facts.map(([k, v]) => (
+            <div key={k} className="bg-surface px-3.5 py-2.5">
+              <dt className="text-[11.5px] text-text-faint">{k}</dt>
+              <dd className="font-[650] text-text">{v}</dd>
+            </div>
+          ))}
+        </dl>
       )}
-      {rows.length > 0 && (
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className={TBL_HEAD_FIRST}>{t('game:storeTab.compatSource')}</th>
-              <th className={TBL_HEAD}>{t('game:storeTab.compatNote')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td className={cx(TBL_CELL_FIRST, 'text-text-muted')}>{r.source}</td>
-                <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
-                  <span className="block whitespace-normal leading-relaxed">{r.note}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {(crash?.hints?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-2.5 rounded-[10px] bg-attention/[0.12] px-3 py-2.5 text-[13px] text-attention">
+          <AlertTriangle className="h-[14px] w-[14px] flex-none" aria-hidden />
+          <span className="min-w-0 flex-1">{t('game:compatTab.crashBanner', { count: crash!.hints!.length })}</span>
+          {d.onOpenFixes && (
+            <button type="button" onClick={d.onOpenFixes} className="flex-none rounded-lg px-2.5 py-1.5 text-[13px] font-semibold text-attention ring-1 ring-attention/40 transition hover:bg-attention/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+              {t('game:compatTab.seeFixes')}
+            </button>
+          )}
+        </div>
       )}
+      {suggested.length > 0 && (
+        <section className="grid gap-2 rounded-xl bg-surface p-4" aria-label={t('game:compatTab.suggestedTitle')}>
+          <header className="flex min-h-[30px] items-center justify-between gap-2.5">
+            <h3 className="text-[14px] font-bold text-text">{t('game:compatTab.suggestedTitle')}</h3>
+            <span className="text-[12.5px] text-text-muted">{t('game:compatTab.suggestedMeta', { count: suggested.length })}</span>
+          </header>
+          <ul className="grid">
+            {suggested.map((tw) => (
+              <li key={tw.id} className="flex items-center gap-3 border-b border-hairline py-2.5 last:border-b-0">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-bold text-text">{tw.title}</span>
+                  <span className="block text-[12.5px] text-text-muted">{tw.reason}</span>
+                </span>
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  className="flex-none"
+                  onClick={() => d.onChangeSettings?.(setTweak(d.game.settings, tw, true), t('gameSettings:tweaks.applied', { title: tw.title }))}
+                >
+                  {t('game:compatTab.apply')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <section className="grid gap-2 rounded-xl bg-surface p-4" aria-label={t('game:compatTab.notesTitle')}>
+        <header className="flex min-h-[30px] items-center justify-between gap-2.5">
+          <h3 className="text-[14px] font-bold text-text">{t('game:compatTab.notesTitle')}</h3>
+          {notes.length > 0 && <span className="text-[12.5px] tabular-nums text-text-muted">{notes.length}</span>}
+        </header>
+        {notes.length > 0 ? (
+          <ul className="grid">
+            {notes.map((n, i) => (
+              <li key={i} className="flex items-start gap-3 border-b border-hairline py-2 last:border-b-0">
+                <span className="w-[70px] flex-none truncate text-[12px] text-text-faint">{rating?.source ?? d.game.fix_info?.source ?? 'Platypus'}</span>
+                <span className="min-w-0 flex-1 text-[13px] leading-relaxed text-text">{n}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[13px] text-text-muted">{t('game:compatTab.noNotes')}</p>
+        )}
+      </section>
     </div>
   );
 }
@@ -1441,16 +1578,14 @@ export function GameTabsView(d: GameTabsData) {
             </div>
             <aside className="grid min-w-0 content-start gap-5">
               <GallerySheet media={d.media} title={d.game.title} />
-              <YouGrid d={d} />
+              <YouSection d={d} />
               {hasAch && <AchSummary d={d} onOpen={() => setTab('achievements')} />}
               <DetailsSide d={d} />
-              <AtlasCollections d={d} />
-              <AtlasStatusNotes d={d} />
             </aside>
           </div>
         )}
         {cur === 'achievements' && <AchRows d={d} />}
-        {cur === 'activity' && <ActivityTab events={d.events} />}
+        {cur === 'activity' && <ActivityTab game={d.game} events={d.events} />}
         {cur === 'saves' && <SavesTab d={d} onCount={setSavesCount} />}
         {cur === 'compat' && (
           <div>
@@ -1459,7 +1594,7 @@ export function GameTabsView(d: GameTabsData) {
                 <CrashHintsPanel game={d.game} hints={crash} onNotify={d.onNotify} onRunner={d.onOpenRunner} />
               </div>
             )}
-            <CompatTab d={d} info={info} />
+            <CompatTab d={d} info={info} crash={crash} />
           </div>
         )}
       </div>

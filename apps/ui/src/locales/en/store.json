@@ -17,5 +17,9 @@
   },
   "blocked": "{{host}} isn't part of {{name}}. Open in your browser?",
   "failed": "Couldn't open {{name}}: {{error}}",
-  "needsShell": "The store view needs the app shell."
+  "needsShell": "The store view needs the app shell.",
+  "shop": {
+    "redeem": "Redeem a code",
+    "storeLabel": "Store"
+  }
 }

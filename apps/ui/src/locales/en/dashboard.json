@@ -53,6 +53,15 @@
     "dismiss": "Don't suggest this",
     "waitingForYou": "Waiting for you",
     "toFinish": "To finish",
-    "toInstall": "To install"
+    "toInstall": "To install",
+    "yourLibrary": "Your library",
+    "openLibrary": "Open library",
+    "statGames": "Games",
+    "statInstalled": "Installed",
+    "statPlayed": "Played",
+    "statOnDisk": "On disk",
+    "needsAttention": "Needs attention",
+    "seeAll": "See all {{count}}",
+    "everythingWorks": "Everything works."
   }
 }

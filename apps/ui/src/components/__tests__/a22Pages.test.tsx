@@ -134,14 +134,17 @@ describe('a22 home (dashboard)', () => {
       />,
     );
     expect(screen.getByRole('heading', { name: /polynux/ })).toBeInTheDocument();
+    // The suggestion is the first owned, not-installed game (the lab's
+    // backlog pick), not the game needing attention.
     expect(screen.getByText('From your backlog')).toBeInTheDocument();
+    expect(screen.getAllByText('backlog').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Continue playing')).toBeInTheDocument();
     expect(screen.getByText('Recently added')).toBeInTheDocument();
     expect(screen.getByText('Waiting for you')).toBeInTheDocument();
     expect(screen.getByText('To finish')).toBeInTheDocument();
     expect(screen.getByText('To install')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: "Don't suggest this" }));
-    expect(onDismissHero).toHaveBeenCalledWith(['needy']);
+    expect(onDismissHero).toHaveBeenCalledWith(['backlog']);
     const plays = screen.getAllByRole('button', { name: /^Play: / });
     expect(plays.length).toBeGreaterThan(0);
     fireEvent.click(plays[0]);
@@ -165,7 +168,7 @@ describe('a22 downloads', () => {
         onOpenGame={noop}
       />,
     );
-    expect(screen.getByText('queue')).toBeInTheDocument();
+    expect(screen.getByText('Queue')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
     expect(screen.getByText('Civ VII')).toBeInTheDocument();
     expect(screen.getByText('No space left')).toBeInTheDocument();

@@ -102,13 +102,13 @@
   },
   "addDialog": {
     "title": "Ajouter un jeu",
-    "description": "Ajoutez un jeu via son exécutable. Il est enregistré dans votre bibliothèque et tourne avec les exécuteurs de Platypus.",
-    "titleSection": "titre",
-    "titlePlaceholder": "Mon jeu",
-    "exeSection": "exécutable",
-    "exeAria": "exécutable",
+    "description": "N'importe quel programme sur votre disque : un installeur GOG, un téléchargement itch, un .exe Windows.",
+    "titleSection": "Titre",
+    "titlePlaceholder": "Trouvé depuis le nom du fichier",
+    "exeSection": "Programme",
+    "exeAria": "Programme",
     "exePlaceholder": "/home/vous/Jeux/jeu/jeu.exe",
-    "browse": "Parcourir…",
+    "browse": "Parcourir",
     "advanced": "Avancé",
     "advancedSet_one": "· {{count}} réglé",
     "advancedSet_other": "· {{count}} réglés",
@@ -138,7 +138,7 @@
     "runAutoUnknown": "Automatique",
     "runNative": "Linux natif",
     "runWine": "Wine / Proton",
-    "submit": "Ajouter le jeu"
+    "submit": "Ajouter à la bibliothèque"
   },
   "offline": "Hors ligne — bibliothèque connue affichée",
   "statusFilter": {

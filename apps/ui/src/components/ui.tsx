@@ -162,27 +162,17 @@ export const EVENT_DOT: Record<ActivityType, string> = {
   cloud: 'bg-info',
 };
 
-export function EmptyState({ label, children, action, icon: Glyph }: { label: string; children?: React.ReactNode; action?: React.ReactNode; icon?: React.ComponentType<{ className?: string }> }) {
+export function EmptyState({ label, children, action, icon: Icon }: { label: string; children?: React.ReactNode; action?: React.ReactNode; /** Atlas icon (Download, Check, Clock): lab .ap-empty has a 20px faint icon, no dashed box. */
+  icon?: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> }) {
   const chrome = useVariant('empty-state.chrome');
   const showIcon = useVariant('empty-state.icon');
-  const Icon = Glyph ?? Inbox;
-  // The lab's empty state has no border and no label chrome.
-  if (chrome === 'plain') {
-    return (
-      <div className="rounded-3xl px-6 py-14 text-center">
-        {showIcon === 'on' && <Icon aria-hidden className="mx-auto mb-3 h-5 w-5 text-text-faint" />}
-        <h3 className="text-[15px] font-bold text-text">{label}</h3>
-        {children && <p className="mx-auto mt-2 max-w-[46ch] text-[13px] leading-relaxed text-text-muted">{children}</p>}
-        {action && <div className="mt-4">{action}</div>}
-      </div>
-    );
-  }
+  const plain = chrome === 'plain';
   return (
-    <div className="rounded-3xl border border-dashed border-hairline p-10 text-center">
-      {showIcon === 'on' && <Icon aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />}
-      <MonoLabel>{label}</MonoLabel>
-      {children && <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-body">{children}</p>}
-      {action && <div className="mt-4">{action}</div>}
+    <div className={plain ? 'grid justify-items-center gap-2 px-6 py-14 text-center' : 'rounded-3xl border border-dashed border-hairline p-10 text-center'}>
+      {showIcon === 'on' && (Icon ? <Icon aria-hidden className="mb-0.5 h-5 w-5 text-text-faint" /> : <Inbox aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />)}
+      {plain ? <h3 className="text-[15px] font-bold text-text">{label}</h3> : <MonoLabel>{label}</MonoLabel>}
+      {children && <p className="mx-auto max-w-[46ch] text-[13px] leading-relaxed text-text-muted">{children}</p>}
+      {action && <div className="mt-1.5">{action}</div>}
     </div>
   );
 }

@@ -25,37 +25,37 @@ interface StoresPageProps {
 
 export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, initialUrl, onClose, onNotify }: StoresPageProps) {
   const { t } = useTranslation(['store', 'nav']);
+  // The lab's single shop bar (StorefrontPage .ap-shop-bar): the store switch
+  // as segmented buttons, then the browser row, then Redeem. No logo tabs row.
+  const seg = (
+    <div role="tablist" aria-label={t('store:shop.storeLabel')} className="inline-flex min-w-0 flex-none gap-0.5 overflow-x-auto rounded-[10px] bg-surface p-[3px]">
+      {plugins.map((p) => {
+        const on = p.id === selected.id;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onSelect(p.id)}
+            className={cx(
+              'inline-flex h-8 flex-none items-center gap-1.5 rounded-lg px-[11px] text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              on
+                ? 'bg-[color-mix(in_srgb,var(--color-accent)_22%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/45'
+                : 'text-text-muted hover:text-text',
+            )}
+          >
+            <span className={cx('[&>svg]:h-[13px] [&>svg]:w-[13px]', on && 'text-accent')}>
+              <PluginLogo src={p.icon_url} name={p.name} size="xs" />
+            </span>
+            <span className="whitespace-nowrap">{p.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className="flex flex-none flex-wrap items-center gap-1.5 px-5 pb-1 pt-5">
-        <div role="tablist" aria-label={t('nav:store')} className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          {plugins.map((p) => {
-            const on = p.id === selected.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                role="tab"
-                aria-selected={on}
-                onClick={() => onSelect(p.id)}
-                className={cx(
-                  'relative flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                  on ? 'text-text' : 'text-text-muted hover:bg-surface hover:text-text',
-                )}
-              >
-                <PluginLogo src={p.icon_url} name={p.name} />
-                <span>{p.name}</span>
-                {on && <span aria-hidden className="absolute inset-x-2.5 -bottom-[5px] h-0.5 rounded-full bg-accent" />}
-              </button>
-            );
-          })}
-        </div>
-        {canRedeem && (
-          <Button variant="neutral" size="sm" onClick={onRedeem}>
-            <Ticket className="h-3.5 w-3.5" /> {t('nav:sourcebar.redeem')}
-          </Button>
-        )}
-      </div>
       <div className="min-h-0 flex-1">
         <StoreView
           key={selected.id}
@@ -63,6 +63,12 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
           initialUrl={initialUrl}
           onClose={onClose}
           onNotify={onNotify}
+          toolbarLead={seg}
+          toolbarTrail={canRedeem ? (
+            <Button variant="neutral" size="sm" onClick={onRedeem} className="flex-none">
+              <Ticket className="h-3.5 w-3.5" /> {t('store:shop.redeem')}
+            </Button>
+          ) : undefined}
         />
       </div>
     </div>

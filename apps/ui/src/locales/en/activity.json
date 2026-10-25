@@ -62,6 +62,7 @@
   "jobVerbRestored": "restored"
  },
  "atlas": {
+  "sub": "What happened in your library, newest first.",
   "filterKinds": "Filter by kind",
   "filterGame": "Filter by game",
   "kinds": {

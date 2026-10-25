@@ -101,14 +101,14 @@
     "scanning": "scanning library…"
   },
   "addDialog": {
-    "title": "Add game",
-    "description": "Sideload a game by its executable path. It's saved to your library and runs through Platypus's runner pipeline.",
-    "titleSection": "title",
-    "titlePlaceholder": "My Game",
-    "exeSection": "executable",
-    "exeAria": "executable",
+    "title": "Add a game",
+    "description": "Any program on your disk: a GOG installer, an itch download, a Windows .exe.",
+    "exeSection": "Program",
+    "exeAria": "Program",
     "exePlaceholder": "/home/you/Games/game/game.exe",
-    "browse": "Browse…",
+    "titleSection": "Title",
+    "titlePlaceholder": "Found from the file name",
+    "browse": "Browse",
     "advanced": "Advanced",
     "advancedSet_one": "· {{count}} set",
     "advancedSet_other": "· {{count}} set",
@@ -138,7 +138,7 @@
     "runAutoUnknown": "Automatic",
     "runNative": "Native Linux",
     "runWine": "Wine / Proton",
-    "submit": "Add game"
+    "submit": "Add to library"
   },
   "offline": "Offline — showing the last known library",
   "statusFilter": {
