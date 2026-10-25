@@ -25,8 +25,11 @@ import D18 from './designs/d18/D18.jsx';
 import D19 from './designs/d19/D19.jsx';
 import D20 from './designs/d20/D20.jsx';
 import D21 from './designs/d21/D21.jsx';
+import D22 from './designs/d22/D22.jsx';
+import D23 from './designs/d23/D23.jsx';
+import D24 from './designs/d24/D24.jsx';
 
-const PAGES = { 1: D1, 2: D2, 3: D3, 4: D4, 5: D5, 6: D6, 7: D7, 8: D8, 9: D9, 10: D10, 11: D11, 12: D12, 13: D13, 14: D14, 15: D15, 16: D16, 17: D17, 18: D18, 19: D19, 20: D20, 21: D21 };
+const PAGES = { 1: D1, 2: D2, 3: D3, 4: D4, 5: D5, 6: D6, 7: D7, 8: D8, 9: D9, 10: D10, 11: D11, 12: D12, 13: D13, 14: D14, 15: D15, 16: D16, 17: D17, 18: D18, 19: D19, 20: D20, 21: D21, 22: D22, 23: D23, 24: D24 };
 const key = window.location.pathname.replace(/^\/+|\/+$/g, '');
 const Page = PAGES[key] || Index;
 document.title = PAGES[key] ? `Platypus /${key}` : 'Platypus — design lab 2';

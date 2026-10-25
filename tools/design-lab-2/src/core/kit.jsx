@@ -397,7 +397,7 @@ function buildItems(L, mode) {
   return items;
 }
 
-export function Palette({ L, placeholder = 'Type a command or game…' }) {
+export function Palette({ L, placeholder = 'Type a command or game…', extra }) {
   const p = L.palette;
   const [q, setQ] = useState('');
   const [hi, setHi] = useState(0);
@@ -406,7 +406,7 @@ export function Palette({ L, placeholder = 'Type a command or game…' }) {
   const mode = p?.mode || 'root';
   useEffect(() => { setQ(''); setHi(0); }, [mode, !!p]);
   useEffect(() => { if (p) setTimeout(() => input.current?.focus(), 0); }, [p, mode]);
-  const all = useMemo(() => (p && mode !== 'conflict' ? buildItems(L, mode) : []), [p, mode, L.game, L.games, L.inspector]);
+  const all = useMemo(() => (p && mode !== 'conflict' ? (extra?.[mode] ? extra[mode]() : [...buildItems(L, mode), ...(mode === 'root' && extra?.root ? extra.root() : [])]) : []), [p, mode, L.game, L.games, L.inspector, extra]);
   const items = useMemo(() => {
     if (!q) {
       if (mode !== 'root') return all;
@@ -417,7 +417,7 @@ export function Palette({ L, placeholder = 'Type a command or game…' }) {
   }, [all, q]);
   useEffect(() => { listRef.current?.querySelector('.is-hi')?.scrollIntoView({ block: 'nearest' }); }, [hi]);
   if (!p) return null;
-  const chipFor = { runner: 'Runner', recipe: 'Recipe', source: 'Store', conflict: 'Save conflict' }[mode];
+  const chipFor = { runner: 'Runner', recipe: 'Recipe', source: 'Store', conflict: 'Save conflict' }[mode] || extra?.chips?.[mode];
   const exec = (it) => {
     if (!it) return;
     if (it.next) { L.actions.setPalette({ ...it.next }); return; }

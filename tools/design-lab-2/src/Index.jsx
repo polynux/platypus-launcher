@@ -37,6 +37,12 @@ const FINAL = [
   { n: 21, name: 'Atlas final', line: '/19 with the screenshots as a contact sheet in the right column, like /18. A switch in the top bar picks how far the game colour goes: accents only, or the whole app as in /20.' },
 ];
 
+const WHOLE = [
+  { n: 22, name: 'Atlas, top bar', line: '/21 with every feature placed. Home, Library and Store in the top bar; downloads, needs attention, friends and a menu (activity, runners, plugins, storage, settings) on the right. Collections, filters and views in the library bar. Friends in a side panel.' },
+  { n: 23, name: 'Atlas, rail', line: 'Every place on an icon rail. A library column with stores, collections and the game list. Friends docked on the right, chats as floating windows, game settings in a window like /11.' },
+  { n: 24, name: 'Atlas, hub', line: 'One labelled sidebar: places, stores, collections, downloads. Opens on Home; games open as full pages with a cover grid by default. Friends and game settings get their own pages.' },
+];
+
 export function Index() {
   return (
     <main className="ix">
@@ -76,6 +82,14 @@ export function Index() {
       <h2 className="ix-h2">Final</h2>
       <ol>
         {FINAL.map((d) => (
+          <li key={d.n}>
+            <a href={`/${d.n}`}><span className="ix-n">/{d.n}</span><span className="ix-name">{d.name}</span><span className="ix-line">{d.line}</span></a>
+          </li>
+        ))}
+      </ol>
+      <h2 className="ix-h2">The whole app: where every feature goes</h2>
+      <ol>
+        {WHOLE.map((d) => (
           <li key={d.n}>
             <a href={`/${d.n}`}><span className="ix-n">/{d.n}</span><span className="ix-name">{d.name}</span><span className="ix-line">{d.line}</span></a>
           </li>
