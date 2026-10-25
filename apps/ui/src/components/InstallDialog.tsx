@@ -53,17 +53,17 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
   return (
     <Modal label={t('gameOps:install.title', { title: game.title })} onClose={onClose} size="md" dismissable={!busy}>
       <h2 className="text-[20px] font-extrabold tracking-tight">{t('gameOps:install.title', { title: game.title })}</h2>
-      <p className="mt-1 text-[12.5px] text-white/70">{plugin.name}</p>
+      <p className="mt-1 text-[12.5px] text-text-muted">{plugin.name}</p>
 
-      <div className="mt-5 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-hint">
+      <div className="mt-5 rounded-2xl bg-surface px-4 py-3 font-mono text-hint">
         <div className="flex justify-between gap-4">
-          <span className="text-white/55">{t('gameOps:install.sizeLabel')}</span>
-          <span className={cx(size.state === 'loading' ? 'text-white/55' : 'text-white/85')} data-testid="install-size">
+          <span className="text-text-muted">{t('gameOps:install.sizeLabel')}</span>
+          <span className={cx(size.state === 'loading' ? 'text-text-muted' : 'text-text')} data-testid="install-size">
             {size.state === 'loading' ? t('gameOps:install.checking') : size.state === 'unknown' ? t('gameOps:install.unknown') : formatBytes(size.total)}
           </span>
         </div>
         {size.state === 'known' && size.added > 0 && (
-          <div className="mt-1.5 flex justify-between gap-4 text-white/55">
+          <div className="mt-1.5 flex justify-between gap-4 text-text-muted">
             <span>{t('gameOps:install.addonsLabel')}</span><span>{t('gameOps:install.addedSize', { size: formatBytes(size.added) })}</span>
           </div>
         )}
@@ -73,7 +73,7 @@ export function InstallDialog({ game, plugin, onClose, onChanged, onNotify }: In
         <InstallLocationPicker game={game} needBytes={total} value={folder} onChange={(f, fr) => { setFolder(f); setFree(fr); }} disabled={busy} />
       </div>
       {short && (
-        <p role="alert" className="mt-3 flex items-center gap-1.5 font-mono text-hint text-red-300">
+        <p role="alert" className="mt-3 flex items-center gap-1.5 font-mono text-hint text-danger">
           <TriangleAlert className="h-3.5 w-3.5" /> {t('gameOps:install.short')}
         </p>
       )}

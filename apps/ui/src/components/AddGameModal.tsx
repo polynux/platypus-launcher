@@ -174,7 +174,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
         }}
       >
         <h2 className="text-[20px] font-extrabold tracking-tight">{t('library:addDialog.title')}</h2>
-        <p className="mt-1 text-[12.5px] text-white/70">{t('library:addDialog.description')}</p>
+        <p className="mt-1 text-[12.5px] text-text-muted">{t('library:addDialog.description')}</p>
         <label className="mt-5 block">
           <MonoLabel className="mb-1.5">{t('library:addDialog.titleSection')}</MonoLabel>
           <Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('library:addDialog.titlePlaceholder')} />
@@ -194,16 +194,16 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
             </Button>
           </div>
         </div>
-        <div className="mt-4 border-t border-white/[0.07] pt-3">
+        <div className="mt-4 border-t border-hairline pt-3">
           <button
             type="button"
             aria-expanded={advancedOpen}
             onClick={() => setAdvancedOpen((o) => !o)}
-            className="flex items-center gap-1.5 font-mono text-[12px] text-white/60 transition hover:text-white/85"
+            className="flex items-center gap-1.5 font-mono text-[12px] text-text-muted transition hover:text-text"
           >
             <ChevronDown className={cx('size-3.5 transition-transform', advancedOpen ? '' : '-rotate-90')} aria-hidden />
             {t('library:addDialog.advanced')}
-            {advancedSet > 0 && <span className="tabular-nums text-amber-200/90">{t('library:addDialog.advancedSet', { count: advancedSet })}</span>}
+            {advancedSet > 0 && <span className="tabular-nums text-attention">{t('library:addDialog.advancedSet', { count: advancedSet })}</span>}
           </button>
           <div hidden={!advancedOpen} className="mt-4 space-y-5">
             <div>
@@ -212,16 +212,16 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
                 aria-label={t('library:addDialog.runWith')}
                 value={runMode}
                 onChange={(e) => setRunMode(e.target.value)}
-                className="w-full rounded-lg bg-white/[0.06] px-3 py-2 text-[13px] text-white/90 outline-none ring-1 ring-white/10 focus:ring-amber-300/40"
+                className="w-full rounded-lg bg-surface px-3 py-2 text-[13px] text-text outline-none ring-1 ring-hairline focus:ring-focus/40"
               >
                 <option value="auto">{detected == null ? t('library:addDialog.runAutoUnknown') : detected.native ? t('library:addDialog.runAutoNative') : t('library:addDialog.runAutoWine')}</option>
                 <option value="native">{t('library:addDialog.runNative')}</option>
                 <option value="wine">{t('library:addDialog.runWine')}</option>
               </select>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.runHelp')}</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.runHelp')}</p>
             </div>
             <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.workDir')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.workDir')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
               <div className="flex items-center gap-2">
                 <Input
                   value={workingDir}
@@ -234,12 +234,12 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
                   {t('library:addDialog.browse')}
                 </Button>
               </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.workHelp')}</p>
-              {workError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{workError}</p>}
+              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.workHelp')}</p>
+              {workError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{workError}</p>}
             </div>
             {!effectiveNative && (
             <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.prefix')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.prefix')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
               <div className="flex items-center gap-2">
                 <Input
                   value={winePrefix}
@@ -252,12 +252,12 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
                   {t('library:addDialog.browse')}
                 </Button>
               </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.prefixHelp')}</p>
-              {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{prefixError}</p>}
+              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.prefixHelp')}</p>
+              {prefixError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{prefixError}</p>}
             </div>
             )}
             <div>
-              <MonoLabel className="mb-1.5">{t('library:addDialog.year')} <span className="normal-case tracking-normal text-white/55">· {t('library:addDialog.optional')}</span></MonoLabel>
+              <MonoLabel className="mb-1.5">{t('library:addDialog.year')} <span className="normal-case tracking-normal text-text-muted">· {t('library:addDialog.optional')}</span></MonoLabel>
               <Input
                 value={releaseYear}
                 onChange={(e) => { setReleaseYear(e.target.value); setYearError(null); }}
@@ -266,8 +266,8 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
                 inputMode="numeric"
                 className="w-32"
               />
-              <p className="mt-1.5 text-[12px] leading-relaxed text-white/70">{t('library:addDialog.yearHelp')}</p>
-              {yearError && <p role="alert" className="mt-1 font-mono text-hint text-orange-300">{yearError}</p>}
+              <p className="mt-1.5 text-[12px] leading-relaxed text-text-muted">{t('library:addDialog.yearHelp')}</p>
+              {yearError && <p role="alert" className="mt-1 font-mono text-hint text-attention">{yearError}</p>}
             </div>
           </div>
         </div>
@@ -275,7 +275,7 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
           <Button variant="neutral" onClick={onClose}>{t('common:cancel')}</Button>
           <Button type="submit" variant="primary" disabled={!valid || saving}>{t('library:addDialog.submit')}</Button>
         </div>
-        {saveError && <p role="alert" className="mt-3 font-mono text-hint text-orange-300">{saveError}</p>}
+        {saveError && <p role="alert" className="mt-3 font-mono text-hint text-attention">{saveError}</p>}
       </form>
     </Modal>
   );

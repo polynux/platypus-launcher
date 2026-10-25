@@ -39,7 +39,7 @@ export function DialogContent({
           aria-label={label}
           aria-describedby={undefined}
           className={cn(
-            'relative flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-white/10',
+            'relative flex max-h-[86vh] w-full animate-modal-in flex-col overflow-hidden rounded-3xl bg-raised outline-none ring-1 ring-hairline',
             sheet && 'h-full max-h-full w-[min(42rem,92vw)] animate-sheet-in motion-reduce:animate-none rounded-l-3xl rounded-r-none',
             contentClassName,
             className,
@@ -47,7 +47,7 @@ export function DialogContent({
           style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)', ...(sheetWidth ? { width: sheetWidth } : {}) }}
           {...props}
         >
-          <div className={cn('min-h-0 flex-1 overflow-y-auto p-7 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,.18)_transparent]', innerClassName)}>{children}</div>
+          <div className={cn('min-h-0 flex-1 overflow-y-auto p-7 [scrollbar-width:thin] [scrollbar-color:var(--color-hairline-strong)_transparent]', innerClassName)}>{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Overlay>
     </DialogPrimitive.Portal>

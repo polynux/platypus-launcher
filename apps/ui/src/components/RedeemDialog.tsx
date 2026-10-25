@@ -48,38 +48,38 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
         <h2 className="mb-4 text-[18px] font-bold">{t('common:redeem.title')}</h2>
         {result ? (
           <div className="space-y-3 text-[14px]">
-            <p className="text-white/80">{result.message}</p>
+            <p className="text-text-body">{result.message}</p>
             {result.titles.length > 0 && (
               <div>
                 <MonoLabel className="mb-1">{t('common:redeem.granted')}</MonoLabel>
                 <ul className="space-y-1">
                   {result.titles.map((title) => (
-                    <li key={title} className="text-amber-200">{title}</li>
+                    <li key={title} className="text-accent-strong">{title}</li>
                   ))}
                 </ul>
               </div>
             )}
             <div className="mt-6 flex gap-2">
-              <Button onClick={() => setResult(null)} className="flex-1 text-white/70">{t('common:redeem.redeemAnother')}</Button>
-              <Button onClick={onClose} className="flex-1 text-sky-100">{t('common:done')}</Button>
+              <Button variant="neutral" onClick={() => setResult(null)} className="flex-1">{t('common:redeem.redeemAnother')}</Button>
+              <Button variant="primary" onClick={onClose} className="flex-1">{t('common:done')}</Button>
             </div>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3">
-            <label className="block text-[13px] text-white/70">
+            <label className="block text-[13px] text-text-muted">
               {t('common:redeem.store')}
               <select
                 value={plugin?.id ?? ''}
                 onChange={(e) => { setStoreId(e.target.value); setError(null); }}
                 disabled={busy || stores.length < 2}
-                className="mt-1.5 block w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[14px] text-white/90 outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 disabled:opacity-60"
+                className="mt-1.5 block w-full rounded-xl border border-hairline bg-surface px-3 py-2 text-[14px] text-text outline-none focus-visible:ring-2 focus-visible:ring-focus/50 disabled:opacity-60"
               >
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
             </label>
-            <label className="block text-[13px] text-white/70">
+            <label className="block text-[13px] text-text-muted">
               {t('common:redeem.code')}
               <Input
                 value={code}
@@ -94,8 +94,8 @@ export function RedeemDialog({ stores, onClose }: { stores: StorePlugin[]; onClo
             </label>
             {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('common:redeem.error')} />}
             <div className="mt-6 flex gap-2">
-              <Button type="button" onClick={onClose} className="flex-1 text-white/70">{t('common:cancel')}</Button>
-              <Button type="submit" disabled={!plugin || !code.trim() || busy} className="flex-1 text-sky-100">
+              <Button type="button" variant="neutral" onClick={onClose} className="flex-1">{t('common:cancel')}</Button>
+              <Button type="submit" variant="primary" disabled={!plugin || !code.trim() || busy} className="flex-1">
                 {busy ? t('common:redeem.redeeming') : t('common:redeem.redeem')}
               </Button>
             </div>

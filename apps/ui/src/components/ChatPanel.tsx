@@ -75,7 +75,7 @@ export function ChatPanel(p: ChatPanelProps) {
           )}
           <div className="min-w-0">
             <h2 className="truncate text-[17px] font-extrabold tracking-tight">{p.friendName}</h2>
-            <div className="font-mono text-micro uppercase tracking-[0.16em] text-white/55">{p.storeName}</div>
+            <div className="font-mono text-micro uppercase tracking-[0.16em] text-text-muted">{p.storeName}</div>
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={p.onClose} className="flex-none">
@@ -84,7 +84,7 @@ export function ChatPanel(p: ChatPanelProps) {
       </header>
 
       {p.error && (
-        <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-[12px] text-red-200 ring-1 ring-red-400/25">
+        <p role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger ring-1 ring-danger/25">
           {p.error}
         </p>
       )}
@@ -104,16 +104,16 @@ export function ChatPanel(p: ChatPanelProps) {
             <LinkButton onClick={p.onLoadOlder}>{t('chat:panel.loadOlder')}</LinkButton>
           </div>
         )}
-        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-white/70">{t('chat:panel.loading')}</p>}
+        {!p.view?.loaded && !p.error && <p className="text-[12.5px] text-text-muted">{t('chat:panel.loading')}</p>}
         {p.view?.loaded && messages.length === 0 && (
-          <p className="text-[12.5px] text-white/70">{t('chat:panel.empty')}</p>
+          <p className="text-[12.5px] text-text-muted">{t('chat:panel.empty')}</p>
         )}
         {messages.map((m) => (
           <MessageRow key={messageKey(m)} message={m} onResend={p.onResend} />
         ))}
       </div>
 
-      {p.view?.typing && <p className="text-hint italic text-white/55">{t('chat:panel.typing', { name: p.friendName })}</p>}
+      {p.view?.typing && <p className="text-hint italic text-text-muted">{t('chat:panel.typing', { name: p.friendName })}</p>}
 
       <div className="flex items-end gap-2">
         <Textarea
@@ -150,13 +150,13 @@ function MessageRow({ message, onResend }: {
       <div
         className={cx(
           'whitespace-pre-wrap rounded-2xl px-3 py-2 text-[13px] leading-snug [overflow-wrap:anywhere]',
-          mine ? 'bg-amber-300/15 text-amber-50' : 'bg-white/[0.06] text-white/85',
-          message.status === 'failed' && 'ring-1 ring-red-400/40',
+          mine ? 'bg-attention/15 text-text' : 'bg-surface text-text',
+          message.status === 'failed' && 'ring-1 ring-danger/40',
         )}
       >
         {splitLinks(message.text).map((part, i) =>
           part.href ? (
-            <ExternalLink key={i} href={part.href} className="underline decoration-white/35 underline-offset-2 hover:text-white">
+            <ExternalLink key={i} href={part.href} className="underline decoration-hairline-strong underline-offset-2 hover:text-text">
               {part.text}
             </ExternalLink>
           ) : (
@@ -164,8 +164,8 @@ function MessageRow({ message, onResend }: {
           ),
         )}
       </div>
-      <div className="flex items-center gap-2 font-mono text-hint text-white/55">
-        <span className={message.status === 'failed' ? 'text-red-300' : undefined}>{state}</span>
+      <div className="flex items-center gap-2 font-mono text-hint text-text-muted">
+        <span className={message.status === 'failed' ? 'text-danger' : undefined}>{state}</span>
         {message.status === 'failed' && message.clientId && (
           <LinkButton onClick={() => onResend(message.clientId!)}>{t('chat:panel.sendAgain')}</LinkButton>
         )}

@@ -198,15 +198,15 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
 
         {gameId ? (
           <ul className="mb-5 space-y-1.5" aria-label={t('collections:pickLabel', { title: game?.title ?? gameId })}>
-            {pickable.length === 0 && <li className="text-[13px] text-white/55">{t('collections:pickerEmpty')}</li>}
+            {pickable.length === 0 && <li className="text-[13px] text-text-muted">{t('collections:pickerEmpty')}</li>}
             {pickable.map((c) => {
               const on = c.games?.includes(gameId) ?? false;
               return (
                 <li key={c.id}>
-                  <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 text-[14px] hover:bg-white/[0.04]">
-                    <input type="checkbox" checked={on} disabled={busy} onChange={(e) => toggle(c, e.target.checked)} className="h-4 w-4 accent-amber-300" />
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 text-[14px] hover:bg-surface">
+                    <input type="checkbox" checked={on} disabled={busy} onChange={(e) => toggle(c, e.target.checked)} className="h-4 w-4 accent-attention" />
                     <span className="flex-1">{label(c)}</span>
-                    <span className="font-mono text-hint tabular-nums text-white/55">{counts[c.id] ?? 0}</span>
+                    <span className="font-mono text-hint tabular-nums text-text-muted">{counts[c.id] ?? 0}</span>
                   </label>
                 </li>
               );
@@ -218,7 +218,7 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
               const missing = missingFrom(c, games).length;
               return (
                 <React.Fragment key={c.id}>
-                <li className="flex flex-wrap items-center gap-2.5 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.05]">
+                <li className="flex flex-wrap items-center gap-2.5 rounded-xl bg-surface px-3 py-2 ring-1 ring-hairline">
                   {c.builtin ? (
                     <span className="min-w-0 flex-1 text-[14px] font-semibold">{label(c)}</span>
                   ) : (
@@ -234,11 +234,11 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
                       className="min-w-0 flex-1"
                     />
                   )}
-                  <span className="font-mono text-hint tabular-nums text-white/55">
+                  <span className="font-mono text-hint tabular-nums text-text-muted">
                     {t('collections:count', { count: counts[c.id] ?? 0 })}
-                    {missing > 0 && <span className="ml-2 text-amber-200">{t('collections:missing', { count: missing })}</span>}
+                    {missing > 0 && <span className="ml-2 text-attention">{t('collections:missing', { count: missing })}</span>}
                   </span>
-                  <label className="flex items-center gap-1.5 text-hint text-white/70">
+                  <label className="flex items-center gap-1.5 text-hint text-text-muted">
                     <Switch checked={c.pinned ?? false} disabled={busy} onCheckedChange={(v) => void run(LauncherApi.pinCollection(c.id, v))} aria-label={t('collections:pinAria', { name: label(c) })} />
                     {t('collections:pin')}
                   </label>
@@ -256,13 +256,13 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
                     ) : null
                   )}
                   {!c.builtin && (
-                    <Button variant="ghost" size="sm" disabled={busy} aria-label={t('collections:deleteAria', { name: c.name })} onClick={() => void run(LauncherApi.deleteCollection(c.id))} className="text-red-200/85">
+                    <Button variant="ghost" size="sm" disabled={busy} aria-label={t('collections:deleteAria', { name: c.name })} onClick={() => void run(LauncherApi.deleteCollection(c.id))} className="text-danger">
                       {t('collections:delete')}
                     </Button>
                   )}
                 </li>
                 {editingId === c.id && c.smart && (
-                  <li className="rounded-xl bg-white/[0.03] p-3">
+                  <li className="rounded-xl bg-surface p-3">
                     <SmartFields draft={editDraft} setDraft={setEditDraft} games={games} collections={collections} disabled={busy} />
                     <div className="mt-3 flex justify-end">
                       <Button variant="primary" size="sm" disabled={busy || !editName.trim()} onClick={() => saveEdit(c)}>{t('collections:save')}</Button>
@@ -275,21 +275,21 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
           </ul>
         )}
 
-        <form onSubmit={create} className="space-y-3 border-t border-white/[0.06] pt-4">
+        <form onSubmit={create} className="space-y-3 border-t border-hairline pt-4">
           <MonoLabel>{t('collections:newHeading')}</MonoLabel>
           <div className="flex flex-wrap items-end gap-2.5">
-            <label className="min-w-0 flex-1 text-[13px] text-white/70">
+            <label className="min-w-0 flex-1 text-[13px] text-text-muted">
               {t('collections:newName')}
               <Input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={t('collections:newNamePlaceholder')} disabled={busy} className="mt-1.5" />
             </label>
             {!gameId && (
-              <label className="text-[13px] text-white/70">
+              <label className="text-[13px] text-text-muted">
                 {t('collections:kind')}
                 <select
                   value={smart ? 'smart' : 'manual'}
                   onChange={(e) => setSmart(e.target.value === 'smart')}
                   disabled={busy}
-                  className="mt-1.5 block rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[14px] text-white/90 outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50"
+                  className="mt-1.5 block rounded-xl border border-hairline bg-surface px-3 py-2 text-[14px] text-text outline-none focus-visible:ring-2 focus-visible:ring-focus/50"
                 >
                   <option value="manual">{t('collections:kindManual')}</option>
                   <option value="smart">{t('collections:kindSmart')}</option>
@@ -305,14 +305,14 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
         </form>
 
         <div className="mt-6 flex justify-end">
-          <Button onClick={onClose} className="text-sky-100">{t('common:done')}</Button>
+          <Button variant="neutral" onClick={onClose}>{t('common:done')}</Button>
         </div>
       </div>
     </Modal>
   );
 }
 
-const selectClass = 'mt-1.5 block w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[14px] text-white/90 outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 disabled:opacity-60';
+const selectClass = 'mt-1.5 block w-full rounded-xl border border-hairline bg-surface px-3 py-2 text-[14px] text-text outline-none focus-visible:ring-2 focus-visible:ring-focus/50 disabled:opacity-60';
 
 /** The smart filter's fields: each one is "any" until the user picks a value. */
 function SmartFields({ draft, setDraft, games, collections, disabled }: { draft: SmartDraft; setDraft: (d: SmartDraft) => void; games: Game[]; collections: Collection[]; disabled: boolean }) {
@@ -320,7 +320,7 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
   const set = (k: keyof SmartDraft) => (e: { target: { value: string } }) => setDraft({ ...draft, [k]: e.target.value });
   const stores = [...new Set(games.map((g) => g.store))];
   const select = (k: keyof SmartDraft, label: string, options: { value: string; label: string }[]) => (
-    <label className="text-[13px] text-white/70" key={k}>
+    <label className="text-[13px] text-text-muted" key={k}>
       {label}
       <select value={draft[k]} onChange={set(k)} disabled={disabled} className={selectClass}>
         <option value="">{t('collections:smart.any')}</option>
@@ -338,22 +338,22 @@ function SmartFields({ draft, setDraft, games, collections, disabled }: { draft:
       {select('played', t('collections:smart.played'), yesNo)}
       {select('badgeKind', t('collections:smart.badgeKind'), ['rating', 'verdict', 'protection', 'note', 'platform'].map((v) => ({ value: v, label: t(`collections:smart.badgeKinds.${v}`) })))}
       {draft.badgeKind === 'rating' ? select('badgeValue', t('collections:smart.badgeValue'), TIER_FILTERS.filter((v) => v !== 'all').map((v) => ({ value: v, label: tierLabel(t, v) }))) : draft.badgeKind === 'verdict' ? select('badgeValue', t('collections:smart.badgeValue'), ['verified', 'playable', 'unsupported'].map((v) => ({ value: v, label: t(`collections:smart.deckName.${v}`) }))) : draft.badgeKind ? (
-        <label className="text-[13px] text-white/70">
+        <label className="text-[13px] text-text-muted">
           {t('collections:smart.badgeValue')}
           <Input value={draft.badgeValue} onChange={set('badgeValue')} disabled={disabled} className="mt-1.5" />
         </label>
       ) : null}
       {select('status', t('collections:smart.status'), STATUSES.map((v) => ({ value: v, label: t(`library:statusFilter.${v}`) })))}
       {select('collection', t('collections:smart.collection'), collections.filter((c) => !c.smart).map((c) => ({ value: c.id, label: c.builtin ? t(`collections:builtin.${c.id}`) : c.name })))}
-      <label className="text-[13px] text-white/70">
+      <label className="text-[13px] text-text-muted">
         {t('collections:smart.minHours')}
         <Input type="number" min={0} inputMode="numeric" value={draft.minHours} onChange={set('minHours')} disabled={disabled} className="mt-1.5" />
       </label>
-      <label className="text-[13px] text-white/70">
+      <label className="text-[13px] text-text-muted">
         {t('collections:smart.yearFrom')}
         <Input type="number" min={0} inputMode="numeric" value={draft.yearFrom} onChange={set('yearFrom')} disabled={disabled} className="mt-1.5" />
       </label>
-      <label className="text-[13px] text-white/70">
+      <label className="text-[13px] text-text-muted">
         {t('collections:smart.yearTo')}
         <Input type="number" min={0} inputMode="numeric" value={draft.yearTo} onChange={set('yearTo')} disabled={disabled} className="mt-1.5" />
       </label>

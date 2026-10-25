@@ -3,12 +3,12 @@ import { cx } from './ui';
 
 /** Monogram tints, picked by name so a source keeps its tile across views. */
 const TINTS = [
-  'bg-amber-300/15 text-amber-200',
-  'bg-sky-300/15 text-sky-200',
-  'bg-emerald-300/15 text-emerald-200',
-  'bg-violet-300/15 text-violet-200',
-  'bg-rose-300/15 text-rose-200',
-  'bg-orange-300/15 text-orange-200',
+  'bg-attention/15 text-attention',
+  'bg-info/15 text-info',
+  'bg-ok/15 text-ok',
+  'bg-dl/15 text-dl',
+  'bg-danger/15 text-danger',
+  'bg-accent/15 text-accent-strong',
 ] as const;
 
 /** The tint class for a name (exported for tests). */
@@ -43,7 +43,7 @@ export function PluginLogo({ src, name, size = 'md' }: { src?: string | null; na
   const box = BOX[size];
   if (!src || broken) {
     return (
-      <span aria-hidden className={cx('grid flex-none place-items-center font-extrabold leading-none ring-1 ring-white/10', tintFor(name), box)}>
+      <span aria-hidden className={cx('grid flex-none place-items-center font-extrabold leading-none ring-1 ring-hairline', tintFor(name), box)}>
         {monogramFor(name)}
       </span>
     );

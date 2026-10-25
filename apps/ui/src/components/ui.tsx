@@ -55,7 +55,7 @@ export function LinkButton({ onClick, children }: { onClick: () => void; childre
     );
   }
   return (
-    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-text-muted transition hover:text-white/80">
+    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-text-muted transition hover:text-text">
       {children}
     </button>
   );
@@ -90,7 +90,7 @@ export function SegRow<T extends string>({ options, value, onChange, label }: { 
 /** Visual-only switch for use inside a clickable row/button. For a standalone control use ds/Switch. */
 export function TogglePill({ on }: { on: boolean }) {
   return (
-    <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-accent-strong' : 'bg-white/15')}>
+    <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-accent-strong' : 'bg-hairline-strong')}>
       <span className={cx('absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-raised transition-transform', on && 'translate-x-3')} />
     </span>
   );
@@ -113,15 +113,15 @@ export const TIER_TEXT: Record<string, string> = {
   platinum: 'text-accent-strong',
   gold: 'text-accent-strong/80',
   silver: 'text-text-muted',
-  bronze: 'text-orange-300',
-  borked: 'text-red-300',
+  bronze: 'text-attention',
+  borked: 'text-danger',
 };
 
 export const TIER_DOT: Record<string, string> = {
   platinum: 'bg-accent-strong',
   gold: 'bg-accent-strong/50',
-  silver: 'bg-white/40',
-  bronze: 'bg-orange-300/70',
+  silver: 'bg-text-muted',
+  bronze: 'bg-attention/70',
   borked: 'bg-danger',
 };
 
@@ -139,24 +139,24 @@ export const btnPrimary = buttonVariantClass.primary;
 export const btnNeutral = buttonVariantClass.neutral;
 
 export const EVENT_TEXT: Record<ActivityType, string> = {
-  session: 'text-emerald-300',
+  session: 'text-ok',
   unlock: 'text-accent-strong',
   fix: 'text-info',
   update: 'text-text-muted',
   add: 'text-text-muted',
   remove: 'text-text-muted',
   download: 'text-dl',
-  tweak: 'text-orange-300',
+  tweak: 'text-attention',
   cloud: 'text-info',
 };
 
 export const EVENT_DOT: Record<ActivityType, string> = {
-  session: 'bg-emerald-400',
+  session: 'bg-ok',
   unlock: 'bg-accent',
   fix: 'bg-info',
-  update: 'bg-white/30',
-  add: 'bg-white/30',
-  remove: 'bg-white/30',
+  update: 'bg-text-muted',
+  add: 'bg-text-muted',
+  remove: 'bg-text-muted',
   download: 'bg-dl',
   tweak: 'bg-attention',
   cloud: 'bg-info',
@@ -166,7 +166,7 @@ export function EmptyState({ label, children, action }: { label: string; childre
   const chrome = useVariant('empty-state.chrome');
   const icon = useVariant('empty-state.icon');
   return (
-    <div className={chrome === 'plain' ? 'rounded-3xl p-10 text-center' : 'rounded-3xl border border-dashed border-white/15 p-10 text-center'}>
+    <div className={chrome === 'plain' ? 'rounded-3xl p-10 text-center' : 'rounded-3xl border border-dashed border-hairline p-10 text-center'}>
       {icon === 'on' && <Inbox aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />}
       <MonoLabel>{label}</MonoLabel>
       <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-text-body">{children}</p>
@@ -326,8 +326,8 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
   }, [current, fail]);
   if (!current) {
     return (
-      <div className={cx('cover-fallback grid place-items-center bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-3 text-center', className)}>
-        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/85">{title}</span>
+      <div className={cx('cover-fallback grid place-items-center bg-gradient-to-br from-surface-strong to-surface p-3 text-center', className)}>
+        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-text">{title}</span>
       </div>
     );
   }

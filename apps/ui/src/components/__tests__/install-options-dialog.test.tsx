@@ -118,7 +118,7 @@ describe('InstallOptionsDialog', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     fireEvent.click(screen.getByLabelText('Season Pass'));
     expect(screen.getByTestId('added-size').textContent).toBe('+' + formatBytes(1 * MiB));
-    expect(screen.getByTestId('free-space').className).toMatch(/text-red/);
+    expect(screen.getByTestId('free-space').className).toMatch(/text-danger/);
     expect(screen.getByRole('alert').textContent).toMatch(/Not enough space/);
     expect((screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByLabelText('Season Pass'));
