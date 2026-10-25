@@ -412,6 +412,7 @@
   "storeTab": {
     "pictures": "Pictures",
     "picturesCount": "{{count}} screenshots",
+    "you": "You",
     "played": "Played",
     "lastPlayed": "Last played",
     "runsWith": "Runs with",
@@ -444,5 +445,10 @@
     "cancel": "Cancel",
     "of": "of",
     "upNext": "Up next"
+  },
+  "launchNotes": {
+    "client": "Launches through {{name}}. Platypus starts it for you and waits.",
+    "updateWaiting": "An update is waiting.",
+    "chooseVersion": "Choose a version"
   }
 }

@@ -10,7 +10,7 @@ import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
-import { AlertTriangle, ChevronDown, Cloud, CloudOff, Download, EyeOff, Loader2, Lock, Play, RefreshCw, SlidersHorizontal, Square, Trophy } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronLeft, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, GitCompare, Loader2, Lock, Play, RefreshCw, SlidersHorizontal, Square, Trophy } from 'lucide-react';
 import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Game, GameDetails, GameJobKind, GameSettings, GameStatus, Job, SaveBackup, SessionEvent, StorePlugin } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -36,7 +36,6 @@ import { coreErrMsg } from '../lib/coreError';
 import { cx } from './ui';
 import {
   AboutSection,
-  GameBackLink,
   GameInstallNote,
   GameOutsideAlert,
   TabsNoteLink,
@@ -155,7 +154,7 @@ function heroSrc(hero: string[], details: GameDetails | null): string | null {
   return hero[0] ?? null;
 }
 
-function AtlasHero({ game, hero, details }: { game: Game; hero: string[]; details: GameDetails | null }) {
+function AtlasHero({ game, hero, details, backLabel, onBack, hideBack }: { game: Game; hero: string[]; details: GameDetails | null; backLabel: string; onBack: () => void; hideBack?: boolean }) {
   const logoMode = useVariant('game-hero.logo');
   const src = heroSrc(hero, details);
   const [broken, setBroken] = useState<string | null>(null);
@@ -173,6 +172,18 @@ function AtlasHero({ game, hero, details }: { game: Game; hero: string[]; detail
           className="h-full w-full object-cover"
           style={{ objectPosition: 'center 30%' }}
         />
+      )}
+      {/* /22 hero-back: the way back sits over the art, like the lab (the
+          list-detail stage hides it, like the lab's split view). */}
+      {!hideBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="absolute left-4 top-[14px] inline-flex h-[30px] items-center gap-1 rounded-lg bg-glass px-3 pl-2 pr-3 text-[13px] font-semibold text-text ring-1 ring-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          <ChevronLeft className="h-[15px] w-[15px]" aria-hidden />
+          {backLabel}
+        </button>
       )}
       {logo ? (
         <img
@@ -304,9 +315,11 @@ function StoreSwitch({ d }: { d: GameTabsData }) {
         <button
           type="button"
           onClick={() => setComparing(true)}
-          className="inline-flex h-[42px] items-center rounded-[10px] px-3 font-sans text-[13px] font-semibold text-accent transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          aria-label={t('gameOps:copies.compare')}
+          title={t('gameOps:copies.compare')}
+          className="inline-flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[10px] bg-glass text-text ring-1 ring-hairline transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          {t('gameOps:copies.compare')}
+          <GitCompare className="h-[15px] w-[15px]" aria-hidden />
         </button>
       )}
       {comparing && compare && (
@@ -438,6 +451,38 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   );
 }
 
+/** The /22 launch notes row under the strip (D22 GameStage LaunchNotes): only
+ *  what the app really knows. A store-client launch (client_launch, or Steam
+ *  without an executable) names the client; a waiting update offers the
+ *  versions settings. The outside-folder alert owns its row below. */
+function LaunchNotesRow({ d }: { d: GameTabsData }) {
+  const { t } = useTranslation('game');
+  const viaSteam = d.game.source === 'steam' && !d.game.executable;
+  const notes: React.ReactNode[] = [];
+  if (d.game.client_launch || viaSteam) {
+    const name = d.plugin?.name ?? storeLabel(d.game.store);
+    notes.push(
+      <li key="client" className="inline-flex items-center gap-[7px]">
+        <ExternalLinkIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
+        <span>{t('game:launchNotes.client', { name })}</span>
+      </li>,
+    );
+  }
+  if (d.game.update_available && d.game.is_installed) {
+    notes.push(
+      <li key="update" className="inline-flex items-center gap-[7px]">
+        <GitCompare className="h-[13px] w-[13px] flex-none" aria-hidden />
+        <span>{t('game:launchNotes.updateWaiting')}</span>
+        <button type="button" onClick={d.onOpenVersions} className="font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+          {t('game:launchNotes.chooseVersion')}
+        </button>
+      </li>,
+    );
+  }
+  if (notes.length === 0) return null;
+  return <ul className="flex flex-wrap gap-x-[18px] gap-y-1.5 border-b border-hairline px-6 py-2 text-[12.5px] text-text-muted">{notes}</ul>;
+}
+
 function GallerySheet({ media, title }: { media: MediaItem[]; title: string }) {
   const { t } = useTranslation('game');
   const [index, setIndex] = useState<number | null>(null);
@@ -481,6 +526,8 @@ function YouGrid({ d }: { d: GameTabsData }) {
     [t('game:storeTab.protondb'), d.protondb || t('game:storeTab.noRating')],
   ];
   return (
+    <section aria-label={t('game:storeTab.you')}>
+      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('game:storeTab.you')}</h2>
     <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[10px] bg-hairline text-[13.5px] leading-[normal]">
       {cells.map(([k, v]) => (
         <div key={k} className="bg-surface px-3 py-2.5">
@@ -489,6 +536,7 @@ function YouGrid({ d }: { d: GameTabsData }) {
         </div>
       ))}
     </dl>
+    </section>
   );
 }
 
@@ -1322,16 +1370,16 @@ export function GameTabsView(d: GameTabsData) {
 
   return (
     <div>
-      {!d.hideBack && (
-        <div className="px-7 pt-7">
-          <GameBackLink backLabel={d.backLabel} onBack={d.onBack} />
-        </div>
-      )}
       {/* Full-bleed like /21 `.stage`: the hero art at the top with the
-          title bottom-left, and the action strip edge to edge under it. No
-          rounded inset card, so the Tune flyout is never clipped. */}
-      <AtlasHero game={d.game} hero={d.hero} details={d.details} />
+          title bottom-left and the /22 back button over it, and the action
+          strip edge to edge under it. No rounded inset card, so the Tune
+          flyout is never clipped. */}
+      <AtlasHero game={d.game} hero={d.hero} details={d.details} backLabel={d.backLabel} onBack={d.onBack} hideBack={d.hideBack} />
       <ActionStrip d={d} />
+      {/* /22 LaunchNotes: the client-launch and waiting-update notes sit in
+          their own row under the strip (the install note stays inline at
+          the end of the strip; the outside-folder alert below owns its). */}
+      <LaunchNotesRow d={d} />
       {/* Notices sit flush below the strip: each carries its own slim-row
           padding, with no outer card and no page padding around them. */}
       <div className="empty:hidden">
