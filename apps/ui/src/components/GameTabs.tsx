@@ -593,6 +593,7 @@ function YouSection({ d }: { d: GameTabsData }) {
   const mine = (d.collections ?? []).filter((c) => !c.smart && c.games?.includes(d.game.id));
   return (
     <div className="grid content-start gap-3">
+      <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{tg.t('game:storeTab.you')}</h2>
       <YouFacts d={d} />
       {d.onSaveStatus && (
         <div className="flex items-center justify-between gap-3">
@@ -1166,10 +1167,14 @@ export function CloudSlimRow({ game, plain, action, syncControl = 'select' }: { 
   const when = st?.checkedAt ? agoLabel(st.checkedAt) : '';
   const conflicted = st?.state === 'conflict' && (st.conflicts?.length ?? 0) > 0;
   const mode: CloudMode | 'default' = info ? (info.game_mode ? asCloudMode(info.game_mode) : 'default') : 'default';
+  // The segmented control always shows the mode it resolves to (the store
+  // default when the game follows it), so one segment is always on.
+  const resolved: CloudMode = info ? (info.game_mode ? asCloudMode(info.game_mode) : asCloudMode(info.plugin_mode ?? 'ask')) : 'ask';
 
   return (
     <div className="flex items-center gap-[18px] border-t border-hairline px-6 py-3.5">
       <div className="grid min-w-0 flex-1 gap-0.5 text-[13px]">
+        {syncControl === 'segmented' && <span className="font-semibold text-text">{t('cloud:panel.syncLabel')}</span>}
         {conflicted ? (
           <span>
             <button type="button" onClick={() => setResolving(true)} className="font-sans font-semibold text-accent hover:underline">
@@ -1206,15 +1211,15 @@ export function CloudSlimRow({ game, plain, action, syncControl = 'select' }: { 
               key={v}
               type="button"
               role="radio"
-              aria-checked={mode === v}
+              aria-checked={resolved === v}
               disabled={!info}
               onClick={() => setMode(v)}
               className={cx(
-                'h-[26px] rounded-md px-2.5 text-[13px] tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                mode === v ? 'bg-surface-strong text-text ring-1 ring-hairline' : 'text-text-muted hover:text-text',
+                'h-7 rounded-[7px] px-[11px] text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                resolved === v ? 'bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/40' : 'text-text-muted hover:text-text',
               )}
             >
-              {t(`cloud:mode.${v}`)}
+              {t(`cloud:panel.seg-${v}`)}
             </button>
           ))}
         </div>
@@ -1296,7 +1301,7 @@ function SavesTab({ d, onCount }: { d: GameTabsData; onCount?: (n: number | unde
         <header className="flex min-h-[30px] items-center justify-between gap-2.5">
           <h3 className="text-[14px] font-bold text-text">{t('game:saves.backupsTitle')}</h3>
           <Button variant="neutral" size="sm" onClick={backupNow} disabled={backingUp} className="flex-none">
-            {backingUp ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
+            <Plus className="size-3.5" aria-hidden /> {backingUp ? t('game:storeTab.backingUp') : t('game:storeTab.backupNow')}
           </Button>
         </header>
         <BackupTable game={d.game} onNotify={d.onNotify ?? (() => {})} onCount={onCount} reloadKey={reloadKey} emptyText={t('game:saves.noBackups')} />
@@ -1400,7 +1405,7 @@ function CompatTab({ d, info, crash }: { d: GameTabsData; info: Compat | null; c
           {d.facts.map(([k, v]) => (
             <div key={k} className="bg-surface px-3.5 py-2.5">
               <dt className="text-[11.5px] text-text-faint">{k}</dt>
-              <dd className="font-[650] text-text">{v}</dd>
+              <dd className="truncate text-[13.5px] font-[650] leading-snug text-text" title={v}>{v}</dd>
             </div>
           ))}
         </dl>

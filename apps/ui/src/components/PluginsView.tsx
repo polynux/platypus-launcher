@@ -14,7 +14,7 @@ import { Input } from './ds/input';
 import { PluginCapabilities } from './PluginCapabilities';
 import { PluginLogo } from './PluginLogo';
 import { PluginSettingsPanel } from './PluginSettings';
-import { offers } from '../lib/capabilities';
+import { offers, offerLabel } from '../lib/capabilities';
 import type { VariantProps } from 'class-variance-authority';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
@@ -402,7 +402,16 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
           {p.problem}
         </p>
       )}
-      {p.status !== 'invalid' && <PluginCapabilities plugin={p} />}
+      {/* The capabilities count line stays in the classic card; the Atlas
+          detail shows only the user-facing list below. */}
+      {p.capabilities.length > 0 && (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
+          <div className="grid min-w-0 gap-[3px]">
+            <span className="text-[13px] font-semibold text-text">{t('plugins:atlas.brings')}</span>
+            <span className="text-[0.93em] leading-normal text-text-muted">{p.capabilities.map((c) => offerLabel(c)).filter((s): s is string => s != null).join(', ')}</span>
+          </div>
+        </div>
+      )}
       {(p.status === 'unapproved' || p.status === 'changed') && (
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" onClick={onReview}>
@@ -439,14 +448,6 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
               </Button>
             )}
           </span>
-        </div>
-      )}
-      {p.capabilities.length > 0 && (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[18px] border-b border-hairline py-3.5">
-          <div className="grid min-w-0 gap-[3px]">
-            <span className="text-[13px] font-semibold text-text">{t('plugins:atlas.brings')}</span>
-            <span className="text-[0.93em] leading-normal text-text-muted">{p.capabilities.map((c) => c.replace(/-/g, ' ')).join(', ')}</span>
-          </div>
         </div>
       )}
       {p.status === 'ready' && <PluginSettingsPanel plugin={p} onNotify={onNotify} />}

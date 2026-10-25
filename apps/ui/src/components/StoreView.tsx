@@ -40,6 +40,10 @@ interface StoreViewProps {
    *  single browser row, so the page has one bar, not two tall rows. */
   toolbarLead?: React.ReactNode;
   toolbarTrail?: React.ReactNode;
+  /** The lab's single shop bar (.ap-shop-bar): one 50px row with background
+   *  and border, and the web view full-bleed under it. The bare embedded
+   *  view (other themes) keeps its own toolbar and inset card. */
+  shopBar?: boolean;
 }
 
 /**
@@ -50,7 +54,7 @@ interface StoreViewProps {
  * declared domains. Navigation outside the domains never loads: the toolbar
  * shows a non-modal notice offering to open the address in the browser.
  */
-export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, toolbarTrail }: StoreViewProps) {
+export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, toolbarTrail, shopBar }: StoreViewProps) {
   const { t } = useTranslation(['store', 'common']);
   const store = storeBridge();
   const [state, setState] = useState<Pick<StoreEvent, 'url' | 'canGoBack' | 'canGoForward' | 'title' | 'loading'>>({
@@ -172,7 +176,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
 
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className="flex flex-none items-center gap-1.5 px-5 pb-3 pt-5">
+      <div className={shopBar ? 'flex h-[50px] flex-none items-center gap-1.5 border-b border-hairline bg-ground-2 px-3.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
         {toolbarLead}
         <ToolbarButton label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
           <ArrowLeft className="h-4 w-4" />
@@ -183,12 +187,14 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
         <ToolbarButton label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
           <RotateCw className={cx('h-4 w-4', state.loading && 'animate-spin')} />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
-          <Home className="h-4 w-4" />
-        </ToolbarButton>
+        {!shopBar && (
+          <ToolbarButton label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
+            <Home className="h-4 w-4" />
+          </ToolbarButton>
+        )}
         <div
           data-testid="store-address"
-          title={`${plugin.name} · ${state.url}`}
+          title={state.title ? `${plugin.name} · ${state.url} · ${state.title}` : `${plugin.name} · ${state.url}`}
           className={cx(
             'mx-1.5 flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface px-2.5 text-[12px] text-text-faint ring-1',
             outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
@@ -206,15 +212,16 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
               <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
             </span>
           )}
-          {state.title && <span className="hidden min-w-0 flex-1 truncate text-right lg:inline">{state.title}</span>}
         </div>
         {toolbarTrail}
         <ToolbarButton label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
-          <X className="h-4 w-4" />
-        </ToolbarButton>
+        {!shopBar && (
+          <ToolbarButton label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
+            <X className="h-4 w-4" />
+          </ToolbarButton>
+        )}
       </div>
       {blocked && !failed && (
         <div
@@ -245,11 +252,11 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
         </div>
       )}
       {failed ? (
-        <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-surface px-6 text-center text-[13px] text-text-muted ring-1 ring-hairline">
+        <div className={shopBar ? 'flex flex-1 items-center justify-center px-6 text-center text-[13px] text-text-muted' : 'mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-surface px-6 text-center text-[13px] text-text-muted ring-1 ring-hairline'}>
           <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
         </div>
       ) : (
-        <div ref={area} data-testid="store-area" className="mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-surface ring-1 ring-hairline" />
+        <div ref={area} data-testid="store-area" className={shopBar ? 'min-h-0 flex-1' : 'mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-surface ring-1 ring-hairline'} />
       )}
     </div>
   );

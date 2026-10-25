@@ -5,7 +5,7 @@
 // render as before.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
-import { ArrowDown, ArrowUp, CircleAlert, LogIn, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUpDown, CircleAlert, LogIn, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import type { Collection, Game, Job, SourceWarning, StoreType } from '../types';
 import { Input } from './ds/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
@@ -228,26 +228,30 @@ export function LibraryListDetail(p: ListDetailProps) {
           {/* Sort key and direction as one joined control, so the filter field keeps its width. */}
           <div className="flex flex-none">
           <Select value={sort} onValueChange={(v) => { const next = v as ListSort; setSort(next); setDir(defaultDir(next === 'recent' ? 'last' : next)); }}>
-            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-[30px] w-[92px] flex-none rounded-r-none bg-surface text-[13px]">
+            <SelectTrigger aria-label={t('library:listDetail.sortAria')} className="h-8 w-[104px] flex-none rounded-r-none bg-surface font-sans text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="recent" className="text-[13px]">{t('library:listDetail.sort.recent')}</SelectItem>
-              <SelectItem value="title" className="text-[13px]">{t('library:listDetail.sort.title')}</SelectItem>
-              <SelectItem value="hours" className="text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
-              <SelectItem value="year" className="text-[13px]">{t('library:listDetail.sort.year')}</SelectItem>
-              <SelectItem value="size" className="text-[13px]">{t('library:listDetail.sort.size')}</SelectItem>
-              <SelectItem value="tier" className="text-[13px]">{t('library:listDetail.sort.tier')}</SelectItem>
+              <SelectItem value="recent" className="font-sans text-[13px]">{t('library:listDetail.sort.recent')}</SelectItem>
+              <SelectItem value="title" className="font-sans text-[13px]">{t('library:listDetail.sort.title')}</SelectItem>
+              <SelectItem value="hours" className="font-sans text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
+              <SelectItem value="year" className="font-sans text-[13px]">{t('library:listDetail.sort.year')}</SelectItem>
+              <SelectItem value="size" className="font-sans text-[13px]">{t('library:listDetail.sort.size')}</SelectItem>
+              <SelectItem value="tier" className="font-sans text-[13px]">{t('library:listDetail.sort.tier')}</SelectItem>
             </SelectContent>
           </Select>
           <button
             type="button"
             aria-label={dir === 'asc' ? t('library:ascToDesc') : t('library:descToAsc')}
             title={dir === 'asc' ? t('library:ascending') : t('library:descending')}
+            aria-pressed={dir === 'desc'}
             onClick={() => setDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
-            className="grid h-[30px] w-6 flex-none place-items-center rounded-r-[7px] border-l border-hairline bg-surface text-text-faint transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className={cx(
+              'grid h-8 w-6 flex-none place-items-center rounded-r-[7px] border-l border-hairline transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              dir === 'desc' ? 'bg-surface-strong text-text' : 'bg-surface text-text-faint hover:text-text'
+            )}
           >
-            {dir === 'asc' ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
+            <ArrowUpDown className="h-3.5 w-3.5" aria-hidden />
           </button>
           </div>
           {/* The /22 shell carries the filters popover (#135); the list keeps

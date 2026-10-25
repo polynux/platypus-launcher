@@ -511,11 +511,11 @@ export function GamePage(p: GamePageProps) {
           : runner?.name ?? (!s.runner_id || s.runner_id === 'auto' ? t('game:facts.autoRunner', { name: autoRunner?.name ?? t('game:facts.noRunner') }) : t('game:facts.missingRunner', { id: s.runner_id })),
     ],
     [t('game:facts.dx'), game.native ? t('game:facts.dxUnused') : s.dx_layer === 'wined3d' ? t('game:facts.dxWined3d') : t('game:facts.dxBundled')],
-    [t('game:facts.wrappers'), [s.use_gamemode && 'gamemode', mangohudOn && 'mangohud', s.use_gamescope && 'gamescope'].filter(Boolean).join(' · ') || t('game:facts.noWrappers')],
-    [t('game:facts.launchVia'), viaSteam ? t('game:facts.steamClient') : plugin ? t('game:facts.viaPlatypus', { name: plugin.name }) : 'Platypus'],
+    [t('game:facts.wrappers'), [s.use_gamemode && 'GameMode', mangohudOn && 'MangoHud', s.use_gamescope && 'Gamescope'].filter(Boolean).join(' · ') || t('game:facts.noWrappers')],
+    [t('game:facts.launchVia'), game.client_launch ? (plugin?.name ?? storeLabel(game.store)) : viaSteam ? t('game:facts.steamClient') : game.native ? t('game:facts.nativeLaunch') : 'umu-run'],
     [
       t('game:facts.compatibility'),
-      !info ? t('game:facts.pending') : ratingBadge ? `${ratingBadge.source} · ${ratingBadge.label}` : info.steam_app_id ? t('game:facts.protondbPending') : t('game:facts.protondbNoAppId'),
+      !info ? t('game:facts.pending') : ratingBadge ? `${ratingBadge.source} · ${ratingBadge.label}` : info.steam_app_id ? t('game:facts.protondbPending') : t('game:facts.unknown'),
     ],
     [
       t('game:facts.deck'),
@@ -525,7 +525,7 @@ export function GamePage(p: GamePageProps) {
           ? deckLabel(t, deck.rating)
           : info.steam_app_id
             ? t('game:facts.deckPending')
-            : t('game:facts.deckNoAppId'),
+            : t('game:facts.unknown'),
     ],
   ];
   const compat = fix?.description || (ratingBadge

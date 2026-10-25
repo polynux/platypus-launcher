@@ -331,7 +331,7 @@ describe('atlas parity round 3 (issue #132)', () => {
         onManageCollections={() => {}}
       />,
     );
-    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('None');
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveTextContent('No status');
     rerender(
       <GamePage
         game={{ ...g, status: 'finished', user_notes: 'loved it' } as Game}

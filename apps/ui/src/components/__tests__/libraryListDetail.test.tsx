@@ -141,7 +141,7 @@ describe('atlas parity (issue #132)', () => {
     // None of the fixture games has a tier, so platinum empties the list.
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
     fireEvent.pointerDown(screen.getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
-    fireEvent.click(screen.getByRole('option', { name: 'Platinum' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Platinum on ProtonDB' }));
     expect(screen.getByText('Nothing here.')).toBeInTheDocument();
     // The filter button carries a dot while a filter is active.
     expect(screen.getByRole('button', { name: 'Library filters' }).querySelector('[aria-label="needs attention"]')).toBeTruthy();
@@ -194,7 +194,7 @@ describe('atlas parity round 2 (issue #132)', () => {
     const any = screen.getByRole('option', { name: 'Any' });
     expect(any.className).toMatch(/font-sans/);
     expect(any.className).not.toMatch(/uppercase/);
-    fireEvent.click(screen.getByRole('option', { name: 'Platinum' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Platinum on ProtonDB' }));
     expect(screen.getByText('Nothing here.')).toBeInTheDocument();
     // The popover stays open for the next filter; Reset clears without leaving.
     expect(document.body.querySelector('[role="menu"]')).toBeTruthy();

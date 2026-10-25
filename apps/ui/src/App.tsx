@@ -973,7 +973,7 @@ export function AppContent() {
       case 'fixes':
         return <FixesView games={games} onOpenGame={openGame} />;
       case 'runners':
-        return <SystemView runners={runners} onRefresh={() => loadData('rescan')} scanning={scanning} />;
+        return <SystemView runners={runners} games={installedGames} onRefresh={() => loadData('rescan')} scanning={scanning} />;
       case 'plugins':
         return (
           <PluginsView
@@ -1085,7 +1085,7 @@ export function AppContent() {
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', (shellNavigation === 'topbar' || shellNavigation === 'sourcebar') && 'flex-col')}>
+    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', (shellNavigation === 'topbar' || shellNavigation === 'sourcebar') && 'flex-col', isSourcebar && 'text-[13.5px]')}>
       <Shell
         view={view}
         onNavigate={setView}

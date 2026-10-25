@@ -26,6 +26,7 @@
     "store": "Store",
     "code": "Code",
     "codePlaceholder": "XXXXX-XXXXX-XXXXX",
+    "codeHint": "Letters and digits, dashes optional.",
     "granted": "granted",
     "redeemAnother": "Redeem another",
     "redeem": "Redeem",

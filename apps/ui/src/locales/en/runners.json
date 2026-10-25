@@ -16,6 +16,10 @@
     "defaultDesc": "Each game can still pick its own.",
     "defaultBadge": "Default",
     "systemNote": "From your system",
+    "gamesCount_one": "{{count}} game",
+    "gamesCount_other": "{{count}} games",
+    "noGames": "No game uses it",
+    "sizeLabel": "Size",
     "installed": "Installed"
   }
 }

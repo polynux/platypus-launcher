@@ -150,7 +150,7 @@ describe('/22 library bar controls (issue #135)', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
     expect(document.body.textContent).toContain('Runs on Linux');
-    await user.click(screen.getByRole('checkbox', { name: 'Platinum' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Platinum on ProtonDB' }));
     expect(tiers).toEqual(['platinum']);
   });
 
@@ -158,11 +158,11 @@ describe('/22 library bar controls (issue #135)', () => {
     const user = userEvent.setup();
     render(<Shell {...baseProps} view={{ name: 'library' }} hasBorrowed={false} />);
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
-    expect(screen.queryByRole('checkbox', { name: 'Only lent to me' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Lent to me' })).not.toBeInTheDocument();
     cleanup();
     render(<Shell {...baseProps} view={{ name: 'library' }} hasBorrowed lending="all" onLending={() => {}} />);
     await user.click(screen.getByRole('button', { name: 'Library filters' }));
-    expect(screen.getByRole('checkbox', { name: 'Only lent to me' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Lent to me' })).toBeInTheDocument();
   });
 
   it('switches the library view through list, covers and table', async () => {

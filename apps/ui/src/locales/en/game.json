@@ -149,7 +149,7 @@
   },
   "facts": {
     "runner": "Runner",
-    "dx": "DX layer",
+    "dx": "DirectX layer",
     "wrappers": "Wrappers",
     "launchVia": "Launch via",
     "deck": "Steam Deck",
@@ -170,7 +170,9 @@
     "deckPending": "not rated yet",
     "deckNoAppId": "no Steam AppID",
     "pending": "…",
-    "compatibility": "Compatibility"
+    "unknown": "Unknown",
+    "nativeLaunch": "Native binary",
+    "compatibility": "ProtonDB"
   },
   "about": {
     "heading": "About",
@@ -364,7 +366,7 @@
   "status": {
     "heading": "Status & notes",
     "aria": "Status",
-    "none": "None",
+    "none": "No status",
     "backlog": "Backlog",
     "playing": "Playing",
     "finished": "Finished",
