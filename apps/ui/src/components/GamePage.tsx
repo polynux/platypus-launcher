@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
-import { ArrowLeft, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, FolderCheck, FolderInput, Maximize2, Play, RefreshCw, Search, Settings2, Store as StoreIcon, Trophy } from 'lucide-react';
 import type { ActivityEvent, Achievement, ArtCandidate, Collection, Game, GameDetails, GameSettings, GameJobKind, GameStatus, Job, ProtonVersion, RemoveOptions, SessionEvent, StorePlugin, Tweak, View } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { PlayButton } from './PlayButton';
@@ -214,14 +214,38 @@ export function GameBackLink({ backLabel, onBack }: { backLabel: string; onBack:
 }
 
 /** The outside-folder alert (catalog game.outside): a plugin game installed
- *  outside its folder. Required: it tells the truth about the game's state. */
+ *  outside its folder. Required: it tells the truth about the game's state.
+ *  In the tabs structure (atlas) it is a slim full-width warning row under
+ *  the strip: danger tint with a 2px left inset bar, never a card. */
 export function GameOutsideAlert({ game, plugin, onAllowFolder }: {
   game: Game;
   plugin: StorePlugin;
   onAllowFolder: (folder: string) => void;
 }) {
   const { t } = useTranslation('game');
+  const tabs = useVariant('game.structure') === 'tabs';
   if (!game.is_installed || !game.outside_folder) return null;
+  if (tabs) {
+    return (
+      <div role="alert" className="flex items-center gap-3 bg-danger/10 px-6 py-2.5 text-[13px] shadow-[inset_2px_0_0_var(--color-danger)]">
+        <AlertTriangle className="h-4 w-4 flex-none text-danger" aria-hidden />
+        <p className="min-w-0 flex-1 leading-relaxed text-text">
+          <span className="font-bold">{t('game:outside.title', { name: plugin.name })} </span>
+          <Trans
+            i18nKey="game:outside.body"
+            values={{ name: plugin.name, folder: plugin.install_folder, dir: game.install_dir }}
+            components={{
+              folder: <span className="font-mono text-[12px]" />,
+              dir: <span className="font-mono text-[12px] text-text" />,
+            }}
+          />
+        </p>
+        <Button onClick={() => onAllowFolder(game.install_dir)} className="flex-none">
+          <FolderCheck className="h-4 w-4" /> {t('game:outside.allow')}
+        </Button>
+      </div>
+    );
+  }
   return (
     <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-strong/[0.07] px-5 py-4 ring-1 ring-accent-strong/25">
       <div className="min-w-0 text-[12.5px] leading-relaxed text-white/75">
@@ -261,6 +285,51 @@ export function GameInstallNote({ game, plugin, installing, installSize, job, ca
   const { t } = useTranslation('game');
   const active = job && (job.state === 'queued' || job.state === 'running');
   const showNote = !active && (game.note || installing);
+  const tabs = useVariant('game.structure') === 'tabs';
+  if (tabs) {
+    // Atlas: slim full-width rows directly under the strip, flush with no
+    // outer card. The install note is muted text on k-bg with a hairline
+    // bottom border; the failed attempt warns with an attention tint.
+    if (!showNote && !refreshing) return null;
+    return (
+      <div className="empty:hidden">
+        {showNote && (
+          <div className="flex items-center gap-3 border-b border-hairline bg-raised px-6 py-2.5 text-[13px] text-text-muted">
+            <p className="min-w-0 flex-1 leading-relaxed">
+              {game.note && <span>{game.note} </span>}
+              {installing && plugin && (
+                <>
+                  <InstallSizeLine size={installSize} />{' '}
+                  <span className="font-sans text-[12px]">
+                    {canChooseVersion ? (
+                      <Trans
+                        i18nKey="game:install.noteWithVersion"
+                        values={{ folder: plugin.install_folder }}
+                        components={{
+                          v: <NoteLink onClick={onOpenVersions} />,
+                          d: <NoteLink onClick={onOpenPlugins} />,
+                        }}
+                      />
+                    ) : (
+                      <Trans
+                        i18nKey="game:install.notePlain"
+                        values={{ folder: plugin.install_folder }}
+                        components={{ d: <NoteLink onClick={onOpenPlugins} /> }}
+                      />
+                    )}
+                  </span>
+                </>
+              )}
+            </p>
+            {!game.is_installed && job?.state === 'failed' && <ErrorNotice className="flex-none" message={job.error ?? ''} fallback={t('game:install.lastAttempt')} />}
+          </div>
+        )}
+        {refreshing && (
+          <p className="border-b border-hairline bg-raised px-6 py-2.5 text-[13px] text-text-muted">{t('game:refreshing')}</p>
+        )}
+      </div>
+    );
+  }
   if (!showNote && !refreshing) return null;
   if (showNote && !refreshing) {
     return (
@@ -993,7 +1062,7 @@ function gameBlocks(d: GameData, _layout?: GameLayoutData): Record<string, React
 
 /** The store's HTML (description, requirements): core sanitizes it to the
  *  allowlist, so rendering it as markup is safe. Links open in the browser. */
-export function SafeHtml({ html, testid }: { html: string; testid?: string }) {
+export function SafeHtml({ html, testid, className }: { html: string; testid?: string; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -1014,7 +1083,7 @@ export function SafeHtml({ html, testid }: { html: string; testid?: string }) {
       ref={ref}
       data-testid={testid}
       dangerouslySetInnerHTML={{ __html: html }}
-      className="space-y-2 text-[13px] leading-relaxed text-text-body [&_a]:text-amber-200/90 [&_a]:underline [&_a]:decoration-amber-200/40 [&_a]:underline-offset-2 [&_h2]:text-[14px] [&_h2]:font-bold [&_h2]:text-white/85 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:text-white/85 [&_h4]:text-[13px] [&_h4]:font-bold [&_h4]:text-white/85 [&_li]:ml-4 [&_li]:list-disc [&_ul]:space-y-1"
+      className={cx('space-y-2 text-[13px] leading-relaxed text-text-body [&_a]:text-amber-200/90 [&_a]:underline [&_a]:decoration-amber-200/40 [&_a]:underline-offset-2 [&_h2]:text-[14px] [&_h2]:font-bold [&_h2]:text-white/85 [&_h3]:text-[13px] [&_h3]:font-bold [&_h3]:text-white/85 [&_h4]:text-[13px] [&_h4]:font-bold [&_h4]:text-white/85 [&_li]:ml-4 [&_li]:list-disc [&_ul]:space-y-1', className)}
     />
   );
 }
@@ -1175,6 +1244,37 @@ export function AboutSection({ game, details, loading, error, compatUrls, onOpen
   ];
   const infoName = d?.info_source_name || infoSourceText(t, d?.info_source);
   const storeLinkLabel = t('game:about.linkStore');
+  // The tabs store page (atlas) shows the description as plain text: 14px,
+  // max 72ch, 1.62 line height, with no card and no About heading. An
+  // untitled game with no description shows one muted line.
+  if (hideDetails) {
+    return (
+      <div className="max-w-[72ch] text-[14px] leading-[1.62] text-text-body">
+        {loading ? (
+          <div className="space-y-2">
+            <div className="h-3 w-full animate-pulse rounded bg-surface-strong" />
+            <div className="h-3 w-4/5 animate-pulse rounded bg-surface-strong" />
+          </div>
+        ) : html ? (
+          <>
+            <div className={expanded ? '' : 'max-h-[104px] overflow-hidden'} data-testid="about-html-wrap">
+              <SafeHtml html={html} testid="about-html" className="text-[14px] leading-[1.62] [&_h2]:text-[14px] [&_h3]:text-[13px] [&_h4]:text-[13px] [&_li]:text-[14px] [&_li]:leading-[1.62] [&_p]:text-[14px] [&_p]:leading-[1.62] [&_ul]:text-[14px]" />
+            </div>
+            <Button variant="ghost" size="none" onClick={() => setExpanded((v) => !v)} data-testid="about-toggle" className="mt-1.5 rounded px-0 font-sans text-[13px] font-semibold text-accent hover:bg-transparent hover:text-text">
+              {expanded ? t('game:about.showLess') : t('game:about.showMore')}
+            </Button>
+          </>
+        ) : summary ? (
+          <p className="leading-[1.62]">{summary}</p>
+        ) : (
+          <p className="text-text-muted">{error ? t('game:about.storeUnavailable', { error }) : t('game:about.noDescription')}</p>
+        )}
+        {isCustom && !linked && !loading && (
+          <InfoFinder game={game} onLinked={() => onReload?.()} onSearch={onSearchInfo} onLink={onLinkInfo} />
+        )}
+      </div>
+    );
+  }
   return (
     <Panel className="bg-surface-strong">
       <h2 className="mb-2 text-[15px] font-bold">{t('game:about.heading')}</h2>

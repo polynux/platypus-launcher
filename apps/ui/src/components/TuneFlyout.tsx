@@ -6,7 +6,7 @@ import { Activity, ChevronRight, Gauge, MonitorPlay, Sparkles, type LucideIcon }
 import type { Game, GameSettings, SettingGroup } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
-import { TogglePill, cx } from './ui';
+import { cx } from './ui';
 import { cardCompat, TIER_LABEL } from '../lib/compat';
 
 /** The four switches the flyout offers, and how they read off a game's settings. */
@@ -251,7 +251,7 @@ export function TuneFlyout({
       ref={ref}
       role="dialog"
       aria-label={t('tune:title', { title: game.title })}
-      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-xl bg-raised text-text ring-1 ring-hairline shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none"
+      className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[380px] animate-modal-in overflow-hidden rounded-[10px] bg-raised text-text ring-1 ring-hairline shadow-[0_18px_48px_rgba(0,0,0,.5)] motion-reduce:animate-none leading-[normal]"
     >
       <div className="border-b border-hairline px-3.5 py-3">
         <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -291,14 +291,16 @@ export function TuneFlyout({
                 aria-checked={on}
                 disabled={!!disabledReason}
                 onClick={() => write(toggleTune(draftRef.current, key))}
-                className="grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                className="grid w-full grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left transition hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 <Icon aria-hidden className={cx('size-4', on ? 'text-accent' : 'text-text-faint')} />
                 <span className="grid min-w-0">
                   <span className="text-[13px] font-semibold text-text">{label}</span>
                   <small className="truncate text-[12px] text-text-faint">{disabledReason ?? sub}</small>
                 </span>
-                <TogglePill on={on} />
+                <span aria-hidden className={cx('relative h-5 w-[34px] flex-none rounded-full transition-colors', on ? 'bg-accent' : 'bg-white/15')}>
+                  <span className={cx('absolute left-0.5 top-0.5 h-4 w-4 rounded-full transition-transform', on ? 'translate-x-[14px] bg-on-accent' : 'bg-raised')} />
+                </span>
               </button>
             </li>
           );
@@ -307,7 +309,7 @@ export function TuneFlyout({
 
       {failed && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{t('tune:saveFailed')}</p>}
 
-      <div className="flex items-center justify-between gap-3 border-t border-hairline px-3.5 py-3">
+      <div className="mx-1 flex items-center justify-between gap-3 border-t border-hairline px-2.5 pb-3 pt-2.5">
         <span className="grid min-w-0">
           <span className="text-[13px] font-semibold text-text">{t('tune:runner.label')}</span>
           <small className="truncate text-[12px] text-text-faint">{tierLine}</small>
@@ -316,12 +318,12 @@ export function TuneFlyout({
           <small className="flex-none text-[12px] text-text-muted">{t('game:facts.steamRunner')}</small>
         ) : runnerField?.options?.length ? (
           <Select value={draft.runner_id || 'auto'} onValueChange={(v) => write({ ...draftRef.current, runner_id: v })}>
-            <SelectTrigger aria-label={t('tune:runner.label')} className="h-8 w-[180px] flex-none">
+            <SelectTrigger aria-label={t('tune:runner.label')} className="h-8 w-[180px] flex-none font-sans text-[13px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {runnerField.options.map((o) => (
-                <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>
+                <SelectItem key={o.id} value={o.id} className="font-sans text-[13px]">{o.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>

@@ -959,7 +959,7 @@ export function App() {
         </Modal>
       )}
 
-      <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
+      <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', isListDetail ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
         {migration && (
           <div className="px-7 pt-7">
             <MigrationBanner

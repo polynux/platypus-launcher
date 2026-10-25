@@ -19,6 +19,7 @@ supports = ["tokens", "variants"]
 "library.presentation" = "list-detail"
 "game.structure" = "tabs"
 "game-hero.logo" = "logo"
+"label.style" = "plain"
 
 [tokens]
 ground = "#13161b"

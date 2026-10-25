@@ -111,6 +111,14 @@ Every name below comes from `internal/themes.Catalog`. A theme that names anythi
 | `chrome` | `dashed`, `plain` | `dashed` | `1.0` | — |
 | `icon` | `on`, `off` | `off` | `1.0` | — |
 
+## `label`
+
+- since: `1.0`
+
+| axis | values | default | since | inherits |
+| --- | --- | --- | --- | --- |
+| `style` | `mono`, `plain` | `mono` | `1.0` | — |
+
 ## `list-row`
 
 - since: `1.0`

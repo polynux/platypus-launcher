@@ -197,6 +197,21 @@
       ]
     },
     {
+      "entry": "label",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "style",
+          "values": [
+            "mono",
+            "plain"
+          ],
+          "default": "mono",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
       "entry": "list-row",
       "since": "1.0",
       "axes": [

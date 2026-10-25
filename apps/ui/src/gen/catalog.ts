@@ -11,6 +11,7 @@ export interface VariantValues {
   "view-header.size": "regular" | "compact";
   "empty-state.chrome": "dashed" | "plain";
   "empty-state.icon": "on" | "off";
+  "label.style": "mono" | "plain";
   "list-row.media": "on" | "off";
   "list-row.density": "comfortable" | "compact";
   "dialog.presentation": "dialog" | "sheet";
@@ -52,6 +53,7 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "view-header.size": "regular",
   "empty-state.chrome": "dashed",
   "empty-state.icon": "off",
+  "label.style": "mono",
   "list-row.media": "on",
   "list-row.density": "comfortable",
   "dialog.presentation": "dialog",

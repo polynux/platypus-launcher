@@ -373,7 +373,7 @@ export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
   return (
     <section data-testid="remove-confirm-panel" className="border-b border-white/[0.06] pb-5 last:border-b-0">
       <div className="min-w-0">
-        <MonoLabel className="mb-1">{t('gameSettings:maintenance.removeTitle').toLowerCase()}</MonoLabel>
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.removeTitle')}</MonoLabel>
         <p className="text-[12.5px] leading-relaxed text-white/60">{summary}</p>
       </div>
       <div className="mt-3 flex min-w-0 flex-col gap-2.5">
@@ -481,7 +481,7 @@ function Row({ title, text, children }: { title: string; text: string; children:
   return (
     <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-white/[0.06] pb-5 last:border-b-0">
       <div className="min-w-0 flex-1 basis-64">
-        <MonoLabel className="mb-1">{title.toLowerCase()}</MonoLabel>
+        <MonoLabel className="mb-1">{title}</MonoLabel>
         <p className="text-[12.5px] leading-relaxed text-white/60">{text}</p>
       </div>
       <div className="flex-none">{children}</div>
