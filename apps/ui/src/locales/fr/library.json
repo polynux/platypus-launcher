@@ -159,6 +159,13 @@
     "addGame": "Ajouter un jeu",
     "filtersAria": "Filtres de la bibliothèque",
     "warnings_one": "Une source nécessite votre attention",
-    "warnings_other": "{count} sources nécessitent votre attention"
+    "warnings_other": "{count} sources nécessitent votre attention",
+    "filterCompat": "Compatibilité",
+    "filterStatus": "Statut",
+    "filterLending": "Prêtés",
+    "filterLentOnly": "Seulement prêtés",
+    "filterAny": "Tous",
+    "filterReset": "Réinitialiser les filtres",
+    "rowCollections": "Collections…"
   }
 }

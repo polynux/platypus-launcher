@@ -159,6 +159,13 @@
     "addGame": "Add a game",
     "filtersAria": "Library filters",
     "warnings_one": "One source needs attention",
-    "warnings_other": "{count} sources need attention"
+    "warnings_other": "{count} sources need attention",
+    "filterCompat": "Compatibility",
+    "filterStatus": "Status",
+    "filterLending": "Lent to me",
+    "filterLentOnly": "Only lent to me",
+    "filterAny": "Any",
+    "filterReset": "Reset filters",
+    "rowCollections": "Collections…"
   }
 }

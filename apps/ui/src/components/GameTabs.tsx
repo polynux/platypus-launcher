@@ -15,6 +15,7 @@ import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Gam
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
 import { Lightbox, type MediaItem } from './Lightbox';
+import { CopyCompareDialog } from './CopyCompareDialog';
 import { PluginLogo } from './PluginLogo';
 import { CrashHintsPanel } from './CrashHints';
 import { CapabilitySurface } from '../lib/capabilities';
@@ -245,54 +246,72 @@ function StripPlay({ d }: { d: GameTabsData }) {
 }
 
 function StoreSwitch({ d }: { d: GameTabsData }) {
-  const { t } = useTranslation('game');
+  const { t } = useTranslation(['game', 'gameOps']);
   const { game, plugin } = d;
   const copies = pickableCopies(game);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setBusy(false), [game.id]);
-  if (copies.length > 1) {
-    const played = playedCopy(game);
-    const pick = (ownerId: string) => {
-      if (busy) return;
-      setBusy(true);
-      Effect.runPromise(LauncherApi.setPreferredCopy(game, ownerId)).then(
-        () => { setBusy(false); d.onCopyChanged?.(); },
-        (e: Error) => { setBusy(false); d.onNotify?.(e.message || String(e), 'err'); },
-      );
-    };
-    return (
-      <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-black/30 p-[3px]">
-        {copies.map((c) => {
-          const on = c.owner_id === played;
-          return (
-            <button
-              key={c.owner_id}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={busy || !c.available}
-              onClick={() => pick(c.owner_id)}
-              title={c.note || c.owner_name}
-              className={cx(
-                'inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                on ? 'bg-accent/[0.22] text-text ring-1 ring-accent/50' : 'text-text-muted hover:text-text',
-              )}
-            >
-              <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={c.owner_name} size="xs" />
-              {c.owner_name}
-            </button>
-          );
-        })}
-      </div>
+  // The classic CopyPicker's compare dialog, next to the switch (issue #132).
+  const [comparing, setComparing] = useState(false);
+  useEffect(() => { setBusy(false); setComparing(false); }, [game.id]);
+  // The same gate as the classic details: the dialog needs the comparison the
+  // store reported, and a choice only exists with two or more copies.
+  const compare = copies.length > 1 ? game.copy_compare : undefined;
+  const played = playedCopy(game);
+  const pick = (ownerId: string) => {
+    if (busy) return;
+    setBusy(true);
+    Effect.runPromise(LauncherApi.setPreferredCopy(game, ownerId)).then(
+      () => { setBusy(false); d.onCopyChanged?.(); },
+      (e: Error) => { setBusy(false); d.onNotify?.(e.message || String(e), 'err'); },
     );
-  }
+  };
   const storeName = game.store === 'custom' ? t('game:store.sideloaded') : storeLabel(game.store);
   return (
-    <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-black/30 px-3 text-[13px] font-semibold text-text">
-      <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={storeName} size="xs" />
-      {storeName}
-      {plugin && game.source !== game.store && <span className="text-text-muted">· {plugin.name}</span>}
-    </span>
+    <>
+      {copies.length > 1 ? (
+        <div role="radiogroup" aria-label={t('game:strip.launchFrom')} className="inline-flex gap-0.5 rounded-[10px] bg-black/30 p-[3px]">
+          {copies.map((c) => {
+            const on = c.owner_id === played;
+            return (
+              <button
+                key={c.owner_id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                disabled={busy || !c.available}
+                onClick={() => pick(c.owner_id)}
+                title={c.note || c.owner_name}
+                className={cx(
+                  'inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  on ? 'bg-accent/[0.22] text-text ring-1 ring-accent/50' : 'text-text-muted hover:text-text',
+                )}
+              >
+                <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={c.owner_name} size="xs" />
+                {c.owner_name}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <span className="inline-flex h-[42px] items-center gap-1.5 rounded-[10px] bg-black/30 px-3 text-[13px] font-semibold text-text">
+          <PluginLogo src={d.sourceLogos?.[game.source] ?? d.sourceLogos?.[game.store]} name={storeName} size="xs" />
+          {storeName}
+          {plugin && game.source !== game.store && <span className="text-text-muted">· {plugin.name}</span>}
+        </span>
+      )}
+      {compare && (
+        <button
+          type="button"
+          onClick={() => setComparing(true)}
+          className="inline-flex h-[42px] items-center rounded-[10px] px-3 font-sans text-[13px] font-semibold text-accent transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {t('gameOps:copies.compare')}
+        </button>
+      )}
+      {comparing && compare && (
+        <CopyCompareDialog game={game} copies={copies} compare={compare} onClose={() => setComparing(false)} />
+      )}
+    </>
   );
 }
 
@@ -1203,26 +1222,46 @@ function CompatTab({ d, info }: { d: GameTabsData; info: ReturnType<typeof useCo
   for (const n of info?.notes ?? []) {
     rows.push({ source: rating?.source ?? d.game.fix_info?.source ?? 'Platypus', note: n });
   }
-  if (rows.length === 0) return <TblEmpty text={t('game:storeTab.noCompat')} />;
+  if (d.facts.length === 0 && rows.length === 0) return <TblEmpty text={t('game:storeTab.noCompat')} />;
   return (
-    <table className="w-full">
-      <thead>
-        <tr>
-          <th className={TBL_HEAD_FIRST}>{t('game:storeTab.compatSource')}</th>
-          <th className={TBL_HEAD}>{t('game:storeTab.compatNote')}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={i}>
-            <td className={cx(TBL_CELL_FIRST, 'text-text-muted')}>{r.source}</td>
-            <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
-              <span className="block whitespace-normal leading-relaxed">{r.note}</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div>
+      {/* The classic facts (DirectX, wrappers, launch-via, …) as a flat
+          two-column table above the notes (issue #132). */}
+      {d.facts.length > 0 && (
+        <table className="w-full" aria-label={t('game:storeTab.details')}>
+          <tbody>
+            {d.facts.map(([k, v]) => (
+              <tr key={k}>
+                <td className={cx(TBL_CELL_FIRST, 'w-44 text-text-muted')}>{k}</td>
+                <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
+                  <span className="block whitespace-normal leading-relaxed">{v}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {rows.length > 0 && (
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={TBL_HEAD_FIRST}>{t('game:storeTab.compatSource')}</th>
+              <th className={TBL_HEAD}>{t('game:storeTab.compatNote')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className={cx(TBL_CELL_FIRST, 'text-text-muted')}>{r.source}</td>
+                <td className={cx(TBL_CELL, 'max-w-[70ch]')}>
+                  <span className="block whitespace-normal leading-relaxed">{r.note}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

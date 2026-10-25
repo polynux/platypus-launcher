@@ -158,3 +158,87 @@ describe('atlas parity (issue #132)', () => {
     expect(onOpenPlugins).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('atlas parity round 2 (issue #132)', () => {
+  it('opens the filters as a popover with human values and a reset entry', async () => {
+    const user = userEvent.setup();
+    list();
+    expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+    await user.click(screen.getByRole('button', { name: 'Library filters' }));
+    // A real popover: portaled to the body, so the list never moves.
+    const menu = document.body.querySelector('[role="menu"]');
+    expect(menu).toBeTruthy();
+    expect(document.body.contains(screen.getByText('Compatibility'))).toBe(true);
+    // Human values in Albert Sans, not uppercase mono.
+    fireEvent.pointerDown(screen.getByLabelText('Filter by tier'), { button: 0, ctrlKey: false, pointerType: 'mouse' });
+    const any = screen.getByRole('option', { name: 'Any' });
+    expect(any.className).toMatch(/font-sans/);
+    expect(any.className).not.toMatch(/uppercase/);
+    fireEvent.click(screen.getByRole('option', { name: 'Platinum' }));
+    expect(screen.getByText('Nothing here.')).toBeInTheDocument();
+    // The popover stays open for the next filter; Reset clears without leaving.
+    expect(document.body.querySelector('[role="menu"]')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+    expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+  });
+
+  it('opens a row menu on right-click with play and collections', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const onManage = vi.fn();
+    const onSettings = vi.fn();
+    render(
+      <LibraryListDetail
+        games={games()}
+        ownership="owned"
+        source="all"
+        onPlay={onPlay}
+        renderStage={(g) => <div data-testid="stage">{g.title}</div>}
+        onManageCollections={onManage}
+        onOpenSettings={onSettings}
+      />,
+    );
+    const alpha = screen.getByRole('button', { name: /Alpha/ });
+    fireEvent.contextMenu(alpha);
+    expect(screen.getByRole('menuitem', { name: 'Play' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Game settings' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Collections…' })).toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'Collections…' }));
+    expect(onManage).toHaveBeenCalledWith('alpha');
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Beta/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Play' }));
+    expect(onPlay).toHaveBeenCalledWith('beta');
+  });
+
+  it('opens the row menu with the keyboard and skips it without handlers', async () => {
+    const onManage = vi.fn();
+    const { unmount } = render(
+      <LibraryListDetail
+        games={games()}
+        ownership="owned"
+        source="all"
+        onPlay={() => {}}
+        renderStage={(g) => <div data-testid="stage">{g.title}</div>}
+        onManageCollections={onManage}
+      />,
+    );
+    const alpha = screen.getByRole('button', { name: /Alpha/ });
+    alpha.focus();
+    fireEvent.keyDown(alpha, { key: 'ContextMenu' });
+    expect(screen.getByRole('menuitem', { name: 'Collections…' })).toBeInTheDocument();
+    unmount();
+    cleanup();
+    list();
+    fireEvent.contextMenu(screen.getByRole('button', { name: /Alpha/ }));
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('notes the active collection titles missing from the library', () => {
+    list({
+      collections: [{ id: 'couch', name: 'Couch co-op', games: ['alpha', 'gone-id'], titles: { 'gone-id': 'Gone Game' } }],
+      collection: 'couch',
+    });
+    const note = screen.getByText('1 not in the library');
+    expect(note.title).toBe('Gone Game');
+  });
+});

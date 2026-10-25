@@ -442,4 +442,21 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(stopped).toEqual(['g1']);
   });
 
+  it('shows the last scan, offline marker and version in the Atlas footer (issue #132)', async () => {
+    const { SourceFooter } = await import('../Shell');
+    const { container } = render(
+      <SourceFooter
+        sessions={[]}
+        jobs={[]}
+        sessionStartedAt={{}}
+        lastScan={Date.now() - 65_000}
+        online={false}
+      />
+    );
+    expect(container.querySelector('[data-region="sourcebar-footer"]')?.className).toMatch(/h-7/);
+    expect(screen.getByText(/scanned/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Offline/);
+    expect(screen.getByText('platypus v0.2')).toBeInTheDocument();
+    (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
 });

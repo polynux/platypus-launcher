@@ -241,3 +241,56 @@ describe('atlas parity side sections (issue #132)', () => {
     expect(await screen.findByText('Saved')).toBeInTheDocument();
   });
 });
+
+describe('atlas parity round 2 (issue #132)', () => {
+  it('shows the classic facts above the compatibility notes', async () => {
+    const user = userEvent.setup();
+    const g = installedGame();
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    await screen.findByRole('tablist', { name: 'Game page' });
+    await user.click(screen.getByRole('tab', { name: /Compatibility/ }));
+    // The facts table carries the classic fact names like the sections do.
+    expect(screen.getByText('Runner')).toBeInTheDocument();
+  });
+
+  it('opens the compare dialog from the store switch when copies differ', async () => {
+    const user = userEvent.setup();
+    const g = {
+      ...installedGame(),
+      shared_by: { id: 'ana', name: 'Ana' },
+      preferred_copy: 'ana',
+      copies: [
+        { owner_id: 'ana', owner_name: 'Ana', available: true },
+        { owner_id: 'ben', owner_name: 'Ben', available: true },
+      ],
+      copy_compare: {
+        baseline: 'ana',
+        diffs: [{ owner_id: 'ben', only_here: 1, only_baseline: 0, shared: 3, soundtracks_only_here: 0, soundtracks_only_baseline: 0, soundtracks_shared: 0 }],
+      },
+    } as unknown as Game;
+    render(
+      <GamePage
+        game={g}
+        plugin={plugin()}
+        runners={baseProps.runners as never}
+        activity={[]}
+        {...baseProps}
+        collections={[]}
+        onManageCollections={() => {}}
+      />,
+    );
+    await screen.findByRole('radiogroup', { name: 'Launch from' });
+    await user.click(screen.getByRole('button', { name: 'Compare copies' }));
+    expect(await screen.findByRole('dialog', { name: /Compare copies of/ })).toBeInTheDocument();
+  });
+});

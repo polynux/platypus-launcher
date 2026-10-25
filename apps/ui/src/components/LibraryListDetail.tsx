@@ -8,11 +8,12 @@ import { useTranslation } from 'react-i18next';
 import { CircleAlert, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import type { Collection, Game, SourceWarning, StoreType } from '../types';
 import { Input } from './ds/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { cx } from './ui';
 import { byRecent, heroImages, hoursPlayed, lastPlayedAgo, needsAttention, attentionReason } from '../lib/games';
 import { sortKey } from '../lib/customize';
-import { collectionPredicate } from '../lib/collections';
+import { collectionPredicate, missingNames } from '../lib/collections';
 import { TierFilterControl, StatusFilterControl, matchesExtraFilters, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
 
@@ -42,6 +43,10 @@ interface ListDetailProps {
   warnings?: SourceWarning[];
   /** Opens the Plugins view for a warning's login/plugins action. */
   onOpenPlugins?: () => void;
+  /** Right-click (or the context-menu key) on a row opens the game's collections dialog. */
+  onManageCollections?: (gameId: string) => void;
+  /** The row menu's settings entry opens the game settings for that game. */
+  onOpenSettings?: (gameId: string) => void;
 }
 
 function sortList(games: Game[], sort: ListSort): Game[] {
@@ -62,7 +67,7 @@ function subLine(t: (k: string) => string, g: Game): { text: string; absent: boo
 }
 
 export function LibraryListDetail(p: ListDetailProps) {
-  const { t } = useTranslation('library');
+  const { t } = useTranslation(['library', 'game', 'collections']);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<ListSort>('recent');
   // Atlas parity (issue #132): the classic tier/status/lending filters, reused
@@ -71,10 +76,20 @@ export function LibraryListDetail(p: ListDetailProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [lending, setLending] = useState<'all' | 'with-me'>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const hasBorrowed = p.games.some((g) => g.shared_by != null);
   const lendingFilter = hasBorrowed ? lending : 'all';
   const extraCount = [tier !== 'all', statusFilter !== 'all', lendingFilter !== 'all'].filter(Boolean).length;
   const resetExtra = () => { setTier('all'); setStatusFilter('all'); setLending('all'); };
+  // Atlas filter selects in Albert Sans (label.style = plain): human values,
+  // never uppercase or mono.
+  const atlasSelect = 'h-[30px] w-full font-sans text-[13px]';
+  const atlasItem = 'font-sans text-[13px] capitalize';
+  const atlasAny = t('library:listDetail.filterAny');
+  // The active collection's missing titles (issue #45's staleTitles): the same
+  // names the classic header lists, as a one-line note at the top of the list.
+  const activeCollection = (p.collections ?? []).find((c) => c.id === p.collection);
+  const missing = activeCollection && !activeCollection.smart ? missingNames(activeCollection, p.games) : [];
   const [selectedId, setSelectedId] = useState<string | null>(p.initialSelectedId ?? null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -143,6 +158,12 @@ export function LibraryListDetail(p: ListDetailProps) {
     // key handler of their own: a focused row bubbles here, so Enter can't
     // play twice. Keyboard and click selection keep focus on the selected row.
     else if (e.key === 'Enter') { e.preventDefault(); if (selected) p.onPlay(selected.id); }
+    // The context-menu key (or Shift+F10) opens the row menu for the focused row.
+    else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const id = (e.target as HTMLElement)?.closest?.('[data-game-row]')?.getAttribute('data-game-row');
+      if (id && (p.onManageCollections || p.onOpenSettings)) { setSelectedId(id); setMenuFor(id); }
+    }
   };
 
   return (
@@ -150,6 +171,11 @@ export function LibraryListDetail(p: ListDetailProps) {
     // tools: App's main never scrolls in this mode (/21 `.list` + `.stage`).
     <div className="flex h-full min-h-0 flex-1 items-stretch overflow-x-hidden">
       <aside aria-label={t('library:listDetail.listLabel')} className="flex min-h-0 w-[260px] min-w-0 flex-none flex-col border-r border-hairline bg-[color-mix(in_srgb,var(--color-ground)_60%,var(--color-raised))] min-[1100px]:w-[296px]">
+        {missing.length > 0 && (
+          <p className="mx-2.5 mt-2.5 truncate text-[12px] text-text-muted" title={missing.join(', ')}>
+            {t('collections:missing', { count: missing.length })}
+          </p>
+        )}
         <div className="flex gap-1.5 p-2.5">
           <label className="flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-[7px] bg-surface px-2.5 text-text-faint">
             <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
@@ -176,21 +202,70 @@ export function LibraryListDetail(p: ListDetailProps) {
               <SelectItem value="hours" className="font-sans text-[13px]">{t('library:listDetail.sort.hours')}</SelectItem>
             </SelectContent>
           </Select>
-          <button
-            type="button"
-            aria-expanded={filtersOpen}
-            aria-label={t('library:listDetail.filtersAria')}
-            onClick={() => setFiltersOpen((v) => !v)}
-            className={cx(
-              'relative grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              filtersOpen || extraCount > 0 ? 'bg-surface-strong text-text' : 'bg-surface text-text-faint hover:text-text-muted'
-            )}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-            {extraCount > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-mono text-[10px] font-bold tabular-nums text-on-accent">{extraCount}</span>
-            )}
-          </button>
+          <DropdownMenu open={filtersOpen} onOpenChange={setFiltersOpen} modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={t('library:listDetail.filtersAria')}
+                className={cx(
+                  'relative grid h-[30px] w-[30px] flex-none place-items-center rounded-[7px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  filtersOpen || extraCount > 0 ? 'bg-surface-strong text-text' : 'bg-surface text-text-faint hover:text-text-muted'
+                )}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                {extraCount > 0 && (
+                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-mono text-[10px] font-bold tabular-nums text-on-accent">{extraCount}</span>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="bottom"
+              align="start"
+              className="w-[260px] p-3"
+              // The selects portal their listbox outside the menu: picking a
+              // value must not dismiss the popover (like the Tune flyout).
+              onPointerDownOutside={(e) => {
+                if ((e.target as Element)?.closest?.('[role="listbox"], [data-radix-popper-content-wrapper]')) e.preventDefault();
+              }}
+            >
+              <div className="grid gap-3">
+                <div>
+                  <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterCompat')}</p>
+                  <TierFilterControl value={tier} onChange={setTier} triggerClassName={atlasSelect} itemClassName={atlasItem} allLabel={atlasAny} />
+                </div>
+                <div>
+                  <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterStatus')}</p>
+                  <StatusFilterControl value={statusFilter} onChange={setStatusFilter} triggerClassName={atlasSelect} itemClassName={atlasItem} allLabel={atlasAny} />
+                </div>
+                {hasBorrowed && (
+                  <div>
+                    <p className="mb-1 text-[13px] text-text-muted">{t('library:listDetail.filterLending')}</p>
+                    <Select value={lendingFilter} onValueChange={(v) => setLending(v as 'all' | 'with-me')}>
+                      <SelectTrigger aria-label={t('library:family')} className={atlasSelect}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all" className={atlasItem}>{atlasAny}</SelectItem>
+                        <SelectItem value="with-me" className={atlasItem}>{t('library:listDetail.filterLentOnly')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              {extraCount > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <button
+                    type="button"
+                    onClick={resetExtra}
+                    className="w-full rounded-lg px-2 py-1.5 text-left font-sans text-[13px] font-semibold text-accent transition hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    {t('library:listDetail.filterReset')}
+                  </button>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {p.onAddGame && (
             <button
               type="button"
@@ -203,23 +278,6 @@ export function LibraryListDetail(p: ListDetailProps) {
             </button>
           )}
         </div>
-        {filtersOpen && (
-          <div className="mx-2.5 mb-2 grid gap-2 rounded-[7px] bg-surface p-2.5 ring-1 ring-hairline">
-            <TierFilterControl value={tier} onChange={setTier} />
-            <StatusFilterControl value={statusFilter} onChange={setStatusFilter} />
-            {hasBorrowed && (
-              <Select value={lendingFilter} onValueChange={(v) => setLending(v as 'all' | 'with-me')}>
-                <SelectTrigger aria-label={t('library:family')} className="font-sans text-[13px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="font-sans text-[13px]">{t('library:all')}</SelectItem>
-                  <SelectItem value="with-me" className="font-sans text-[13px]">{t('library:sharedWithMe')}</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        )}
         {(p.warnings ?? []).length > 0 && (
           <div role="status" className="mx-2.5 mb-2 flex items-center gap-2 rounded-[7px] bg-danger/[0.08] px-2.5 py-2 text-[12px] ring-1 ring-danger/25">
             <CircleAlert className="h-3.5 w-3.5 flex-none text-danger" aria-hidden />
@@ -251,34 +309,66 @@ export function LibraryListDetail(p: ListDetailProps) {
               const on = g.id === selected?.id;
               const art = heroImages(g)[0];
               const attn = needsAttention(g);
+              const hasMenu = !!(p.onManageCollections || p.onOpenSettings);
+              const button = (
+                <button
+                  type="button"
+                  data-game-row={g.id}
+                  aria-current={on ? 'true' : undefined}
+                  onClick={() => setSelectedId(g.id)}
+                  onDoubleClick={() => p.onPlay(g.id)}
+                  onContextMenu={hasMenu ? (e) => { e.preventDefault(); setSelectedId(g.id); setMenuFor(g.id); } : undefined}
+                  className={cx(
+                    'flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] pl-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                    on ? 'bg-accent/[0.15] text-text' : 'text-text-muted hover:bg-surface hover:text-text',
+                  )}
+                >
+                  {art ? (
+                    <img src={art} alt="" loading="lazy" className={cx('h-7 w-[60px] flex-none rounded-[5px] object-cover', !g.is_installed && 'brightness-[0.55] grayscale')} />
+                  ) : (
+                    <span aria-hidden className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />
+                  )}
+                  <span className="grid min-w-0 flex-1 leading-[1.2]">
+                    <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
+                    <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
+                  </span>
+                  {attn && (
+                    <span title={attentionReason(g)} aria-label={t('library:listDetail.needsAttention')} className="flex-none text-attention">
+                      <CircleAlert className="h-4 w-4" aria-hidden />
+                    </span>
+                  )}
+                </button>
+              );
+              // The classic tile's right-click opens the game's collections;
+              // the Atlas row opens a small menu with the same entry, plus
+              // Play and the game settings (issue #132).
+              if (!hasMenu) return <li key={g.id}>{button}</li>;
               return (
                 <li key={g.id}>
-                  <button
-                    type="button"
-                    data-game-row={g.id}
-                    aria-current={on ? 'true' : undefined}
-                    onClick={() => setSelectedId(g.id)}
-                    onDoubleClick={() => p.onPlay(g.id)}
-                    className={cx(
-                      'flex w-full items-center gap-2.5 rounded-lg px-2 py-[5px] pl-[5px] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                      on ? 'bg-accent/[0.15] text-text' : 'text-text-muted hover:bg-surface hover:text-text',
-                    )}
-                  >
-                    {art ? (
-                      <img src={art} alt="" loading="lazy" className={cx('h-7 w-[60px] flex-none rounded-[5px] object-cover', !g.is_installed && 'brightness-[0.55] grayscale')} />
-                    ) : (
-                      <span aria-hidden className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />
-                    )}
-                    <span className="grid min-w-0 flex-1 leading-[1.2]">
-                      <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
-                      <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
-                    </span>
-                    {attn && (
-                      <span title={attentionReason(g)} aria-label={t('library:listDetail.needsAttention')} className="flex-none text-attention">
-                        <CircleAlert className="h-4 w-4" aria-hidden />
-                      </span>
-                    )}
-                  </button>
+                  <DropdownMenu open={menuFor === g.id} onOpenChange={(o) => { if (!o) setMenuFor(null); }} modal={false}>
+                    <DropdownMenuTrigger asChild>{button}</DropdownMenuTrigger>
+                    <DropdownMenuContent side="bottom" align="start">
+                      <DropdownMenuItem asChild onSelect={() => p.onPlay(g.id)}>
+                        <button>
+                          <span>{t('game:play.play')}</span>
+                        </button>
+                      </DropdownMenuItem>
+                      {p.onOpenSettings && (
+                        <DropdownMenuItem asChild onSelect={() => p.onOpenSettings?.(g.id)}>
+                          <button>
+                            <span>{t('game:hero.gameSettings')}</span>
+                          </button>
+                        </DropdownMenuItem>
+                      )}
+                      {p.onManageCollections && (
+                        <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.(g.id)}>
+                          <button>
+                            <span>{t('library:listDetail.rowCollections')}</span>
+                          </button>
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </li>
               );
             })}

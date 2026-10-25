@@ -43,6 +43,7 @@ import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
 import { loadTheme } from './lib/theme';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
+import { useNetState } from './components/useNetState';
 import { hasDetails, plainError } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
@@ -73,6 +74,9 @@ export function App() {
   const [scanning, setScanning] = useState(false);
 
   const [view, setView] = useState<View>({ name: 'dashboard' });
+  // Atlas parity (issue #132): the footer shows the last scan and the
+  // offline marker, from the same sources as the classic header.
+  const { online } = useNetState();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsReturnView, setSettingsReturnView] = useState<View>({ name: 'dashboard' });
   const settingsPresentation = useVariant('settings.presentation');
@@ -765,6 +769,8 @@ export function App() {
       onAddGame={() => setAddOpen(true)}
       warnings={warnings}
       onOpenPlugins={() => setView({ name: 'plugins' })}
+      onManageCollections={(id) => setCollectionsDialog({ gameId: id })}
+      onOpenSettings={openGameSettings}
       onResetFilters={() => {
         setOwnership('owned');
         setSelectedStores([]);
@@ -991,6 +997,8 @@ export function App() {
           jobs={activeJobs}
           sessionStartedAt={{ ...sessionStart.current }}
           onStop={(id) => stop(id, false)}
+          lastScan={lastScan}
+          online={online}
         />
       )}
 

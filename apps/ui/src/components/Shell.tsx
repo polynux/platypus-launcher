@@ -7,7 +7,7 @@
 // a 44px top bar, a 48px source bar and a 28px activity footer.
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownToLine, ChevronDown, CircleAlert, HardDrive, Layers, LibraryBig, Plus, Search, Settings, ShoppingBag, Square, Ticket } from 'lucide-react';
+import { ArrowDownToLine, ChevronDown, CircleAlert, HardDrive, Layers, LibraryBig, Plus, Search, Settings, ShoppingBag, Square, Ticket, WifiOff } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { cx, clock } from './ui';
 import { Button } from './ds/button';
@@ -633,17 +633,19 @@ function formatElapsed(ms: number): string {
 // The activity footer (28px, D21 `.tele`): the running game with its elapsed
 // time, plus one item per job with its percentage and a 2px progress line.
 // Atlas parity (issue #132): each session carries the same Stop action as the
-// sidebar rows, so a running game can be stopped without leaving Atlas.
-export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionStartedAt'> & { onStop?: (gameId: string) => void }) {
-  const { t } = useTranslation('nav');
+// sidebar rows, and the right side shows the last scan, the offline marker
+// and the version, from the same sources as the classic header.
+export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionStartedAt'> & {
+  onStop?: (gameId: string) => void;
+  lastScan?: number | null;
+  online?: boolean;
+}) {
+  const { t } = useTranslation(['nav', 'library']);
   const now = useNow();
   const sessions = p.sessions ?? [];
   const jobs = (p.jobs ?? []).filter((j) => j.state === 'queued' || j.state === 'running');
-  if (sessions.length === 0 && jobs.length === 0) {
-    return <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch border-t border-hairline bg-ground text-[12px] text-text-faint" />;
-  }
   return (
-    <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch overflow-hidden whitespace-nowrap border-t border-hairline bg-ground text-[12px] text-text-faint">
+    <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch gap-2 overflow-hidden whitespace-nowrap border-t border-hairline bg-ground text-[12px] text-text-faint">
       {sessions.map((e) => {
         const started = p.sessionStartedAt?.[e.game_id];
         const title = (e as SessionEvent & { title: string }).title;
@@ -675,6 +677,16 @@ export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionS
           </span>
         );
       })}
+      <span className="ml-auto inline-flex min-w-0 flex-none items-center gap-2 self-center truncate px-3">
+        {p.online === false && (
+          <span role="status" className="inline-flex flex-none items-center gap-1 text-danger">
+            <WifiOff className="h-3.5 w-3.5" aria-hidden />
+            {t('library:offline')}
+          </span>
+        )}
+        {p.lastScan != null && <span className="truncate tabular-nums">{t('library:scannedSuffix', { time: clock(p.lastScan) })}</span>}
+        <span className="flex-none">platypus v0.2</span>
+      </span>
     </footer>
   );
 }
