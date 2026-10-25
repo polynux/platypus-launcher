@@ -148,7 +148,7 @@ describe('Item 4 Fixes suggested card', () => {
 
 describe('N3 failed tweak save leaves no unhandled rejection', () => {
   it('the App onChangeSettings wrapper swallows the rethrown save failure', async () => {
-    // App.saveSettings toasts then rethrows so the drawer keeps its dirty
+    // App's saveSettings toasts then rethrows so the drawer keeps its dirty
     // state; the tweak switch (void prop) must catch where it ignores it.
     // This mirrors App.tsx: void saveSettings(...).catch(() => {}).
     let toasted = false;
