@@ -758,6 +758,7 @@ export function AppContent() {
   // The hero art the game page actually shows (the details hero once it
   // loads): the tone samples that, falling back to the library chain.
   const [heroArt, setHeroArt] = useState<string | null>(null);
+  const [installIntentId, setInstallIntentId] = useState<string | null>(null);
   const currentGameId = currentGame?.id;
   useEffect(() => { setHeroArt(null); }, [currentGameId]);
   // The game's colour (issue #123), applied here so it also works where the
@@ -773,6 +774,8 @@ export function AppContent() {
   const renderGamePage = (game: Game, from: 'dashboard' | 'library' | 'fixes', hideBack = false) => (
     <GamePage
       game={game}
+      installIntent={installIntentId === game.id}
+      onInstallIntentHandled={() => setInstallIntentId(null)}
       runners={runners}
       activity={activity}
       backLabel={t(`nav:${from}`)}
@@ -896,7 +899,7 @@ export function AppContent() {
               const g = games.find((x) => x.id === id);
               if (g) launch(g);
             }}
-            onInstall={(g) => runJob('install', g)}
+            onInstall={(g) => { setInstallIntentId(g.id); openGame(g.id); }}
             onStop={(id) => stop(id, false)}
             onJobAction={jobAction}
           />

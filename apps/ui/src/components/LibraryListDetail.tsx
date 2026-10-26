@@ -163,6 +163,11 @@ export function LibraryListDetail(p: ListDetailProps) {
   const selected = filtered.find((g) => g.id === selectedId) ?? null;
 
   useEffect(() => {
+    if (!selectedId) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-game-row="${CSS.escape(selectedId)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!atlas) return;
     const onGlobalKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;

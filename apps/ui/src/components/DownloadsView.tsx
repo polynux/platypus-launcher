@@ -272,9 +272,9 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
                     ? t('downloads:job.etaMins', { count: Math.max(1, Math.round((j.total - j.bytes) / j.speed / 60)) })
                     : null;
                   const stateNote = paused
-                    ? t('downloads:state.paused')
+                    ? t('downloads:atlas.state.paused')
                     : j.state === 'queued'
-                      ? t('downloads:state.queued')
+                      ? t('downloads:atlas.state.queued')
                       : j.speed > 0
                         ? t('downloads:job.speedPerSec', { speed: formatBytes(j.speed) })
                         : null;

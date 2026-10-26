@@ -60,8 +60,8 @@ export function Toaster() {
         unstyled: true,
         closeButtonAriaLabel: t('toast.close', 'Close notification'),
         classNames: {
-          toast: plain ? 'platypus-toast group pointer-events-auto relative flex w-auto max-w-[min(560px,calc(100vw-2rem))] items-center gap-2 rounded-[6px] bg-surface-strong px-3.5 py-2 font-sans text-[13.5px] text-text shadow-[0_10px_30px_rgba(0,0,0,.45)] ring-1 ring-hairline-strong' : TOAST_BASE,
-          title: 'platypus-toast-title-wrap',
+          toast: plain ? 'platypus-toast group pointer-events-auto relative flex w-auto max-w-[min(560px,calc(100vw-2rem))] items-center gap-2 whitespace-nowrap rounded-[6px] bg-surface-strong px-3.5 py-2 font-sans text-[13.5px] text-text shadow-[0_10px_30px_rgba(0,0,0,.45)] ring-1 ring-hairline-strong' : TOAST_BASE,
+          title: plain ? 'platypus-toast-title-wrap [&_[data-title]]:truncate' : 'platypus-toast-title-wrap',
           description: 'platypus-toast-description mt-0.5 text-[13px] leading-snug',
           actionButton:
             'platypus-toast-action col-start-2 inline-flex h-8 justify-self-start items-center rounded-xl bg-accent-strong px-3 text-[12px] font-extrabold text-on-accent transition hover:brightness-110',
@@ -70,7 +70,7 @@ export function Toaster() {
           closeButton:
             'platypus-toast-close absolute flex size-7 items-center justify-center rounded-xl p-0 text-text-muted transition hover:bg-surface-strong hover:text-text',
           content: 'platypus-toast-content flex min-w-0 flex-1 flex-col pr-5',
-          icon: 'platypus-toast-icon flex flex-none items-center',
+          icon: plain ? 'hidden' : 'platypus-toast-icon flex flex-none items-center',
         },
       }}
     />

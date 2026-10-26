@@ -508,7 +508,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
             {suggestedDescription && <p className={`leading-normal text-white/[.82] ${suggestedRunning ? '' : 'line-clamp-2'}`}>{suggestedDescription}</p>}
             <div className="mt-1 flex gap-2.5">
               {mainAction(suggested, (
-                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] px-4">
+                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else onOpenGame(suggested.id); }} className="h-[38px] px-4">
                   {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
                 </Button>
               ))}

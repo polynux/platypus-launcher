@@ -124,15 +124,15 @@ function AtlasAttention({ games, jobs, runners, onOpenGame, onJobAction, onJob, 
                 <button type="button" onClick={() => onOpenGame(g.id)} className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label={g.title}>
                   <Cover src={heroImages(g)} title={g.title} className="h-[70px] w-[150px] object-cover" />
                 </button>
-                <div className="min-w-0">
+                <div className="grid min-w-0 gap-[3px]">
                   <div className={`inline-flex items-center gap-1.5 text-[12px] font-bold ${issue.kind === 'install' ? 'text-danger' : 'text-attention'}`}>
                     <KindIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
                     <span className="truncate">{title}</span>
                   </div>
-                  <button type="button" onClick={() => onOpenGame(g.id)} className="truncate text-left text-[15px] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                  <button type="button" onClick={() => onOpenGame(g.id)} className="truncate justify-self-start text-left text-[15px] font-[750] hover:underline underline-offset-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {g.title}
                   </button>
-                  <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.reason}</p>
+                  <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.reason}</p>
                 </div>
                 <div className="grid gap-1">
                   <Button variant="primary" onClick={action}>{fix}</Button>

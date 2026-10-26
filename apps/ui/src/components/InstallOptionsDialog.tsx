@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, TriangleAlert } from 'lucide-react';
+import { ExternalLink, TriangleAlert, Folder } from 'lucide-react';
 import type { Game, InstallChoices, OptionGroup, StorePlugin } from '../types';
-import { ModalOrInline } from './Modal';
+import { ModalOrInline, ModalHead, ModalFoot } from './Modal';
 import { InstallLocationPicker } from './InstallLocationPicker';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
@@ -19,6 +19,7 @@ import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { useVariant } from '../lib/theme';
 
 export interface InstallOptionsDialogProps {
   game: Game;
@@ -38,6 +39,7 @@ export interface InstallOptionsDialogProps {
  *  the choices and checks them again when the install is queued. */
 export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify, embedded }: InstallOptionsDialogProps) {
   const { t } = useTranslation(['gameOps', 'common']);
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [choices, setChoices] = useState<InstallChoices>({});
   // What the choices were when the dialog opened: an update compares with it.
@@ -114,8 +116,10 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   };
 
   return (
-    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy}>
-      {!embedded && (
+    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy} innerClassName={atlas ? 'p-0' : undefined}>
+      {atlas && !embedded && <ModalHead title={installing ? t('gameOps:install.title', { title: game.title }) : t('gameOps:options.updateTitle')} sub={`${plugin.name} · ${total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}`} onClose={onClose} />}
+      <div className={atlas && !embedded ? 'max-h-[60vh] overflow-y-auto px-5 py-3' : ''}>
+      {!embedded && !atlas && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? t('gameOps:options.installTitle') : t('gameOps:options.updateTitle')}</h2>
           <p className="mt-1 text-[12.5px] text-text-muted">
@@ -185,12 +189,14 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
         </p>
       )}
 
-      <div className="mt-6 flex justify-end gap-2.5">
+        {!atlas && <div className="mt-6 flex justify-end gap-2.5">
         <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button>
         <Button variant="primary" size="sm" disabled={busy || !groups || short || unchanged} onClick={apply}>
           {installing ? t('gameOps:options.install') : t('gameOps:options.apply')}
         </Button>
+        </div>}
       </div>
+      {atlas && !embedded && <ModalFoot><Button variant="ghost" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button variant="primary" disabled={busy || !groups || short || unchanged} onClick={apply}>{installing ? t('gameOps:options.install') : t('gameOps:options.apply')}</Button></ModalFoot>}
     </ModalOrInline>
   );
 }

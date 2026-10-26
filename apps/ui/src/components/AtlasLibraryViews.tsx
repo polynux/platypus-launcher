@@ -355,7 +355,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
   const hasActions = !!(onPlay || onInstall || onOpenSettings || onManageCollections);
   if (!hasActions) return null;
   return (
-    <span className="absolute bottom-12 left-2 right-2 flex translate-y-1 items-center justify-end gap-1 rounded-[10px] bg-[rgba(10,12,16,.72)] p-1 opacity-0 backdrop-blur transition focus-within:translate-y-0 focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 light:bg-white/85">
+    <span className="absolute bottom-12 left-2 right-2 flex translate-y-1 items-center justify-end gap-1 rounded-[10px] bg-ground/80 p-1 opacity-0 backdrop-blur transition group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100">
       {game.is_installed ? (
         onPlay && (
           <button
@@ -363,7 +363,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
             aria-label={t('game:play.play')}
             title={t('game:play.play')}
             onClick={(e) => { e.stopPropagation(); onPlay(game.id); }}
-            className="grid size-8 place-items-center rounded-lg bg-raised/90 text-text ring-1 ring-hairline transition hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="grid h-7 flex-1 place-items-center rounded-[7px] bg-accent text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <Play className="h-3.5 w-3.5 fill-current" aria-hidden />
           </button>
@@ -375,7 +375,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
             aria-label={t('game:install.install')}
             title={t('game:install.install')}
             onClick={(e) => { e.stopPropagation(); onInstall(game); }}
-            className="grid size-8 place-items-center rounded-lg bg-raised/90 text-text ring-1 ring-hairline transition hover:text-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="grid h-7 flex-1 place-items-center rounded-[7px] bg-accent text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
           </button>
@@ -387,7 +387,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
           aria-label={t('game:hero.gameSettings')}
           title={t('game:hero.gameSettings')}
           onClick={(e) => { e.stopPropagation(); onOpenSettings(game.id); }}
-          className="grid size-8 place-items-center rounded-lg bg-raised/90 text-text-faint ring-1 ring-hairline transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="grid size-7 place-items-center rounded-md text-text-muted transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <Settings2 className="h-3.5 w-3.5" aria-hidden />
         </button>
@@ -398,7 +398,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
           aria-label={t('library:listDetail.rowCollections')}
           title={t('library:listDetail.rowCollections')}
           onClick={(e) => { e.stopPropagation(); onManageCollections(game.id); }}
-          className="grid size-8 place-items-center rounded-lg bg-raised/90 text-text-faint ring-1 ring-hairline transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="grid size-7 place-items-center rounded-md text-text-muted transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <FolderPlus className="h-3.5 w-3.5" aria-hidden />
         </button>
@@ -547,10 +547,11 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, sessions
                       type="button"
                       data-game-row={g.id}
                       onClick={() => onOpen(g.id)}
-                      className="min-w-0 flex-1 truncate text-left font-semibold text-text hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      className={cx('min-w-0 flex-1 truncate text-left font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', g.is_installed ? 'text-text' : 'text-text-faint')}
                     >
                       {g.title}
                     </button>
+                    <AtlasGameBadges game={g} job={jobs.get(g.id)} session={sessions?.get(g.id)} />
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-2 py-2">
@@ -566,7 +567,6 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, sessions
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.release_year ?? '—'}</td>
                 <td className="px-2 py-2">
                   <span className="flex items-center justify-end gap-1">
-                    <AtlasGameBadges game={g} job={jobs.get(g.id)} session={sessions?.get(g.id)} />
                     <span className="relative hidden items-center gap-0.5 group-hover:inline-flex">
                       {g.is_installed ? (
                         onPlay && (

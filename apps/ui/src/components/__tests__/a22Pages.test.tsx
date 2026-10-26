@@ -117,18 +117,18 @@ describe('a22 home (dashboard)', () => {
   it('uses install on the suggestion and shows Stop for a live game on Continue playing', () => {
     const installed = mkGame('live', { title: 'Live game', last_played_at: 10 });
     const backlog = mkGame('backlog', { is_installed: false, title: 'Backlog', installable: true });
-    const onInstall = vi.fn();
+    const onOpenGame = vi.fn();
     const onStop = vi.fn();
     render(
       <Dashboard
         games={[installed]} allGames={[installed, backlog]} runners={[]} activity={[]}
-        dismissedHero={new Set()} onDismissHero={noop} onOpenGame={noop} onNavigate={noop}
-        onInstall={onInstall} onStop={onStop}
+        dismissedHero={new Set()} onDismissHero={noop} onOpenGame={onOpenGame} onNavigate={noop}
+        onInstall={vi.fn()} onStop={onStop}
         sessions={{ live: { game_id: 'live', state: 'running' } as never }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Install/ }));
-    expect(onInstall).toHaveBeenCalledWith(backlog);
+    expect(onOpenGame).toHaveBeenCalledWith(backlog.id);
     expect(screen.getByText('Live game is running.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Stop/ }));
     expect(onStop).toHaveBeenCalledWith('live');

@@ -78,6 +78,7 @@
   "backedUp": "Backed up {{title}}",
   "restored": "Restored {{title}}",
   "atlas": {
+    "state": { "paused": "Paused", "queued": "Queued" },
     "queueSub_one": "{{count}} in the queue.",
     "queueSub_other": "{{count}} in the queue.",
     "queueSubSpeed_one": "{{count}} in the queue. {{speed}}/s.",

@@ -42,6 +42,14 @@ function list(props: Partial<React.ComponentProps<typeof LibraryListDetail>> = {
 }
 
 describe('library list-detail', () => {
+  it('scrolls a game selected from outside the list into view', () => {
+    const scroll = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    list({ initialSelectedId: 'gamma' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
+    expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+    scroll.mockRestore();
+  });
+
   it('selects the first game and shows it on the stage', () => {
     list();
     expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');

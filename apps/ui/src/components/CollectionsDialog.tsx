@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import type { Collection, Game, SmartFilter } from '../types';
-import { Modal } from './Modal';
+import { Modal, ModalHead, ModalFoot } from './Modal';
 import { Button } from './ds/button';
 import { Input } from './ds/input';
 import { Switch } from './ds/switch';
@@ -193,10 +193,11 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
   const title = mode === 'new' ? t('collections:newHeading') : game ? t('collections:pickLabel', { title: game.title }) : t('collections:title');
 
   return (
-    <Modal label={title} onClose={onClose} size="md">
-      <div className="p-6">
+    <Modal label={title} onClose={onClose} size="md" innerClassName={mode === 'new' ? 'p-0' : undefined}>
+      {mode === 'new' && <ModalHead title={title} onClose={onClose} />}
+      <div className={mode === 'new' ? 'p-5' : 'p-6'}>
         {mode !== 'new' && <MonoLabel className="mb-2">{t('collections:title')}</MonoLabel>}
-        <h2 className="mb-4 text-[18px] font-bold">{title}</h2>
+        {mode !== 'new' && <h2 className="mb-4 text-[18px] font-bold">{title}</h2>}
 
         {gameId ? (
           <ul className="mb-5 space-y-1.5" aria-label={t('collections:pickLabel', { title: game?.title ?? gameId })}>
@@ -277,14 +278,14 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
           </ul>
         ) : null}
 
-        <form onSubmit={create} className={cx('space-y-3', mode === 'new' ? '' : 'border-t border-hairline pt-4')}>
+        <form id="atlas-new-collection" onSubmit={create} className={cx('space-y-3', mode === 'new' ? '' : 'border-t border-hairline pt-4')}>
           {mode !== 'new' && <MonoLabel>{t('collections:newHeading')}</MonoLabel>}
           <div className="flex flex-wrap items-end gap-2.5">
             <label className="min-w-0 flex-1 text-[13px] text-text-muted">
               {t('collections:newName')}
               <Input autoFocus={mode === 'new'} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={t('collections:newNamePlaceholder')} disabled={busy} className="mt-1.5" />
             </label>
-            {!gameId && (
+            {!gameId && mode !== 'new' && (
               <label className="text-[13px] text-text-muted">
                 {t('collections:kind')}
                 <select
@@ -298,19 +299,20 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
                 </select>
               </label>
             )}
-            <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
+            {mode !== 'new' && <Button type="submit" variant="primary" disabled={busy || !name.trim()}>
               {t('collections:create')}
-            </Button>
+            </Button>}
           </div>
+          {mode === 'new' && !gameId && <div className="flex items-center justify-between gap-4 border-t border-hairline py-3"><div><div className="text-[13px] font-semibold text-text">{t('collections:kind')}</div><div className="text-[12px] text-text-muted">{smart ? t('collections:kindSmartDesc') : t('collections:kindManualDesc')}</div></div><div className="flex rounded-[9px] bg-surface p-[3px]"><button type="button" onClick={() => setSmart(false)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', !smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindManual')}</button><button type="button" onClick={() => setSmart(true)} className={cx('rounded-[7px] px-3 py-1.5 text-[13px] font-semibold', smart ? 'bg-accent text-on-accent' : 'text-text-muted')}>{t('collections:kindSmart')}</button></div></div>}
           {smart && !gameId && <SmartFields draft={draft} setDraft={setDraft} games={games} collections={collections} disabled={busy} />}
           {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('collections:error')} />}
         </form>
 
         <div className="mt-6 flex justify-end gap-2">
-          {mode === 'new' && <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>}
           {mode !== 'new' && <Button variant="neutral" onClick={onClose}>{t('common:done')}</Button>}
         </div>
       </div>
+      {mode === 'new' && <ModalFoot><Button variant="ghost" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button type="submit" form="atlas-new-collection" variant="primary" disabled={busy || !name.trim()}>{t('collections:create')}</Button></ModalFoot>}
     </Modal>
   );
 }

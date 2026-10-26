@@ -63,6 +63,8 @@ function useHero(game: Game, details: GameDetails | null): string[] {
 
 interface GamePageProps {
   game: Game;
+  installIntent?: boolean;
+  onInstallIntentHandled?: () => void;
   runners: ProtonVersion[];
   activity: ActivityEvent[];
   backLabel: string;
@@ -541,6 +543,13 @@ export function GamePage(p: GamePageProps) {
   // page, tabs is the /21 hero with the action strip and sticky tabs.
   const structure = useVariant('game.structure');
   const atlasShell = useVariant('shell.navigation') === 'sourcebar';
+  useEffect(() => {
+    if (!p.installIntent) return;
+    if (canChooseOptions) setOptionsOpen(true);
+    else if (atlasShell && plugin) setInstallTo(true);
+    else p.onJob('install');
+    p.onInstallIntentHandled?.();
+  }, [p.installIntent, canChooseOptions, atlasShell, plugin, p.onJob, p.onInstallIntentHandled]);
   const settingsModal = settingsTab ? (
     <GameSettingsModal
       game={game}

@@ -82,6 +82,7 @@ accent-dim = "#dfe5f5"
 on-accent = "#ffffff"
 focus = "#3b5bdb"
 danger = "#9d2a1e"
+attention = "#9a5b00"
 
 [schemes.black]
 ground = "#000000"
