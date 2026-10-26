@@ -17,6 +17,8 @@ export interface ChatState {
   /** The conversation on screen, if any. */
   target: ChatTarget | null;
   conversation: ChatView | undefined;
+  /** Every conversation the backend holds, read or unread (the Chats tab). */
+  conversations: ChatView[];
   /** Why the last open, page or send failed; cleared by the next one. */
   error: string | null;
   /** Message alerts per store that offers chat. */
@@ -192,6 +194,7 @@ export function useChat(
   return {
     target,
     conversation,
+    conversations,
     error,
     alerts,
     unread: unreadTotal(conversations),
