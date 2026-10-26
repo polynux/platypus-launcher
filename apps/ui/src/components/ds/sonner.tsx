@@ -11,6 +11,7 @@ import { CheckCircle2, Info, Loader2, X, XCircle } from 'lucide-react';
 import { Toaster as SonnerToaster } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { useVariant } from '@/lib/theme';
 
 // The launcher's floating-panel family (dialog surface, JobProgress): raised
 // ground, ring-1 instead of a border, the rounded-2xl card radius.
@@ -34,31 +35,32 @@ function TypeIcon({ Icon, tone, spin }: { Icon: typeof Info; tone: string; spin?
  *  running, #49) disable them in style.css, while new toasts still appear. */
 export function Toaster() {
   const { t } = useTranslation('common');
+  const plain = useVariant('label.style') === 'plain';
   return (
     <SonnerToaster
-      position="top-right"
+      position={plain ? 'bottom-center' : 'top-right'}
       visibleToasts={3}
       expand={false}
       closeButton
       theme="dark"
       richColors={false}
       gap={8}
-      offset={{ top: 64, right: 16 }}
-      mobileOffset={{ top: 64, right: 16 }}
+      offset={plain ? { bottom: 40 } : { top: 64, right: 16 }}
+      mobileOffset={plain ? { bottom: 40 } : { top: 64, right: 16 }}
       containerAriaLabel={t('toast.region', 'Notifications')}
       className={cn('platypus-toaster')}
       icons={{
-        success: <TypeIcon Icon={CheckCircle2} tone="bg-ok/15 text-ok" />,
-        info: <TypeIcon Icon={Info} tone="bg-info/10 text-info" />,
-        error: <TypeIcon Icon={XCircle} tone="bg-danger/15 text-danger" />,
-        loading: <TypeIcon Icon={Loader2} tone="bg-accent-strong/15 text-accent-strong" spin />,
+        success: plain ? undefined : <TypeIcon Icon={CheckCircle2} tone="bg-ok/15 text-ok" />,
+        info: plain ? undefined : <TypeIcon Icon={Info} tone="bg-info/10 text-info" />,
+        error: plain ? <XCircle className="size-3.5 text-danger" /> : <TypeIcon Icon={XCircle} tone="bg-danger/15 text-danger" />,
+        loading: plain ? <Loader2 className="size-3.5 animate-spin" /> : <TypeIcon Icon={Loader2} tone="bg-accent-strong/15 text-accent-strong" spin />,
         close: <X className="size-3.5" />,
       }}
       toastOptions={{
         unstyled: true,
         closeButtonAriaLabel: t('toast.close', 'Close notification'),
         classNames: {
-          toast: TOAST_BASE,
+          toast: plain ? 'platypus-toast group pointer-events-auto relative flex w-auto max-w-[min(560px,calc(100vw-2rem))] items-center gap-2 rounded-[6px] bg-surface-strong px-3.5 py-2 font-sans text-[13.5px] text-text shadow-[0_10px_30px_rgba(0,0,0,.45)] ring-1 ring-hairline-strong' : TOAST_BASE,
           title: 'platypus-toast-title-wrap',
           description: 'platypus-toast-description mt-0.5 text-[13px] leading-snug',
           actionButton:

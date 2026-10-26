@@ -130,7 +130,7 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    scrollbar-color: var(--color-hairline-strong) transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -140,14 +140,14 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--color-hairline-strong);
     border: 2px solid transparent;
     border-radius: 999px;
     background-clip: padding-box;
     transition: background-color 200ms ease;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.22);
+    background: var(--color-text-faint);
     border: 2px solid transparent;
     background-clip: padding-box;
   }

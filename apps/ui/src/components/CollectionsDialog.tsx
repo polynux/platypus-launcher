@@ -7,7 +7,7 @@ import { Modal } from './Modal';
 import { Button } from './ds/button';
 import { Input } from './ds/input';
 import { Switch } from './ds/switch';
-import { MonoLabel } from './ui';
+import { MonoLabel, cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
 import { LauncherApi } from '../effect/runtime';
 import { coreErrMsg } from '../lib/coreError';
@@ -84,6 +84,7 @@ interface DialogProps {
   games: Game[];
   /** The game the picker is for. Absent: the manager (pin, order, rename, create, delete). */
   gameId?: string;
+  mode?: 'new';
   onChanged: (list: Collection[]) => void;
   onClose: () => void;
 }
@@ -91,7 +92,7 @@ interface DialogProps {
 /** Collections (issue #45). With a game: a checkbox per manual collection, and a
  *  new one that takes the game. Without: the manager for the sidebar. Every
  *  change answers the whole list, which goes back up through onChanged. */
-export function CollectionsDialog({ collections, games, gameId, onChanged, onClose }: DialogProps) {
+export function CollectionsDialog({ collections, games, gameId, mode, onChanged, onClose }: DialogProps) {
   const { t } = useTranslation(['collections', 'library', 'common']);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +146,7 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
       setName('');
       setSmart(false);
       setDraft(EMPTY_DRAFT);
+      if (mode === 'new') onClose();
     });
   };
 
@@ -188,12 +190,12 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
   };
 
   const pickable = collections.filter((c) => !c.smart);
-  const title = game ? t('collections:pickLabel', { title: game.title }) : t('collections:title');
+  const title = mode === 'new' ? t('collections:newHeading') : game ? t('collections:pickLabel', { title: game.title }) : t('collections:title');
 
   return (
     <Modal label={title} onClose={onClose} size="md">
       <div className="p-6">
-        <MonoLabel className="mb-2">{t('collections:title')}</MonoLabel>
+        {mode !== 'new' && <MonoLabel className="mb-2">{t('collections:title')}</MonoLabel>}
         <h2 className="mb-4 text-[18px] font-bold">{title}</h2>
 
         {gameId ? (
@@ -212,7 +214,7 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
               );
             })}
           </ul>
-        ) : (
+        ) : mode !== 'new' ? (
           <ul className="mb-5 space-y-2" aria-label={t('collections:title')}>
             {collections.map((c, i) => {
               const missing = missingFrom(c, games).length;
@@ -273,14 +275,14 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
               );
             })}
           </ul>
-        )}
+        ) : null}
 
-        <form onSubmit={create} className="space-y-3 border-t border-hairline pt-4">
-          <MonoLabel>{t('collections:newHeading')}</MonoLabel>
+        <form onSubmit={create} className={cx('space-y-3', mode === 'new' ? '' : 'border-t border-hairline pt-4')}>
+          {mode !== 'new' && <MonoLabel>{t('collections:newHeading')}</MonoLabel>}
           <div className="flex flex-wrap items-end gap-2.5">
             <label className="min-w-0 flex-1 text-[13px] text-text-muted">
               {t('collections:newName')}
-              <Input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={t('collections:newNamePlaceholder')} disabled={busy} className="mt-1.5" />
+              <Input autoFocus={mode === 'new'} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder={t('collections:newNamePlaceholder')} disabled={busy} className="mt-1.5" />
             </label>
             {!gameId && (
               <label className="text-[13px] text-text-muted">
@@ -304,8 +306,9 @@ export function CollectionsDialog({ collections, games, gameId, onChanged, onClo
           {error && <ErrorNotice className="text-[13px]" message={error} fallback={t('collections:error')} />}
         </form>
 
-        <div className="mt-6 flex justify-end">
-          <Button variant="neutral" onClick={onClose}>{t('common:done')}</Button>
+        <div className="mt-6 flex justify-end gap-2">
+          {mode === 'new' && <Button variant="ghost" onClick={onClose}>{t('common:cancel')}</Button>}
+          {mode !== 'new' && <Button variant="neutral" onClick={onClose}>{t('common:done')}</Button>}
         </div>
       </div>
     </Modal>

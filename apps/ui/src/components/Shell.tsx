@@ -47,6 +47,7 @@ interface ShellProps extends SidebarProps {
   sessionStartedAt?: Record<string, number>;
   /** Opens the add-game dialog (the More places menu entry, #132 parity). */
   onAddGame?: () => void;
+  onNewCollection?: () => void;
   /** The friends side panel is open (the avatar stays marked, #135). */
   friendsOpen?: boolean;
   /** Banners between the top bar and the library bar (migration, #135). */
@@ -447,7 +448,7 @@ function AttentionButton({ p }: { p: ShellProps }) {
     >
       <CircleAlert className="h-4 w-4" aria-hidden />
       {p.fixCount > 0 && (
-        <span className="absolute -right-[3px] -top-[1px] grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[10px] font-bold tabular-nums text-on-accent">
+        <span className="absolute -right-[3px] -top-[1px] grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold tabular-nums text-white ring-2 ring-ground">
           {p.fixCount}
         </span>
       )}
@@ -491,18 +492,18 @@ function FriendsButton({ p }: { p: ShellProps }) {
       {self?.avatarUrl ? (
         <span className="relative h-6 w-6 flex-none">
           <img src={self.avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
-          <span aria-hidden className={cx('absolute -bottom-px -right-px size-2 rounded-full ring-2 ring-ground', dotFor(self.state))} />
+          <span aria-hidden className={cx('absolute -bottom-px -right-px size-2.5 rounded-full ring-2 ring-ground', dotFor(self.state))} />
         </span>
       ) : (
         <span className="relative h-6 w-6 flex-none">
           <span aria-hidden className="grid h-6 w-6 place-items-center rounded-full text-[12px] font-bold text-white" style={avatarHueStyle(self?.name ?? '?')}>
             {self ? initial : <Users className="h-4 w-4" />}
           </span>
-          {self && <span aria-hidden className={cx('absolute -bottom-px -right-px size-2 rounded-full ring-2 ring-ground', dotFor(self.state))} />}
+          {self && <span aria-hidden className={cx('absolute -bottom-px -right-px size-2.5 rounded-full ring-2 ring-ground', dotFor(self.state))} />}
         </span>
       )}
       {(p.friendsUnread ?? 0) > 0 && (
-        <span className="absolute -right-[3px] -top-[1px] grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[10px] font-bold tabular-nums text-on-accent">
+        <span className="absolute -right-[3px] -top-[1px] grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold tabular-nums text-white ring-2 ring-ground">
           {p.friendsUnread}
         </span>
       )}
@@ -518,6 +519,7 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
   const [open, setOpen] = useState(false);
   const active = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
   const pluginAttention = p.authNeeded;
+  const managing = ['activity', 'runners', 'plugins', 'storage', 'settings'].includes(active ?? '');
   const warnCount = (p.stores ?? []).filter((s) => (s as { status?: string }).status !== 'ready').length;
   const items: { key: string; label: string; Icon: LucideIcon; onSelect: () => void; current?: boolean; badge?: boolean }[] = [
     { key: 'activity', label: t('nav:activity'), Icon: Activity, onSelect: () => p.onNavigate({ name: 'activity' }), current: active === 'activity' },
@@ -539,9 +541,9 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
           type="button"
           aria-label={t('nav:sourcebar.morePlaces')}
           aria-expanded={open}
-          className="relative grid size-[34px] flex-none place-items-center rounded-[9px] text-text-muted transition hover:bg-surface hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className={cx('relative grid size-[34px] flex-none place-items-center rounded-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', managing ? 'bg-surface-strong text-text' : 'text-text-muted hover:bg-surface hover:text-text')}
         >
-          <Menu className="h-4 w-4" aria-hidden />
+          <Menu className="size-[17px]" aria-hidden />
           {pluginAttention && (
             <span aria-label={t('nav:needsAttention')} className="absolute right-[6px] top-[6px] size-[7px] rounded-full bg-attention" />
           )}
@@ -550,10 +552,10 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
       <DropdownMenuContent side="bottom" align="end">
         {items.map((n) => (
           <DropdownMenuItem key={n.key} asChild onSelect={n.onSelect}>
-            <button aria-current={n.current ? 'page' : undefined} className={cx('w-full', n.current && 'text-accent-strong')}>
+            <button aria-current={n.current ? 'page' : undefined} className={cx('w-full', n.current && 'font-semibold text-text')}>
               <n.Icon aria-hidden className="size-[15px] flex-none text-text-muted" />
               <span className="min-w-0 flex-1 text-left">{n.label}</span>
-              {n.badge && <Badge variant="neutral" aria-label={t('nav:needsAttention')}>{warnCount > 0 ? warnCount : '!'}</Badge>}
+              {n.badge && <span aria-label={t('nav:needsAttention')} className="ml-auto rounded-full bg-attention px-1.5 text-[11px] font-bold text-[#1b1300]">{warnCount > 0 ? warnCount : '!'}</span>}
             </button>
           </DropdownMenuItem>
         ))}
@@ -896,7 +898,7 @@ function CollectionsMenu({ p }: { p: ShellProps }) {
         {p.onManageCollections && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild onSelect={() => p.onManageCollections?.()}>
+            <DropdownMenuItem asChild onSelect={() => (p.onNewCollection ?? p.onManageCollections)?.()}>
               <button>
                 <Plus aria-hidden className="size-[15px] flex-none text-text-faint" />
                 <span>{t('collections:newHeading')}</span>

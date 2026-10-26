@@ -75,7 +75,7 @@ export function AppContent() {
   const [redeemOpen, setRedeemOpen] = useState(false);
   // Collections (issue #45): the list from settings, and the dialog (for one game, or the manager).
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [collectionsDialog, setCollectionsDialog] = useState<{ gameId?: string } | null>(null);
+  const [collectionsDialog, setCollectionsDialog] = useState<{ gameId?: string; mode?: 'new' } | null>(null);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -1174,6 +1174,7 @@ export function AppContent() {
         collectionCounts={collectionTotals}
         onOpenCollection={(id) => setView({ name: 'library', collection: id })}
         onManageCollections={() => setCollectionsDialog({})}
+        onNewCollection={() => setCollectionsDialog({ mode: 'new' })}
         ownership={ownership}
         onOwnership={setOwnership}
         ownedCount={games.length}
@@ -1276,7 +1277,7 @@ export function AppContent() {
         collectionTotals={collectionTotals}
         collectionId={view.name === 'library' ? view.collection ?? null : null}
         onShowCollection={(id) => setView({ name: 'library', collection: id })}
-        onNewCollection={() => setCollectionsDialog({})}
+        onNewCollection={() => setCollectionsDialog({ mode: 'new' })}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
         sourceLogos={sourceLogos}
       />
@@ -1291,6 +1292,7 @@ export function AppContent() {
           collections={collections}
           games={games}
           gameId={collectionsDialog.gameId}
+          mode={collectionsDialog.mode}
           onChanged={setCollections}
           onClose={() => setCollectionsDialog(null)}
         />

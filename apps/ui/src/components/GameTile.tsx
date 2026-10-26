@@ -165,7 +165,7 @@ export const GameRow = memo(function GameRow({ game: g, index, runners, recency,
       {!minimal && <span role="cell" className="truncate font-mono text-hint text-text-muted">{runnerShort(g.settings.runner_id, runners)}</span>}
       {!minimal && <span role="cell" className="text-right font-mono text-hint tabular-nums text-text-muted">{hoursPlayed(g) ?? '—'}</span>}
       {!minimal && <span role="cell" className="text-right font-mono text-hint tabular-nums text-text-muted">{g.release_year ?? '—'}</span>}
-      {!minimal && <span role="cell" className="text-right font-mono text-hint text-text-muted">{(g.is_installed ? formatBytes(g.size_bytes) : t('library:table.notInstalled')) || '—'}</span>}
+      {!minimal && <span role="cell" className="text-right font-mono text-hint text-text-muted">{formatBytes(g.size_bytes) || '—'}</span>}
       <span role="cell" className="text-right font-mono text-hint text-text-muted">{recency ?? '—'}</span>
     </div>
   );

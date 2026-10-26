@@ -142,7 +142,7 @@ function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps &
                     {/* GetProtonVersions carries no size, and runners are
                         detected, not installed (no remove call): the column
                         reads unknown until the core reports it. */}
-                    <span className="flex-none text-[12px] tabular-nums text-text-faint" title={t('runners:atlas.sizeLabel')}>—</span>
+                    {r.is_system && <span className="flex-none text-[12px] text-text-faint">{t('runners:badge.system')}</span>}
                   </li>
                 );
               })}

@@ -79,8 +79,7 @@
     "hours": "h",
     "year": "année",
     "size": "taille",
-    "lastPlayed": "dernière session",
-    "notInstalled": "non installé"
+    "lastPlayed": "dernière session"
   },
   "atlasTable": {
     "title": "Titre",
