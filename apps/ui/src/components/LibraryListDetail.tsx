@@ -157,10 +157,15 @@ export function LibraryListDetail(p: ListDetailProps) {
       if (selectedId !== null) setSelectedId(null);
       return;
     }
+    // A game opened from elsewhere stays selected even when the filters hide
+    // it (like /22's select): the stage still shows the routed game.
+    if (selectedId && selectedId === p.initialSelectedId && p.games.some((g) => g.id === selectedId)) return;
     if (!selectedId || !filtered.some((g) => g.id === selectedId)) setSelectedId(filtered[0].id);
-  }, [filtered, selectedId]);
+  }, [filtered, selectedId, p.initialSelectedId, p.games]);
 
-  const selected = filtered.find((g) => g.id === selectedId) ?? null;
+  const selected = filtered.find((g) => g.id === selectedId)
+    ?? (selectedId && selectedId === p.initialSelectedId ? p.games.find((g) => g.id === selectedId) : undefined)
+    ?? null;
 
   useEffect(() => {
     if (!selectedId) return;

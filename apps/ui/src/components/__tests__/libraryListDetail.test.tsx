@@ -141,6 +141,11 @@ describe('library list-detail', () => {
     expect(document.activeElement?.getAttribute('data-game-row')).toBeTruthy();
   });
 
+  it('shows the game opened from elsewhere even when the filters hide it', () => {
+    list({ initialSelectedId: 'beta', ownership: 'installed' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Beta');
+  });
+
   it('selects the game opened from elsewhere', () => {
     list({ initialSelectedId: 'gamma' });
     expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');

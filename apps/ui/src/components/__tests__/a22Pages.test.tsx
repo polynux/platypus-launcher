@@ -119,16 +119,18 @@ describe('a22 home (dashboard)', () => {
     const backlog = mkGame('backlog', { is_installed: false, title: 'Backlog', installable: true });
     const onOpenGame = vi.fn();
     const onStop = vi.fn();
+    const onInstall = vi.fn();
     render(
       <Dashboard
         games={[installed]} allGames={[installed, backlog]} runners={[]} activity={[]}
         dismissedHero={new Set()} onDismissHero={noop} onOpenGame={onOpenGame} onNavigate={noop}
-        onInstall={vi.fn()} onStop={onStop}
+        onInstall={onInstall} onStop={onStop}
         sessions={{ live: { game_id: 'live', state: 'running' } as never }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /Install/ }));
-    expect(onOpenGame).toHaveBeenCalledWith(backlog.id);
+    // Install goes through the install intent (the game page opens its dialog).
+    expect(onInstall).toHaveBeenCalledWith(backlog);
     expect(screen.getByText('Live game is running.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Stop/ }));
     expect(onStop).toHaveBeenCalledWith('live');

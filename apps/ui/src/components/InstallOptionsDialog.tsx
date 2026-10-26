@@ -147,7 +147,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       ))}
 
       {groups && groups.length > 0 && (
-        <div className="mt-6 rounded-2xl bg-surface px-4 py-3 font-mono text-hint">
+        <div className={cx('mt-6 rounded-2xl bg-surface px-4 py-3', atlas ? 'font-sans text-[13px] tabular-nums [&_[data-testid]]:font-semibold' : 'font-mono text-hint')}>
           <div className="flex justify-between gap-4">
             <span className="text-text-muted">{t('gameOps:options.addonsLabel')}</span>
             <span className="text-text" data-testid="added-size">{added > 0 ? t('gameOps:options.addedSome', { size: formatBytes(added) }) : t('gameOps:options.addedNone')}</span>
