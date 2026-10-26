@@ -79,8 +79,7 @@
     "hours": "hrs",
     "year": "year",
     "size": "size",
-    "lastPlayed": "last played",
-    "notInstalled": "not installed"
+    "lastPlayed": "last played"
   },
   "atlasTable": {
     "title": "Title",

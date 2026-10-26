@@ -150,12 +150,14 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     if (scheme === 'light') {
       const accent = toneAt(tone, 0.75, 0.38);
       derived.accent = accent;
+      derived.focus = accent;
       derived['accent-strong'] = accent;
       derived['accent-dim'] = toneAt(tone, 0.45, 0.88);
       derived['on-accent'] = readable(tone, 0.15, 0.98, accent, 4.5, 1);
     } else {
       const accent = vivid(tone, 0.7, 0.6);
       derived.accent = accent;
+      derived.focus = accent;
       derived['accent-strong'] = vivid(tone, 0.68, 0.76);
       // The dim shade of the accent, worn by the action strip (the lab's
       // --acc-dim: toneAt(.45,.17) in accent mode, (.42,.2) in whole mode;
@@ -176,6 +178,7 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     derived.popover = toneAt(tone, 0.25, 0.98);
     const accent = toneAt(tone, 0.75, 0.38);
     derived.accent = accent;
+    derived.focus = accent;
     derived['accent-strong'] = accent;
     derived['accent-dim'] = toneAt(tone, 0.5, 0.84);
     // Text stays dark on the light ground; the clamp moves it down when the
@@ -199,6 +202,7 @@ export function toneVariables(mode: GameToneMode, tone: Tone | null, scheme: Col
     derived.popover = toneAt(tone, 0.42, 0.13 * d);
     const accent = toneAt(tone, 0.9, 0.66);
     derived.accent = accent;
+    derived.focus = accent;
     derived['accent-strong'] = toneAt(tone, 0.7, 0.76);
     derived['accent-dim'] = toneAt(tone, 0.42, 0.2 * d);
     derived['on-accent'] = readable(tone, 0.5, 0.07, accent, 4.5, -1);

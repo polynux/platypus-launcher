@@ -355,7 +355,7 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
   const hasActions = !!(onPlay || onInstall || onOpenSettings || onManageCollections);
   if (!hasActions) return null;
   return (
-    <span className="absolute bottom-12 left-2 right-2 flex items-center justify-end gap-1 rounded-[10px] bg-[rgba(10,12,16,.72)] p-1 opacity-0 backdrop-blur transition focus-within:opacity-100 group-hover:opacity-100 light:bg-white/85">
+    <span className="absolute bottom-12 left-2 right-2 flex translate-y-1 items-center justify-end gap-1 rounded-[10px] bg-[rgba(10,12,16,.72)] p-1 opacity-0 backdrop-blur transition focus-within:translate-y-0 focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 light:bg-white/85">
       {game.is_installed ? (
         onPlay && (
           <button
@@ -423,25 +423,27 @@ export function AtlasLibraryGrid({ games, jobs, sessions, onOpen, onPlay, onInst
   return (
     <ul aria-label={t('library:table.label')} className="grid gap-x-4 gap-y-[22px] [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
       {games.map((g) => (
-        <li key={g.id} className={cx(!g.is_installed && 'opacity-90')}>
+        <li key={g.id}>
           <div className="group relative">
             <button
               type="button"
               data-game-row={g.id}
               onClick={() => onOpen(g.id)}
               aria-label={g.title}
-              className="block w-full overflow-hidden rounded-[10px] text-left ring-1 ring-hairline transition hover:ring-accent-strong/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="block w-full overflow-hidden rounded-[10px] text-left transition-[scale] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
-              <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[3/4] w-full', !g.is_installed && 'brightness-[0.55] grayscale')} />
+              <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full transition-[scale] duration-300 group-hover:scale-[1.035]', !g.is_installed && 'grayscale-[.85] brightness-[.6]')} />
             </button>
+            <span className="pointer-events-none absolute left-2 right-2 top-2 flex items-center gap-1 [&>*]:ml-auto">
+              <AtlasGameBadges game={g} job={jobs.get(g.id)} session={sessions?.get(g.id)} />
+            </span>
             <AtlasQuickActions game={g} onPlay={onPlay} onInstall={onInstall} onOpenSettings={onOpenSettings} onManageCollections={onManageCollections} />
           </div>
           <div className="mt-[7px] flex items-start gap-1.5 px-0.5">
             <div className="min-w-0 flex-1">
-              <p className={cx('truncate text-[13px] font-[650]', g.is_installed ? 'text-text' : 'text-text-faint')}>{g.title}</p>
+              <p className="truncate text-[13px] font-[650] text-text">{g.title}</p>
               <p className="truncate text-[12px] tabular-nums text-text-faint">{atlasSubLine(t, g)}</p>
             </div>
-            <AtlasGameBadges game={g} job={jobs.get(g.id)} session={sessions?.get(g.id)} />
           </div>
         </li>
       ))}
@@ -558,8 +560,8 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, sessions
                 </td>
                 <td className="whitespace-nowrap px-2 py-2 text-text-muted">{statusLabel(g)}</td>
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{h != null ? `${formatCount(Math.round(h * 10) / 10)} h` : '—'}</td>
-                <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{lastPlayedAgo(g) ?? '—'}</td>
-                <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.is_installed ? (g.size_bytes != null ? formatBytes(g.size_bytes) : '—') : t('library:table.notInstalled')}</td>
+                <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.is_installed ? (lastPlayedAgo(g) ?? '—') : '—'}</td>
+                <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.size_bytes != null ? formatBytes(g.size_bytes) : '—'}</td>
                 <td className={cx('whitespace-nowrap px-2 py-2', tier === 'none' ? 'text-text-faint' : TIER_TEXT[tier] ?? 'text-text-muted')}>{tierText}</td>
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.release_year ?? '—'}</td>
                 <td className="px-2 py-2">
