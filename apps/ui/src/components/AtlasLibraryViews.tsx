@@ -408,8 +408,10 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
 }
 
 /** Atlas grid of covers (D22 `LibraryGrid`) with real data. */
-export function AtlasLibraryGrid({ games, jobs, sessions, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections }: {
+export function AtlasLibraryGrid({ games, jobs, sessions, currentId, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections }: {
   games: Game[];
+  /** The last game opened or staged: outlined like /22's current game. */
+  currentId?: string | null;
   jobs: Map<string, Job>;
   /** Live sessions, for the playing dot (R4-13). */
   sessions?: Map<string, SessionEvent>;
@@ -430,7 +432,8 @@ export function AtlasLibraryGrid({ games, jobs, sessions, onOpen, onPlay, onInst
               data-game-row={g.id}
               onClick={() => onOpen(g.id)}
               aria-label={g.title}
-            className="block w-full overflow-hidden rounded-[10px] text-left transition-[scale] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            aria-current={g.id === currentId ? 'true' : undefined}
+            className={cx('block w-full overflow-hidden rounded-[10px] text-left transition-[scale] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus', g.id === currentId && 'outline outline-2 outline-offset-2 outline-accent')}
             >
               <Cover src={coverImages(g)} title={g.title} className={cx('aspect-[2/3] w-full transition-[scale] duration-300 group-hover:scale-[1.035]', !g.is_installed && 'grayscale-[.85] brightness-[.6]')} />
             </button>
@@ -652,6 +655,8 @@ export type AtlasPageView = 'grid' | 'table';
  *  blocks when no filter is active, then the grid or table on real data. */
 export function AtlasLibraryPage(p: {
   games: Game[];
+  /** The last game opened or staged, outlined in the grid. */
+  currentId?: string | null;
   ownership: 'installed' | 'owned';
   source: StoreType | 'all';
   storeSelection?: StoreType[];
@@ -755,6 +760,7 @@ export function AtlasLibraryPage(p: {
           {p.view === 'grid' ? (
             <AtlasLibraryGrid
               games={filtered}
+              currentId={p.currentId}
               jobs={jobsById}
               sessions={sessionsById}
               onOpen={p.onOpen}

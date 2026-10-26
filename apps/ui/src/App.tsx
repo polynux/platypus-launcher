@@ -749,6 +749,11 @@ export function AppContent() {
   // it. Opening a game from the palette or dashboard lands on the stage,
   // and clicking another row re-stages, so both follow the staged game.
   const [stagedGameId, setStagedGameId] = useState<string | null>(null);
+  // The last game opened or staged, so the Atlas grid can outline it.
+  const [lastGameId, setLastGameId] = useState<string | null>(null);
+  const routedGameId = view.name === 'game' ? view.id : null;
+  useEffect(() => { if (routedGameId) setLastGameId(routedGameId); }, [routedGameId]);
+  useEffect(() => { if (stagedGameId) setLastGameId(stagedGameId); }, [stagedGameId]);
   const stagedGame = isListDetail ? games.find((g) => g.id === stagedGameId) ?? undefined : undefined;
   const gameViewGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
   // Covers and table open the full game page, so the routed id wins there;
@@ -912,6 +917,7 @@ export function AppContent() {
           return (
             <AtlasLibraryPage
               games={games}
+              currentId={lastGameId}
               ownership={ownership}
               source={source}
               storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}

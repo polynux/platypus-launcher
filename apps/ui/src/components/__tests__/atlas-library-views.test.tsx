@@ -43,6 +43,12 @@ describe('atlas grid (issue #136)', () => {
     expect(onOpen).toHaveBeenCalledWith('gamma');
   });
 
+  it('outlines the current game', () => {
+    render(<AtlasLibraryGrid games={games()} jobs={jobsById([])} currentId="beta" onOpen={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Beta' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Alpha' })).not.toHaveAttribute('aria-current');
+  });
+
   it('shows a download badge for a running job', () => {
     const job = { id: 'j1', game_id: 'alpha', kind: 'download', state: 'running', percent: 42 } as Job;
     render(<AtlasLibraryGrid games={games()} jobs={jobsById([job])} onOpen={() => {}} />);
