@@ -63,7 +63,9 @@
     "waiting": "waiting",
     "attempt": "attempt {{count}}",
     "sizesOf": "{{done}} of {{total}}",
-    "speedPerSec": "{{speed}}/s"
+    "speedPerSec": "{{speed}}/s",
+    "etaMins_one": "about {{count}} min left",
+    "etaMins_other": "about {{count}} min left"
   },
   "aria": {
     "pauseJob": "Pause {{title}}",

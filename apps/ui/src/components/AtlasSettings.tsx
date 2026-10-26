@@ -455,7 +455,7 @@ export interface AtlasBodyProps {
   onSaveSettings: (s: GameSettings) => void | Promise<void>;
   onChangeSettings: (s: GameSettings, what: string) => void;
   onJob: (kind: 'install' | 'update' | 'uninstall') => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   onChanged: () => void;
   onCustomized: () => void;

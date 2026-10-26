@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event';
 import { TooltipProvider } from '../ds/tooltip';
 import { AtlasLibraryGrid, AtlasLibraryTable, AtlasLibraryPage, AtlasActiveChips, AtlasGameBadges, AtlasSkeleton } from '../AtlasLibraryViews';
 import { LibraryListDetail } from '../LibraryListDetail';
-import type { Game, Job } from '../../types';
+import type { Game, Job, SessionEvent } from '../../types';
 
 vi.mock('../../effect/runtime', () => ({ LauncherApi: {} }));
 
@@ -170,8 +170,29 @@ describe('atlas badges and skeletons (issue #136)', () => {
     unmount();
     cleanup();
     render(<AtlasGameBadges game={games()[2]} />);
-    expect(screen.getByLabelText('Shared by Sam')).toBeInTheDocument();
+    expect(screen.getByTitle('Shared by Sam')).toBeInTheDocument();
+    expect(screen.getByText('Sam')).toBeInTheDocument();
     expect(screen.getByLabelText('Needs attention')).toBeInTheDocument();
+  });
+
+  it('keeps paused jobs visible as a download ring (R4-11)', () => {
+    const job = { id: 'j1', game_id: 'alpha', kind: 'install', state: 'paused', percent: 50 } as Job;
+    render(<AtlasLibraryGrid games={games()} jobs={jobsById([job])} onOpen={() => {}} />);
+    expect(screen.getByLabelText('Downloading, 50%')).toBeInTheDocument();
+  });
+
+  it('prefers the playing dot over the download ring and update mark (R4-13)', () => {
+    const job = { id: 'j1', game_id: 'alpha', kind: 'install', state: 'running', percent: 42 } as Job;
+    const session = { game_id: 'alpha', state: 'running' } as SessionEvent;
+    const { unmount } = render(<AtlasGameBadges game={games()[0]} job={job} session={session} />);
+    expect(screen.getByLabelText('Playing')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Downloading, 42%')).toBeNull();
+    expect(screen.queryByLabelText('Update available')).toBeNull();
+    unmount();
+    cleanup();
+    render(<AtlasGameBadges game={games()[0]} job={job} />);
+    expect(screen.getByLabelText('Downloading, 42%')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Update available')).toBeNull();
   });
 
   it('renders a skeleton per view', () => {

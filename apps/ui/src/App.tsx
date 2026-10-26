@@ -659,7 +659,7 @@ export function AppContent() {
     () => installedGames.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
     [installedGames]
   );
-  const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
+  const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const collectionTotals = useMemo(() => collectionCounts(collections, games, Math.floor(Date.now() / 1000)), [collections, games]);
@@ -842,6 +842,7 @@ export function AppContent() {
       onManageCollections={(id) => setCollectionsDialog({ gameId: id })}
       onOpenSettings={openGameSettings}
       onInstall={(g) => runJob('install', g)}
+      sessions={sessions}
       onResetFilters={() => {
         setOwnership('owned');
         setSelectedStores([]);
@@ -883,6 +884,16 @@ export function AppContent() {
             onDismissHero={(ids) => setDismissedHero((prev) => new Set([...prev, ...ids]))}
             onOpenGame={openGame}
             onNavigate={setView}
+            jobs={jobs}
+            sessions={sessions}
+            sessionStartedAt={{ ...sessionStart.current }}
+            onPlay={(id) => {
+              const g = games.find((x) => x.id === id);
+              if (g) launch(g);
+            }}
+            onInstall={(g) => runJob('install', g)}
+            onStop={(id) => stop(id, false)}
+            onJobAction={jobAction}
           />
         );
       case 'library':
@@ -910,6 +921,7 @@ export function AppContent() {
               pluginName={(id) => socialLabels[id] ?? id}
               onOpenPlugins={() => setView({ name: 'plugins' })}
               jobs={activeJobs}
+              sessions={sessions}
               runners={runners}
               activity={activity}
               sourceLogos={sourceLogos}
@@ -1200,6 +1212,8 @@ export function AppContent() {
           jobs={activeJobs}
           sessionStartedAt={{ ...sessionStart.current }}
           onStop={(id) => stop(id, false)}
+          onOpenDownloads={() => setView({ name: 'downloads' })}
+          games={games}
           lastScan={lastScan}
           online={online}
         />

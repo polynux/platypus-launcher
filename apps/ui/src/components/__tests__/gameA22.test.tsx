@@ -143,6 +143,25 @@ describe('/22 game strip states (issue #137)', () => {
     expect(screen.getByText(/\d+:\d\d(:\d\d)?/)).toBeInTheDocument();
   });
 
+  it('paused job: Paused strip button with resume, cancel one click away, no second Install (R4-11)', async () => {
+    const user = userEvent.setup();
+    const onJobAction = vi.fn();
+    const g = game({ is_installed: false, installable: true });
+    const job = {
+      id: 'j-paused', kind: 'install', source: 'echo', game_id: g.id, store_game_id: '1', title: g.title,
+      state: 'paused', bytes: 20950000, total: 41900000, speed: 0, percent: 50, attempts: 1, created_at: 0, updated_at: 0,
+    };
+    page(g, { job, onJobAction });
+    const btn = await screen.findByRole('progressbar', { name: /Paused/ });
+    expect(btn).toHaveTextContent('50%');
+    expect(btn).toHaveAttribute('title', 'Resume');
+    // The paused job stays offered: no duplicate "Install" queued from the page.
+    expect(screen.queryByRole('button', { name: /^Install/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /Cancel install/ })).toBeInTheDocument();
+    await user.click(btn);
+    expect(onJobAction).toHaveBeenCalledWith('resume', 'j-paused');
+  });
+
   it('failed job on an uninstalled game: Retry install + last attempt', async () => {
     const g = game({ is_installed: false, installable: true });
     const job = {

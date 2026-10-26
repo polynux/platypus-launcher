@@ -3,7 +3,7 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { ActivityEvent, Game, ProtonVersion, ThemeLayout as DashboardLayoutData, View } from '../types';
+import type { ActivityEvent, Game, Job, ProtonVersion, SessionEvent, ThemeLayout as DashboardLayoutData, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { ATLAS_PAGE, Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
@@ -18,6 +18,7 @@ import { runnerShort } from '../lib/settings';
 import { sortKey } from '../lib/customize';
 import { ratingBadge } from '../lib/compat';
 import { ThemeLayout } from '../lib/layout';
+import { AtlasMainAction } from './GameTabs';
 import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 
@@ -35,6 +36,15 @@ interface DashboardProps {
   onDismissHero: (ids: string[]) => void;
   onOpenGame: (id: string) => void;
   onNavigate: (v: View) => void;
+  /** Active jobs, live sessions and job controls: Home's hero and Continue
+   *  playing render the same Atlas main action as the strip (R4-15). */
+  jobs?: Job[];
+  sessions?: Record<string, SessionEvent>;
+  sessionStartedAt?: Record<string, number>;
+  onPlay?: (id: string) => void;
+  onInstall?: (game: Game) => void;
+  onStop?: (id: string) => void;
+  onJobAction?: (action: 'pause' | 'resume' | 'cancel', id: string) => void;
 }
 
 export function Dashboard({ games, ownedCount, allGames, ...rest }: DashboardProps) {
@@ -432,7 +442,7 @@ function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
   return games.filter((g) => g.store === 'custom').slice(0, 5);
 }
 
-function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate }: DashboardProps & { allGames: Game[] }) {
+function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction }: DashboardProps & { allGames: Game[] }) {
   const { t } = useTranslation(['dashboard', 'common', 'game', 'activity']);
   const waiting = games.filter(needsAttention);
   const pending = waiting.filter((g) => !dismissedHero.has(g.id));
@@ -449,6 +459,20 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
   const added = recentAdded(owned, activity);
   const toFinish = [...games].filter((g) => (g.playtime_minutes ?? 0) > 0).sort(byRecent).slice(0, 5);
   const toInstall = owned.filter((g) => !g.is_installed).slice(0, 5);
+  // The strip's main action on Home (R4-15): the same job/running/idle
+  // behaviour as the game page, with Home's own navigation buttons idle.
+  const jobsById = React.useMemo(() => new Map((jobs ?? []).map((j) => [j.game_id, j])), [jobs]);
+  const mainAction = (g: Game, idle: React.ReactNode) => (
+    <AtlasMainAction
+      job={jobsById.get(g.id)}
+      session={sessions?.[g.id]}
+      sessionStartedAt={sessionStartedAt?.[g.id]}
+      onJobAction={onJobAction}
+      onStop={() => onStop?.(g.id)}
+    >
+      {idle}
+    </AtlasMainAction>
+  );
   const hour = new Date().getHours();
   const greeting = hour < 5
     ? t('dashboard:greeting.night')
@@ -481,9 +505,11 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
             <h2 className="text-[24px] font-extrabold leading-tight">{suggested.title}</h2>
             {reason && <p className="line-clamp-2 text-[13.5px] leading-relaxed text-white/85">{reason}</p>}
             <div className="mt-1 flex gap-2.5">
-              <Button variant="primary" onClick={() => onOpenGame(suggested.id)}>
-                {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
-              </Button>
+              {mainAction(suggested, (
+                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }}>
+                  {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
+                </Button>
+              ))}
               <Button variant="neutral" onClick={() => onOpenGame(suggested.id)} className="bg-white/10 text-white ring-white/20 hover:bg-white/20">
                 {t('dashboard:hero.openGame')}
               </Button>
@@ -514,15 +540,17 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
                     <div className="truncate text-[13px] font-bold">{g.title}</div>
                     <div className="truncate text-[12px] text-text-faint">{sub}</div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => onOpenGame(g.id)}
-                    aria-label={`${t('game:play.play')}: ${g.title}`}
-                    className="inline-flex h-[34px] flex-none items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  >
-                    <Play className="size-3.5 fill-current" aria-hidden />
-                    {t('game:play.play')}
-                  </button>
+                  {mainAction(g, (
+                    <button
+                      type="button"
+                      onClick={() => (onPlay ? onPlay(g.id) : onOpenGame(g.id))}
+                      aria-label={`${t('game:play.play')}: ${g.title}`}
+                      className="inline-flex h-[34px] flex-none items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    >
+                      <Play className="size-3.5 fill-current" aria-hidden />
+                      {t('game:play.play')}
+                    </button>
+                  ))}
                 </div>
               </li>
             );

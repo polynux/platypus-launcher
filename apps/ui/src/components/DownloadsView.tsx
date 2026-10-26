@@ -259,34 +259,45 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
         <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
       ) : (
         <>
-          {active.length > 0 && (
-            <section aria-label={t('downloads:atlas.queue')}>
-              <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.queue')}</h2>
-              <ul className="grid gap-2">
-                {active.map((j) => {
+          <section aria-label={t('downloads:atlas.queue')}>
+            <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.queue')}</h2>
+            {active.length > 0 ? (
+            <ul className="grid gap-2">
+                {active.map((j, i) => {
                   const pct = j.percent >= 0 ? Math.round(j.percent) : null;
                   const paused = j.state === 'paused';
-                  const meta = paused
+                  const name = byId.get(j.game_id)?.title ?? j.title;
+                  const running = j.state === 'running';
+                  const eta = running && j.total > 0 && j.speed > 0 && j.total > j.bytes
+                    ? t('downloads:job.etaMins', { count: Math.max(1, Math.round((j.total - j.bytes) / j.speed / 60)) })
+                    : null;
+                  const stateNote = paused
                     ? t('downloads:state.paused')
                     : j.state === 'queued'
                       ? t('downloads:state.queued')
-                      : [j.speed > 0 ? t('downloads:job.speedPerSec', { speed: formatBytes(j.speed) }) : '', j.phase].filter(Boolean).join(' · ');
+                      : j.speed > 0
+                        ? t('downloads:job.speedPerSec', { speed: formatBytes(j.speed) })
+                        : null;
                   return (
                     <li key={j.id} className={paused ? 'opacity-70' : undefined}>
-                      <div className="flex items-center gap-3.5 rounded-xl bg-surface px-2.5 py-2.5 ring-1 ring-hairline">
-                        <Cover src={artOf(j.game_id)} title={j.title} className="h-14 w-28 flex-none rounded-lg ring-1 ring-hairline" />
-                        <div className="min-w-0 flex-1">
+                      <div className={cx('flex items-center gap-3.5 rounded-xl bg-surface py-2.5 pl-2.5 pr-3', i === 0 && 'ring-1 ring-inset ring-accent/35')}>
+                        <button type="button" onClick={() => onOpenGame(j.game_id)} aria-label={name} className="flex-none rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                          <Cover src={artOf(j.game_id)} title={name} className="h-14 w-[120px] rounded-[7px]" />
+                        </button>
+                        <div className="grid min-w-0 flex-1 gap-1.5">
                           <div className="flex flex-wrap items-baseline gap-x-2">
-                            <button onClick={() => onOpenGame(j.game_id)} className="truncate text-left text-[13px] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                              {j.title}
-                            </button>
+                            <span className="truncate text-left text-[13px] font-bold">
+                              {name}
+                            </span>
                             <span className="truncate text-[12px] text-text-faint">{t(VERB_KEY[j.kind])}</span>
                           </div>
-                          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: j.title })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
-                            <div className={cx('h-full rounded-full bg-accent transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+                          <div className="h-1.5 overflow-hidden rounded-[3px] bg-surface-strong" role="progressbar" aria-label={t('downloads:aria.progressOf', { title: name })} aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
+                            <div className={cx('h-full rounded-[3px] transition-[width]', paused ? 'bg-text-faint' : 'bg-accent', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
                           </div>
-                          <div className="mt-1 truncate text-[12px] text-text-faint">
-                            {pct != null && `${pct}% · `}{meta}
+                          <div className="flex gap-3.5 text-[12px] text-text-faint tabular-nums">
+                            {pct != null && <span>{pct}%</span>}
+                            {stateNote && <span>{stateNote}</span>}
+                            {i === 0 && eta && <span>{eta}</span>}
                           </div>
                         </div>
                         <div className="flex flex-none items-center gap-1">
@@ -308,8 +319,10 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
                   );
                 })}
               </ul>
-            </section>
-          )}
+            ) : (
+              <EmptyState icon={Download} label={t('downloads:atlas.emptyTitle')}>{t('downloads:atlas.emptyBody')}</EmptyState>
+            )}
+          </section>
           {finished.length > 0 && (
             <section aria-label={t('downloads:atlas.recent')}>
               <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('downloads:atlas.recent')}</h2>
@@ -317,8 +330,8 @@ function AtlasDownloads({ jobs, games, onAction, onClear, onOpenGame }: Required
                 {finished.map((j) => (
                   <li key={j.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-3 py-1.5">
                     <button onClick={() => onOpenGame(j.game_id)} className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
-                      <Cover src={artOf(j.game_id)} title={j.title} className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
-                      <span className="truncate text-[13px] font-semibold">{j.title}</span>
+                      <Cover src={artOf(j.game_id)} title={byId.get(j.game_id)?.title ?? j.title} className="h-5 w-11 flex-none rounded ring-1 ring-hairline" />
+                      <span className="truncate text-[13px] font-semibold">{byId.get(j.game_id)?.title ?? j.title}</span>
                     </button>
                     <span className={cx('truncate text-[12.5px]', j.state === 'failed' ? 'text-danger' : 'text-text-muted')}>
                       {j.state === 'failed' ? (j.error || t('downloads:state.failed')) : t(STATE_KEY[j.state])}
