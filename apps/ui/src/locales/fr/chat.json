@@ -5,12 +5,20 @@
     "loadOlder": "Charger les messages plus anciens",
     "loading": "Chargement…",
     "empty": "Aucun message pour l'instant. Dites bonjour.",
+    "sayHi": "Dites bonjour à {{name}}.",
+    "viewGame": "Voir le jeu",
+    "back": "Retour aux amis",
+    "muteAlerts": "Couper les alertes de messages",
+    "unmuteAlerts": "Réactiver les alertes de messages",
+    "noChat": "{{store}} ne propose pas de discussion aux plugins.",
     "typing": "{{name}} est en train d'écrire…",
     "placeholder": "Écrivez un message",
     "send": "Envoyer",
     "sending": "Envoi…",
     "notSent": "Non envoyé",
-    "sendAgain": "Renvoyer"
+    "sendAgain": "Renvoyer",
+    "sendFailed": "Non envoyé.",
+    "resend": "Renvoyer"
   },
   "modal": {
     "title": "Amis",
@@ -22,8 +30,10 @@
     "friendsOff": "Les amis sont désactivés pour {{label}}. Activez-les pour voir qui est en ligne.",
     "reconnect": "Reconnecter",
     "showPlaying": "Montrer à mes amis à quoi je joue",
+    "showPlayingMenu": "Montrer mon jeu en cours",
     "showPlayingLabel": "Montrer à mes amis à quoi je joue sur {{label}}",
     "chatAlerts": "Me prévenir des nouveaux messages de mes amis",
+    "chatAlertsMenu": "Alertes de messages",
     "chatAlertsLabel": "Alertes de messages sur {{label}}",
     "noFriends": "Pas encore d'amis sur {{label}}.",
     "noMatch": "Aucun ami ne correspond à « {{query}} ».",
@@ -39,6 +49,7 @@
   "row": {
     "playing": "Joue à {{title}}",
     "lastSeen": "Vu {{when}}",
+    "lastOnline": "Vu {{ago}}",
     "offline": "Hors ligne",
     "unread_one": "{{count}} message non lu",
     "unread_other": "{{count}} messages non lus",
@@ -87,6 +98,9 @@
     "friends": "Amis",
     "chats": "Discussions",
     "family": "Famille",
-    "empty": "Aucune conversation pour l'instant."
+    "empty": "Aucune conversation pour l'instant.",
+    "emptyBody": "Les messages de vos amis arrivent ici.",
+    "newMessages_one": "{{count}} nouveau message",
+    "newMessages_other": "{{count}} nouveaux messages"
   }
 }

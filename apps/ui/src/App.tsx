@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
 import { Shell, SourceFooter } from './components/Shell';
-import { AtlasFriendsPanel } from './components/AtlasFriendsPanel';
+import { AtlasFriendsPanel, AtlasChatView } from './components/AtlasFriendsPanel';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
@@ -691,6 +691,12 @@ export function AppContent() {
   }, [plugins]);
   // Conversations with friends (chat capability): unread badges, the open chat, alerts.
   const chat = useChat(social, notify, socialLabels);
+  // The running game's title, if any (the Atlas MeCard's "Playing" line).
+  const playingTitle = useMemo(() => {
+    const first = Object.values(sessions)[0];
+    if (!first) return null;
+    return games.find((g) => g.id === first.game_id)?.title ?? first.game_id;
+  }, [sessions, games]);
   // Redeem is one entry for every ready store that offers it (none: no entry).
   const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
   const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
@@ -1084,18 +1090,42 @@ export function AppContent() {
       />
     </div>
   ) : undefined;
-  const chatPanel = chat.target && (
-    <ChatPanel
-      view={chat.conversation}
-      friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
-      storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
-      error={chat.error}
-      onLoadOlder={chat.loadOlder}
-      onSend={chat.send}
-      onResend={chat.resend}
-      onBack={chat.close}
-      onClose={closeFriends}
-    />
+  const chatTarget = chat.target;
+  const chatFriend = chatTarget ? social.find((v) => v.plugin === chatTarget.plugin)?.friends.find((f) => f.id === chatTarget.friendId) : undefined;
+  const chatPlugin = chatTarget ? plugins.find((x) => x.id === chatTarget.plugin) : undefined;
+  const chatPanel = chatTarget && (
+    isSourcebar ? (
+      <AtlasChatView
+        view={chat.conversation}
+        friend={chatFriend}
+        friendName={chatFriend?.name ?? friendNameOf(social, chatTarget.plugin, chatTarget.friendId)}
+        plugin={chatTarget.plugin}
+        logoUrl={sourceLogos[chatTarget.plugin]}
+        storeName={socialLabels[chatTarget.plugin] ?? chatTarget.plugin}
+        canChat={chatPlugin ? offers(chatPlugin, 'chat') : true}
+        inLibrary={(id) => libraryIds.has(id)}
+        onOpenGame={(id) => { closeFriends(); openGame(id); }}
+        chatAlerts={chat.alerts}
+        onSetChatAlerts={chat.setAlerts}
+        error={chat.error}
+        onLoadOlder={chat.loadOlder}
+        onSend={chat.send}
+        onResend={chat.resend}
+        onBack={chat.close}
+      />
+    ) : (
+      <ChatPanel
+        view={chat.conversation}
+        friendName={friendNameOf(social, chatTarget.plugin, chatTarget.friendId)}
+        storeName={socialLabels[chatTarget.plugin] ?? chatTarget.plugin}
+        error={chat.error}
+        onLoadOlder={chat.loadOlder}
+        onSend={chat.send}
+        onResend={chat.resend}
+        onBack={chat.close}
+        onClose={closeFriends}
+      />
+    )
   );
 
   return (
@@ -1189,6 +1219,9 @@ export function AppContent() {
               onBackFromChat={chat.close}
               chatAlerts={chat.alerts}
               onSetChatAlerts={chat.setAlerts}
+              conversations={chat.conversations}
+              chatTarget={chat.target}
+              playingTitle={playingTitle}
             />
           )}
         </div>

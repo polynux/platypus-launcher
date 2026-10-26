@@ -5,12 +5,20 @@
     "loadOlder": "Load older messages",
     "loading": "Loading…",
     "empty": "No messages yet. Say hello.",
+    "sayHi": "Say hi to {{name}}.",
+    "viewGame": "View game",
+    "back": "Back to friends",
+    "muteAlerts": "Mute message alerts",
+    "unmuteAlerts": "Unmute message alerts",
+    "noChat": "{{store}} doesn't offer chat to plugins.",
     "typing": "{{name}} is typing…",
     "placeholder": "Write a message",
     "send": "Send",
     "sending": "Sending…",
     "notSent": "Not sent",
-    "sendAgain": "Send again"
+    "sendAgain": "Send again",
+    "sendFailed": "Not sent.",
+    "resend": "Resend"
   },
   "modal": {
     "title": "Friends",
@@ -22,8 +30,10 @@
     "friendsOff": "Friends are off for {{label}}. Turn them on to see who is online.",
     "reconnect": "Reconnect",
     "showPlaying": "Show what I'm playing to friends",
+    "showPlayingMenu": "Show what I'm playing",
     "showPlayingLabel": "Show what I'm playing to friends on {{label}}",
     "chatAlerts": "Alert me to new messages from friends",
+    "chatAlertsMenu": "Message alerts",
     "chatAlertsLabel": "Message alerts on {{label}}",
     "noFriends": "No friends on {{label}} yet.",
     "noMatch": "No friends match “{{query}}”.",
@@ -39,6 +49,7 @@
   "row": {
     "playing": "Playing {{title}}",
     "lastSeen": "Last seen {{when}}",
+    "lastOnline": "Last online {{ago}}",
     "offline": "Offline",
     "unread_one": "{{count}} unread message",
     "unread_other": "{{count}} unread messages",
@@ -87,6 +98,9 @@
     "friends": "Friends",
     "chats": "Chats",
     "family": "Family",
-    "empty": "No conversations yet."
+    "empty": "No conversations yet.",
+    "emptyBody": "Messages from friends land here.",
+    "newMessages_one": "{{count}} new message",
+    "newMessages_other": "{{count}} new messages"
   }
 }
