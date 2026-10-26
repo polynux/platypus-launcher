@@ -746,7 +746,10 @@ export function AppContent() {
   const [stagedGameId, setStagedGameId] = useState<string | null>(null);
   const stagedGame = isListDetail ? games.find((g) => g.id === stagedGameId) ?? undefined : undefined;
   const gameViewGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
-  const currentGame = isListDetail ? (stagedGame ?? gameViewGame) : gameViewGame;
+  // Covers and table open the full game page, so the routed id wins there;
+  // only the list's stage follows the staged game.
+  const stageShowsGame = isListDetail && !(view.name === 'game' && atlasView !== 'list');
+  const currentGame = stageShowsGame ? (stagedGame ?? gameViewGame) : gameViewGame;
   // The hero art the game page actually shows (the details hero once it
   // loads): the tone samples that, falling back to the library chain.
   const [heroArt, setHeroArt] = useState<string | null>(null);
