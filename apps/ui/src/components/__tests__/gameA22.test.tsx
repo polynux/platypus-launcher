@@ -15,6 +15,7 @@ vi.mock('../../lib/theme', async (importOriginal) => {
   return {
     ...mod,
     useVariant: (axis: string) => {
+      if (axis === 'shell.navigation') return 'sourcebar';
       if (axis === 'game.structure') return 'tabs';
       if (axis === 'game-hero.logo') return 'title';
       if (axis === 'game-settings.presentation') return 'dialog';
@@ -162,14 +163,14 @@ describe('/22 game strip states (issue #137)', () => {
     expect(onJobAction).toHaveBeenCalledWith('resume', 'j-paused');
   });
 
-  it('failed job on an uninstalled game: Retry install + last attempt', async () => {
+  it('failed job on an uninstalled game: Retry + last attempt', async () => {
     const g = game({ is_installed: false, installable: true });
     const job = {
       id: 'j1', kind: 'install', source: 'echo', game_id: g.id, store_game_id: '1', title: g.title,
       state: 'failed', bytes: 0, total: 0, speed: 0, percent: 0, attempts: 1, created_at: 0, updated_at: 0, error: '',
     };
     page(g, { job });
-    expect(await screen.findByRole('button', { name: /Retry install/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Retry/ })).toBeInTheDocument();
     expect(await screen.findByText(/didn't finish/)).toBeInTheDocument();
   });
 

@@ -8,6 +8,7 @@
     "addedSize": "+{{size}}",
     "short": "Pas assez de place ici pour ce jeu.",
     "action": "Installer",
+    "toFolder": "Installer dans {{folder}}",
     "queued": "Installation de {{title}} en file d'attente"
   },
   "options": {

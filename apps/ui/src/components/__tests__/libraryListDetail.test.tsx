@@ -9,6 +9,10 @@ import { TooltipProvider } from '../ds/tooltip';
 import type { Game } from '../../types';
 
 vi.mock('../../effect/runtime', () => ({ LauncherApi: {} }));
+vi.mock('../../lib/theme', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/theme')>();
+  return { ...actual, useVariant: (axis: string) => axis === 'shell.navigation' ? 'sourcebar' : actual.useVariant(axis as never) };
+});
 
 afterEach(() => cleanup());
 const render = (ui: React.ReactElement) => rtlRender(ui, { wrapper: TooltipProvider });
@@ -85,6 +89,17 @@ describe('library list-detail', () => {
     await user.keyboard('{Enter}');
     expect(onPlay).toHaveBeenCalledTimes(1);
     expect(onPlay).toHaveBeenCalledWith('gamma');
+  });
+
+  it('moves and launches from the page body, and slash focuses the filter', () => {
+    const { onPlay } = list();
+    fireEvent.keyDown(document.body, { key: 'j' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Beta');
+    fireEvent.keyDown(document.body, { key: '/' });
+    expect(document.activeElement).toBe(screen.getByPlaceholderText('Filter'));
+    document.body.focus();
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(onPlay).toHaveBeenCalledWith('beta');
   });
 
   it('marks only the selected row current', () => {

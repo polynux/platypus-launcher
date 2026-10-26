@@ -10,7 +10,7 @@ import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
-import { AlertTriangle, ChevronDown, ChevronLeft, Clock, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, FolderOpen, GitCompare, Info, Loader2, Lock, Play, Plus, RefreshCw, SlidersHorizontal, Square, Star, Trophy, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronLeft, Clock, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, FolderOpen, GitCompare, Info, Loader2, Lock, Play, Plus, RefreshCw, RotateCcw, SlidersHorizontal, Square, Star, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Compat, CrashHints, Game, GameDetails, GameJobKind, GameSettings, GameStatus, Job, SaveBackup, SessionEvent, StorePlugin, Tweak } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -29,6 +29,7 @@ import { useCompat } from '../lib/useCompat';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
 import { useVariant } from '../lib/theme';
 import { formatBytes, lastPlayedAgo, storeLabel } from '../lib/games';
+import { plainError } from '../lib/plainError';
 import { currentLocale, formatClock, formatDate, formatPercentValue } from '../lib/format';
 import { playedCopy, pickableCopies } from '../lib/family';
 import { setTweak, tweakApplied } from '../lib/settings';
@@ -134,7 +135,8 @@ function useNow(active: boolean): number {
 function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+  const h = Math.floor(s / 3600);
+  return h ? `${h}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}` : `${Math.floor(s / 60)}:${pad(s % 60)}`;
 }
 
 /** The cloud save state for the strip: the last known info, refreshed on
@@ -284,7 +286,7 @@ export function AtlasMainAction({ job, session, sessionStartedAt, launching, onJ
           variant="neutral"
           size="none"
           onClick={onStop}
-          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-glass px-5 text-[15px] font-extrabold text-text ring-1 ring-accent/60 hover:bg-surface-strong"
+          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-black/30 px-5 pl-5 pr-[26px] text-[15px] font-extrabold text-text ring-[1.5px] ring-inset ring-accent hover:bg-surface-strong light:bg-white/60"
         >
           {starting ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Square className="h-3 w-3 fill-current" aria-hidden />}
           <span>{starting ? t('game:strip.starting') : t('game:play.stop')}</span>
@@ -316,17 +318,17 @@ function StripPlay({ d }: { d: GameTabsData }) {
   } else if (!game.installable) {
     idle = <span className="inline-flex h-[42px] items-center rounded-[9px] bg-surface px-5 text-[13px] font-bold text-text-muted">{t('game:install.cantInstall')}</span>;
   } else {
-    const size = d.installSize.state === 'known' && d.installSize.total ? formatBytes(d.installSize.total) : null;
+    const size = d.installSize.state === 'known' && Number.isFinite(d.installSize.total) && d.installSize.total > 0 ? formatBytes(d.installSize.total) : null;
     idle = (
       <Button
         variant="primary"
         size="none"
-        onClick={d.onInstall}
-        className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110"
+        onClick={() => d.job?.state === 'failed' ? d.onJobAction('retry', d.job.id) : d.onInstall()}
+        className={cx('inline-flex h-[42px] items-center gap-2 rounded-[9px] px-6 pl-5 text-[15px] font-extrabold hover:brightness-110', d.job?.state === 'failed' ? 'bg-[color-mix(in_srgb,var(--color-danger)_70%,var(--color-surface-strong))] text-white' : 'bg-accent text-on-accent')}
       >
-        <Download className="h-[15px] w-[15px]" aria-hidden />
-        <span>{d.job?.state === 'failed' ? t('game:install.retryInstall') : t('game:install.install')}</span>
-        {size && <span className="font-mono text-[12px] font-medium">{size}</span>}
+        {d.job?.state === 'failed' ? <RotateCcw className="h-[15px] w-[15px]" aria-hidden /> : <Download className="h-[15px] w-[15px]" aria-hidden />}
+        <span>{d.job?.state === 'failed' ? t('game:install.retry') : t('game:install.install')}</span>
+        {d.job?.state !== 'failed' && size && <span className="font-mono text-[12px] font-medium">{size}</span>}
       </Button>
     );
   }
@@ -459,10 +461,12 @@ function ActionStrip({ d }: { d: GameTabsData }) {
   const active = d.job && (d.job.state === 'queued' || d.job.state === 'running' || d.job.state === 'paused');
   // The game's own note lives in LaunchNotesRow under the strip; only the
   // install/version links stay inline at the end of the strip.
+  const failedInstall = !d.game.is_installed && d.job?.state === 'failed' && (d.job.kind === 'install' || d.job.kind === 'update');
   const showNote = !active && d.installing;
   // The live transfer figures sit under the strip while a job runs (R4-12):
   // "1.3 MB of 41.9 MB · 140 KB/s · about 4 min left".
   const jobNote = (() => {
+    if (failedInstall && d.job) return plainError(d.job.error, t('game:install.lastAttempt'));
     const job = active ? d.job : undefined;
     if (!job) return null;
     const parts: string[] = [];
@@ -543,8 +547,9 @@ function ActionStrip({ d }: { d: GameTabsData }) {
         </p>
       )}
       {jobNote && (
-        <p className="flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] text-text-muted tabular-nums">
-          <span className="min-w-0 truncate">{jobNote}</span>
+        <p title={failedInstall ? d.job?.error ?? undefined : undefined} className={`flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] tabular-nums ${failedInstall ? 'text-[#ffb4aa] light:text-danger' : 'text-text-muted'}`}>
+          {failedInstall && <AlertTriangle className="size-[13px] flex-none" aria-hidden />}
+          <span className="min-w-0 truncate">{failedInstall ? t('game:install.lastAttemptPrefix', { error: jobNote }) : jobNote}</span>
         </p>
       )}
     </div>
@@ -1629,11 +1634,6 @@ export function GameTabsView(d: GameTabsData) {
           padding, with no outer card and no page padding around them. */}
       <div className="empty:hidden">
         {d.plugin && <GameOutsideAlert game={d.game} plugin={d.plugin} onAllowFolder={d.onAllowFolder} />}
-        {!d.game.is_installed && d.job?.state === 'failed' && (
-          <div className="border-b border-hairline bg-raised px-6 py-3">
-            <ErrorNotice message={d.job.error ?? ''} fallback={t('game:install.lastAttempt')} />
-          </div>
-        )}
         <GameInstallNote
           game={d.game}
           plugin={d.plugin}

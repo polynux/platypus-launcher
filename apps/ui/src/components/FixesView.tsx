@@ -1,21 +1,21 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useState } from 'react';
-import type { Game } from '../types';
-import { AlertTriangle, Check, Info } from 'lucide-react';
+import type { Game, Job, ProtonVersion } from '../types';
+import { AlertTriangle, ArrowDownToLine, Check, Download, FolderOpen, Info, Wrench } from 'lucide-react';
 import { ATLAS_PAGE, Cover, EmptyState, ListRow, Section, SegRow, TierBadge, TweakDot, ViewHeader } from './ui';
 import { Badge } from './ds/badge';
 import { Button } from './ds/button';
-import { attentionReason, coverImages, needsAttention, storeLabel } from '../lib/games';
+import { attentionIssues, attentionReason, heroImages, coverImages, needsAttention, storeLabel } from '../lib/games';
 import { useVariant } from '../lib/theme';
 
 type Filter = 'attention' | 'all';
 
-export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
+export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: { games: Game[]; onOpenGame: (id: string) => void; jobs?: Job[]; runners?: ProtonVersion[]; onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void; onAllowFolder?: (game: Game) => void; onSaveSettings?: (game: Game, runner: string) => void; onOpenRunners?: () => void }) {
   const { t } = useTranslation(['nav', 'fixes']);
   // Atlas renders the /22 Needs attention page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {
-    return <AtlasAttention games={games} onOpenGame={onOpenGame} />;
+    return <AtlasAttention games={games} jobs={jobs} runners={runners} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
   }
   const [filter, setFilter] = useState<Filter>('attention');
   const withData = games.filter((g) => g.fix_info || g.compat_badges?.some((b) => b.kind === 'rating'));
@@ -81,46 +81,63 @@ export function FixesView({ games, onOpenGame }: { games: Game[]; onOpenGame: (i
  *  per-kind actions (retry install, install runner, move, repair, update,
  *  compare) have no backing in this view: those fixes live on the game page,
  *  so the card opens it. */
-function AtlasAttention({ games, onOpenGame }: { games: Game[]; onOpenGame: (id: string) => void }) {
+function AtlasAttention({ games, jobs, runners, onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: { games: Game[]; jobs: Job[]; runners: ProtonVersion[]; onOpenGame: (id: string) => void; onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void; onAllowFolder?: (game: Game) => void; onSaveSettings?: (game: Game, runner: string) => void; onOpenRunners?: () => void }) {
   const { t } = useTranslation(['nav', 'fixes']);
-  const issues = games.filter(needsAttention);
+  const issues = attentionIssues(games, jobs, runners);
+  const gameCount = new Set(issues.map((issue) => issue.game.id)).size;
   return (
     <div className={ATLAS_PAGE}>
       <header>
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('fixes:atlas.title')}</h1>
         <p className="mt-[3px] text-[13px] text-text-muted">
-          {issues.length > 0 ? t('fixes:atlas.sub', { count: issues.length }) : t('fixes:atlas.emptySub')}
+          {gameCount > 0 ? t('fixes:atlas.sub', { count: gameCount }) : t('fixes:atlas.emptySub')}
         </p>
       </header>
       {issues.length === 0 ? (
         <EmptyState icon={Check} label={t('fixes:atlas.emptyTitle')}>{t('fixes:atlas.emptyBody')}</EmptyState>
       ) : (
         <ul className="grid gap-2.5">
-          {issues.map((g) => {
-            const rating = g.compat_badges?.find((b) => b.kind === 'rating');
-            const isFix = !!g.fix_info;
-            const kind = rating?.tone || g.fix_info?.tier
-              ? t('fixes:atlas.kindRated', { source: rating?.source || g.fix_info?.source })
-              : t('fixes:atlas.kindFix');
-            const KindIcon = isFix ? AlertTriangle : Info;
+          {issues.map((issue, index) => {
+            const { game: g } = issue;
+            const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, rating: AlertTriangle }[issue.kind];
+            const title = ({
+              install: t('fixes:atlas.issue.install'), outside: t('fixes:atlas.issue.outside'), runner: t('fixes:atlas.issue.runner'),
+              update: t('fixes:atlas.issue.update'), rating: t('fixes:atlas.issue.rating'),
+            })[issue.kind];
+            const fix = issue.kind === 'runner'
+              ? t('fixes:atlas.useDefaultRunner', { runner: runners.find((r) => r.is_default)?.name ?? t('fixes:atlas.defaultRunner') })
+              : ({
+                install: t('fixes:atlas.fix.install'), outside: t('fixes:atlas.fix.outside'), runner: t('fixes:atlas.fix.runner'),
+                update: t('fixes:atlas.fix.update'), rating: t('fixes:atlas.fix.rating'),
+              })[issue.kind];
+            const issueJob = jobs.filter((j) => j.game_id === g.id && j.state === 'failed' && (j.kind === 'install' || j.kind === 'update')).sort((a, b) => b.updated_at - a.updated_at)[0];
+            const fallbackRunner = runners.find((r) => r.is_default);
+            const action = () => {
+              if (issue.kind === 'install' && issueJob) onJobAction?.('retry', issueJob.id);
+              else if (issue.kind === 'outside') onAllowFolder?.(g);
+              else if (issue.kind === 'runner' && fallbackRunner) onSaveSettings?.(g, fallbackRunner.id);
+              else if (issue.kind === 'update') onJob?.('update', g);
+              else onOpenGame(g.id);
+            };
             return (
-              <li key={g.id} className="grid grid-cols-[116px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3 ring-1 ring-hairline">
+              <li key={`${g.id}-${issue.kind}-${index}`} className="grid grid-cols-[150px_minmax(0,1fr)_auto] items-center gap-4 rounded-xl bg-surface p-3">
                 <button type="button" onClick={() => onOpenGame(g.id)} className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label={g.title}>
-                  <Cover src={coverImages(g)} title={g.title} className="aspect-[116/64] w-full" />
+                  <Cover src={heroImages(g)} title={g.title} className="h-[70px] w-[150px] object-cover" />
                 </button>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-attention">
-                    <KindIcon className="h-3 w-3 flex-none" aria-hidden />
-                    <span className="truncate">{kind}</span>
+                  <div className={`inline-flex items-center gap-1.5 text-[12px] font-bold ${issue.kind === 'install' ? 'text-danger' : 'text-attention'}`}>
+                    <KindIcon className="h-[13px] w-[13px] flex-none" aria-hidden />
+                    <span className="truncate">{title}</span>
                   </div>
                   <button type="button" onClick={() => onOpenGame(g.id)} className="truncate text-left text-[15px] font-bold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {g.title}
                   </button>
-                  <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-text-muted">{attentionReason(g)}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.reason}</p>
                 </div>
-                <Button variant="primary" onClick={() => onOpenGame(g.id)}>
-                  {t('fixes:atlas.openGame')}
-                </Button>
+                <div className="grid gap-1">
+                  <Button variant="primary" onClick={action}>{fix}</Button>
+                  {issue.kind !== 'rating' && <Button variant="ghost" onClick={() => issue.kind === 'runner' ? onOpenRunners?.() : onOpenGame(g.id)}>{issue.kind === 'runner' ? t('fixes:atlas.openRunners') : t('fixes:atlas.openGame')}</Button>}
+                </div>
               </li>
             );
           })}

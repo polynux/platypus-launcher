@@ -40,7 +40,7 @@ import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { heroImages, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
+import { attentionIssues, heroImages, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
 import type { TierFilter } from './lib/compat';
 import type { StatusFilter } from './components/LibraryView';
@@ -426,7 +426,6 @@ export function AppContent() {
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
-            notify(t('game:nowRunning', { title }));
             log({ type: 'session', game: title, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
           }
           return;
@@ -992,7 +991,7 @@ export function AppContent() {
       case 'activity':
         return <ActivityView events={activity} games={games} />;
       case 'fixes':
-        return <FixesView games={games} onOpenGame={openGame} />;
+        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => void saveSettings(game.id, { ...game.settings, runner_id: runner })} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
         return <SystemView runners={runners} games={installedGames} onRefresh={() => loadData('rescan')} scanning={scanning} />;
       case 'plugins':
@@ -1144,7 +1143,7 @@ export function AppContent() {
         loading={!loaded}
         downloadCount={activeJobs.length}
         authNeeded={warnings.some((w) => w.needs_auth) || plugins.some((x) => x.status === 'unapproved' || x.status === 'changed')}
-        fixCount={games.filter(needsAttention).length}
+        fixCount={attentionIssues(games, jobs, runners).length}
         runnerCount={runners.length}
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
@@ -1198,7 +1197,7 @@ export function AppContent() {
             {renderView()}
           </main>
           {friendsOpen && (
-            <AtlasFriendsPanel
+            <div data-keys-local><AtlasFriendsPanel
               views={social}
               labels={socialLabels}
               plugins={plugins}
@@ -1222,7 +1221,7 @@ export function AppContent() {
               conversations={chat.conversations}
               chatTarget={chat.target}
               playingTitle={playingTitle}
-            />
+            /></div>
           )}
         </div>
       ) : (

@@ -47,6 +47,7 @@
     "custom": "Sideloaded"
   },
   "home": {
+    "running": "{{title}} is running.",
     "ready_one": "{{count}} game ready to play.",
     "ready_other": "{{count}} games ready to play.",
     "fromBacklog": "From your backlog",
