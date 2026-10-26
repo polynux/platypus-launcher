@@ -489,6 +489,8 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
     );
   }
   const reason = suggested ? attentionReason(suggested, t) || backlogReason(suggested, t) : '';
+  const suggestedRunning = !!suggested && ['running', 'starting'].includes(sessions?.[suggested.id]?.state ?? '');
+  const suggestedDescription = suggestedRunning ? t('dashboard:home.running', { title: suggested?.title }) : reason;
   const installSize = suggested && !suggested.is_installed && suggested.size_bytes ? formatBytes(suggested.size_bytes) : null;
   return (
     <div className={ATLAS_PAGE}>
@@ -497,20 +499,20 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
         <p className="mt-[3px] text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
       </header>
       {suggested && (
-        <section aria-label={suggested.title} className="relative overflow-hidden rounded-xl text-white">
-          <img src={heroImages(suggested)[0]} alt="" aria-hidden loading="lazy" className="h-[180px] w-full object-cover" style={{ objectPosition: 'center 30%' }} />
-          <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/50 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 grid max-w-[52ch] content-end gap-2 p-5">
+        <section aria-label={suggested.title} className="relative min-h-[230px] overflow-hidden rounded-2xl text-white">
+          <img src={heroImages(suggested)[0]} alt="" aria-hidden loading="lazy" className="absolute inset-0 h-full min-h-[230px] w-full object-cover" style={{ objectPosition: 'center 30%' }} />
+          <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,10,14,.92)_0%,rgba(8,10,14,.6)_45%,transparent_75%)]" />
+          <div className="relative grid min-h-[230px] max-w-[460px] content-end gap-2 px-7 py-[26px]">
             <small className="text-[12px] font-semibold text-white opacity-70">{t('dashboard:home.fromBacklog')}</small>
-            <h2 className="text-[24px] font-extrabold leading-tight">{suggested.title}</h2>
-            {reason && <p className="line-clamp-2 text-[13.5px] leading-relaxed text-white/85">{reason}</p>}
+            <h2 className="text-[28px] font-extrabold leading-tight tracking-[-0.01em]">{suggested.title}</h2>
+            {suggestedDescription && <p className={`leading-normal text-white/[.82] ${suggestedRunning ? '' : 'line-clamp-2'}`}>{suggestedDescription}</p>}
             <div className="mt-1 flex gap-2.5">
               {mainAction(suggested, (
-                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }}>
+                <Button variant="primary" onClick={() => { if (suggested.is_installed) { if (onPlay) onPlay(suggested.id); else onOpenGame(suggested.id); } else if (onInstall) onInstall(suggested); else onOpenGame(suggested.id); }} className="h-[38px] px-4">
                   {suggested.is_installed ? t('game:play.play') : (<><Download className="size-3.5" aria-hidden />{t('game:install.install')}{installSize && <span className="font-mono text-[12px]">{installSize}</span>}</>)}
                 </Button>
               ))}
-              <Button variant="neutral" onClick={() => onOpenGame(suggested.id)} className="bg-white/10 text-white ring-white/20 hover:bg-white/20">
+              <Button variant="ghost" onClick={() => onOpenGame(suggested.id)} className="h-[38px] bg-transparent px-4 text-white hover:bg-white/10 hover:text-white">
                 {t('dashboard:hero.openGame')}
               </Button>
             </div>
@@ -529,7 +531,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
         <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{hasPlayData ? t('dashboard:continuePlaying') : t('dashboard:yourGames')}</h2>
         <ul className="grid gap-3.5 md:grid-cols-3">
           {continueGames.map((g) => {
-            const sub = [lastPlayedAgo(g), g.playtime_minutes ? `${Math.round(g.playtime_minutes / 60)} h` : ''].filter(Boolean).join(' · ') || '—';
+            const sub = ['running', 'starting'].includes(sessions?.[g.id]?.state ?? '') ? t('dashboard:home.running', { title: g.title }) : [lastPlayedAgo(g), g.playtime_minutes ? `${Math.round(g.playtime_minutes / 60)} h` : ''].filter(Boolean).join(' · ') || '—';
             return (
               <li key={g.id}>
                 <button type="button" onClick={() => onOpenGame(g.id)} aria-label={t('dashboard:hero.openGame') + ': ' + g.title} className="block w-full overflow-hidden rounded-xl text-left ring-1 ring-hairline transition hover:ring-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
@@ -545,7 +547,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
                       type="button"
                       onClick={() => (onPlay ? onPlay(g.id) : onOpenGame(g.id))}
                       aria-label={`${t('game:play.play')}: ${g.title}`}
-                      className="inline-flex h-[34px] flex-none items-center gap-1.5 rounded-lg bg-accent px-3.5 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                      className="inline-flex h-[38px] flex-none items-center gap-1.5 rounded-lg bg-accent px-4 text-[13px] font-bold text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                     >
                       <Play className="size-3.5 fill-current" aria-hidden />
                       {t('game:play.play')}

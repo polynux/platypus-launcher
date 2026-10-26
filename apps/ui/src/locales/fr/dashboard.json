@@ -47,6 +47,7 @@
     "custom": "Ajout manuel"
   },
   "home": {
+    "running": "{{title}} est en cours d'exécution.",
     "ready_one": "{{count}} jeu prêt à jouer.",
     "ready_other": "{{count}} jeux prêts à jouer.",
     "fromBacklog": "Dans votre backlog",

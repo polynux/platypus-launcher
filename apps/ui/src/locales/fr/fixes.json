@@ -27,6 +27,11 @@
     "kindRated": "Note {{source}}",
     "kindFix": "Correctif communautaire",
     "openGame": "Ouvrir le jeu",
+    "openRunners": "Ouvrir les runners",
+    "defaultRunner": "runner par défaut",
+    "useDefaultRunner": "Utiliser {{runner}}",
+    "issue": { "install": "Échec de l'installation", "outside": "En dehors de vos dossiers de jeux", "runner": "Runner manquant", "update": "Mise à jour disponible", "rating": "Fonctionne mal sous Linux" },
+    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "rating": "Ouvrir le jeu" },
     "emptyTitle": "Tout fonctionne",
     "emptyBody": "Les jeux qui ne s’installent pas, perdent leur runner ou attendent une mise à jour apparaissent ici."
   }

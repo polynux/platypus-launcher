@@ -225,12 +225,14 @@
     "installTo": "Install to…",
     "install": "Install",
     "retryInstall": "Retry install",
+    "retry": "Retry",
     "cantInstall": "Can't install here",
     "noteWithVersion": "installs into {{folder}} · <v>Choose version</v> · <d>change default</d>",
     "notePlain": "installs into {{folder}} · <d>change default</d>",
     "stripWithVersion": "<v>Choose version</v> · <d>Change folder</d>",
     "stripPlain": "<d>Change folder</d>",
-    "lastAttempt": "The last attempt didn't finish."
+    "lastAttempt": "The last attempt didn't finish.",
+    "lastAttemptPrefix": "Last attempt failed: {{error}}"
   },
   "installSize": {
     "checking": "checking the install size…",

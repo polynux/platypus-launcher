@@ -16,6 +16,7 @@ vi.mock('../../lib/theme', async (importOriginal) => {
   return {
     ...mod,
     useVariant: (axis: string) => {
+      if (axis === 'shell.navigation') return 'sourcebar';
       if (axis === 'game.structure') return themeState.structure;
       if (axis === 'game-hero.logo') return themeState.logo;
       if (axis === 'game-settings.presentation') return 'dialog';
@@ -314,7 +315,7 @@ describe('atlas parity round 3 (issue #132)', () => {
         onManageCollections={() => {}}
       />,
     );
-    expect(await screen.findByRole('button', { name: /Retry install/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Retry/ })).toBeInTheDocument();
     expect(await screen.findByText(/didn't finish/)).toBeInTheDocument();
   });
 

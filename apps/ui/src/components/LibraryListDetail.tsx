@@ -16,6 +16,7 @@ import { collectionPredicate, missingNames } from '../lib/collections';
 import { TierFilterControl, StatusFilterControl, matchesExtraFilters, sortGames, defaultDir, type Sort, type StatusFilter } from './LibraryView';
 import { AtlasActiveChips, AtlasGameBadges } from './AtlasLibraryViews';
 import type { TierFilter } from '../lib/compat';
+import { useVariant } from '../lib/theme';
 
 type ListSort = 'recent' | 'title' | 'hours' | 'year' | 'size' | 'tier';
 
@@ -81,6 +82,7 @@ function subLine(t: (k: string) => string, g: Game): { text: string; absent: boo
 }
 
 export function LibraryListDetail(p: ListDetailProps) {
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const { t } = useTranslation(['library', 'game', 'collections', 'nav']);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<ListSort>('recent');
@@ -161,6 +163,22 @@ export function LibraryListDetail(p: ListDetailProps) {
   const selected = filtered.find((g) => g.id === selectedId) ?? null;
 
   useEffect(() => {
+    if (!atlas) return;
+    const onGlobalKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return;
+      if (target.closest('[role=listbox],[role=menu],[role=dialog],[data-keys-local]') || document.querySelector('[role=dialog]')) return;
+      if (target.closest('[data-game-row]')) return;
+      if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+      else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+      else if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); searchRef.current?.focus(); }
+      else if (e.key === 'Enter' && target === document.body && selected) { e.preventDefault(); p.onPlay(selected.id); }
+    };
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
+  }, [atlas, filtered, selectedId, selected, p.onPlay]);
+
+  useEffect(() => {
     p.onStageChange?.(selected?.id ?? null);
   }, [selected?.id]);
 
@@ -216,6 +234,7 @@ export function LibraryListDetail(p: ListDetailProps) {
             <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
             <span className="sr-only">{t('library:listDetail.filterAria')}</span>
             <input
+              data-search
               ref={searchRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}

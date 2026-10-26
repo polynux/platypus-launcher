@@ -27,6 +27,11 @@
     "kindRated": "{{source}} rating",
     "kindFix": "Community fix",
     "openGame": "Open game",
+    "openRunners": "Open runners",
+    "defaultRunner": "default runner",
+    "useDefaultRunner": "Use {{runner}}",
+    "issue": { "install": "Install failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "rating": "Runs badly on Linux" },
+    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "rating": "Open game" },
     "emptyTitle": "Everything works",
     "emptyBody": "Games that fail to install, lose their runner or need an update show up here."
   }
