@@ -353,7 +353,7 @@ describe('sourcebar shell variant (/22, issue #135)', () => {
         view={{ name: 'library' }}
         downloadCount={1}
         fixCount={3}
-        jobs={[{ id: 'j1', kind: 'download', source: 'steam', game_id: 'g1', store_game_id: 'g1', title: 'Game', state: 'running', bytes: 50, total: 100, speed: 1, percent: 50, attempts: 1, created_at: 0, updated_at: 0 }]}
+        jobs={[{ id: 'j1', kind: 'install', source: 'steam', game_id: 'g1', store_game_id: 'g1', title: 'Game', state: 'running', bytes: 50, total: 100, speed: 1, percent: 50, attempts: 1, created_at: 0, updated_at: 0 }]}
       />
     );
     expect(screen.getByRole('button', { name: /Downloads, 1 active/ }).querySelector('circle')).toBeTruthy();
@@ -387,6 +387,24 @@ describe('sourcebar activity footer (issue #125)', () => {
     expect(screen.getByText('Game Two')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
     (expect(await (await import('vitest-axe')).axe(container)) as any).toHaveNoViolations();
+  });
+
+  it('shows the library title and opens Downloads from a job item (R4-14)', async () => {
+    const { SourceFooter } = await import('../Shell');
+    const user = userEvent.setup();
+    const opened: string[] = [];
+    render(
+      <SourceFooter
+        sessions={[]}
+        jobs={[{ id: 'j1', kind: 'install', source: 'steam', game_id: 'g2', store_game_id: 'g2', title: 'Store Title', state: 'running', bytes: 25, total: 100, speed: 1, percent: 25, attempts: 1, created_at: 0, updated_at: 0 }]}
+        games={[{ id: 'g2', title: 'Custom Title' }] as never}
+        onOpenDownloads={() => opened.push('downloads')}
+      />
+    );
+    expect(screen.getByText('Custom Title')).toBeInTheDocument();
+    expect(screen.queryByText('Store Title')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Custom Title/ }));
+    expect(opened).toEqual(['downloads']);
   });
 
   const atlasBarProps = {

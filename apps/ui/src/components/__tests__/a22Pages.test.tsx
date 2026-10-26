@@ -158,11 +158,16 @@ describe('a22 downloads', () => {
     render(
       <DownloadsView
         jobs={[
-          mkJob({ id: 'a', state: 'running', title: 'Civ VII' }),
-          mkJob({ id: 'b', state: 'done', title: 'Deltarune', percent: 100 }),
-          mkJob({ id: 'c', state: 'failed', title: 'Subnautica', error: 'No space left' }),
+          mkJob({ id: 'a', game_id: 'civ', state: 'running', title: 'Civ VII' }),
+          mkJob({ id: 'b', game_id: 'del', state: 'done', title: 'Deltarune', percent: 100 }),
+          // The job title is the store title; the rows show the library title (R4-14).
+          mkJob({ id: 'c', game_id: 'sub', state: 'failed', title: 'Store Subnautica', error: 'No space left' }),
         ]}
-        games={[mkGame('g', { title: 'Civ VII', hero_url: 'https://example.com/hero.jpg' })]}
+        games={[
+          mkGame('civ', { title: 'Civ VII', hero_url: 'https://example.com/hero.jpg' }),
+          mkGame('del', { title: 'Deltarune' }),
+          mkGame('sub', { title: 'Subnautica' }),
+        ]}
         onAction={onAction}
         onClear={noop}
         onOpenGame={noop}
@@ -171,6 +176,7 @@ describe('a22 downloads', () => {
     expect(screen.getByText('Queue')).toBeInTheDocument();
     expect(screen.getByText('Recent')).toBeInTheDocument();
     expect(screen.getByText('Civ VII')).toBeInTheDocument();
+    expect(screen.queryByText('Store Subnautica')).toBeNull();
     expect(screen.getByText('No space left')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pause Civ VII' }));
     expect(onAction).toHaveBeenCalledWith('pause', 'a');

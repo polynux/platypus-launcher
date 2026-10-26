@@ -410,7 +410,12 @@
     "saveLocal": "Local saves only",
     "saveOff": "Cloud saves off",
     "launchFrom": "Launch from",
-    "update": "Update"
+    "update": "Update",
+    "jobPaused": "Paused",
+    "jobQueued": "Queued",
+    "jobInstalling": "Installing",
+    "jobUpdating": "Updating",
+    "jobVerifying": "Verifying"
   },
   "storeTab": {
     "pictures": "Pictures",

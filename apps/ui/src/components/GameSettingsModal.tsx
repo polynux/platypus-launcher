@@ -38,7 +38,7 @@ export interface GameSettingsModalProps {
   /** A tweak switched on or off. */
   onChangeSettings: (s: GameSettings, what: string) => void;
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** A job was queued or a pin changed: the library should reload. */
   onChanged: () => void;

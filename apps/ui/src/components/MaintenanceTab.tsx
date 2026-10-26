@@ -32,7 +32,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   job?: Job;
   jobs: Job[];
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Closes the settings: a removed game has nothing left to set. */
   onClose: () => void;

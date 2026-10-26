@@ -410,7 +410,12 @@
     "saveLocal": "Sauvegardes locales uniquement",
     "saveOff": "Sauvegardes cloud désactivées",
     "launchFrom": "Lancer depuis",
-    "update": "Mettre à jour"
+    "update": "Mettre à jour",
+    "jobPaused": "En pause",
+    "jobQueued": "En file d’attente",
+    "jobInstalling": "Installation",
+    "jobUpdating": "Mise à jour",
+    "jobVerifying": "Vérification"
   },
   "storeTab": {
     "pictures": "Images",

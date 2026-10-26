@@ -4,8 +4,8 @@
 // list-detail presentation renders these; every colour comes from a token.
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Cloud, Download, FolderPlus, Play, Search, Settings2, X } from 'lucide-react';
-import type { ActivityEvent, Collection, Game, Job, ProtonVersion, StoreType } from '../types';
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpDown, Download, FolderPlus, Play, Search, Settings2, Users, X } from 'lucide-react';
+import type { ActivityEvent, Collection, Game, Job, ProtonVersion, SessionEvent, StoreType } from '../types';
 import { Cover, cx, relTime } from './ui';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { PluginLogo } from './PluginLogo';
@@ -13,6 +13,7 @@ import { coverImages, formatBytes, heroImages, hoursPlayed, lastPlayedAgo, needs
 import { formatCount } from '../lib/format';
 import { TIER_LABEL, tierFilterValue } from '../lib/compat';
 import { collectionPredicate } from '../lib/collections';
+import { isLiveState } from '../lib/sessions';
 import { matchesExtraFilters, sortGames, type Sort, type SortKey, type StatusFilter } from './LibraryView';
 import type { TierFilter } from '../lib/compat';
 
@@ -52,37 +53,40 @@ export function atlasFilteredGames(games: Game[], o: {
 }
 
 /** Attention / update / download badges at the right of a row or card, as in
- *  the screenshots (issue #136 §1-2). Shared by the list, grid and table. */
-export function AtlasGameBadges({ game, job }: { game: Game; job?: Job }) {
-  const { t } = useTranslation('library');
-  const active = job && (job.state === 'queued' || job.state === 'running');
+ *  the screenshots (issue #136 §1-2). Shared by the list, grid and table.
+ *  One mark per game (lab `AttnMark`): the playing dot, else the download
+ *  ring, else the update mark; then the attention mark and the lent chip. */
+export function AtlasGameBadges({ game, job, session }: { game: Game; job?: Job; session?: SessionEvent | null }) {
+  const { t } = useTranslation(['library', 'game']);
   const badges: React.ReactNode[] = [];
-  if (game.update_available) {
+  if (session && isLiveState(session.state)) {
     badges.push(
-      <span key="update" title={t('library:atlasViews.badges.update')} aria-label={t('library:atlasViews.badges.update')} className="grid size-6 flex-none place-items-center rounded-md bg-accent-dim text-accent-strong ring-1 ring-accent-strong/30">
-        <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden />
-      </span>,
+      <span key="playing" title={t('game:play.playing')} aria-label={t('game:play.playing')} className="size-2 flex-none rounded-full bg-ok shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-ok)_25%,transparent)] animate-pulse" />,
     );
-  }
-  if (active) {
+  } else if (job && (job.state === 'queued' || job.state === 'running' || job.state === 'paused')) {
     const pct = job.percent >= 0 ? Math.round(job.percent) : 0;
     badges.push(
-      <span key="dl" title={t('library:atlasViews.badges.downloading', { percent: pct })} aria-label={t('library:atlasViews.badges.downloading', { percent: pct })} className="grid size-6 flex-none place-items-center rounded-md bg-surface-strong text-text ring-1 ring-hairline">
-        <Download className="h-3.5 w-3.5" aria-hidden />
+      <span key="dl" title={t('library:atlasViews.badges.downloading', { percent: pct })} aria-label={t('library:atlasViews.badges.downloading', { percent: pct })} style={{ '--p': pct / 100 } as React.CSSProperties} className="size-4 flex-none rounded-full [background:conic-gradient(var(--color-accent)_calc(var(--p)*360deg),color-mix(in_srgb,var(--color-text)_14%,transparent)_0)] [mask:radial-gradient(circle,transparent_4.5px,black_5px)]" />,
+    );
+  } else if (game.update_available) {
+    badges.push(
+      <span key="update" title={t('library:atlasViews.badges.update')} aria-label={t('library:atlasViews.badges.update')} className="grid size-[18px] flex-none place-items-center rounded-full bg-accent/15 text-accent">
+        <ArrowDownToLine className="size-3" strokeWidth={2.2} aria-hidden />
       </span>,
     );
   }
   if (game.shared_by) {
     badges.push(
-      <span key="lent" title={t('library:sharedBy', { name: game.shared_by.name })} aria-label={t('library:sharedBy', { name: game.shared_by.name })} className="grid size-6 flex-none place-items-center rounded-md bg-surface-strong text-text-muted ring-1 ring-hairline">
-        <Cloud className="h-3.5 w-3.5" aria-hidden />
+      <span key="lent" title={t('library:sharedBy', { name: game.shared_by.name })} className="inline-flex h-5 flex-none items-center gap-1 rounded-md bg-surface-strong px-1.5 text-[11px] font-semibold text-text-muted">
+        <Users className="size-[11px]" aria-hidden />
+        {game.shared_by.name}
       </span>,
     );
   }
   if (needsAttention(game)) {
     badges.push(
-      <span key="attn" title={attentionReason(game)} aria-label={t('library:listDetail.needsAttention')} className="grid size-6 flex-none place-items-center rounded-md bg-attention/15 text-attention ring-1 ring-attention/30">
-        <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+      <span key="attn" title={attentionReason(game)} aria-label={t('library:listDetail.needsAttention')} className="grid size-5 flex-none place-items-center rounded-md bg-attention text-[#1b1300]">
+        <AlertTriangle className="size-[11px]" aria-hidden />
       </span>,
     );
   }
@@ -404,9 +408,11 @@ export function AtlasQuickActions({ game, onPlay, onInstall, onOpenSettings, onM
 }
 
 /** Atlas grid of covers (D22 `LibraryGrid`) with real data. */
-export function AtlasLibraryGrid({ games, jobs, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections }: {
+export function AtlasLibraryGrid({ games, jobs, sessions, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections }: {
   games: Game[];
   jobs: Map<string, Job>;
+  /** Live sessions, for the playing dot (R4-13). */
+  sessions?: Map<string, SessionEvent>;
   onOpen: (id: string) => void;
   onPlay?: (id: string) => void;
   onInstall?: (game: Game) => void;
@@ -435,7 +441,7 @@ export function AtlasLibraryGrid({ games, jobs, onOpen, onPlay, onInstall, onOpe
               <p className={cx('truncate text-[13px] font-[650]', g.is_installed ? 'text-text' : 'text-text-faint')}>{g.title}</p>
               <p className="truncate text-[12px] tabular-nums text-text-faint">{atlasSubLine(t, g)}</p>
             </div>
-            <AtlasGameBadges game={g} job={jobs.get(g.id)} />
+            <AtlasGameBadges game={g} job={jobs.get(g.id)} session={sessions?.get(g.id)} />
           </div>
         </li>
       ))}
@@ -480,12 +486,14 @@ const TIER_TEXT: Record<string, string> = {
 };
 
 /** Atlas table with sortable columns (D22 `LibraryTable`) on real data. */
-export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections, sourceLogos }: {
+export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, sessions, onOpen, onPlay, onInstall, onOpenSettings, onManageCollections, sourceLogos }: {
   games: Game[];
   runners: ProtonVersion[];
   sort: AtlasTableSort;
   onSort: (k: SortKey) => void;
   jobs: Map<string, Job>;
+  /** Live sessions, for the playing dot (R4-13). */
+  sessions?: Map<string, SessionEvent>;
   onOpen: (id: string) => void;
   onPlay?: (id: string) => void;
   onInstall?: (game: Game) => void;
@@ -556,7 +564,7 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, onOpen, 
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.release_year ?? '—'}</td>
                 <td className="px-2 py-2">
                   <span className="flex items-center justify-end gap-1">
-                    <AtlasGameBadges game={g} job={jobs.get(g.id)} />
+                    <AtlasGameBadges game={g} job={jobs.get(g.id)} session={sessions?.get(g.id)} />
                     <span className="relative hidden items-center gap-0.5 group-hover:inline-flex">
                       {g.is_installed ? (
                         onPlay && (
@@ -659,6 +667,8 @@ export function AtlasLibraryPage(p: {
   pluginName: (id: string) => string;
   onOpenPlugins: () => void;
   jobs: Job[];
+  /** Live sessions by game id, for the playing dot (R4-13). */
+  sessions?: Record<string, SessionEvent>;
   runners: ProtonVersion[];
   activity?: ActivityEvent[];
   sourceLogos?: Record<string, string | undefined>;
@@ -696,6 +706,7 @@ export function AtlasLibraryPage(p: {
     [p.games, p.ownership, p.source, p.storeSelection, p.collection, p.collections, p.tier, p.status, p.lending, p.query, sort, dir],
   );
   const jobsById = useMemo(() => new Map(p.jobs.map((j) => [j.game_id, j])), [p.jobs]);
+  const sessionsById = useMemo(() => new Map(Object.entries(p.sessions ?? {})), [p.sessions]);
   const activeCollection = (p.collections ?? []).find((c) => c.id === p.collection);
   const hasFilter =
     p.query.trim() !== '' ||
@@ -743,6 +754,7 @@ export function AtlasLibraryPage(p: {
             <AtlasLibraryGrid
               games={filtered}
               jobs={jobsById}
+              sessions={sessionsById}
               onOpen={p.onOpen}
               onPlay={p.onPlay}
               onInstall={p.onInstall}
@@ -756,6 +768,7 @@ export function AtlasLibraryPage(p: {
               sort={tableSort}
               onSort={toggleTableSort}
               jobs={jobsById}
+              sessions={sessionsById}
               onOpen={p.onOpen}
               onPlay={p.onPlay}
               onInstall={p.onInstall}

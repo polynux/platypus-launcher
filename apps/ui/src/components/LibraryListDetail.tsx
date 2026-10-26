@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { ArrowUpDown, CircleAlert, LogIn, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
-import type { Collection, Game, Job, SourceWarning, StoreType } from '../types';
+import type { Collection, Game, Job, SessionEvent, SourceWarning, StoreType } from '../types';
 import { Input } from './ds/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ds/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
@@ -57,6 +57,8 @@ interface ListDetailProps {
   onInstall?: (game: Game) => void;
   /** Queued or running jobs, for the download badges (issue #136). */
   jobs?: Job[];
+  /** Live sessions by game id, for the playing dot (R4-13). */
+  sessions?: Record<string, SessionEvent>;
   /** Controlled filter state from the /22 library bar (App owns it, #135).
    *  When set, the list filters through these values and hides its own
    *  filter popover (the shell carries it); otherwise it keeps its internal
@@ -437,7 +439,7 @@ export function LibraryListDetail(p: ListDetailProps) {
                       <span className={cx('truncate text-[13.5px] font-semibold', !g.is_installed && 'text-text-faint')}>{g.title}</span>
                       <span className="truncate text-[12px] text-text-faint">{sub.text}</span>
                     </span>
-                    <AtlasGameBadges game={g} job={jobsById.get(g.id)} />
+                    <AtlasGameBadges game={g} job={jobsById.get(g.id)} session={p.sessions?.[g.id]} />
                   </button>
                 </li>
               );

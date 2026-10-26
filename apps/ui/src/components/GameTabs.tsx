@@ -10,7 +10,7 @@ import { TuneFlyout } from './TuneFlyout';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { Effect } from 'effect';
-import { AlertTriangle, ChevronDown, ChevronLeft, Clock, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, FolderOpen, GitCompare, Info, Loader2, Lock, Play, Plus, RefreshCw, SlidersHorizontal, Square, Star, Trophy } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronLeft, Clock, Cloud, CloudOff, Download, ExternalLink as ExternalLinkIcon, EyeOff, FolderOpen, GitCompare, Info, Loader2, Lock, Play, Plus, RefreshCw, SlidersHorizontal, Square, Star, Trophy, X } from 'lucide-react';
 import type { ActivityEvent, ArtCandidate, CloudInfo, CloudMode, Collection, Compat, CrashHints, Game, GameDetails, GameJobKind, GameSettings, GameStatus, Job, SaveBackup, SessionEvent, StorePlugin, Tweak } from '../types';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -23,7 +23,7 @@ import { CapabilitySurface, offers } from '../lib/capabilities';
 import { agoLabel, asCloudMode, modeHelp, modeName, stateChip } from '../lib/cloud';
 import { CloudConflictDialog } from './CloudSavesConflict';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
-import { JobProgress } from './JobProgress';
+import { jobKindKey } from './DownloadsView';
 import { useCrashHints } from '../lib/useCrashHints';
 import { useCompat } from '../lib/useCompat';
 import { LauncherApi, onCloud, onSession } from '../effect/runtime';
@@ -63,7 +63,7 @@ export interface GameTabsData {
   job?: Job;
   sourceLogos?: Record<string, string>;
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onAllowFolder: (folder: string) => void;
   onNavigate: (v: { name: string }) => void;
   onNotify?: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
@@ -206,22 +206,84 @@ function AtlasHero({ game, hero, details, backLabel, onBack, hideBack }: { game:
   );
 }
 
-function StripPlay({ d }: { d: GameTabsData }) {
-  const { t } = useTranslation('game');
-  const { game, job, session, launching } = d;
-  const active = job && (job.state === 'queued' || job.state === 'running');
+/** The /22 job button on the Atlas strip (issue #133, review 4): the fill
+ *  grows left to right behind the label, like the lab `.play.is-job`. Pause
+ *  and resume go through onJobAction; cancel stays one click away on the
+ *  Tune-style button next to it. Shared with Home (R4-15). */
+export function StripJob({ job, onJobAction }: { job: Job; onJobAction: (action: 'pause' | 'resume' | 'cancel', id: string) => void }) {
+  const { t } = useTranslation(['game', 'downloads']);
+  const paused = job.state === 'paused';
+  const queued = job.state === 'queued';
+  const pct = job.percent >= 0 ? Math.round(job.percent) : null;
+  const kind = job.kind;
+  const label = paused
+    ? t('game:strip.jobPaused')
+    : queued
+      ? t('game:strip.jobQueued')
+      : kind === 'update'
+        ? t('game:strip.jobUpdating')
+        : kind === 'verify'
+          ? t('game:strip.jobVerifying')
+          : t('game:strip.jobInstalling');
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onJobAction(paused ? 'resume' : 'pause', job.id)}
+        title={paused ? t('downloads:job.resume') : t('downloads:job.pause')}
+        aria-label={pct != null ? `${label}, ${pct}%` : label}
+        role="progressbar"
+        aria-valuenow={pct ?? undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="relative inline-flex h-[42px] items-center gap-[9px] overflow-hidden rounded-[9px] bg-[color-mix(in_srgb,var(--color-accent)_25%,var(--color-surface-strong))] pl-5 pr-[26px] text-[15px] font-extrabold text-text"
+      >
+        <span aria-hidden className={cx('absolute inset-y-0 left-0 transition-[width] duration-700 ease-linear', paused ? 'bg-text-faint/35' : 'bg-accent/45', pct == null && 'w-full animate-pulse opacity-50')} style={pct != null ? { width: `${pct}%` } : undefined} />
+        <span className="relative">{paused ? <Play className="size-3.5" aria-hidden /> : <Loader2 className="size-[15px] animate-spin" aria-hidden />}</span>
+        <span className="relative">{label}</span>
+        {pct != null && <span className="relative font-mono text-[12px] font-medium tabular-nums">{pct}%</span>}
+      </button>
+      <button
+        type="button"
+        onClick={() => onJobAction('cancel', job.id)}
+        aria-label={t('downloads:aria.cancelKind', { kind: t(jobKindKey(job.kind)) })}
+        title={t('downloads:aria.cancelKind', { kind: t(jobKindKey(job.kind)) })}
+        className="inline-flex h-[42px] w-[42px] items-center justify-center rounded-[9px] bg-black/[.28] text-text transition hover:bg-black/[.42] light:bg-white/55 light:hover:bg-white/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        <X className="size-[15px]" aria-hidden />
+      </button>
+    </>
+  );
+}
+
+/** The Atlas main action (lab `MainAction`): the job button while a job runs,
+ *  the running Stop button while a session is live, else the caller's idle
+ *  action (R4-15). The strip renders it with Play/Install; Home renders it
+ *  with its own navigation buttons. */
+export function AtlasMainAction({ job, session, sessionStartedAt, launching, onJobAction = () => {}, onStop = () => {}, children }: {
+  job?: Job | null;
+  session?: SessionEvent | null;
+  sessionStartedAt?: number;
+  launching?: boolean;
+  onJobAction?: (action: 'pause' | 'resume' | 'cancel', id: string) => void;
+  onStop?: () => void;
+  /** The idle action (Play/Install): shown with no job and no live session. */
+  children?: React.ReactNode;
+}) {
+  const { t } = useTranslation(['game', 'downloads']);
+  const active = job && (job.state === 'queued' || job.state === 'running' || job.state === 'paused');
   const running = session?.state === 'running' || session?.state === 'starting';
   const starting = launching || session?.state === 'starting';
-  const now = useNow(!!running && d.sessionStartedAt != null);
-  if (active && job) return <JobProgress job={job} onCancel={(id) => d.onJobAction('cancel', id)} />;
+  const now = useNow(!!running && sessionStartedAt != null);
+  if (active && job) return <StripJob job={job} onJobAction={onJobAction} />;
   if (running && session) {
-    const elapsed = d.sessionStartedAt != null ? formatElapsed(now - d.sessionStartedAt) : null;
+    const elapsed = sessionStartedAt != null ? formatElapsed(now - sessionStartedAt) : null;
     return (
       <span className="inline-flex items-center gap-2.5">
         <Button
           variant="neutral"
           size="none"
-          onClick={d.onStop}
+          onClick={onStop}
           className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-glass px-5 text-[15px] font-extrabold text-text ring-1 ring-accent/60 hover:bg-surface-strong"
         >
           {starting ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Square className="h-3 w-3 fill-current" aria-hidden />}
@@ -231,8 +293,15 @@ function StripPlay({ d }: { d: GameTabsData }) {
       </span>
     );
   }
+  return <>{children}</>;
+}
+
+function StripPlay({ d }: { d: GameTabsData }) {
+  const { t } = useTranslation('game');
+  const { game, launching } = d;
+  let idle: React.ReactNode;
   if (game.is_installed) {
-    return (
+    idle = (
       <Button
         variant="primary"
         size="none"
@@ -244,22 +313,27 @@ function StripPlay({ d }: { d: GameTabsData }) {
         <span className="group-disabled:opacity-60">{launching ? t('game:play.launching') : t('game:play.play')}</span>
       </Button>
     );
+  } else if (!game.installable) {
+    idle = <span className="inline-flex h-[42px] items-center rounded-[9px] bg-surface px-5 text-[13px] font-bold text-text-muted">{t('game:install.cantInstall')}</span>;
+  } else {
+    const size = d.installSize.state === 'known' && d.installSize.total ? formatBytes(d.installSize.total) : null;
+    idle = (
+      <Button
+        variant="primary"
+        size="none"
+        onClick={d.onInstall}
+        className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110"
+      >
+        <Download className="h-[15px] w-[15px]" aria-hidden />
+        <span>{d.job?.state === 'failed' ? t('game:install.retryInstall') : t('game:install.install')}</span>
+        {size && <span className="font-mono text-[12px] font-medium">{size}</span>}
+      </Button>
+    );
   }
-  if (!game.installable) {
-    return <span className="inline-flex h-[42px] items-center rounded-[9px] bg-surface px-5 text-[13px] font-bold text-text-muted">{t('game:install.cantInstall')}</span>;
-  }
-  const size = d.installSize.state === 'known' && d.installSize.total ? formatBytes(d.installSize.total) : null;
   return (
-    <Button
-      variant="primary"
-      size="none"
-      onClick={d.onInstall}
-      className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110"
-    >
-      <Download className="h-[15px] w-[15px]" aria-hidden />
-      <span>{d.job?.state === 'failed' ? t('game:install.retryInstall') : t('game:install.install')}</span>
-      {size && <span className="font-mono text-[12px] font-medium">{size}</span>}
-    </Button>
+    <AtlasMainAction job={d.job} session={d.session} sessionStartedAt={d.sessionStartedAt} launching={launching} onJobAction={d.onJobAction} onStop={d.onStop}>
+      {idle}
+    </AtlasMainAction>
   );
 }
 
@@ -378,14 +452,28 @@ function SaveState({ d }: { d: GameTabsData }) {
 }
 
 function ActionStrip({ d }: { d: GameTabsData }) {
-  const { t } = useTranslation('game');
+  const { t } = useTranslation(['game', 'downloads']);
   const [tuneOpen, setTuneOpen] = useState(false);
   // Another game on the stage never inherits the open flyout.
   useEffect(() => setTuneOpen(false), [d.game.id]);
-  const active = d.job && (d.job.state === 'queued' || d.job.state === 'running');
+  const active = d.job && (d.job.state === 'queued' || d.job.state === 'running' || d.job.state === 'paused');
   // The game's own note lives in LaunchNotesRow under the strip; only the
   // install/version links stay inline at the end of the strip.
   const showNote = !active && d.installing;
+  // The live transfer figures sit under the strip while a job runs (R4-12):
+  // "1.3 MB of 41.9 MB · 140 KB/s · about 4 min left".
+  const jobNote = (() => {
+    const job = active ? d.job : undefined;
+    if (!job) return null;
+    const parts: string[] = [];
+    if (job.total > 0) parts.push(t('downloads:job.sizesOf', { done: formatBytes(job.bytes) || '0 B', total: formatBytes(job.total) }));
+    if (job.state === 'running' && job.speed > 0) parts.push(t('downloads:job.speedPerSec', { speed: formatBytes(job.speed) }));
+    if (job.state === 'running' && job.total > 0 && job.speed > 0 && job.total > job.bytes) {
+      const mins = Math.max(1, Math.round((job.total - job.bytes) / job.speed / 60));
+      parts.push(t('downloads:job.etaMins', { count: mins }));
+    }
+    return parts.length > 0 ? parts.join(' · ') : null;
+  })();
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-accent-dim py-3 pl-6 pr-5">
       <div className="mr-2 flex items-center gap-1.5">
@@ -452,6 +540,11 @@ function ActionStrip({ d }: { d: GameTabsData }) {
             </>
           )}
           </span>
+        </p>
+      )}
+      {jobNote && (
+        <p className="flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] text-text-muted tabular-nums">
+          <span className="min-w-0 truncate">{jobNote}</span>
         </p>
       )}
     </div>

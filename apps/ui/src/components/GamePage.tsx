@@ -85,7 +85,7 @@ interface GamePageProps {
   /** Plugin logos by store (and plugin id): the store badge and details row. */
   sourceLogos?: Record<string, string>;
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   /** Every job in the queue: the verify dialog follows its own. */
   jobs?: Job[];
   onAllowFolder: (folder: string) => void;
@@ -885,7 +885,7 @@ interface GameData {
   playtimeTitle?: string;
   canChooseOptions: boolean;
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onPlay: () => void;
   onStop: () => void;
   onForceStop: () => void;
@@ -1743,7 +1743,7 @@ export function GameHeroActions({ game, plugin, job, active, session, launching,
   playtimeTitle?: string;
   canChooseOptions: boolean;
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onPlay: () => void;
   onStop: () => void;
   onForceStop: () => void;
@@ -1871,7 +1871,7 @@ function InstallationPanel({
   game: Game;
   plugin: StorePlugin;
   job?: Job;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   sourceLogos?: Record<string, string>;
 }) {
   const { t } = useTranslation('game');

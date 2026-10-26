@@ -403,8 +403,9 @@ function TopBar({ p }: { p: ShellProps }) {
 function DownloadsButton({ p }: { p: ShellProps }) {
   const { t } = useTranslation(['nav']);
   const on = p.view.name === 'downloads';
-  const dl = (p.jobs ?? []).filter((j) => j.kind === 'download' && (j.state === 'queued' || j.state === 'running'));
-  const progress = dl.length > 0 ? dl.reduce((s, j) => s + (j.percent >= 0 ? j.percent : 0), 0) / dl.length / 100 : 0;
+  const DL_KINDS = new Set(['install', 'update']);
+  const dl = (p.jobs ?? []).filter((j) => DL_KINDS.has(j.kind) && (j.state === 'queued' || j.state === 'running' || j.state === 'paused'));
+  const progress = dl.length ? dl.reduce((s, j) => s + Math.max(j.percent, 0), 0) / dl.length / 100 : 0;
   const label = dl.length > 0 ? `${t('nav:downloads')}, ${dl.length} active` : t('nav:downloads');
   return (
     <button
@@ -421,7 +422,7 @@ function DownloadsButton({ p }: { p: ShellProps }) {
       <ArrowDownToLine className="h-4 w-4" aria-hidden />
       {dl.length > 0 && (
         <svg aria-hidden viewBox="0 0 36 36" className="pointer-events-none absolute inset-[1px] h-8 w-8 -rotate-90">
-          <circle cx="18" cy="18" r="16" fill="none" strokeWidth="2.2" strokeLinecap="round" className="stroke-accent" style={{ strokeDasharray: `${Math.round(progress * 100)} 100` }} />
+          <circle cx="18" cy="18" r="16" fill="none" strokeWidth="2.2" strokeLinecap="round" className="stroke-accent transition-[stroke-dasharray] duration-700 ease-linear" style={{ strokeDasharray: `${Math.round(progress * 100)} 100` }} />
         </svg>
       )}
     </button>
@@ -925,8 +926,9 @@ function useNow(): number {
 
 function formatElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
 // The activity footer (28px, D21 `.tele`): the running game with its elapsed
@@ -936,31 +938,38 @@ function formatElapsed(ms: number): string {
 // and the version, from the same sources as the classic header.
 export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionStartedAt'> & {
   onStop?: (gameId: string) => void;
+  /** Opens Downloads (the job items are buttons, R4-14). */
+  onOpenDownloads?: () => void;
+  /** The library, for the custom game titles (R4-14). */
+  games?: Game[];
   lastScan?: number | null;
   online?: boolean;
 }) {
-  const { t } = useTranslation(['nav', 'library']);
+  const { t } = useTranslation(['nav', 'library', 'game']);
   const now = useNow();
   const sessions = p.sessions ?? [];
-  const jobs = (p.jobs ?? []).filter((j) => j.state === 'queued' || j.state === 'running');
+  const jobs = (p.jobs ?? []).filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
+  const titles = useMemo(() => new Map((p.games ?? []).map((g) => [g.id, g.title])), [p.games]);
+  const titleOf = (j: Job) => titles.get(j.game_id) ?? j.title;
   return (
     <footer aria-label={t('activity')} data-region="sourcebar-footer" className="flex h-7 flex-none items-stretch gap-2 overflow-hidden whitespace-nowrap border-t border-hairline bg-ground text-[12px] text-text-faint">
       {sessions.map((e) => {
         const started = p.sessionStartedAt?.[e.game_id];
         const title = (e as SessionEvent & { title: string }).title;
         return (
-          <span key={e.game_id} className="relative inline-flex items-center gap-2 border-r border-hairline px-3.5">
+          <span key={e.game_id} className="relative inline-flex items-center gap-2 border-r border-hairline px-3 text-ok">
             <span aria-hidden className="size-[7px] rounded-full bg-ok" />
-            <span className="font-semibold text-text">{title}</span>
-            {started != null && <b className="font-medium tabular-nums text-text">{formatElapsed(now - started)}</b>}
+            <span className="font-semibold">{title}</span>
+            {started != null && <b className="font-semibold tabular-nums text-text">{formatElapsed(now - started)}</b>}
             {p.onStop && e.state !== 'stopping' && (
               <button
                 type="button"
                 onClick={() => p.onStop?.(e.game_id)}
                 aria-label={t('nav:stopGame', { title })}
-                className="grid size-5 place-items-center rounded text-text-faint transition hover:bg-surface-strong hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                className="inline-flex h-5 items-center gap-[5px] rounded-[5px] bg-surface-strong px-2 font-semibold text-text hover:bg-[color-mix(in_srgb,var(--color-danger)_40%,var(--color-surface-strong))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >
-                <Square className="h-2.5 w-2.5 fill-current" aria-hidden />
+                <Square className="size-[9px] fill-current" aria-hidden />
+                {t('game:play.stop')}
               </button>
             )}
           </span>
@@ -969,22 +978,22 @@ export function SourceFooter(p: Pick<ShellProps, 'sessions' | 'jobs' | 'sessionS
       {jobs.map((j) => {
         const pct = j.percent >= 0 ? Math.round(j.percent) : 0;
         return (
-          <span key={j.id} className="relative inline-flex items-center gap-2 border-r border-hairline px-3.5">
-            {j.title}
-            <b className="font-medium tabular-nums text-text">{pct}%</b>
-            <span aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-accent opacity-70" style={{ width: `${pct}%` }} />
-          </span>
+          <button key={j.id} type="button" onClick={p.onOpenDownloads} className="relative inline-flex items-center gap-2 border-r border-hairline px-3 text-text-muted hover:bg-surface hover:text-text">
+            {titleOf(j)}
+            <b className="font-semibold tabular-nums text-text">{pct}%</b>
+            <span aria-hidden className={cx('absolute inset-x-0 bottom-0 h-0.5 opacity-75', j.state === 'paused' ? 'bg-text-faint' : 'bg-accent')} style={{ width: `${pct}%` }} />
+          </button>
         );
       })}
-      <span className="ml-auto inline-flex min-w-0 flex-none items-center gap-2 self-center truncate px-3">
+      <span className="ml-auto inline-flex min-w-0 flex-none items-stretch self-center">
         {p.online === false && (
-          <span role="status" className="inline-flex flex-none items-center gap-1 text-danger">
+          <span role="status" className="inline-flex flex-none items-center gap-1 border-l border-hairline px-3 text-danger">
             <WifiOff className="h-3.5 w-3.5" aria-hidden />
             {t('library:offline')}
           </span>
         )}
-        {p.lastScan != null && <span className="truncate tabular-nums">{t('library:scannedFooter', { time: relTime(p.lastScan, now) })}</span>}
-        <span className="flex-none">{APP_VERSION}</span>
+        {p.lastScan != null && <span className="inline-flex items-center truncate border-l border-hairline px-3 tabular-nums">{t('library:scannedFooter', { time: relTime(p.lastScan, now) })}</span>}
+        <span className="inline-flex flex-none items-center border-l border-hairline px-3">{APP_VERSION}</span>
       </span>
     </footer>
   );
