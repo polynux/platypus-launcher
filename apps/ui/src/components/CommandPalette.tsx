@@ -309,7 +309,7 @@ function PaletteDialog({ p, onClose }: { p: CommandPaletteProps; onClose: () => 
                   </span>
                   <span className={cx('min-w-0 flex-1 truncate', item.tone === 'bad' && 'text-danger')}>{item.label}</span>
                   {item.hint && <span className="whitespace-nowrap text-[12.4px] text-text-faint">{item.hint}</span>}
-                  {item.kbd && <kbd className={KBD}>{item.kbd}</kbd>}
+                  {item.kbd && (!plain || i !== hi) && <kbd className={KBD}>{item.kbd}</kbd>}
                   {i === hi && <CornerDownLeft className="size-3 flex-none text-text-muted" aria-hidden />}
                 </li>
               </React.Fragment>
@@ -449,9 +449,7 @@ function paletteItemsAtlas(p: CommandPaletteProps, t: TFunction): PaletteItem[] 
       label: g.title,
       hint: !g.is_installed
         ? t('library:cardNotInstalled')
-        : hours === undefined
-          ? undefined
-          : t('library:cardHours', { hours }),
+        : t('library:cardHours', { hours: hours ?? 0 }),
       kind: 'game',
       store: g.source,
       storeName: storeLabel(g.source),

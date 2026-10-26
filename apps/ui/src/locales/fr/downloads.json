@@ -78,6 +78,7 @@
   "backedUp": "{{title}} sauvegardé",
   "restored": "{{title}} restauré",
   "atlas": {
+    "state": { "paused": "En pause", "queued": "En attente" },
     "queueSub_one": "{{count}} dans la file.",
     "queueSub_other": "{{count}} dans la file.",
     "queueSubSpeed_one": "{{count}} dans la file. {{speed}}/s.",

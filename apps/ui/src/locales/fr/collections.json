@@ -25,6 +25,8 @@
   "newNamePlaceholder": "Coop sur canapé",
   "kind": "Type",
   "kindManual": "Liste manuelle",
+  "kindManualDesc": "Vous ajoutez les jeux à la main.",
+  "kindSmartDesc": "Se remplit selon une règle et reste à jour.",
   "kindSmart": "Filtre intelligent",
   "create": "Créer",
   "edit": "Modifier les conditions",

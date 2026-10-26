@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen } from 'lucide-react';
+import { Folder, FolderOpen } from 'lucide-react';
 import type { Game, InstallLocation } from '../types';
 import { Button } from '@/components/ds/button';
 import { MonoLabel, cx } from './ui';
@@ -80,7 +80,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
 
   return (
     <section>
-      <MonoLabel className="mb-1.5">{t('gameOps:location.heading')}</MonoLabel>
+      {atlas ? <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-bold text-text-faint"><Folder className="size-3.5" aria-hidden />{t('gameOps:location.heading')}</div> : <MonoLabel className="mb-1.5">{t('gameOps:location.heading')}</MonoLabel>}
       {!rows && !error && <p className="font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:location.loading')}</p>}
       {rows && (
         <div role="radiogroup" aria-label={t('gameOps:location.group')} className="space-y-1.5">
