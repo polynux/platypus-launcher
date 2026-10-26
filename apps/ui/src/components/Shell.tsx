@@ -382,11 +382,11 @@ function TopBar({ p }: { p: ShellProps }) {
       <button
         type="button"
         onClick={openCommandPalette}
-        className="flex h-[30px] min-w-0 items-center gap-2.5 rounded-xl bg-surface px-1.5 pl-3 text-left text-text-faint transition hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        className="flex h-[30px] min-w-0 items-center gap-2.5 rounded-lg bg-surface pl-3 pr-1.5 text-left text-text-faint transition hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
         <span className="min-w-0 flex-1 truncate text-left text-[13px]">{t('nav:sourcebar.searchOrCommand')}</span>
-        <kbd className="flex-none rounded-md border border-hairline px-1.5 font-mono text-hint text-text-faint">Ctrl K</kbd>
+        <kbd className="flex-none rounded-[3px] px-[5px] py-px font-mono text-[11px] text-text-muted ring-1 ring-inset ring-hairline-strong">Ctrl K</kbd>
       </button>
       <div className="flex min-w-0 items-center justify-end gap-1">
         <DownloadsButton p={p} />

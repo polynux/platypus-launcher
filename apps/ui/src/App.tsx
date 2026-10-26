@@ -1239,6 +1239,14 @@ export function AppContent() {
         onRedeem={redeemStores.length > 0 ? () => setRedeemOpen(true) : undefined}
         onManageCollections={() => setCollectionsDialog({})}
         onAddGame={() => setAddOpen(true)}
+        onOpenFriends={() => setFriendsOpen((v) => !v)}
+        collections={collections}
+        collectionTotals={collectionTotals}
+        collectionId={view.name === 'library' ? view.collection ?? null : null}
+        onShowCollection={(id) => setView({ name: 'library', collection: id })}
+        onNewCollection={() => setCollectionsDialog({})}
+        sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+        sourceLogos={sourceLogos}
       />
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />

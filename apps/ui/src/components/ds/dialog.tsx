@@ -21,6 +21,7 @@ export function DialogContent({
   overlayClassName,
   contentClassName,
   innerClassName,
+  contentStyle,
   ...props
 }: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, 'aria-label'> & {
   label: string;
@@ -30,6 +31,8 @@ export function DialogContent({
   overlayClassName?: string;
   contentClassName?: string;
   innerClassName?: string;
+  /** A dialog's own shadow, when it isn't the shared one (the /22 palette). */
+  contentStyle?: React.CSSProperties;
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -44,7 +47,7 @@ export function DialogContent({
             contentClassName,
             className,
           )}
-          style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)', ...(sheetWidth ? { width: sheetWidth } : {}) }}
+          style={{ boxShadow: '0 40px 100px rgba(0,0,0,.6)', ...(sheetWidth ? { width: sheetWidth } : {}), ...contentStyle }}
           {...props}
         >
           <div className={cn('min-h-0 flex-1 overflow-y-auto p-7 [scrollbar-width:thin] [scrollbar-color:var(--color-hairline-strong)_transparent]', innerClassName)}>{children}</div>
