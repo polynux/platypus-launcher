@@ -35,12 +35,16 @@ interface ModalProps {
   overlayClassName?: string;
   contentClassName?: string;
   innerClassName?: string;
+  /** A dialog's own shadow, when it isn't the shared one (the /22 palette). */
+  contentStyle?: React.CSSProperties;
+  /** Radix's Escape hook, for dialogs that leave it (the /22 palette's sub-mode). */
+  onEscapeKeyDown?: (e: KeyboardEvent) => void;
   children: React.ReactNode;
 }
 
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`. */
-export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, overlayClassName, contentClassName, innerClassName, children }: ModalProps) {
+export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps) {
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -51,8 +55,9 @@ export function Modal({ label, onClose, size = 'sm', className, dismissable = tr
         overlayClassName={overlayClassName}
         contentClassName={contentClassName}
         innerClassName={innerClassName}
+        contentStyle={contentStyle}
         className={cn(MODAL_SIZES[size], className)}
-        onEscapeKeyDown={(e) => !dismissable && e.preventDefault()}
+        onEscapeKeyDown={(e) => { if (!dismissable) e.preventDefault(); else onEscapeKeyDown?.(e); }}
         onInteractOutside={(e) => !dismissable && e.preventDefault()}
         onOpenAutoFocus={onOpenAutoFocus}
         onCloseAutoFocus={(e) => {

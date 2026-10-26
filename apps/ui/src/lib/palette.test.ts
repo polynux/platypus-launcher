@@ -44,4 +44,21 @@ describe('filterPaletteItems', () => {
   it('returns nothing when nothing matches', () => {
     expect(filterPaletteItems([item('a', 'Library')], 'zzz')).toEqual([]);
   });
+
+  it('clusters game rows with the other matches instead of repeating the heading', () => {
+    // Review 4 (R4-4): "cy" showed the games heading twice, because game rows
+    // scored like every other row. Games get +0.5, like the lab, so the game
+    // rows stay together in built order.
+    const items = [
+      item('g1', 'Cyberpunk 2077', 'game'),
+      item('p1', 'Cycle settings', 'place'),
+      item('g2', 'Cyborg museum', 'game'),
+    ];
+    expect(filterPaletteItems(items, 'cy').map((x) => x.id)).toEqual(['g1', 'g2', 'p1']);
+  });
+
+  it('caps a typed query at forty rows, like the lab', () => {
+    const items = Array.from({ length: 60 }, (_, i) => item(`g${i}`, `Game match ${i}`, 'game'));
+    expect(filterPaletteItems(items, 'match')).toHaveLength(40);
+  });
 });

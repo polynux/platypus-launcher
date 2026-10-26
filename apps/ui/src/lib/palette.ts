@@ -10,6 +10,20 @@ export interface PaletteItem {
   /** A short right-hand note (hours played, "not installed", …). */
   hint?: string;
   kind: 'action' | 'place' | 'game';
+  /** The store the row's glyph comes from (a storefront id or a game's source). */
+  store?: string;
+  /** The store name for the glyph's monogram fallback. */
+  storeName?: string;
+  /** The glyph art for `store`, resolved by the caller. */
+  logoSrc?: string | null;
+  /** The row is the current choice (the collection in the sub-mode). */
+  active?: boolean;
+  /** The sub-mode the row opens instead of running. */
+  next?: 'collection';
+  /** A row that warns: its label reads in danger. */
+  tone?: 'bad';
+  /** The key shown at the row's right (the lab's Play row). */
+  kbd?: string;
   run: () => void;
 }
 
@@ -41,8 +55,13 @@ export function filterPaletteItems(items: readonly PaletteItem[], query: string)
     return items.filter((item) => item.kind !== 'game' || games++ < UNFILTERED_GAME_LIMIT);
   }
   return items
-    .map((item, index) => ({ item, index, score: paletteScore(query, item.label) }))
-    .filter((scored) => scored.score > 0)
+    // The +0.5 clusters game rows with the other matches (R4-4), like the
+    // lab: it applies only to rows that match at all. (The lab adds it before
+    // filtering, which would also list every non-matching game.)
+    .map((item, index) => ({ item, index, base: paletteScore(query, item.label) }))
+    .filter((scored) => scored.base > 0)
+    .map((scored) => ({ ...scored, score: scored.base + (scored.item.kind === 'game' ? 0.5 : 0) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map((scored) => scored.item);
+    .map((scored) => scored.item)
+    .slice(0, 40);
 }
