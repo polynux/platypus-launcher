@@ -94,13 +94,10 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     atlas ? (
       <section>
         <AtlasSRow label={t('cleanup.heading')} desc={t('cleanup.description')}>
-          <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); if (cleanupDirty && typeof cleanupDays === 'number') saveCleanupDays(cleanupDays); }}>
-            <label className="flex items-center gap-2"><span className="text-[12.5px] text-text-body">{t('cleanup.keepFor')}</span>
-              <NumberField min={0} max={365} step={1} hideSteppers value={cleanupDays === '' ? undefined : cleanupDays} onChange={(v) => { setCleanupDays(v ?? ''); setCleanupError(null); }} disabled={!saved} aria-label={t('cleanup.daysLabel')} className="w-24" />
-              <span className="text-[12.5px] text-text-body">{t('cleanup.days')}</span>
-            </label>
-            <Button type="submit" variant="primary" disabled={!cleanupDirty || busy}>{t('common:save')}</Button>
-          </form>
+          <Select value={String(cleanupDays)} onValueChange={(v) => saveCleanupDays(Number(v))} disabled={!saved || busy}>
+            <SelectTrigger aria-label={t('cleanup.daysLabel')} className="h-8 w-[210px] font-sans text-[13px]"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="0">{t('cleanup.deleteRightAway')}</SelectItem><SelectItem value="7">{t('cleanup.keepWeek')}</SelectItem><SelectItem value="365">{t('cleanup.keepYear')}</SelectItem></SelectContent>
+          </Select>
         </AtlasSRow>
         <div className="mt-2.5 flex min-h-4 items-center gap-4">{cleanupError ? <ErrorNotice message={cleanupError} fallback={t('cleanupError')} /> : <span />}</div>
       </section>
@@ -121,7 +118,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
     <RatingsSetting onNotify={onNotify} />,
     <ArtworkSetting onNotify={onNotify} />,
     <GameInfoSetting onNotify={onNotify} />,
-    <ChatNotificationsSetting onNotify={onNotify} />,
+    <SocialSettings plugins={plugins} onNotify={onNotify} />,
     <TraySetting onNotify={onNotify} />,
     <BackupsSetting onNotify={onNotify} />,
     <CloudSavesDefaults plugins={plugins} />,
@@ -486,7 +483,7 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
               className={cx('inline-flex w-auto', segWrap)}
               disabled={busy}
             >
-              {(['dark', 'light', 'black'] as const).filter((s) => schemes.includes(s)).map((s) => (
+              {(['dark', 'black', 'light'] as const).filter((s) => schemes.includes(s)).map((s) => (
                 <ToggleGroupItem key={s} value={s} aria-label={t(`appearance.scheme.${s}`)} className={cx('h-[26px]', segItem)}>
                   {t(`appearance.scheme.${s}`)}
                 </ToggleGroupItem>
@@ -606,11 +603,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
           disabled={on === null || busy}
           onChange={() => toggle(!(on ?? true))}
         />
-        <div className="space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
-          <p>{t('ratings.creditCompat')}</p>
-          <p>{t('ratings.creditWiki')}</p>
-          <p>{t('ratings.creditAnticheat')}</p>
-        </div>
+        <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{t('ratings.creditCompat')} {t('ratings.creditWiki')} {t('ratings.creditAnticheat')}</p>
       </section>
     );
   }
@@ -666,9 +659,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
           disabled={on === null || busy}
           onChange={() => toggle(!(on ?? true))}
         />
-        <div className="space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
-          <p>{t('artwork.creditArt')}</p>
-        </div>
+        <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{t('artwork.creditArt')}</p>
       </section>
     );
   }
@@ -721,9 +712,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
           disabled={on === null || busy}
           onChange={() => toggle(!(on ?? true))}
         />
-        <div className="space-y-1.5 border-t border-hairline pt-3 font-mono text-hint leading-relaxed text-text-muted">
-          <p>{t('gameInfo.creditInfo')}</p>
-        </div>
+        <p className="border-t border-hairline pt-3 text-[12px] font-sans text-text-faint">{t('gameInfo.creditInfo')}</p>
       </section>
     );
   }
@@ -793,6 +782,22 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
     </section>
   );
 }
+
+function SocialSettings({ plugins, onNotify }: { plugins: StorePlugin[]; onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
+  const { t } = useTranslation('settings');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const [views, setViews] = useState<{ plugin: string; enabled: boolean }[]>([]);
+  const stores = plugins.filter((p) => p.capabilities.includes('social') || p.declared.includes('social'));
+  const refresh = () => Effect.runPromise(LauncherApi.socialViews()).then((v) => setViews(v ?? [])).catch(() => {});
+  useEffect(() => { if (atlas) refresh(); }, [atlas]);
+  return <section>
+    {atlas && stores.map((p) => {
+      const enabled = views.find((v) => v.plugin === p.id)?.enabled ?? false;
+      return <AtlasSSwitch key={p.id} label={t('social.friends', { store: p.name })} checked={enabled} onChange={() => Effect.runPromise(LauncherApi.setSocialEnabled(p.id, !enabled)).then(refresh).catch((e) => onNotify(coreErrMsg(e), 'err'))} />;
+    })}
+    <ChatNotificationsSetting onNotify={onNotify} />
+  </section>;
+}
 /** "Minimize to tray while a game runs" (issue #49): while a game runs the
  *  window hides to a tray icon instead of staying open, and comes back when
  *  the game exits. Off by default, unlike the online switches. */
@@ -820,7 +825,7 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
       <section>
         <AtlasSSwitch
           label={t('tray.heading')}
-          desc={t('tray.description')}
+          desc={<span title={t('tray.description')}>{t('tray.atlasDescription')}</span>}
           checked={on ?? false}
           disabled={on === null || busy}
           onChange={() => toggle(!(on ?? false))}
@@ -847,6 +852,7 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
  *  or deletes existing prefixes; empty resets it to the default. */
 export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
   const { t } = useTranslation('settings');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [folder, setFolder] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -876,46 +882,21 @@ export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, ki
 
   const browse = () => {
     Effect.runPromise(LauncherApi.pickFolder(t('prefixes.browseTitle'), folder.trim() || saved?.prefixes_folder || saved?.default_prefixes_folder || ''))
-      .then((picked) => { if (picked) { setFolder(picked); setError(null); } })
+      .then((picked) => { if (picked) { setFolder(picked); setError(null); if (atlas) save(picked); } })
       .catch((e) => setError(coreErrMsg(e)));
   };
 
   // Atlas: the lab's wide .srow (label + desc up top, the folder controls below).
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (atlas) {
     return (
       <section>
-        <AtlasSRow label={t('prefixes.heading')} desc={t('prefixes.description')} wide>
-          <form
-            className="flex flex-wrap items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (dirty) save(folder.trim());
-            }}
-          >
-            <Input
-              aria-label={t('prefixes.label')}
-              value={folder}
-              onChange={(e) => { setFolder(e.target.value); setError(null); }}
-              placeholder={saved?.default_prefixes_folder || t('prefixes.placeholder')}
-              spellCheck={false}
-              disabled={!saved}
-              className="min-w-0 max-w-xl flex-1 font-sans text-[13px]"
-            />
-            <Button type="button" variant="neutral" onClick={browse} disabled={!saved || busy}>{t('prefixes.browse')}</Button>
-            <Button type="submit" variant="primary" disabled={!dirty || busy}>{t('prefixes.save')}</Button>
-            {custom && (
-              <Button type="button" variant="ghost" onClick={() => save('')} disabled={busy}>{t('prefixes.reset')}</Button>
-            )}
-          </form>
-          <div className="mt-2.5 flex min-h-4 flex-wrap items-center gap-4">
-            {error ? <ErrorNotice message={error} fallback={t('prefixError')} /> : <span />}
-            {saved && (
-              <span className="font-mono text-hint text-text-muted">
-                {t('prefixes.effective', { folder: folder.trim() || saved.prefixes_folder || saved.default_prefixes_folder || t('prefixes.placeholder') })}
-              </span>
-            )}
+        <AtlasSRow label={t('prefixes.heading')} desc={saved ? (saved.prefixes_folder || saved.default_prefixes_folder || t('prefixes.placeholder')) : t('prefixes.description')}>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={browse} disabled={!saved || busy}>{t('prefixes.change')}</Button>
+            {custom && <Button type="button" variant="ghost" size="sm" onClick={() => save('')} disabled={busy}>{t('prefixes.reset')}</Button>}
           </div>
         </AtlasSRow>
+        {error && <ErrorNotice message={error} fallback={t('prefixError')} />}
       </section>
     );
   }

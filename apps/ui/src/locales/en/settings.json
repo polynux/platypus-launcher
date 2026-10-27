@@ -28,6 +28,7 @@
  },
  "folders": {
   "heading": "Game folders",
+  "addRow": "Add a folder",
   "description": "Where games install. A store's games go in their own subfolder of the default folder, for example <path>{{path}}/epic</path>. Each game's “Install to…” step offers every folder here. Steam keeps using its own library folders.",
   "pending": "not created yet",
   "default": "default",
@@ -42,6 +43,7 @@
  },
  "prefixes": {
   "heading": "Wine prefix folder",
+  "change": "Change",
   "description": "Where new Wine prefixes are created, one folder per game. A game's own prefix setting still wins. Changing this folder does not move or delete existing prefixes. Games that already have a prefix keep it: Platypus pins it in their settings.",
   "label": "Default Wine prefix folder",
   "placeholder": "The default prefix folder",
@@ -59,7 +61,10 @@
   "keepFor": "Keep for",
   "days": "days",
   "daysLabel": "Days to keep canceled downloads' data",
-  "saved": "Download cleanup setting saved"
+  "saved": "Download cleanup setting saved",
+  "deleteRightAway": "Delete right away",
+  "keepWeek": "Keep for a week",
+  "keepYear": "Keep for a year"
  },
  "ratings": {
   "heading": "Ratings, protection and anti-cheat data",
@@ -99,7 +104,8 @@
   "description": "While a game runs, hide the Platypus window to a tray icon instead of leaving it open. It comes back when the game exits, or from the tray menu (show, stop game, quit). Where the desktop has no tray, the window minimizes instead, so it never gets stuck out of reach.",
   "label": "Minimize to tray while a game runs",
   "on": "Platypus will hide to the tray while a game runs",
-  "off": "Platypus stays open while a game runs"
+  "off": "Platypus stays open while a game runs",
+  "atlasDescription": "Closing the window keeps downloads and chat running."
  },
  "theme": {
   "heading": "Theme",
@@ -134,6 +140,7 @@
    "off": "Never back up automatically."
   },
   "afterSessionLabel": "Back up after each session",
+  "atlasAutoLabel": "Back up saves automatically",
   "afterSessionHint": "Take a backup after each session, except games whose store syncs saves to the cloud. Cloud saves sync first; the backup waits for them briefly.",
   "manifestLabel": "Save list",
   "manifest": {
@@ -172,5 +179,6 @@
    "data": "Ratings and game info",
    "social": "Friends and chat"
   }
- }
+ },
+ "social": {"friends": "{{store}} friends"}
 }

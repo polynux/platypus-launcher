@@ -21,6 +21,8 @@ export interface StorageData extends ReturnType<typeof useStorageData> {}
 
 export function useStorageData({ games: library, onNotify, onRemove, onUninstall }: UseStorageDataProps) {
   const [usage, setUsage] = useState<DiskUsage | null>(null);
+  const [folders, setFolders] = useState<import('../types').GameFolder[] | null>(null);
+  const [jobs, setJobs] = useState<import('../types').Job[]>([]);
   // Rows whose Scan was pressed, waiting for the next snapshot (local, not
   // global: only this view shows them).
   const [measuring, setMeasuring] = useState<ReadonlySet<string>>(new Set());
@@ -43,6 +45,8 @@ export function useStorageData({ games: library, onNotify, onRemove, onUninstall
   };
   useEffect(() => {
     Effect.runPromise(LauncherApi.getDiskUsage()).then(apply).catch(() => {});
+    Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch(() => {});
+    Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
     return onDiskUsage(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -75,8 +79,10 @@ export function useStorageData({ games: library, onNotify, onRemove, onUninstall
   const openFolder = (game: Game) => {
     Effect.runPromise(LauncherApi.openGameFolder(game)).catch((err) => onNotify(coreErrMsg(err), 'err'));
   };
+  const refreshJobs = () => Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch((err) => onNotify(coreErrMsg(err), 'err'));
+  const discardJob = (id: string) => Effect.runPromise(LauncherApi.discardJob(id)).catch((err) => onNotify(coreErrMsg(err), 'err'));
   return {
     usage, measuring, moveId, setMoveId, removeId, setRemoveId, uninstallId, setUninstallId,
-    rescan, scanning, sorted, byId, drives, scan, openFolder, onNotify, onRemove, onUninstall, library,
+    rescan, scanning, sorted, byId, drives, folders, jobs, refreshJobs, discardJob, scan, openFolder, onNotify, onRemove, onUninstall, library,
   };
 }

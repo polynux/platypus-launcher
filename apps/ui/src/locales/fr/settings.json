@@ -28,6 +28,7 @@
  },
  "folders": {
   "heading": "Dossiers de jeux",
+  "addRow": "Ajouter un dossier",
   "description": "Où s'installent les jeux. Les jeux d'une boutique vont dans leur propre sous-dossier du dossier par défaut, par exemple <path>{{path}}/epic</path>. L'étape « Installer vers… » de chaque jeu propose tous les dossiers ci-dessous. Steam garde ses propres dossiers de bibliothèque.",
   "pending": "pas encore créé",
   "default": "par défaut",
@@ -42,6 +43,7 @@
  },
  "prefixes": {
   "heading": "Dossier des préfixes Wine",
+  "change": "Modifier",
   "description": "Où sont créés les nouveaux préfixes Wine, un dossier par jeu. Le préfixe propre d'un jeu reste prioritaire. Changer ce dossier ne déplace ni ne supprime les préfixes existants. Les jeux qui ont déjà un préfixe le gardent : Platypus l'épingle dans leurs paramètres.",
   "label": "Dossier des préfixes Wine par défaut",
   "placeholder": "Le dossier des préfixes par défaut",
@@ -59,7 +61,10 @@
   "keepFor": "Garder pendant",
   "days": "jours",
   "daysLabel": "Jours de conservation des données des téléchargements annulés",
-  "saved": "Réglage du nettoyage des téléchargements enregistré"
+  "saved": "Réglage du nettoyage des téléchargements enregistré",
+  "deleteRightAway": "Supprimer aussitôt",
+  "keepWeek": "Garder une semaine",
+  "keepYear": "Garder un an"
  },
  "ratings": {
   "heading": "Notes, protection et données anti-triche",
@@ -99,7 +104,8 @@
   "description": "Pendant qu'un jeu tourne, cacher la fenêtre Platypus dans une icône de la zone de notification au lieu de la laisser ouverte. Elle revient quand le jeu se termine, ou depuis le menu de l'icône (afficher, arrêter le jeu, quitter). Là où le bureau n'a pas de zone de notification, la fenêtre se réduit simplement, pour ne jamais rester hors d'atteinte.",
   "label": "Réduire dans la zone de notification pendant un jeu",
   "on": "Platypus se cachera dans la zone de notification pendant un jeu",
-  "off": "Platypus reste ouvert pendant un jeu"
+  "off": "Platypus reste ouvert pendant un jeu",
+  "atlasDescription": "Fermer la fenêtre laisse les téléchargements et les discussions actifs."
  },
  "theme": {
   "heading": "Thème",
@@ -134,6 +140,7 @@
    "off": "Jamais de sauvegarde automatique."
   },
   "afterSessionLabel": "Sauvegarder après chaque session",
+  "atlasAutoLabel": "Sauvegarder automatiquement les parties",
   "afterSessionHint": "Sauvegarde après chaque session, sauf les jeux dont la boutique synchronise les sauvegardes dans le cloud. Le cloud se synchronise d’abord ; la sauvegarde l’attend brièvement.",
   "manifestLabel": "Liste des sauvegardes",
   "manifest": {
@@ -172,5 +179,6 @@
    "data": "Notes et infos jeux",
    "social": "Amis et discussion"
   }
- }
+ },
+ "social": {"friends": "Amis de {{store}}"}
 }
