@@ -1,13 +1,15 @@
 {
   "header": {
     "subtitle": "Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.",
+    "atlasSubtitle": "Each store comes in through a plugin. Plugins only do what you approve.",
     "pluginsFolder": "Plugins folder",
     "rescan": "Rescan"
   },
   "section": {
     "store": "store plugins",
     "data": "data plugins · no code, always on",
-    "builtIn": "built in"
+    "builtIn": "built in",
+    "builtInAtlas": "Built in"
   },
   "empty": {
     "label": "no store plugins",
@@ -30,7 +32,7 @@
     "installFirst": "install first",
     "rescanHint": "Then rescan.",
     "installsInto": "installs into",
-    "change": "change",
+    "change": "Change",
     "reset": "reset",
     "alsoAllowed": "also allowed",
     "dataNote": "JSON only — fix recipes and tweaks. It can't run anything, so Platypus applies it without asking.",
@@ -120,5 +122,13 @@
   },
   "builtIn": {
     "protondb": "Compatibility ratings and community notes for Steam games."
+  },
+  "atlas": {
+    "account": "Account",
+    "libraryList": "Library list",
+    "brings": "What it brings",
+    "loginNeeded": "Log in needed",
+    "versionBy": "Version {{version}}, by {{author}}",
+    "gameCount": "{{count}} games"
   }
 }

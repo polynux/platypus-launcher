@@ -59,14 +59,14 @@ export function FamilyWarningHost({ games }: { games: Game[] }) {
   return (
     <div
       role="alert"
-      className="fixed bottom-4 left-4 z-[60] flex max-w-md items-start gap-3 rounded-[3px] border border-amber-300/40 bg-[#191410] px-3.5 py-2.5 font-mono text-[12px]"
+      className="fixed bottom-4 left-4 z-[60] flex max-w-md items-start gap-3 rounded-[3px] border border-attention/40 bg-raised px-3.5 py-2.5 font-mono text-[12px]"
       style={{ boxShadow: '0 10px 30px rgba(0,0,0,.5)' }}
     >
-      <span className="h-1.5 w-1.5 mt-1.5 flex-none rounded-full bg-amber-300" />
+      <span className="h-1.5 w-1.5 mt-1.5 flex-none rounded-full bg-attention" />
       <span className="min-w-0 flex-1">
-        <span className="block font-bold text-amber-200">{title}</span>
-        <span className="block break-words text-white/75">{warning.message}</span>
-        {counting && <span className="tabular-nums text-white/55">{countdownLabel(left)}</span>}
+        <span className="block font-bold text-attention">{title}</span>
+        <span className="block break-words text-text-body">{warning.message}</span>
+        {counting && <span className="tabular-nums text-text-muted">{countdownLabel(left)}</span>}
       </span>
       <Button variant="ghost" size="sm" onClick={() => setShown(null)}>{t('common:dismiss')}</Button>
     </div>

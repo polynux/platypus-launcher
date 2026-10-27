@@ -36,10 +36,10 @@ describe('library status filter', () => {
     lib(games);
     expect(titles()).toEqual(['playing-one', 'finished-one', 'plain-one']);
 
-    pickStatusFilter('playing');
+    pickStatusFilter('Playing');
     expect(titles()).toEqual(['playing-one']);
 
-    pickStatusFilter('no status');
+    pickStatusFilter('No status');
     expect(titles()).toEqual(['plain-one']);
 
     pickStatusFilter('all');

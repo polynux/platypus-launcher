@@ -29,10 +29,10 @@ export function JobProgress({ job, onCancel }: { job: Job; onCancel: (id: string
         </Tooltip>
       </div>
       <div className="mt-2 h-1.5 rounded-full bg-white/15" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}>
-        <div className={cx('h-full rounded-full bg-amber-300 transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
+        <div className={cx('h-full rounded-full bg-accent-strong transition-[width]', pct == null && 'animate-pulse')} style={{ width: `${pct ?? 100}%` }} />
       </div>
       {job.state === 'running' && job.total > 0 && (
-        <div className="mt-1.5 font-mono text-hint tabular-nums text-white/55">
+        <div className="mt-1.5 font-mono text-hint tabular-nums text-text-muted">
           {t('downloads:job.sizesOf', { done: formatBytes(job.bytes) || '0 B', total: formatBytes(job.total) })}
           {job.speed > 0 && ` · ${t('downloads:job.speedPerSec', { speed: formatBytes(job.speed) })}`}
         </div>

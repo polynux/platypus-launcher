@@ -535,6 +535,9 @@ export namespace types {
     default_prefixes_folder: string;
     language: string;
     minimize_to_tray: boolean;
+    theme: string;
+    game_tone: string;
+    color_scheme: string;
   }
 
   export interface LedgerEntry {
@@ -836,6 +839,67 @@ export namespace types {
     version: string;
   }
 
+  export interface ThemeCatalogAttr {
+    name: string;
+    type: string;
+    min?: number;
+    max?: number;
+    values?: string[];
+  }
+
+  export interface ThemeCatalogAxis {
+    name: string;
+    values: string[];
+    default: string;
+    since: string;
+    inherits?: string;
+  }
+
+  export interface ThemeCatalogEntry {
+    entry: string;
+    since: string;
+    axes: types.ThemeCatalogAxis[];
+    kind?: string;
+    required?: boolean;
+    region?: string;
+    attrs?: types.ThemeCatalogAttr[];
+  }
+
+  export interface ThemeInfo {
+    id: string;
+    name: string;
+    schema: number;
+    supports: string[];
+    status: string;
+    warnings: string[];
+    source?: string;
+  }
+
+  export interface ThemeLayout {
+    view: string;
+    regions: types.ThemeLayoutRegion[];
+  }
+
+  export interface ThemeLayoutNode {
+    block?: string;
+    attrs?: Record<string, string>;
+    row?: types.ThemeLayoutNode[];
+  }
+
+  export interface ThemeLayoutRegion {
+    name: string;
+    nodes: types.ThemeLayoutNode[];
+  }
+
+  export interface ThemeTokens {
+    id: string;
+    tokens: Record<string, string>;
+    wash: types.WashLayer[];
+    variants: Record<string, string>;
+    fonts?: Record<string, string>;
+    schemes?: Record<string, Record<string, string>>;
+  }
+
   export interface Tweak {
     id: string;
     title: string;
@@ -903,6 +967,14 @@ export namespace types {
     build?: string;
     manual?: Record<string, string>;
     archiveRef?: unknown;
+  }
+
+  export interface WashLayer {
+    at: string;
+    size: string;
+    color: string;
+    fade: string;
+    image?: string;
   }
 
   export interface WikiCredit {

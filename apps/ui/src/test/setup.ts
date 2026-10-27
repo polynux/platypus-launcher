@@ -2,7 +2,8 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach } from 'vitest';
 import i18n, { setSessionInfo } from '../lib/i18n';
 
-// jsdom lacks scrollTo; App scrolls main on view change.
+// jsdom lacks scrollTo; App scrolls main on view change, and the router
+// scrolls the window on navigation.
 if (!Element.prototype.scrollTo) {
   (Element.prototype as unknown as Record<string, unknown>).scrollTo = () => {};
 } else {
@@ -11,6 +12,15 @@ if (!Element.prototype.scrollTo) {
     (Element.prototype as unknown as Record<string, unknown>).scrollTo = () => {};
   } catch {
     void orig;
+  }
+}
+if (typeof window.scrollTo !== 'function' || window.scrollTo.toString().includes('not implemented')) {
+  (window as unknown as Record<string, unknown>).scrollTo = () => {};
+} else {
+  try {
+    (window as unknown as Record<string, unknown>).scrollTo = () => {};
+  } catch {
+    // Keep jsdom's stub.
   }
 }
 
@@ -63,6 +73,9 @@ globalThis.fetch = ((input: unknown, init?: unknown) => {
 // i18n starts in English (issue #39): tests asserting English text run under
 // the default `en`, and each test resets any language it changed.
 beforeEach(async () => {
+  // Each test starts at the dashboard route (issue #140): the App builds a
+  // hash-history router per mount, so clear the hash between tests.
+  window.location.hash = '';
   setSessionInfo(null);
   if (i18n.language !== 'en') await i18n.changeLanguage('en');
   window.platypus = {

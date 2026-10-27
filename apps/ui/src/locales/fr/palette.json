@@ -1,0 +1,48 @@
+{
+  "label": "Palette de commandes",
+  "input": "Commande",
+  "placeholder": "Tapez une commande ou un jeu…",
+  "listbox": "Résultats",
+  "empty": "Rien ne correspond à « {{query}} ».",
+  "group": {
+    "places": "Aller à",
+    "games": "Jeux",
+    "library": "Bibliothèque",
+    "running": "En cours",
+    "open": "Ouvrir",
+    "gotoGame": "Aller au jeu",
+    "collections": "Collections"
+  },
+  "action": {
+    "play": "Jouer à {{title}}",
+    "stop": "Arrêter {{title}}",
+    "install": "Installer {{title}}",
+    "gameSettings": "Ouvrir les paramètres du jeu",
+    "redeem": "Utiliser un code",
+    "manageCollections": "Gérer les collections",
+    "addGame": "Ajouter un jeu",
+    "gameSettingsAtlas": "Paramètres du jeu…",
+    "redeemAtlas": "Utiliser un code…",
+    "addGameAtlas": "Ajouter un jeu…",
+    "showCollection": "Afficher une collection…",
+    "newCollection": "Nouvelle collection…",
+    "stopNone": "Arrêter le jeu en cours",
+    "openStore": "Ouvrir la boutique {{store}}"
+  },
+  "chip": {
+    "collection": "Collection",
+    "back": "Retour (Retour arrière)"
+  },
+  "searchCollections": "Rechercher des collections…",
+  "hint": {
+    "move": "se déplacer",
+    "run": "lancer",
+    "close": "fermer",
+    "back": "retour",
+    "nothingRunning": "aucun jeu en cours",
+    "gamesCount": "{{count}} jeux"
+  },
+  "key": {
+    "esc": "échap"
+  }
+}

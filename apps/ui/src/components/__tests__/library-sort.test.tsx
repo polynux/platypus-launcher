@@ -68,3 +68,23 @@ describe('Library sort', () => {
     expect(container.textContent).toMatch(/2011/);
   });
 });
+
+describe('extra filters predicate (issue #132)', () => {
+  it('matches tier, status and lending together', async () => {
+    const { matchesExtraFilters } = await import('../LibraryView');
+    const g = (o: Partial<Game> = {}): Game =>
+      ({ id: 'x', source: 'steam', store: 'steam', store_app_id: 'x', title: 'x', cover_url: '', banner_url: '', install_dir: '', executable: '', is_installed: true, settings: {}, ...o }) as Game;
+    const native = g({ native: true });
+    const plat = g({ fix_info: { source: 'curated', tier: 'platinum' } as Game['fix_info'] });
+    const playing = g({ status: 'playing' as const });
+    const lent = g({ shared_by: { id: 'ana', name: 'Ana' } });
+    expect(matchesExtraFilters(native, 'native', 'all', 'all')).toBe(true);
+    expect(matchesExtraFilters(plat, 'platinum', 'all', 'all')).toBe(true);
+    expect(matchesExtraFilters(plat, 'gold', 'all', 'all')).toBe(false);
+    expect(matchesExtraFilters(playing, 'all', 'playing', 'all')).toBe(true);
+    expect(matchesExtraFilters(playing, 'all', 'none', 'all')).toBe(false);
+    expect(matchesExtraFilters(native, 'all', 'none', 'all')).toBe(true);
+    expect(matchesExtraFilters(lent, 'all', 'all', 'with-me')).toBe(true);
+    expect(matchesExtraFilters(native, 'all', 'all', 'with-me')).toBe(false);
+  });
+});

@@ -72,7 +72,7 @@ export function FriendsModal(p: FriendsModalProps) {
           <h2 className="text-[17px] font-extrabold tracking-tight">{t('chat:modal.title')}</h2>
           <label className="relative block w-64">
             <span className="sr-only">{t('chat:modal.searchLabel')}</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/55" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
             <Input
               type="search"
               value={query}
@@ -103,20 +103,20 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
   const total = groups.inGame.length + groups.online.length + groups.offline.length;
   const canReconnect = view.connection.state === 'replaced' || view.connection.state === 'loggedOut';
   return (
-    <section aria-label={t('chat:modal.section', { label })} className="flex flex-col gap-3 border-t border-white/[0.06] pt-4 first:border-t-0 first:pt-0">
+    <section aria-label={t('chat:modal.section', { label })} className="flex flex-col gap-3 border-t border-hairline pt-4 first:border-t-0 first:pt-0">
       <header className="flex items-center justify-between gap-3">
-        <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-white/55">{label}</h3>
+        <h3 className="font-mono text-micro uppercase tracking-[0.18em] text-text-muted">{label}</h3>
         <Button variant="ghost" size="sm" onClick={() => onSetEnabled(view.plugin, !view.enabled)}>
           {view.enabled ? t('chat:modal.turnOff') : t('chat:modal.turnOn')}
         </Button>
       </header>
 
       {!view.enabled ? (
-        <p className="text-[12.5px] text-white/70">{t('chat:modal.friendsOff', { label })}</p>
+        <p className="text-[12.5px] text-text-muted">{t('chat:modal.friendsOff', { label })}</p>
       ) : (
         <>
           {line && (
-            <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-amber-300/[0.08] px-3 py-2 text-[12px] text-amber-100 ring-1 ring-amber-300/25">
+            <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-attention/[0.08] px-3 py-2 text-[12px] text-attention ring-1 ring-attention/25">
               <span>{line}</span>
               {canReconnect && (
                 <Button variant="ghost" size="sm" onClick={() => onReconnect(view.plugin)}>
@@ -125,7 +125,7 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
               )}
             </div>
           )}
-          <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/60">
+          <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-muted">
             <span>{t('chat:modal.showPlaying')}</span>
             <Switch
               aria-label={t('chat:modal.showPlayingLabel', { label })}
@@ -134,7 +134,7 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
             />
           </label>
           {chatAlerts && onSetChatAlerts && view.plugin in chatAlerts && (
-            <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/60">
+            <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-muted">
               <span>{t('chat:modal.chatAlerts')}</span>
               <Switch
                 aria-label={t('chat:modal.chatAlertsLabel', { label })}
@@ -144,10 +144,10 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
             </label>
           )}
           {view.self && (
-            <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
+            <div className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2">
               <Avatar name={view.self.name} url={view.self.avatarUrl} dot={stateDot(view.self.state)} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-semibold text-white/90">{view.self.name}</div>
+                <div className="truncate text-[13px] font-semibold text-text">{view.self.name}</div>
               </div>
               <Select
                 value={view.self.state}
@@ -167,7 +167,7 @@ function StoreSection({ view, label, query, plugins, inLibrary, onSetEnabled, on
           )}
 
           {total === 0 && (
-            <p className="text-[12.5px] text-white/70">
+            <p className="text-[12.5px] text-text-muted">
               {view.friends.length === 0 ? t('chat:modal.noFriends', { label }) : t('chat:modal.noMatch', { query: query.trim() })}
             </p>
           )}
@@ -197,19 +197,19 @@ function FriendGroup({ title, friends, inLibrary, onOpenGame, plugin, unreadOf, 
   if (friends.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
-      <h4 className="px-1 font-mono text-micro uppercase tracking-[0.16em] text-white/55">
+      <h4 className="px-1 font-mono text-micro uppercase tracking-[0.16em] text-text-muted">
         {title} · {friends.length}
       </h4>
       <ul className="flex flex-col">
         {friends.slice(0, shown).map((f) => (
-          <li key={f.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
+          <li key={f.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-surface">
             {/* The row opens the chat; the game's link sits beside it, since a button can't hold a link. */}
             <FriendRowMain
               friend={f}
               onOpenChat={onOpenChat && (() => onOpenChat(plugin, f))}
             />
             {unreadOf && unreadOf(plugin, f.id) > 0 && (
-              <span aria-label={t('chat:row.unread', { count: unreadOf(plugin, f.id) })} className="rounded-full bg-amber-300 px-1.5 font-mono text-hint font-bold text-[#130f0a]">
+              <span aria-label={t('chat:row.unread', { count: unreadOf(plugin, f.id) })} className="rounded-full bg-attention px-1.5 font-mono text-hint font-bold text-on-accent">
                 {unreadOf(plugin, f.id)}
               </span>
             )}
@@ -234,8 +234,8 @@ function FriendRowMain({ friend: f, onOpenChat }: { friend: SocialFriend; onOpen
     <>
       <Avatar name={f.name} url={f.avatarUrl} dot={stateDot(f.state)} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-semibold text-white/85">{f.name}</div>
-        <div className="truncate text-hint text-white/55">
+        <div className="truncate text-[13px] font-semibold text-text">{f.name}</div>
+        <div className="truncate text-hint text-text-muted">
           {f.game ? t('chat:row.playing', { title: f.game.title }) : f.state === 'offline' || f.state === 'invisible' ? (f.lastSeen ? t('chat:row.lastSeen', { when: agoLabel(f.lastSeen) }) : t('chat:row.offline')) : friendStateLabel(f.state)}
         </div>
       </div>
@@ -243,7 +243,7 @@ function FriendRowMain({ friend: f, onOpenChat }: { friend: SocialFriend; onOpen
   );
   if (!onOpenChat) return <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>;
   return (
-    <button type="button" onClick={onOpenChat} className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50">
+    <button type="button" onClick={onOpenChat} className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-focus/50">
       {body}
     </button>
   );
@@ -253,10 +253,10 @@ function Avatar({ name, url, dot }: { name: string; url?: string; dot: string })
   return (
     // The dot sits outside the clipped picture: inside it, overflow-hidden would cut it.
     <span className="relative h-8 w-8 flex-none">
-      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-white/10 font-mono text-hint font-bold text-white/70">
+      <span className="grid h-full w-full place-items-center overflow-hidden rounded-full bg-surface-strong font-mono text-hint font-bold text-text-muted">
         {url ? <img src={url} alt="" className="h-full w-full object-cover" /> : initials(name)}
       </span>
-      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1a140f]', dot)} />
+      <span className={cx('absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-ground', dot)} />
     </span>
   );
 }

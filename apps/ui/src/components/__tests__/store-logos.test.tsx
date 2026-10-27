@@ -100,7 +100,7 @@ function page(g: Game, sourceLogos?: Record<string, string>) {
   return rtlRender(
     <GamePage
       game={g} plugin={plugin()} runners={[]} activity={[]} backLabel="Library" onBack={() => {}} onPlay={() => {}} onStop={() => {}} onForceStop={() => {}}
-      launching={false} tweaks={[]} onChangeSettings={() => {}} onSaveSettings={() => {}} onJob={vi.fn()} onJobAction={() => {}} onAllowFolder={() => {}}
+      launching={false} tweaks={[]} onChangeSettings={() => {}} onSaveSettings={async () => {}} onJob={vi.fn()} onJobAction={() => {}} onAllowFolder={() => {}}
       onNavigate={() => {}} jobs={[]} onNotify={() => {}} sourceLogos={sourceLogos}
     />,
   );

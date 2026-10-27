@@ -1,0 +1,48 @@
+{
+  "label": "Command palette",
+  "input": "Command",
+  "placeholder": "Type a command or game…",
+  "listbox": "Results",
+  "empty": "Nothing matches “{{query}}”.",
+  "group": {
+    "places": "Go to",
+    "games": "Games",
+    "library": "Library",
+    "running": "Running",
+    "open": "Open",
+    "gotoGame": "Go to game",
+    "collections": "Collections"
+  },
+  "action": {
+    "play": "Play {{title}}",
+    "stop": "Stop {{title}}",
+    "install": "Install {{title}}",
+    "gameSettings": "Open game settings",
+    "redeem": "Redeem a code",
+    "manageCollections": "Manage collections",
+    "addGame": "Add a game",
+    "gameSettingsAtlas": "Game settings…",
+    "redeemAtlas": "Redeem a code…",
+    "addGameAtlas": "Add a game…",
+    "showCollection": "Show a collection…",
+    "newCollection": "New collection…",
+    "stopNone": "Stop the running game",
+    "openStore": "Open the {{store}} store"
+  },
+  "chip": {
+    "collection": "Collection",
+    "back": "Back (Backspace)"
+  },
+  "searchCollections": "Search collections…",
+  "hint": {
+    "move": "move",
+    "run": "run",
+    "close": "close",
+    "back": "back",
+    "nothingRunning": "nothing running",
+    "gamesCount": "{{count}} games"
+  },
+  "key": {
+    "esc": "esc"
+  }
+}

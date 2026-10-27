@@ -44,6 +44,19 @@ export function unreadTotal(list: ChatView[]): number {
   return list.reduce((sum, v) => sum + v.unread, 0);
 }
 
+/** The conversations the Chats tab lists: every held conversation with
+ *  something to show (a message or an unread count), newest first by the last
+ *  message's sentAt, falling back to seq when no message is held. */
+export function chatRows(list: ChatView[]): ChatView[] {
+  return list
+    .filter((v) => v.messages.length > 0 || v.unread > 0)
+    .sort((a, b) => {
+      const aLast = a.messages[a.messages.length - 1];
+      const bLast = b.messages[b.messages.length - 1];
+      return (bLast ? bLast.sentAt : b.seq) - (aLast ? aLast.sentAt : a.seq);
+    });
+}
+
 /** A message's key on screen: the clientId while it is in flight, the id once confirmed. */
 export function messageKey(m: ChatMessage): string {
   return m.clientId ?? m.id;

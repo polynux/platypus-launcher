@@ -48,7 +48,7 @@ export function NumberField({ value, onChange, min, max, step = 1, hideSteppers,
 
   const atMin = value !== undefined && min !== undefined && value <= min;
   const atMax = value !== undefined && max !== undefined && value >= max;
-  const stepBtn = 'grid size-7 flex-none place-items-center rounded-lg bg-white/[0.06] text-white/60 transition hover:bg-white/[0.1] hover:text-white/90 disabled:pointer-events-none disabled:opacity-40';
+  const stepBtn = 'grid size-7 flex-none place-items-center rounded-lg bg-surface-strong text-text-muted transition hover:bg-white/[0.1] hover:text-text disabled:pointer-events-none disabled:opacity-40';
 
   return (
     <div data-slot="number-field" className={cn('flex items-center gap-1.5', className)}>

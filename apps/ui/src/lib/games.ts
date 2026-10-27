@@ -1,7 +1,34 @@
-import type { Game, GameSettings } from '../types';
+import type { Game, GameSettings, Job, ProtonVersion } from '../types';
 import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 import i18n from './i18n';
 import { ratingBadge } from './compat';
+
+export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'rating'; error?: string; runnerId?: string; failedJobKind?: 'install' | 'update' };
+
+/** Issues the frontend can identify from its current library, job and runner snapshots. */
+export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersion[]): AttentionIssue[] {
+  const latest = new Map<string, Job>();
+  for (const job of jobs) {
+    const prev = latest.get(job.game_id);
+    if (!prev || job.updated_at > prev.updated_at) latest.set(job.game_id, job);
+  }
+  const out: AttentionIssue[] = [];
+  for (const game of games) {
+    const job = latest.get(game.id);
+    if (job?.state === 'failed' && (job.kind === 'install' || job.kind === 'update')) {
+      out.push({ game, kind: 'install', error: job.error ?? undefined, failedJobKind: job.kind });
+    }
+    if (game.outside_folder) out.push({ game, kind: 'outside' });
+    const runnerId = game.settings.runner_id;
+    const runner = runners.find((r) => r.id === runnerId || r.name === runnerId);
+    if (!game.native && runnerId && runnerId !== 'auto' && !runner) {
+      out.push({ game, kind: 'runner', runnerId });
+    }
+    if (game.update_available && game.is_installed) out.push({ game, kind: 'update' });
+    if (needsAttention(game)) out.push({ game, kind: 'rating' });
+  }
+  return out;
+}
 
 /** A game "needs attention" when it has a curated fix recipe or a poor rating badge. */
 export function needsAttention(g: Game): boolean {
@@ -68,6 +95,25 @@ export function hoursPlayed(g: Game): number | undefined {
 
 export function lastPlayedLabel(g: Game, now = Date.now()): string | undefined {
   return formatLastPlayed(g.last_played_at, now);
+}
+
+/** Relative "ago" for the atlas list rows (issue #128), mirroring `ago()` in
+ *  tools/design-lab-2/src/core/launcher.js: "6 h ago", "yesterday",
+ *  "2 mo ago". Never a calendar date: anything past a month counts in months,
+ *  past a year in years. last_played_at is unix seconds; now is ms. */
+export function lastPlayedAgo(g: Game, now = Date.now()): string | undefined {
+  if (!g.last_played_at) return undefined;
+  const ms = Math.max(0, now - g.last_played_at * 1000);
+  const m = ms / 60e3;
+  if (m < 1) return i18n.t('game:timeAgo.justNow');
+  if (m < 60) return i18n.t('game:timeAgo.minutes', { count: Math.round(m) });
+  const h = m / 60;
+  if (h < 24) return i18n.t('game:timeAgo.hours', { count: Math.round(h) });
+  const d = h / 24;
+  if (d < 2) return i18n.t('game:timeAgo.yesterday');
+  if (d < 30) return i18n.t('game:timeAgo.days', { count: Math.round(d) });
+  if (d < 365) return i18n.t('game:timeAgo.months', { count: Math.round(d / 30) });
+  return i18n.t('game:timeAgo.years', { count: Math.round(d / 365) });
 }
 
 /** Most recently played first; never-played titles keep scan order at the end. */

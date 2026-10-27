@@ -32,7 +32,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   job?: Job;
   jobs: Job[];
   onJob: (kind: GameJobKind) => void;
-  onJobAction: (action: 'cancel' | 'retry', id: string) => void;
+  onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Closes the settings: a removed game has nothing left to set. */
   onClose: () => void;
@@ -107,7 +107,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
   if (active) {
     return (
       <div className="space-y-3">
-        <p className="text-[12.5px] text-white/70">{t('gameSettings:maintenance.busy', { title: game.title })}</p>
+        <p className="text-[12.5px] text-text-muted">{t('gameSettings:maintenance.busy', { title: game.title })}</p>
         <JobProgress job={job} onCancel={(id) => onJobAction('cancel', id)} />
       </div>
     );
@@ -186,9 +186,9 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
             {/* Loading text in place until the save paths and the auto-backup
                 state land: never an empty line, never the wrong line. */}
             {savePaths == null || autoState === undefined ? (
-              <p role="status" className="text-[12px] text-white/60">{t('gameSettings:maintenance.saveBackups.loading')}</p>
+              <p role="status" className="text-[12px] text-text-muted">{t('gameSettings:maintenance.saveBackups.loading')}</p>
             ) : (
-              <p className="text-[12px] text-white/60">
+              <p className="text-[12px] text-text-muted">
                 {cloudNoSaves
                   ? t('gameSettings:maintenance.saveBackups.uninstallCloudNoSaves')
                   : noSavePaths
@@ -197,7 +197,7 @@ export function MaintenanceTab({ game, plugin, job, jobs, onJob, onJobAction, on
               </p>
             )}
             {needsNoSavesCheck && (
-              <label className="flex items-center gap-2 text-[12.5px] text-white/75">
+              <label className="flex items-center gap-2 text-[12.5px] text-text-body">
                 <input
                   type="checkbox"
                   checked={allowNoBackup}
@@ -371,10 +371,10 @@ export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
         : (nouns[0] ?? ''),
     });
   return (
-    <section data-testid="remove-confirm-panel" className="border-b border-white/[0.06] pb-5 last:border-b-0">
+    <section data-testid="remove-confirm-panel" className="border-b border-hairline pb-5 last:border-b-0">
       <div className="min-w-0">
-        <MonoLabel className="mb-1">{t('gameSettings:maintenance.removeTitle').toLowerCase()}</MonoLabel>
-        <p className="text-[12.5px] leading-relaxed text-white/60">{summary}</p>
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.removeTitle')}</MonoLabel>
+        <p className="text-[12.5px] leading-relaxed text-text-muted">{summary}</p>
       </div>
       <div className="mt-3 flex min-w-0 flex-col gap-2.5">
         {/* Native games have no Wine prefix (issue #47): no box to check. */}
@@ -388,7 +388,7 @@ export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
               onChange={setDeletePrefix}
             />
             {sharedPath && sharers && sharers.length > 0 && (
-              <p role="status" className="text-[12px] leading-snug text-amber-200/85">
+              <p role="status" className="text-[12px] leading-snug text-attention">
                 {t('gameSettings:prefix.sharedWith', { games: sharers.join(', ') })}
               </p>
             )}
@@ -403,27 +403,27 @@ export function RemoveConfirmPanel({ game, check, error, onCancel, onRemove }: {
         />
         {check ? (
           noPaths ? (
-            <label className="flex items-start gap-2 text-[12.5px] leading-snug text-white/70">
+            <label className="flex items-start gap-2 text-[12.5px] leading-snug text-text-muted">
               <input
                 type="checkbox"
                 checked={allowNoSaves}
                 onChange={(e) => setAllowNoSaves(e.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 accent-amber-300"
+                className="mt-0.5 h-3.5 w-3.5 accent-attention"
               />
               <span>
                 {t('gameSettings:maintenance.removeNoSaves')}
-                <span className="block text-[12px] text-white/55">{t('gameSettings:maintenance.removeAllowNoSaves')}</span>
+                <span className="block text-[12px] text-text-muted">{t('gameSettings:maintenance.removeAllowNoSaves')}</span>
               </span>
             </label>
           ) : cloudNoSaves ? (
-            <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeCloudNoSaves')}</p>
+            <p className="min-h-[18px] text-[12px] text-text-muted">{t('gameSettings:maintenance.removeCloudNoSaves')}</p>
           ) : check.saves?.off ? (
-            <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupOff')}</p>
+            <p className="min-h-[18px] text-[12px] text-text-muted">{t('gameSettings:maintenance.removeBackupOff')}</p>
           ) : (
-            <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeBackupFirst')}</p>
+            <p className="min-h-[18px] text-[12px] text-text-muted">{t('gameSettings:maintenance.removeBackupFirst')}</p>
           )
         ) : (
-          <p className="min-h-[18px] text-[12px] text-white/55">{t('gameSettings:maintenance.removeMeasuring')}</p>
+          <p className="min-h-[18px] text-[12px] text-text-muted">{t('gameSettings:maintenance.removeMeasuring')}</p>
         )}
         {error && <ErrorNotice message={error} fallback={t('gameSettings:maintenance.removeError', { title: game.title })} />}
         <div className="flex gap-2">
@@ -461,17 +461,17 @@ function TargetBox({ label, target, measuring, checked, onChange }: {
       ? `${target.path} · ${formatBytes(target.bytes)}`
       : reasonText(target);
   return (
-    <label className="flex min-w-0 items-start gap-2 text-[12.5px] leading-snug text-white/70">
+    <label className="flex min-w-0 items-start gap-2 text-[12.5px] leading-snug text-text-muted">
       <input
         type="checkbox"
         checked={checked}
         disabled={!target?.allowed}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-3.5 w-3.5 flex-none accent-amber-300"
+        className="mt-0.5 h-3.5 w-3.5 flex-none accent-attention"
       />
       <span className="min-w-0 flex-1">
         {label}
-        <span className="block min-h-[18px] truncate font-mono text-[12px] text-white/55" title={target?.path ?? detail}>{detail}</span>
+        <span className="block min-h-[18px] truncate font-mono text-[12px] text-text-muted" title={target?.path ?? detail}>{detail}</span>
       </span>
     </label>
   );
@@ -479,10 +479,10 @@ function TargetBox({ label, target, measuring, checked, onChange }: {
 
 function Row({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-white/[0.06] pb-5 last:border-b-0">
+    <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-hairline pb-5 last:border-b-0">
       <div className="min-w-0 flex-1 basis-64">
-        <MonoLabel className="mb-1">{title.toLowerCase()}</MonoLabel>
-        <p className="text-[12.5px] leading-relaxed text-white/60">{text}</p>
+        <MonoLabel className="mb-1">{title}</MonoLabel>
+        <p className="text-[12.5px] leading-relaxed text-text-muted">{text}</p>
       </div>
       <div className="flex-none">{children}</div>
     </section>

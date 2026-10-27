@@ -7,7 +7,7 @@ export function Label({ className, ...props }: React.ComponentProps<typeof Label
   return (
     <LabelPrimitive.Root
       data-slot="label"
-      className={cn('font-mono text-micro uppercase tracking-[0.16em] text-white/55 select-none', className)}
+      className={cn('font-mono text-micro uppercase tracking-[0.16em] text-text-muted select-none plain:font-sans plain:normal-case plain:tracking-normal plain:text-[13px] plain:font-semibold plain:text-text', className)}
       {...props}
     />
   );

@@ -16,5 +16,24 @@
   "attention": {
     "borked": "{{source}} reports this title as borked. Try a different runner or check the reports.",
     "bronze": "{{source}} rates this title bronze. It may need tweaks to run well."
+  },
+  "atlas": {
+    "reason": { "install": "The last attempt failed.", "outside": "{{title}} lives in {{dir}}. Platypus only launches games from your game folders.", "runner": "{{title}} is set to {{runner}}, which was removed.", "update": "An update is available." },
+    "title": "Needs attention",
+    "sub_one": "{{count}} game can't start or needs a decision.",
+    "sub_other": "{{count}} games can't start or need a decision.",
+    "emptySub": "Nothing needs you.",
+    "emptyTitle": "Everything works",
+    "emptyBody": "Games that fail to install, lose their runner or need an update show up here.",
+    "kindRated": "{{source}} rating",
+    "kindFix": "Community fix",
+    "openGame": "Open game",
+    "openRunners": "Open runners",
+    "defaultRunner": "default runner",
+    "useDefaultRunner": "Use {{runner}}",
+    "issue": { "install": "Install failed", "updateFailed": "Update failed", "outside": "Outside your game folders", "runner": "Runner missing", "update": "Update ready", "rating": "Runs badly on Linux" },
+    "fix": { "install": "Retry install", "outside": "Allow this folder", "runner": "Use default runner", "update": "Update now", "rating": "Open game" },
+    "emptyTitle": "Everything works",
+    "emptyBody": "Games that fail to install, lose their runner or need an update show up here."
   }
 }

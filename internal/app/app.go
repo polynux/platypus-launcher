@@ -1182,6 +1182,9 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		DefaultPrefixesFolder: settings.DefaultPrefixesFolderFor(a.resolvedDataDir()),
 		Language:              a.settings.Language(),
 		MinimizeToTray:        a.settings.MinimizeToTray(),
+		Theme:                 a.settings.Theme(),
+		GameTone:              a.settings.GameTone(),
+		ColorScheme:           a.settings.ColorScheme(),
 	}
 }
 

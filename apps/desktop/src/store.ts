@@ -30,6 +30,15 @@ export interface StoreRect {
   height: number;
 }
 
+export function applyStoreViewBounds(view: { setVisible(visible: boolean): void; setBounds(bounds: StoreRect): void }, bounds: StoreRect): void {
+  if (bounds.width === 0 || bounds.height === 0) {
+    view.setVisible(false);
+    return;
+  }
+  view.setVisible(true);
+  view.setBounds(bounds);
+}
+
 /** The rect to place the native view at, or null when it is unusable. */
 export function validStoreBounds(raw: unknown): StoreRect | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -37,7 +46,7 @@ export function validStoreBounds(raw: unknown): StoreRect | null {
   const nums = [r.x, r.y, r.width, r.height];
   if (!nums.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
   const [x, y, width, height] = nums as number[];
-  if (width < 1 || height < 1 || width > 16384 || height > 16384) return null;
+  if ((width === 0) !== (height === 0) || width < 0 || height < 0 || width > 16384 || height > 16384) return null;
   if (x < 0 || y < 0 || x > 16384 || y > 16384) return null;
   return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) };
 }

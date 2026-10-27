@@ -1,0 +1,57 @@
+# The default theme: the warm control room (DESIGN.md §1). Its values are the
+# ones style.css and the components have always used.
+
+[theme]
+id = "warm"
+name = "Warm"
+schema = 1
+catalog = "1.0"
+supports = ["tokens", "variants"]
+
+[tokens]
+ground = "#130f0a"
+ground-2 = "#191410"
+raised = "#191410"
+surface = "rgba(255, 255, 255, 0.045)"
+surface-strong = "rgba(255, 255, 255, 0.06)"
+hairline = "rgba(255, 255, 255, 0.07)"
+hairline-strong = "rgba(255, 255, 255, 0.12)"
+popover = "#191410"
+glass = "rgba(25, 20, 16, 0.82)"
+text = "rgba(255, 255, 255, 0.9)"
+text-body = "rgba(255, 255, 255, 0.7)"
+text-muted = "rgba(255, 255, 255, 0.55)"
+text-faint = "#78716c"
+accent = "oklch(82.8% 0.189 84.429)"
+accent-strong = "oklch(87.9% 0.169 91.605)"
+accent-dim = "#2f240d"
+on-accent = "#130f0a"
+ok = "oklch(76.5% 0.177 163.223)"
+attention = "oklch(75% 0.183 55.934)"
+info = "oklch(82.8% 0.111 230.318)"
+dl = "oklch(70.2% 0.183 293.541)"
+danger = "oklch(63.7% 0.237 25.331)"
+focus = "oklch(87.9% 0.169 91.605)"
+radius-chip = "0.75rem"
+radius-card = "1rem"
+radius-panel = "1.5rem"
+font-sans = '"Hanken Grotesk", system-ui, sans-serif'
+font-mono = '"JetBrains Mono", ui-monospace, monospace'
+
+[[wash]]
+at = "14% -8%"
+size = "1100px 620px"
+color = "rgba(150, 96, 58, 0.46)"
+fade = "58%"
+
+[[wash]]
+at = "90% 10%"
+size = "880px 520px"
+color = "rgba(86, 62, 128, 0.44)"
+fade = "54%"
+
+[[wash]]
+at = "52% 108%"
+size = "760px 460px"
+color = "rgba(30, 78, 96, 0.36)"
+fade = "56%"

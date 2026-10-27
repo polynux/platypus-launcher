@@ -1,7 +1,9 @@
 import React from 'react';
 import type { ActivityType } from '../types';
 import { cn } from '@/lib/utils';
+import { Inbox } from 'lucide-react';
 import { coverMisses } from '../lib/coverMisses';
+import { useVariant } from '../lib/theme';
 import { buttonVariantClass } from './ds/button';
 import { Badge } from './ds/badge';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
@@ -16,15 +18,22 @@ import { TIER_MEANING } from '../lib/compat';
 
 export const cx = cn;
 
+/** The launcher version stamped in the shell footers (sidebar, topbar, sourcebar). */
+export const APP_VERSION = 'Platypus 0.2.0';
+
 export function Panel({ className, children, as: Tag = 'div' }: { className?: string; children: React.ReactNode; as?: 'div' | 'section' | 'aside' }) {
-  return <Tag className={cx('rounded-3xl bg-white/[0.045] p-5 ring-1 ring-white/[0.07]', className)}>{children}</Tag>;
+  return <Tag className={cx('rounded-3xl bg-surface p-5 ring-1 ring-hairline', className)}>{children}</Tag>;
 }
 
 export const cardClass =
-  'group overflow-hidden rounded-2xl bg-white/[0.045] text-left ring-1 ring-white/[0.07] transition duration-300 hover:-translate-y-0.5 hover:ring-amber-300/40 focus-visible:ring-amber-300/60';
+  'group overflow-hidden rounded-2xl bg-surface text-left ring-1 ring-hairline transition duration-300 hover:-translate-y-0.5 hover:ring-accent-strong/40 focus-visible:ring-focus/60';
 
 export function MonoLabel({ children, className, as: Tag = 'div' }: { children: React.ReactNode; className?: string; as?: 'div' | 'h2' }) {
-  return <Tag className={cx('font-mono text-micro uppercase tracking-[0.16em] text-white/55', className)}>{children}</Tag>;
+  const style = useVariant('label.style');
+  if (style === 'plain') {
+    return <Tag className={cx('text-[12px] font-bold text-text-faint', className)}>{children}</Tag>;
+  }
+  return <Tag className={cx('font-mono text-micro uppercase tracking-[0.16em] text-text-muted', className)}>{children}</Tag>;
 }
 
 export function SectionTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
@@ -37,8 +46,16 @@ export function SectionTitle({ children, right }: { children: React.ReactNode; r
 }
 
 export function LinkButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  const style = useVariant('label.style');
+  if (style === 'plain') {
+    return (
+      <button onClick={onClick} className="rounded text-[12px] font-bold text-text-faint transition hover:text-text">
+        {children}
+      </button>
+    );
+  }
   return (
-    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-white/55 transition hover:text-white/80">
+    <button onClick={onClick} className="rounded font-mono text-micro uppercase tracking-widest text-text-muted transition hover:text-text">
       {children}
     </button>
   );
@@ -51,6 +68,7 @@ export interface SegOption<T extends string> {
 }
 
 export function SegRow<T extends string>({ options, value, onChange, label }: { options: SegOption<T>[]; value: T; onChange: (v: T) => void; label: string }) {
+  const plain = useVariant('label.style') === 'plain';
   return (
     <ToggleGroup
       type="single"
@@ -61,7 +79,7 @@ export function SegRow<T extends string>({ options, value, onChange, label }: { 
       onValueChange={(v) => v && onChange(v as T)}
     >
       {options.map((o) => (
-        <ToggleGroupItem key={o.value} value={o.value} title={o.title}>
+        <ToggleGroupItem key={o.value} value={o.value} title={o.title} className={plain ? 'font-sans' : undefined}>
           {o.label}
         </ToggleGroupItem>
       ))}
@@ -72,8 +90,8 @@ export function SegRow<T extends string>({ options, value, onChange, label }: { 
 /** Visual-only switch for use inside a clickable row/button. For a standalone control use ds/Switch. */
 export function TogglePill({ on }: { on: boolean }) {
   return (
-    <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-amber-300' : 'bg-white/15')}>
-      <span className={cx('absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-[#191410] transition-transform', on && 'translate-x-3')} />
+    <span aria-hidden className={cx('relative h-4 w-7 flex-none rounded-full transition-colors', on ? 'bg-accent-strong' : 'bg-hairline-strong')}>
+      <span className={cx('absolute left-0.5 top-0.5 h-3 w-3 rounded-full bg-raised transition-transform', on && 'translate-x-3')} />
     </span>
   );
 }
@@ -92,26 +110,26 @@ export function TierBadge({ tier, suffix, title }: { tier?: string | null; suffi
 }
 
 export const TIER_TEXT: Record<string, string> = {
-  platinum: 'text-amber-300',
-  gold: 'text-amber-300/80',
-  silver: 'text-white/55',
-  bronze: 'text-orange-300',
-  borked: 'text-red-300',
+  platinum: 'text-accent-strong',
+  gold: 'text-accent-strong/80',
+  silver: 'text-text-muted',
+  bronze: 'text-attention',
+  borked: 'text-danger',
 };
 
 export const TIER_DOT: Record<string, string> = {
-  platinum: 'bg-amber-300',
-  gold: 'bg-amber-300/50',
-  silver: 'bg-white/40',
-  bronze: 'bg-orange-300/70',
-  borked: 'bg-red-400',
+  platinum: 'bg-accent-strong',
+  gold: 'bg-accent-strong/50',
+  silver: 'bg-text-muted',
+  bronze: 'bg-attention/70',
+  borked: 'bg-danger',
 };
 
 export function TweakDot({ className }: { className?: string }) {
   return (
     <span
       title="Community fix available"
-      className={cx('h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,.8)]', className)}
+      className={cx('h-2 w-2 rounded-full bg-attention shadow-[0_0_8px_rgba(251,146,60,.8)]', className)}
     />
   );
 }
@@ -121,36 +139,154 @@ export const btnPrimary = buttonVariantClass.primary;
 export const btnNeutral = buttonVariantClass.neutral;
 
 export const EVENT_TEXT: Record<ActivityType, string> = {
-  session: 'text-emerald-300',
-  unlock: 'text-amber-300',
-  fix: 'text-sky-300',
-  update: 'text-white/60',
-  add: 'text-white/60',
-  remove: 'text-white/60',
-  download: 'text-violet-400',
-  tweak: 'text-orange-300',
-  cloud: 'text-sky-300',
+  session: 'text-ok',
+  unlock: 'text-accent-strong',
+  fix: 'text-info',
+  update: 'text-text-muted',
+  add: 'text-text-muted',
+  remove: 'text-text-muted',
+  download: 'text-dl',
+  tweak: 'text-attention',
+  cloud: 'text-info',
+  scan: 'text-text-muted',
 };
 
 export const EVENT_DOT: Record<ActivityType, string> = {
-  session: 'bg-emerald-400',
-  unlock: 'bg-amber-400',
-  fix: 'bg-[#7dd3fc]',
-  update: 'bg-white/30',
-  add: 'bg-white/30',
-  remove: 'bg-white/30',
-  download: 'bg-[#a78bfa]',
-  tweak: 'bg-orange-400',
-  cloud: 'bg-[#7dd3fc]',
+  session: 'bg-ok',
+  unlock: 'bg-accent',
+  fix: 'bg-info',
+  update: 'bg-text-muted',
+  add: 'bg-text-muted',
+  remove: 'bg-text-muted',
+  download: 'bg-dl',
+  tweak: 'bg-attention',
+  cloud: 'bg-info',
+  scan: 'bg-text-muted',
 };
 
-export function EmptyState({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
+export function EmptyState({ label, children, action, icon: Icon }: { label: string; children?: React.ReactNode; action?: React.ReactNode; /** Atlas icon (Download, Check, Clock): lab .ap-empty has a 20px faint icon, no dashed box. */
+  icon?: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }> }) {
+  const chrome = useVariant('empty-state.chrome');
+  const showIcon = useVariant('empty-state.icon');
+  const plain = chrome === 'plain';
   return (
-    <div className="rounded-3xl border border-dashed border-white/15 p-10 text-center">
-      <MonoLabel>{label}</MonoLabel>
-      <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-white/70">{children}</p>
-      {action && <div className="mt-4">{action}</div>}
+    <div className={plain ? 'grid justify-items-center gap-2 px-6 py-14 text-center' : 'rounded-3xl border border-dashed border-hairline p-10 text-center'}>
+      {showIcon === 'on' && (Icon ? <Icon aria-hidden className="mb-0.5 h-5 w-5 text-text-faint" /> : <Inbox aria-hidden className="mx-auto mb-3 h-6 w-6 text-text-faint" />)}
+      {plain ? <h3 className="text-[15px] font-bold text-text">{label}</h3> : <MonoLabel>{label}</MonoLabel>}
+      {children && <p className="mx-auto max-w-[46ch] text-[13px] leading-relaxed text-text-muted">{children}</p>}
+      {action && <div className="mt-1.5">{action}</div>}
     </div>
+  );
+}
+
+/** The /22 page frame (lab `.ap-page`): every Atlas page shares it. */
+export const ATLAS_PAGE = 'mx-auto grid w-full max-w-[1240px] content-start gap-6 px-[30px] pt-[26px] pb-12';
+
+/** A view's header (issue #100): title, subtitle and right-side actions.
+ *  The subtitle and actions are the caller's own nodes, so each view keeps
+ *  its copy; the variants only move or hide them. Warm (right/shown/regular)
+ *  is today's layout. */
+export function ViewHeader({ title, subtitle, actions, below, tight }: { title: React.ReactNode; subtitle?: React.ReactNode; actions?: React.ReactNode; below?: React.ReactNode; tight?: boolean }) {
+  const actionsAt = useVariant('view-header.actions');
+  const showSubtitle = useVariant('view-header.subtitle');
+  const size = useVariant('view-header.size');
+  const titleClass = size === 'compact' ? 'text-[20px] font-extrabold tracking-tight' : 'text-[23px] font-extrabold tracking-tight';
+  const subtitleNode = subtitle && showSubtitle === 'shown' ? subtitle : null;
+  if (!actions) {
+    return (
+      <header className={tight ? 'mb-2' : size === 'compact' ? 'mb-4' : 'mb-6'}>
+        <h1 className={titleClass}>{title}</h1>
+        {subtitleNode}
+        {below}
+      </header>
+    );
+  }
+  if (actionsAt === 'below') {
+    return (
+      <header className={tight ? 'mb-2' : size === 'compact' ? 'mb-4' : 'mb-6'}>
+        <h1 className={titleClass}>{title}</h1>
+        {subtitleNode}
+        <div className="mt-3 flex flex-wrap items-center gap-2.5">{actions}</div>
+        {below}
+      </header>
+    );
+  }
+  if (below) {
+    return (
+      <header className="mb-6 space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className={titleClass}>{title}</h1>
+            {subtitleNode}
+          </div>
+          {actions}
+        </div>
+        {below}
+      </header>
+    );
+  }
+  return (
+    <header className={tight ? 'mb-2 flex flex-wrap items-end justify-between gap-4' : 'mb-6 flex flex-wrap items-end justify-between gap-4'}>
+      <div>
+        <h1 className={titleClass}>{title}</h1>
+        {subtitleNode}
+      </div>
+      {actions}
+    </header>
+  );
+}
+
+/** One row in a simple list (issue #100): runner, fix and job rows. The kind
+ *  keeps each row's box as it is today; the media variant hides the fix
+ *  cover in text-only themes, and density tightens the box. Warm
+ *  (media on, comfortable) is pixel-identical to today. */
+const LISTROW_BOX: Record<'fix' | 'runner' | 'job', { comfortable: string; compact: string }> = {
+  fix: {
+    comfortable: 'flex w-full gap-4 rounded-2xl bg-surface p-4 text-left ring-1 ring-hairline transition hover:ring-attention/40',
+    compact: 'flex w-full gap-3 rounded-2xl bg-surface p-3 text-left ring-1 ring-hairline transition hover:ring-attention/40',
+  },
+  runner: {
+    comfortable: 'flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline',
+    compact: 'flex items-center justify-between gap-3 rounded-2xl bg-surface px-3 py-2 ring-1 ring-hairline',
+  },
+  job: {
+    comfortable: 'rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline',
+    compact: 'rounded-2xl bg-surface px-3 py-2 ring-1 ring-hairline',
+  },
+};
+
+export function ListRow({ kind, media, children, as: Tag = 'div', buttonProps }: { kind: 'fix' | 'runner' | 'job'; media?: React.ReactNode; children: React.ReactNode; as?: 'div' | 'button'; buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement> }) {
+  const showMedia = useVariant('list-row.media');
+  const density = useVariant('list-row.density');
+  const box = density === 'compact' ? LISTROW_BOX[kind].compact : LISTROW_BOX[kind].comfortable;
+  const mediaNode = kind === 'fix' && media && showMedia === 'on' ? media : null;
+  if (Tag === 'button') {
+    return (
+      <button {...buttonProps} className={box}>
+        {mediaNode}
+        {children}
+      </button>
+    );
+  }
+  return (
+    <div className={box}>
+      {mediaNode}
+      {children}
+    </div>
+  );
+}
+
+/** A group in a simple view (issue #100): the queue and finished groups in
+ *  Downloads, the feed panel in Activity. The chrome prop is the view's
+ *  current box, so warm stays pixel-identical; the catalog variant drives
+ *  the Settings sections, and cool's framed/compact/split choices show in
+ *  the headers, empty states and rows instead. */
+export function Section({ children, className }: { children: React.ReactNode; className?: string }) {
+  const chrome = useVariant('section.chrome');
+  return (
+    <section data-chrome={chrome} className={className}>
+      {children}
+    </section>
   );
 }
 
@@ -197,8 +333,8 @@ export function Cover({ src, title, className }: { src?: string | string[]; titl
   }, [current, fail]);
   if (!current) {
     return (
-      <div className={cx('grid place-items-center bg-gradient-to-br from-white/[0.08] to-white/[0.02] p-3 text-center', className)}>
-        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-white/85">{title}</span>
+      <div className={cx('cover-fallback grid place-items-center bg-gradient-to-br from-surface-strong to-surface p-3 text-center', className)}>
+        <span className="line-clamp-3 text-[13px] font-extrabold leading-tight text-text">{title}</span>
       </div>
     );
   }

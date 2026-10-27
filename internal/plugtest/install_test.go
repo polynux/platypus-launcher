@@ -141,3 +141,28 @@ func TestInstallScriptRejectsEscapingExec(t *testing.T) {
 		t.Fatalf("expected a refusal, got %v: %s", err, out)
 	}
 }
+
+// A theme may live in a subfolder: install.sh copies the theme file's own
+// layouts/, assets/ and fonts/, recursively, so nested asset folders ship
+// (issue #155).
+func TestInstallScriptCopiesASubfolderThemeRecursively(t *testing.T) {
+	e := newInstallEnv(t)
+	e.write("plugins/t/plugin.json", `{"id": "t", "kind": "data", "theme": "theme/theme.toml"}`)
+	e.write("plugins/t/theme/theme.toml", "[theme]\nid = \"t\"\n")
+	e.write("plugins/t/theme/layouts/dashboard.xml", "<layout/>")
+	e.write("plugins/t/theme/assets/nested/bg.png", "png")
+	e.write("plugins/t/theme/fonts/x.woff2", "woff2")
+	if out, err := e.install("t"); err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	for _, rel := range []string{
+		"theme/theme.toml",
+		"theme/layouts/dashboard.xml",
+		"theme/assets/nested/bg.png",
+		"theme/fonts/x.woff2",
+	} {
+		if !e.installed("t", rel) {
+			t.Errorf("%s wasn't installed", rel)
+		}
+	}
+}

@@ -53,13 +53,13 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
   return (
     <Modal label={t('cloud:conflict.label')} onClose={onClose} size="lg">
       <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:conflict.heading')}</h2>
-      <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60">
+      <p className="mt-1.5 text-[12.5px] leading-relaxed text-text-muted">
         {t('cloud:conflict.intro', { title: game.title, count: conflicts.length })}{' '}
         {t('cloud:conflict.explanation')}
       </p>
 
       {conflicts.length > 1 && (
-        <div className="mt-3 flex items-center gap-3 font-mono text-hint text-white/55">
+        <div className="mt-3 flex items-center gap-3 font-mono text-hint text-text-muted">
           {t('cloud:conflict.allFiles')}
           <Button variant="link" onClick={() => setAll('local')}>{t('cloud:conflict.keepLocal')}</Button>
           <Button variant="link" onClick={() => setAll('remote')}>{t('cloud:conflict.keepRemote')}</Button>
@@ -69,8 +69,8 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
 
       <ul aria-label={t('cloud:conflict.filesLabel')} className="mt-4 space-y-3">
         {conflicts.map((c) => (
-          <li key={c.path} className="rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/[0.07]">
-            <div className="truncate font-mono text-[12px] text-white/85 select-text" title={c.path}>{c.path}</div>
+          <li key={c.path} className="rounded-2xl bg-surface p-4 ring-1 ring-hairline">
+            <div className="truncate font-mono text-[12px] text-text select-text" title={c.path}>{c.path}</div>
             <div className="mt-2.5 grid gap-2 sm:grid-cols-2">
               <Side title={t('cloud:conflict.local')} file={c.local} newer={newerSide(c) === 'local'} />
               <Side title={t('cloud:conflict.remote')} file={c.remote} newer={newerSide(c) === 'remote'} from={c.remote.machine} />
@@ -91,7 +91,7 @@ export function CloudConflictDialog({ game, status, onClose, onResolved, onLaunc
         ))}
       </ul>
 
-      {status.backupDir && <p className="mt-3 font-mono text-hint text-white/55 select-text">{t('cloud:conflict.backups', { dir: status.backupDir })}</p>}
+      {status.backupDir && <p className="mt-3 font-mono text-hint text-text-muted select-text">{t('cloud:conflict.backups', { dir: status.backupDir })}</p>}
       {error && <ErrorNotice className="mt-3" message={error} fallback={t('cloud:conflict.error')} />}
 
       <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
@@ -118,14 +118,14 @@ function newerSide(c: CloudConflict): 'local' | 'remote' | null {
 function Side({ title, file, newer, from }: { title: string; file: CloudConflict['local']; newer: boolean; from?: string }) {
   const { t } = useTranslation('cloud');
   return (
-    <div className={cx('rounded-xl px-3 py-2.5 ring-1', newer ? 'bg-amber-300/[0.06] ring-amber-300/25' : 'ring-white/[0.07]')}>
+    <div className={cx('rounded-xl px-3 py-2.5 ring-1', newer ? 'bg-attention/[0.06] ring-attention/25' : 'ring-hairline')}>
       <div className="flex items-center justify-between gap-2">
         <MonoLabel>{title}</MonoLabel>
         {newer && <Badge variant="accent">{t('cloud:conflict.newer')}</Badge>}
       </div>
-      <div className="mt-1.5 font-mono text-[12px] text-white/85">{fileSize(file.size)}</div>
-      <div className="font-mono text-hint text-white/55">{whenLabel(file.mtime)}</div>
-      {from && <div className="font-mono text-hint text-white/55">{t('cloud:conflict.from', { machine: from })}</div>}
+      <div className="mt-1.5 font-mono text-[12px] text-text">{fileSize(file.size)}</div>
+      <div className="font-mono text-hint text-text-muted">{whenLabel(file.mtime)}</div>
+      {from && <div className="font-mono text-hint text-text-muted">{t('cloud:conflict.from', { machine: from })}</div>}
     </div>
   );
 }

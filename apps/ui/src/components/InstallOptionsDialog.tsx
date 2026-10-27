@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
-import { ExternalLink, TriangleAlert } from 'lucide-react';
+import { ExternalLink, TriangleAlert, Folder } from 'lucide-react';
 import type { Game, InstallChoices, OptionGroup, StorePlugin } from '../types';
-import { ModalOrInline } from './Modal';
+import { ModalOrInline, ModalHead, ModalFoot } from './Modal';
 import { InstallLocationPicker } from './InstallLocationPicker';
 import { Badge } from '@/components/ds/badge';
 import { Button } from '@/components/ds/button';
@@ -19,6 +19,7 @@ import { ensureTerms } from '../lib/termsRequest';
 import { addedBytes, canPick, chosenIds, pickValue, removedAddOns, sameChoices, setFlag, toggleValue } from '../lib/options';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { useVariant } from '../lib/theme';
 
 export interface InstallOptionsDialogProps {
   game: Game;
@@ -38,6 +39,7 @@ export interface InstallOptionsDialogProps {
  *  the choices and checks them again when the install is queued. */
 export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, onNotify, embedded }: InstallOptionsDialogProps) {
   const { t } = useTranslation(['gameOps', 'common']);
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const [groups, setGroups] = useState<OptionGroup[] | null>(null);
   const [choices, setChoices] = useState<InstallChoices>({});
   // What the choices were when the dialog opened: an update compares with it.
@@ -67,7 +69,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       () => { /* unknown: the total says so, and the install isn't blocked on it */ },
     );
     return () => { live = false; };
-  }, [game]);
+  }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const installing = mode === 'install';
   const added = groups ? addedBytes(groups, choices) : 0;
@@ -114,23 +116,25 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
   };
 
   return (
-    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy}>
-      {!embedded && (
+    <ModalOrInline embedded={embedded} label={installing ? t('gameOps:options.installLabel', { title: game.title }) : t('gameOps:options.updateLabel', { title: game.title })} onClose={onClose} size="md" dismissable={!busy} innerClassName={atlas ? 'p-0' : undefined}>
+      {atlas && !embedded && <ModalHead title={installing ? t('gameOps:install.title', { title: game.title }) : t('gameOps:options.updateTitle')} sub={`${plugin.name} · ${total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}`} onClose={onClose} />}
+      <div className={atlas && !embedded ? 'max-h-[60vh] overflow-y-auto px-5 py-3' : ''}>
+      {!embedded && !atlas && (
         <>
           <h2 className="text-[20px] font-extrabold tracking-tight">{installing ? t('gameOps:options.installTitle') : t('gameOps:options.updateTitle')}</h2>
-          <p className="mt-1 text-[12.5px] text-white/70">
+          <p className="mt-1 text-[12.5px] text-text-muted">
             {game.title} · {plugin.name}
           </p>
         </>
       )}
 
-      {!groups && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:options.loading')}</p>}
+      {!groups && !error && <p className="mt-6 font-mono text-micro uppercase tracking-widest text-text-muted">{t('gameOps:options.loading')}</p>}
       {error && (
-        <ErrorNotice className="mt-5 rounded-xl bg-red-500/10 px-4 py-3" message={error} fallback={t('gameOps:options.loadError')} />
+        <ErrorNotice className="mt-5 rounded-xl bg-danger/10 px-4 py-3" message={error} fallback={t('gameOps:options.loadError')} />
       )}
 
       {groups && groups.length === 0 && (
-        <p className="mt-5 rounded-xl bg-white/[0.04] px-4 py-3 text-[12.5px] text-white/60">
+        <p className="mt-5 rounded-xl bg-surface px-4 py-3 text-[12.5px] text-text-muted">
           {t('gameOps:options.empty', { plugin: plugin.name, title: game.title })}
         </p>
       )}
@@ -143,23 +147,23 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       ))}
 
       {groups && groups.length > 0 && (
-        <div className="mt-6 rounded-2xl bg-white/[0.04] px-4 py-3 font-mono text-hint">
+        <div className={cx('mt-6 rounded-2xl bg-surface px-4 py-3', atlas ? 'font-sans text-[13px] tabular-nums [&_[data-testid]]:font-semibold' : 'font-mono text-hint')}>
           <div className="flex justify-between gap-4">
-            <span className="text-white/55">{t('gameOps:options.addonsLabel')}</span>
-            <span className="text-white/85" data-testid="added-size">{added > 0 ? t('gameOps:options.addedSome', { size: formatBytes(added) }) : t('gameOps:options.addedNone')}</span>
+            <span className="text-text-muted">{t('gameOps:options.addonsLabel')}</span>
+            <span className="text-text" data-testid="added-size">{added > 0 ? t('gameOps:options.addedSome', { size: formatBytes(added) }) : t('gameOps:options.addedNone')}</span>
           </div>
           <div className="mt-1.5 flex justify-between gap-4">
-            <span className="text-white/55">{t('gameOps:options.totalLabel')}</span>
-            <span className="text-white/85" data-testid="total-size">{total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}</span>
+            <span className="text-text-muted">{t('gameOps:options.totalLabel')}</span>
+            <span className="text-text" data-testid="total-size">{total != null ? formatBytes(total) : t('gameOps:options.totalUnknown')}</span>
           </div>
           {room != null && room >= 0 && (
             <div className="mt-1.5 flex justify-between gap-4">
-              <span className="text-white/55">{t('gameOps:options.freeLabel')}</span>
-              <span className={cx(short ? 'text-red-300' : 'text-white/85')} data-testid="free-space">{formatBytes(room)}</span>
+              <span className="text-text-muted">{t('gameOps:options.freeLabel')}</span>
+              <span className={cx(short ? 'text-danger' : 'text-text')} data-testid="free-space">{formatBytes(room)}</span>
             </div>
           )}
           {short && (
-            <p role="alert" className="mt-2 flex items-center gap-1.5 text-red-300">
+            <p role="alert" className="mt-2 flex items-center gap-1.5 text-danger">
               <TriangleAlert className="h-3.5 w-3.5" /> {t('gameOps:options.short')}
             </p>
           )}
@@ -179,18 +183,20 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       )}
 
       {removed.length > 0 && (
-        <p role="alert" className="mt-5 flex items-start gap-1.5 text-[12.5px] text-amber-200">
+        <p role="alert" className="mt-5 flex items-start gap-1.5 text-[12.5px] text-attention">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{t('gameOps:options.removal', { list: formatList(removed), title: game.title })}</span>
         </p>
       )}
 
-      <div className="mt-6 flex justify-end gap-2.5">
+        {!atlas && <div className="mt-6 flex justify-end gap-2.5">
         <Button variant="neutral" size="sm" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button>
         <Button variant="primary" size="sm" disabled={busy || !groups || short || unchanged} onClick={apply}>
           {installing ? t('gameOps:options.install') : t('gameOps:options.apply')}
         </Button>
+        </div>}
       </div>
+      {atlas && !embedded && <ModalFoot><Button variant="ghost" disabled={busy} onClick={onClose}>{t('common:cancel')}</Button><Button variant="primary" disabled={busy || !groups || short || unchanged} onClick={apply}>{installing ? t('gameOps:options.install') : t('gameOps:options.apply')}</Button></ModalFoot>}
     </ModalOrInline>
   );
 }
@@ -206,7 +212,7 @@ function OptionGroupBody({ group, choices, onChange }: {
   if (group.kind === 'bool') {
     const on = choices[group.id] === true;
     return (
-      <label className="flex items-center justify-between gap-3 text-[12.5px] text-white/75">
+      <label className="flex items-center justify-between gap-3 text-[12.5px] text-text-body">
         {group.label ?? group.id}
         <Switch aria-label={group.label ?? group.id} checked={on} onCheckedChange={(v) => onChange(setFlag(choices, group, v))} />
       </label>
@@ -232,19 +238,19 @@ function OptionGroupBody({ group, choices, onChange }: {
         const allowed = canPick(group, v);
         const checked = picked.includes(v.id);
         return (
-          <li key={v.id} className={cx('flex items-center gap-2.5 text-[12.5px]', allowed ? 'text-white/75' : 'text-white/55')}>
+          <li key={v.id} className={cx('flex items-center gap-2.5 text-[12.5px]', allowed ? 'text-text-body' : 'text-text-muted')}>
             <input
               type="checkbox"
               aria-label={v.label ?? v.id}
               checked={checked}
               disabled={!allowed}
               onChange={(e) => onChange(toggleValue(group, choices, v.id, e.target.checked))}
-              className="h-3.5 w-3.5 accent-amber-300"
+              className="h-3.5 w-3.5 accent-attention"
             />
             <span className="min-w-0 flex-1 truncate">{v.label ?? v.id}</span>
             {v.installed && <Badge variant="ok">{t('gameOps:options.installedBadge')}</Badge>}
             {!v.owned && group.dlc && <Badge variant="neutral">{t('gameOps:options.notOwned')}</Badge>}
-            {v.sizeBytes != null && v.sizeBytes > 0 && <span className="font-mono text-hint text-white/55">{formatBytes(v.sizeBytes)}</span>}
+            {v.sizeBytes != null && v.sizeBytes > 0 && <span className="font-mono text-hint text-text-muted">{formatBytes(v.sizeBytes)}</span>}
             {!v.owned && group.dlc && v.storeUrl && (
               <Button variant="link" size="sm" onClick={() => openExternal(v.storeUrl)} className="gap-1">
                 {t('gameOps:options.store')} <ExternalLink className="h-3 w-3" />

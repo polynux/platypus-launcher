@@ -1,4 +1,5 @@
 {
+  "timeAgo": { "justNow": "à l’instant", "minutes_one": "il y a {{count}} min", "minutes_other": "il y a {{count}} min", "hours_one": "il y a {{count}} h", "hours_other": "il y a {{count}} h", "yesterday": "hier", "days_one": "il y a {{count}} jour", "days_other": "il y a {{count}} jours", "months_one": "il y a {{count}} mois", "months_other": "il y a {{count}} mois", "years_one": "il y a {{count}} an", "years_other": "il y a {{count}} ans" },
   "launching": "Lancement de {{title}}",
   "nowRunning": "{{title}} est en cours d'exécution",
   "stopBeforeRemove": "Arrêtez « {{title}} » avant de le retirer",
@@ -149,7 +150,7 @@
   },
   "facts": {
     "runner": "Exécuteur",
-    "dx": "Couche DX",
+    "dx": "Couche DirectX",
     "wrappers": "Wrappers",
     "launchVia": "Lancé via",
     "deck": "Steam Deck",
@@ -170,12 +171,15 @@
     "deckPending": "pas encore évalué",
     "deckNoAppId": "pas d'AppID Steam",
     "pending": "…",
-    "compatibility": "Compatibilité"
+    "unknown": "Inconnu",
+    "nativeLaunch": "Binaire natif",
+    "compatibility": "ProtonDB"
   },
   "about": {
     "heading": "À propos",
     "showMore": "Afficher plus",
     "showLess": "Afficher moins",
+    "readFull": "Lire la description complète",
     "noDescription": "Pas de description de la boutique pour ce titre.",
     "storeUnavailable": "Données de la boutique indisponibles : {{error}}",
     "developer": "Développeur",
@@ -222,10 +226,14 @@
     "installTo": "Installer vers…",
     "install": "Installer",
     "retryInstall": "Réessayer l'installation",
+    "retry": "Réessayer",
     "cantInstall": "Installation impossible ici",
     "noteWithVersion": "s'installe dans {{folder}} · <v>Choisir la version</v> · <d>changer le défaut</d>",
     "notePlain": "s'installe dans {{folder}} · <d>changer le défaut</d>",
-    "lastAttempt": "La dernière tentative n'a pas abouti."
+    "stripWithVersion": "<v>Choisir la version</v> · <d>Changer de dossier</d>",
+    "stripPlain": "<d>Changer de dossier</d>",
+    "lastAttempt": "La dernière tentative n'a pas abouti.",
+    "lastAttemptPrefix": "Échec de la dernière tentative : {{error}}"
   },
   "installSize": {
     "checking": "vérification de la taille d'installation…",
@@ -269,7 +277,15 @@
     "unlocked": "débloqué",
     "shareOfPlayers": "{{share}} des joueurs",
     "hidden": "caché",
-    "locked": "verrouillé"
+    "locked": "verrouillé",
+    "unlockedAgo": "Débloqué {{when}}",
+    "daysAgo_one": "il y a {{count}} jour",
+    "daysAgo_other": "il y a {{count}} jours",
+    "monthsAgo_one": "il y a {{count}} mois",
+    "monthsAgo_other": "il y a {{count}} mois",
+    "yearsAgo_one": "il y a {{count}} an",
+    "yearsAgo_other": "il y a {{count}} ans",
+    "yesterday": "hier"
   },
   "steamAppId": {
     "heading": "appid steam pour les évaluations",
@@ -353,15 +369,123 @@
   "status": {
     "heading": "Statut et notes",
     "aria": "Statut",
-    "none": "Aucun",
+    "none": "Aucun statut",
     "backlog": "À jouer",
     "playing": "En cours",
     "finished": "Terminé",
     "abandoned": "Abandonné",
     "notesLabel": "Vos notes",
-    "notesPlaceholder": "Vos remarques sur ce jeu, conservées sur cette machine.",
+    "notesPlaceholder": "Vous seul pouvez voir ceci.",
     "saving": "Enregistrement…",
     "saved": "Enregistré",
-    "failed": "Échec"
+    "failed": "Échec",
+    "privateNotes": "Notes privées"
+  },
+  "achList": {
+    "show": "Afficher",
+    "sort": "Trier",
+    "all": "Tous {{count}}",
+    "unlocked": "Débloqués {{count}}",
+    "locked": "Verrouillés {{count}}",
+    "recent": "Récents",
+    "rarest": "Les plus rares",
+    "lockedLabel": "Verrouillé",
+    "hiddenName": "Succès caché",
+    "hiddenDesc": "Continuez à jouer pour le révéler.",
+    "none": "Aucun succès ne correspond à ce filtre."
+  },
+  "tabs": {
+    "label": "Page du jeu",
+    "store": "Page boutique",
+    "achievements": "Succès",
+    "activity": "Activité",
+    "saves": "Sauvegardes",
+    "compat": "Compatibilité"
+  },
+  "strip": {
+    "tune": "Régler",
+    "starting": "Démarrage",
+    "elapsedLabel": "{{time}} écoulées",
+    "saveConflict": "Conflit de sauvegardes, résoudre",
+    "saveSynced": "Sauvegardes synchronisées",
+    "saveSyncing": "Envoi de la sauvegarde",
+    "saveUnchecked": "Sauvegardes non vérifiées",
+    "saveLocal": "Sauvegardes locales uniquement",
+    "saveOff": "Sauvegardes cloud désactivées",
+    "launchFrom": "Lancer depuis",
+    "update": "Mettre à jour",
+    "jobPaused": "En pause",
+    "jobQueued": "En file d’attente",
+    "jobInstalling": "Installation",
+    "jobUpdating": "Mise à jour",
+    "jobVerifying": "Vérification"
+  },
+  "storeTab": {
+    "pictures": "Images",
+    "picturesCount": "{{count}} captures",
+    "you": "Vous",
+    "played": "Joué",
+    "lastPlayed": "Dernière partie",
+    "runsWith": "Fonctionne avec",
+    "protondb": "ProtonDB",
+    "neverPlayed": "Jamais",
+    "unknownRunner": "Inconnu",
+    "noRating": "Sans évaluation",
+    "achievements": "Succès",
+    "seeAll": "Voir les {{total}} succès",
+    "details": "Détails",
+    "noActivity": "Aucune activité pour ce jeu pour l'instant.",
+    "noSaves": "Aucune sauvegarde trouvée pour ce jeu pour l'instant.",
+    "noCompat": "Aucune note de compatibilité pour ce jeu pour l'instant.",
+    "activityStarted": "Début",
+    "activityEvent": "Événement",
+    "activityInfo": "Info",
+    "savesBackup": "Sauvegarde",
+    "savesTrigger": "Déclencheur",
+    "savesFiles": "Fichiers",
+    "savesSize": "Taille",
+    "compatSource": "Source",
+    "compatNote": "Note",
+    "backupNow": "Sauvegarder maintenant",
+    "backingUp": "Sauvegarde en cours…",
+    "backupQueued": "Sauvegarde mise en file d'attente",
+    "restore": "Restaurer",
+    "delete": "Supprimer",
+    "restoreConfirm": "Restaurer cette sauvegarde ?",
+    "deleteConfirm": "Supprimer cette sauvegarde ?",
+    "cancel": "Annuler",
+    "of": "sur",
+    "upNext": "À suivre"
+  },
+  "saves": {
+    "cloudTitle": "Sauvegardes cloud",
+    "cloudStore": "Cloud {{store}}",
+    "noCloudStore": "{{store}} n'a pas de sauvegardes cloud",
+    "localOnly": "Les sauvegardes locales ci-dessous protègent quand même vos sauvegardes.",
+    "backupsTitle": "Sauvegardes sur ce PC",
+    "noBackups": "Aucune sauvegarde pour l'instant. Platypus sauvegarde avant chaque synchronisation une fois que vous avez joué.",
+    "locationTitle": "Emplacement des sauvegardes",
+    "openFolder": "Ouvrir le dossier"
+  },
+  "sessions": {
+    "emptyTitle": "Aucune session pour l'instant",
+    "emptyBody": "Jouez à {{title}} une fois pour commencer un historique.",
+    "lead": "{{count}} sessions ces deux dernières semaines, {{total}} en tout.",
+    "quitNormally": "Quitté normalement",
+    "crashed": "Planté"
+  },
+  "compatTab": {
+    "crashBanner": "{{count}} des derniers lancements ont planté.",
+    "seeFixes": "Voir les correctifs",
+    "suggestedTitle": "Ajustements suggérés",
+    "suggestedMeta": "{{count}} suggérés",
+    "apply": "Appliquer",
+    "notesTitle": "Notes de la communauté",
+    "noNotes": "Aucune note pour l'instant."
+  },
+  "launchNotes": {
+    "client": "Se lance via {{name}}. Platypus le démarre pour vous et attend.",
+    "updateWaiting": "Une mise à jour est en attente.",
+    "chooseVersion": "Choisir une version"
   }
 }

@@ -85,3 +85,11 @@ describe('friends modal chat view', () => {
     expect(props.onBackFromChat).not.toHaveBeenCalled();
   });
 });
+
+describe('atlas reachability (issue #132)', () => {
+  it('reaches the store family group from the friends modal', async () => {
+    modal({ plugins: [{ id: 'echo', name: 'Echo', status: 'ready', capabilities: ['family'], declared: ['family'] }] as unknown as StorePlugin[] });
+    // FamiliesPanel renders its labelled section once the store offers family.
+    expect(await screen.findByRole('region', { name: 'Families' })).toBeInTheDocument();
+  });
+});

@@ -1,0 +1,27 @@
+<!-- The cool game page (issue #103): an invented demo, not a design proposal.
+     The about text comes first with the media strip under it; compat and
+     installation lead the side column. Validated against internal/themes/layout.xsd. -->
+<layout view="game" catalog="1.0">
+  <region name="hero">
+    <block name="back" />
+    <block name="heading" />
+    <block name="actions" />
+    <block name="outside" />
+    <block name="note" />
+  </region>
+  <region name="main">
+    <block name="about" />
+    <block name="media" />
+    <block name="achievements-progress" />
+    <block name="achievements" />
+    <block name="activity" />
+  </region>
+  <region name="side">
+    <block name="compat" />
+    <block name="installation" />
+    <block name="crash" />
+    <block name="status" />
+    <block name="collections" />
+    <block name="copies" />
+  </region>
+</layout>

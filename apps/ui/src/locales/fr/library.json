@@ -1,4 +1,5 @@
 {
+  "loading": "Chargement",
   "view": "affichage",
   "mode": {
     "cards": "cartes",
@@ -21,14 +22,14 @@
   "tier": "niveau",
   "tierFilterAria": "Filtrer par niveau",
   "tierAll": "tout",
-  "tierNative": "natif",
+  "tierNative": "Natif",
   "tierNone": "sans évaluation",
   "tierName": {
-    "platinum": "Platine",
-    "gold": "Or",
-    "silver": "Argent",
-    "bronze": "Bronze",
-    "borked": "Non fonctionnel"
+    "platinum": "Platine sur ProtonDB",
+    "gold": "Or sur ProtonDB",
+    "silver": "Argent sur ProtonDB",
+    "bronze": "Bronze sur ProtonDB",
+    "borked": "Non fonctionnel sur ProtonDB"
   },
   "sort": "tri",
   "sortBy": "Trier par",
@@ -79,8 +80,17 @@
     "hours": "h",
     "year": "année",
     "size": "taille",
-    "lastPlayed": "dernière session",
-    "notInstalled": "non installé"
+    "lastPlayed": "dernière session"
+  },
+  "atlasTable": {
+    "title": "Titre",
+    "stores": "Boutiques",
+    "status": "État",
+    "played": "Joué",
+    "lastPlayed": "Dernière session",
+    "size": "Taille",
+    "runs": "Niveau",
+    "year": "Année"
   },
   "recency": {
     "today": "aujourd'hui",
@@ -92,13 +102,13 @@
   },
   "addDialog": {
     "title": "Ajouter un jeu",
-    "description": "Ajoutez un jeu via son exécutable. Il est enregistré dans votre bibliothèque et tourne avec les exécuteurs de Platypus.",
-    "titleSection": "titre",
-    "titlePlaceholder": "Mon jeu",
-    "exeSection": "exécutable",
-    "exeAria": "exécutable",
+    "description": "N'importe quel programme sur votre disque : un installeur GOG, un téléchargement itch, un .exe Windows.",
+    "titleSection": "Titre",
+    "titlePlaceholder": "Trouvé depuis le nom du fichier",
+    "exeSection": "Programme",
+    "exeAria": "Programme",
     "exePlaceholder": "/home/vous/Jeux/jeu/jeu.exe",
-    "browse": "Parcourir…",
+    "browse": "Parcourir",
     "advanced": "Avancé",
     "advancedSet_one": "· {{count}} réglé",
     "advancedSet_other": "· {{count}} réglés",
@@ -128,17 +138,71 @@
     "runAutoUnknown": "Automatique",
     "runNative": "Linux natif",
     "runWine": "Wine / Proton",
-    "submit": "Ajouter le jeu"
+    "submit": "Ajouter à la bibliothèque"
   },
   "offline": "Hors ligne — bibliothèque connue affichée",
   "statusFilter": {
     "label": "statut",
     "all": "tous",
-    "none": "sans statut",
-    "backlog": "à jouer",
-    "playing": "en cours",
-    "finished": "terminé",
-    "abandoned": "abandonné"
+    "none": "Sans statut",
+    "backlog": "À jouer",
+    "playing": "En cours",
+    "finished": "Terminé",
+    "abandoned": "Abandonné"
   },
-  "statusFilterAria": "Filtrer par statut"
+  "statusFilterAria": "Filtrer par statut",
+  "listDetail": {
+    "listLabel": "Jeux",
+    "filterAria": "Filtrer les jeux",
+    "filterPlaceholder": "Filtrer",
+    "sortAria": "Trier les jeux",
+    "sort": {
+      "recent": "Récents",
+      "title": "Titre",
+      "hours": "Heures",
+      "year": "Année",
+      "size": "Taille",
+      "tier": "Niveau"
+    },
+    "empty": "Rien ici.",
+    "showAll": "Afficher tous les jeux",
+    "notInstalled": "Non installé",
+    "neverPlayed": "Jamais joué",
+    "needsAttention": "Nécessite votre attention",
+    "addGame": "Ajouter un jeu",
+    "filtersAria": "Filtres de la bibliothèque",
+    "warnings_one": "Une source nécessite votre attention",
+    "warnings_other": "{{count}} sources nécessitent votre attention",
+    "filterCompat": "Compatibilité",
+    "filterStatus": "Statut",
+    "filterLending": "Prêtés",
+    "filterLentOnly": "Prêtés",
+    "filterAny": "Tous",
+    "filterReset": "Réinitialiser les filtres",
+    "filterTiers": "Fonctionne sous Linux",
+    "filterStatuses": "Votre statut",
+    "filterFamily": "Famille",
+    "filterClear": "Effacer les filtres",
+    "rowCollections": "Collections…"
+  },
+  "atlasViews": {
+    "filterPlaceholder": "Filtrer la bibliothèque",
+    "blocks": {
+      "continue": "Joués récemment",
+      "recent": "Ajouts récents"
+    },
+    "chips": {
+      "reset": "Réinitialiser",
+      "remove": "Retirer le filtre {{label}}"
+    },
+    "warnings": {
+      "fix": "Corriger",
+      "dismiss": "Masquer pour l'instant"
+    },
+    "badges": {
+      "update": "Mise à jour disponible",
+      "downloading": "Téléchargement, {{percent}} %"
+    }
+  },
+  "scannedFooter": "Bibliothèque analysée {{time}}"
 }

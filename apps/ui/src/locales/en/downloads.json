@@ -63,7 +63,9 @@
     "waiting": "waiting",
     "attempt": "attempt {{count}}",
     "sizesOf": "{{done}} of {{total}}",
-    "speedPerSec": "{{speed}}/s"
+    "speedPerSec": "{{speed}}/s",
+    "etaMins_one": "about {{count}} min left",
+    "etaMins_other": "about {{count}} min left"
   },
   "aria": {
     "pauseJob": "Pause {{title}}",
@@ -74,5 +76,18 @@
     "cancelKind": "Cancel {{kind}}"
   },
   "backedUp": "Backed up {{title}}",
-  "restored": "Restored {{title}}"
+  "restored": "Restored {{title}}",
+  "atlas": {
+    "state": { "paused": "Paused", "queued": "Queued" },
+    "queueSub_one": "{{count}} in the queue.",
+    "queueSub_other": "{{count}} in the queue.",
+    "queueSubSpeed_one": "{{count}} in the queue. {{speed}}/s.",
+    "queueSubSpeed_other": "{{count}} in the queue. {{speed}}/s.",
+    "queueEmptySub": "Nothing downloading.",
+    "queue": "Queue",
+    "pauseAll": "Pause all",
+    "recent": "Recent",
+    "emptyTitle": "Nothing downloading",
+    "emptyBody": "Installs, updates, moves and file checks show up here."
+  }
 }

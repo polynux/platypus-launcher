@@ -10,6 +10,15 @@ export type StoreType = 'steam' | 'epic' | 'gog' | 'ubisoft' | 'custom' | (strin
 
 export type ProtonVersion = gen.ProtonVersion;
 
+// Themes (issue #93): the picker list, and a theme's resolved tokens (lib/theme.ts).
+export type ThemeInfo = gen.ThemeInfo;
+export type ThemeTokens = gen.ThemeTokens;
+export type WashLayer = gen.WashLayer;
+// Layouts (issue #96): the validated regions and blocks of one view.
+export type ThemeLayout = gen.ThemeLayout;
+export type ThemeLayoutRegion = gen.ThemeLayoutRegion;
+export type ThemeLayoutNode = gen.ThemeLayoutNode;
+
 /** The runner's choices: plain per-game values under their own names (the core
  *  keeps them as they were saved, and the runner reads them; runner.options
  *  declares them). They are not in the generated GameSettings. */
@@ -210,7 +219,7 @@ export type Compat = gen.Compat;
 export type CrashHint = gen.CrashHint;
 export type CrashHints = gen.CrashHints;
 
-export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'remove' | 'tweak' | 'cloud';
+export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'remove' | 'tweak' | 'cloud' | 'scan';
 
 export interface ActivityEvent {
   id: number;

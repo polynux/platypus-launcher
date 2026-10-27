@@ -1,0 +1,19 @@
+<!-- The cool dashboard (issue #96, #109): an invented demo, not a design
+     proposal. No welcome banner; continue and waiting share a row, with
+     continue spanning twice waiting so its tile grid keeps its columns;
+     activity moves to a side column with fewer events. Validated against
+     internal/themes/layout.xsd. -->
+<layout view="dashboard" catalog="1.0">
+  <region name="main">
+    <block name="hero" />
+    <block name="empty" />
+    <row>
+      <block name="continue" span="2" />
+      <block name="waiting" />
+    </row>
+    <block name="recent" />
+  </region>
+  <region name="side">
+    <block name="activity" limit="6" />
+  </region>
+</layout>

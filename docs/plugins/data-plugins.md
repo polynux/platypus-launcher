@@ -1,10 +1,14 @@
-# Data plugins (fixes and tweaks)
+# Data plugins (fixes, tweaks and themes)
 
 A data plugin is a folder in `~/.local/share/platypus/plugins/<id>/` whose
 `plugin.json` says `"kind": "data"` and has no executable. It is JSON only: fix
 recipes and tweak packs. It can't run anything, so Platypus applies it without
 asking the user to approve anything — the Plugins view lists it under
-"data plugins · no code, always on".
+"data plugins · no code, always on". A data plugin may also carry a theme
+(issue #105): `theme.toml` plus `layouts/*.xml` and assets, validated like the
+built-ins and listed in the theme picker with its source. Theme authoring is
+documented in [docs/themes/authoring.md](../themes/authoring.md), with the
+generated catalog reference in [docs/themes/catalog.md](../themes/catalog.md).
 
 Platypus's own curated fixes and hardware tweaks are the same format, embedded in
 the launcher (`internal/dataplug/builtin`) and read through the same loader.
@@ -28,10 +32,19 @@ the launcher (`internal/dataplug/builtin`) and read through the same loader.
 - No `exec`, no `store`, no `capabilities`, no `requires` — those belong to
   store plugins (see [protocol.md](protocol.md)).
 - `data` lists the JSON files, relative to the folder. Default: `fixes.json`
-  and `tweaks.json`, missing ones skipped.
+  and `tweaks.json`, missing ones skipped. A theme-only plugin names no data
+  files: the missing defaults are not an error when it names a theme.
+- `theme` names the `theme.toml` inside the folder (e.g. `"theme.toml"`, or
+  `"theme/theme.toml"` in a subfolder). Only a data plugin may carry one. The
+  theme's layouts live in `layouts/` next to it, and its images (`png`,
+  `webp`, `svg`) and fonts (`woff2`) live inside the theme's folder;
+  references outside it, oversized files and content that doesn't match its
+  extension are rejected with a warning, exactly like a bad token.
 
 Everything is validated; a file with an unknown field or a bad value is
 rejected and the plugin shows as invalid, with the reason, in the Plugins view.
+A broken theme never breaks the plugin's fixes: the theme is listed as invalid
+in the picker instead.
 
 ## fixes.json
 

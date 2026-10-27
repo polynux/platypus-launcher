@@ -63,7 +63,9 @@
     "waiting": "en attente",
     "attempt": "tentative {{count}}",
     "sizesOf": "{{done}} sur {{total}}",
-    "speedPerSec": "{{speed}}/s"
+    "speedPerSec": "{{speed}}/s",
+    "etaMins_one": "environ {{count}} min restante",
+    "etaMins_other": "environ {{count}} min restantes"
   },
   "aria": {
     "pauseJob": "Mettre {{title}} en pause",
@@ -74,5 +76,18 @@
     "cancelKind": "Annuler : {{kind}}"
   },
   "backedUp": "{{title}} sauvegardé",
-  "restored": "{{title}} restauré"
+  "restored": "{{title}} restauré",
+  "atlas": {
+    "state": { "paused": "En pause", "queued": "En attente" },
+    "queueSub_one": "{{count}} dans la file.",
+    "queueSub_other": "{{count}} dans la file.",
+    "queueSubSpeed_one": "{{count}} dans la file. {{speed}}/s.",
+    "queueSubSpeed_other": "{{count}} dans la file. {{speed}}/s.",
+    "queueEmptySub": "Rien ne télécharge.",
+    "queue": "File d'attente",
+    "pauseAll": "Tout mettre en pause",
+    "recent": "Récents",
+    "emptyTitle": "Rien à télécharger",
+    "emptyBody": "Les installations, mises à jour, déplacements et vérifications de fichiers apparaissent ici."
+  }
 }

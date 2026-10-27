@@ -26,6 +26,35 @@ export interface AvailabilityOptions {
   reason?: string;
 }
 
+/** User words for a plugin capability id (the Atlas "What it brings" row).
+ *  Internal capabilities never reach the user: auth, discard, terms and
+ *  settings stay out. Unknown ids fall back to a humanized id. */
+const BRING_SKIP = new Set(['auth', 'discard', 'terms', 'settings']);
+const BRING_LABEL: Record<string, string> = {
+  library: 'Library',
+  install: 'Installs',
+  launch: 'Launch',
+  'cloud-saves': 'Cloud saves',
+  'install-options': 'Install options',
+  versions: 'Versions',
+  verify: 'Verify',
+  move: 'Move',
+  social: 'Friends',
+  achievements: 'Achievements',
+  playtime: 'Playtime',
+  redeem: 'Redeem codes',
+  family: 'Family',
+  chat: 'Chat',
+};
+
+/** A capability id in user words, or null when it is internal. (Named
+ *  offerLabel: the `offers` name in lib/capabilities is the availability
+ *  check.) */
+export function offerLabel(id: string): string | null {
+  if (BRING_SKIP.has(id)) return null;
+  return BRING_LABEL[id] ?? id.replace(/-/g, ' ').replace(/^\w/, (ch) => ch.toUpperCase());
+}
+
 /** Whether a UI surface that depends on `capability` should render. It uses
  *  the runtime set (what the plugin offers right now), then the game's own
  *  `features` when it lists some. A game without `features` (null/absent) has

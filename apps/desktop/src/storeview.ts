@@ -13,6 +13,7 @@
 // (InvalidateLibrary) so purchases appear.
 import { app, BrowserWindow, session, WebContentsView } from 'electron';
 import {
+  applyStoreViewBounds,
   blockedHost,
   canOpenStore,
   explicitStoreURL,
@@ -28,21 +29,28 @@ export interface StoreEvent {
   /**
    * 'navigated' (url, history, title), 'loading' (spinner state), or
    * 'blocked' (an http(s) navigation to an outside host was refused; url is
-   * the attempted address, the toolbar offers to open it in the browser).
+   * the attempted address, the toolbar offers to open it in the browser), or
+   * 'failed' (the main-frame load failed; error names it).
    */
-  kind: 'navigated' | 'loading' | 'blocked';
+  kind: 'navigated' | 'loading' | 'blocked' | 'failed';
   pluginId: string;
   url: string;
   canGoBack: boolean;
   canGoForward: boolean;
   title: string;
   loading: boolean;
+  /** 'failed' only: the main-frame load error. */
+  error?: string;
 }
 
 interface Held {
   view: WebContentsView;
   plugin: StorePluginInfo;
   bounds: StoreRect | null;
+  hidden: boolean;
+  /** The address whose main-frame load failed, until a load succeeds: open
+   * reloads it even though the contents already show that URL. */
+  failedURL?: string;
 }
 
 /**
@@ -144,7 +152,10 @@ export class StoreViews {
 
   private watch(id: string, h: Held): void {
     const wc = h.view.webContents;
-    wc.on('did-navigate', (_e, url) => {
+    wc.on('did-navigate', (_e, url, httpResponseCode) => {
+      // Only a real response clears a failed load: Chromium's error page
+      // also loads, which must not hide the failure from the next open.
+      if (httpResponseCode > 0) h.failedURL = undefined;
       if (this.current === id) this.report(h, 'navigated', false);
     });
     wc.on('did-navigate-in-page', (_e, url) => {
@@ -159,6 +170,24 @@ export class StoreViews {
     });
     wc.on('did-stop-loading', () => {
       if (this.current === id) this.report(h, 'loading', false);
+    });
+    // A failed main-frame load (not an abort from a newer navigation) shows
+    // the UI's error state instead of a white page, also for later loads.
+    wc.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) return;
+      h.failedURL = validatedURL;
+      if (this.current === id) {
+        this.emit({
+          kind: 'failed',
+          pluginId: id,
+          url: validatedURL,
+          canGoBack: false,
+          canGoForward: false,
+          title: '',
+          loading: false,
+          error: `${errorDescription} (${errorCode}) loading '${validatedURL}'`,
+        });
+      }
     });
   }
 
@@ -184,7 +213,7 @@ export class StoreViews {
         spellcheck: false,
       },
     });
-    h = { view, plugin, bounds: null };
+    h = { view, plugin, bounds: null, hidden: false };
     view.setVisible(false);
     this.devtools(view.webContents);
     this.guard(id, h, view.webContents);
@@ -237,12 +266,15 @@ export class StoreViews {
     const content = this.win.contentView;
     if (!content.children.includes(h.view)) content.addChildView(h.view);
     // A view held before any bounds report has none yet: place it where the
-    // content area last was (the UI's next report corrects it).
+    // content area last was (the UI's next report corrects it). Only
+    // non-zero rects are stored (setBounds keeps zero out of lastBounds),
+    // so there is no zero-bounds case here.
     const bounds = h.bounds ?? this.lastBounds;
-    if (bounds) {
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
       h.bounds = bounds;
       h.view.setBounds(bounds);
     }
+    h.hidden = false;
     h.view.setVisible(true);
   }
 
@@ -270,7 +302,9 @@ export class StoreViews {
     const h = this.hold(pluginId, plugin!);
     this.current = pluginId;
     this.show(h);
-    if (h.view.webContents.getURL() !== url) {
+    // After a failed load the contents already report the URL: load again.
+    if (h.view.webContents.getURL() !== url || h.failedURL) {
+      h.failedURL = undefined;
       try {
         await h.view.webContents.loadURL(url);
       } catch (err) {
@@ -284,20 +318,30 @@ export class StoreViews {
 
   /** Places the shown view over the UI's content area. */
   setBounds(bounds: StoreRect): void {
+    if (bounds.width === 0 || bounds.height === 0) {
+      const h = this.currentHeld();
+      if (h) h.hidden = true;
+      if (h) applyStoreViewBounds(h.view, bounds);
+      return;
+    }
     this.lastBounds = bounds;
     const h = this.currentHeld();
     if (!h) return;
     h.bounds = bounds;
-    h.view.setBounds(bounds);
+    h.hidden = false;
+    applyStoreViewBounds(h.view, bounds);
   }
 
   /** Re-applies the shown view's bounds (after the window resized). */
   relayout(): void {
     const h = this.currentHeld();
     const bounds = h?.bounds ?? this.lastBounds;
-    if (h && bounds) {
-      h.bounds = bounds;
-      h.view.setBounds(bounds);
+    if (h && bounds && !h.hidden) {
+      if (bounds.width > 0 && bounds.height > 0) {
+        h.bounds = bounds;
+        h.view.setBounds(bounds);
+        h.view.setVisible(true);
+      }
     }
   }
 

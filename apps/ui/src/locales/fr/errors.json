@@ -166,6 +166,9 @@
     "workdir": {
       "notFolder": "« {{path}} » est un fichier, pas un dossier."
     },
+    "gameTone": {
+      "invalid": "La couleur du jeu doit être off, accent, whole ou vide, pas « {{tone}} »."
+    },
     "year": {
       "invalid": "L'année de sortie doit être comprise entre 1970 et {{max}} (reçu : {{year}})."
     },
@@ -195,7 +198,10 @@
       "native": "Les préréglages ne s'appliquent pas à {{title}} : il tourne en natif, sans préfixe Wine.",
       "clientLaunch": "Les préréglages ne s'appliquent pas à {{title}} : son client le lance et possède son préfixe."
     },
-    "unavailable": "Les réglages ne sont pas prêts."
+    "unavailable": "Les réglages ne sont pas prêts.",
+    "colorScheme": {
+      "invalid": "Le schéma de couleurs doit être dark, light, black ou vide, pas « {{scheme}} »."
+    }
   },
   "sideload": {
     "duplicate": "« {{executable}} » est déjà dans votre bibliothèque sous le nom « {{title}} ».",
@@ -272,5 +278,9 @@
     "clientRunning": "Fermez {{client}} d’abord : il est ouvert et écrirait les mêmes sauvegardes.",
     "queued": "{{title}} a déjà une sauvegarde en file d’attente.",
     "unknown": "Version de sauvegarde inconnue."
+  },
+  "theme": {
+    "unknown": "Aucun thème ne s'appelle {{theme}}.",
+    "unusable": "Le thème {{theme}} n'est pas utilisable. Consultez ses avertissements dans les paramètres."
   }
 }

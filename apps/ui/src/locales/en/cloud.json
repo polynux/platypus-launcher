@@ -1,8 +1,12 @@
 {
   "panel": {
     "title": "Cloud saves",
-    "syncForGame": "sync for this game",
+    "syncForGame": "Sync for this game",
     "modeLabel": "Sync mode for this game",
+    "syncLabel": "Sync",
+    "seg-auto": "Automatic",
+    "seg-ask": "Ask first",
+    "seg-off": "Off",
     "defaultOption": "Default · {{mode}}",
     "defaultTitle": "Follow the store plugin's setting",
     "checked": "checked {{when}}",

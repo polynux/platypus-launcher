@@ -6,12 +6,13 @@ import type { Game, SettingField, SettingValue, SettingsSaved, SettingsView, Sto
 import { Input } from '@/components/ds/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ds/select';
 import { Switch } from '@/components/ds/switch';
-import { MonoLabel, Panel } from './ui';
+import { cx, MonoLabel, Panel } from './ui';
 import { LauncherApi } from '../effect/runtime';
 import { CapabilitySurface } from '../lib/capabilities';
 import { effectiveValue } from '../lib/pluginSettings';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { useVariant } from '../lib/theme';
 
 /** A saved setting that the plugin answers with its own words. */
 export function SettingError({ message }: { message: string }) {
@@ -96,6 +97,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   // Saves of this scope, one after the other: each waits for the one before.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const { t } = useTranslation('plugins');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
 
   // Reads the view and the values the backend holds.
   const reload = (live: () => boolean) => Effect.runPromise(loadRef.current()).then(
@@ -128,32 +130,32 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   if (error && !view) return <SettingError message={error} />;
   // Loading text in place, never an empty first frame (issue #56): the game
   // settings' plugin tab renders this before the plugin answers.
-  if (!view) return <p role="status" className="text-[12.5px] text-white/55">{t('plugins:settings.loading')}</p>;
-  if (view.groups.length === 0) return emptyText ? <p className="text-[12.5px] text-white/70">{emptyText}</p> : null;
+  if (!view) return <p role="status" className="text-[12.5px] text-text-faint">{t('plugins:settings.loading')}</p>;
+  if (view.groups.length === 0) return emptyText ? <p className="text-[12.5px] text-text-muted">{emptyText}</p> : null;
   const body = (
     <div className="space-y-4">
       {view.groups.map((g) => (
         <div key={g.id} className="space-y-2.5">
           <div>
-            <MonoLabel>{g.label}</MonoLabel>
-            {g.description && <p className="mt-1 text-[12px] leading-relaxed text-white/70">{g.description}</p>}
+            {atlas ? <h3 className="mt-3.5 text-[13px] font-bold text-text-muted">{g.label}</h3> : <MonoLabel>{g.label}</MonoLabel>}
+            {g.description && <p className="mt-1 text-[12px] leading-relaxed text-text-muted">{g.description}</p>}
           </div>
           {g.fields.map((f) => (
             <div key={f.id} className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-[12.5px] text-white/85">{f.label}</div>
-                {f.description && <div className="text-hint leading-relaxed text-white/55">{f.description}</div>}
+                <div className={cx('text-[12.5px] text-text', atlas && 'font-semibold')}>{f.label}</div>
+                {f.description && <div className={atlas ? 'text-[12px] leading-relaxed text-text-muted' : 'text-hint leading-relaxed text-text-muted'}>{f.description}</div>}
               </div>
               <FieldControl field={f} value={effectiveValue(f, values)} onChange={(v) => change(f.id, v)} />
             </div>
           ))}
         </div>
       ))}
-      {notice && <p role="status" className="font-mono text-hint text-amber-200">{notice}</p>}
+      {notice && <p role="status" className="text-attention">{notice}</p>}
       {error && <SettingError message={error} />}
     </div>
   );
-  return framed ? <Panel className="bg-white/[0.05]"><MonoLabel className="mb-3">{t('plugins:settings.sectionTitle')}</MonoLabel>{body}</Panel> : body;
+  return framed ? <Panel className={atlas ? 'bg-surface' : undefined}>{atlas ? <h3 className="mb-3 text-[13px] font-bold text-text-muted">{t('plugins:settings.sectionTitle')}</h3> : <MonoLabel className="mb-3">{t('plugins:settings.sectionTitle')}</MonoLabel>}{body}</Panel> : body;
 }
 
 /** The plugin-wide settings of a store plugin, in the Plugins view. Shown only

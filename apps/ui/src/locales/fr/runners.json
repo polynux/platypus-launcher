@@ -9,5 +9,18 @@
     "custom": "personnalisé",
     "system": "système",
     "found": "trouvé"
+  },
+  "atlas": {
+    "sub": "Versions de Proton et Wine qui font tourner vos jeux Windows.",
+    "defaultLabel": "Défaut pour les nouveaux jeux",
+    "defaultDesc": "Chaque jeu peut toujours choisir le sien.",
+    "defaultBadge": "Défaut",
+    "systemNote": "De votre système",
+    "fromSystem": "De votre système",
+    "gamesCount_one": "{{count}} jeu",
+    "gamesCount_other": "{{count}} jeux",
+    "noGames": "Aucun jeu ne l'utilise",
+    "sizeLabel": "Taille",
+    "installed": "Installés"
   }
 }

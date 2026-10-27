@@ -81,7 +81,30 @@
   "settingsModal": {
     "title": "Paramètres de {{title}}",
     "heading": "Paramètres du jeu",
+    "allSettings": "Tous les paramètres",
     "sections": "Sections des paramètres du jeu"
+  },
+  "accordion": {
+    "everyday": "Au quotidien",
+    "advanced": "Avancé",
+    "game": "Jeu"
+  },
+  "summary": {
+    "native": "Linux natif",
+    "auto": "Runner automatique",
+    "args": "{{runner}} · {{args}}",
+    "cloudStore": "Synchronisé par la boutique",
+    "cloudPlatypus": "Synchronisé par Platypus",
+    "pinned": "Version figée : {{version}}",
+    "update": "Mise à jour disponible",
+    "latest": "Dernière version",
+    "options": "Extensions et options d'installation",
+    "plugin": "Plugin de la boutique",
+    "tweaks": "{{count}} suggérés",
+    "customized": "{{count}} personnalisés",
+    "customization": "Visuel, titre et tri",
+    "maintenance": "Vérifier, déplacer, sauvegardes",
+    "job": "{{kind}} {{percent}} %"
   },
   "tabs": {
     "general": "Général",

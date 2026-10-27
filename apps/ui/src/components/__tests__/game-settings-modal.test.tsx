@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { Effect } from 'effect';
-import type { Game, StorePlugin, Tweak } from '../../types';
+import type { Game, GameSettings, StorePlugin, Tweak } from '../../types';
 
 const api = vi.hoisted(() => ({
   getGameDetails: vi.fn(),
@@ -47,7 +47,7 @@ const game = (o: Partial<Game> = {}): Game => ({
 const tweak = { id: 't1', kind: 'recommended', title: 'Use fsync', reason: 'faster', env: { DXVK_ASYNC: '1' } } as unknown as Tweak;
 
 function page(over: Partial<React.ComponentProps<typeof GamePage>> = {}, g: Game = game(), p: StorePlugin | undefined = plugin()) {
-  const mocks = { onChangeSettings: vi.fn(), onSaveSettings: vi.fn() };
+  const mocks = { onChangeSettings: vi.fn(), onSaveSettings: vi.fn(async (_settings: GameSettings) => {}) };
   const props = {
     runners: [], activity: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {}, launching: false, tweaks: [] as Tweak[],
     onChangeSettings: mocks.onChangeSettings, onSaveSettings: mocks.onSaveSettings, onJob: vi.fn(), onJobAction() {}, onAllowFolder() {}, onNavigate() {}, jobs: [],
@@ -172,7 +172,7 @@ describe('the game settings dialog', () => {
     expect(props.onSaveSettings).toHaveBeenCalledOnce();
     expect(props.onSaveSettings.mock.calls[0][0].launch_arguments).toBe('-windowed');
     // Saved: nothing is unsaved any more, so the dialog can be dismissed again.
-    expect(screen.queryByText(/Unsaved changes/)).toBeNull();
+    await waitFor(() => expect(screen.queryByText(/Unsaved changes/)).toBeNull());
   });
 
   it('moves between tabs with the arrow keys', () => {

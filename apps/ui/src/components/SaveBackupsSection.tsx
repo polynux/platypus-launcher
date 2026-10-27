@@ -158,7 +158,7 @@ export function SaveBackupsSection({ game, onNotify }: {
   return (
     <div className="space-y-5">
       <section>
-        <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.heading').toLowerCase()}</MonoLabel>
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.heading')}</MonoLabel>
         <p className="text-[12.5px] leading-relaxed text-white/60">{t('gameSettings:maintenance.saveBackups.description')}</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button onClick={backupNow} disabled={busy}>
@@ -250,7 +250,7 @@ export function SaveBackupsSection({ game, onNotify }: {
       )}
 
       <section>
-        <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.pathsHeading').toLowerCase()}</MonoLabel>
+        <MonoLabel className="mb-1">{t('gameSettings:maintenance.saveBackups.pathsHeading')}</MonoLabel>
         <p className="text-[12.5px] leading-relaxed text-white/60">{t('gameSettings:maintenance.saveBackups.pathsDescription')}</p>
         {/* The path list keeps its place from the first frame: loading text
             until the folders land, never an empty list. */}

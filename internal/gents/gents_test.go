@@ -9,6 +9,7 @@ import (
 	"platypus/internal/app"
 	"platypus/internal/corerpc"
 	"platypus/internal/gents"
+	"platypus/internal/themes"
 )
 
 // repoRoot is the repository root, anchored at this test's source file so the
@@ -22,15 +23,16 @@ func repoRoot(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..")
 }
 
-// TestGeneratedUpToDate fails when apps/ui/src/gen/ is stale: regenerate with
-// `go run ./cmd/gen-ts` from the repository root and commit the result.
+// TestGeneratedUpToDate fails when apps/ui/src/gen/ or docs/themes/catalog.md
+// is stale: regenerate with `go run ./cmd/gen-ts` from the repository root
+// and commit the result.
 func TestGeneratedUpToDate(t *testing.T) {
 	root := repoRoot(t)
 	models, api, err := gents.Generate(&app.App{}, filepath.Join(root, "internal", "app"))
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	for name, want := range map[string]string{"models.ts": models, "api.ts": api} {
+	for name, want := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS(), "builtinLayouts.ts": themes.BuiltinLayoutsTS()} {
 		got, err := os.ReadFile(filepath.Join(root, "apps", "ui", "src", "gen", name))
 		if err != nil {
 			t.Fatalf("%s: %v (run `go run ./cmd/gen-ts` from the repository root)", name, err)
@@ -38,6 +40,14 @@ func TestGeneratedUpToDate(t *testing.T) {
 		if string(got) != want {
 			t.Fatalf("%s is stale: run `go run ./cmd/gen-ts` from the repository root and commit the result", name)
 		}
+	}
+	wantCatalog := themes.CatalogMD()
+	gotCatalog, err := os.ReadFile(filepath.Join(root, "docs", "themes", "catalog.md"))
+	if err != nil {
+		t.Fatalf("catalog.md: %v (run `go run ./cmd/gen-ts` from the repository root)", err)
+	}
+	if string(gotCatalog) != wantCatalog {
+		t.Fatalf("docs/themes/catalog.md is stale: run `go run ./cmd/gen-ts` from the repository root and commit the result")
 	}
 }
 

@@ -1,0 +1,956 @@
+{
+  "version": "1.0",
+  "entries": [
+    {
+      "entry": "settings",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "page",
+            "dialog",
+            "sheet"
+          ],
+          "default": "page",
+          "since": "1.0"
+        },
+        {
+          "name": "navigation",
+          "values": [
+            "scroll",
+            "tabs"
+          ],
+          "default": "scroll",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "section",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "chrome",
+          "values": [
+            "hairline",
+            "framed",
+            "plain"
+          ],
+          "default": "hairline",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "color",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "game-tone",
+          "values": [
+            "off",
+            "accent",
+            "whole"
+          ],
+          "default": "off",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "dashboard.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "dashboard.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "dashboard.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "dashboard.bottom",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "dashboard.hero",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "dashboard.welcome",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "dashboard.empty",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "dashboard.continue",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "dashboard.waiting",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "dashboard.recent",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "dashboard.activity",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom",
+      "attrs": [
+        {
+          "name": "limit",
+          "type": "int",
+          "min": 1,
+          "max": 50
+        }
+      ]
+    },
+    {
+      "entry": "view-header",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "actions",
+          "values": [
+            "right",
+            "below"
+          ],
+          "default": "right",
+          "since": "1.0"
+        },
+        {
+          "name": "subtitle",
+          "values": [
+            "shown",
+            "hidden"
+          ],
+          "default": "shown",
+          "since": "1.0"
+        },
+        {
+          "name": "size",
+          "values": [
+            "regular",
+            "compact"
+          ],
+          "default": "regular",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "empty-state",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "chrome",
+          "values": [
+            "dashed",
+            "plain"
+          ],
+          "default": "dashed",
+          "since": "1.0"
+        },
+        {
+          "name": "icon",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "off",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "label",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "style",
+          "values": [
+            "mono",
+            "plain"
+          ],
+          "default": "mono",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "list-row",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "media",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "comfortable",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "command-palette",
+      "since": "1.0",
+      "axes": null
+    },
+    {
+      "entry": "dialog",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "dialog",
+            "sheet"
+          ],
+          "default": "dialog",
+          "since": "1.0"
+        },
+        {
+          "name": "size",
+          "values": [
+            "auto",
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ],
+          "default": "auto",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-settings",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "dialog",
+            "sheet",
+            "page"
+          ],
+          "default": "dialog",
+          "since": "1.0",
+          "inherits": "dialog.presentation"
+        },
+        {
+          "name": "tabs",
+          "values": [
+            "vertical",
+            "horizontal",
+            "accordion"
+          ],
+          "default": "vertical",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "shell",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "navigation",
+          "values": [
+            "sidebar",
+            "topbar",
+            "sourcebar"
+          ],
+          "default": "sidebar",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "shell.sidebar",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "shell.topbar",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "shell.sourcebar",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "shell.nav",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.tools",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.collections",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.sources",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.store",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "shell.footer",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "sidebar"
+    },
+    {
+      "entry": "game-tile",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "aspect",
+          "values": [
+            "2:3",
+            "3:4",
+            "16:9"
+          ],
+          "default": "3:4",
+          "since": "1.0"
+        },
+        {
+          "name": "compat",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0"
+        },
+        {
+          "name": "overlay",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "comfortable",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-row",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "columns",
+          "values": [
+            "full",
+            "minimal"
+          ],
+          "default": "full",
+          "since": "1.0"
+        },
+        {
+          "name": "mode",
+          "values": [
+            "full",
+            "compact"
+          ],
+          "default": "full",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "library-tile",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "aspect",
+          "values": [
+            "2:3",
+            "3:4",
+            "16:9"
+          ],
+          "default": "2:3",
+          "since": "1.0",
+          "inherits": "game-tile.aspect"
+        },
+        {
+          "name": "compat",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0",
+          "inherits": "game-tile.compat"
+        },
+        {
+          "name": "overlay",
+          "values": [
+            "on",
+            "off"
+          ],
+          "default": "on",
+          "since": "1.0",
+          "inherits": "game-tile.overlay"
+        },
+        {
+          "name": "density",
+          "values": [
+            "comfortable",
+            "compact"
+          ],
+          "default": "compact",
+          "since": "1.0",
+          "inherits": "game-tile.density"
+        }
+      ]
+    },
+    {
+      "entry": "library",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "presentation",
+          "values": [
+            "grid",
+            "list-detail"
+          ],
+          "default": "grid",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "library.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.bottom",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "library.header",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "library.title",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.mode",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.search",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.chips",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.filters",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "library.warnings",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "top"
+    },
+    {
+      "entry": "library.empty",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "library.last-played",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "library.all-titles",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "library.activity",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom",
+      "attrs": [
+        {
+          "name": "limit",
+          "type": "int",
+          "min": 1,
+          "max": 50
+        }
+      ]
+    },
+    {
+      "entry": "library.recent",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "library.table",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "hero",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "height",
+          "values": [
+            "tall",
+            "regular",
+            "compact"
+          ],
+          "default": "tall",
+          "since": "1.0"
+        },
+        {
+          "name": "gradient",
+          "values": [
+            "warm",
+            "neutral",
+            "none"
+          ],
+          "default": "warm",
+          "since": "1.0"
+        },
+        {
+          "name": "chips",
+          "values": [
+            "glass",
+            "solid"
+          ],
+          "default": "glass",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game-hero",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "height",
+          "values": [
+            "tall",
+            "regular",
+            "compact"
+          ],
+          "default": "regular",
+          "since": "1.0",
+          "inherits": "hero.height"
+        },
+        {
+          "name": "gradient",
+          "values": [
+            "warm",
+            "neutral",
+            "none"
+          ],
+          "default": "warm",
+          "since": "1.0",
+          "inherits": "hero.gradient"
+        },
+        {
+          "name": "chips",
+          "values": [
+            "glass",
+            "solid"
+          ],
+          "default": "solid",
+          "since": "1.0",
+          "inherits": "hero.chips"
+        },
+        {
+          "name": "logo",
+          "values": [
+            "title",
+            "logo"
+          ],
+          "default": "title",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "dashboard.attention",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "game.heading",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "hero"
+    },
+    {
+      "entry": "game.actions",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "hero"
+    },
+    {
+      "entry": "storage.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "storage.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "storage.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "storage.header",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "storage.drives",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "storage.games",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "plugins.top",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "plugins.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "plugins.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "plugins.header",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "top"
+    },
+    {
+      "entry": "plugins.store",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "main"
+    },
+    {
+      "entry": "plugins.data",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "plugins.builtin",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game",
+      "since": "1.0",
+      "axes": [
+        {
+          "name": "structure",
+          "values": [
+            "sections",
+            "tabs"
+          ],
+          "default": "sections",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "entry": "game.hero",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.main",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.side",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.bottom",
+      "since": "1.0",
+      "axes": null,
+      "kind": "region"
+    },
+    {
+      "entry": "game.back",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "hero"
+    },
+    {
+      "entry": "game.outside",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "required": true,
+      "region": "hero"
+    },
+    {
+      "entry": "game.note",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "hero"
+    },
+    {
+      "entry": "game.media",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.about",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "main"
+    },
+    {
+      "entry": "game.achievements-progress",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "game.achievements",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "game.activity",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "bottom"
+    },
+    {
+      "entry": "game.compat",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.crash",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.status",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.collections",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.installation",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    },
+    {
+      "entry": "game.copies",
+      "since": "1.0",
+      "axes": null,
+      "kind": "block",
+      "region": "side"
+    }
+  ]
+}

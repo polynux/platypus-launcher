@@ -1,0 +1,66 @@
+# A neutral slate alternate: graphite ground, grey accent, tighter corners. It
+# ships the topbar shell variant (issue #104); its other choices reuse the
+# existing catalog axes.
+
+[theme]
+id = "slate"
+name = "Slate"
+schema = 1
+catalog = "1.0"
+supports = ["tokens", "variants"]
+
+[variants]
+"shell.navigation" = "topbar"
+"settings.presentation" = "dialog"
+"settings.navigation" = "tabs"
+"section.chrome" = "plain"
+"view-header.size" = "compact"
+"list-row.density" = "compact"
+
+[tokens]
+ground = "#0f151c"
+ground-2 = "#151d27"
+raised = "#151d27"
+surface = "rgba(148, 163, 184, 0.08)"
+surface-strong = "rgba(148, 163, 184, 0.14)"
+hairline = "rgba(148, 163, 184, 0.12)"
+hairline-strong = "rgba(148, 163, 184, 0.2)"
+popover = "#151d27"
+glass = "rgba(21, 29, 39, 0.82)"
+text = "#e2e8f0"
+text-body = "#94a3b8"
+text-muted = "rgba(226, 232, 240, 0.6)"
+text-faint = "#7d8aa0"
+accent = "#94a3b8"
+accent-strong = "#cbd5e1"
+accent-dim = "#1f262f"
+on-accent = "#0f172a"
+ok = "#4ade80"
+attention = "#fdba74"
+info = "#7dd3fc"
+dl = "#c4b5fd"
+danger = "#fb7185"
+focus = "#e2e8f0"
+radius-chip = "0.5rem"
+radius-card = "0.75rem"
+radius-panel = "1rem"
+font-sans = '"Hanken Grotesk", system-ui, sans-serif'
+font-mono = '"JetBrains Mono", ui-monospace, monospace'
+
+[[wash]]
+at = "12% -10%"
+size = "1000px 600px"
+color = "rgba(100, 116, 139, 0.22)"
+fade = "56%"
+
+[[wash]]
+at = "90% 0%"
+size = "900px 520px"
+color = "rgba(71, 85, 105, 0.2)"
+fade = "54%"
+
+[[wash]]
+at = "50% 110%"
+size = "800px 460px"
+color = "rgba(51, 65, 85, 0.18)"
+fade = "56%"

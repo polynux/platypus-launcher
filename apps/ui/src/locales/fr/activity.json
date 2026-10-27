@@ -60,5 +60,22 @@
   "removed": "{{title}} retiré de la bibliothèque",
   "jobVerbBackedUp": "sauvegardé",
   "jobVerbRestored": "restauré"
+ },
+ "atlas": {
+  "sub": "Ce qui s'est passé dans votre bibliothèque, du plus récent au plus ancien.",
+  "filterKinds": "Filtrer par type",
+  "filterGame": "Filtrer par jeu",
+  "kinds": {
+   "sessions": "Sessions",
+   "installs": "Installations",
+   "updates": "Mises à jour",
+   "cloud": "Sauvegardes cloud",
+   "achievements": "Succès"
+  },
+  "everyGame": "Tous les jeux",
+  "noMatch": "Aucun résultat",
+  "clearFilters": "Effacer les filtres",
+  "today": "Aujourd'hui",
+  "yesterday": "Hier"
  }
 }

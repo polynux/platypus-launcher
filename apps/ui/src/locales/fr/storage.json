@@ -25,5 +25,24 @@
     "uninstall": "Désinstaller {{title}}"
   },
   "uninstallAsk": "Désinstaller « {{title}} » ? Ses fichiers quittent le disque.",
-  "uninstallGo": "Désinstaller"
+  "uninstallGo": "Désinstaller",
+  "atlas": {
+    "rescan": "Réanalyser",
+    "andMore": "et {{count}} de plus",
+    "freeOf": "libres sur {{total}}",
+    "played": "Joué {{ago}}",
+    "neverPlayed": "Jamais joué",
+    "systemDrive": "Disque système",
+    "almostFull": "Presque plein. Les installations sur ce disque échoueront.",
+    "default": "Par défaut",
+    "defaultFolder": "dossier par défaut",
+    "outsideTitle": "En dehors de vos dossiers de jeux",
+    "outsideEmpty": "Tous les jeux installés sont dans vos dossiers de jeux.",
+    "moveTo": "Déplacer vers {{folder}}",
+    "leftoversTitle": "Fichiers restants",
+    "canceledInstall": "installation annulée",
+    "canceledUpdate": "mise à jour annulée",
+    "clean": "Nettoyer {{size}}",
+    "nothingLeft": "Aucun fichier restant."
+  }
 }

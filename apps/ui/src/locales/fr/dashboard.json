@@ -45,5 +45,30 @@
     "epic": "Epic",
     "ubisoft": "Ubisoft",
     "custom": "Ajout manuel"
+  },
+  "home": {
+    "running": "{{title}} est en cours d'exécution.",
+    "ready_one": "{{count}} jeu prêt à jouer.",
+    "ready_other": "{{count}} jeux prêts à jouer.",
+    "fromBacklog": "Dans votre backlog",
+    "dismiss": "Ne plus suggérer",
+    "waitingForYou": "En attente",
+    "toFinish": "À finir",
+    "toInstall": "À installer",
+    "yourLibrary": "Votre bibliothèque",
+    "openLibrary": "Ouvrir la bibliothèque",
+    "backlogFallback": "Dans votre bibliothèque, pas encore installé.",
+    "backlogRated": "Évalué {{tier}} sur ProtonDB.",
+    "statGames": "Jeux",
+    "statInstalled": "Installés",
+    "statPlayed": "Joués",
+    "statOnDisk": "Sur le disque",
+    "needsAttention": "À surveiller",
+    "seeAll": "Tout voir ({{count}})",
+    "everythingWorks": "Tout fonctionne.",
+    "friendsOnline": "Amis en ligne",
+    "onlineCount": "{{count}} en ligne",
+    "online": "En ligne",
+    "achievements": "{{unlocked}}/{{total}} succès"
   }
 }

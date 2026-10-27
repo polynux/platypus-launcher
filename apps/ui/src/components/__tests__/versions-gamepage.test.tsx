@@ -29,7 +29,7 @@ import { GamePage } from '../GamePage';
 import type { Game, StorePlugin } from '../../types';
 
 const base = { runners: [], activity: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {}, launching: false, tweaks: [],
-  onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {} };
+  onChangeSettings() {}, onSaveSettings() { return Promise.resolve(); }, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {} };
 const plugin = (caps: string[]): StorePlugin => ({ id: 'echo', name: 'Echo', status: 'ready', capabilities: caps, declared: ['install', 'versions'], install_folder: '/g' }) as StorePlugin;
 const game = (o: Partial<Game> = {}): Game => ({
   id: 'p.echo.tiny', source: 'echo', store: 'echo', store_app_id: 'tiny', title: 'Echo Tiny', cover_url: '', banner_url: '', install_dir: '/g/tiny', executable: '',

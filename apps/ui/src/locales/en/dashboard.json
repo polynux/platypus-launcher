@@ -45,5 +45,30 @@
     "epic": "Epic",
     "ubisoft": "Ubisoft",
     "custom": "Sideloaded"
+  },
+  "home": {
+    "running": "{{title}} is running.",
+    "ready_one": "{{count}} game ready to play.",
+    "ready_other": "{{count}} games ready to play.",
+    "fromBacklog": "From your backlog",
+    "dismiss": "Don't suggest this",
+    "waitingForYou": "Waiting for you",
+    "toFinish": "To finish",
+    "toInstall": "To install",
+    "yourLibrary": "Your library",
+    "openLibrary": "Open library",
+    "backlogFallback": "In your library, not installed yet.",
+    "backlogRated": "Rated {{tier}} on ProtonDB.",
+    "statGames": "Games",
+    "statInstalled": "Installed",
+    "statPlayed": "Played",
+    "statOnDisk": "On disk",
+    "needsAttention": "Needs attention",
+    "seeAll": "See all {{count}}",
+    "everythingWorks": "Everything works.",
+    "friendsOnline": "Friends online",
+    "onlineCount": "{{count}} online",
+    "online": "Online",
+    "achievements": "{{unlocked}}/{{total}} achievements"
   }
 }

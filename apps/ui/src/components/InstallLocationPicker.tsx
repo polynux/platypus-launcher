@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Effect } from 'effect';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen } from 'lucide-react';
+import { Folder, FolderOpen } from 'lucide-react';
 import type { Game, InstallLocation } from '../types';
 import { Button } from '@/components/ds/button';
 import { MonoLabel, cx } from './ui';
@@ -10,6 +10,7 @@ import { LauncherApi } from '../effect/runtime';
 import { freeLabel, isShort, kindLabel } from '../lib/installLocation';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { useVariant } from '../lib/theme';
 
 type Row = Omit<InstallLocation, 'kind'> & { kind: InstallLocation['kind'] | 'picked' };
 
@@ -29,6 +30,7 @@ export interface InstallLocationPickerProps {
  *  checked by core before it can be chosen; a refusal is shown and nothing changes. */
 export function InstallLocationPicker({ game, needBytes, value, onChange, disabled }: InstallLocationPickerProps) {
   const { t } = useTranslation('gameOps');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,7 +80,7 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
 
   return (
     <section>
-      <MonoLabel className="mb-1.5">{t('gameOps:location.heading')}</MonoLabel>
+      {atlas ? <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-bold text-text-faint"><Folder className="size-3.5" aria-hidden />{t('gameOps:location.heading')}</div> : <MonoLabel className="mb-1.5">{t('gameOps:location.heading')}</MonoLabel>}
       {!rows && !error && <p className="font-mono text-micro uppercase tracking-widest text-white/55">{t('gameOps:location.loading')}</p>}
       {rows && (
         <div role="radiogroup" aria-label={t('gameOps:location.group')} className="space-y-1.5">
@@ -94,15 +96,15 @@ export function InstallLocationPicker({ game, needBytes, value, onChange, disabl
                 disabled={disabled}
                 onClick={() => select(r)}
                 className={cx(
-                  'flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left ring-1 transition disabled:opacity-60',
-                  chosen ? 'bg-amber-300/[0.08] ring-amber-300/35' : 'bg-white/[0.03] ring-white/[0.06] hover:bg-white/[0.06]',
+                  atlas ? 'flex h-12 w-full items-center justify-between gap-3 rounded-[10px] bg-surface px-3 text-left transition disabled:opacity-60' : 'flex w-full items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-left ring-1 transition disabled:opacity-60',
+                  atlas ? (chosen ? 'ring-[1.5px] ring-inset ring-accent' : 'hover:bg-surface-strong') : (chosen ? 'bg-amber-300/[0.08] ring-amber-300/35' : 'bg-white/[0.03] ring-white/[0.06] hover:bg-white/[0.06]'),
                 )}
               >
                 <span className="min-w-0">
-                  <span className="block font-mono text-micro uppercase tracking-wider text-white/55">{kindLabel(r.kind, t)}</span>
-                  <span className="block truncate font-mono text-[12px] text-white/85" title={r.folder}>{r.folder}</span>
+                  <span className={cx('block', atlas ? 'text-[11px] text-text-faint' : 'font-mono text-micro uppercase tracking-wider text-white/55')}>{kindLabel(r.kind, t)}</span>
+                  <span className={cx('block truncate text-[12px]', atlas ? 'text-text' : 'font-mono text-white/85')} title={r.folder}>{r.folder}</span>
                 </span>
-                <span className={cx('flex-none font-mono text-hint', short ? 'text-red-300' : 'text-white/55')}>
+                <span className={cx('flex-none', atlas ? 'text-[12px] tabular-nums' : 'font-mono text-hint', short ? 'text-danger' : atlas ? 'text-text-faint' : 'text-white/55')}>
                   {freeLabel(r.free_bytes)}
                 </span>
               </button>

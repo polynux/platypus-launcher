@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 type StoreType string
 
 const (
@@ -367,6 +369,153 @@ type LauncherSettings struct {
 	// (issue #49), off by default. The shell reads it and hides the window
 	// to the tray while a game session runs.
 	MinimizeToTray bool `json:"minimize_to_tray"`
+	// Theme is the picked theme's id (issue #93): "" is the built-in default.
+	Theme string `json:"theme"`
+	// GameTone is the game colour choice (issue #123, #134): "off", "accent"
+	// or "whole". "" means accent. The theme's color.game-tone axis decides
+	// how far it applies.
+	GameTone string `json:"game_tone"`
+	// ColorScheme is the colour scheme (issue #134): "dark", "light" or
+	// "black". "" means dark. Only themes that declare [schemes.light] or
+	// [schemes.black] offer another; the rest are dark only.
+	ColorScheme string `json:"color_scheme"`
+}
+
+// ThemeInfo is one theme in the Settings picker (issue #93). Status is "ok"
+// (can be picked), "newer" (needs a newer Platypus) or "invalid" (its
+// theme.toml can't be used). Warnings list what was ignored or fell back.
+// Source is the data plugin that carries the theme (issue #105); empty for
+// the built-in themes.
+type ThemeInfo struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Schema   int      `json:"schema"`
+	Supports []string `json:"supports"`
+	Status   string   `json:"status"`
+	Warnings []string `json:"warnings"`
+	Source   string   `json:"source,omitempty"`
+}
+
+// ThemeTokens is a theme's resolved tokens (issue #93): every token has a
+// value, the built-in one where the theme's is missing or invalid. The UI sets
+// them as CSS custom properties. Fonts maps a shipped family to its art URL
+// (issue #105); empty for the built-ins, whose families come from @fontsource.
+// Schemes holds the scheme token overrides (issue #134): "light" and "black"
+// tables from theme.toml, validated like [tokens]; the dark scheme is Tokens.
+type ThemeTokens struct {
+	ID       string                       `json:"id"`
+	Tokens   map[string]string            `json:"tokens"`
+	Wash     []WashLayer                  `json:"wash"`
+	Variants map[string]string            `json:"variants"`
+	Fonts    map[string]string            `json:"fonts,omitempty"`
+	Schemes  map[string]map[string]string `json:"schemes,omitempty"`
+}
+
+type ThemeCatalogEntry struct {
+	Entry string             `json:"entry"`
+	Since string             `json:"since"`
+	Axes  []ThemeCatalogAxis `json:"axes"`
+	// Kind is "block" or "region" for layout entries (issue #96); older
+	// component and container entries leave it empty.
+	Kind string `json:"kind,omitempty"`
+	// Required marks a block the layout can't hide: a layout that leaves it
+	// out still gets it, in Region, with a warning.
+	Required bool   `json:"required,omitempty"`
+	Region   string `json:"region,omitempty"`
+	// Attrs lists the per-block layout attributes the catalog declares (e.g.
+	// "limit" on the activity feed). Anything else is ignored with a warning.
+	// Each attr is typed: "int" with a Min (and optional Max) or "enum"
+	// with Values. The XSD and the core check both come from here (issue
+	// #110).
+	Attrs []ThemeCatalogAttr `json:"attrs,omitempty"`
+}
+
+// ThemeCatalogAttr is one declared block attribute (issue #110): an integer
+// with a minimum (and optional maximum, 0 means no maximum) or an enum of
+// allowed values.
+type ThemeCatalogAttr struct {
+	Name string `json:"name"`
+	// Type is "int" or "enum".
+	Type string `json:"type"`
+	// Min is the minimum for int attributes.
+	Min int `json:"min,omitempty"`
+	// Max caps int attributes; 0 means no maximum.
+	Max int `json:"max,omitempty"`
+	// Values lists the allowed values for enum attributes.
+	Values []string `json:"values,omitempty"`
+}
+
+// UnmarshalJSON accepts the current object shape and the pre-#110 string
+// shape ("limit"), so the catalog guard can still read the old snapshot when
+// checking compatibility. The catalog is unreleased (still 1.0), so the shape
+// change needs no major bump: a bare name keeps its historic meaning (limit
+// 1..50) only for reading old snapshots, never for new catalog entries.
+func (a *ThemeCatalogAttr) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		a.Name = name
+		if name == "limit" {
+			a.Type = "int"
+			a.Min = 1
+			a.Max = 50
+			return nil
+		}
+		a.Type = "int"
+		return nil
+	}
+	type raw ThemeCatalogAttr
+	var v raw
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*a = ThemeCatalogAttr(v)
+	return nil
+}
+
+type ThemeCatalogAxis struct {
+	Name    string   `json:"name"`
+	Values  []string `json:"values"`
+	Default string   `json:"default"`
+	Since   string   `json:"since"`
+	// Inherits names a broader axis ("dialog.presentation") whose value this
+	// use-site axis takes when the theme doesn't set it, if it's one of Values.
+	Inherits string `json:"inherits,omitempty"`
+}
+
+// WashLayer is one radial gradient of the background wash: where it sits,
+// how big it is, its colour, and where it fades out. Image is an optional
+// theme asset (issue #105): the art URL of a png, webp or svg inside the
+// theme folder, drawn under the gradient. Empty for the built-ins.
+type WashLayer struct {
+	At    string `json:"at"`
+	Size  string `json:"size"`
+	Color string `json:"color"`
+	Fade  string `json:"fade"`
+	Image string `json:"image,omitempty"`
+}
+
+// ThemeLayout is a view's validated block layout (issue #96): the regions in
+// the order the theme lists them, each with its blocks and rows. The UI maps
+// the names onto the view's block components; the core resolves the built-in
+// arrangement (issue #108) when the theme ships none, so a view with blocks
+// always gets a layout and nil only means an unknown view.
+type ThemeLayout struct {
+	View    string              `json:"view"`
+	Regions []ThemeLayoutRegion `json:"regions"`
+}
+
+// ThemeLayoutRegion is one named place in a view (e.g. "main", "side").
+type ThemeLayoutRegion struct {
+	Name  string            `json:"name"`
+	Nodes []ThemeLayoutNode `json:"nodes"`
+}
+
+// ThemeLayoutNode is one block in a region, or one row grouping blocks
+// side by side. Exactly one of Block and Row is set.
+type ThemeLayoutNode struct {
+	Block string            `json:"block,omitempty"`
+	Attrs map[string]string `json:"attrs,omitempty"`
+	Row   []ThemeLayoutNode `json:"row,omitempty"`
 }
 
 // Achievement is one Steam achievement. Unlocked/UnlockedAt are only known when

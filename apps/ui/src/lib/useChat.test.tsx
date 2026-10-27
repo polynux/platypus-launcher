@@ -139,6 +139,17 @@ describe('useChat', () => {
     expect(result.current.unreadOf('echo', '1')).toBe(0);
   });
 
+  it('exposes every held conversation, read or unread, for the Chats tab', async () => {
+    const { result } = renderHook(() => useChat(social, vi.fn()));
+    await act(async () => {});
+    expect(result.current.conversations).toEqual([]);
+    act(() => {
+      h.listener?.({ ...conv({ unread: 0, seq: 3 }), alert: false } as ChatEvent);
+    });
+    expect(result.current.conversations).toHaveLength(1);
+    expect(result.current.unread).toBe(0);
+  });
+
   it('closes the conversation on screen when another one opens', async () => {
     const close = vi.fn(() => Effect.succeed(undefined));
     h.api.chatClose = close;

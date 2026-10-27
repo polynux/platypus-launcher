@@ -1,0 +1,15 @@
+<!-- The cool plugins (issue #102): an invented demo, not a design proposal.
+     The header and the store cards stay full width; the data cards and the
+     built-in list share a row below. The store block keeps its login row and
+     approve/enable actions, so the required parts stay reachable.
+     Validated against internal/themes/layout.xsd. -->
+<layout view="plugins" catalog="1.0">
+  <region name="main">
+    <block name="header" />
+    <block name="store" />
+    <row>
+      <block name="data" />
+      <block name="builtin" />
+    </row>
+  </region>
+</layout>

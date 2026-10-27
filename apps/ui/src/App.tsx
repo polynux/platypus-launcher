@@ -1,12 +1,16 @@
 // i18n: converted
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Effect } from 'effect';
-import { Sidebar } from './components/Sidebar';
+import { Shell, SourceFooter } from './components/Shell';
+import { AtlasFriendsPanel, AtlasChatView } from './components/AtlasFriendsPanel';
 import { offers } from './lib/capabilities';
 import { Dashboard } from './components/Dashboard';
 import { LibraryView, type LibraryMode, type Ownership } from './components/LibraryView';
+import { LibraryListDetail } from './components/LibraryListDetail';
+import { AtlasLibraryPage } from './components/AtlasLibraryViews';
 import { GamePage, invalidateGameDetailsCache } from './components/GamePage';
 import { StoreView } from './components/StoreView';
+import { StoresPage } from './components/StoresPage';
 import { AddGameModal, type AddGameOptions } from './components/AddGameModal';
 import { addGameFlow } from './lib/addGame';
 import { ActivityView } from './components/ActivityView';
@@ -20,6 +24,7 @@ import { CloudSavesHost } from './components/CloudSavesHost';
 import { FriendsModal } from './components/FriendsModal';
 import { RedeemDialog } from './components/RedeemDialog';
 import { CollectionsDialog } from './components/CollectionsDialog';
+import { CommandPalette } from './components/CommandPalette';
 import { collectionCounts, staleTitles } from './lib/collections';
 import { ChatPanel } from './components/ChatPanel';
 import { FamilyWarningHost } from './components/FamilyWarningHost';
@@ -35,17 +40,32 @@ import { friendNameOf, useChat } from './lib/useChat';
 import { isLiveState } from './lib/sessions';
 import { usePauseWhileGameRuns } from './lib/pauseWhileHidden';
 import { optimisticGamesAfterJob, withoutFinishedJobs } from './lib/jobs';
-import { needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
+import { attentionIssues, heroImages, needsAttention, mergeCopies, mergeCustomization, mergePlaytime, mergeRescannedGames } from './lib/games';
 import type { ActivityEvent, Collection, Game, GameSettings, Job, MigrationNotice, ProtonVersion, RemoveOptions, SessionEvent, SocialStatus, SocialView, SourceWarning, StorePlugin, StoreType, Tweak, View } from './types';
+import type { TierFilter } from './lib/compat';
+import type { StatusFilter } from './components/LibraryView';
 import { useTranslation } from 'react-i18next';
 import { applyLanguage, loadSessionInfo } from './lib/i18n';
+import { loadTheme } from './lib/theme';
 import { LibrarySkeleton } from './components/LibrarySkeleton';
+import { useNetState } from './components/useNetState';
 import { hasDetails, plainError } from './lib/plainError';
 import { coreErrMsg } from './lib/coreError';
 import { Toaster } from './components/ds/sonner';
+import { Modal } from './components/Modal';
+import { useVariant } from './lib/theme';
+import { useGameTone } from './lib/gameTone';
+import type { GameSettingsTab } from './lib/gameSettingsTabs';
 import { notify as toastNotify, type LegacyKind as NoticeKind } from './lib/notify';
+import { X } from 'lucide-react';
+import { RouterProvider, useRouter } from '@tanstack/react-router';
+import { createAppRouter, useSetView, useView, viewToLocation } from './router';
 
-export function App() {
+export function AppContent() {
+  const view = useView();
+  const setView = useSetView();
+  const router = useRouter();
+  const viewKey = JSON.stringify(view);
   const { t } = useTranslation(['nav', 'common', 'activity']);
   const [games, setGames] = useState<Game[]>([]);
   const [runners, setRunners] = useState<ProtonVersion[]>([]);
@@ -55,7 +75,7 @@ export function App() {
   const [redeemOpen, setRedeemOpen] = useState(false);
   // Collections (issue #45): the list from settings, and the dialog (for one game, or the manager).
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [collectionsDialog, setCollectionsDialog] = useState<{ gameId?: string } | null>(null);
+  const [collectionsDialog, setCollectionsDialog] = useState<{ gameId?: string; mode?: 'new' } | null>(null);
   // Sources that failed to list (a logged-out plugin) on the last scan.
   const [warnings, setWarnings] = useState<SourceWarning[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -64,11 +84,76 @@ export function App() {
   const [lastScan, setLastScan] = useState<number | null>(null);
   const [scanning, setScanning] = useState(false);
 
-  const [view, setView] = useState<View>({ name: 'dashboard' });
+  // Atlas parity (issue #132): the footer shows the last scan and the
+  // offline marker, from the same sources as the classic header.
+  const { online } = useNetState();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsReturnView, setSettingsReturnView] = useState<View>({ name: 'dashboard' });
+  const settingsPresentation = useVariant('settings.presentation');
+  // The shell is a view (issue #104): its regions depend on shell.navigation.
+  // Sidebar mode keeps today's row layout; topbar mode stacks the bar above
+  // the main column.
+  const shellNavigation = useVariant('shell.navigation');
+  useEffect(() => {
+    // The settings bounce replaces history (issue #140): going back from the
+    // return view must not land on the bounced settings URL again.
+    if (settingsPresentation !== 'page' && view.name === 'settings') {
+      setSettingsOpen(true);
+      const back = settingsReturnView.name === 'settings' ? { name: 'dashboard' } as View : settingsReturnView;
+      void router.navigate({ ...(viewToLocation(back) as object), replace: true } as never);
+    } else if (settingsPresentation === 'page' && settingsOpen) {
+      setSettingsOpen(false);
+      void router.navigate({ to: '/settings', replace: true } as never);
+    }
+  }, [settingsPresentation, settingsOpen, settingsReturnView, view.name, router]);
+  // Mouse back/forward buttons (issue #140): Chromium fires mouseup 3/4 for
+  // them; Electron doesn't always turn those into history navigations, so do
+  // it here. Browser Alt+Left/Right already navigates natively.
+  useEffect(() => {
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 3) {
+        e.preventDefault();
+        router.history.back();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        router.history.forward();
+      }
+    };
+    window.addEventListener('mouseup', onMouseUp);
+    return () => window.removeEventListener('mouseup', onMouseUp);
+  }, [router]);
   const [search, setSearch] = useState('');
   const [source, setSource] = useState<StoreType | 'all'>('all');
+  // The sourcebar's multi-store selection (issue #125, D21 empty = every
+  // store): kept in sync with the single source the sidebar and topbar use.
+  const [selectedStores, setSelectedStores] = useState<StoreType[]>([]);
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('cards');
   const [ownership, setOwnership] = useState<Ownership>('installed');
+
+  // The /22 library bar shares its filter state with the list (#135): one
+  // state in App drives both, like the classic library mode keeps its view.
+  const [atlasTier, setAtlasTier] = useState<TierFilter>('all');
+  const [atlasStatus, setAtlasStatus] = useState<StatusFilter>('all');
+  const [atlasLending, setAtlasLending] = useState<'all' | 'with-me'>('all');
+  // Which library view the /22 switch shows (issue #136): the list-detail
+  // stage, or the Atlas grid/table. Persisted like the classic library mode,
+  // so the choice survives a relaunch.
+  const [atlasView, setAtlasView] = useState<'list' | 'grid' | 'table'>(() => {
+    try {
+      const saved = window.localStorage.getItem('platypus.atlas.view');
+      return saved === 'grid' || saved === 'table' ? saved : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+  const persistAtlasView = useCallback((v: 'list' | 'grid' | 'table') => {
+    setAtlasView(v);
+    try {
+      window.localStorage.setItem('platypus.atlas.view', v);
+    } catch {
+      // A private window or denied storage keeps the in-memory choice.
+    }
+  }, []);
 
   const [addOpen, setAddOpen] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
@@ -114,7 +199,7 @@ export function App() {
   }, [t]);
 
   const main = useRef<HTMLElement>(null);
-  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [view]);
+  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [viewKey]);
 
   // Friends lists: the snapshot of every store that offers one, then each push.
   // A snapshot is merged with what the pushes already brought in, and it drops
@@ -199,14 +284,14 @@ export function App() {
             const installed = g.filter((x) => x.is_installed).length;
             // Runner count uses whatever the runners call returned (possibly stale).
             log({
-              type: 'update',
+              type: 'scan',
               detail: installed < g.length
                 ? t('activity:log.scanOwned', { count: installed, owned: g.length })
                 : t('activity:log.scan', { count: installed }),
               meta: t('activity:log.sources', { count: sources }),
             });
             for (const w of lib.warnings) log({
-              type: 'update',
+              type: 'scan',
               detail: w.needs_auth
                 ? t('activity:log.warnLoggedOut', { source: w.source })
                 : w.unavailable
@@ -246,7 +331,7 @@ export function App() {
           if (failures.length > 0) {
             const msg = failures.join(' · ');
             setLoadError(msg);
-            log({ type: 'update', detail: t('activity:log.scanErrors'), meta: msg });
+            log({ type: 'scan', detail: t('activity:log.scanErrors'), meta: msg });
             notify(msg, 'err');
           } else {
             setLoadError(null);
@@ -296,6 +381,9 @@ export function App() {
       );
   }, []);
 
+  // The picked theme (issue #93) replaces the one applied from the cache at boot.
+  useEffect(() => { void loadTheme(); }, []);
+
   // StrictMode mounts effects twice in dev; scan only once on startup.
   const started = useRef(false);
   useEffect(() => {
@@ -338,7 +426,7 @@ export function App() {
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
-            notify(t('game:nowRunning', { title }));
+            if (shellNavigation !== 'sourcebar') notify(t('game:nowRunning', { title }), 'busy');
             log({ type: 'session', game: title, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
           }
           return;
@@ -358,7 +446,7 @@ export function App() {
           log({ type: 'session', game: title, detail: t('activity:log.sessionStopped', { title }), meta: started ? t('activity:log.sessionMinutes', { count: mins }) : undefined });
         }
       }),
-    [log, notify]
+    [log, notify, shellNavigation, t]
   );
 
   // A hidden window can miss nothing (events stay live) but re-checks on
@@ -392,8 +480,10 @@ export function App() {
   const saveSettings = (id: string, settings: GameSettings, what = t('activity:log.tweakDefault')) => {
     const g = games.find((x) => x.id === id);
     setGames((prev) => prev.map((x) => (x.id === id ? { ...x, settings } : x)));
-    if (!g) return;
-    Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
+    if (!g) return Promise.resolve();
+    // Returns the write: the settings drawer clears its dirty state only
+    // once this resolves, so a failed save keeps its footer.
+    return Effect.runPromise(LauncherApi.saveGameSettings(id, settings))
       .then(() => {
         notify(t('common:settingsSaved'));
         log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }) });
@@ -401,6 +491,7 @@ export function App() {
       .catch((err) => {
         notify(t('errors:notPersisted', { error: coreErrMsg(err) }), 'err');
         log({ type: 'tweak', game: g.title, detail: t('activity:log.tweakDetail', { what, title: g.title }), meta: t('activity:log.tweakSessionOnly') });
+        throw err;
       });
   };
 
@@ -568,7 +659,7 @@ export function App() {
     () => installedGames.reduce<Record<string, number>>((acc, g) => ((acc[g.store] = (acc[g.store] ?? 0) + 1), acc), {}),
     [installedGames]
   );
-  const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
+  const activeJobs = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
   const jobFor = (id: string) => activeJobs.find((j) => j.game_id === id) ?? [...jobs].reverse().find((j) => j.game_id === id && j.state === 'failed');
 
   const collectionTotals = useMemo(() => collectionCounts(collections, games, Math.floor(Date.now() / 1000)), [collections, games]);
@@ -600,14 +691,43 @@ export function App() {
   }, [plugins]);
   // Conversations with friends (chat capability): unread badges, the open chat, alerts.
   const chat = useChat(social, notify, socialLabels);
+  // The running game's title, if any (the Atlas MeCard's "Playing" line).
+  const playingTitle = useMemo(() => {
+    const first = Object.values(sessions)[0];
+    if (!first) return null;
+    return games.find((g) => g.id === first.game_id)?.title ?? first.game_id;
+  }, [sessions, games]);
   // Redeem is one entry for every ready store that offers it (none: no entry).
   const redeemStores = useMemo(() => plugins.filter((p) => p.status === 'ready' && offers(p, 'redeem')), [plugins]);
   const libraryIds = useMemo(() => new Set(games.map((g) => g.id)), [games]);
 
   // Stable, so the library's memoized cards are not re-rendered by every App update.
   const openGame = useCallback(
-    (id: string) => setView((v) => ({ name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' })),
+    (id: string) =>
+      setView((v) =>
+        // Opening the game already shown keeps its back target.
+        v.name === 'game' && v.id === id
+          ? v
+          : { name: 'game', id, from: v.name === 'library' || v.name === 'fixes' ? v.name : 'dashboard' },
+      ),
     [],
+  );
+  // The Settings entry (the shell's and the palette's): the theme's presentation
+  // decides whether Settings replaces the view or opens over it.
+  const openSettings = useCallback(() => {
+    setSettingsReturnView(view);
+    if (settingsPresentation === 'page') setView({ name: 'settings' });
+    else setSettingsOpen(true);
+  }, [settingsPresentation, view]);
+  // Game settings asked for from the palette (issue #124): open the game page
+  // on that tab, as the page's own Settings button does.
+  const [gameSettingsTab, setGameSettingsTab] = useState<{ gameId: string; tab: GameSettingsTab } | null>(null);
+  const openGameSettings = useCallback(
+    (id: string) => {
+      openGame(id);
+      setGameSettingsTab({ gameId: id, tab: 'general' });
+    },
+    [openGame],
   );
   // Closing the friends modal ends any conversation in it: the chat only shows inside the modal.
   const closeFriends = () => { chat.close(); setFriendsOpen(false); };
@@ -622,7 +742,136 @@ export function App() {
     Effect.runPromise(LauncherApi.dismissMigrationNotice()).catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
-  const currentGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
+  // Atlas list-detail (issue #126): the library is the list plus the stage.
+  const libraryPresentation = useVariant('library.presentation');
+  const isListDetail = libraryPresentation === 'list-detail';
+  // The staged game in the library list-detail (for the game tone and the
+  // palette's actions): tracked whenever the stage shows, whatever opened
+  // it. Opening a game from the palette or dashboard lands on the stage,
+  // and clicking another row re-stages, so both follow the staged game.
+  const [stagedGameId, setStagedGameId] = useState<string | null>(null);
+  // The last game opened or staged, so the Atlas grid can outline it.
+  const [lastGameId, setLastGameId] = useState<string | null>(null);
+  const routedGameId = view.name === 'game' ? view.id : null;
+  useEffect(() => { if (routedGameId) setLastGameId(routedGameId); }, [routedGameId]);
+  useEffect(() => { if (stagedGameId) setLastGameId(stagedGameId); }, [stagedGameId]);
+  const stagedGame = isListDetail ? games.find((g) => g.id === stagedGameId) ?? undefined : undefined;
+  const gameViewGame = view.name === 'game' ? games.find((g) => g.id === view.id) : undefined;
+  // Covers and table open the full game page, so the routed id wins there;
+  // only the list's stage follows the staged game.
+  const stageShowsGame = isListDetail && !(view.name === 'game' && atlasView !== 'list');
+  const currentGame = stageShowsGame ? (stagedGame ?? gameViewGame) : gameViewGame;
+  // The hero art the game page actually shows (the details hero once it
+  // loads): the tone samples that, falling back to the library chain.
+  const [heroArt, setHeroArt] = useState<string | null>(null);
+  const [installIntentId, setInstallIntentId] = useState<string | null>(null);
+  const currentGameId = currentGame?.id;
+  useEffect(() => { setHeroArt(null); }, [currentGameId]);
+  // The game's colour (issue #123), applied here so it also works where the
+  // theme shows no switch (the /22 switch lives in Settings > Appearance,
+  // #134; the shell takes no tone prop).
+  // The game's colour is applied as a side effect; the /22 switch for it
+  // lives in Settings > Appearance (#134).
+  useGameTone(currentGame ? (heroArt ?? heroImages(currentGame)[0]) : undefined);
+
+  // One game page for the game view and the list-detail stage (issues #126,
+  // #127): the same props, so the stage renders the game page for the
+  // selected game with the real data and APIs.
+  const renderGamePage = (game: Game, from: 'dashboard' | 'library' | 'fixes', hideBack = false) => (
+    <GamePage
+      game={game}
+      installIntent={installIntentId === game.id}
+      onInstallIntentHandled={() => setInstallIntentId(null)}
+      runners={runners}
+      activity={activity}
+      backLabel={t(`nav:${from}`)}
+      onBack={() => setView({ name: from } as View)}
+      hideBack={hideBack}
+      onHeroArt={setHeroArt}
+      onTuneSaved={(st) => setGames((prev) => prev.map((x) => (x.id === game.id ? { ...x, settings: st } : x)))}
+      onPlay={() => launch(game)}
+      onStop={() => stop(game.id, false)}
+      onForceStop={() => stop(game.id, true)}
+      launching={launchingId === game.id}
+      session={sessions[game.id] ?? sessionFailures[game.id]}
+      sessionStartedAt={sessionStart.current[game.id]}
+      refreshing={scanning}
+      tweaks={tweaks}
+      // saveSettings rethrows after its toast so the settings drawer can
+      // keep its dirty state; the tweak switch has no such state, so a
+      // failed tweak save must not leave an unhandled rejection here.
+      onChangeSettings={(st, what) => { void saveSettings(game.id, st, what).catch(() => {}); }}
+      onSaveSettings={(st) => saveSettings(game.id, st)}
+      onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
+      plugin={plugins.find((x) => x.id === game.source)}
+      sourceLogos={sourceLogos}
+      job={jobFor(game.id)}
+      jobs={jobs}
+      onJob={(kind) => runJob(kind, game)}
+      onJobAction={jobAction}
+      onAllowFolder={(folder) => allowFolder(game, folder)}
+      onNavigate={setView}
+      onNotify={notify}
+      onVersionsChanged={() => loadData('update')}
+      onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
+      onRemove={(opts) => removeGame(game, opts)}
+      collections={collections}
+      onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
+      openSettingsTab={gameSettingsTab?.gameId === game.id ? gameSettingsTab.tab : undefined}
+      onSettingsOpened={() => setGameSettingsTab(null)}
+    />
+  );
+
+  // The list-detail library (issue #126): the list plus the stage. Opening a
+  // game from elsewhere (palette, dashboard) lands here with that game
+  // selected, through the game view below. Under Atlas the /22 library bar
+  // owns the filters (#135), so the list filters through App's state and
+  // keeps only its filter field and sort; the add-game entry lives in the
+  // More places menu.
+  const resetLibraryFilters = () => {
+    setOwnership('owned');
+    setSelectedStores([]);
+    setSource('all');
+    setSearch('');
+    setAtlasTier('all');
+    setAtlasStatus('all');
+    setAtlasLending('all');
+    if (view.name !== 'library') setView({ name: 'library' });
+    else setView({ name: 'library', collection: undefined });
+  };
+
+  const renderListDetail = (initialSelectedId?: string | null) => (
+    <LibraryListDetail
+      games={games}
+      ownership={ownership}
+      source={source}
+      storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
+      collection={view.name === 'library' ? view.collection : undefined}
+      collections={collections}
+      onPlay={(id) => {
+        const g = games.find((x) => x.id === id);
+        if (g) launch(g);
+      }}
+      renderStage={(g) => renderGamePage(g, view.name === 'game' && view.from ? view.from : 'library', true)}
+      initialSelectedId={initialSelectedId}
+      onStageChange={setStagedGameId}
+      tierValue={atlasTier}
+      onTierChange={setAtlasTier}
+      statusValue={atlasStatus}
+      onStatusChange={setAtlasStatus}
+      lendingValue={atlasLending}
+      onLendingChange={setAtlasLending}
+      warnings={warnings}
+      pluginName={(id) => socialLabels[id] ?? id}
+      onOpenPlugins={() => setView({ name: 'plugins' })}
+      jobs={jobs}
+      onManageCollections={(id) => setCollectionsDialog({ gameId: id })}
+      onOpenSettings={openGameSettings}
+      onInstall={(g) => runJob('install', g)}
+      sessions={sessions}
+      onResetFilters={resetLibraryFilters}
+    />
+  );
 
   const renderView = () => {
     if (!loaded) return <LibrarySkeleton />;
@@ -643,16 +892,73 @@ export function App() {
         return (
           <Dashboard
             games={installedGames}
+            allGames={games}
             ownedCount={games.length}
             runners={runners}
             activity={activity}
+            social={social}
+            sourceLogos={sourceLogos}
+            onOpenFriends={() => setFriendsOpen(true)}
             dismissedHero={dismissedHero}
             onDismissHero={(ids) => setDismissedHero((prev) => new Set([...prev, ...ids]))}
             onOpenGame={openGame}
             onNavigate={setView}
+            jobs={jobs}
+            sessions={sessions}
+            sessionStartedAt={{ ...sessionStart.current }}
+            onPlay={(id) => {
+              const g = games.find((x) => x.id === id);
+              if (g) launch(g);
+            }}
+            onInstall={(g) => { setInstallIntentId(g.id); openGame(g.id); }}
+            onStop={(id) => stop(id, false)}
+            onJobAction={jobAction}
           />
         );
       case 'library':
+        // Atlas list-detail is the list plus the stage; the /22 grid and
+        // table are the Atlas lib-full page (issue #136). Other themes keep
+        // the classic LibraryView grid.
+        if (isListDetail && atlasView !== 'list') {
+          return (
+            <AtlasLibraryPage
+              games={games}
+              currentId={lastGameId}
+              ownership={ownership}
+              source={source}
+              storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
+              collection={view.name === 'library' ? view.collection : undefined}
+              collections={collections}
+              tier={atlasTier}
+              onTier={setAtlasTier}
+              status={atlasStatus}
+              onStatus={setAtlasStatus}
+              lending={atlasLending}
+              onLending={setAtlasLending}
+              query={search}
+              onQuery={setSearch}
+              warnings={warnings}
+              pluginName={(id) => socialLabels[id] ?? id}
+              onOpenPlugins={() => setView({ name: 'plugins' })}
+              jobs={activeJobs}
+              sessions={sessions}
+              runners={runners}
+              activity={activity}
+              sourceLogos={sourceLogos}
+              view={atlasView}
+              onOpen={openGame}
+              onPlay={(id) => {
+                const g = games.find((x) => x.id === id);
+                if (g) launch(g);
+              }}
+              onInstall={(g) => runJob('install', g)}
+              onOpenSettings={openGameSettings}
+              onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
+              onResetFilters={resetLibraryFilters}
+            />
+          );
+        }
+        if (isListDetail && atlasView === 'list') return renderListDetail();
         return (
           <LibraryView
             games={games}
@@ -662,7 +968,8 @@ export function App() {
             onSearch={setSearch}
             source={source}
             onSource={setSource}
-            mode={libraryMode}
+            storeSelection={shellNavigation === 'sourcebar' ? selectedStores : undefined}
+            mode={isListDetail && atlasView === 'table' ? 'table' : libraryMode}
             onMode={setLibraryMode}
             ownership={ownership}
             onOwnership={setOwnership}
@@ -681,51 +988,32 @@ export function App() {
           />
         );
       case 'game':
+        // Atlas list-detail shows the list with that game selected on the stage.
+        if (isListDetail && atlasView === 'list') {
+          const selected = games.find((g) => g.id === view.id);
+          if (!selected) {
+            return (
+              <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
+            );
+          }
+          return renderListDetail(view.id);
+        }
         return currentGame ? (
-          <GamePage
-            game={currentGame}
-            runners={runners}
-            activity={activity}
-            backLabel={t(`nav:${view.from}`)}
-            onBack={() => setView({ name: view.from } as View)}
-            onPlay={() => launch(currentGame)}
-            onStop={() => stop(currentGame.id, false)}
-            onForceStop={() => stop(currentGame.id, true)}
-            launching={launchingId === currentGame.id}
-            session={sessions[currentGame.id] ?? sessionFailures[currentGame.id]}
-            refreshing={scanning}
-            tweaks={tweaks}
-            onChangeSettings={(st, what) => saveSettings(currentGame.id, st, what)}
-            onSaveSettings={(st) => saveSettings(currentGame.id, st)}
-            onCustomized={() => refreshLibraryQuietly(mergeCustomization)}
-            plugin={plugins.find((x) => x.id === currentGame.source)}
-            sourceLogos={sourceLogos}
-            job={jobFor(currentGame.id)}
-            jobs={jobs}
-            onJob={(kind) => runJob(kind, currentGame)}
-            onJobAction={jobAction}
-            onAllowFolder={(folder) => allowFolder(currentGame, folder)}
-            onNavigate={setView}
-            onNotify={notify}
-            onVersionsChanged={() => loadData('update')}
-            onCopyChanged={() => refreshLibraryQuietly(mergeCopies)}
-            onRemove={(opts) => removeGame(currentGame, opts)}
-            collections={collections}
-            onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
-          />
+          renderGamePage(currentGame, view.from)
         ) : (
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
         );
       case 'activity':
-        return <ActivityView events={activity} />;
+        return <ActivityView events={activity} games={games} onOpenGame={openGame} />;
       case 'fixes':
-        return <FixesView games={games} onOpenGame={openGame} />;
+        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner }).catch(() => {})} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
-        return <SystemView runners={runners} onRefresh={() => loadData('rescan')} scanning={scanning} />;
+        return <SystemView runners={runners} games={installedGames} onRefresh={() => loadData('rescan')} scanning={scanning} />;
       case 'plugins':
         return (
           <PluginsView
             plugins={plugins}
+            games={games}
             warnings={warnings}
             onPlugins={onPluginsChanged}
             onLibraryChanged={() => loadData('update')}
@@ -736,6 +1024,7 @@ export function App() {
         return (
           <StorageView
             games={games}
+            jobs={jobs}
             onNotify={notify}
             onRemove={removeGame}
             onUninstall={(game) => runJob('uninstall', game)}
@@ -745,6 +1034,7 @@ export function App() {
         return (
           <DownloadsView
             jobs={jobs}
+            games={games}
             onAction={jobAction}
             onClear={() => {
               // Optimistic clear so the button feels instant even when the
@@ -761,7 +1051,7 @@ export function App() {
           />
         );
       case 'settings':
-        return <LauncherSettingsView onNotify={notify} plugins={plugins} />;
+        return settingsPresentation === 'page' ? <LauncherSettingsView onNotify={notify} plugins={plugins} /> : null;
       case 'store': {
         const plugin = storePlugins.find((x) => x.id === view.plugin);
         if (!plugin) {
@@ -769,6 +1059,22 @@ export function App() {
             <div className="p-7">
               <EmptyState label={t('store:unavailable')}>{t('store:unavailableDetail')}</EmptyState>
             </div>
+          );
+        }
+        // Atlas lists every storefront above the embedded view (issue #138);
+        // other themes keep the bare embedded view.
+        if (isSourcebar) {
+          return (
+            <StoresPage
+              plugins={storePlugins}
+              selected={plugin}
+              onSelect={(id) => setView({ name: 'store', plugin: id })}
+              canRedeem={redeemStores.length > 0}
+              onRedeem={() => setRedeemOpen(true)}
+              initialUrl={view.url}
+              onClose={() => closeStore(plugin.id)}
+              onNotify={notify}
+            />
           );
         }
         return (
@@ -783,29 +1089,98 @@ export function App() {
     }
   };
 
+  // Atlas parity (issue #132): the list and stage scroll inside themselves,
+  // so App's main clips only on the list-detail library/game views;
+  // every other view scrolls like warm. The Atlas grid/table scroll too.
+  const listDetailActive = isListDetail && atlasView === 'list' && (view.name === 'library' || view.name === 'game');
+  const isSourcebar = shellNavigation === 'sourcebar';
+  const hasBorrowed = useMemo(() => games.some((g) => g.shared_by != null), [games]);
+  // The /22 banners (D22 Banners): between the top bar and the library bar.
+  // Other themes keep the banner in the main column.
+  const banner = migration ? (
+    <div className="border-b border-hairline bg-ground px-4 py-3 [&>div]:mb-0">
+      <MigrationBanner
+        notice={migration}
+        onOpenPlugins={() => setView({ name: 'plugins' })}
+        onDismiss={dismissMigration}
+      />
+    </div>
+  ) : undefined;
+  const chatTarget = chat.target;
+  const chatFriend = chatTarget ? social.find((v) => v.plugin === chatTarget.plugin)?.friends.find((f) => f.id === chatTarget.friendId) : undefined;
+  const chatPlugin = chatTarget ? plugins.find((x) => x.id === chatTarget.plugin) : undefined;
+  const chatPanel = chatTarget && (
+    isSourcebar ? (
+      <AtlasChatView
+        view={chat.conversation}
+        friend={chatFriend}
+        friendName={chatFriend?.name ?? friendNameOf(social, chatTarget.plugin, chatTarget.friendId)}
+        plugin={chatTarget.plugin}
+        logoUrl={sourceLogos[chatTarget.plugin]}
+        storeName={socialLabels[chatTarget.plugin] ?? chatTarget.plugin}
+        canChat={chatPlugin ? offers(chatPlugin, 'chat') : true}
+        inLibrary={(id) => libraryIds.has(id)}
+        onOpenGame={(id) => { closeFriends(); openGame(id); }}
+        chatAlerts={chat.alerts}
+        onSetChatAlerts={chat.setAlerts}
+        error={chat.error}
+        onLoadOlder={chat.loadOlder}
+        onSend={chat.send}
+        onResend={chat.resend}
+        onBack={chat.close}
+      />
+    ) : (
+      <ChatPanel
+        view={chat.conversation}
+        friendName={friendNameOf(social, chatTarget.plugin, chatTarget.friendId)}
+        storeName={socialLabels[chatTarget.plugin] ?? chatTarget.plugin}
+        error={chat.error}
+        onLoadOlder={chat.loadOlder}
+        onSend={chat.send}
+        onResend={chat.resend}
+        onBack={chat.close}
+        onClose={closeFriends}
+      />
+    )
+  );
+
   return (
     <TooltipProvider delayDuration={300}>
-    <div className={cx('flex h-screen overflow-hidden text-[#ece6da]', view.name === 'game' ? 'app-wash-game' : 'app-wash')}>
-      <Sidebar
+    <div className={cx('flex h-screen overflow-hidden text-foreground', view.name === 'game' ? 'app-wash-game' : 'app-wash', (shellNavigation === 'topbar' || shellNavigation === 'sourcebar') && 'flex-col', isSourcebar && 'text-[13.5px]')}>
+      <Shell
         view={view}
         onNavigate={setView}
+        onSettingsOpen={openSettings}
         search={search}
         onSearch={setSearch}
         storeCounts={storeCounts}
-        onPickSource={(s) => { setSource(s); setView({ name: 'library' }); }}
+        onPickSource={(s) => { setSource(s); setSelectedStores(s === 'all' ? [] : [s]); setView({ name: 'library' }); }}
         sourceLogos={sourceLogos}
         gameCount={installedGames.length}
         loading={!loaded}
         downloadCount={activeJobs.length}
         authNeeded={warnings.some((w) => w.needs_auth) || plugins.some((x) => x.status === 'unapproved' || x.status === 'changed')}
-        fixCount={games.filter(needsAttention).length}
+        fixCount={shellNavigation === 'sourcebar' ? attentionIssues(games, jobs, runners).length : games.filter(needsAttention).length}
         runnerCount={runners.length}
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
         onStop={(id) => stop(id, false)}
         friends={social}
         friendLabels={socialLabels}
-        onOpenFriends={() => setFriendsOpen(true)}
+        onOpenFriends={() => setFriendsOpen((v) => !v)}
+        friendsOpen={friendsOpen}
+        banner={isSourcebar ? banner : undefined}
+        onAddGame={() => setAddOpen(true)}
+        tier={atlasTier}
+        onTier={setAtlasTier}
+        statusFilter={atlasStatus}
+        onStatusFilter={setAtlasStatus}
+        lending={atlasLending}
+        onLending={setAtlasLending}
+        hasBorrowed={hasBorrowed}
+        filterGames={games}
+        atlasView={atlasView}
+        onAtlasView={persistAtlasView}
         canRedeem={redeemStores.length > 0}
         onRedeem={() => setRedeemOpen(true)}
         friendsUnread={chat.unread}
@@ -816,22 +1191,113 @@ export function App() {
         collectionCounts={collectionTotals}
         onOpenCollection={(id) => setView({ name: 'library', collection: id })}
         onManageCollections={() => setCollectionsDialog({})}
+        onNewCollection={() => setCollectionsDialog({ mode: 'new' })}
+        ownership={ownership}
+        onOwnership={setOwnership}
+        ownedCount={games.length}
+        storeSelection={selectedStores}
+        onSelectStores={(s) => { setSelectedStores(s); setSource(s.length === 1 ? s[0] : 'all'); }}
+        jobs={activeJobs}
+        sessionStartedAt={{ ...sessionStart.current }}
       />
+      {settingsPresentation !== 'page' && settingsOpen && (
+        <Modal label={t('nav:title.settings')} presentation={settingsPresentation === 'sheet' ? 'sheet' : 'dialog'} size="xl" className="h-[min(52rem,100%)]" onClose={() => setSettingsOpen(false)}>
+          <button type="button" aria-label={t('common:close')} onClick={() => setSettingsOpen(false)} className="absolute right-5 top-5 z-10 rounded-lg p-2 text-text-muted hover:bg-surface-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"><X aria-hidden className="h-4 w-4" /></button>
+          <LauncherSettingsView onNotify={notify} plugins={plugins} />
+        </Modal>
+      )}
 
-      <main ref={main} data-scroll-root className="min-w-0 flex-1 overflow-y-auto">
-        {migration && (
-          <div className="px-7 pt-7">
-            <MigrationBanner
-              notice={migration}
-              onOpenPlugins={() => setView({ name: 'plugins' })}
-              onDismiss={dismissMigration}
-            />
-          </div>
-        )}
-        {renderView()}
-      </main>
+      {/* The /22 body (D22 `.body`): the stage and the friends side panel sit
+          side by side; other themes keep main as the single column. */}
+      {isSourcebar ? (
+        <div className="flex min-h-0 flex-1">
+          <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+            {renderView()}
+          </main>
+          {friendsOpen && (
+            <div data-keys-local><AtlasFriendsPanel
+              views={social}
+              labels={socialLabels}
+              plugins={plugins}
+              inLibrary={(id) => libraryIds.has(id)}
+              onClose={closeFriends}
+              onSetEnabled={(plugin, enabled) =>
+                Effect.runPromise(LauncherApi.setSocialEnabled(plugin, enabled)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onSetStatus={(plugin, state: SocialStatus) =>
+                Effect.runPromise(LauncherApi.setSocialStatus(plugin, state)).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onSetPlaying={(plugin, show) =>
+                Effect.runPromise(LauncherApi.setSocialPlaying(plugin, show)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onReconnect={(plugin) =>
+                Effect.runPromise(LauncherApi.restartSocial(plugin)).then(refreshSocial).catch((err) => notify(coreErrMsg(err), 'err'))}
+              onOpenGame={(id) => { closeFriends(); openGame(id); }}
+              unreadOf={chat.unreadOf}
+              onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
+              chat={chatPanel}
+              onBackFromChat={chat.close}
+              chatAlerts={chat.alerts}
+              onSetChatAlerts={chat.setAlerts}
+              conversations={chat.conversations}
+              chatTarget={chat.target}
+              playingTitle={playingTitle}
+            /></div>
+          )}
+        </div>
+      ) : (
+        <main ref={main} data-scroll-root className={cx('min-h-0 min-w-0 flex-1', listDetailActive ? 'overflow-hidden' : 'overflow-y-auto overflow-x-hidden')}>
+          {migration && (
+            <div className="px-7 pt-7">
+              <MigrationBanner
+                notice={migration}
+                onOpenPlugins={() => setView({ name: 'plugins' })}
+                onDismiss={dismissMigration}
+              />
+            </div>
+          )}
+          {renderView()}
+        </main>
+      )}
+      {shellNavigation === 'sourcebar' && (
+        <SourceFooter
+          sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+          jobs={activeJobs}
+          sessionStartedAt={{ ...sessionStart.current }}
+          onStop={(id) => stop(id, false)}
+          onOpenDownloads={() => setView({ name: 'downloads' })}
+          games={games}
+          lastScan={lastScan}
+          online={online}
+        />
+      )}
 
       {addOpen && <AddGameModal onClose={() => setAddOpen(false)} onAdd={addGame} />}
+
+      {/* The command palette (issue #124) is one dialog at the app root; the
+          shell reaches it through openCommandPalette(). */}
+      <CommandPalette
+        games={games}
+        currentGame={currentGame}
+        session={currentGame ? sessions[currentGame.id] : undefined}
+        stores={storePlugins}
+        onOpenGame={openGame}
+        onNavigate={setView}
+        onOpenStore={(id) => setView({ name: 'store', plugin: id })}
+        onOpenSettings={openSettings}
+        onPlay={launch}
+        onStop={(id) => stop(id, false)}
+        onInstall={(game) => runJob('install', game)}
+        onOpenGameSettings={openGameSettings}
+        onRedeem={redeemStores.length > 0 ? () => setRedeemOpen(true) : undefined}
+        onManageCollections={() => setCollectionsDialog({})}
+        onAddGame={() => setAddOpen(true)}
+        onOpenFriends={() => setFriendsOpen((v) => !v)}
+        collections={collections}
+        collectionTotals={collectionTotals}
+        collectionId={view.name === 'library' ? view.collection ?? null : null}
+        onShowCollection={(id) => setView({ name: 'library', collection: id })}
+        onNewCollection={() => setCollectionsDialog({ mode: 'new' })}
+        sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}
+        sourceLogos={sourceLogos}
+      />
 
       <CloudSavesHost games={games} onNotify={notify} onLog={log} />
       <FamilyWarningHost games={games} />
@@ -843,12 +1309,15 @@ export function App() {
           collections={collections}
           games={games}
           gameId={collectionsDialog.gameId}
+          mode={collectionsDialog.mode}
           onChanged={setCollections}
           onClose={() => setCollectionsDialog(null)}
         />
       )}
 
-      {friendsOpen && (
+      {/* Atlas shows the friends side panel instead (#135); other themes
+          keep the modal. */}
+      {friendsOpen && !isSourcebar && (
         <FriendsModal
           views={social}
           labels={socialLabels}
@@ -868,27 +1337,23 @@ export function App() {
           onOpenChat={(plugin, friend) => chat.open(plugin, friend.id)}
           chatAlerts={chat.alerts}
           onSetChatAlerts={chat.setAlerts}
-          chat={chat.target && (
-            <ChatPanel
-              view={chat.conversation}
-              friendName={friendNameOf(social, chat.target.plugin, chat.target.friendId)}
-              storeName={socialLabels[chat.target.plugin] ?? chat.target.plugin}
-              error={chat.error}
-              onLoadOlder={chat.loadOlder}
-              onSend={chat.send}
-              onResend={chat.resend}
-              onBack={chat.close}
-              onClose={closeFriends}
-            />
-          )}
+          chat={chatPanel}
           onBackFromChat={chat.close}
         />
       )}
 
-      <Toaster />
+      <Toaster storeOpen={view.name === 'store'} />
     </div>
     </TooltipProvider>
   );
+}
+
+// The app root (issue #140): the router provider, so AppContent's useView()
+// always has context. Each mount builds its own hash-history router, so a
+// reload restores the route from the current hash and tests stay isolated.
+export function App() {
+  const [router] = useState(() => createAppRouter(AppContent));
+  return <RouterProvider router={router} />;
 }
 
 export default App;

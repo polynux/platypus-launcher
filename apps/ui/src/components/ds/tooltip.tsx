@@ -14,7 +14,7 @@ export function TooltipContent({ className, sideOffset = 6, children, ...props }
       <TooltipPrimitive.Content
         data-slot="tooltip-content"
         sideOffset={sideOffset}
-        className={cn('z-[70] max-w-xs rounded-lg bg-[#191410] px-2.5 py-1.5 text-[12px] text-white/80 ring-1 ring-white/10 animate-modal-in', className)}
+        className={cn('z-[70] max-w-xs rounded-lg bg-raised px-2.5 py-1.5 text-[12px] text-white/80 ring-1 ring-white/10 animate-modal-in', className)}
         {...props}
       >
         {children}

@@ -60,5 +60,22 @@
   "removed": "Removed {{title}} from library",
   "jobVerbBackedUp": "backed up",
   "jobVerbRestored": "restored"
+ },
+ "atlas": {
+  "sub": "What happened in your library, newest first.",
+  "filterKinds": "Filter by kind",
+  "filterGame": "Filter by game",
+  "kinds": {
+   "sessions": "Sessions",
+   "installs": "Installs",
+   "updates": "Updates",
+   "cloud": "Cloud saves",
+   "achievements": "Achievements"
+  },
+  "everyGame": "Every game",
+  "noMatch": "Nothing matches",
+  "clearFilters": "Clear filters",
+  "today": "Today",
+  "yesterday": "Yesterday"
  }
 }

@@ -69,8 +69,8 @@ export function CloudSavesHost({
     return (
       <Modal label={t('cloud:host.decisionLabel')} onClose={close}>
         <h2 className="text-[19px] font-extrabold tracking-tight">{title}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-white/70">{t('cloud:host.openGame')}</p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{t('cloud:host.openGame')}</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>{t('common:close')}</Button>
         </div>
@@ -102,7 +102,7 @@ export function CloudSavesHost({
     return (
       <Modal label={t('cloud:host.clientLabel')} onClose={close}>
         <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:host.clientRunning', { name })}</h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
+        <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <Button variant="ghost" onClick={close}>{t('common:cancel')}</Button>
           <Button variant="neutral" onClick={() => run(LauncherApi.launchGameAnyway(game, 'client-running'))}>{t('cloud:host.launchWithoutSync')}</Button>
@@ -115,8 +115,8 @@ export function CloudSavesHost({
   return (
     <Modal label={t('cloud:host.offlineLabel')} onClose={close}>
       <h2 className="text-[19px] font-extrabold tracking-tight">{t('cloud:host.offlineLabel')}</h2>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-white/60">{pending.message}</p>
-      <p className="mt-2 text-[12.5px] leading-relaxed text-white/70">
+      <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">{pending.message}</p>
+      <p className="mt-2 text-[12.5px] leading-relaxed text-text-muted">
         {t('cloud:host.offlineWhy', { title: game.title })}
       </p>
       <div className="mt-5 flex justify-end gap-2">

@@ -1,0 +1,28 @@
+# Example theme plugin (Refs #106): a data plugin's theme that uses all three
+# levels. Copy this folder to start a new theme; every value here loads with
+# zero warnings (see docs/themes/authoring.md).
+
+[theme]
+id = "theme-example"
+name = "Example"
+schema = 1
+catalog = "1.0"
+supports = ["tokens", "variants", "layouts"]
+
+[tokens]
+ground = "#0b1118"
+raised = "#101a24"
+accent = "#7dd3fc"
+on-accent = "#0b1118"
+radius-card = "0.75rem"
+
+[[wash]]
+at = "10% -10%"
+size = "1000px 600px"
+color = "rgba(56, 189, 248, 0.22)"
+fade = "56%"
+image = "assets/bg.png"
+
+[variants]
+"settings.presentation" = "sheet"
+"section.chrome" = "framed"

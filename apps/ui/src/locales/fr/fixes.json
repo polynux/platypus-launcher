@@ -16,5 +16,24 @@
   "attention": {
     "borked": "{{source}} signale ce titre comme borked. Essayez un autre runner ou consultez les rapports.",
     "bronze": "{{source}} note ce titre bronze. Il aura peut-être besoin d'ajustements pour bien fonctionner."
+  },
+  "atlas": {
+    "reason": { "install": "La dernière tentative a échoué.", "outside": "{{title}} se trouve dans {{dir}}. Platypus ne lance que les jeux de vos dossiers de jeux.", "runner": "{{title}} utilise {{runner}}, qui a été supprimé.", "update": "Une mise à jour est disponible." },
+    "title": "À surveiller",
+    "sub_one": "{{count}} jeu ne démarre pas ou attend une décision.",
+    "sub_other": "{{count}} jeux ne démarrent pas ou attendent une décision.",
+    "emptySub": "Rien à signaler.",
+    "emptyTitle": "Tout fonctionne",
+    "emptyBody": "Les jeux qui ne s'installent pas, perdent leur exécuteur ou attendent une mise à jour s'affichent ici.",
+    "kindRated": "Note {{source}}",
+    "kindFix": "Correctif communautaire",
+    "openGame": "Ouvrir le jeu",
+    "openRunners": "Ouvrir les runners",
+    "defaultRunner": "runner par défaut",
+    "useDefaultRunner": "Utiliser {{runner}}",
+    "issue": { "install": "Échec de l'installation", "updateFailed": "Échec de la mise à jour", "outside": "En dehors de vos dossiers de jeux", "runner": "Runner manquant", "update": "Mise à jour disponible", "rating": "Fonctionne mal sous Linux" },
+    "fix": { "install": "Réessayer l'installation", "outside": "Autoriser ce dossier", "runner": "Utiliser le runner par défaut", "update": "Mettre à jour", "rating": "Ouvrir le jeu" },
+    "emptyTitle": "Tout fonctionne",
+    "emptyBody": "Les jeux qui ne s’installent pas, perdent leur runner ou attendent une mise à jour apparaissent ici."
   }
 }

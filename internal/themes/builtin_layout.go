@@ -1,0 +1,180 @@
+// Built-in view layouts (issue #108). The arrangement a view has today is
+// itself a layout: the regions, rows and blocks the view's components render
+// through ThemeLayout when the picked theme ships no layout for the view.
+// They are declared here as the XML a theme would ship, so they pass the
+// same validation (parseLayout) as theme layouts, with zero warnings.
+package themes
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+
+	"platypus/internal/types"
+)
+
+// builtinLayoutXML is the built-in arrangement per view, in the layouts XML
+// the core validates. Keep the comments short: they travel nowhere, the UI
+// gets the parsed structs.
+var builtinLayoutXML = map[string]string{
+	// Today's dashboard: the hero or welcome banner full width, the
+	// continue grid beside the waiting and recent stack, the activity feed
+	// full width below.
+	"dashboard": `<layout view="dashboard" catalog="1.0">
+  <region name="top">
+    <block name="hero" />
+    <block name="welcome" />
+    <block name="empty" />
+  </region>
+  <region name="main">
+    <block name="continue" />
+  </region>
+  <region name="side">
+    <block name="waiting" />
+    <block name="recent" />
+  </region>
+  <region name="bottom">
+    <block name="activity" limit="8" />
+  </region>
+</layout>`,
+	// Today's library: the header (title, controls, toolbar), warnings and
+	// empty state full width, then the catalog sections and the activity
+	// and recent grid full width below. The header block stays (issue #109):
+	// the granular blocks stack vertically and can't reproduce its two-row
+	// flex arrangement without contortions; the all-titles block shows the
+	// catalog's 2:3 cards through library-tile exactly as the built-in
+	// section does. The row groups activity and recent side by side.
+	"library": `<layout view="library" catalog="1.0">
+  <region name="top">
+    <block name="header" />
+    <block name="warnings" />
+    <block name="empty" />
+  </region>
+  <region name="bottom">
+    <block name="last-played" />
+    <block name="all-titles" />
+    <block name="table" />
+    <row>
+      <block name="activity" limit="6" />
+      <block name="recent" />
+    </row>
+  </region>
+</layout>`,
+	// Today's storage: the header full width, the drives over the game list
+	// below. The games block owns the remove and move flows, like the
+	// built-in list does.
+	"storage": `<layout view="storage" catalog="1.0">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="drives" />
+    <block name="games" />
+  </region>
+</layout>`,
+	// Today's plugins: the header full width, then the store cards, the data
+	// cards and the built-in list below. The store block renders each card
+	// with its own login row and approve/enable actions, so a layout can't
+	// hide them on their own; the approve and login dialogs stay owned by
+	// the view.
+	"plugins": `<layout view="plugins" catalog="1.0">
+  <region name="top">
+    <block name="header" />
+  </region>
+  <region name="main">
+    <block name="store" />
+    <block name="data" />
+    <block name="builtin" />
+  </region>
+</layout>`,
+	// Today's game page: the back link, the hero (heading and actions inside
+	// the Hero frame), the outside-folder alert and the install note full
+	// width; the media strip and about text in the left column, compat,
+	// crash hints, status, collections, installation and copies in the right
+	// column; the achievements and session activity full width below both
+	// columns, exactly as the pre-layout page laid them out. The view wraps
+	// the hero region's heading and actions in the Hero frame, so a layout
+	// can move the actions out of the hero.
+	"game": `<layout view="game" catalog="1.0">
+  <region name="hero">
+    <block name="back" />
+    <block name="heading" />
+    <block name="actions" />
+    <block name="outside" />
+    <block name="note" />
+  </region>
+  <region name="main">
+    <block name="media" />
+    <block name="about" />
+  </region>
+  <region name="side">
+    <block name="compat" />
+    <block name="crash" />
+    <block name="status" />
+    <block name="collections" />
+    <block name="installation" />
+    <block name="copies" />
+  </region>
+  <region name="bottom">
+    <block name="achievements-progress" />
+    <block name="achievements" />
+    <block name="activity" />
+  </region>
+</layout>`,
+}
+
+// builtinLayouts holds the parsed built-ins, in layout order.
+var builtinLayouts = func() map[string]types.ThemeLayout {
+	out := map[string]types.ThemeLayout{}
+	for view, src := range builtinLayoutXML {
+		layout, warnings := parseLayout(view, []byte(src))
+		if layout == nil {
+			panic(fmt.Sprintf("themes: built-in %s layout didn't parse: %v", view, warnings))
+		}
+		if len(warnings) != 0 {
+			panic(fmt.Sprintf("themes: built-in %s layout warns: %v", view, warnings))
+		}
+		out[view] = *layout
+	}
+	return out
+}()
+
+// BuiltinLayout returns the built-in arrangement for a view: what the UI
+// renders when the picked theme ships no layout for it. It returns nil for a
+// view the catalog knows no blocks for (e.g. "attic").
+func BuiltinLayout(view string) *types.ThemeLayout {
+	l, ok := builtinLayouts[view]
+	if !ok {
+		return nil
+	}
+	out := l
+	return &out
+}
+
+// BuiltinLayoutsTS renders the built-in arrangements for the UI
+// (apps/ui/src/gen/builtinLayouts.ts, written by `go run ./cmd/gen-ts`):
+// one validated layout per view, so the first paint already shows the
+// built-in arrangement before the core answers over RPC. The UI reads them
+// by view name; an unknown view has no entry.
+func BuiltinLayoutsTS() string {
+	views := make([]string, 0, len(builtinLayouts))
+	for view := range builtinLayouts {
+		views = append(views, view)
+	}
+	sort.Strings(views)
+	var b strings.Builder
+	b.WriteString("// Generated by `go run ./cmd/gen-ts` from internal/themes/builtin_layout.go. Do not edit.\n\n")
+	b.WriteString("import type { ThemeLayout } from '../types';\n\n")
+	b.WriteString("/** The built-in arrangement per view: what renders with no theme layout. */\n")
+	b.WriteString("export const BUILTIN_LAYOUTS: Record<string, ThemeLayout> = {\n")
+	for _, view := range views {
+		raw, err := json.Marshal(builtinLayouts[view])
+		if err != nil {
+			panic(fmt.Sprintf("themes: encoding built-in %s layout: %v", view, err))
+		}
+		fmt.Fprintf(&b, "  %q: %s,\n", view, raw)
+	}
+	b.WriteString("};\n")
+	return b.String()
+}

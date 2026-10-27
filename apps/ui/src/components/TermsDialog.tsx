@@ -48,7 +48,7 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
   return (
     <Modal label={t('common:terms.dialogLabel', { title: game.title })} onClose={onCancel} size="md" dismissable={!busy}>
       <h2 className="text-[20px] font-extrabold tracking-tight">{t('common:terms.heading', { title: game.title })}</h2>
-      <p className="mt-1 text-[12.5px] text-white/70">
+      <p className="mt-1 text-[12.5px] text-text-muted">
         {t('common:terms.intro', { title: game.title })}
       </p>
 
@@ -56,16 +56,16 @@ export function TermsDialog({ game, terms, onAccepted, onCancel }: TermsDialogPr
         {terms.map((term) => {
           const link = termURL(term);
           return (
-            <li key={`${term.id}@${term.version}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white/[0.04] px-4 py-3">
+            <li key={`${term.id}@${term.version}`} className="flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
               <span className="min-w-0">
-                <span className="block text-[13px] text-white/90">{term.title}</span>
-                <span className="block font-mono text-hint text-white/55">{t('common:terms.version', { version: term.version })}</span>
+                <span className="block text-[13px] text-text">{term.title}</span>
+                <span className="block font-mono text-hint text-text-muted">{t('common:terms.version', { version: term.version })}</span>
               </span>
               {link && (
                 <button
                   type="button"
                   onClick={() => openExternal(link)}
-                  className={cx('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-hint text-sky-200 hover:bg-white/[0.06]')}
+                  className={cx('inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-mono text-hint text-info hover:bg-surface')}
                 >
                   <ExternalLink className="h-3.5 w-3.5" /> {t('common:terms.read')}
                 </button>

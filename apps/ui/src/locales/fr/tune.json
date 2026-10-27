@@ -1,0 +1,45 @@
+{
+  "title": "Réglages rapides pour {{title}}",
+  "preset": {
+    "label": "Préréglage",
+    "applies": "Applique trois des interrupteurs ci-dessous",
+    "custom": "Personnalisé",
+    "quality": "Qualité",
+    "balanced": "Équilibré",
+    "performance": "Performance"
+  },
+  "gamemode": {
+    "label": "Mode performance",
+    "sub": "Garde le processeur et le GPU à pleine vitesse"
+  },
+  "mangohud": {
+    "label": "Surcouche FPS",
+    "sub": "Images par seconde et températures dans un coin"
+  },
+  "gamescope": {
+    "label": "Bloquer la résolution",
+    "sub": "Fixe la résolution et la fréquence de rafraîchissement",
+    "known": "{{resolution}} à {{rate}} Hz",
+    "rateOnly": "{{rate}} Hz"
+  },
+  "fsr": {
+    "label": "Mise à l'échelle plus nette",
+    "sub": "Affiche plus bas puis affine l'image",
+    "needsLock": "Activez d'abord Bloquer la résolution",
+    "native": "Nécessite Proton : c'est une version native"
+  },
+  "runner": {
+    "label": "Couche de compatibilité"
+  },
+  "tier": {
+    "rated": "{{tier}} sur ProtonDB",
+    "none": "Aucune évaluation ProtonDB"
+  },
+  "unavailable": {
+    "runner": "Le greffon de runner n'est pas installé",
+    "setting": "Ce runner ne le propose pas"
+  },
+  "all": "Tous les réglages",
+  "allHint": "Sauvegardes, correctifs, environnement, commande de lancement",
+  "saveFailed": "Platypus n'a pas pu enregistrer ce changement."
+}

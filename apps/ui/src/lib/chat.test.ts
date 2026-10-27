@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alertText, canSendChat, chatKey, chatNotifyTitle, clipNotifyText, clockLabel, dropConversation, messageKey, notifyTextOf, splitLinks, unreadFor, unreadTotal, upsertConversation } from './chat';
+import { alertText, canSendChat, chatKey, chatNotifyTitle, chatRows, clipNotifyText, clockLabel, dropConversation, messageKey, notifyTextOf, splitLinks, unreadFor, unreadTotal, upsertConversation } from './chat';
 import type { ChatView } from '../types';
 
 const conv = (over: Partial<ChatView> = {}): ChatView => ({
@@ -56,6 +56,19 @@ describe('dropConversation', () => {
     expect(dropConversation(list, { plugin: 'echo', friendId: 'b', seq: 3 }).map((v) => v.friendId)).toEqual(['a']);
     expect(dropConversation(list, { plugin: 'echo', friendId: 'a', seq: 4 }).map((v) => v.friendId)).toEqual(['a', 'b']);
     expect(dropConversation(list, { plugin: 'other', friendId: 'b', seq: 9 })).toHaveLength(2);
+  });
+});
+
+describe('chatRows', () => {
+  const msg = (sentAt: number) => ({ id: `m${sentAt}`, from: 'ana', text: 'hi', sentAt });
+  it('lists conversations with messages or unread, newest first, read ones included', () => {
+    const list = [
+      conv({ friendId: 'old', seq: 1, messages: [msg(100)] }),
+      conv({ friendId: 'new', seq: 2, messages: [msg(100), msg(300)] }),
+      conv({ friendId: 'unread-only', seq: 9, unread: 2 }),
+      conv({ friendId: 'empty', seq: 8 }),
+    ];
+    expect(chatRows(list).map((v) => v.friendId)).toEqual(['new', 'old', 'unread-only']);
   });
 });
 

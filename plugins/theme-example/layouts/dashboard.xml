@@ -1,0 +1,13 @@
+<!-- Example dashboard layout (Refs #106): blocks in the main region, the
+     activity feed in the side region. Validated against
+     internal/themes/layout.xsd. -->
+<layout view="dashboard" catalog="1.0">
+  <region name="main">
+    <block name="hero" />
+    <block name="continue" />
+    <block name="waiting" />
+  </region>
+  <region name="side">
+    <block name="activity" limit="6" />
+  </region>
+</layout>

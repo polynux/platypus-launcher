@@ -25,6 +25,8 @@
   "newNamePlaceholder": "Couch co-op",
   "kind": "Kind",
   "kindManual": "Manual list",
+  "kindManualDesc": "You add games by hand.",
+  "kindSmartDesc": "Fills itself from a rule and stays up to date.",
   "kindSmart": "Smart filter",
   "create": "Create",
   "edit": "Edit conditions",

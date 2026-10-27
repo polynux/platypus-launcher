@@ -6,33 +6,35 @@ import type { CloudMode, StorePlugin } from '../types';
 import { LauncherApi } from '../effect/runtime';
 import { offers } from '../lib/capabilities';
 import { asCloudMode, modeHelp } from '../lib/cloud';
-import { MonoLabel, Panel, SegRow } from './ui';
+import { MonoLabel, SegRow, cx } from './ui';
 import { ErrorNotice } from './ErrorNotice';
+import { useVariant } from '../lib/theme';
+import { AtlasSRow } from './AtlasSettings';
+import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 
 /** The cloud-saves default of every ready store that offers cloud saves, one
  *  row each, in Settings. Games can override their store's default on their
  *  own page. Nothing renders when no store offers cloud saves. */
 export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
   const { t } = useTranslation('cloud');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const stores = plugins.filter((p) => p.status === 'ready' && offers(p, 'cloud-saves'));
   if (stores.length === 0) return null;
   return (
-    <Panel as="section" className="mt-4 max-w-2xl">
-      <h2 className="mb-1 text-[14px] font-bold">{t('cloud:panel.title')}</h2>
-      <p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">
-        {t('cloud:setting.description')}
-      </p>
-      <div className="space-y-4">
+    <section className={atlas ? '' : 'mt-4 max-w-2xl rounded-3xl bg-surface p-5 ring-1 ring-hairline'}>
+      {!atlas && <><h2 className="mb-1 text-[14px] font-bold">{t('cloud:panel.title')}</h2><p className="mb-4 max-w-[75ch] text-[12.5px] leading-relaxed text-white/70">{t('cloud:setting.description')}</p></>}
+      <div>
         {stores.map((p) => (
           <Row key={p.id} plugin={p} />
         ))}
       </div>
-    </Panel>
+    </section>
   );
 }
 
 function Row({ plugin }: { plugin: StorePlugin }) {
   const { t } = useTranslation('cloud');
+  const atlas = useVariant('shell.navigation') === 'sourcebar';
   const [mode, setMode] = useState<CloudMode>('ask');
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +56,12 @@ function Row({ plugin }: { plugin: StorePlugin }) {
     });
   };
 
+  if (atlas) return <AtlasSRow label={plugin.name}>
+    <ToggleGroup type="single" value={mode} onValueChange={(v) => { if (v === 'off' || v === 'ask' || v === 'auto') change(v); }} aria-label={t('cloud:setting.rowLabel', { name: plugin.name })} className="inline-flex w-auto gap-0.5 rounded-[9px] bg-surface p-[3px]">
+      {(['off', 'ask', 'auto'] as const).map((v) => <ToggleGroupItem key={v} value={v} className={cx('h-[26px] rounded-md px-2.5 font-sans text-[12.5px] font-semibold text-text-muted data-[state=on]:bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] data-[state=on]:text-text data-[state=on]:ring-1 data-[state=on]:ring-inset data-[state=on]:ring-accent/40')}>{t(`cloud:mode.${v}`)}</ToggleGroupItem>)}
+    </ToggleGroup>
+    {error && <ErrorNotice message={error} fallback={t('cloud:setting.error')} />}
+  </AtlasSRow>;
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-3">

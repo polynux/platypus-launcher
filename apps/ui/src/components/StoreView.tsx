@@ -1,8 +1,8 @@
 // i18n: converted
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, ExternalLink, Home, Lock, RotateCw, TriangleAlert, X } from 'lucide-react';
-import { cx } from './ui';
+import { ChevronLeft, ChevronRight, ExternalLink, Globe, Home, RefreshCw, RotateCw, TriangleAlert, WifiOff, X } from 'lucide-react';
+import { EmptyState, cx } from './ui';
 import { Button } from './ds/button';
 import { browserOpen, onStoreEvent, storeBridge, type StoreEvent } from '../effect/bridge';
 import type { StorePlugin } from '../types';
@@ -36,6 +36,14 @@ interface StoreViewProps {
   initialUrl?: string;
   onClose: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  /** Atlas shop bar (issue #138): store switch and actions rendered into the
+   *  single browser row, so the page has one bar, not two tall rows. */
+  toolbarLead?: React.ReactNode;
+  toolbarTrail?: React.ReactNode;
+  /** The lab's single shop bar (.ap-shop-bar): one 50px row with background
+   *  and border, and the web view full-bleed under it. The bare embedded
+   *  view (other themes) keeps its own toolbar and inset card. */
+  shopBar?: boolean;
 }
 
 /**
@@ -46,7 +54,7 @@ interface StoreViewProps {
  * declared domains. Navigation outside the domains never loads: the toolbar
  * shows a non-modal notice offering to open the address in the browser.
  */
-export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewProps) {
+export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, toolbarTrail, shopBar }: StoreViewProps) {
   const { t } = useTranslation(['store', 'common']);
   const store = storeBridge();
   const [state, setState] = useState<Pick<StoreEvent, 'url' | 'canGoBack' | 'canGoForward' | 'title' | 'loading'>>({
@@ -60,17 +68,21 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
   // An outside address the view refused to load (a 'blocked' store event):
   // the notice offers to open it in the browser, never auto-opening.
   const [blocked, setBlocked] = useState<string | null>(null);
+  const overlayOpen = useOverlayOpen();
   const area = useRef<HTMLDivElement>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const reportBounds = useCallback(() => {
-    const el = area.current;
     const bridge = storeBridge();
-    if (!el || !bridge) return;
+    if (!bridge) return;
+    // Hide first: in the failed state the content area isn't rendered.
+    if (failed || overlayOpen) { bridge.setBounds({ x: 0, y: 0, width: 0, height: 0 }); return; }
+    const el = area.current;
+    if (!el) return;
     const r = el.getBoundingClientRect();
     bridge.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
-  }, []);
+  }, [failed, overlayOpen]);
 
   // Open the store on mount and when the plugin or deep link changes; the
   // shell validates the plugin and the address. Switching stores must NOT
@@ -90,7 +102,9 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
     bridge.open(plugin.id, initialUrl).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       setFailed(msg);
-      onNotify(msg, 'err');
+      // The Atlas shop bar shows the failure inline (EmptyState below), so
+      // no duplicate toast there; the bare view keeps its toast.
+      if (!shopBar) onNotify(msg, 'err');
     });
     // Open once per plugin+link: navigating inside the store must not reopen it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,6 +128,10 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
     if (ev.pluginId !== plugin.id) return;
     if (ev.kind === 'blocked') {
       setBlocked(ev.url);
+      return;
+    }
+    if (ev.kind === 'failed') {
+      setFailed(ev.error ?? ev.url);
       return;
     }
     if (ev.kind === 'navigated') setBlocked(null);
@@ -162,61 +180,80 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
     store?.open(plugin.id).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       setFailed(msg);
-      onNotify(msg, 'err');
+      if (!shopBar) onNotify(msg, 'err');
+    });
+  };
+  // The Atlas error state's Reload: reopen the storefront over the failed
+  // view (inline already, so no toast here either).
+  const retry = () => {
+    const bridge = storeBridge();
+    if (!bridge) {
+      setFailed(t('store:needsShell'));
+      return;
+    }
+    setFailed(null);
+    setBlocked(null);
+    bridge.open(plugin.id, initialUrl).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setFailed(msg);
+      if (!shopBar) onNotify(msg, 'err');
     });
   };
 
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className="flex flex-none items-center gap-1.5 px-5 pb-3 pt-5">
-        <ToolbarButton label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
-          <ArrowLeft className="h-4 w-4" />
+      <div className={shopBar ? 'flex h-[55px] flex-none items-center gap-3 border-b border-hairline bg-ground-2 px-4 py-2.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
+        {toolbarLead}
+      <ToolbarButton shopBar={shopBar} label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
+          <ChevronLeft className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
-          <ArrowRight className="h-4 w-4" />
+        <ToolbarButton shopBar={shopBar} label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
+          <ChevronRight className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
-          <RotateCw className={cx('h-4 w-4', state.loading && 'animate-spin')} />
+        <ToolbarButton shopBar={shopBar} label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
+          <RefreshCw className={cx('h-3.5 w-3.5', state.loading && 'animate-spin')} />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
-          <Home className="h-4 w-4" />
-        </ToolbarButton>
+        {!shopBar && (
+          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
+            <Home className="h-4 w-4" />
+          </ToolbarButton>
+        )}
         <div
           data-testid="store-address"
-          title={state.url}
+          title={state.title ? `${plugin.name} · ${state.url} · ${state.title}` : `${plugin.name} · ${state.url}`}
           className={cx(
-            'mx-1.5 flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 font-mono text-[12px] ring-1',
-            outside
-              ? 'bg-amber-300/[0.07] text-amber-200 ring-amber-300/30'
-              : 'bg-black/40 text-white/70 ring-white/[0.08]',
+            'mx-1.5 flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface px-3 text-[12.5px] text-text-faint ring-1',
+            outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
           )}
         >
           {state.loading ? (
-            <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-white/30 border-t-transparent" />
+            <span data-testid="store-loading" aria-label={t('store:address.loading')} className="h-3 w-3 flex-none animate-spin rounded-full border border-hairline-strong border-t-transparent" />
           ) : (
-            <Lock className="h-3 w-3 flex-none opacity-70" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
+            <Globe className="h-3 w-3 flex-none" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
           )}
-          <span className="truncate">{host || '…'}</span>
+          <span className="truncate">{storeAddress(state.url) || host || '…'}</span>
           {outside && (
-            <span className="flex flex-none items-center gap-1 text-amber-200/90">
+            <span className="flex flex-none items-center gap-1 text-attention/90">
               <TriangleAlert className="h-3 w-3" />
               <span className="hidden sm:inline">{t('store:address.outsideSuffix', { name: plugin.name })}</span>
             </span>
           )}
-          {state.title && <span className="hidden min-w-0 flex-1 truncate text-right text-white/40 lg:inline">{state.title}</span>}
         </div>
-        <ToolbarButton label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
+        {toolbarTrail}
+          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
-          <X className="h-4 w-4" />
-        </ToolbarButton>
+        {!shopBar && (
+          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
+            <X className="h-4 w-4" />
+          </ToolbarButton>
+        )}
       </div>
       {blocked && !failed && (
         <div
           data-testid="store-blocked"
           role="note"
-          className="mx-5 mb-3 flex flex-none items-center gap-2 rounded-xl bg-amber-300/[0.07] px-3 py-2 text-[12px] text-amber-200 ring-1 ring-amber-300/30"
+          className="mx-5 mb-3 flex flex-none items-center gap-2 rounded-xl bg-attention/[0.07] px-3 py-2 text-[12px] text-attention ring-1 ring-attention/30"
         >
           <TriangleAlert className="h-3.5 w-3.5 flex-none" />
           <span className="min-w-0 flex-1 truncate">
@@ -226,7 +263,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
             type="button"
             onClick={openBlocked}
             data-testid="store-blocked-open"
-            className="flex-none rounded-lg bg-amber-300/20 px-2.5 py-1 font-medium hover:bg-amber-300/30"
+            className="flex-none rounded-lg bg-attention/20 px-2.5 py-1 font-medium hover:bg-attention/30"
           >
             {t('common:open')}
           </button>
@@ -234,26 +271,53 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify }: StoreViewPr
             type="button"
             onClick={() => setBlocked(null)}
             aria-label={t('common:dismiss')}
-            className="grid h-6 w-6 flex-none place-items-center rounded-lg hover:bg-white/10"
+            className="grid h-6 w-6 flex-none place-items-center rounded-lg hover:bg-attention/20"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
       {failed ? (
-        <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-white/[0.03] px-6 text-center text-[13px] text-white/60 ring-1 ring-white/[0.07]">
-          <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
-        </div>
+        shopBar ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6">
+            <div className="w-full max-w-[520px]">
+              <EmptyState
+                icon={WifiOff}
+                label={t('store:openFailedTitle', { name: plugin.name })}
+                action={
+                  <span className="grid justify-items-center gap-2">
+                    <Button variant="primary" size="sm" onClick={retry} data-testid="store-retry">
+                      <RotateCw className="h-3.5 w-3.5" /> {t('store:toolbar.reload')}
+                    </Button>
+                    <details className="font-sans text-[12px] text-text-faint">
+                      <summary className="cursor-pointer hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
+                        {t('store:details')}
+                      </summary>
+                      <p className="mx-auto mt-1 max-w-[46ch] break-all select-text">{failed}</p>
+                    </details>
+                  </span>
+                }
+              >
+                {t('store:openFailedBody')}
+              </EmptyState>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-5 mb-5 flex flex-1 items-center justify-center rounded-2xl bg-surface px-6 text-center text-[13px] text-text-muted ring-1 ring-hairline">
+            <p>{t('store:failed', { name: plugin.name, error: failed })}</p>
+          </div>
+        )
       ) : (
-        <div ref={area} data-testid="store-area" className="mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-black/30 ring-1 ring-white/[0.07]" />
+        <div ref={area} data-testid="store-area" className={shopBar ? 'min-h-0 flex-1' : 'mx-5 mb-5 min-h-0 flex-1 rounded-2xl bg-surface ring-1 ring-hairline'} />
       )}
     </div>
   );
 }
 
-function ToolbarButton({ label, children, ...rest }: {
+function ToolbarButton({ label, children, shopBar, ...rest }: {
   label: string;
   children: React.ReactNode;
+  shopBar?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   'data-testid'?: string;
@@ -264,10 +328,27 @@ function ToolbarButton({ label, children, ...rest }: {
       size="none"
       title={label}
       aria-label={label}
-      className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-black/50 text-white/80 hover:bg-black/70 disabled:opacity-35 disabled:hover:bg-black/50"
+      className={shopBar ? "grid size-8 flex-none place-items-center rounded-lg bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35" : "grid h-9 w-9 flex-none place-items-center rounded-xl bg-surface text-text-muted ring-1 ring-hairline transition hover:text-text disabled:opacity-35"}
       {...rest}
     >
       {children}
     </Button>
   );
+}
+
+function storeAddress(value: string): string {
+  try { const url = new URL(value); return `${url.host}${url.pathname.replace(/\/$/, '')}`; } catch { return ''; }
+}
+
+function useOverlayOpen(): boolean {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const selectors = '[role="dialog"], [role="alertdialog"], [role="menu"], [data-radix-popper-content-wrapper]';
+    const update = () => setOpen(Boolean(document.querySelector(selectors)));
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role'] });
+    return () => observer.disconnect();
+  }, []);
+  return open;
 }

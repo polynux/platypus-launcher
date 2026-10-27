@@ -1,9 +1,26 @@
 {
  "title": "Paramètres",
  "subtitle": "Réglages généraux de Platypus, enregistrés dans ~/.local/share/platypus/settings.json.",
+ "sections": {
+  "label": "Sections des paramètres",
+  "language": "Langue",
+  "theme": "Thème",
+  "appearance": "Apparence",
+  "folders": "Dossiers de jeux",
+  "prefixes": "Préfixe Wine",
+  "cleanup": "Téléchargements annulés",
+  "ratings": "Informations sur les jeux",
+  "artwork": "Illustrations",
+  "gameInfo": "Détails des jeux",
+  "chat": "Discussion",
+  "tray": "Zone de notification",
+  "backups": "Sauvegardes",
+  "cloud": "Sauvegardes cloud"
+ },
  "language": {
   "heading": "Langue",
   "description": "La langue du lanceur. Système suit la langue de votre bureau. S'applique aussitôt, sans redémarrage.",
+  "atlasDescription": "S'applique aussitôt.",
   "label": "Langue",
   "system": "Système",
   "saved": "Langue enregistrée",
@@ -11,9 +28,11 @@
  },
  "folders": {
   "heading": "Dossiers de jeux",
+  "addRow": "Ajouter un dossier",
   "description": "Où s'installent les jeux. Les jeux d'une boutique vont dans leur propre sous-dossier du dossier par défaut, par exemple <path>{{path}}/epic</path>. L'étape « Installer vers… » de chaque jeu propose tous les dossiers ci-dessous. Steam garde ses propres dossiers de bibliothèque.",
   "pending": "pas encore créé",
   "default": "par défaut",
+  "defaultBadge": "Par défaut",
   "makeDefaultLabel": "Faire de {{folder}} le dossier par défaut",
   "madeDefault": "Dossier de jeux par défaut changé",
   "makeDefault": "par défaut",
@@ -25,6 +44,7 @@
  },
  "prefixes": {
   "heading": "Dossier des préfixes Wine",
+  "change": "Modifier",
   "description": "Où sont créés les nouveaux préfixes Wine, un dossier par jeu. Le préfixe propre d'un jeu reste prioritaire. Changer ce dossier ne déplace ni ne supprime les préfixes existants. Les jeux qui ont déjà un préfixe le gardent : Platypus l'épingle dans leurs paramètres.",
   "label": "Dossier des préfixes Wine par défaut",
   "placeholder": "Le dossier des préfixes par défaut",
@@ -38,11 +58,14 @@
  },
  "cleanup": {
   "heading": "Téléchargements annulés",
-  "description": "Combien de temps Platypus garde les données partiellement téléchargées d'un téléchargement annulé avant de les supprimer. Le téléchargement peut encore reprendre pendant ce temps. 0 le supprime aussitôt ; un téléchargement en pause n'est jamais touché.",
+  "description": "Fichiers partiels des installations annulées.",
   "keepFor": "Garder pendant",
   "days": "jours",
   "daysLabel": "Jours de conservation des données des téléchargements annulés",
-  "saved": "Réglage du nettoyage des téléchargements enregistré"
+  "saved": "Réglage du nettoyage des téléchargements enregistré",
+  "deleteRightAway": "Supprimer aussitôt",
+  "keepWeek": "Garder une semaine",
+  "keepYear": "Garder un an"
  },
  "ratings": {
   "heading": "Notes, protection et données anti-triche",
@@ -82,7 +105,20 @@
   "description": "Pendant qu'un jeu tourne, cacher la fenêtre Platypus dans une icône de la zone de notification au lieu de la laisser ouverte. Elle revient quand le jeu se termine, ou depuis le menu de l'icône (afficher, arrêter le jeu, quitter). Là où le bureau n'a pas de zone de notification, la fenêtre se réduit simplement, pour ne jamais rester hors d'atteinte.",
   "label": "Réduire dans la zone de notification pendant un jeu",
   "on": "Platypus se cachera dans la zone de notification pendant un jeu",
-  "off": "Platypus reste ouvert pendant un jeu"
+  "off": "Platypus reste ouvert pendant un jeu",
+  "atlasDescription": "Fermer la fenêtre laisse les téléchargements et les discussions actifs."
+ },
+ "theme": {
+  "heading": "Thème",
+  "description": "L'apparence du lanceur : couleurs, angles et fond. S'applique aussitôt, sans redémarrage.",
+  "label": "Thème",
+  "saved": "Thème appliqué",
+  "warningsLabel": "Problèmes du thème",
+  "source": "de {{plugin}}",
+  "status": {
+   "newer": "demande une version plus récente de Platypus",
+   "invalid": "son fichier ne peut pas être utilisé"
+  }
  },
  "loadError": "Platypus n'a pas pu charger les paramètres.",
  "prefixError": "Platypus n'a pas pu changer le dossier des préfixes Wine.",
@@ -105,6 +141,7 @@
    "off": "Jamais de sauvegarde automatique."
   },
   "afterSessionLabel": "Sauvegarder après chaque session",
+  "atlasAutoLabel": "Sauvegarder automatiquement les parties",
   "afterSessionHint": "Sauvegarde après chaque session, sauf les jeux dont la boutique synchronise les sauvegardes dans le cloud. Le cloud se synchronise d’abord ; la sauvegarde l’attend brièvement.",
   "manifestLabel": "Liste des sauvegardes",
   "manifest": {
@@ -117,5 +154,32 @@
   "updating": "Mise à jour…",
   "saved": "Réglages de sauvegarde enregistrés.",
   "saveError": "Enregistrement des réglages impossible."
- }
+ },
+ "appearance": {
+  "heading": "Apparence",
+  "description": "Schéma de couleurs et couleur du jeu. S’applique aussitôt, sans redémarrage.",
+  "schemeLabel": "Schéma de couleurs",
+  "schemeDescription": "Sombre, clair ou noir. Seuls les thèmes qui déclarent un autre schéma le proposent.",
+  "scheme": {
+   "dark": "Sombre",
+   "light": "Clair",
+   "black": "Noir"
+  },
+  "schemeSaved": "Schéma de couleurs appliqué",
+  "gameLabel": "Couleur du jeu",
+  "gameDescription": "Prend la couleur de l’illustration du jeu sélectionné.",
+  "gameSaved": "Couleur du jeu enregistrée",
+  "none": "Ce thème n’a aucune option d’apparence."
+ },
+ "atlas": {
+  "cats": {
+   "general": "Général",
+   "appearance": "Apparence",
+   "folders": "Dossiers de jeux",
+   "saves": "Sauvegardes",
+   "data": "Notes et infos jeux",
+   "social": "Amis et discussion"
+  }
+ },
+ "social": {"friends": "Amis de {{store}}"}
 }
