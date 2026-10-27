@@ -1,4 +1,5 @@
 {
+  "timeAgo": { "justNow": "just now", "minutes_one": "{{count}} min ago", "minutes_other": "{{count}} min ago", "hours_one": "{{count}} h ago", "hours_other": "{{count}} h ago", "yesterday": "yesterday", "days_one": "{{count}} day ago", "days_other": "{{count}} days ago", "months_one": "{{count}} mo ago", "months_other": "{{count}} mo ago", "years_one": "{{count}} yr ago", "years_other": "{{count}} yr ago" },
   "launching": "Launching {{title}}",
   "nowRunning": "{{title}} is running",
   "stopBeforeRemove": "Stop \"{{title}}\" before removing it",

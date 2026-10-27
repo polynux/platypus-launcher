@@ -109,7 +109,7 @@ function installedGame(): Game {
 const baseProps = {
   runners: [{ id: 'proton', name: 'Proton 9', path: '/proton', is_system: true, is_custom: false, is_default: true }],
   backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {},
-  launching: false, tweaks: [], onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {},
+  launching: false, tweaks: [], onChangeSettings() {}, onSaveSettings() { return Promise.resolve(); }, onJob() {}, onJobAction() {},
   onAllowFolder() {}, onNavigate() {}, jobs: [], onNotify() {},
 };
 

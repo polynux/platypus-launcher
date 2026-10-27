@@ -59,6 +59,10 @@ export function Dashboard({ games, ownedCount, allGames, ...rest }: DashboardPro
   if (useVariant('shell.navigation') === 'sourcebar') {
     return <AtlasHome games={games} allGames={allGames ?? games} ownedCount={ownedCount} {...rest} />;
   }
+  return <ClassicDashboard games={games} ownedCount={ownedCount} allGames={allGames} {...rest} />;
+}
+
+function ClassicDashboard({ games, ownedCount, allGames, ...rest }: DashboardProps) {
   // The built-in arrangement is the initial layout, so the first paint
   // already shows today's dashboard before the core answers over RPC.
   const layout = useThemeLayout('dashboard') ?? BUILTIN_LAYOUTS['dashboard'];
@@ -502,7 +506,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
   return (
     <div className={ATLAS_PAGE}>
       <header>
-        <h1 className="text-[24px] font-extrabold tracking-tight">{greeting}, polynux</h1>
+        <h1 className="text-[24px] font-extrabold tracking-tight">{greeting}</h1>
         <p className="mt-[3px] text-[13px] text-text-muted">{t('dashboard:home.ready', { count: installed })}</p>
       </header>
       {suggested && (

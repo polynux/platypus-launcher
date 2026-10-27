@@ -48,7 +48,7 @@ const emptyDetails = {
 const baseProps = {
   runners: [], activity: [], backLabel: 'Library',
   onBack: () => {}, onPlay: () => {}, onStop: () => {}, onForceStop: () => {},
-  launching: false, tweaks: [], onChangeSettings: () => {}, onSaveSettings: () => {},
+  launching: false, tweaks: [], onChangeSettings: () => {}, onSaveSettings: async () => {},
   onJob: () => {}, onJobAction: () => {}, onAllowFolder: () => {}, onNavigate: () => {},
 };
 

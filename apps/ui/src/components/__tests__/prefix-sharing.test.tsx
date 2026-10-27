@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Effect } from 'effect';
-import type { Game, Job, PrefixShare, StorePlugin } from '../../types';
+import type { Game, GameSettings, Job, PrefixShare, StorePlugin } from '../../types';
 
 // Shared Wine prefixes (issue #52): the prefix picker and the "Shared with"
 // lines in the settings and the remove dialog.
@@ -60,7 +60,7 @@ const job = (o: Partial<Job> = {}): Job =>
 
 const base = {
   runners: [], activity: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {}, launching: false, tweaks: [],
-  onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {}, jobs: [],
+  onChangeSettings() {}, onSaveSettings() { return Promise.resolve(); }, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {}, jobs: [],
 };
 
 beforeEach(() => {
@@ -101,7 +101,7 @@ describe('The existing-prefix picker', () => {
       { path: '/pfx/shared', games: [{ id: 'custom-1', title: 'Sideloaded Gem' }, { id: 'custom-2', title: 'Other Gem' }] },
       { path: '/pfx/alone', games: [{ id: 'custom-9', title: 'Lonely Gem' }] },
     ] as PrefixShare[]);
-    const onSave = vi.fn();
+    const onSave = vi.fn(async (_settings: GameSettings) => {});
     render(<SettingsModal game={game()} runners={[]} onClose={() => {}} onSave={onSave} onCopied={() => {}} />);
 
     fireEvent.pointerDown(screen.getByRole('combobox', { name: 'use an existing prefix' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
@@ -120,7 +120,7 @@ describe('The shared-prefix line in the settings', () => {
     api.prefixUsage.mockResolvedValue([
       { path: '/pfx/custom-1', games: [{ id: 'custom-1', title: 'Sideloaded Gem' }, { id: 'custom-2', title: 'Other Gem' }] },
     ] as PrefixShare[]);
-    const view = render(<SettingsModal game={game()} runners={[]} onClose={() => {}} onSave={() => {}} onCopied={() => {}} />);
+    const view = render(<SettingsModal game={game()} runners={[]} onClose={() => {}} onSave={async () => {}} onCopied={() => {}} />);
     expect(await screen.findByText('Shared with: Other Gem')).toBeTruthy();
     expect(screen.getByText('A broken shared prefix breaks every game in it.')).toBeTruthy();
     view.unmount();
@@ -129,7 +129,7 @@ describe('The shared-prefix line in the settings', () => {
     api.prefixUsage.mockResolvedValue([
       { path: '/pfx/custom-1', games: [{ id: 'custom-1', title: 'Sideloaded Gem' }] },
     ] as PrefixShare[]);
-    render(<SettingsModal game={game()} runners={[]} onClose={() => {}} onSave={() => {}} onCopied={() => {}} />);
+    render(<SettingsModal game={game()} runners={[]} onClose={() => {}} onSave={async () => {}} onCopied={() => {}} />);
     // Wait for the usage answer to land: the picker lists its one prefix.
     fireEvent.pointerDown(screen.getByRole('combobox', { name: 'use an existing prefix' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
     await screen.findByRole('option', { name: /1 game/ });

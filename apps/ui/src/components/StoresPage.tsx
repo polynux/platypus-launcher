@@ -1,3 +1,4 @@
+// i18n: converted
 // The /22 stores page (issue #138, Atlas only): one tab per storefront
 // plugin plus the redeem entry, with the embedded StoreView for the selected
 // store below. Tab switches navigate (the router URL stays the store), so the

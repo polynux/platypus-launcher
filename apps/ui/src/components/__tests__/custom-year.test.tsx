@@ -35,7 +35,7 @@ function modal(g: Game = custom(), over: Partial<React.ComponentProps<typeof Gam
   render(
     <GameSettingsModal
       game={g} runners={[]} tweaks={[]} jobs={[]}
-      onClose={() => {}} onSaveSettings={() => {}} onChangeSettings={() => {}}
+      onClose={() => {}} onSaveSettings={async () => {}} onChangeSettings={() => {}}
       onJob={() => {}} onJobAction={() => {}} onNotify={() => {}}
       onChanged={() => {}} onCustomized={onCustomized} onCopied={() => {}}
       {...over}
@@ -102,7 +102,7 @@ describe('GamePage release row (issue #35)', () => {
         game={g} runners={[]} activity={[]} backLabel="Library"
         onBack={() => {}} onPlay={() => {}} onStop={() => {}} onForceStop={() => {}}
         launching={false} tweaks={[]}
-        onChangeSettings={() => {}} onSaveSettings={() => {}}
+        onChangeSettings={() => {}} onSaveSettings={async () => {}}
         onJob={() => {}} onJobAction={() => {}} onAllowFolder={() => {}} onNavigate={() => {}} jobs={[]}
       />
     );

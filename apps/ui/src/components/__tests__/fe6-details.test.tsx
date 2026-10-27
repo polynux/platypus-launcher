@@ -76,7 +76,7 @@ const baseProps = {
   launching: false,
   tweaks: [],
   onChangeSettings: () => {},
-  onSaveSettings: () => {},
+  onSaveSettings: async () => {},
   onJob: () => {},
   onJobAction: () => {},
   onAllowFolder: () => {},

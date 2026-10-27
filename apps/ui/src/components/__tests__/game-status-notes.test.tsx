@@ -32,7 +32,7 @@ const game = (o: Partial<Game> = {}) =>
 
 const props = {
   runners: [], activity: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {}, launching: false, tweaks: [],
-  onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {},
+  onChangeSettings() {}, onSaveSettings() { return Promise.resolve(); }, onJob() {}, onJobAction() {}, onAllowFolder() {}, onNavigate() {},
 };
 
 const pair = (o: Partial<GameStatusInfo> = {}): GameStatusInfo => ({ status: 'playing', user_notes: '', ...o });

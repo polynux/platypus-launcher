@@ -37,7 +37,7 @@ import { SettingsModal } from '../SettingsModal';
 const game = (settings: object) =>
   ({ id: 'g1', title: 'G', store: 'custom', source: 'custom', executable: '/x.exe', settings: { env_vars: {}, ...settings } }) as unknown as Game;
 
-const open = (g: Game) => render(<SettingsModal game={g} runners={[]} onClose={() => {}} onSave={() => {}} onCopied={() => {}} />);
+const open = (g: Game) => render(<SettingsModal game={g} runners={[]} onClose={() => {}} onSave={async () => {}} onCopied={() => {}} />);
 
 describe('general settings groups', () => {
   it('shows the runner choices in their groups, with no folds', async () => {

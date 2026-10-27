@@ -31,7 +31,7 @@ import { SettingsModal } from '../SettingsModal';
 const game = (settings: object) =>
   ({ id: 'g1', title: 'Echo sandbox-crash', store: 'custom', source: 'custom', executable: '/x.exe', settings: { env_vars: {}, ...settings } }) as unknown as Game;
 
-const open = (g: Game) => render(<SettingsModal game={g} runners={[]} onClose={() => {}} onSave={() => {}} onCopied={() => {}} />);
+const open = (g: Game) => render(<SettingsModal game={g} runners={[]} onClose={() => {}} onSave={async () => {}} onCopied={() => {}} />);
 
 describe('the runner choice of a game that never saved one', () => {
   it('shows the automatic pick, with no warning, when runner_id is unset', async () => {

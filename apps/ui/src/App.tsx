@@ -426,6 +426,7 @@ export function AppContent() {
           setSessions((prev) => ({ ...prev, [e.game_id]: e }));
           if (e.state === 'running') {
             sessionStart.current[e.game_id] = Date.now();
+            if (shellNavigation !== 'sourcebar') notify(t('game:nowRunning', { title }), 'busy');
             log({ type: 'session', game: title, detail: t('activity:log.sessionStarted', { title }), meta: e.pid ? t('activity:log.sessionPid', { pid: e.pid }) : undefined });
           }
           return;
@@ -445,7 +446,7 @@ export function AppContent() {
           log({ type: 'session', game: title, detail: t('activity:log.sessionStopped', { title }), meta: started ? t('activity:log.sessionMinutes', { count: mins }) : undefined });
         }
       }),
-    [log, notify]
+    [log, notify, shellNavigation, t]
   );
 
   // A hidden window can miss nothing (events stay live) but re-checks on
@@ -1003,7 +1004,7 @@ export function AppContent() {
       case 'activity':
         return <ActivityView events={activity} games={games} onOpenGame={openGame} />;
       case 'fixes':
-        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => void saveSettings(game.id, { ...game.settings, runner_id: runner })} onOpenRunners={() => setView({ name: 'runners' })} />;
+        return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner }).catch(() => {})} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
         return <SystemView runners={runners} games={installedGames} onRefresh={() => loadData('rescan')} scanning={scanning} />;
       case 'plugins':
@@ -1157,7 +1158,7 @@ export function AppContent() {
         loading={!loaded}
         downloadCount={activeJobs.length}
         authNeeded={warnings.some((w) => w.needs_auth) || plugins.some((x) => x.status === 'unapproved' || x.status === 'changed')}
-        fixCount={attentionIssues(games, jobs, runners).length}
+        fixCount={shellNavigation === 'sourcebar' ? attentionIssues(games, jobs, runners).length : games.filter(needsAttention).length}
         runnerCount={runners.length}
         lastScan={lastScan}
         sessions={Object.values(sessions).map((e) => ({ ...e, title: games.find((g) => g.id === e.game_id)?.title ?? e.game_id }))}

@@ -1,3 +1,4 @@
+// i18n: converted
 // Atlas /22 library views (issue #136, D22.jsx `lib-full` + `appLibrary.jsx`).
 // The list view lives in LibraryListDetail; the grid and table live here so
 // warm, cool and slate keep today's LibraryView path exactly. Only the Atlas
@@ -608,9 +609,10 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, sessions
 
 /** Loading skeletons per Atlas view (D22 `Skeleton` rows/grid). */
 export function AtlasSkeleton({ view }: { view: 'list' | 'grid' | 'table' }) {
+  const { t } = useTranslation('library');
   if (view === 'grid') {
     return (
-      <ul aria-busy="true" aria-label="Loading" className="grid gap-x-4 gap-y-[22px] [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+      <ul aria-busy="true" aria-label={t('loading')} className="grid gap-x-4 gap-y-[22px] [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
         {Array.from({ length: 8 }, (_, i) => (
           <li key={i} className="animate-pulse rounded-xl bg-surface ring-1 ring-hairline motion-reduce:animate-none">
             <span className="block aspect-[3/4] rounded-xl bg-surface-strong" />
@@ -623,7 +625,7 @@ export function AtlasSkeleton({ view }: { view: 'list' | 'grid' | 'table' }) {
   }
   if (view === 'table') {
     return (
-      <div aria-busy="true" aria-label="Loading" className="overflow-hidden rounded-xl ring-1 ring-hairline">
+      <div aria-busy="true" aria-label={t('loading')} className="overflow-hidden rounded-xl ring-1 ring-hairline">
         {Array.from({ length: 8 }, (_, i) => (
           <div key={i} className="flex animate-pulse items-center gap-3 border-b border-hairline/60 px-3 py-2.5 last:border-0 motion-reduce:animate-none">
             <span className="h-7 w-[52px] flex-none rounded bg-surface-strong" />
@@ -635,7 +637,7 @@ export function AtlasSkeleton({ view }: { view: 'list' | 'grid' | 'table' }) {
     );
   }
   return (
-    <ul aria-busy="true" aria-label="Loading" className="grid gap-1.5 px-1.5">
+    <ul aria-busy="true" aria-label={t('loading')} className="grid gap-1.5 px-1.5">
       {Array.from({ length: 9 }, (_, i) => (
         <li key={i} className="flex animate-pulse items-center gap-2.5 rounded-lg px-2 py-[5px] pl-[5px] motion-reduce:animate-none">
           <span className="h-7 w-[60px] flex-none rounded-[5px] bg-surface-strong" />

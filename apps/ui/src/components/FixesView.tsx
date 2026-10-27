@@ -8,15 +8,27 @@ import { Badge } from './ds/badge';
 import { Button } from './ds/button';
 import { attentionIssues, attentionReason, heroImages, coverImages, needsAttention, storeLabel } from '../lib/games';
 import { useVariant } from '../lib/theme';
+import { plainError } from '../lib/plainError';
 
 type Filter = 'attention' | 'all';
+type FixesProps = {
+  games: Game[]; onOpenGame: (id: string) => void; jobs?: Job[]; runners?: ProtonVersion[];
+  onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void;
+  onAllowFolder?: (game: Game) => void;
+  onSaveSettings?: (game: Game, runner: string) => Promise<void>; // i18n:allow: Promise return type
+  onOpenRunners?: () => void;
+};
 
-export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: { games: Game[]; onOpenGame: (id: string) => void; jobs?: Job[]; runners?: ProtonVersion[]; onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void; onAllowFolder?: (game: Game) => void; onSaveSettings?: (game: Game, runner: string) => void; onOpenRunners?: () => void }) {
-  const { t } = useTranslation(['nav', 'fixes']);
+export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
   // Atlas renders the /22 Needs attention page (issue #138); other themes keep the rows below.
   if (useVariant('shell.navigation') === 'sourcebar') {
     return <AtlasAttention games={games} jobs={jobs} runners={runners} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
   }
+  return <ClassicFixesView games={games} onOpenGame={onOpenGame} onJobAction={onJobAction} onJob={onJob} onAllowFolder={onAllowFolder} onSaveSettings={onSaveSettings} onOpenRunners={onOpenRunners} />;
+}
+
+function ClassicFixesView({ games, onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
+  const { t } = useTranslation(['nav', 'fixes']);
   const [filter, setFilter] = useState<Filter>('attention');
   const withData = games.filter((g) => g.fix_info || g.compat_badges?.some((b) => b.kind === 'rating'));
   const shown = filter === 'attention' ? withData.filter(needsAttention) : withData;
@@ -81,7 +93,7 @@ export function FixesView({ games, onOpenGame, jobs = [], runners = [], onJobAct
  *  per-kind actions (retry install, install runner, move, repair, update,
  *  compare) have no backing in this view: those fixes live on the game page,
  *  so the card opens it. */
-function AtlasAttention({ games, jobs, runners, onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: { games: Game[]; jobs: Job[]; runners: ProtonVersion[]; onOpenGame: (id: string) => void; onJobAction?: (action: 'retry', id: string) => void; onJob?: (kind: 'update', game: Game) => void; onAllowFolder?: (game: Game) => void; onSaveSettings?: (game: Game, runner: string) => void; onOpenRunners?: () => void }) {
+function AtlasAttention({ games, jobs = [], runners = [], onOpenGame, onJobAction, onJob, onAllowFolder, onSaveSettings, onOpenRunners }: FixesProps) {
   const { t } = useTranslation(['nav', 'fixes']);
   const issues = attentionIssues(games, jobs, runners);
   const gameCount = new Set(issues.map((issue) => issue.game.id)).size;
@@ -100,10 +112,12 @@ function AtlasAttention({ games, jobs, runners, onOpenGame, onJobAction, onJob, 
           {issues.map((issue, index) => {
             const { game: g } = issue;
             const KindIcon = { install: Download, outside: FolderOpen, runner: Wrench, update: ArrowDownToLine, rating: AlertTriangle }[issue.kind];
-            const title = ({
+            const title = issue.kind === 'install' && issue.failedJobKind === 'update'
+              ? t('fixes:atlas.issue.updateFailed')
+              : ({
               install: t('fixes:atlas.issue.install'), outside: t('fixes:atlas.issue.outside'), runner: t('fixes:atlas.issue.runner'),
               update: t('fixes:atlas.issue.update'), rating: t('fixes:atlas.issue.rating'),
-            })[issue.kind];
+              })[issue.kind];
             const fix = issue.kind === 'runner'
               ? t('fixes:atlas.useDefaultRunner', { runner: runners.find((r) => r.is_default)?.name ?? t('fixes:atlas.defaultRunner') })
               : ({
@@ -132,7 +146,7 @@ function AtlasAttention({ games, jobs, runners, onOpenGame, onJobAction, onJob, 
                   <button type="button" onClick={() => onOpenGame(g.id)} className="truncate justify-self-start text-left text-[15px] font-[750] hover:underline underline-offset-[3px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                     {g.title}
                   </button>
-                  <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.reason}</p>
+                  <p className="line-clamp-2 text-[12.5px] leading-[1.45] text-text-muted">{issue.kind === 'install' ? plainError(issue.error, t('fixes:atlas.reason.install')) : issue.kind === 'outside' ? t('fixes:atlas.reason.outside', { title: g.title, dir: g.install_dir }) : issue.kind === 'runner' ? t('fixes:atlas.reason.runner', { title: g.title, runner: issue.runnerId }) : issue.kind === 'update' ? t('fixes:atlas.reason.update') : attentionReason(g)}</p>
                 </div>
                 <div className="grid gap-1">
                   <Button variant="primary" onClick={action}>{fix}</Button>

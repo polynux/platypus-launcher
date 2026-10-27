@@ -128,7 +128,7 @@ const testTweak = { id: 't1', kind: 'recommended', title: 'Use fsync', reason: '
 function modalProps(over: Partial<React.ComponentProps<typeof GameSettingsModal>> = {}) {
   return {
     game: testGame(), plugin: testPlugin(), runners: [], tweaks: [testTweak], jobs: [],
-    onClose: () => {}, onSaveSettings: () => {}, onChangeSettings: () => {}, onJob: () => {}, onJobAction: () => {},
+    onClose: () => {}, onSaveSettings: async () => {}, onChangeSettings: () => {}, onJob: () => {}, onJobAction: () => {},
     onNotify: () => {}, onChanged: () => {}, onCustomized: () => {}, onCopied: () => {},
     ...over,
   };

@@ -91,7 +91,7 @@ function freshGame(): Game {
 
 const baseProps = {
   runners: [], backLabel: 'Library', onBack() {}, onPlay() {}, onStop() {}, onForceStop() {},
-  launching: false, tweaks: [], onChangeSettings() {}, onSaveSettings() {}, onJob() {}, onJobAction() {},
+  launching: false, tweaks: [], onChangeSettings() {}, onSaveSettings() { return Promise.resolve(); }, onJob() {}, onJobAction() {},
   onAllowFolder() {}, onNavigate() {}, jobs: [], onNotify() {},
 };
 

@@ -1,3 +1,4 @@
+// i18n: converted
 // A sideloaded game's release year (issue #35), shared by the tab dialog and
 // the atlas drawer. Empty clears it back to unknown.
 import React, { useEffect, useState } from 'react';

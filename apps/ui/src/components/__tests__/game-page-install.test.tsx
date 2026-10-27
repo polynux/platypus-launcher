@@ -46,7 +46,7 @@ function page(p: StorePlugin, g: Game = game()) {
   render(
     <GamePage
       game={g} plugin={p} runners={[]} activity={[]} backLabel="Library" onBack={() => {}} onPlay={() => {}} onStop={() => {}} onForceStop={() => {}}
-      launching={false} tweaks={[]} onChangeSettings={() => {}} onSaveSettings={() => {}} onJob={vi.fn()} onJobAction={() => {}} onAllowFolder={() => {}}
+      launching={false} tweaks={[]} onChangeSettings={() => {}} onSaveSettings={async () => {}} onJob={vi.fn()} onJobAction={() => {}} onAllowFolder={() => {}}
       onNavigate={() => {}} jobs={[]} onNotify={() => {}}
     />,
   );
