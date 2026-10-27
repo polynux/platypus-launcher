@@ -396,8 +396,8 @@ function AtlasStorage({ data }: { data: StorageData }) {
     const groups = data.drives.map((d) => {
       const mine = rest.filter((row) => {
         const dir = data.byId.get(row.game_id)?.install_dir || row.install_dir;
-        if (d.folders.some((f) => dir.startsWith(f))) return true;
-        return d.mount !== '/' && dir.startsWith(d.mount) && !data.drives.some((o) => o !== d && o.folders.some((f) => dir.startsWith(f)));
+        if (d.folders.some((f) => isWithinFolder(dir, f))) return true;
+        return d.mount !== '/' && isWithinFolder(dir, d.mount) && !data.drives.some((o) => o !== d && o.folders.some((f) => isWithinFolder(dir, f)));
       });
       for (const m of mine) rest.splice(rest.indexOf(m), 1);
       return { drive: d, rows: mine };
@@ -550,7 +550,7 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
           <span className="w-[76px]" />
         )}
       </div>
-      {data.moveId === row.game_id && game && (
+      {data.moveId === row.game_id && game && !game.outside_folder && (
         <MoveDialog
           game={game}
           startFolder={parentFolder(game.install_dir)}

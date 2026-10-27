@@ -85,7 +85,7 @@ export function AtlasGameBadges({ game, job, session }: { game: Game; job?: Job;
   }
   if (needsAttention(game)) {
     badges.push(
-      <span key="attn" title={attentionReason(game)} aria-label={t('library:listDetail.needsAttention')} className="grid size-5 flex-none place-items-center rounded-md bg-attention text-[#1b1300]">
+      <span key="attn" title={attentionReason(game)} aria-label={t('library:listDetail.needsAttention')} className="grid size-5 flex-none place-items-center rounded-md bg-attention text-on-accent">
         <AlertTriangle className="size-[11px]" aria-hidden />
       </span>,
     );
@@ -570,7 +570,7 @@ export function AtlasLibraryTable({ games, runners, sort, onSort, jobs, sessions
                 <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums text-text-muted">{g.release_year ?? '—'}</td>
                 <td className="px-2 py-2">
                   <span className="flex items-center justify-end gap-1">
-                    <span className="relative hidden items-center gap-0.5 group-hover:inline-flex">
+                    <span className="relative flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100">
                       {g.is_installed ? (
                         onPlay && (
                           <button type="button" aria-label={`${t('game:play.play')}: ${g.title}`} onClick={() => onPlay(g.id)} className="grid size-7 place-items-center rounded-[7px] bg-accent text-on-accent transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">

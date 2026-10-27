@@ -85,6 +85,7 @@ export function LibraryListDetail(p: ListDetailProps) {
   const atlas = useVariant('shell.navigation') === 'sourcebar';
   const { t } = useTranslation(['library', 'game', 'collections', 'nav']);
   const [query, setQuery] = useState('');
+  const [nowSec] = useState(() => Math.floor(Date.now() / 1000));
   const [sort, setSort] = useState<ListSort>('recent');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   // Atlas parity (issue #132): the classic tier/status/lending filters, reused
@@ -133,8 +134,8 @@ export function LibraryListDetail(p: ListDetailProps) {
   const jobsById = useMemo(() => new Map((p.jobs ?? []).map((j) => [j.game_id, j])), [p.jobs]);
 
   const inCollection = useMemo(
-    () => collectionPredicate(p.collections ?? [], p.collection ?? '', Math.floor(Date.now() / 1000)),
-    [p.collections, p.collection],
+    () => collectionPredicate(p.collections ?? [], p.collection ?? '', nowSec),
+    [p.collections, p.collection, nowSec],
   );
 
   const filtered = useMemo(() => {
@@ -154,7 +155,7 @@ export function LibraryListDetail(p: ListDetailProps) {
   // The selection is kept across filter changes when possible.
   useEffect(() => {
     if (filtered.length === 0) {
-      if (selectedId !== null) setSelectedId(null);
+      if (selectedId !== p.initialSelectedId && selectedId !== null) setSelectedId(null);
       return;
     }
     // A game opened from elsewhere stays selected even when the filters hide
@@ -178,11 +179,12 @@ export function LibraryListDetail(p: ListDetailProps) {
       const target = e.target as HTMLElement | null;
       if (!target || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable) return;
       if (target.closest('[role=listbox],[role=menu],[role=dialog],[data-keys-local]') || document.querySelector('[role=dialog]')) return;
+      const list = listRef.current;
+      if (list && !list.contains(target) && target !== document.body) return;
       if (target.closest('[data-game-row]')) return;
       if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); move(1); }
       else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
       else if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); searchRef.current?.focus(); }
-      else if (e.key === 'Enter' && target === document.body && selected) { e.preventDefault(); p.onPlay(selected.id); }
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);

@@ -555,7 +555,7 @@ function MorePlacesMenu({ p }: { p: ShellProps }) {
             <button aria-current={n.current ? 'page' : undefined} className={cx('w-full', n.current && 'font-semibold text-text')}>
               <n.Icon aria-hidden className="size-[15px] flex-none text-text-muted" />
               <span className="min-w-0 flex-1 text-left">{n.label}</span>
-              {n.badge && <span aria-label={t('nav:needsAttention')} className="ml-auto rounded-full bg-attention px-1.5 text-[11px] font-bold text-[#1b1300]">{warnCount > 0 ? warnCount : '!'}</span>}
+              {n.badge && <span aria-label={t('nav:needsAttention')} className="ml-auto rounded-full bg-attention px-1.5 text-[11px] font-bold text-on-accent">{warnCount > 0 ? warnCount : '!'}</span>}
             </button>
           </DropdownMenuItem>
         ))}

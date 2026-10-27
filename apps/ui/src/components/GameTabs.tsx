@@ -547,7 +547,7 @@ function ActionStrip({ d }: { d: GameTabsData }) {
         </p>
       )}
       {jobNote && (
-        <p title={failedInstall ? d.job?.error ?? undefined : undefined} className={`flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] tabular-nums ${failedInstall ? 'text-[#ffb4aa] light:text-danger' : 'text-text-muted'}`}>
+        <p title={failedInstall ? d.job?.error ?? undefined : undefined} className={`flex min-w-0 basis-full -mt-0.5 items-center gap-[7px] text-[12.5px] tabular-nums ${failedInstall ? 'text-danger' : 'text-text-muted'}`}>
           {failedInstall && <AlertTriangle className="size-[13px] flex-none" aria-hidden />}
           <span className="min-w-0 truncate">{failedInstall ? t('game:install.lastAttemptPrefix', { error: jobNote }) : jobNote}</span>
         </p>

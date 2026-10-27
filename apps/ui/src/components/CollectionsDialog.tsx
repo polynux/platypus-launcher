@@ -103,7 +103,7 @@ export function CollectionsDialog({ collections, games, gameId, mode, onChanged,
   const [editDraft, setEditDraft] = useState<SmartDraft>(EMPTY_DRAFT);
   const [editName, setEditName] = useState('');
   const game = gameId ? games.find((g) => g.id === gameId) : undefined;
-  const nowSec = Math.floor(Date.now() / 1000);
+  const [nowSec] = useState(() => Math.floor(Date.now() / 1000));
   const counts = useMemo(() => collectionCounts(collections, games, nowSec), [collections, games, nowSec]);
 
   const label = (c: Collection) => (c.builtin ? t(`collections:builtin.${c.id}`) : c.name);
