@@ -32,9 +32,8 @@ export interface GameSettingsModalProps {
   /** The tab to open (General when the game has no such tab). */
   initialTab?: GameSettingsTab;
   onClose: () => void;
-  /** The general form was saved. Returns a promise when the save is async:
-   *  the drawer clears its dirty state only once it resolves. */
-  onSaveSettings: (s: GameSettings) => void | Promise<void>; // i18n:allow: Promise return type, not user-facing text
+  /** The general form was saved; the drawer clears its dirty state on success. */
+  onSaveSettings: (s: GameSettings) => Promise<void>; // i18n:allow: Promise return type, not user-facing text
   /** A tweak switched on or off. */
   onChangeSettings: (s: GameSettings, what: string) => void;
   onJob: (kind: GameJobKind) => void;

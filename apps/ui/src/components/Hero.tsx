@@ -1,3 +1,4 @@
+// i18n: converted
 // The themeable hero frame (issue #101): one frame for the dashboard and
 // game page heroes. It owns the art background, the scrim gradient, the
 // height and the chip style through the hero catalog axes; the content blocks

@@ -167,7 +167,7 @@ describe('a22 home (dashboard)', () => {
         onNavigate={noop}
       />,
     );
-    expect(screen.getByRole('heading', { name: /polynux/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Good morning|Good afternoon|Good evening|Up late/ })).toBeInTheDocument();
     // The suggestion is the first owned, not-installed game (the lab's
     // backlog pick), not the game needing attention.
     expect(screen.getByText('From your backlog')).toBeInTheDocument();

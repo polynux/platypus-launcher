@@ -1,3 +1,4 @@
+// i18n: converted
 // The game colour switch (issue #123): "Accent" keeps the game's colour on
 // buttons and highlights, "Whole app" retints the surfaces, lines and text
 // too. The theme's color.game-tone axis says what it allows; a theme that only

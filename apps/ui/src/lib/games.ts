@@ -2,9 +2,8 @@ import type { Game, GameSettings, Job, ProtonVersion } from '../types';
 import { formatBytes as formatBytesLocale, formatLastPlayed } from './format';
 import i18n from './i18n';
 import { ratingBadge } from './compat';
-import { plainError } from './plainError';
 
-export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'rating'; title: string; reason: string; fix: string; alt?: string };
+export type AttentionIssue = { game: Game; kind: 'install' | 'outside' | 'runner' | 'update' | 'rating'; error?: string; runnerId?: string; failedJobKind?: 'install' | 'update' };
 
 /** Issues the frontend can identify from its current library, job and runner snapshots. */
 export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersion[]): AttentionIssue[] {
@@ -17,17 +16,16 @@ export function attentionIssues(games: Game[], jobs: Job[], runners: ProtonVersi
   for (const game of games) {
     const job = latest.get(game.id);
     if (job?.state === 'failed' && (job.kind === 'install' || job.kind === 'update')) {
-      out.push({ game, kind: 'install', title: job.kind === 'update' ? 'Update failed' : 'Install failed', reason: plainError(job.error, 'The last attempt failed.'), fix: 'Retry install', alt: 'Open game' });
+      out.push({ game, kind: 'install', error: job.error ?? undefined, failedJobKind: job.kind });
     }
-    if (game.outside_folder) out.push({ game, kind: 'outside', title: 'Outside your game folders', reason: `${game.title} lives in ${game.install_dir}. Platypus only launches games from your game folders.`, fix: 'Allow this folder', alt: 'Open game' });
+    if (game.outside_folder) out.push({ game, kind: 'outside' });
     const runnerId = game.settings.runner_id;
     const runner = runners.find((r) => r.id === runnerId || r.name === runnerId);
     if (!game.native && runnerId && runnerId !== 'auto' && !runner) {
-      const fallback = runners.find((r) => r.is_default);
-      out.push({ game, kind: 'runner', title: 'Runner missing', reason: `${game.title} is set to ${runnerId}, which was removed.`, fix: `Use ${fallback?.name ?? 'default runner'}`, alt: 'Open runners' });
+      out.push({ game, kind: 'runner', runnerId });
     }
-    if (game.update_available && game.is_installed) out.push({ game, kind: 'update', title: 'Update ready', reason: 'An update is available.', fix: 'Update now', alt: 'Open game' });
-    if (needsAttention(game)) out.push({ game, kind: 'rating', title: 'Runs badly on Linux', reason: attentionReason(game), fix: 'Open game', alt: 'Open game' });
+    if (game.update_available && game.is_installed) out.push({ game, kind: 'update' });
+    if (needsAttention(game)) out.push({ game, kind: 'rating' });
   }
   return out;
 }
@@ -107,15 +105,15 @@ export function lastPlayedAgo(g: Game, now = Date.now()): string | undefined {
   if (!g.last_played_at) return undefined;
   const ms = Math.max(0, now - g.last_played_at * 1000);
   const m = ms / 60e3;
-  if (m < 1) return 'just now';
-  if (m < 60) return `${Math.round(m)} min ago`;
+  if (m < 1) return i18n.t('game:timeAgo.justNow');
+  if (m < 60) return i18n.t('game:timeAgo.minutes', { count: Math.round(m) });
   const h = m / 60;
-  if (h < 24) return `${Math.round(h)} h ago`;
+  if (h < 24) return i18n.t('game:timeAgo.hours', { count: Math.round(h) });
   const d = h / 24;
-  if (d < 2) return 'yesterday';
-  if (d < 30) return `${Math.round(d)} days ago`;
-  if (d < 365) return `${Math.round(d / 30)} mo ago`;
-  return `${Math.round(d / 365)} yr ago`;
+  if (d < 2) return i18n.t('game:timeAgo.yesterday');
+  if (d < 30) return i18n.t('game:timeAgo.days', { count: Math.round(d) });
+  if (d < 365) return i18n.t('game:timeAgo.months', { count: Math.round(d / 30) });
+  return i18n.t('game:timeAgo.years', { count: Math.round(d / 365) });
 }
 
 /** Most recently played first; never-played titles keep scan order at the end. */

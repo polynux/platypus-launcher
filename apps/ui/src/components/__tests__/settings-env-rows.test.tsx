@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { Effect } from 'effect';
-import type { Game } from '../../types';
+import type { Game, GameSettings } from '../../types';
 
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
@@ -26,7 +26,7 @@ const game = { id: 'g1', title: 'G', store: 'custom', source: 'custom', executab
 
 describe('env var rows', () => {
   it('adds two rows, deletes one, and saves only the remaining one', () => {
-    const onSave = vi.fn();
+    const onSave = vi.fn(async (_settings: GameSettings) => {});
     render(<SettingsModal game={game} runners={[]} onClose={() => {}} onSave={onSave} onCopied={() => {}} />);
     const add = screen.getByRole('button', { name: '+ Add variable' });
     fireEvent.click(add);

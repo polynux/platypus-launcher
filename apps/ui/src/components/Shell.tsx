@@ -1,3 +1,4 @@
+// i18n: converted
 // The app shell as a view (issue #104, ADR 0002 answer 4). The shell has one
 // region per shell.navigation value (catalog shell.sidebar, shell.topbar,
 // shell.sourcebar for atlas in #125): the sidebar's parts (inventory §1.2)
@@ -131,7 +132,7 @@ function Topbar(p: ShellProps) {
   return (
     <header data-region="topbar" className="flex-none border-b border-hairline bg-ground">
       <div className="flex items-center gap-2 px-4 pt-2">
-        <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-gradient-to-br from-accent-strong to-danger text-[14px] font-black text-on-accent">P</span>
+        <span className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-gradient-to-br from-accent-strong to-danger text-[14px] font-black text-on-accent">P{/* i18n:allow: brand initial */}</span>
         {/* shell.nav */}
         <nav aria-label={t('nav:main')} className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {main.map((n) => navButton(n))}
@@ -359,8 +360,8 @@ function TopBar({ p }: { p: ShellProps }) {
     <header className="grid h-12 grid-cols-[minmax(max-content,1fr)_minmax(200px,460px)_minmax(max-content,1fr)] items-center gap-4 bg-ground px-3.5">
       <div className="flex items-center gap-5">
         <div className="flex flex-none items-center gap-2.5 font-bold text-[14.5px] text-text">
-          <span aria-hidden className="grid size-6 place-items-center rounded-xl bg-accent text-[13px] font-extrabold text-on-accent">P</span>
-          <span>Platypus</span>
+          <span aria-hidden className="grid size-6 place-items-center rounded-xl bg-accent text-[13px] font-extrabold text-on-accent">P{/* i18n:allow: brand initial */}</span>
+          <span>Platypus{/* i18n:allow: product name */}</span>
         </div>
         <nav aria-label={t('nav:main')} className="flex min-w-0 items-center gap-0.5">
           {nav.map((n) => (
@@ -387,7 +388,7 @@ function TopBar({ p }: { p: ShellProps }) {
       >
         <Search className="h-3.5 w-3.5 flex-none" aria-hidden />
         <span className="min-w-0 flex-1 truncate text-left text-[13px]">{t('nav:sourcebar.searchOrCommand')}</span>
-        <kbd className="flex-none rounded-[3px] px-[5px] py-px font-mono text-[11px] text-text-muted ring-1 ring-inset ring-hairline-strong">Ctrl K</kbd>
+        <kbd className="flex-none rounded-[3px] px-[5px] py-px font-mono text-[11px] text-text-muted ring-1 ring-inset ring-hairline-strong">Ctrl K{/* i18n:allow: keyboard shortcut */}</kbd>
       </button>
       <div className="flex min-w-0 items-center justify-end gap-1">
         <DownloadsButton p={p} />

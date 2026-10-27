@@ -297,6 +297,11 @@ export function TuneFlyout({
   };
 
   const compat = cardCompat(game);
+  const presetLabels: Record<TunePreset, string> = {
+    quality: t('tune:preset.quality'),
+    balanced: t('tune:preset.balanced'),
+    performance: t('tune:preset.performance'),
+  };
   const tierLine = compat?.kind === 'native'
     ? t('game:compat.native')
     : compat?.kind === 'tier'
@@ -331,7 +336,7 @@ export function TuneFlyout({
                   on ? 'bg-accent/20 text-text ring-accent/40' : 'text-text-muted ring-hairline hover:text-text',
                 )}
               >
-                {t(`tune:preset.${p.id}`)}
+                {presetLabels[p.id]}
               </button>
             );
           })}

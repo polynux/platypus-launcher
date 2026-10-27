@@ -152,6 +152,11 @@ export function DownloadsView({ jobs, games = [], onAction, onClear, onOpenGame 
   if (useVariant('shell.navigation') === 'sourcebar') {
     return <AtlasDownloads jobs={jobs} games={games} onAction={onAction} onClear={onClear} onOpenGame={onOpenGame} />;
   }
+  return <ClassicDownloads jobs={jobs} onAction={onAction} onClear={onClear} onOpenGame={onOpenGame} />;
+}
+
+function ClassicDownloads({ jobs, onAction, onClear, onOpenGame }: Omit<DownloadsViewProps, 'games'>) {
+  const { t } = useTranslation(['downloads', 'nav']);
   const active = jobs.filter((j) => j.state === 'queued' || j.state === 'running' || j.state === 'paused');
   const finished = jobs.filter((j) => !active.includes(j)).sort((a, b) => b.updated_at - a.updated_at);
   const [clearing, setClearing] = useState(false);

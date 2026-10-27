@@ -79,7 +79,7 @@ interface GamePageProps {
   /** A tweak was switched on or off. */
   onChangeSettings: (s: GameSettings, what: string) => void;
   /** The general settings form was saved. */
-  onSaveSettings: (s: GameSettings) => void;
+  onSaveSettings: (s: GameSettings) => Promise<void>; // i18n:allow: Promise return type
   /** The game's customization changed: the library should reload to carry it. */
   onCustomized?: () => void;
   plugin?: StorePlugin; // plugin games only

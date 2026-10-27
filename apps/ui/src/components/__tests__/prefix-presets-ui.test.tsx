@@ -77,7 +77,7 @@ beforeEach(() => {
   api.getGameSettings.mockResolvedValue({});
 });
 
-const open = (g: Game) => render(<SettingsModal game={g} runners={[]} onClose={() => {}} onSave={() => {}} onCopied={() => {}} />);
+const open = (g: Game) => render(<SettingsModal game={g} runners={[]} onClose={() => {}} onSave={async () => {}} onCopied={() => {}} />);
 const openPresets = () =>
   fireEvent.pointerDown(screen.getByRole('combobox', { name: 'Apply a preset…' }), { button: 0, ctrlKey: false, pointerType: 'mouse' });
 

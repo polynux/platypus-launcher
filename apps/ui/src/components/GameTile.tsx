@@ -1,3 +1,4 @@
+// i18n: converted
 // Game tiles and rows (issue #98, #109): the catalog components the Library
 // and the Dashboard share. Warm keeps today's dashboard tile (3:4, compat and
 // overlay on, comfortable) and today's library card (2:3, compact footer)

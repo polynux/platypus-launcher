@@ -242,6 +242,7 @@ describe('atlas drawer save model', () => {
     draftCtl.discard.mockReset();
     draftCtl.markClean.mockReset();
     draftCtl.onSave.mockReset();
+    draftCtl.onSave.mockResolvedValue(undefined);
   });
 
   const props = () => ({
@@ -401,7 +402,7 @@ describe('atlas maintenance parity (issue #132)', () => {
         jobs={[]}
         groups={[]}
         shared={shared}
-        onSaveSettings={() => {}}
+        onSaveSettings={async () => {}}
         onChangeSettings={() => {}}
         onJob={() => {}}
         onJobAction={() => {}}

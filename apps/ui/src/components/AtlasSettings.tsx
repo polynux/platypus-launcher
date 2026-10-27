@@ -1,3 +1,4 @@
+// i18n: converted
 // Atlas drawer only (game-settings.tabs = accordion, atlas-only): the /21
 // SettingsDrawer categories, mapped onto the app's real settings and APIs.
 // Other themes keep the tab dialog/sheet in GameSettingsModal; this file never
@@ -6,7 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import {
-  Braces, ChevronDown, Cloud, Cpu, Gauge, GitBranch, Layers, MonitorPlay, Palette,
+  Braces, ChevronDown, Cloud, Cpu, Gauge, GitBranch, Layers, MonitorPlay, Palette, X,
   Plug, Puzzle, TerminalSquare, Wrench,
 } from 'lucide-react';
 import type {
@@ -452,7 +453,7 @@ export interface AtlasBodyProps {
   job?: Job;
   groups: SettingGroup[];
   shared: GameSettingsDraft;
-  onSaveSettings: (s: GameSettings) => void | Promise<void>;
+  onSaveSettings: (s: GameSettings) => Promise<void>; // i18n:allow: Promise return type
   onChangeSettings: (s: GameSettings, what: string) => void;
   onJob: (kind: 'install' | 'update' | 'uninstall') => void;
   onJobAction: (action: 'cancel' | 'retry' | 'pause' | 'resume', id: string) => void;
@@ -633,7 +634,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
     const dx = fieldOf(groups, 'dx_layer');
     const sync = fieldOf(groups, 'sync_mode');
     const flags = ['proton_enable_nvapi', 'proton_hide_nvidia_gpu', 'proton_enable_wayland', 'proton_no_d3d11', 'proton_no_d3d12', 'proton_force_large_address_aware', 'proton_old_gl_string']
-      .map((id) => fieldOf(groups, id)).filter((x): x is NonNullable<typeof x> => !!x);
+      .map((id) => fieldOf(groups, id)).filter((x): x is NonNullable<typeof x> => !!x); // i18n:allow: TypeScript type guard
     return (
       <div>
         {native && <p className="py-2 text-[12.5px] text-text-body">{t('gameSettings:runner.nativeNote')}</p>}
@@ -687,7 +688,7 @@ export function AtlasCategoryBody(p: AtlasBodyProps) {
             onOpenSettings={p.onOpenGeneral}
           />
         </div>
-        <AtlasSRow label="winetricks" desc={t('gameSettings:winetricks.note')} wide>
+        <AtlasSRow label={t('gameSettings:winetricks.kicker')} desc={t('gameSettings:winetricks.note')} wide>
           <div className="flex flex-wrap gap-1.5">
             {['vcrun2022', 'vcrun2019', 'd3dx9', 'd3dcompiler_47', 'dotnet48', 'corefonts', 'xact', 'mfc140'].map((v) => {
               const on = tricks.includes(v);
@@ -839,9 +840,7 @@ export function AtlasDrawer(props: Omit<AtlasBodyProps, 'cat' | 'onOpenGeneral' 
             <Button variant="primary" size="sm" onClick={() => {
               // A failed save keeps its dirty state: the error toast (App)
               // explains, and the footer stays until the save lands.
-              const r = props.onSaveSettings(shared.current) as unknown as Promise<void> | void;
-              if (r && typeof (r as Promise<void>).then === 'function') (r as Promise<void>).then(() => shared.markClean(), () => {});
-              else shared.markClean();
+              props.onSaveSettings(shared.current).then(() => shared.markClean(), () => {});
             }}>
               {t('atlas:footer.save')}
             </Button>
@@ -905,7 +904,7 @@ function AtlasEnvBody({ p, groups }: { p: AtlasBodyProps; groups: SettingGroup[]
                     onChange={(e) => setEnvRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, value: e.target.value } : x)))}
                     placeholder={t('gameSettings:launch.varValuePlaceholder')} spellCheck={false} className="min-w-0 flex-1 font-sans text-[13px]" />
                   <Button variant="ghost" size="icon" aria-label={t('gameSettings:launch.removeVar', { key: r.key || t('gameSettings:launch.varFallback') }) as string}
-                    onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none size-7">×</Button>
+                    onClick={() => setEnvRows((rs) => rs.filter((x) => x.id !== r.id))} className="flex-none size-7"><X aria-hidden /></Button>
                 </div>
                 {err && <p role="status" className="mt-1 font-mono text-hint text-danger">{err}</p>}
               </div>

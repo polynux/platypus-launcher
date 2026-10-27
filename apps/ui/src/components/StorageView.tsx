@@ -48,6 +48,10 @@ export function StorageView(props: StorageViewProps) {
   if (useVariant('shell.navigation') === 'sourcebar') {
     return <AtlasStorage data={data} />;
   }
+  return <ClassicStorage data={data} />;
+}
+
+function ClassicStorage({ data }: { data: ReturnType<typeof useStorageData> }) {
   // The built-in arrangement is the initial layout, so the first paint
   // already shows today's storage before the core answers over RPC.
   const layout = useThemeLayout('storage') ?? BUILTIN_LAYOUTS['storage'];

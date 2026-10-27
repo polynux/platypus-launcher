@@ -19,8 +19,8 @@ describe('attentionIssues', () => {
     const runners = [{ id: 'default', name: 'Default', is_default: true } as ProtonVersion];
     const issues = attentionIssues(games, jobs, runners);
     expect(issues.map((issue) => issue.kind)).toEqual(['install', 'outside', 'runner', 'update']);
-    expect(issues[0]).toMatchObject({ title: 'Install failed', reason: 'Disk is full', fix: 'Retry install' });
-    expect(issues[2]).toMatchObject({ title: 'Runner missing', fix: 'Use Default' });
+    expect(issues[0]).toMatchObject({ game: games[0], kind: 'install', error: 'Disk is full' });
+    expect(issues[2]).toMatchObject({ game: games[2], kind: 'runner', runnerId: 'removed' });
   });
 
   it('uses only the latest job and keeps the save-conflict/prefix signals out of the frontend list', () => {
