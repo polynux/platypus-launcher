@@ -13,6 +13,7 @@
 // (InvalidateLibrary) so purchases appear.
 import { app, BrowserWindow, session, WebContentsView } from 'electron';
 import {
+  applyStoreViewBounds,
   blockedHost,
   canOpenStore,
   explicitStoreURL,
@@ -43,6 +44,7 @@ interface Held {
   view: WebContentsView;
   plugin: StorePluginInfo;
   bounds: StoreRect | null;
+  hidden: boolean;
 }
 
 /**
@@ -184,7 +186,7 @@ export class StoreViews {
         spellcheck: false,
       },
     });
-    h = { view, plugin, bounds: null };
+    h = { view, plugin, bounds: null, hidden: false };
     view.setVisible(false);
     this.devtools(view.webContents);
     this.guard(id, h, view.webContents);
@@ -240,9 +242,16 @@ export class StoreViews {
     // content area last was (the UI's next report corrects it).
     const bounds = h.bounds ?? this.lastBounds;
     if (bounds) {
-      h.bounds = bounds;
-      h.view.setBounds(bounds);
+      if (bounds.width > 0 && bounds.height > 0) {
+        h.bounds = bounds;
+        h.view.setBounds(bounds);
+      } else {
+        h.hidden = true;
+        applyStoreViewBounds(h.view, bounds);
+        return;
+      }
     }
+    h.hidden = false;
     h.view.setVisible(true);
   }
 
@@ -284,20 +293,30 @@ export class StoreViews {
 
   /** Places the shown view over the UI's content area. */
   setBounds(bounds: StoreRect): void {
+    if (bounds.width === 0 || bounds.height === 0) {
+      const h = this.currentHeld();
+      if (h) h.hidden = true;
+      if (h) applyStoreViewBounds(h.view, bounds);
+      return;
+    }
     this.lastBounds = bounds;
     const h = this.currentHeld();
     if (!h) return;
     h.bounds = bounds;
-    h.view.setBounds(bounds);
+    h.hidden = false;
+    applyStoreViewBounds(h.view, bounds);
   }
 
   /** Re-applies the shown view's bounds (after the window resized). */
   relayout(): void {
     const h = this.currentHeld();
     const bounds = h?.bounds ?? this.lastBounds;
-    if (h && bounds) {
-      h.bounds = bounds;
-      h.view.setBounds(bounds);
+    if (h && bounds && !h.hidden) {
+      if (bounds.width > 0 && bounds.height > 0) {
+        h.bounds = bounds;
+        h.view.setBounds(bounds);
+        h.view.setVisible(true);
+      }
     }
   }
 

@@ -392,8 +392,8 @@ function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, 
           <h2 className="truncate text-[19px] font-extrabold tracking-tight">{p.name}</h2>
           <p className="truncate text-[13px] text-text-muted">
             {p.author
-              ? `${t('plugins:atlas.versionBy', { version: p.version, author: p.author })}, ${t('plugins:atlas.gameCount', { count: gameCount })}`
-              : `Version ${p.version}, ${t('plugins:atlas.gameCount', { count: gameCount })}`}
+              ? `${t('plugins:atlas.versionBy', { version: p.version, author: p.author })}${p.kind === 'store' && gameCount > 0 ? `, ${t('plugins:atlas.gameCount', { count: gameCount })}` : ''}`
+              : `Version ${p.version}${p.kind === 'store' && gameCount > 0 ? `, ${t('plugins:atlas.gameCount', { count: gameCount })}` : ''}`}
           </p>
         </div>
         {pill && (
@@ -700,7 +700,7 @@ export function PluginsBuiltIn() {
               <div className="text-[13px] font-bold">{b.name}</div>
               <div className="text-[12px] text-text-muted">{t('plugins:builtIn.protondb')}</div>
             </div>
-            <span className="flex h-5 flex-none items-center rounded-md bg-surface-strong px-[7px] text-[11.5px] font-semibold text-text-muted">{t('plugins:status.builtIn')}</span>
+            <span className="flex h-5 flex-none items-center rounded-md bg-surface-strong px-[7px] text-[11.5px] font-semibold text-text-muted">{t('plugins:section.builtInAtlas')}</span>
           </div>
         ))}
       </div>

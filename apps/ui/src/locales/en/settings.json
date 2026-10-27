@@ -32,6 +32,7 @@
   "description": "Where games install. A store's games go in their own subfolder of the default folder, for example <path>{{path}}/epic</path>. Each game's “Install to…” step offers every folder here. Steam keeps using its own library folders.",
   "pending": "not created yet",
   "default": "default",
+  "defaultBadge": "Default",
   "makeDefaultLabel": "Make {{folder}} the default folder",
   "madeDefault": "Default game folder changed",
   "makeDefault": "make default",
@@ -57,7 +58,7 @@
  },
  "cleanup": {
   "heading": "Canceled downloads",
-  "description": "How long Platypus keeps the partially downloaded data of a canceled download before deleting it. The download can still be resumed during that time. 0 deletes it right away; a paused download is never touched.",
+  "description": "Partial files from canceled installs.",
   "keepFor": "Keep for",
   "days": "days",
   "daysLabel": "Days to keep canceled downloads' data",

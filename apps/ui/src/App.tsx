@@ -1021,6 +1021,7 @@ export function AppContent() {
         return (
           <StorageView
             games={games}
+            jobs={jobs}
             onNotify={notify}
             onRemove={removeGame}
             onUninstall={(game) => runJob('uninstall', game)}
@@ -1338,7 +1339,7 @@ export function AppContent() {
         />
       )}
 
-      <Toaster />
+      <Toaster storeOpen={view.name === 'store'} />
     </div>
     </TooltipProvider>
   );

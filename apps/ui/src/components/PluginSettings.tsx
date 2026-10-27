@@ -144,7 +144,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
             <div key={f.id} className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className={cx('text-[12.5px] text-text', atlas && 'font-semibold')}>{f.label}</div>
-                {f.description && <div className="leading-relaxed text-text-muted">{f.description}</div>}
+                {f.description && <div className={atlas ? 'text-[12px] leading-relaxed text-text-muted' : 'text-hint leading-relaxed text-text-muted'}>{f.description}</div>}
               </div>
               <FieldControl field={f} value={effectiveValue(f, values)} onChange={(v) => change(f.id, v)} />
             </div>

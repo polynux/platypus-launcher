@@ -198,17 +198,17 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
     <div className="flex h-full min-h-[480px] flex-col">
       <div className={shopBar ? 'flex h-[55px] flex-none items-center gap-3 border-b border-hairline bg-ground-2 px-4 py-2.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
         {toolbarLead}
-        <ToolbarButton label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
+      <ToolbarButton shopBar={shopBar} label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
           <ChevronLeft className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
+        <ToolbarButton shopBar={shopBar} label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
           <ChevronRight className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
+        <ToolbarButton shopBar={shopBar} label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
           <RefreshCw className={cx('h-3.5 w-3.5', state.loading && 'animate-spin')} />
         </ToolbarButton>
         {!shopBar && (
-          <ToolbarButton label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
+          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
             <Home className="h-4 w-4" />
           </ToolbarButton>
         )}
@@ -234,11 +234,11 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
           )}
         </div>
         {toolbarTrail}
-        <ToolbarButton label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
+          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.openExternal')} onClick={openInBrowser} data-testid="store-external">
           <ExternalLink className="h-4 w-4" />
         </ToolbarButton>
         {!shopBar && (
-          <ToolbarButton label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
+          <ToolbarButton shopBar={shopBar} label={t('store:toolbar.close', { name: plugin.name })} onClick={onClose} data-testid="store-close">
             <X className="h-4 w-4" />
           </ToolbarButton>
         )}
@@ -308,9 +308,10 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
   );
 }
 
-function ToolbarButton({ label, children, ...rest }: {
+function ToolbarButton({ label, children, shopBar, ...rest }: {
   label: string;
   children: React.ReactNode;
+  shopBar?: boolean;
   disabled?: boolean;
   onClick?: () => void;
   'data-testid'?: string;
@@ -321,7 +322,7 @@ function ToolbarButton({ label, children, ...rest }: {
       size="none"
       title={label}
       aria-label={label}
-      className="grid size-8 flex-none place-items-center rounded-lg bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35"
+      className={shopBar ? "grid size-8 flex-none place-items-center rounded-lg bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35" : "grid h-9 w-9 flex-none place-items-center rounded-xl bg-surface text-text-muted ring-1 ring-hairline transition hover:text-text disabled:opacity-35"}
       {...rest}
     >
       {children}
@@ -336,7 +337,7 @@ function storeAddress(value: string): string {
 function useOverlayOpen(): boolean {
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    const selectors = '[role="dialog"], [role="alertdialog"], [role="menu"], [data-radix-popper-content-wrapper], [data-sonner-toast]';
+    const selectors = '[role="dialog"], [role="alertdialog"], [role="menu"], [data-radix-popper-content-wrapper]';
     const update = () => setOpen(Boolean(document.querySelector(selectors)));
     update();
     const observer = new MutationObserver(update);
