@@ -117,12 +117,13 @@ function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps &
                 return (
                   <li key={r.id} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline">
                     <div className="min-w-0 flex flex-wrap items-center gap-2">
-                      <span className="basis-full text-[13px] font-bold text-text">{r.name}</span>
+                      <div className="flex basis-full items-center gap-2"><span className="basis-auto text-[13px] font-bold text-text">{r.name}</span>
                         {r.is_default && (
                           <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[11.5px] font-semibold text-text-muted">
                             {t('runners:atlas.defaultBadge')}
                           </span>
                         )}
+                      </div>
                       <div className="basis-full truncate text-[12.5px] text-text-faint select-text">{r.path}</div>
                     </div>
                     <div className="flex min-w-0 items-center gap-1">

@@ -30,6 +30,7 @@ interface StorageViewProps {
   /** The in-memory library, joined to the snapshot's rows by game id: the
    *  actions need the full game the core calls take. */
   games: Game[];
+  jobs?: Job[];
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Removes a sideloaded game (#43): the row's panel picks the options. */
   onRemove: (game: Game, opts: RemoveOptions) => void;
@@ -405,11 +406,12 @@ function AtlasStorage({ data }: { data: StorageData }) {
     return groups;
   }, [data.drives, data.sorted, data.byId]);
   const defaultFolder = data.folders?.find((f) => f.is_default)?.path;
-  const outside = data.folders ? data.library.filter((g) => g.is_installed && !!g.install_dir && !data.folders.some((f) => isWithinFolder(g.install_dir, f.path))).map((game) => {
+  const outside = data.library.filter((g) => g.is_installed && g.outside_folder).map((game) => {
     const row = data.sorted.find((r) => r.game_id === game.id);
     return { game, size: row ? row.size_bytes + row.prefix_bytes : game.size_bytes ?? 0 };
-  }) : [];
-  const leftovers = data.jobs.filter((j) => j.leftover && !j.cleaned_at);
+  });
+  const leftovers = data.jobs.filter((j) => j.state === 'canceled' && !j.cleaned_at && (j.kind === 'install' || j.kind === 'update') && j.bytes > 0);
+  const otherLeftovers = data.jobs.filter((j) => j.leftover && !j.cleaned_at && !leftovers.includes(j));
   return (
     <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -437,7 +439,7 @@ function AtlasStorage({ data }: { data: StorageData }) {
           <AtlasDriveCard key={drive.id} drive={drive} rows={rows} data={data} defaultFolder={defaultFolder} />
         ))
       )}
-      <StoragePanels outside={outside} leftovers={leftovers} defaultFolder={defaultFolder} data={data} />
+      <StoragePanels outside={outside} leftovers={leftovers} otherLeftovers={otherLeftovers} defaultFolder={defaultFolder} data={data} />
     </div>
   );
 }
@@ -597,7 +599,7 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
   );
 }
 
-function StoragePanels({ outside, leftovers, defaultFolder, data }: { outside: { game: Game; size: number }[]; leftovers: Job[]; defaultFolder?: string; data: StorageData }) {
+function StoragePanels({ outside, leftovers, otherLeftovers, defaultFolder, data }: { outside: { game: Game; size: number }[]; leftovers: Job[]; otherLeftovers: Job[]; defaultFolder?: string; data: StorageData }) {
   const { t } = useTranslation(['storage', 'common']);
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const pickedIds = picked ?? new Set(leftovers.map((j) => j.id));
@@ -618,8 +620,17 @@ function StoragePanels({ outside, leftovers, defaultFolder, data }: { outside: {
       <h2 className="mb-2 text-[14px] font-bold">{t('storage:atlas.leftoversTitle')}</h2>
       {leftovers.length ? <><ul className="divide-y divide-hairline">{leftovers.map((j) => <li key={j.id} className="flex items-center gap-2 py-2 text-[12.5px]">
         <input type="checkbox" checked={pickedIds.has(j.id)} onChange={(e) => setPicked((prev) => { const next = new Set(prev ?? leftovers.map((job) => job.id)); e.target.checked ? next.add(j.id) : next.delete(j.id); return next; })} aria-label={j.title} className="accent-accent" />
-        <span className="min-w-0 flex-1 truncate">{j.title}, {t('storage:atlas.canceledInstall')}</span><span className="tabular-nums text-text-muted">{figure(j.bytes)}</span>
+        <span className="min-w-0 flex-1 truncate">{j.title}, {t(j.kind === 'update' ? 'storage:atlas.canceledUpdate' : 'storage:atlas.canceledInstall')}</span><span className="tabular-nums text-text-muted">{figure(j.bytes)}</span>
       </li>)}</ul><Button variant="primary" size="sm" disabled={!pickedIds.size} onClick={clean}>{t('storage:atlas.clean', { size: figure(leftovers.filter((j) => pickedIds.has(j.id)).reduce((n, j) => n + j.bytes, 0)) })}</Button></> : <p className="text-[12.5px] text-text-muted">{t('storage:atlas.nothingLeft')}</p>}
+      {otherLeftovers.map((j) => {
+        const game = data.library.find((g) => g.id === j.game_id);
+        return (
+          <div key={j.id} className="mt-2 flex items-center gap-2 text-[12px] text-text-faint">
+            <span className="min-w-0 flex-1 truncate">{j.title}: {j.leftover}</span>
+            {game && <Button variant="ghost" size="sm" onClick={() => data.openFolder(game)}>{t('storage:action.open', { title: j.title })}</Button>}
+          </div>
+        );
+      })}
     </section>
   </div>;
 }

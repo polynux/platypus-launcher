@@ -32,6 +32,7 @@
   "description": "Où s'installent les jeux. Les jeux d'une boutique vont dans leur propre sous-dossier du dossier par défaut, par exemple <path>{{path}}/epic</path>. L'étape « Installer vers… » de chaque jeu propose tous les dossiers ci-dessous. Steam garde ses propres dossiers de bibliothèque.",
   "pending": "pas encore créé",
   "default": "par défaut",
+  "defaultBadge": "Par défaut",
   "makeDefaultLabel": "Faire de {{folder}} le dossier par défaut",
   "madeDefault": "Dossier de jeux par défaut changé",
   "makeDefault": "par défaut",
@@ -57,7 +58,7 @@
  },
  "cleanup": {
   "heading": "Téléchargements annulés",
-  "description": "Combien de temps Platypus garde les données partiellement téléchargées d'un téléchargement annulé avant de les supprimer. Le téléchargement peut encore reprendre pendant ce temps. 0 le supprime aussitôt ; un téléchargement en pause n'est jamais touché.",
+  "description": "Fichiers partiels des installations annulées.",
   "keepFor": "Garder pendant",
   "days": "jours",
   "daysLabel": "Jours de conservation des données des téléchargements annulés",

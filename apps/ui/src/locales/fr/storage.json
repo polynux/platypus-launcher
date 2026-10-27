@@ -41,6 +41,7 @@
     "moveTo": "Déplacer vers {{folder}}",
     "leftoversTitle": "Fichiers restants",
     "canceledInstall": "installation annulée",
+    "canceledUpdate": "mise à jour annulée",
     "clean": "Nettoyer {{size}}",
     "nothingLeft": "Aucun fichier restant."
   }

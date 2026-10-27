@@ -41,6 +41,7 @@
     "moveTo": "Move to {{folder}}",
     "leftoversTitle": "Leftovers",
     "canceledInstall": "canceled install",
+    "canceledUpdate": "canceled update",
     "clean": "Clean {{size}}",
     "nothingLeft": "Nothing left behind."
   }

@@ -16,7 +16,7 @@ vi.mock('../../lib/theme', async (importOriginal) => ({
 
 import { StorageView } from '../StorageView';
 
-const mk = (id: string, install_dir: string): Game => ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', hero_url: '', install_dir, executable: `${install_dir}/run`, is_installed: true, size_bytes: 3e9, settings: {}, features: [] }) as Game;
+const mk = (id: string, install_dir: string): Game => ({ id, source: 'steam', store: 'steam', store_app_id: id, title: id, cover_url: '', banner_url: '', hero_url: '', install_dir, executable: `${install_dir}/run`, is_installed: true, outside_folder: id === 'outside', size_bytes: 3e9, settings: {}, features: [] }) as Game;
 const usage: DiskUsage = {
   drives: [{ id: '/', mount: '/', folders: ['/home/games'], total_bytes: 100e9, free_bytes: 30e9, games_bytes: 10e9, other_bytes: 60e9 }],
   games: [{ game_id: 'inside', title: 'Inside', source: 'steam', store: 'steam', install_dir: '/home/games/Inside', size_bytes: 10e9, prefix_bytes: 0, from_plugin: false, measured: true }],
@@ -31,12 +31,16 @@ beforeEach(() => {
 });
 
 describe('Atlas Storage panels', () => {
-  it('marks the default drive, lists games outside folders, and cleans selected leftovers', async () => {
-    render(<StorageView games={[mk('inside', '/home/games/Inside'), mk('outside', '/home/Downloads/Outside')]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
+  it('uses outside_folder and only lists canceled installs with downloaded bytes', async () => {
+    const canceled = { id: 'left', kind: 'install', title: 'Canceled', state: 'canceled', bytes: 12e9, leftover: '' } as never;
+    const moved = { id: 'move', kind: 'move', title: 'Moved', state: 'finished', bytes: 12e9, leftover: '/old' } as never;
+    render(<StorageView games={[mk('inside', '/home/games/Inside'), mk('outside', '/home/Downloads/Outside'), { ...mk('store-folder', '/steam/library'), outside_folder: false } as Game]} jobs={[canceled, moved]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
     expect(await screen.findByText('Default')).toBeInTheDocument();
     expect(screen.getByText('Outside your game folders')).toBeInTheDocument();
     expect(screen.getByText('/home/Downloads/Outside, 3.0 GB')).toBeInTheDocument();
     expect(screen.getByText('Canceled, canceled install')).toBeInTheDocument();
+    expect(screen.queryByText('store-folder')).not.toBeInTheDocument();
+    expect(screen.getByText('Moved: /old')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Clean 12.0 GB' }));
     await waitFor(() => expect(api.discardJob).toHaveBeenCalledWith('left'));
   });

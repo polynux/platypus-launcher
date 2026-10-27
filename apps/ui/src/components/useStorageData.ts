@@ -10,6 +10,7 @@ import { coreErrMsg } from '../lib/coreError';
 interface UseStorageDataProps {
   /** The in-memory library, joined to the snapshot's rows by game id. */
   games: Game[];
+  jobs?: import('../types').Job[];
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   /** Removes a sideloaded game (#43): the row's panel picks the options. */
   onRemove: (game: Game, opts: RemoveOptions) => void;
@@ -19,7 +20,7 @@ interface UseStorageDataProps {
 
 export interface StorageData extends ReturnType<typeof useStorageData> {}
 
-export function useStorageData({ games: library, onNotify, onRemove, onUninstall }: UseStorageDataProps) {
+export function useStorageData({ games: library, jobs: liveJobs = [], onNotify, onRemove, onUninstall }: UseStorageDataProps) {
   const [usage, setUsage] = useState<DiskUsage | null>(null);
   const [folders, setFolders] = useState<import('../types').GameFolder[] | null>(null);
   const [jobs, setJobs] = useState<import('../types').Job[]>([]);
@@ -46,10 +47,10 @@ export function useStorageData({ games: library, onNotify, onRemove, onUninstall
   useEffect(() => {
     Effect.runPromise(LauncherApi.getDiskUsage()).then(apply).catch(() => {});
     Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch(() => {});
-    Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
     return onDiskUsage(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => setJobs(liveJobs), [liveJobs]);
   const rescan = () => {
     Effect.runPromise(LauncherApi.refreshDiskUsage()).then(apply).catch(() => {});
   };

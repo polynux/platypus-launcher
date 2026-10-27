@@ -43,9 +43,9 @@ export function GameFoldersSettings({ onNotify }: { onNotify: (msg: string, kind
   const defaultPath = folders?.find((f) => f.is_default)?.path;
 
   if (useVariant('shell.navigation') === 'sourcebar') return <section>
-    {(folders ?? []).map((f) => <AtlasSRow key={f.path} label={<span className="block truncate" title={f.path}>{shortPath(f.path)}</span>} desc={`${f.path.split('/').filter(Boolean).at(-1) || f.path}, ${f.exists ? `${freeLabel(f.free_bytes)} free` : t('folders.pending')}`}>
+    {(folders ?? []).map((f) => <AtlasSRow key={f.path} label={<span className="block truncate" title={f.path}>{shortPath(f.path)}</span>} desc={`${f.path.split('/').filter(Boolean).at(-1) || f.path}, ${f.exists ? freeLabel(f.free_bytes) : t('folders.pending')}`}>
       <div className="flex items-center gap-2">
-        {f.is_default ? <span className="rounded-md bg-surface-strong px-[7px] py-0.5 text-[11.5px] font-semibold text-text-muted">{t('folders.default')}</span> : <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(Effect.runPromise(LauncherApi.makeDefaultGameFolder(f.path)), t('folders.madeDefault'))}>{t('folders.makeDefault')}</Button>}
+        {f.is_default ? <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[11.5px] font-semibold text-text-muted">{t('folders.defaultBadge')}</span> : <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(Effect.runPromise(LauncherApi.makeDefaultGameFolder(f.path)), t('folders.madeDefault'))}>{t('folders.makeDefault')}</Button>}
         {!f.is_default && <Button variant="ghost" size="icon" aria-label={t('folders.removeLabel', { folder: f.path })} disabled={busy} onClick={() => run(Effect.runPromise(LauncherApi.removeGameFolder(f.path)), t('folders.removed'))}><X className="size-3.5" /></Button>}
       </div>
     </AtlasSRow>)}

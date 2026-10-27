@@ -175,7 +175,7 @@ function Topbar(p: ShellProps) {
               </DropdownMenuContent>
           </DropdownMenu>
         </nav>
-        <label className="relative ml-auto block w-52 flex-none">
+        <label className="relative ml-auto block w-36 flex-none xl:w-52">
           <span className="sr-only">{t('nav:searchLibrary')}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
           <Input

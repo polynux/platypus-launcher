@@ -33,20 +33,20 @@ function TypeIcon({ Icon, tone, spin }: { Icon: typeof Info; tone: string; spin?
  *  interacting); the close button and swipe dismiss. Animations are Sonner's
  *  built-in; prefers-reduced-motion and the platypus-paused class (a game
  *  running, #49) disable them in style.css, while new toasts still appear. */
-export function Toaster() {
+export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
   const { t } = useTranslation('common');
   const plain = useVariant('label.style') === 'plain';
   return (
     <SonnerToaster
-      position={plain ? 'bottom-center' : 'top-right'}
+      position={plain && !storeOpen ? 'bottom-center' : 'top-right'}
       visibleToasts={3}
       expand={false}
       closeButton
       theme="dark"
       richColors={false}
       gap={8}
-      offset={plain ? { bottom: 40 } : { top: 64, right: 16 }}
-      mobileOffset={plain ? { bottom: 40 } : { top: 64, right: 16 }}
+      offset={plain && !storeOpen ? { bottom: 40 } : { top: 64, right: 16 }}
+      mobileOffset={plain && !storeOpen ? { bottom: 40 } : { top: 64, right: 16 }}
       containerAriaLabel={t('toast.region', 'Notifications')}
       className={cn('platypus-toaster')}
       icons={{

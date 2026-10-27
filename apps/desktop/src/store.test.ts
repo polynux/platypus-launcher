@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   blockedHost,
+  applyStoreViewBounds,
   canOpenStore,
   explicitStoreURL,
   insideDomains,
@@ -23,8 +24,9 @@ const steam: StorePluginInfo = {
   storefront_domains: ['steampowered.com', 'steamcommunity.com', 'steamstatic.com'],
 };
 
-test('bounds are finite, positive, in-range rects', () => {
+test('bounds are finite, nonnegative, in-range rects and zero hides the view', () => {
   assert.deepEqual(validStoreBounds({ x: 224, y: 48, width: 800.4, height: 600 }), { x: 224, y: 48, width: 800, height: 600 });
+  assert.deepEqual(validStoreBounds({ x: 0, y: 0, width: 0, height: 0 }), { x: 0, y: 0, width: 0, height: 0 });
   for (const bad of [
     null, undefined, 'rect', 5, [],
     { x: 0, y: 0, width: 0, height: 600 },
@@ -38,6 +40,15 @@ test('bounds are finite, positive, in-range rects', () => {
   ]) {
     assert.equal(validStoreBounds(bad), null, JSON.stringify(bad));
   }
+});
+
+test('zero store bounds hide without replacing the last visible placement', () => {
+  const calls: unknown[] = [];
+  const view = { setVisible: (visible: boolean) => calls.push(['visible', visible]), setBounds: (bounds: unknown) => calls.push(['bounds', bounds]) };
+  applyStoreViewBounds(view, { x: 0, y: 0, width: 0, height: 0 });
+  assert.deepEqual(calls, [['visible', false]]);
+  applyStoreViewBounds(view, { x: 10, y: 20, width: 300, height: 400 });
+  assert.deepEqual(calls.slice(1), [['visible', true], ['bounds', { x: 10, y: 20, width: 300, height: 400 }]]);
 });
 
 test('partitions are per plugin and persistent', () => {
