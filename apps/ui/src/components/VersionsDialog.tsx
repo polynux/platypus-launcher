@@ -77,7 +77,7 @@ export function VersionsDialog({ game, plugin, onClose, onChanged, onNotify, emb
       (v) => { setInfo(v); if (resetPin) setPinIt(v.pinned != null); },
       (e) => setError(coreErrMsg(e)),
     );
-  }, [game]);
+  }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [load]);
 
   const select = (c: VersionChoice) => { setChoice(c); setStep('pick'); };

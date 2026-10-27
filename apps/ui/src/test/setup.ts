@@ -18,8 +18,6 @@ if (typeof window.scrollTo !== 'function' || window.scrollTo.toString().includes
   (window as unknown as Record<string, unknown>).scrollTo = () => {};
 } else {
   try {
-    const origWin = window.scrollTo.bind(window);
-    void origWin;
     (window as unknown as Record<string, unknown>).scrollTo = () => {};
   } catch {
     // Keep jsdom's stub.

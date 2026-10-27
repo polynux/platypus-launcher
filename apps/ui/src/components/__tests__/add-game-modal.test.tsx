@@ -6,6 +6,7 @@ import { Effect } from 'effect';
 const api = vi.hoisted(() => ({
   pickGameExecutable: vi.fn(),
   pickFolder: vi.fn(),
+  detectGameExecutable: vi.fn(),
 }));
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: new Proxy(api, {
@@ -233,5 +234,45 @@ describe('AddGameModal release year (issue #35)', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/release year/);
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddGameModal executable detection (issue #154)', () => {
+  it('debounces keystrokes and keeps the latest path when an older answer is slower', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveFirst!: (v: { native: boolean; kind: string }) => void;
+      const first = new Promise<{ native: boolean; kind: string }>((r) => { resolveFirst = r; });
+      api.detectGameExecutable.mockImplementation((path: string) =>
+        path === '/g/first.exe' ? first : Promise.resolve({ native: true, kind: 'elf' }),
+      );
+      open();
+      fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+      const program = screen.getByLabelText('Program');
+      fireEvent.change(program, { target: { value: '/g/first.exe' } });
+      // Still debouncing: no RPC yet for the intermediate keystroke.
+      expect(api.detectGameExecutable).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(250);
+      expect(api.detectGameExecutable).toHaveBeenCalledTimes(1);
+
+      fireEvent.change(program, { target: { value: '/g/second' } });
+      await vi.advanceTimersByTimeAsync(250);
+      expect(api.detectGameExecutable).toHaveBeenCalledTimes(2);
+
+      // The stale first answer resolves last and must not win.
+      resolveFirst({ native: false, kind: 'windows-exe' });
+      await vi.runAllTimersAsync();
+      // Flush the pending Effect promises.
+      await Promise.resolve();
+      await Promise.resolve();
+      vi.useRealTimers();
+      // Latest path is native: the run choice names the native auto default,
+      // not the stale Wine answer.
+      await waitFor(() =>
+        expect(screen.getByRole('combobox', { name: 'Run with' })).toHaveTextContent('detected: native'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

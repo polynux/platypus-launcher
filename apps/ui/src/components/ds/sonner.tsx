@@ -70,7 +70,7 @@ export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
           closeButton:
             'platypus-toast-close absolute flex size-7 items-center justify-center rounded-xl p-0 text-text-muted transition hover:bg-surface-strong hover:text-text',
           content: 'platypus-toast-content flex min-w-0 flex-1 flex-col pr-5',
-          icon: plain ? 'hidden' : 'platypus-toast-icon flex flex-none items-center',
+          icon: 'platypus-toast-icon flex flex-none items-center',
         },
       }}
     />

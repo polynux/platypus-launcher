@@ -213,7 +213,7 @@ export function buildRouteTree(AppComponent: React.ComponentType) {
   return routeTree;
 }
 
-export function createAppRouter(AppComponent: React.ComponentType, history?: RouterHistory): any {
+export function createAppRouter(AppComponent: React.ComponentType, history?: RouterHistory): ReturnType<typeof createRouter> {
   // The project's tsconfig runs without strictNullChecks; the router's types
   // ask for it, so the options go in as never (the tree is still validated
   // at runtime by the router itself).

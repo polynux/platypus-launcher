@@ -1,5 +1,5 @@
 // i18n: converted
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Effect } from 'effect';
 import { ChevronDown, FolderOpen } from 'lucide-react';
@@ -65,18 +65,25 @@ export function AddGameModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
   // What the executable looks like by content (issue #47): the default of the
   // "Run with" choice. Null until it answers (or when there is no backend).
   const [detected, setDetected] = useState<{ native: boolean; kind: string } | null>(null);
+  const detectSeq = useRef(0);
   React.useEffect(() => {
     const path = exe.trim();
     if (!path) {
+      detectSeq.current++;
       setDetected(null);
       return;
     }
     let live = true;
-    Effect.runPromise(LauncherApi.detectGameExecutable(path)).then(
-      (d) => { if (live) setDetected(d); },
-      () => { if (live) setDetected(null); },
-    );
-    return () => { live = false; };
+    // One RPC per keystroke spams the core and races: the slow answer for an
+    // older path must not overwrite the current one.
+    const timer = setTimeout(() => {
+      const my = ++detectSeq.current;
+      Effect.runPromise(LauncherApi.detectGameExecutable(path)).then(
+        (d) => { if (live && my === detectSeq.current) setDetected(d); },
+        () => { if (live && my === detectSeq.current) setDetected(null); },
+      );
+    }, 250);
+    return () => { live = false; clearTimeout(timer); };
   }, [exe]);
   const effectiveNative = runMode === 'native' ? true : runMode === 'wine' ? false : (detected?.native ?? false);
   const advancedSet = (workingDir.trim() ? 1 : 0) + (!effectiveNative && winePrefix.trim() ? 1 : 0) + (runMode !== 'auto' ? 1 : 0) + (yearParsed.year ? 1 : 0);

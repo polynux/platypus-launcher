@@ -4,7 +4,7 @@
 // `rounded-2xl` to `var(--radius-2xl)`, so variables set here restyle them.
 // Token names are the ones in apps/ui/src/style.css (@theme and :root).
 import { Effect } from 'effect';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { LauncherApi } from '../effect/runtime';
 import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
 import { VARIANT_DEFAULTS, type VariantAxis, type VariantValues } from '../gen/catalog';
@@ -81,11 +81,6 @@ function normalizeScheme(s: string | null | undefined): ColorScheme {
   return s === 'light' ? 'light' : s === 'black' ? 'black' : 'dark';
 }
 
-/** The stored scheme pick, dark when nothing is stored. */
-export function getColorSchemeChoice(): ColorScheme {
-  return schemeChoice;
-}
-
 /** The scheme actually painted: the stored pick when the theme declares it,
  *  else dark. Dark is always valid: it is the theme's own tokens. */
 export function getEffectiveScheme(): ColorScheme {
@@ -124,23 +119,6 @@ export function useThemeSchemes(): ColorScheme[] {
   if (currentThemeTokens?.schemes?.light) out.push('light');
   if (currentThemeTokens?.schemes?.black) out.push('black');
   return out;
-}
-
-/** The stored scheme pick, or dark when nothing is stored. */
-export function loadColorSchemeChoice(): Promise<ColorScheme> {
-  try {
-    return Effect.runPromise(LauncherApi.getLauncherSettings())
-      .then((s) => {
-        const next = normalizeScheme((s as { color_scheme?: string })?.color_scheme ?? '');
-        schemeChoice = next;
-        if (currentThemeTokens) effectiveScheme = computeEffective(next, currentThemeTokens);
-        notifyScheme();
-        return next;
-      })
-      .catch(() => schemeChoice);
-  } catch {
-    return Promise.resolve(schemeChoice);
-  }
 }
 
 /** Saves the scheme pick. A failed write keeps what is on screen. */
@@ -255,6 +233,10 @@ export function currentThemeVariables(): Record<string, string> {
 export function applyTheme(theme: ThemeTokens): void {
   currentThemeTokens = theme;
   effectiveScheme = computeEffective(schemeChoice, theme);
+  // The core sends every axis resolved; a cached theme from an older build
+  // may lack new axes, which keep their built-in value. Resolve before
+  // touching the DOM so dataset reads the new theme, not the previous one.
+  currentVariants = { ...VARIANT_DEFAULTS, ...(theme.variants ?? {}) } as VariantValues;
   const style = document.documentElement.style;
   const vars = themeVariables(theme, effectiveScheme);
   // Kept before the listeners run, so a tone repainted from one of them
@@ -274,9 +256,6 @@ export function applyTheme(theme: ThemeTokens): void {
     // No DOM: the variant hook still reads the cached value.
   }
   loadThemeFonts(theme.fonts);
-  // The core sends every axis resolved; a cached theme from an older build
-  // may lack new axes, which keep their built-in value.
-  currentVariants = { ...VARIANT_DEFAULTS, ...(theme.variants ?? {}) } as VariantValues;
   for (const listener of variantListeners) listener();
   notifyScheme();
 }
@@ -348,10 +327,14 @@ export function loadTheme(): Promise<void> {
  *  for an unknown view, or when the read fails: the view then keeps showing
  *  its built-in arrangement, like a failed theme read keeps the applied theme. */
 export function loadThemeLayout(view: string): Promise<ThemeLayout | null> {
+  const fallback = BUILTIN_LAYOUTS[view] ?? null;
   try {
-    return Effect.runPromise(LauncherApi.getThemeLayout(view)).catch(() => BUILTIN_LAYOUTS[view] ?? null);
+    return Effect.runPromise(LauncherApi.getThemeLayout(view)).then(
+      (l) => l ?? fallback,
+      () => fallback,
+    );
   } catch {
-    return Promise.resolve(BUILTIN_LAYOUTS[view] ?? null);
+    return Promise.resolve(fallback);
   }
 }
 
@@ -360,11 +343,18 @@ export function loadThemeLayout(view: string): Promise<ThemeLayout | null> {
  *  instead of flashing empty, and refetches when the picked theme changes. */
 export function useThemeLayout(view: string): ThemeLayout | null {
   const [layout, setLayout] = useState<ThemeLayout | null>(() => BUILTIN_LAYOUTS[view] ?? null);
+  const seq = useRef(0);
   useEffect(() => {
     let live = true;
-    const fetch = () => { void loadThemeLayout(view).then((l) => { if (live && l) setLayout(l); }); };
+    const fetch = () => {
+      const my = ++seq.current;
+      void loadThemeLayout(view).then((l) => {
+        if (live && my === seq.current) setLayout(l ?? BUILTIN_LAYOUTS[view] ?? null);
+      });
+    };
     fetch();
-    return onThemeApplied(fetch);
+    const off = onThemeApplied(fetch);
+    return () => { live = false; off(); };
   }, [view]);
   return layout;
 }
