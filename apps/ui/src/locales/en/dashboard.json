@@ -68,6 +68,7 @@
     "everythingWorks": "Everything works.",
     "friendsOnline": "Friends online",
     "onlineCount": "{{count}} online",
-    "online": "Online"
+    "online": "Online",
+    "achievements": "{{unlocked}}/{{total}} achievements"
   }
 }

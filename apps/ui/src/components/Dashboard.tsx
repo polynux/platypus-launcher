@@ -690,6 +690,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
 }
 
 function ContinueMeta({ game, sub }: { game: Game; sub: string }) {
+  const { t } = useTranslation('dashboard');
   const [progress, setProgress] = useState<{ unlocked: number; total: number } | null>(null);
   useEffect(() => {
     if (typeof LauncherApi.getGameAchievements !== 'function') return;
@@ -698,6 +699,8 @@ function ContinueMeta({ game, sub }: { game: Game; sub: string }) {
       if (alive && r) setProgress(r);
     }).catch(() => {});
     return () => { alive = false; };
-  }, [game]);
-  return <>{sub}{progress ? ` · ${progress.unlocked}/${progress.total} achievements` : ''}</>;
+    // Keyed on the id: library refreshes replace the game object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game.id]);
+  return <>{sub}{progress ? ` · ${t('dashboard:home.achievements', { unlocked: progress.unlocked, total: progress.total })}` : ''}</>;
 }

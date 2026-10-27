@@ -68,6 +68,7 @@
     "everythingWorks": "Tout fonctionne.",
     "friendsOnline": "Amis en ligne",
     "onlineCount": "{{count}} en ligne",
-    "online": "En ligne"
+    "online": "En ligne",
+    "achievements": "{{unlocked}}/{{total}} succès"
   }
 }
