@@ -74,7 +74,7 @@ function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps &
   const { t } = useTranslation(['nav', 'runners']);
   const fallback = runners.find((r) => r.is_default) ?? runners[0];
   const uses = (id: string, name: string): Game[] =>
-    games.filter((g) => !g.native && (g.settings.runner_id === id || g.settings.runner_id === name));
+    games.filter((g) => !g.native && (g.settings.runner_id === id || g.settings.runner_id === name || ((!g.settings.runner_id || g.settings.runner_id === 'auto') && fallback?.id === id)));
   return (
     <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">

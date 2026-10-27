@@ -827,6 +827,18 @@ export function AppContent() {
   // owns the filters (#135), so the list filters through App's state and
   // keeps only its filter field and sort; the add-game entry lives in the
   // More places menu.
+  const resetLibraryFilters = () => {
+    setOwnership('owned');
+    setSelectedStores([]);
+    setSource('all');
+    setSearch('');
+    setAtlasTier('all');
+    setAtlasStatus('all');
+    setAtlasLending('all');
+    if (view.name !== 'library') setView({ name: 'library' });
+    else setView({ name: 'library', collection: undefined });
+  };
+
   const renderListDetail = (initialSelectedId?: string | null) => (
     <LibraryListDetail
       games={games}
@@ -856,17 +868,7 @@ export function AppContent() {
       onOpenSettings={openGameSettings}
       onInstall={(g) => runJob('install', g)}
       sessions={sessions}
-      onResetFilters={() => {
-        setOwnership('owned');
-        setSelectedStores([]);
-        setSource('all');
-        setSearch('');
-        setAtlasTier('all');
-        setAtlasStatus('all');
-        setAtlasLending('all');
-        if (view.name !== 'library') setView({ name: 'library' });
-        else setView({ name: 'library', collection: undefined });
-      }}
+      onResetFilters={resetLibraryFilters}
     />
   );
 
@@ -951,7 +953,7 @@ export function AppContent() {
               onInstall={(g) => runJob('install', g)}
               onOpenSettings={openGameSettings}
               onManageCollections={(gameId) => setCollectionsDialog({ gameId })}
-              onResetFilters={() => setView({ name: 'library', collection: undefined })}
+              onResetFilters={resetLibraryFilters}
             />
           );
         }

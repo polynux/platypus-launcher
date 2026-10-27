@@ -99,7 +99,7 @@ describe('library list-detail', () => {
     expect(onPlay).toHaveBeenCalledWith('gamma');
   });
 
-  it('moves and launches from the page body, and slash focuses the filter', () => {
+  it('moves from the page body, but does not launch there, and slash focuses the filter', () => {
     const { onPlay } = list();
     fireEvent.keyDown(document.body, { key: 'j' });
     expect(screen.getByTestId('stage')).toHaveTextContent('Beta');
@@ -107,7 +107,7 @@ describe('library list-detail', () => {
     expect(document.activeElement).toBe(screen.getByPlaceholderText('Filter'));
     document.body.focus();
     fireEvent.keyDown(document.body, { key: 'Enter' });
-    expect(onPlay).toHaveBeenCalledWith('beta');
+    expect(onPlay).not.toHaveBeenCalled();
   });
 
   it('marks only the selected row current', () => {
@@ -150,6 +150,22 @@ describe('library list-detail', () => {
     list({ initialSelectedId: 'gamma' });
     expect(screen.getByTestId('stage')).toHaveTextContent('Gamma');
     expect(screen.getByRole('button', { name: /Gamma/ }).getAttribute('aria-current')).toBe('true');
+  });
+
+  it('keeps a routed game selected when filters exclude it', () => {
+    list({ initialSelectedId: 'beta', ownership: 'installed' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Beta');
+  });
+
+  it('does not let stage arrows move the list or Enter on body launch', () => {
+    const { onPlay } = list();
+    const stageButton = screen.getByTestId('stage').appendChild(document.createElement('button'));
+    stageButton.focus();
+    fireEvent.keyDown(stageButton, { key: 'ArrowDown' });
+    expect(screen.getByTestId('stage')).toHaveTextContent('Alpha');
+    document.body.focus();
+    fireEvent.keyDown(document.body, { key: 'Enter' });
+    expect(onPlay).not.toHaveBeenCalled();
   });
 });
 

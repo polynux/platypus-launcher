@@ -70,7 +70,7 @@ const ROWS_PER_GROUP = 200;
 /** Dot colour for a friend or status, from the theme tokens only. A friend in
  *  a game reads blue; offline and invisible stay hollow. */
 function presenceDot(state: string, inGame: boolean): string {
-  if (inGame) return 'bg-[#7fb8ff]';
+  if (inGame) return 'bg-info';
   switch (state) {
     case 'online':
     case 'looking':
@@ -104,7 +104,7 @@ function PanelAvatar({ name, url, dot, size = 28 }: { name: string; url?: string
 /** The friend's sub-line: what they play, when they were last online, or their state. */
 function FriendSub({ friend: f }: { friend: SocialFriend }) {
   const { t } = useTranslation('chat');
-  if (f.game) return <span className="text-[#9cc7ff] light:text-accent">{t('chat:row.playing', { title: f.game.title })}</span>;
+  if (f.game) return <span className="text-info">{t('chat:row.playing', { title: f.game.title })}</span>;
   if (f.state === 'offline' || f.state === 'invisible') {
     return <>{f.lastSeen ? t('chat:row.lastOnline', { ago: formatRelativeAge(f.lastSeen * 1000) }) : t('chat:row.offline')}</>;
   }
@@ -121,6 +121,7 @@ export function AtlasFriendsPanel(p: AtlasFriendsPanelProps) {
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const el = e.target as Element | null;
+      if (document.querySelector('[role="dialog"]')) return;
       if (el?.closest?.('[role="listbox"], [data-radix-popper-content-wrapper], input, textarea')) return;
       e.stopPropagation();
       if (p.chat) p.onBackFromChat?.();

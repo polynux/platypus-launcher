@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Effect } from 'effect';
 import type { DiskUsage, Game } from '../../types';
 
@@ -56,5 +56,27 @@ describe('Atlas Storage panels', () => {
     // Alpha is cleaned; Beta stays unticked.
     rerender(<StorageView {...props} jobs={[job('b', 'Beta')]} />);
     expect(screen.getByRole('checkbox', { name: 'Beta' })).not.toBeChecked();
+  });
+
+  it('does not match sibling paths by mount prefix', async () => {
+    const driveUsage: DiskUsage = {
+      ...usage,
+      drives: [
+        { ...usage.drives[0], id: '/home/games', mount: '/home/games', folders: ['/home/games'] },
+        { ...usage.drives[0], id: '/home/games-old', mount: '/home/games-old', folders: ['/home/games-old'] },
+      ],
+      games: [{ ...usage.games[0], game_id: 'outside', title: 'Outside', install_dir: '/home/games-old/Outside' }],
+    };
+    api.getDiskUsage.mockReturnValue(Effect.succeed(driveUsage));
+    render(<StorageView games={[mk('outside', '/home/games-old/Outside')]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
+    expect(within(await screen.findByRole('region', { name: '/home/games-old' })).getAllByText('Outside')).toHaveLength(2);
+    expect(within(screen.getByRole('region', { name: '/home/games' })).queryByText('Outside')).toBeNull();
+  });
+
+  it('renders one move dialog for an outside-folder game', async () => {
+    const outside = { ...mk('outside', '/home/Downloads/Outside'), outside_folder: true } as Game;
+    render(<StorageView games={[outside]} onNotify={() => {}} onRemove={() => {}} onUninstall={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Move to games/i }));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
   });
 });

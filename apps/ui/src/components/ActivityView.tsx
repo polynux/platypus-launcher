@@ -146,7 +146,7 @@ function AtlasActivity({ events, games, onOpenGame }: { events: ActivityEvent[];
                 const title = (e.game && byId.get(e.game)?.title) || e.game || '';
                 return (
                   <li key={e.id} className="grid min-h-[38px] grid-cols-[28px_52px_minmax(140px,220px)_minmax(0,1fr)] items-center gap-2.5 rounded-[7px] px-2 transition hover:bg-surface">
-                    <span className={cx('grid size-[26px] place-items-center rounded-[7px] bg-surface-strong', e.type === 'session' ? 'text-accent' : e.type === 'cloud' ? 'text-info' : e.type === 'unlock' ? 'text-[#f2c94c]' : 'text-text-muted')}>
+                    <span className={cx('grid size-[26px] place-items-center rounded-[7px] bg-surface-strong', e.type === 'session' ? 'text-accent' : e.type === 'cloud' ? 'text-info' : e.type === 'unlock' ? 'text-attention' : 'text-text-muted')}>
                       <Icon className="size-3.5" />
                     </span>
                     <time className="text-[12px] tabular-nums text-text-faint">{clock(e.ts)}</time>

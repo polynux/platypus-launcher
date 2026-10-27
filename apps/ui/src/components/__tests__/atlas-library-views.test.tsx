@@ -100,6 +100,13 @@ describe('atlas table (issue #136)', () => {
     void rerender;
     void table;
   });
+
+  it('keeps row actions available to keyboard focus', () => {
+    const { container } = rtlRender(<AtlasLibraryTable games={games()} runners={[]} sort={null} onSort={() => {}} jobs={jobsById([])} onOpen={() => {}} />, { wrapper: TooltipProvider });
+    const actions = container.querySelector('tr.group > td:last-child span.relative');
+    expect(actions).toHaveClass('group-focus-within:opacity-100');
+    expect(actions).not.toHaveClass('hidden');
+  });
 });
 
 describe('atlas page (issue #136)', () => {
