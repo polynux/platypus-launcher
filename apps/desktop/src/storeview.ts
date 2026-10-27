@@ -266,17 +266,13 @@ export class StoreViews {
     const content = this.win.contentView;
     if (!content.children.includes(h.view)) content.addChildView(h.view);
     // A view held before any bounds report has none yet: place it where the
-    // content area last was (the UI's next report corrects it).
+    // content area last was (the UI's next report corrects it). Only
+    // non-zero rects are stored (setBounds keeps zero out of lastBounds),
+    // so there is no zero-bounds case here.
     const bounds = h.bounds ?? this.lastBounds;
-    if (bounds) {
-      if (bounds.width > 0 && bounds.height > 0) {
-        h.bounds = bounds;
-        h.view.setBounds(bounds);
-      } else {
-        h.hidden = true;
-        applyStoreViewBounds(h.view, bounds);
-        return;
-      }
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      h.bounds = bounds;
+      h.view.setBounds(bounds);
     }
     h.hidden = false;
     h.view.setVisible(true);

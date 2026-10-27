@@ -69,7 +69,7 @@ export function InstallOptionsDialog({ game, plugin, mode, onClose, onChanged, o
       () => { /* unknown: the total says so, and the install isn't blocked on it */ },
     );
     return () => { live = false; };
-  }, [game]);
+  }, [game.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const installing = mode === 'install';
   const added = groups ? addedBytes(groups, choices) : 0;

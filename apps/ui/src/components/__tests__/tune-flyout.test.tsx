@@ -255,4 +255,21 @@ describe('TuneFlyout', () => {
     const { container } = mount(game({}, { use_gamescope: false }));
     (expect(await axe(container)) as any).toHaveNoViolations();
   });
+
+  it('drops the previous game schema while the next one loads (issue #154)', async () => {
+    api.getRunnerOptions.mockReturnValue(Effect.succeed(groups()));
+    const { rerender } = mount(game({ id: 'g1', title: 'First' }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Compatibility layer' })).toBeInTheDocument());
+
+    // The next game's answer hangs: the flyout must not keep offering the
+    // previous game's runner choices.
+    api.getRunnerOptions.mockReturnValue(
+      Effect.tryPromise({
+        try: () => new Promise<never>(() => {}),
+        catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+      }) as never,
+    );
+    rerender(<TuneFlyout game={game({ id: 'g2', title: 'Second' })} open onClose={vi.fn()} onAllSettings={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Compatibility layer' })).toBeNull());
+  });
 });

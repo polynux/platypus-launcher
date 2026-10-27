@@ -281,4 +281,15 @@ describe('Pinned game', () => {
     await waitFor(() => expect(api.unpinGameVersion).toHaveBeenCalledWith('p.echo.tiny'));
     expect(api.pinGameVersion).not.toHaveBeenCalled();
   });
+
+  it('does not refetch when the game object identity changes but the id does not (issue #154)', async () => {
+    api.getGameVersions.mockResolvedValue(info());
+    const g = game();
+    const { rerender } = render(<VersionsDialog game={g} plugin={plugin} onClose={vi.fn()} onChanged={vi.fn()} onNotify={vi.fn()} />);
+    await screen.findByRole('radiogroup', { name: 'Channels' });
+    expect(api.getGameVersions).toHaveBeenCalledTimes(1);
+    rerender(<VersionsDialog game={{ ...g }} plugin={plugin} onClose={vi.fn()} onChanged={vi.fn()} onNotify={vi.fn()} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getGameVersions).toHaveBeenCalledTimes(1);
+  });
 });

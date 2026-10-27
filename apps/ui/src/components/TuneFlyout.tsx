@@ -135,10 +135,13 @@ export function TuneFlyout({
   // options). A game the store client launches gets no `runner` group.
   useEffect(() => {
     if (!open) return;
+    // A new game starts with no schema: until its own answer arrives the
+    // switches stay locked instead of reading the previous game's.
+    setGroups(null);
     let live = true;
     Effect.runPromise(LauncherApi.getRunnerOptions(game)).then(
-      (g) => live && setGroups(g),
-      () => live && setGroups([]),
+      (g) => { if (live) setGroups(g); },
+      () => { if (live) setGroups([]); },
     );
     return () => { live = false; };
   }, [open, game.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -158,6 +161,7 @@ export function TuneFlyout({
   // height untouched. Reposition on scroll and resize so it follows the
   // anchor, and cap the height so it scrolls inside itself.
   const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  const raf = useRef(0);
   useLayoutEffect(() => {
     if (!open) { setPos(null); return; }
     const place = () => {
@@ -188,12 +192,18 @@ export function TuneFlyout({
       maxHeight = Math.max(200, Math.min(520, maxHeight));
       setPos({ left, top, maxHeight });
     };
+    // Scroll fires every tick: coalesce the layout work onto one frame.
+    const schedule = () => {
+      if (raf.current) return;
+      raf.current = requestAnimationFrame(() => { raf.current = 0; place(); });
+    };
     place();
-    window.addEventListener('scroll', place, true);
-    window.addEventListener('resize', place);
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
     return () => {
-      window.removeEventListener('scroll', place, true);
-      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+      if (raf.current) { cancelAnimationFrame(raf.current); raf.current = 0; }
     };
   }, [open, game.id]);
 

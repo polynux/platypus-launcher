@@ -265,4 +265,23 @@ describe('InstallOptionsDialog install location', () => {
     expect((await screen.findByText(/refusing to install into system folder/))).toBeTruthy();
     expect(screen.getByRole('radio', { name: /\/g\/echo/ }).getAttribute('aria-checked')).toBe('true');
   });
+
+  it('does not refetch when the game object identity changes but the id does not (issue #154)', async () => {
+    api.getGameOptions.mockResolvedValue(options());
+    api.getInstallFreeSpace.mockResolvedValue(100 * MiB);
+    api.getInstallSize.mockResolvedValue(0);
+    api.getInstallLocations.mockResolvedValue([{ folder: '/g/echo', kind: 'default', free_bytes: 100 * MiB, exists: true }]);
+    const g = game();
+    const { rerender } = render(
+      <InstallOptionsDialog game={g} plugin={plugin} mode="install" onClose={vi.fn()} onChanged={vi.fn()} onNotify={vi.fn()} />,
+    );
+    await ready();
+    expect(api.getGameOptions).toHaveBeenCalledTimes(1);
+    rerender(
+      <InstallOptionsDialog game={{ ...g }} plugin={plugin} mode="install" onClose={vi.fn()} onChanged={vi.fn()} onNotify={vi.fn()} />,
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getGameOptions).toHaveBeenCalledTimes(1);
+    expect(api.getInstallSize).toHaveBeenCalledTimes(1);
+  });
 });

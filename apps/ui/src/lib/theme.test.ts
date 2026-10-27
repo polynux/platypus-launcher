@@ -6,9 +6,11 @@ import { Effect } from 'effect';
 import type { ThemeTokens } from '../types';
 
 const getTheme = vi.hoisted(() => vi.fn());
-vi.mock('../effect/runtime', () => ({ LauncherApi: { getTheme: (id: string) => getTheme(id) } }));
+const getThemeLayout = vi.hoisted(() => vi.fn());
+vi.mock('../effect/runtime', () => ({ LauncherApi: { getTheme: (id: string) => getTheme(id), getThemeLayout: (view: string) => getThemeLayout(view) } }));
 
-import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, loadThemeFonts, themeVariables, washImage } from './theme';
+import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, loadThemeFonts, loadThemeLayout, themeVariables, washImage } from './theme';
+import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 
 const warm: ThemeTokens = {
   id: 'warm',
@@ -35,7 +37,9 @@ const root = () => document.documentElement.style;
 beforeEach(() => {
   window.localStorage.clear();
   root().cssText = '';
+  document.documentElement.dataset.labelStyle = '';
   getTheme.mockReset();
+  getThemeLayout.mockReset();
 });
 
 afterEach(() => {
@@ -203,6 +207,19 @@ describe('applying a theme', () => {
     });
     await expect(loadTheme()).resolves.toBeUndefined();
     expect(root().getPropertyValue('--color-accent')).toBe('oklch(82.8% 0.189 84.429)');
+  });
+
+  it('writes data-label-style from the new theme on the first apply (issue #154)', () => {
+    applyTheme(warm);
+    expect(document.documentElement.dataset.labelStyle).toBe('mono');
+    applyTheme({ ...warm, id: 'atlas', variants: { 'label.style': 'plain' } });
+    expect(document.documentElement.dataset.labelStyle).toBe('plain');
+  });
+
+  it('falls back to the built-in layout when the theme ships none (issue #154)', async () => {
+    getThemeLayout.mockReturnValue(Effect.succeed(null));
+    await expect(loadThemeLayout('dashboard')).resolves.toEqual(BUILTIN_LAYOUTS['dashboard']);
+    await expect(loadThemeLayout('attic')).resolves.toBeNull();
   });
 });
 
