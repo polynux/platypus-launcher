@@ -86,13 +86,51 @@ describe('StoreView toolbar', () => {
   it('hides the native storefront while an overlay is mounted', async () => {
     const bridge = storeBridgeStub();
     window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    // jsdom lays everything out at 0×0: give the area a real size.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 300, height: 200 } as DOMRect);
     render(<TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} /></TooltipProvider>);
+    expect(bridge.setBounds).toHaveBeenLastCalledWith({ x: 10, y: 20, width: 300, height: 200 });
     const dialog = document.createElement('div');
     dialog.setAttribute('role', 'dialog');
     await act(async () => { document.body.append(dialog); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(bridge.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 0, height: 0 });
     await act(async () => { dialog.remove(); await new Promise((resolve) => setTimeout(resolve, 0)); });
-    expect(bridge.setBounds).toHaveBeenLastCalledWith(expect.objectContaining({ width: 0, height: 0 }));
+    // Closing the overlay puts the view back over the area.
+    expect(bridge.setBounds).toHaveBeenLastCalledWith({ x: 10, y: 20, width: 300, height: 200 });
+    rect.mockRestore();
+  });
+
+  it('hides the native storefront when the open fails', async () => {
+    // jsdom lays everything out at 0×0: give the area a real size.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 300, height: 200 } as DOMRect);
+    const bridge = storeBridgeStub();
+    bridge.open = vi.fn(async () => { throw new Error('ERR_CONNECTION_REFUSED (-102)'); });
+    window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    render(<TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} shopBar /></TooltipProvider>);
+    expect(bridge.setBounds).toHaveBeenCalledWith({ x: 10, y: 20, width: 300, height: 200 });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(bridge.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 0, height: 0 });
+    rect.mockRestore();
+  });
+
+  it('shows the error state and hides the view on a later failed load', () => {
+    // jsdom lays everything out at 0×0: give the area a real size.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 10, top: 20, width: 300, height: 200 } as DOMRect);
+    const bridge = storeBridgeStub();
+    let listener!: (ev: never) => void;
+    bridge.onEvent = vi.fn((cb: (ev: never) => void) => { listener = cb; return () => {}; });
+    window.platypus = { ...window.platypus!, store: bridge } as typeof window.platypus;
+    render(<TooltipProvider><StoreView plugin={plugin as never} onClose={() => {}} onNotify={() => {}} shopBar /></TooltipProvider>);
+    expect(bridge.setBounds).toHaveBeenCalledWith({ x: 10, y: 20, width: 300, height: 200 });
+    act(() => {
+      listener({
+        kind: 'failed', pluginId: 'echo', url: 'http://127.0.0.1:18427/store/', canGoBack: false,
+        canGoForward: false, title: '', loading: false, error: 'ERR_CONNECTION_REFUSED (-102)',
+      } as never);
+    });
+    expect(bridge.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 0, height: 0 });
+    expect(document.body.textContent).toMatch(/ERR_CONNECTION_REFUSED/);
+    rect.mockRestore();
   });
 
   it('opens the storefront and reports its bounds', () => {

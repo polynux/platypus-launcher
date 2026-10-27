@@ -601,10 +601,12 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
 
 function StoragePanels({ outside, leftovers, otherLeftovers, defaultFolder, data }: { outside: { game: Game; size: number }[]; leftovers: Job[]; otherLeftovers: Job[]; defaultFolder?: string; data: StorageData }) {
   const { t } = useTranslation(['storage', 'common']);
-  const [picked, setPicked] = useState<Set<string> | null>(null);
-  const pickedIds = picked ?? new Set(leftovers.map((j) => j.id));
+  // What the user unticked: new leftovers start ticked, and a clean keeps
+  // the rest of the user's choice.
+  const [unpicked, setUnpicked] = useState<Set<string>>(() => new Set());
+  const pickedIds = new Set(leftovers.filter((j) => !unpicked.has(j.id)).map((j) => j.id));
   const defaultName = defaultFolder?.split('/').filter(Boolean).at(-1) || defaultFolder || t('storage:atlas.defaultFolder');
-  const clean = () => { void Promise.all([...pickedIds].map((id) => data.discardJob(id))).then(data.refreshJobs).then(() => setPicked(null)); };
+  const clean = () => { void Promise.all([...pickedIds].map((id) => data.discardJob(id))).then(data.refreshJobs); };
   return <div className="grid gap-3 md:grid-cols-2">
     <section className="rounded-xl bg-surface px-4 py-3.5">
       <h2 className="mb-2 text-[14px] font-bold">{t('storage:atlas.outsideTitle')}</h2>
@@ -619,7 +621,7 @@ function StoragePanels({ outside, leftovers, otherLeftovers, defaultFolder, data
     <section className="rounded-xl bg-surface px-4 py-3.5">
       <h2 className="mb-2 text-[14px] font-bold">{t('storage:atlas.leftoversTitle')}</h2>
       {leftovers.length ? <><ul className="divide-y divide-hairline">{leftovers.map((j) => <li key={j.id} className="flex items-center gap-2 py-2 text-[12.5px]">
-        <input type="checkbox" checked={pickedIds.has(j.id)} onChange={(e) => setPicked((prev) => { const next = new Set(prev ?? leftovers.map((job) => job.id)); e.target.checked ? next.add(j.id) : next.delete(j.id); return next; })} aria-label={j.title} className="accent-accent" />
+        <input type="checkbox" checked={pickedIds.has(j.id)} onChange={(e) => setUnpicked((prev) => { const next = new Set(prev); e.target.checked ? next.delete(j.id) : next.add(j.id); return next; })} aria-label={j.title} className="accent-accent" />
         <span className="min-w-0 flex-1 truncate">{j.title}, {t(j.kind === 'update' ? 'storage:atlas.canceledUpdate' : 'storage:atlas.canceledInstall')}</span><span className="tabular-nums text-text-muted">{figure(j.bytes)}</span>
       </li>)}</ul><Button variant="primary" size="sm" disabled={!pickedIds.size} onClick={clean}>{t('storage:atlas.clean', { size: figure(leftovers.filter((j) => pickedIds.has(j.id)).reduce((n, j) => n + j.bytes, 0)) })}</Button></> : <p className="text-[12.5px] text-text-muted">{t('storage:atlas.nothingLeft')}</p>}
       {otherLeftovers.map((j) => {

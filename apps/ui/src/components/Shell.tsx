@@ -356,8 +356,8 @@ function TopBar({ p }: { p: ShellProps }) {
     { id: 'store', label: t('nav:store'), on: storeOn, go: goStore },
   ];
   return (
-    <header className="grid h-12 grid-cols-[1fr_minmax(260px,460px)_1fr] items-center gap-4 bg-ground px-3.5">
-      <div className="flex min-w-0 items-center gap-5">
+    <header className="grid h-12 grid-cols-[minmax(max-content,1fr)_minmax(200px,460px)_minmax(max-content,1fr)] items-center gap-4 bg-ground px-3.5">
+      <div className="flex items-center gap-5">
         <div className="flex flex-none items-center gap-2.5 font-bold text-[14.5px] text-text">
           <span aria-hidden className="grid size-6 place-items-center rounded-xl bg-accent text-[13px] font-extrabold text-on-accent">P</span>
           <span>Platypus</span>

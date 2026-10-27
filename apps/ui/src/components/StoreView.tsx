@@ -74,10 +74,12 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
   stateRef.current = state;
 
   const reportBounds = useCallback(() => {
-    const el = area.current;
     const bridge = storeBridge();
-    if (!el || !bridge) return;
+    if (!bridge) return;
+    // Hide first: in the failed state the content area isn't rendered.
     if (failed || overlayOpen) { bridge.setBounds({ x: 0, y: 0, width: 0, height: 0 }); return; }
+    const el = area.current;
+    if (!el) return;
     const r = el.getBoundingClientRect();
     bridge.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
   }, [failed, overlayOpen]);
@@ -126,6 +128,10 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
     if (ev.pluginId !== plugin.id) return;
     if (ev.kind === 'blocked') {
       setBlocked(ev.url);
+      return;
+    }
+    if (ev.kind === 'failed') {
+      setFailed(ev.error ?? ev.url);
       return;
     }
     if (ev.kind === 'navigated') setBlocked(null);

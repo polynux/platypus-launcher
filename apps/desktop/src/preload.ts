@@ -14,13 +14,15 @@ export interface StoreBounds {
 }
 
 export interface StoreEvent {
-  kind: 'navigated' | 'loading' | 'blocked';
+  kind: 'navigated' | 'loading' | 'blocked' | 'failed';
   pluginId: string;
   url: string;
   canGoBack: boolean;
   canGoForward: boolean;
   title: string;
   loading: boolean;
+  /** 'failed' only: the main-frame load error. */
+  error?: string;
 }
 
 /** A chat message asking the shell for a desktop notification (issue #12):

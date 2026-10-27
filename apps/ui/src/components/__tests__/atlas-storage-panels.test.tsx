@@ -44,4 +44,17 @@ describe('Atlas Storage panels', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clean 12.0 GB' }));
     await waitFor(() => expect(api.discardJob).toHaveBeenCalledWith('left'));
   });
+
+  it('keeps what the user unticked after a clean', async () => {
+    const job = (id: string, title: string) => ({ id, kind: 'install', title, state: 'canceled', bytes: 1e9, leftover: '' }) as never;
+    const props = { games: [mk('inside', '/home/games/Inside')], onNotify: () => {}, onRemove: () => {}, onUninstall: () => {} };
+    const { rerender } = render(<StorageView {...props} jobs={[job('a', 'Alpha'), job('b', 'Beta')]} />);
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Beta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clean 1.0 GB' }));
+    await waitFor(() => expect(api.discardJob).toHaveBeenCalledWith('a'));
+    expect(api.discardJob).not.toHaveBeenCalledWith('b');
+    // Alpha is cleaned; Beta stays unticked.
+    rerender(<StorageView {...props} jobs={[job('b', 'Beta')]} />);
+    expect(screen.getByRole('checkbox', { name: 'Beta' })).not.toBeChecked();
+  });
 });

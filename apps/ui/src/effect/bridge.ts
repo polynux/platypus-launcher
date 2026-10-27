@@ -75,13 +75,15 @@ export interface StoreBounds {
 /** A navigation event from the embedded store view. 'blocked' carries the
  * attempted outside address: the toolbar offers to open it in the browser. */
 export interface StoreEvent {
-  kind: 'navigated' | 'loading' | 'blocked';
+  kind: 'navigated' | 'loading' | 'blocked' | 'failed';
   pluginId: string;
   url: string;
   canGoBack: boolean;
   canGoForward: boolean;
   title: string;
   loading: boolean;
+  /** 'failed' only: the main-frame load error. */
+  error?: string;
 }
 
 declare global {

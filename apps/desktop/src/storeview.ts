@@ -29,15 +29,18 @@ export interface StoreEvent {
   /**
    * 'navigated' (url, history, title), 'loading' (spinner state), or
    * 'blocked' (an http(s) navigation to an outside host was refused; url is
-   * the attempted address, the toolbar offers to open it in the browser).
+   * the attempted address, the toolbar offers to open it in the browser), or
+   * 'failed' (the main-frame load failed; error names it).
    */
-  kind: 'navigated' | 'loading' | 'blocked';
+  kind: 'navigated' | 'loading' | 'blocked' | 'failed';
   pluginId: string;
   url: string;
   canGoBack: boolean;
   canGoForward: boolean;
   title: string;
   loading: boolean;
+  /** 'failed' only: the main-frame load error. */
+  error?: string;
 }
 
 interface Held {
@@ -45,6 +48,9 @@ interface Held {
   plugin: StorePluginInfo;
   bounds: StoreRect | null;
   hidden: boolean;
+  /** The address whose main-frame load failed, until a load succeeds: open
+   * reloads it even though the contents already show that URL. */
+  failedURL?: string;
 }
 
 /**
@@ -161,6 +167,27 @@ export class StoreViews {
     });
     wc.on('did-stop-loading', () => {
       if (this.current === id) this.report(h, 'loading', false);
+    });
+    wc.on('did-finish-load', () => {
+      h.failedURL = undefined;
+    });
+    // A failed main-frame load (not an abort from a newer navigation) shows
+    // the UI's error state instead of a white page, also for later loads.
+    wc.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) return;
+      h.failedURL = validatedURL;
+      if (this.current === id) {
+        this.emit({
+          kind: 'failed',
+          pluginId: id,
+          url: validatedURL,
+          canGoBack: false,
+          canGoForward: false,
+          title: '',
+          loading: false,
+          error: `${errorDescription} (${errorCode}) loading '${validatedURL}'`,
+        });
+      }
     });
   }
 
@@ -279,7 +306,9 @@ export class StoreViews {
     const h = this.hold(pluginId, plugin!);
     this.current = pluginId;
     this.show(h);
-    if (h.view.webContents.getURL() !== url) {
+    // After a failed load the contents already report the URL: load again.
+    if (h.view.webContents.getURL() !== url || h.failedURL) {
+      h.failedURL = undefined;
       try {
         await h.view.webContents.loadURL(url);
       } catch (err) {
