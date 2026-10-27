@@ -2,6 +2,7 @@ package themes
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -144,6 +145,9 @@ func TestContrastKnownPairs(t *testing.T) {
 
 // themeSource builds a theme.toml that sets every colour token of the built-in
 // default, then the overrides, so a test names only the token it is about.
+// A case that lightens the ground has to set text and text-body dark too: the
+// pair is what must pass, and an inherited light text on a light ground would
+// cost the theme its ground before the pair under test is reached.
 func themeSource(t *testing.T, overrides map[string]string) string {
 	t.Helper()
 	tokens := Resolve("").Tokens
@@ -157,6 +161,19 @@ func themeSource(t *testing.T, overrides map[string]string) string {
 		b.WriteString(name + " = " + strconv.Quote(v) + "\n")
 	}
 	return b.String()
+}
+
+// lightBase is a coherent light theme: the built-in tokens flipped so the
+// pairs a case isn't about still pass on a white ground. A case then moves
+// only the pair it tests, since the check drops whatever pair it can't fix.
+func lightBase(overrides map[string]string) map[string]string {
+	out := map[string]string{
+		"ground": "#ffffff", "raised": "#ffffff",
+		"text": "#000000", "text-body": "#000000",
+		"text-muted": "#000000", "text-faint": "#000000", "focus": "#000000",
+	}
+	maps.Copy(out, overrides)
+	return out
 }
 
 // contrastWarning returns the warning for one pair, "" when the pair passed.
@@ -178,16 +195,16 @@ func TestThresholdsPerPair(t *testing.T) {
 		fg, bg    string
 		fails     bool
 	}{
-		{"text at 4.54:1", map[string]string{"ground": "#ffffff", "text": "#767676"}, "text", "ground", false},
-		{"text at 4.48:1", map[string]string{"ground": "#ffffff", "text": "#787878"}, "text", "ground", true},
-		{"body at 4.48:1", map[string]string{"ground": "#ffffff", "text-body": "#787878"}, "text-body", "ground", true},
-		{"muted at 3.03:1", map[string]string{"ground": "#ffffff", "text-muted": "#949494"}, "text-muted", "ground", false},
-		{"muted at 2.92:1", map[string]string{"ground": "#ffffff", "text-muted": "#979797"}, "text-muted", "ground", true},
-		{"faint at 2.92:1", map[string]string{"ground": "#ffffff", "text-faint": "#979797"}, "text-faint", "ground", true},
+		{"text at 4.54:1", lightBase(map[string]string{"text": "#767676"}), "text", "ground", false},
+		{"text at 4.48:1", lightBase(map[string]string{"text": "#787878"}), "text", "ground", true},
+		{"body at 4.48:1", lightBase(map[string]string{"text-body": "#787878"}), "text-body", "ground", true},
+		{"muted at 3.03:1", lightBase(map[string]string{"text-muted": "#949494"}), "text-muted", "ground", false},
+		{"muted at 2.92:1", lightBase(map[string]string{"text-muted": "#979797"}), "text-muted", "ground", true},
+		{"faint at 2.92:1", lightBase(map[string]string{"text-faint": "#979797"}), "text-faint", "ground", true},
 		{"on-accent at 4.54:1", map[string]string{"accent": "#767676", "on-accent": "#ffffff"}, "on-accent", "accent", false},
 		{"on-accent at 4.48:1", map[string]string{"accent": "#787878", "on-accent": "#ffffff"}, "on-accent", "accent", true},
-		{"focus at 3.03:1", map[string]string{"ground": "#ffffff", "focus": "#949494"}, "focus", "ground", false},
-		{"focus at 2.92:1", map[string]string{"ground": "#ffffff", "focus": "#979797"}, "focus", "ground", true},
+		{"focus at 3.03:1", lightBase(map[string]string{"focus": "#949494"}), "focus", "ground", false},
+		{"focus at 2.92:1", lightBase(map[string]string{"focus": "#979797"}), "focus", "ground", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,6 +249,35 @@ func TestInheritedForegroundIsCheckedAgainstANewGround(t *testing.T) {
 	th := parse(t, themeSource(t, map[string]string{"ground": "#ffffff"}))
 	if contrastWarning(th, "text", "ground") == "" {
 		t.Fatalf("light ground kept the inherited white text (warnings %v)", th.Info.Warnings)
+	}
+}
+
+// A theme that only moves a background must not keep a failing pair: the
+// inherited foreground has nothing to drop, so the background it moved falls
+// back with it (issue #155).
+func TestThemeThatOnlyMovesABackgroundFallsBackWithIt(t *testing.T) {
+	// The built-in on-accent is dark: a dark accent leaves it unreadable.
+	src := strings.Replace(minimal, `accent = "#7dd3fc"`, `accent = "#130f0a"`, 1)
+	th := parse(t, src)
+	if contrastWarning(th, "on-accent", "accent") == "" {
+		t.Fatalf("a dark accent kept the inherited dark on-accent (warnings %v)", th.Info.Warnings)
+	}
+	got, _ := resolveSrc(t, src)
+	if want := Resolve("").Tokens["accent"]; got.Tokens["accent"] != want {
+		t.Errorf("resolved accent = %q, want the built-in %q", got.Tokens["accent"], want)
+	}
+}
+
+// The same over a scheme: dropping the inherited scheme foreground alone
+// would leave the scheme accent the theme set, so it falls back too.
+func TestSchemeThatOnlyMovesABackgroundFallsBackWithIt(t *testing.T) {
+	src := minimal + "\n[schemes.light]\naccent = \"#130f0a\"\n"
+	th := parse(t, src)
+	if !warningsContain(th, "token on-accent in scheme light on accent") {
+		t.Fatalf("a dark light-scheme accent kept the inherited dark on-accent (warnings %v)", th.Info.Warnings)
+	}
+	if v, kept := th.Schemes["light"]["accent"]; kept {
+		t.Errorf("light scheme kept accent %q, want the dark value", v)
 	}
 }
 

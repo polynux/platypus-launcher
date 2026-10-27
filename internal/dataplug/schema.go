@@ -73,6 +73,11 @@ var (
 	wrappers   = []string{"gamemode", "mangohud"}
 )
 
+// ErrNoDataFiles reports a data plugin that listed no file this build could
+// read. A theme-only plugin carries no data files, and that is not an error
+// for it: callers test for this error, never for its wording.
+var ErrNoDataFiles = errors.New("no data files found")
+
 // Load reads a data plugin's files from fsys. files comes from the manifest;
 // an empty list means the default file names, and missing ones are skipped.
 // A listed file that is missing is an error, so a typo doesn't load nothing.
@@ -117,7 +122,7 @@ func Load(fsys fs.FS, files []string) (*Data, error) {
 		loaded++
 	}
 	if loaded == 0 {
-		return nil, fmt.Errorf("no data files found (looked for %s)", strings.Join(files, ", "))
+		return nil, fmt.Errorf("%w (looked for %s)", ErrNoDataFiles, strings.Join(files, ", "))
 	}
 	return out, nil
 }

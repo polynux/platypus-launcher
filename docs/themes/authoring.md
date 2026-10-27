@@ -391,10 +391,13 @@ Source: `internal/themes/contrast.go`.
 ## Assets
 
 A theme may ship images (`png`, `webp`, `svg`) and fonts (`woff2`) inside
-its own folder. References are relative paths from the theme folder, e.g.
-`assets/bg.png`. They must stay inside it: absolute paths, `..` escapes and
-quotes, backslashes or control characters are refused with a warning, and
-the token, layer or family that names them is dropped.
+its own folder. References are relative paths from the theme file's folder,
+e.g. `assets/bg.png`; for a theme in a subfolder (`"theme":
+"theme/theme.toml"`), that file lives at `theme/assets/bg.png` in the
+plugin. They must stay inside the theme folder: absolute paths, `..`
+escapes, quotes, backslashes, control characters and `#` or `?` (which would
+end the path in its URL) are refused with a warning, and the token, layer or
+family that names them is dropped.
 
 - The type comes from the content, never the file name. PNG needs the PNG
   signature, WebP a `RIFF....WEBP` header, SVG an `<svg>` root (optionally
@@ -478,11 +481,13 @@ Install from a checkout with:
 plugins/install.sh theme-example
 ```
 
-It copies the data files, the manifest, the theme file, `layouts/`,
-`assets/` and `fonts/`. A data plugin needs no approval: there is nothing
-to run. The Plugins view lists it under data plugins, and the theme picker
-lists its theme with the plugin id as source. A broken theme never breaks
-the plugin's fixes: the theme shows as invalid in the picker instead.
+It copies the data files, the manifest, and the theme file with its own
+folder: `layouts/`, `assets/` and `fonts/` next to the theme file, copied
+recursively, so a theme in a subfolder ships its files too. A data plugin
+needs no approval: there is nothing to run. The Plugins view lists it under
+data plugins, and the theme picker lists its theme with the plugin id as
+source. A broken theme never breaks the plugin's fixes: the theme shows as
+invalid in the picker instead.
 
 Source: `docs/plugins/data-plugins.md`, `internal/plugins/manifest.go`,
 `internal/plugins/manager.go`, `plugins/install.sh`.

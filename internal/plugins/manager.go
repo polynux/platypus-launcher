@@ -289,7 +289,7 @@ func (m *Manager) inspect(dir string) *Plugin {
 			// A theme-only plugin carries no fixes or tweaks: the missing
 			// data files are not an error when it names a theme. Any other
 			// data failure still breaks the plugin.
-			if man.Theme == "" || !strings.Contains(err.Error(), "no data files") {
+			if man.Theme == "" || !errors.Is(err, dataplug.ErrNoDataFiles) {
 				p.Status, p.Problem = StatusInvalid, err.Error()
 				return p
 			}

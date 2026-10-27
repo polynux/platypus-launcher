@@ -43,18 +43,25 @@ const (
 )
 
 // checkAssetRef validates one relative asset path and reads it from the theme
-// folder. It returns the cleaned relative path. A reference that leaves the
-// folder, names a missing or oversized file, or holds the wrong content is
-// refused with a warning, and the caller drops that token or layer.
+// folder. The path is relative to the theme file's own folder; it returns it
+// cleaned and relative to the FS root instead (the plugin folder for a plugin
+// theme), which is what the asset route and the app join to, so a theme in a
+// subfolder keeps its folder. A reference that leaves the theme folder, names
+// a missing or oversized file, or holds the wrong content is refused with a
+// warning, and the caller drops that token or layer.
 func (t *Theme) checkAssetRef(fsys fs.FS, themeDir, raw string, kind assetKind) (string, error) {
 	rel := strings.TrimSpace(raw)
 	if rel == "" || !filepath.IsLocal(rel) {
 		return "", fmt.Errorf("%q must be a path inside the theme folder", raw)
 	}
 	// A quote, backslash or control character would break the url("...") the
-	// core builds from this path, so it never reaches the UI.
+	// core builds from this path, so it never reaches the UI. A '#' or '?'
+	// would end the path in that URL, so such a file could never load.
 	if strings.ContainsAny(rel, "\"'\\") || strings.ContainsAny(rel, "\n\r\t") {
 		return "", fmt.Errorf("%q has a character a theme may not use", raw)
+	}
+	if strings.ContainsAny(rel, "#?") {
+		return "", fmt.Errorf("%q has a character a theme may not use in an asset path", raw)
 	}
 	// The FS joins with slashes; an OS-absolute or backslash escape never
 	// passes IsLocal, but a leading "./" would read the same file under two
@@ -94,10 +101,9 @@ func (t *Theme) checkAssetRef(fsys fs.FS, themeDir, raw string, kind assetKind) 
 		return "", fmt.Errorf("%q can't be read: %v", raw, rerr)
 	}
 	head = head[:n]
-	var ctype string
 	switch kind {
 	case assetImage:
-		ctype = sniffThemeImage(head)
+		ctype := sniffThemeImage(head)
 		if ctype == "" {
 			return "", fmt.Errorf("%q is not a PNG, WebP or SVG image", raw)
 		}
@@ -123,10 +129,8 @@ func (t *Theme) checkAssetRef(fsys fs.FS, themeDir, raw string, kind assetKind) 
 		if strings.ToLower(path.Ext(rel)) != ".woff2" {
 			return "", fmt.Errorf("%q must end in .woff2", raw)
 		}
-		ctype = ThemeWOFF
-		_ = ctype
 	}
-	return rel, nil
+	return name, nil
 }
 
 // sniffThemeImage reports the content type of a theme image header, or "" for
@@ -137,16 +141,16 @@ func sniffThemeImage(head []byte) string {
 		return ThemePNG
 	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
 		return ThemeWEBP
-	case isThemeSVG(head):
+	case IsThemeSVG(head):
 		return ThemeSVG
 	}
 	return ""
 }
 
-// isThemeSVG reports whether head looks like SVG data: an <svg> root,
+// IsThemeSVG reports whether head looks like SVG data: an <svg> root,
 // optionally after an XML declaration. Anything else (HTML, a script) is
-// refused.
-func isThemeSVG(head []byte) bool {
+// refused. The theme validator and the asset route share this one test.
+func IsThemeSVG(head []byte) bool {
 	s := strings.TrimSpace(string(head))
 	if strings.HasPrefix(strings.ToLower(s), "<svg") {
 		return true

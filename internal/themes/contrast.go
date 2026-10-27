@@ -65,11 +65,11 @@ func builtinDefaults() map[string]string {
 // checkContrast drops every token that misses its pair's ratio, so Resolve
 // falls back to the built-in value. It checks the theme's tokens over the
 // built-in ones, so a theme that only moves the ground still has its text
-// checked. The foreground is the token under test, so it is the one dropped;
-// when the theme didn't set it there is nothing to reset, but the warning still
-// points at the pair the theme has to fix (with an on-accent, say). Each
-// declared scheme is checked the same way over its own resolved tokens
-// (issue #134): a failing scheme token falls back to the dark value.
+// checked. The pair is what has to pass: an inherited foreground alone can't
+// fix a pair the theme broke, so the override it did set falls back too, and
+// the built-in pair is what reaches the UI. Each declared scheme is checked
+// the same way over its own resolved tokens (issue #134): a failing scheme
+// token falls back to the dark value.
 func (t *Theme) checkContrast() {
 	def := builtinDefaults()
 	if def == nil {
@@ -83,19 +83,20 @@ func (t *Theme) checkContrast() {
 		tokens[name] = v
 	}
 	for _, p := range contrastPairs {
-		bg, ok := backdrop(tokens, p.bg)
-		if !ok {
+		got, missing := missingContrast(tokens, p)
+		if !missing {
 			continue
 		}
-		fg, ok := parseColor(tokens[p.fg])
-		if !ok {
-			continue
-		}
-		if got := contrast(fg.over(bg), bg); got < p.min {
-			t.warn("token %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
-				p.fg, p.bg, tokens[p.fg], tokens[p.bg], got, p.min)
-			delete(t.Tokens, p.fg)
-			tokens[p.fg] = def[p.fg]
+		t.warn("token %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
+			p.fg, p.bg, tokens[p.fg], tokens[p.bg], got, p.min)
+		// Drop the foreground, then the background when the pair still
+		// misses: a token the theme didn't set has nothing to drop, and
+		// returning before the background would accept a failing pair.
+		delete(t.Tokens, p.fg)
+		tokens[p.fg] = def[p.fg]
+		if _, still := missingContrast(tokens, p); still {
+			delete(t.Tokens, p.bg)
+			tokens[p.bg] = def[p.bg]
 		}
 	}
 	for _, scheme := range schemeNames {
@@ -111,25 +112,39 @@ func (t *Theme) checkContrast() {
 			resolved[name] = v
 		}
 		for _, p := range contrastPairs {
-			bg, ok := backdrop(resolved, p.bg)
-			if !ok {
+			got, missing := missingContrast(resolved, p)
+			if !missing {
 				continue
 			}
-			fg, ok := parseColor(resolved[p.fg])
-			if !ok {
-				continue
+			t.warn("token %s in scheme %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
+				p.fg, scheme, p.bg, resolved[p.fg], resolved[p.bg], got, p.min)
+			delete(t.Schemes[scheme], p.fg)
+			resolved[p.fg] = tokens[p.fg]
+			if _, still := missingContrast(resolved, p); still {
+				delete(t.Schemes[scheme], p.bg)
+				resolved[p.bg] = tokens[p.bg]
 			}
-			if got := contrast(fg.over(bg), bg); got < p.min {
-				t.warn("token %s in scheme %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
-					p.fg, scheme, p.bg, resolved[p.fg], resolved[p.bg], got, p.min)
-				delete(t.Schemes[scheme], p.fg)
-				resolved[p.fg] = tokens[p.fg]
-				if len(t.Schemes[scheme]) == 0 {
-					delete(t.Schemes, scheme)
-				}
+			if len(t.Schemes[scheme]) == 0 {
+				delete(t.Schemes, scheme)
 			}
 		}
 	}
+}
+
+// missingContrast reports the ratio of one pair and whether it misses its
+// threshold. A colour it can't parse is skipped, as the grammar, not the
+// contrast check, decides what is a colour.
+func missingContrast(tokens map[string]string, p contrastPair) (float64, bool) {
+	bg, ok := backdrop(tokens, p.bg)
+	if !ok {
+		return 0, false
+	}
+	fg, ok := parseColor(tokens[p.fg])
+	if !ok {
+		return 0, false
+	}
+	got := contrast(fg.over(bg), bg)
+	return got, got < p.min
 }
 
 // backdrop returns the opaque colour a token is painted over: the ground over

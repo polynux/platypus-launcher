@@ -103,27 +103,10 @@ func (m Manifest) ThemeAssetPath(dir, rel string) (path, ctype string, err error
 		return path, themes.ThemePNG, nil
 	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP" && ext == ".webp":
 		return path, themes.ThemeWEBP, nil
-	case isThemeSVG(head) && ext == ".svg":
+	case themes.IsThemeSVG(head) && ext == ".svg":
 		return path, themes.ThemeSVG, nil
 	case bytes.HasPrefix(head, []byte("wOF2")) && ext == ".woff2":
 		return path, themes.ThemeWOFF, nil
 	}
 	return "", "", fmt.Errorf("theme asset %q is not a PNG, WebP, SVG or woff2 file", rel)
-}
-
-// isThemeSVG reports whether head looks like SVG data, like the theme
-// validator does: an <svg> root, optionally after an XML declaration.
-func isThemeSVG(head []byte) bool {
-	s := strings.TrimSpace(string(head))
-	if strings.HasPrefix(strings.ToLower(s), "<svg") {
-		return true
-	}
-	if strings.HasPrefix(s, "<?xml") {
-		lower := strings.ToLower(s)
-		if i := strings.Index(lower, "<svg"); i >= 0 {
-			rest := strings.TrimSpace(lower[:i])
-			return strings.HasSuffix(rest, "?>") || strings.HasSuffix(rest, ">")
-		}
-	}
-	return false
 }

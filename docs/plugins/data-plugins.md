@@ -34,12 +34,12 @@ the launcher (`internal/dataplug/builtin`) and read through the same loader.
 - `data` lists the JSON files, relative to the folder. Default: `fixes.json`
   and `tweaks.json`, missing ones skipped. A theme-only plugin names no data
   files: the missing defaults are not an error when it names a theme.
-- `theme` names the `theme.toml` inside the folder (e.g. `"theme.toml"`).
-  Only a data plugin may carry one. The theme's layouts live in `layouts/`
-  next to it, and its images (`png`, `webp`, `svg`) and fonts (`woff2`) live
-  inside the folder; references outside it, oversized files and content that
-  doesn't match its extension are rejected with a warning, exactly like a bad
-  token.
+- `theme` names the `theme.toml` inside the folder (e.g. `"theme.toml"`, or
+  `"theme/theme.toml"` in a subfolder). Only a data plugin may carry one. The
+  theme's layouts live in `layouts/` next to it, and its images (`png`,
+  `webp`, `svg`) and fonts (`woff2`) live inside the theme's folder;
+  references outside it, oversized files and content that doesn't match its
+  extension are rejected with a warning, exactly like a bad token.
 
 Everything is validated; a file with an unknown field or a bad value is
 rejected and the plugin shows as invalid, with the reason, in the Plugins view.
