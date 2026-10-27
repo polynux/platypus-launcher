@@ -152,7 +152,10 @@ export class StoreViews {
 
   private watch(id: string, h: Held): void {
     const wc = h.view.webContents;
-    wc.on('did-navigate', (_e, url) => {
+    wc.on('did-navigate', (_e, url, httpResponseCode) => {
+      // Only a real response clears a failed load: Chromium's error page
+      // also loads, which must not hide the failure from the next open.
+      if (httpResponseCode > 0) h.failedURL = undefined;
       if (this.current === id) this.report(h, 'navigated', false);
     });
     wc.on('did-navigate-in-page', (_e, url) => {
@@ -167,9 +170,6 @@ export class StoreViews {
     });
     wc.on('did-stop-loading', () => {
       if (this.current === id) this.report(h, 'loading', false);
-    });
-    wc.on('did-finish-load', () => {
-      h.failedURL = undefined;
     });
     // A failed main-frame load (not an abort from a newer navigation) shows
     // the UI's error state instead of a white page, also for later loads.
