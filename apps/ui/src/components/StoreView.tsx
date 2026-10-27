@@ -1,7 +1,7 @@
 // i18n: converted
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, ExternalLink, Globe, Home, RotateCw, TriangleAlert, WifiOff, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Globe, Home, RefreshCw, RotateCw, TriangleAlert, WifiOff, X } from 'lucide-react';
 import { EmptyState, cx } from './ui';
 import { Button } from './ds/button';
 import { browserOpen, onStoreEvent, storeBridge, type StoreEvent } from '../effect/bridge';
@@ -68,6 +68,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
   // An outside address the view refused to load (a 'blocked' store event):
   // the notice offers to open it in the browser, never auto-opening.
   const [blocked, setBlocked] = useState<string | null>(null);
+  const overlayOpen = useOverlayOpen();
   const area = useRef<HTMLDivElement>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -76,9 +77,10 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
     const el = area.current;
     const bridge = storeBridge();
     if (!el || !bridge) return;
+    if (failed || overlayOpen) { bridge.setBounds({ x: 0, y: 0, width: 0, height: 0 }); return; }
     const r = el.getBoundingClientRect();
     bridge.setBounds({ x: r.left, y: r.top, width: r.width, height: r.height });
-  }, []);
+  }, [failed, overlayOpen]);
 
   // Open the store on mount and when the plugin or deep link changes; the
   // shell validates the plugin and the address. Switching stores must NOT
@@ -194,16 +196,16 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
 
   return (
     <div className="flex h-full min-h-[480px] flex-col">
-      <div className={shopBar ? 'flex h-[50px] flex-none items-center gap-1.5 border-b border-hairline bg-ground-2 px-3.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
+      <div className={shopBar ? 'flex h-[55px] flex-none items-center gap-3 border-b border-hairline bg-ground-2 px-4 py-2.5' : 'flex flex-none items-center gap-1.5 px-5 pb-3 pt-5'}>
         {toolbarLead}
         <ToolbarButton label={t('store:toolbar.back')} disabled={!state.canGoBack} onClick={() => store?.back()} data-testid="store-back">
-          <ArrowLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton label={t('store:toolbar.forward')} disabled={!state.canGoForward} onClick={() => store?.forward()} data-testid="store-forward">
-          <ArrowRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton label={t('store:toolbar.reload')} onClick={() => store?.reload()} data-testid="store-reload">
-          <RotateCw className={cx('h-4 w-4', state.loading && 'animate-spin')} />
+          <RefreshCw className={cx('h-3.5 w-3.5', state.loading && 'animate-spin')} />
         </ToolbarButton>
         {!shopBar && (
           <ToolbarButton label={t('store:toolbar.home')} onClick={goHome} data-testid="store-home">
@@ -214,7 +216,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
           data-testid="store-address"
           title={state.title ? `${plugin.name} · ${state.url} · ${state.title}` : `${plugin.name} · ${state.url}`}
           className={cx(
-            'mx-1.5 flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface px-2.5 text-[12px] text-text-faint ring-1',
+            'mx-1.5 flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-lg bg-surface px-3 text-[12.5px] text-text-faint ring-1',
             outside ? 'bg-attention/[0.07] text-attention ring-attention/30' : 'ring-hairline',
           )}
         >
@@ -223,7 +225,7 @@ export function StoreView({ plugin, initialUrl, onClose, onNotify, toolbarLead, 
           ) : (
             <Globe className="h-3 w-3 flex-none" aria-label={outside ? t('store:address.lockOutside') : t('store:address.lockInside')} />
           )}
-          <span className="truncate">{host || '…'}</span>
+          <span className="truncate">{storeAddress(state.url) || host || '…'}</span>
           {outside && (
             <span className="flex flex-none items-center gap-1 text-attention/90">
               <TriangleAlert className="h-3 w-3" />
@@ -319,10 +321,27 @@ function ToolbarButton({ label, children, ...rest }: {
       size="none"
       title={label}
       aria-label={label}
-      className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-surface text-text-muted ring-1 ring-hairline transition hover:bg-surface-strong hover:text-text disabled:opacity-35"
+      className="grid size-8 flex-none place-items-center rounded-lg bg-transparent text-text-muted transition hover:bg-surface hover:text-text disabled:opacity-35"
       {...rest}
     >
       {children}
     </Button>
   );
+}
+
+function storeAddress(value: string): string {
+  try { const url = new URL(value); return `${url.host}${url.pathname.replace(/\/$/, '')}`; } catch { return ''; }
+}
+
+function useOverlayOpen(): boolean {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const selectors = '[role="dialog"], [role="alertdialog"], [role="menu"], [data-radix-popper-content-wrapper], [data-sonner-toast]';
+    const update = () => setOpen(Boolean(document.querySelector(selectors)));
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role'] });
+    return () => observer.disconnect();
+  }, []);
+  return open;
 }

@@ -3,7 +3,7 @@ import { useTranslation, Trans } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { Effect } from 'effect';
 import { ExternalLink, FolderOpen, Loader2, LogIn, LogOut, RefreshCw, RotateCcw, ShieldAlert, ShieldCheck } from 'lucide-react';
-import type { AuthPrompt, AuthStatus, PluginStatus, SourceWarning, StorePlugin } from '../types';
+import type { AuthPrompt, AuthStatus, Game, PluginStatus, SourceWarning, StorePlugin } from '../types';
 import { LauncherApi, onAuth } from '../effect/runtime';
 import { openExternal } from '../lib/external';
 import { Modal } from './Modal';
@@ -25,6 +25,7 @@ import { usePluginsData, type PluginsAuthState } from './usePluginsData';
 
 interface PluginsViewProps {
   plugins: StorePlugin[];
+  games?: Game[];
   warnings: SourceWarning[];
   onPlugins: (p: StorePlugin[]) => void;
   /** Approval, login and folder changes change what the library lists. */
@@ -54,7 +55,7 @@ const hasAuth = (p: StorePlugin) => offers(p, 'auth');
  *  keep working; the cache itself lives in the view-owned data hook. */
 export { resetPluginsAuthCache } from './usePluginsData';
 
-export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
+export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
   const { t } = useTranslation(['plugins', 'common']);
   const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
   const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act } = data;
@@ -67,6 +68,7 @@ export function PluginsView({ plugins, warnings, onPlugins, onLibraryChanged, on
       <>
         <AtlasPlugins
           plugins={plugins}
+          games={games}
           warnings={warnings}
           auth={auth}
           busy={busy}
@@ -242,8 +244,9 @@ export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChoose
  *  login rows, approve/enable actions and dialogs. The lab's "Add a store"
  *  button has no backing (store plugins install through the plugins folder),
  *  so the header keeps Rescan and the Plugins folder entry. */
-function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
+function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify }: {
   plugins: StorePlugin[];
+  games: Game[];
   warnings: SourceWarning[];
   auth: Record<string, PluginsAuthState>;
   busy: string | null;
@@ -257,7 +260,7 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
   const current = plugins.find((p) => p.id === selected) ?? store[0] ?? rest[0];
   const statusDot = (p: StorePlugin): string | null => {
     switch (p.status) {
-      case 'ready': return null;
+      case 'ready': { const a = auth[p.id]; return hasAuth(p) && a && !('error' in a) && !a.loggedIn ? 'bg-attention' : null; }
       case 'disabled': return 'bg-text-faint';
       case 'invalid': return 'bg-danger';
       case 'unapproved':
@@ -268,6 +271,7 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
   const accountOf = (p: StorePlugin): string => {
     const a = auth[p.id];
     if (a && !('error' in a) && a.loggedIn) return a.user || t('plugins:auth.loggedIn');
+    if (!hasAuth(p)) return p.capabilities.map(offerLabel).find((s): s is string => Boolean(s)) ?? '';
     return t('plugins:auth.loggedOut');
   };
   return (
@@ -275,7 +279,7 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold tracking-tight">{t('nav:title.plugins')}</h1>
-          <p className="mt-[3px] text-[13px] text-text-muted">{t('plugins:header.subtitle')}</p>
+          <p className="mt-[3px] text-[13px] text-text-muted">{t('plugins:header.atlasSubtitle')}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="neutral" onClick={() => {
@@ -305,7 +309,7 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
                     on ? 'bg-[color-mix(in_srgb,var(--color-accent)_15%,var(--color-surface))]' : 'hover:bg-surface',
                   )}
                 >
-                  <span className="grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-lg bg-surface-strong">
+                  <span className="grid size-8 flex-none place-items-center overflow-hidden rounded-[9px] bg-surface-strong">
                     <PluginLogo src={p.icon_url} name={p.name} size="xs" />
                   </span>
                   <span className="min-w-0 flex-1">
@@ -319,9 +323,10 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
           })}
         </ul>
         <div className="min-w-0 rounded-2xl bg-surface p-5 ring-1 ring-hairline">
-          {current && current.kind === 'store' ? (
+              {current && current.kind === 'store' ? (
             <AtlasPluginDetail
               plugin={current}
+              gameCount={games.filter((g) => g.source === current.id).length}
               authState={auth[current.id]}
               warning={warnings.find((w) => w.source === current.id)}
               busy={busy}
@@ -349,8 +354,9 @@ function AtlasPlugins({ plugins, warnings, auth, busy, data, onNotify }: {
 /** The selected store plugin's detail: the same identity, alert, approval,
  *  account, capabilities and folder rows as the card, without the card frame
  *  so the pane reads like the lab's detail column. */
-function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onRescan, onNotify }: {
+function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onRescan, onNotify }: {
   plugin: StorePlugin;
+  gameCount: number;
   authState: PluginsAuthState | undefined;
   warning: SourceWarning | undefined;
   busy: string | null;
@@ -379,15 +385,15 @@ function AtlasPluginDetail({ plugin: p, authState: a, warning, busy, onLogout, o
   return (
     <div className="grid content-start gap-4">
       <header className="flex items-center gap-3.5">
-        <span className="grid h-7 w-7 flex-none place-items-center overflow-hidden rounded-lg bg-surface-strong">
-          <PluginLogo src={p.icon_url} name={p.name} size="xs" />
+        <span className="grid size-[46px] flex-none place-items-center overflow-hidden rounded-xl bg-surface-strong">
+          <PluginLogo src={p.icon_url} name={p.name} size="md" />
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[19px] font-extrabold tracking-tight">{p.name}</h2>
           <p className="truncate text-[13px] text-text-muted">
             {p.author
-              ? t('plugins:atlas.versionBy', { version: `v${p.version}`, author: p.author })
-              : `v${p.version}`}
+              ? `${t('plugins:atlas.versionBy', { version: p.version, author: p.author })}, ${t('plugins:atlas.gameCount', { count: gameCount })}`
+              : `Version ${p.version}, ${t('plugins:atlas.gameCount', { count: gameCount })}`}
           </p>
         </div>
         {pill && (
@@ -686,7 +692,7 @@ export function PluginsBuiltIn() {
   // built-in block as one column.
   return (
     <div>
-      <MonoLabel as="h2" className="mb-3 mt-8">{t('plugins:section.builtIn')}</MonoLabel>
+      <h2 className="mb-2.5 mt-8 text-[13px] font-bold text-text-muted">{t('plugins:section.builtInAtlas')}</h2>
       <div className="grid gap-2 xl:grid-cols-2">
         {BUILT_IN.map((b) => (
           <div key={b.name} className="flex items-center justify-between gap-4 rounded-2xl bg-surface px-4 py-3 ring-1 ring-hairline">
@@ -694,7 +700,7 @@ export function PluginsBuiltIn() {
               <div className="text-[13px] font-bold">{b.name}</div>
               <div className="text-[12px] text-text-muted">{t('plugins:builtIn.protondb')}</div>
             </div>
-            <Badge variant="neutral" className="flex-none">{t('plugins:status.builtIn')}</Badge>
+            <span className="flex h-5 flex-none items-center rounded-md bg-surface-strong px-[7px] text-[11.5px] font-semibold text-text-muted">{t('plugins:status.builtIn')}</span>
           </div>
         ))}
       </div>

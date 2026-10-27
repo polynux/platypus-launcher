@@ -15,7 +15,7 @@ vi.mock('../../lib/theme', () => ({
   useColorScheme: () => 'dark',
   saveColorSchemeChoice: vi.fn(async () => {}),
 }));
-vi.mock('../../lib/gameTone', () => ({ useGameTone: () => ({ supported: 'off', mode: 'off', choice: 'accent', tone: null, setChoice: vi.fn() }) }));
+vi.mock('../../lib/gameTone', () => ({ useGameToneChoice: () => ({ supported: 'off', choice: 'accent', setChoice: vi.fn() }) }));
 vi.mock('../../lib/i18n', () => ({ PSEUDO_LOCALE: 'pseudo', applyLanguage: vi.fn(), loadSessionInfo: async () => {}, pseudoAvailable: () => false }));
 const api = vi.hoisted(() => ({
   listThemes: vi.fn(),

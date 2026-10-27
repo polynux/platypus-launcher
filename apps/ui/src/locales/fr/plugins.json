@@ -1,13 +1,15 @@
 {
   "header": {
     "subtitle": "Les plugins de boutique importent les bibliothèques d'autres boutiques et installent les jeux que vous possédez. Chacun est un programme à part ; Platypus n'exécute que ceux que vous approuvez.",
+    "atlasSubtitle": "Chaque boutique passe par un plugin. Les plugins ne font que ce que vous approuvez.",
     "pluginsFolder": "Dossier des plugins",
     "rescan": "Réanalyser"
   },
   "section": {
     "store": "plugins de boutique",
     "data": "plugins de données · pas de code, toujours actifs",
-    "builtIn": "intégrés"
+    "builtIn": "intégrés",
+    "builtInAtlas": "Intégrés"
   },
   "empty": {
     "label": "aucun plugin de boutique",
@@ -126,6 +128,7 @@
     "libraryList": "Liste de jeux",
     "brings": "Ce qu'elle apporte",
     "loginNeeded": "Connexion requise",
-    "versionBy": "Version {{version}}, par {{author}}"
+    "versionBy": "Version {{version}}, par {{author}}",
+    "gameCount": "{{count}} jeux"
   }
 }
