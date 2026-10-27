@@ -19,14 +19,14 @@ func writeThemePlugin(t *testing.T, pluginsDir, id string, extra map[string]any,
 		t.Fatal(err)
 	}
 	m := map[string]any{
-		"id":            id,
-		"name":          "Theme Test",
-		"version":       "1.0.0",
-		"api":           1,
-		"kind":          "data",
-		"data":          []string{},
-		"theme":         "theme.toml",
-		"description":   "test",
+		"id":          id,
+		"name":        "Theme Test",
+		"version":     "1.0.0",
+		"api":         1,
+		"kind":        "data",
+		"data":        []string{},
+		"theme":       "theme.toml",
+		"description": "test",
 	}
 	for k, v := range extra {
 		m[k] = v

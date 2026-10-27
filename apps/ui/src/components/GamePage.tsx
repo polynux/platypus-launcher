@@ -572,6 +572,10 @@ export function GamePage(p: GamePageProps) {
       running={sessionActive || p.launching}
     />
   ) : null;
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's game page before the core answers over RPC.
+  // Above the settings-page return: hooks must run on every render.
+  const layout = useThemeLayout('game') ?? BUILTIN_LAYOUTS['game'];
   if (settingsModal && settingsPage) {
     return (
       <TooltipProvider>
@@ -595,9 +599,6 @@ export function GamePage(p: GamePageProps) {
     ? () => p.onNavigate({ name: 'store', plugin: plugin.id, url: details.store_url })
     : undefined;
 
-  // The built-in arrangement is the initial layout, so the first paint
-  // already shows today's game page before the core answers over RPC.
-  const layout = useThemeLayout('game') ?? BUILTIN_LAYOUTS['game'];
   // Tabs re-arrange the same blocks (issue #127): the page owns the data,
   // the tabs only lay it out, so required blocks stay present.
   if (structure === 'tabs') {

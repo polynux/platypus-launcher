@@ -4,20 +4,24 @@
 // axe, and required blocks (back, actions, outside) come back when omitted.
 import React from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { render as rtlRender, cleanup, screen, within } from '@testing-library/react';
+import { render as rtlRender, cleanup, screen, within, fireEvent } from '@testing-library/react';
 import * as matchers from 'vitest-axe/matchers';
 import 'vitest-axe/extend-expect';
 import { Effect } from 'effect';
 
 const layoutState = vi.hoisted(() => ({ layout: null as unknown }));
 vi.mock('../../effect/runtime', () => ({
-  LauncherApi: {
+  // Calls the page doesn't need here (the settings page's) answer empty.
+  LauncherApi: new Proxy({
     getGameDetails: () => Effect.succeed(details as never),
     getCrashHints: () => Effect.succeed(null),
     getInstallSize: () => Effect.succeed(0),
     getGameOptions: () => Effect.succeed({ groups: [], chosen: {} } as never),
     getThemeLayout: () => Effect.succeed(layoutState.layout as never),
-  },
+    prefixUsage: () => Effect.succeed([]),
+    listPrefixPresets: () => Effect.succeed([]),
+    getRunnerOptions: () => Effect.succeed([]),
+  } as Record<string, unknown>, { get: (t, k: string) => t[k] ?? (() => Effect.succeed(null)) }),
   onJobs: () => () => {},
   onSession: () => () => {},
   onFamily: () => () => {},
@@ -32,8 +36,9 @@ vi.mock('../../lib/compat', async (importOriginal) => {
 });
 
 import { GamePage, invalidateGameDetailsCache } from '../GamePage';
+import { applyTheme } from '../../lib/theme';
 import { TooltipProvider } from '../ds/tooltip';
-import type { Game, StorePlugin, ThemeLayout } from '../../types';
+import type { Game, StorePlugin, ThemeLayout, ThemeTokens } from '../../types';
 
 expect.extend(matchers);
 afterEach(() => { cleanup(); layoutState.layout = null; });
@@ -124,6 +129,20 @@ const coolLayout: ThemeLayout = {
 };
 
 describe('game page layouts', () => {
+  // A theme can show game settings as a page: opening them must not change
+  // the page's hook count (the settings page used to return before a hook).
+  it('opens game settings as a page without crashing', async () => {
+    applyTheme({ id: 'paged', tokens: {}, wash: [], variants: { 'game-settings.presentation': 'page' } } as unknown as ThemeTokens);
+    try {
+      page(installedGame(), []);
+      await screen.findByRole('heading', { name: 'Layout Installed' });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Game settings' })[0]!);
+      expect(await screen.findByRole('tab', { name: /General/ })).toBeTruthy();
+    } finally {
+      applyTheme({ id: 'warm', tokens: {}, wash: [], variants: {} } as unknown as ThemeTokens);
+    }
+  });
+
   it('renders the built-in arrangement: media above about, compat in the side column, axe clean', async () => {
     const events = [{ id: 1, ts: Date.now(), type: 'play', detail: 'played', game: 'Layout Installed' }] as unknown as GamePageActivity;
     const { container } = page(installedGame(), events);

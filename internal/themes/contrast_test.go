@@ -187,7 +187,8 @@ func contrastWarning(th Theme, fg, bg string) string {
 	return ""
 }
 
-// Each threshold has a known passing and a known failing pair.
+// Each threshold has a known passing and a known failing pair. The accent
+// cases set accent-strong too: on-accent is checked on both.
 func TestThresholdsPerPair(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -201,8 +202,8 @@ func TestThresholdsPerPair(t *testing.T) {
 		{"muted at 3.03:1", lightBase(map[string]string{"text-muted": "#949494"}), "text-muted", "ground", false},
 		{"muted at 2.92:1", lightBase(map[string]string{"text-muted": "#979797"}), "text-muted", "ground", true},
 		{"faint at 2.92:1", lightBase(map[string]string{"text-faint": "#979797"}), "text-faint", "ground", true},
-		{"on-accent at 4.54:1", map[string]string{"accent": "#767676", "on-accent": "#ffffff"}, "on-accent", "accent", false},
-		{"on-accent at 4.48:1", map[string]string{"accent": "#787878", "on-accent": "#ffffff"}, "on-accent", "accent", true},
+		{"on-accent at 4.54:1", map[string]string{"accent": "#767676", "accent-strong": "#767676", "on-accent": "#ffffff"}, "on-accent", "accent", false},
+		{"on-accent at 4.48:1", map[string]string{"accent": "#787878", "accent-strong": "#787878", "on-accent": "#ffffff"}, "on-accent", "accent", true},
 		{"focus at 3.03:1", lightBase(map[string]string{"focus": "#949494"}), "focus", "ground", false},
 		{"focus at 2.92:1", lightBase(map[string]string{"focus": "#979797"}), "focus", "ground", true},
 	}
@@ -317,6 +318,19 @@ func TestBuiltinThemesMeetContrast(t *testing.T) {
 		}
 		if len(th.Info.Warnings) != 0 {
 			t.Errorf("%s: warnings %v, want none", th.Info.ID, th.Info.Warnings)
+		}
+	}
+}
+
+// A background that falls back changes pairs already checked against it, so
+// the check runs again: a white theme with one slightly low muted text must
+// not end with its black text on the built-in dark ground.
+func TestBackgroundFallbackRechecksEarlierPairs(t *testing.T) {
+	src := themeSource(t, lightBase(map[string]string{"text-body": "#222222", "text-muted": "#a0a0a0"}))
+	got, _ := resolveSrc(t, src)
+	for _, p := range contrastPairs {
+		if ratio, missing := missingContrast(got.Tokens, p); missing {
+			t.Errorf("%s on %s is %.2f:1 after the fallback, needs %.1f:1 (%s on %s)", p.fg, p.bg, ratio, p.min, got.Tokens[p.fg], got.Tokens[p.bg])
 		}
 	}
 }

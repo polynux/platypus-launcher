@@ -77,8 +77,8 @@ type Manifest struct {
 	Icon string `json:"icon,omitempty"`
 	// Kind is "store" (default) or "data". A data plugin has no exec and
 	// lists its JSON files in Data.
-	Kind         string   `json:"kind"`
-	Data         []string `json:"data"`
+	Kind string   `json:"kind"`
+	Data []string `json:"data"`
 	// Theme names the theme.toml inside the folder (issue #105), e.g.
 	// "theme.toml". Only a data plugin may carry one: it is data like the
 	// JSON files, so it needs no approval. Empty means the plugin carries

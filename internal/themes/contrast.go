@@ -67,9 +67,11 @@ func builtinDefaults() map[string]string {
 // built-in ones, so a theme that only moves the ground still has its text
 // checked. The pair is what has to pass: an inherited foreground alone can't
 // fix a pair the theme broke, so the override it did set falls back too, and
-// the built-in pair is what reaches the UI. Each declared scheme is checked
-// the same way over its own resolved tokens (issue #134): a failing scheme
-// token falls back to the dark value.
+// the built-in pair is what reaches the UI. A background that falls back
+// changes pairs already checked against it, so the pairs run again until
+// nothing falls back (each pass only reverts overrides, so this ends). Each
+// declared scheme is checked the same way over its own resolved tokens
+// (issue #134): a failing scheme token falls back to the dark value.
 func (t *Theme) checkContrast() {
 	def := builtinDefaults()
 	if def == nil {
@@ -82,21 +84,28 @@ func (t *Theme) checkContrast() {
 	for name, v := range t.Tokens {
 		tokens[name] = v
 	}
-	for _, p := range contrastPairs {
-		got, missing := missingContrast(tokens, p)
-		if !missing {
-			continue
-		}
-		t.warn("token %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
-			p.fg, p.bg, tokens[p.fg], tokens[p.bg], got, p.min)
-		// Drop the foreground, then the background when the pair still
-		// misses: a token the theme didn't set has nothing to drop, and
-		// returning before the background would accept a failing pair.
-		delete(t.Tokens, p.fg)
-		tokens[p.fg] = def[p.fg]
-		if _, still := missingContrast(tokens, p); still {
-			delete(t.Tokens, p.bg)
-			tokens[p.bg] = def[p.bg]
+	for changed := true; changed; {
+		changed = false
+		for _, p := range contrastPairs {
+			got, missing := missingContrast(tokens, p)
+			if !missing {
+				continue
+			}
+			before := tokens[p.fg] + "\x00" + tokens[p.bg]
+			t.warn("token %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
+				p.fg, p.bg, tokens[p.fg], tokens[p.bg], got, p.min)
+			// Drop the foreground, then the background when the pair still
+			// misses: a token the theme didn't set has nothing to drop, and
+			// returning before the background would accept a failing pair.
+			delete(t.Tokens, p.fg)
+			tokens[p.fg] = def[p.fg]
+			if _, still := missingContrast(tokens, p); still {
+				delete(t.Tokens, p.bg)
+				tokens[p.bg] = def[p.bg]
+			}
+			if tokens[p.fg]+"\x00"+tokens[p.bg] != before {
+				changed = true
+			}
 		}
 	}
 	for _, scheme := range schemeNames {
@@ -111,22 +120,29 @@ func (t *Theme) checkContrast() {
 		for name, v := range over {
 			resolved[name] = v
 		}
-		for _, p := range contrastPairs {
-			got, missing := missingContrast(resolved, p)
-			if !missing {
-				continue
+		for changed := true; changed; {
+			changed = false
+			for _, p := range contrastPairs {
+				got, missing := missingContrast(resolved, p)
+				if !missing {
+					continue
+				}
+				before := resolved[p.fg] + "\x00" + resolved[p.bg]
+				t.warn("token %s in scheme %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
+					p.fg, scheme, p.bg, resolved[p.fg], resolved[p.bg], got, p.min)
+				delete(t.Schemes[scheme], p.fg)
+				resolved[p.fg] = tokens[p.fg]
+				if _, still := missingContrast(resolved, p); still {
+					delete(t.Schemes[scheme], p.bg)
+					resolved[p.bg] = tokens[p.bg]
+				}
+				if resolved[p.fg]+"\x00"+resolved[p.bg] != before {
+					changed = true
+				}
 			}
-			t.warn("token %s in scheme %s on %s: %s on %s is %.2f:1, needs %.1f:1, using the built-in value",
-				p.fg, scheme, p.bg, resolved[p.fg], resolved[p.bg], got, p.min)
-			delete(t.Schemes[scheme], p.fg)
-			resolved[p.fg] = tokens[p.fg]
-			if _, still := missingContrast(resolved, p); still {
-				delete(t.Schemes[scheme], p.bg)
-				resolved[p.bg] = tokens[p.bg]
-			}
-			if len(t.Schemes[scheme]) == 0 {
-				delete(t.Schemes, scheme)
-			}
+		}
+		if len(t.Schemes[scheme]) == 0 {
+			delete(t.Schemes, scheme)
 		}
 	}
 }
