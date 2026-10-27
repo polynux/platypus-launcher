@@ -1,13 +1,15 @@
 {
   "header": {
     "subtitle": "Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.",
+    "atlasSubtitle": "Each store comes in through a plugin. Plugins only do what you approve.",
     "pluginsFolder": "Plugins folder",
     "rescan": "Rescan"
   },
   "section": {
     "store": "store plugins",
     "data": "data plugins · no code, always on",
-    "builtIn": "built in"
+    "builtIn": "built in",
+    "builtInAtlas": "Built in"
   },
   "empty": {
     "label": "no store plugins",
@@ -126,6 +128,7 @@
     "libraryList": "Library list",
     "brings": "What it brings",
     "loginNeeded": "Log in needed",
-    "versionBy": "Version {{version}}, by {{author}}"
+    "versionBy": "Version {{version}}, by {{author}}",
+    "gameCount": "{{count}} games"
   }
 }

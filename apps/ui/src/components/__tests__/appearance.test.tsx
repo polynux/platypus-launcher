@@ -25,11 +25,9 @@ vi.mock('../../lib/gameTone', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/gameTone')>();
   return {
     ...actual,
-    useGameTone: () => ({
+    useGameToneChoice: () => ({
       supported: toneState.supported,
-      mode: 'accent',
       choice: toneState.choice,
-      tone: null,
       setChoice: (next: string) => {
         toneState.setChoice(next);
         toneState.choice = next;
@@ -77,6 +75,12 @@ describe('Appearance settings (issue #134)', () => {
     render(<AppearanceSetting onNotify={(m) => { notified.push(m); }} />);
     fireEvent.click(screen.getByRole('radio', { name: 'whole' }));
     expect(toneState.setChoice).toHaveBeenCalledWith('whole');
+  });
+
+  it('does not repaint the app accent while Appearance is mounted', () => {
+    document.documentElement.style.setProperty('--color-accent', 'rgb(12, 34, 56)');
+    render(<AppearanceSetting onNotify={() => {}} />);
+    expect(document.documentElement.style.getPropertyValue('--color-accent')).toBe('rgb(12, 34, 56)');
   });
 
   it('hides the scheme picker when the theme is dark only', () => {

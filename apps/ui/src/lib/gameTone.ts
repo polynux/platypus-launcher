@@ -432,3 +432,20 @@ export function useGameTone(heroUrl?: string | null): GameTone {
 
   return { supported, mode, choice, tone, setChoice };
 }
+
+/** Reads and edits the game-colour preference without painting it. Settings
+ *  must not replace the selected game's tone while the page is open. */
+export function useGameToneChoice(): Pick<GameTone, 'supported' | 'choice' | 'setChoice'> {
+  const supported = useVariant('color.game-tone');
+  const choice = useSyncExternalStore(
+    (listener) => { choiceListeners.add(listener); return () => choiceListeners.delete(listener); },
+    () => sharedChoice,
+    () => 'accent' as GameToneChoice,
+  );
+  useEffect(() => {
+    let live = true;
+    void loadGameToneChoice().then((stored) => { if (live && stored !== sharedChoice) { sharedChoice = stored; notifyChoice(); } });
+    return () => { live = false; };
+  }, []);
+  return { supported, choice, setChoice: (next) => { void saveGameToneChoice(next); } };
+}

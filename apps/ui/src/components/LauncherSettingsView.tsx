@@ -16,7 +16,7 @@ import { BackupsSetting } from './BackupsSetting';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
 import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
-import { useGameTone, type GameToneChoice } from '../lib/gameTone';
+import { useGameToneChoice, type GameToneChoice } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
 import { ATLAS_PAGE, ViewHeader, cx } from './ui';
 import { AtlasSRow, AtlasSSwitch } from './AtlasSettings';
@@ -194,7 +194,7 @@ function AtlasSettingsPage({ sections, loadError }: {
         <h1 className="text-[24px] font-extrabold tracking-tight">{t('settings:title')}</h1>
       </header>
       {loadError && <ErrorNotice message={loadError} fallback={t('loadError')} />}
-      <div className="grid items-start gap-7 lg:grid-cols-[180px_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav aria-label={t('sections.label')} className="grid gap-0.5">
           {ATLAS_CATS.map((c) => (
             <button
@@ -203,15 +203,15 @@ function AtlasSettingsPage({ sections, loadError }: {
               onClick={() => setCat(c)}
               aria-current={cat === c ? 'page' : undefined}
               className={cat === c
-                ? 'h-8 rounded-lg bg-accent/15 px-2.5 text-left text-[13px] font-bold text-text'
-                : 'h-8 rounded-lg px-2.5 text-left text-[13px] font-semibold text-text-muted transition hover:bg-surface hover:text-text'}
+                ? 'rounded-lg bg-[color-mix(in_srgb,var(--color-accent)_15%,var(--color-surface))] px-2.5 py-[7px] text-left text-[13px] font-semibold text-text'
+                : 'rounded-lg px-2.5 py-[7px] text-left text-[13px] font-semibold text-text-muted transition hover:bg-surface hover:text-text'}
             >
               {t(`atlas.cats.${c}`)}
             </button>
           ))}
         </nav>
-        <section aria-label={t(`atlas.cats.${cat}`)} className="min-w-0">
-          <h2 className="mb-1 text-[16px] font-extrabold tracking-tight">{t(`atlas.cats.${cat}`)}</h2>
+        <section aria-label={t(`atlas.cats.${cat}`)} className="min-w-0 px-[26px] pt-[18px]">
+          <h2 className="mb-1 text-[18px] font-extrabold tracking-tight">{t(`atlas.cats.${cat}`)}</h2>
           <div>{ATLAS_SECTIONS[cat].map((i) => <React.Fragment key={i}>{sections[i]}</React.Fragment>)}</div>
         </section>
       </div>
@@ -270,7 +270,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
         <AtlasSRow
           label={t('language.heading')}
           desc={<>
-            {t('language.description')}
+            {t('language.atlasDescription')}
             {dev && <span className="mt-1 block text-[12px] text-text-faint">{t('language.pseudoNote')}</span>}
           </>}
         >
@@ -438,7 +438,7 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   const { t: tTone } = useTranslation('gameTone');
   const schemes = useThemeSchemes();
   const scheme = useColorScheme();
-  const tone = useGameTone(null);
+  const tone = useGameToneChoice();
   const [busy, setBusy] = useState(false);
   const showScheme = schemes.length > 1;
   const showTone = tone.supported !== 'off';
@@ -450,11 +450,11 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
       </section>
     );
   }
-  const segWrap = 'gap-0.5 rounded-lg bg-surface p-0.5';
+  const segWrap = 'gap-0.5 rounded-[9px] bg-surface p-[3px]';
   const segItem =
     'gap-1.5 rounded-md bg-transparent px-2.5 py-0 font-sans text-[12.5px] font-semibold text-text-muted transition hover:bg-transparent hover:text-text ' +
-    'data-[state=on]:bg-surface-strong data-[state=on]:font-semibold data-[state=on]:text-text ' +
-    'data-[state=on]:shadow-[inset_0_-2px_0_var(--color-accent)]';
+    'data-[state=on]:bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] data-[state=on]:font-semibold data-[state=on]:text-text ' +
+    'data-[state=on]:ring-1 data-[state=on]:ring-inset data-[state=on]:ring-accent/40';
   const pickScheme = (next: string) => {
     if (next !== 'dark' && next !== 'light' && next !== 'black') return;
     persistedSettingsSection = 'appearance';

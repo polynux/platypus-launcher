@@ -1007,6 +1007,7 @@ export function AppContent() {
         return (
           <PluginsView
             plugins={plugins}
+            games={games}
             warnings={warnings}
             onPlugins={onPluginsChanged}
             onLibraryChanged={() => loadData('update')}

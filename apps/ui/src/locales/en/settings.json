@@ -20,6 +20,7 @@
  "language": {
   "heading": "Language",
   "description": "The language of the launcher. System follows your desktop language. Applies right away, without a restart.",
+  "atlasDescription": "Applies right away.",
   "label": "Language",
   "system": "System",
   "saved": "Language saved",

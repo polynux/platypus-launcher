@@ -20,6 +20,7 @@
  "language": {
   "heading": "Langue",
   "description": "La langue du lanceur. Système suit la langue de votre bureau. S'applique aussitôt, sans redémarrage.",
+  "atlasDescription": "S'applique aussitôt.",
   "label": "Langue",
   "system": "Système",
   "saved": "Langue enregistrée",

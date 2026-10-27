@@ -28,7 +28,7 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
   // The lab's single shop bar (StorefrontPage .ap-shop-bar): the store switch
   // as segmented buttons, then the browser row, then Redeem. No logo tabs row.
   const seg = (
-    <div role="tablist" aria-label={t('store:shop.storeLabel')} className="inline-flex min-w-0 flex-none gap-0.5 overflow-x-auto rounded-[10px] bg-surface p-[3px]">
+    <div role="tablist" aria-label={t('store:shop.storeLabel')} className="inline-flex min-w-0 flex-none gap-0.5 overflow-x-auto rounded-[9px] bg-surface p-[3px]">
       {plugins.map((p) => {
         const on = p.id === selected.id;
         return (
@@ -39,9 +39,9 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
             aria-selected={on}
             onClick={() => onSelect(p.id)}
             className={cx(
-              'inline-flex h-8 flex-none items-center gap-1.5 rounded-lg px-[11px] text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+              'inline-flex h-7 flex-none items-center gap-1.5 rounded-[7px] px-[11px] text-[13.5px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
               on
-                ? 'bg-[color-mix(in_srgb,var(--color-accent)_22%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/45'
+                ? 'bg-[color-mix(in_srgb,var(--color-accent)_20%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/40'
                 : 'text-text-muted hover:text-text',
             )}
           >
@@ -66,7 +66,7 @@ export function StoresPage({ plugins, selected, onSelect, canRedeem, onRedeem, i
           shopBar
           toolbarLead={seg}
           toolbarTrail={canRedeem ? (
-            <Button variant="neutral" size="sm" onClick={onRedeem} className="flex-none">
+              <Button variant="neutral" size="md" onClick={onRedeem} className="flex-none font-medium">
               <Ticket className="h-3.5 w-3.5" /> {t('store:shop.redeem')}
             </Button>
           ) : undefined}
