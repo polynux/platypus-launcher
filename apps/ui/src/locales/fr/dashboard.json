@@ -65,6 +65,9 @@
     "statOnDisk": "Sur le disque",
     "needsAttention": "À surveiller",
     "seeAll": "Tout voir ({{count}})",
-    "everythingWorks": "Tout fonctionne."
+    "everythingWorks": "Tout fonctionne.",
+    "friendsOnline": "Amis en ligne",
+    "onlineCount": "{{count}} en ligne",
+    "online": "En ligne"
   }
 }

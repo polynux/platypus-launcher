@@ -284,14 +284,14 @@ export function AppContent() {
             const installed = g.filter((x) => x.is_installed).length;
             // Runner count uses whatever the runners call returned (possibly stale).
             log({
-              type: 'update',
+              type: 'scan',
               detail: installed < g.length
                 ? t('activity:log.scanOwned', { count: installed, owned: g.length })
                 : t('activity:log.scan', { count: installed }),
               meta: t('activity:log.sources', { count: sources }),
             });
             for (const w of lib.warnings) log({
-              type: 'update',
+              type: 'scan',
               detail: w.needs_auth
                 ? t('activity:log.warnLoggedOut', { source: w.source })
                 : w.unavailable
@@ -331,7 +331,7 @@ export function AppContent() {
           if (failures.length > 0) {
             const msg = failures.join(' · ');
             setLoadError(msg);
-            log({ type: 'update', detail: t('activity:log.scanErrors'), meta: msg });
+            log({ type: 'scan', detail: t('activity:log.scanErrors'), meta: msg });
             notify(msg, 'err');
           } else {
             setLoadError(null);
@@ -893,6 +893,8 @@ export function AppContent() {
             ownedCount={games.length}
             runners={runners}
             activity={activity}
+            social={social}
+            onOpenFriends={() => setFriendsOpen(true)}
             dismissedHero={dismissedHero}
             onDismissHero={(ids) => setDismissedHero((prev) => new Set([...prev, ...ids]))}
             onOpenGame={openGame}
@@ -998,7 +1000,7 @@ export function AppContent() {
           <div className="p-7"><EmptyState label={t('nav:notFound')}>{t('nav:goneDetail')}</EmptyState></div>
         );
       case 'activity':
-        return <ActivityView events={activity} games={games} />;
+        return <ActivityView events={activity} games={games} onOpenGame={openGame} />;
       case 'fixes':
         return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => void saveSettings(game.id, { ...game.settings, runner_id: runner })} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':

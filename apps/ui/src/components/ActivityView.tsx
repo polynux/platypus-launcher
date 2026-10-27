@@ -1,7 +1,7 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useMemo, useState } from 'react';
-import { ArrowDownToLine, CircleDot, Cloud, Clock, Download, Trophy } from 'lucide-react';
+import { ArrowDownToLine, CircleDot, Cloud, Clock, Download, Trophy, RefreshCw } from 'lucide-react';
 import type { ActivityEvent, ActivityType, Game } from '../types';
 import { ActivityFeed } from './ActivityFeed';
 import { ATLAS_PAGE, Panel, Section, ViewHeader, EmptyState, clock, cx } from './ui';
@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { currentLocale } from '../lib/format';
 import { useVariant } from '../lib/theme';
 
-export function ActivityView({ events, games = [] }: { events: ActivityEvent[]; games?: Game[] }) {
+export function ActivityView({ events, games = [], onOpenGame }: { events: ActivityEvent[]; games?: Game[]; onOpenGame?: (id: string) => void }) {
   const { t } = useTranslation(['activity', 'nav']);
   // Atlas renders the /22 Activity page (issue #138); other themes keep the feed panel.
   if (useVariant('shell.navigation') === 'sourcebar') {
-    return <AtlasActivity events={events} games={games} />;
+    return <AtlasActivity events={events} games={games} onOpenGame={onOpenGame} />;
   }
   return (
     <div className="p-7">
@@ -47,6 +47,7 @@ const KIND_ICON: Record<ActivityType, React.ComponentType<{ className?: string }
   download: Download,
   add: Download,
   update: ArrowDownToLine,
+  scan: RefreshCw,
   cloud: Cloud,
   unlock: Trophy,
   fix: CircleDot,
@@ -56,7 +57,7 @@ const KIND_ICON: Record<ActivityType, React.ComponentType<{ className?: string }
 
 /** The /22 Activity page (issue #138, Atlas only): kind chips, a game
  *  filter and the day-grouped feed. Same events; only the markup is /22. */
-function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game[] }) {
+function AtlasActivity({ events, games, onOpenGame }: { events: ActivityEvent[]; games: Game[]; onOpenGame?: (id: string) => void }) {
   const { t } = useTranslation(['activity', 'nav', 'common']);
   const [kinds, setKinds] = useState<string[]>([]);
   const [game, setGame] = useState('all');
@@ -96,15 +97,13 @@ function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game
           {kindIds.map((k) => {
             const on = kinds.includes(k);
             return (
-              <button
+                <button
                 key={k}
                 type="button"
                 aria-pressed={on}
                 onClick={() => setKinds((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k]))}
-                className={cx(
-                  'rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                  on ? 'bg-accent font-bold text-on-accent ring-accent' : 'bg-surface text-text-muted ring-hairline hover:text-text',
-                )}
+                className={cx('h-[26px] rounded-[13px] px-[9px] text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                  on ? 'bg-[color-mix(in_srgb,var(--color-accent)_24%,var(--color-surface-strong))] text-text ring-1 ring-inset ring-accent/45' : 'bg-surface-strong text-text hover:bg-surface')}
               >
                 {t(`activity:atlas.kinds.${k}`)}
               </button>
@@ -140,19 +139,19 @@ function AtlasActivity({ events, games }: { events: ActivityEvent[]; games: Game
       ) : (
         days.map((d) => (
           <section key={d.key} aria-label={d.label}>
-            <h2 className="mb-1.5 text-[13px] font-bold">{d.label}</h2>
+            <h2 className="mb-1.5 text-[13px] font-bold text-text-muted">{d.label}</h2>
             <ul>
               {d.items.map((e) => {
                 const Icon = KIND_ICON[e.type] ?? CircleDot;
                 const title = (e.game && byId.get(e.game)?.title) || e.game || '';
                 return (
-                  <li key={e.id} className="grid h-[30px] grid-cols-[22px_48px_180px_1fr] items-center gap-3 rounded-lg px-2 transition hover:bg-surface">
-                    <span className="grid size-[22px] place-items-center rounded-full bg-surface-strong text-text-muted">
+                  <li key={e.id} className="grid min-h-[38px] grid-cols-[28px_52px_minmax(140px,220px)_minmax(0,1fr)] items-center gap-2.5 rounded-[7px] px-2 transition hover:bg-surface">
+                    <span className={cx('grid size-[26px] place-items-center rounded-[7px] bg-surface-strong', e.type === 'session' ? 'text-accent' : e.type === 'cloud' ? 'text-info' : e.type === 'unlock' ? 'text-[#f2c94c]' : 'text-text-muted')}>
                       <Icon className="size-3.5" />
                     </span>
                     <time className="text-[12px] tabular-nums text-text-faint">{clock(e.ts)}</time>
-                    <span className="truncate text-left text-[13px] font-bold">{title}</span>
-                    <span className="truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>
+                    {title ? <button type="button" onClick={() => onOpenGame?.(e.game)} className="truncate text-left text-[13px] font-bold hover:underline">{title}</button> : <span className="col-span-2 truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>}
+                    {title && <span className="truncate text-[13px] text-text-muted">{e.detail}{e.meta ? ` · ${e.meta}` : ''}</span>}
                   </li>
                 );
               })}

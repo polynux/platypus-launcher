@@ -30,6 +30,9 @@
     "rescan": "Réanalyser",
     "andMore": "et {{count}} de plus",
     "freeOf": "libres sur {{total}}",
-    "played": "Joué {{ago}}"
+    "played": "Joué {{ago}}",
+    "neverPlayed": "Jamais joué",
+    "systemDrive": "Disque système",
+    "almostFull": "Presque plein. Les installations sur ce disque échoueront."
   }
 }
