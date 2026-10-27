@@ -33,6 +33,15 @@
     "played": "Played {{ago}}",
     "neverPlayed": "Never played",
     "systemDrive": "System drive",
-    "almostFull": "Almost full. Installs on this drive will fail."
+    "almostFull": "Almost full. Installs on this drive will fail.",
+    "default": "Default",
+    "defaultFolder": "default folder",
+    "outsideTitle": "Outside your game folders",
+    "outsideEmpty": "All installed games are in your game folders.",
+    "moveTo": "Move to {{folder}}",
+    "leftoversTitle": "Leftovers",
+    "canceledInstall": "canceled install",
+    "clean": "Clean {{size}}",
+    "nothingLeft": "Nothing left behind."
   }
 }

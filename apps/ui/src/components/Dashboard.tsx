@@ -23,6 +23,7 @@ import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
 import { Effect } from 'effect';
 import { LauncherApi } from '../effect/runtime';
+import { PluginLogo } from './PluginLogo';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -49,6 +50,7 @@ interface DashboardProps {
   onJobAction?: (action: 'pause' | 'resume' | 'cancel', id: string) => void;
   social?: SocialView[];
   onOpenFriends?: () => void;
+  sourceLogos?: Record<string, string>;
 }
 
 export function Dashboard({ games, ownedCount, allGames, ...rest }: DashboardProps) {
@@ -446,7 +448,7 @@ function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
   return games.filter((g) => g.store === 'custom').slice(0, 5);
 }
 
-function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction, social = [], onOpenFriends }: DashboardProps & { allGames: Game[] }) {
+function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction, social = [], onOpenFriends, sourceLogos }: DashboardProps & { allGames: Game[] }) {
   const { t } = useTranslation(['dashboard', 'common', 'game', 'activity']);
   const waiting = games.filter(needsAttention);
   const hasSocial = social.some((v) => v.enabled);
@@ -632,15 +634,11 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
             ))}
           </dl>
           <div className="flex h-6 gap-0.5 overflow-hidden rounded-md">
-            {(['steam', 'gog', 'epic', 'ubisoft', 'custom'] as const).map((s) => {
-              const n = owned.filter((g) => g.store === s).length;
-              if (!n) return null;
-              return (
+            {[...owned.reduce((counts, game) => counts.set(game.source, (counts.get(game.source) ?? 0) + 1), new Map<string, number>())].map(([s, n]) => (
                 <span key={s} title={`${storeLabel(s, t)}: ${n}`} style={{ flex: n }} className="flex min-w-0 items-center gap-1 overflow-hidden bg-surface-strong px-1.5 text-[11.5px] tabular-nums text-text-muted">
-                  <span className="grid size-[14px] flex-none place-items-center rounded-sm bg-surface text-[9px] font-bold" aria-hidden>{storeLabel(s, t).slice(0, 1)}</span>{n}
+                  <PluginLogo src={sourceLogos?.[s]} name={storeLabel(s, t)} size="glyph" />{n}
                 </span>
-              );
-            })}
+            ))}
           </div>
         </section>
         <section aria-label={t('dashboard:home.needsAttention')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">

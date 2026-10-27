@@ -9,6 +9,9 @@ import type { DiskUsage, Game } from '../../types';
 const mock = vi.hoisted(() => ({
   api: {
     getDiskUsage: vi.fn(),
+    getGameFolders: vi.fn(),
+    listJobs: vi.fn(),
+    discardJob: vi.fn(),
     refreshDiskUsage: vi.fn(),
     openGameFolder: vi.fn(),
     scanGameSize: vi.fn(),
@@ -85,6 +88,9 @@ const emit = (d: DiskUsage) =>
 beforeEach(() => {
   mock.subs.length = 0;
   Object.values(mock.api).forEach((f) => f.mockReset());
+  mock.api.getGameFolders.mockReturnValue(Effect.succeed([]));
+  mock.api.listJobs.mockReturnValue(Effect.succeed([]));
+  mock.api.discardJob.mockReturnValue(Effect.succeed(undefined as never));
 });
 
 describe('StorageView', () => {

@@ -2,7 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import React, { useMemo, useState } from 'react';
 import { FolderInput, FolderOpen, HardDrive, HardDriveDownload, Loader2, RefreshCw, ScanLine, Trash2, TriangleAlert } from 'lucide-react';
-import type { DiskUsage, Game, RemoveOptions } from '../types';
+import type { DiskUsage, Game, Job, RemoveOptions } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
 import { Badge } from './ds/badge';
@@ -19,6 +19,11 @@ import { useStorageData, type StorageData } from './useStorageData';
 function figure(n: number): string {
   if (n < 0) return '—';
   return formatBytes(n) || '0 B';
+}
+
+function isWithinFolder(path: string, folder: string): boolean {
+  const base = folder.endsWith('/') ? folder.slice(0, -1) : folder;
+  return path === folder || path.startsWith(`${base}/`);
 }
 
 interface StorageViewProps {
@@ -399,6 +404,12 @@ function AtlasStorage({ data }: { data: StorageData }) {
     if (rest.length > 0 && groups.length > 0) groups[0].rows.push(...rest);
     return groups;
   }, [data.drives, data.sorted, data.byId]);
+  const defaultFolder = data.folders?.find((f) => f.is_default)?.path;
+  const outside = data.folders ? data.library.filter((g) => g.is_installed && !!g.install_dir && !data.folders.some((f) => isWithinFolder(g.install_dir, f.path))).map((game) => {
+    const row = data.sorted.find((r) => r.game_id === game.id);
+    return { game, size: row ? row.size_bytes + row.prefix_bytes : game.size_bytes ?? 0 };
+  }) : [];
+  const leftovers = data.jobs.filter((j) => j.leftover && !j.cleaned_at);
   return (
     <div className={ATLAS_PAGE}>
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -422,28 +433,28 @@ function AtlasStorage({ data }: { data: StorageData }) {
           <EmptyState label={t('storage:emptyTitle')}>{t('storage:emptyBody')}</EmptyState>
         )
       ) : (
-        <>
-          {gamesByDrive.map(({ drive, rows }) => (
-            <AtlasDriveCard key={drive.id} drive={drive} rows={rows} data={data} />
-          ))}
-        </>
+        gamesByDrive.map(({ drive, rows }) => (
+          <AtlasDriveCard key={drive.id} drive={drive} rows={rows} data={data} defaultFolder={defaultFolder} />
+        ))
       )}
+      <StoragePanels outside={outside} leftovers={leftovers} defaultFolder={defaultFolder} data={data} />
     </div>
   );
 }
 
-function AtlasDriveCard({ drive: d, rows, data }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData }) {
+function AtlasDriveCard({ drive: d, rows, data, defaultFolder }: { drive: DiskUsage['drives'][number]; rows: DiskUsage['games'][number][]; data: StorageData; defaultFolder?: string }) {
   const { t } = useTranslation(['storage', 'gameSettings', 'common']);
   const known = d.total_bytes > 0;
-  const shown = rows.slice(0, 6);
-  const hidden = rows.length - shown.length;
+  const shown = rows;
   const total = rows.reduce((a, r) => a + r.size_bytes + r.prefix_bytes, 0);
+  const isDefaultDrive = !!defaultFolder && d.folders.some((f) => isWithinFolder(defaultFolder, f));
   return (
     <section aria-label={d.mount} className="grid gap-2.5 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="inline-flex items-center gap-2 text-[14px] font-bold">
           <HardDrive className="h-[18px] w-[18px] text-text-faint" aria-hidden />
           {d.mount === '/' ? t('storage:atlas.systemDrive') : d.mount.split('/').filter(Boolean).at(-1) || d.mount}
+          {isDefaultDrive && <span className="rounded-md bg-surface-strong px-[7px] py-0.5 text-[11.5px] font-semibold text-text-muted">{t('storage:atlas.default')}</span>}
         </span>
         <span className="text-[12.5px] text-text-muted">
           <strong className={d.free_bytes < 20e9 ? 'font-bold text-danger' : 'font-bold text-text'}>{figure(d.free_bytes)}</strong> {t('storage:atlas.freeOf', { total: figure(d.total_bytes) })}
@@ -476,9 +487,6 @@ function AtlasDriveCard({ drive: d, rows, data }: { drive: DiskUsage['drives'][n
             <AtlasGameRow key={row.game_id} row={row} data={data} />
           ))}
         </ul>
-      )}
-      {hidden > 0 && (
-        <p className="text-[12px] text-text-faint">{t('storage:atlas.andMore', { count: hidden })}</p>
       )}
     </section>
   );
@@ -587,4 +595,31 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
       )}
     </li>
   );
+}
+
+function StoragePanels({ outside, leftovers, defaultFolder, data }: { outside: { game: Game; size: number }[]; leftovers: Job[]; defaultFolder?: string; data: StorageData }) {
+  const { t } = useTranslation(['storage', 'common']);
+  const [picked, setPicked] = useState<Set<string> | null>(null);
+  const pickedIds = picked ?? new Set(leftovers.map((j) => j.id));
+  const defaultName = defaultFolder?.split('/').filter(Boolean).at(-1) || defaultFolder || t('storage:atlas.defaultFolder');
+  const clean = () => { void Promise.all([...pickedIds].map((id) => data.discardJob(id))).then(data.refreshJobs).then(() => setPicked(null)); };
+  return <div className="grid gap-3 md:grid-cols-2">
+    <section className="rounded-xl bg-surface px-4 py-3.5">
+      <h2 className="mb-2 text-[14px] font-bold">{t('storage:atlas.outsideTitle')}</h2>
+      {outside.length ? <ul className="divide-y divide-hairline">{outside.map(({ game, size }) => {
+        return <li key={game.id} className="flex items-center gap-3 py-2">
+          <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold">{game.title}</span><span className="block truncate text-[12px] text-text-faint" title={game.install_dir}>{game.install_dir}, {figure(size)}</span></span>
+          <Button variant="neutral" size="sm" onClick={() => data.setMoveId(game.id)}>{t('storage:atlas.moveTo', { folder: defaultName })}</Button>
+          {data.moveId === game.id && <MoveDialog game={game} startFolder={parentFolder(game.install_dir)} onClose={() => data.setMoveId(null)} onQueued={() => { data.setMoveId(null); data.onNotify(t('gameSettings:maintenance.moving', { title: game.title }), 'busy'); }} />}
+        </li>;
+      })}</ul> : <p className="text-[12.5px] text-text-muted">{t('storage:atlas.outsideEmpty')}</p>}
+    </section>
+    <section className="rounded-xl bg-surface px-4 py-3.5">
+      <h2 className="mb-2 text-[14px] font-bold">{t('storage:atlas.leftoversTitle')}</h2>
+      {leftovers.length ? <><ul className="divide-y divide-hairline">{leftovers.map((j) => <li key={j.id} className="flex items-center gap-2 py-2 text-[12.5px]">
+        <input type="checkbox" checked={pickedIds.has(j.id)} onChange={(e) => setPicked((prev) => { const next = new Set(prev ?? leftovers.map((job) => job.id)); e.target.checked ? next.add(j.id) : next.delete(j.id); return next; })} aria-label={j.title} className="accent-accent" />
+        <span className="min-w-0 flex-1 truncate">{j.title}, {t('storage:atlas.canceledInstall')}</span><span className="tabular-nums text-text-muted">{figure(j.bytes)}</span>
+      </li>)}</ul><Button variant="primary" size="sm" disabled={!pickedIds.size} onClick={clean}>{t('storage:atlas.clean', { size: figure(leftovers.filter((j) => pickedIds.has(j.id)).reduce((n, j) => n + j.bytes, 0)) })}</Button></> : <p className="text-[12.5px] text-text-muted">{t('storage:atlas.nothingLeft')}</p>}
+    </section>
+  </div>;
 }

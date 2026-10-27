@@ -17,6 +17,8 @@ const mock = vi.hoisted(() => ({
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
     getDiskUsage: () => Effect.succeed(usage()),
+    getGameFolders: () => Effect.succeed([{ path: '/mnt/a/Games', is_default: true, exists: true, free_bytes: 40 * GB }]),
+    listJobs: () => Effect.succeed([]),
     refreshDiskUsage: () => Effect.succeed(usage()),
     openGameFolder: () => Effect.succeed(undefined as never),
     scanGameSize: () => Effect.succeed(usage()),

@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ds/switch';
 import { ErrorNotice } from './ErrorNotice';
 import { coreErrMsg } from '../lib/coreError';
+import { useVariant } from '../lib/theme';
+import { AtlasSRow, AtlasSSwitch } from './AtlasSettings';
 
 const SECTION = 'max-w-2xl border-t border-white/[0.07] py-6';
 
@@ -80,6 +82,24 @@ export function BackupsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
     : saved?.manifest === 'fetching' ? t('backups.manifest.fetching')
     : saved?.manifest === 'stale' ? t('backups.manifest.stale')
     : t('backups.manifest.none');
+
+  if (useVariant('shell.navigation') === 'sourcebar') {
+    const persist = (nextFolder: string, nextKeep: number, nextMode: string, nextAfter: boolean) => {
+      setBusy(true);
+      Effect.runPromise(LauncherApi.setBackupSettings(nextFolder, nextKeep, nextMode, nextAfter)).then((s) => {
+        setSaved(s); setFolder(s.folder === s.default_folder ? '' : s.folder); setKeep(s.keep); setMode(s.mode); setAfterSession(s.after_session);
+      }).catch((e) => setError(coreErrMsg(e))).finally(() => setBusy(false));
+    };
+    const changeFolder = () => Effect.runPromise(LauncherApi.pickFolder(t('backups.folderLabel'), saved?.folder || saved?.default_folder || '')).then((p) => { if (p) persist(p, Number(keep) || 5, mode, afterSession); }).catch((e) => setError(coreErrMsg(e)));
+    return <section>
+      <AtlasSSwitch label={t('backups.atlasAutoLabel')} desc={t('backups.afterSessionHint')} checked={afterSession} disabled={!saved || busy} onChange={() => persist(folder, Number(keep) || 5, mode, !afterSession)} />
+      <AtlasSRow label={t('backups.keepLabel')}><Select value={String(keep || 5)} onValueChange={(v) => persist(folder, Number(v), mode, afterSession)} disabled={!saved || busy}><SelectTrigger aria-label={t('backups.keepLabel')} className="h-8 w-[180px] font-sans text-[13px]"><SelectValue /></SelectTrigger><SelectContent>{[3, 5, 10, 20].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent></Select></AtlasSRow>
+      <AtlasSRow label={t('backups.mode.destructive')}><Select value={mode} onValueChange={(v) => persist(folder, Number(keep) || 5, v, afterSession)} disabled={!saved || busy}><SelectTrigger aria-label={t('backups.mode.destructive')} className="h-8 w-[210px] font-sans text-[13px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="destructive">{t('backups.mode.destructive')}</SelectItem><SelectItem value="all">{t('backups.mode.all')}</SelectItem><SelectItem value="off">{t('backups.mode.off')}</SelectItem></SelectContent></Select></AtlasSRow>
+      <AtlasSRow label={t('backups.folderLabel')} desc={saved?.folder || saved?.default_folder}><Button variant="ghost" size="sm" onClick={changeFolder} disabled={!saved || busy}>{t('prefixes.change')}</Button></AtlasSRow>
+      <AtlasSRow label={t('backups.manifestLabel')} desc={manifestState}><Button variant="ghost" size="sm" onClick={refresh} disabled={refreshing}>{refreshing ? t('backups.updating') : t('backups.update')}</Button></AtlasSRow>
+      {error && <ErrorNotice message={error} fallback={t('backups.saveError')} />}
+    </section>;
+  }
 
   return (
     <section className={SECTION}>

@@ -894,6 +894,7 @@ export function AppContent() {
             runners={runners}
             activity={activity}
             social={social}
+            sourceLogos={sourceLogos}
             onOpenFriends={() => setFriendsOpen(true)}
             dismissedHero={dismissedHero}
             onDismissHero={(ids) => setDismissedHero((prev) => new Set([...prev, ...ids]))}

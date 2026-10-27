@@ -33,6 +33,15 @@
     "played": "Joué {{ago}}",
     "neverPlayed": "Jamais joué",
     "systemDrive": "Disque système",
-    "almostFull": "Presque plein. Les installations sur ce disque échoueront."
+    "almostFull": "Presque plein. Les installations sur ce disque échoueront.",
+    "default": "Par défaut",
+    "defaultFolder": "dossier par défaut",
+    "outsideTitle": "En dehors de vos dossiers de jeux",
+    "outsideEmpty": "Tous les jeux installés sont dans vos dossiers de jeux.",
+    "moveTo": "Déplacer vers {{folder}}",
+    "leftoversTitle": "Fichiers restants",
+    "canceledInstall": "installation annulée",
+    "clean": "Nettoyer {{size}}",
+    "nothingLeft": "Aucun fichier restant."
   }
 }

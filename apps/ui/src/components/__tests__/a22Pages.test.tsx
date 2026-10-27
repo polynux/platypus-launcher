@@ -29,6 +29,9 @@ vi.mock('../../lib/theme', async (importOriginal) => {
 
 const mock = vi.hoisted(() => ({
   getDiskUsage: vi.fn(),
+  getGameFolders: vi.fn(),
+  listJobs: vi.fn(),
+  discardJob: vi.fn(),
   refreshDiskUsage: vi.fn(),
   openGameFolder: vi.fn(),
   scanGameSize: vi.fn(),
@@ -38,11 +41,15 @@ const mock = vi.hoisted(() => ({
   approvePlugin: vi.fn(),
   getLauncherSettings: vi.fn(),
   listThemes: vi.fn(),
+  socialViews: vi.fn(),
   subs: [] as ((d: unknown) => void)[],
 }));
 vi.mock('../../effect/runtime', () => ({
   LauncherApi: {
     getDiskUsage: (...a: unknown[]) => mock.getDiskUsage(...a),
+    getGameFolders: (...a: unknown[]) => mock.getGameFolders(...a),
+    listJobs: (...a: unknown[]) => mock.listJobs(...a),
+    discardJob: (...a: unknown[]) => mock.discardJob(...a),
     refreshDiskUsage: (...a: unknown[]) => mock.refreshDiskUsage(...a),
     openGameFolder: (...a: unknown[]) => mock.openGameFolder(...a),
     scanGameSize: (...a: unknown[]) => mock.scanGameSize(...a),
@@ -52,6 +59,7 @@ vi.mock('../../effect/runtime', () => ({
     approvePlugin: (...a: unknown[]) => mock.approvePlugin(...a),
     getLauncherSettings: (...a: unknown[]) => mock.getLauncherSettings(...a),
     listThemes: (...a: unknown[]) => mock.listThemes(...a),
+    socialViews: (...a: unknown[]) => mock.socialViews(...a),
   },
   onDiskUsage: (cb: (d: unknown) => void) => {
     mock.subs.push(cb);
@@ -87,6 +95,10 @@ beforeEach(() => {
   Object.values(mock).forEach((v) => { if (typeof v === 'function' && 'mockReset' in v) (v as unknown as { mockReset(): void }).mockReset(); });
   mock.getLauncherSettings.mockReturnValue(Effect.succeed({} as never));
   mock.listThemes.mockReturnValue(Effect.succeed([] as never));
+  mock.getGameFolders.mockReturnValue(Effect.succeed([] as never));
+  mock.listJobs.mockReturnValue(Effect.succeed([] as never));
+  mock.discardJob.mockReturnValue(Effect.succeed(undefined as never));
+  mock.socialViews.mockReturnValue(Effect.succeed([] as never));
 });
 
 const noop = () => {};
