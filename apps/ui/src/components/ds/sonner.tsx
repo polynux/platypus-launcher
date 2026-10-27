@@ -52,8 +52,8 @@ export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
       icons={{
         success: plain ? undefined : <TypeIcon Icon={CheckCircle2} tone="bg-ok/15 text-ok" />,
         info: plain ? undefined : <TypeIcon Icon={Info} tone="bg-info/10 text-info" />,
-        error: plain ? <XCircle className="size-3.5 text-danger" /> : <TypeIcon Icon={XCircle} tone="bg-danger/15 text-danger" />,
-        loading: plain ? <Loader2 className="size-3.5 animate-spin" /> : <TypeIcon Icon={Loader2} tone="bg-accent-strong/15 text-accent-strong" spin />,
+        error: plain ? undefined : <TypeIcon Icon={XCircle} tone="bg-danger/15 text-danger" />,
+        loading: plain ? undefined : <TypeIcon Icon={Loader2} tone="bg-accent-strong/15 text-accent-strong" spin />,
         close: <X className="size-3.5" />,
       }}
       toastOptions={{
@@ -70,7 +70,8 @@ export function Toaster({ storeOpen = false }: { storeOpen?: boolean }) {
           closeButton:
             'platypus-toast-close absolute flex size-7 items-center justify-center rounded-xl p-0 text-text-muted transition hover:bg-surface-strong hover:text-text',
           content: 'platypus-toast-content flex min-w-0 flex-1 flex-col pr-5',
-          icon: 'platypus-toast-icon flex flex-none items-center',
+          // /22 toasts are a plain one-line pill: no icon (the slot is hidden).
+          icon: plain ? 'hidden' : 'platypus-toast-icon flex flex-none items-center',
         },
       }}
     />
