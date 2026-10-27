@@ -148,6 +148,7 @@ export const EVENT_TEXT: Record<ActivityType, string> = {
   download: 'text-dl',
   tweak: 'text-attention',
   cloud: 'text-info',
+  scan: 'text-text-muted',
 };
 
 export const EVENT_DOT: Record<ActivityType, string> = {
@@ -160,6 +161,7 @@ export const EVENT_DOT: Record<ActivityType, string> = {
   download: 'bg-dl',
   tweak: 'bg-attention',
   cloud: 'bg-info',
+  scan: 'bg-text-muted',
 };
 
 export function EmptyState({ label, children, action, icon: Icon }: { label: string; children?: React.ReactNode; action?: React.ReactNode; /** Atlas icon (Download, Check, Clock): lab .ap-empty has a 20px faint icon, no dashed box. */

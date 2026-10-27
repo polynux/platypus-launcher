@@ -219,7 +219,7 @@ export type Compat = gen.Compat;
 export type CrashHint = gen.CrashHint;
 export type CrashHints = gen.CrashHints;
 
-export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'remove' | 'tweak' | 'cloud';
+export type ActivityType = 'session' | 'unlock' | 'fix' | 'update' | 'download' | 'add' | 'remove' | 'tweak' | 'cloud' | 'scan';
 
 export interface ActivityEvent {
   id: number;

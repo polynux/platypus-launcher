@@ -1,9 +1,9 @@
 // i18n: converted
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { ActivityEvent, Game, Job, ProtonVersion, SessionEvent, ThemeLayout as DashboardLayoutData, View } from '../types';
+import type { ActivityEvent, Game, Job, ProtonVersion, SessionEvent, SocialView, ThemeLayout as DashboardLayoutData, View } from '../types';
 import { ActivityPanel } from './ActivityFeed';
 import { ATLAS_PAGE, Cover, EmptyState, Panel, TierBadge, TweakDot, cardClass, cx } from './ui';
 import { CompatChip, GameCardBody } from './CompatBadges';
@@ -21,6 +21,8 @@ import { ThemeLayout } from '../lib/layout';
 import { AtlasMainAction } from './GameTabs';
 import { useThemeLayout, useVariant } from '../lib/theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { Effect } from 'effect';
+import { LauncherApi } from '../effect/runtime';
 
 const byTitle = (a: Game, b: Game) => sortKey(a).localeCompare(sortKey(b)) || a.id.localeCompare(b.id);
 
@@ -45,6 +47,8 @@ interface DashboardProps {
   onInstall?: (game: Game) => void;
   onStop?: (id: string) => void;
   onJobAction?: (action: 'pause' | 'resume' | 'cancel', id: string) => void;
+  social?: SocialView[];
+  onOpenFriends?: () => void;
 }
 
 export function Dashboard({ games, ownedCount, allGames, ...rest }: DashboardProps) {
@@ -442,9 +446,10 @@ function recentAdded(games: Game[], activity: ActivityEvent[]): Game[] {
   return games.filter((g) => g.store === 'custom').slice(0, 5);
 }
 
-function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction }: DashboardProps & { allGames: Game[] }) {
+function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, onOpenGame, onNavigate, jobs, sessions, sessionStartedAt, onPlay, onInstall, onStop, onJobAction, social = [], onOpenFriends }: DashboardProps & { allGames: Game[] }) {
   const { t } = useTranslation(['dashboard', 'common', 'game', 'activity']);
   const waiting = games.filter(needsAttention);
+  const hasSocial = social.some((v) => v.enabled);
   const pending = waiting.filter((g) => !dismissedHero.has(g.id));
   // The lab's suggestion: the first owned, not-installed game, else an
   // installed never-played one, skipping dismissed ones, else the game
@@ -540,7 +545,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-bold">{g.title}</div>
-                    <div className="truncate text-[12px] text-text-faint">{sub}</div>
+                    <div className="truncate text-[12px] text-text-faint"><ContinueMeta game={g} sub={sub} /></div>
                   </div>
                   {mainAction(g, (
                     <button
@@ -607,7 +612,7 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
           </div>
         </section>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <section aria-label={t('dashboard:home.yourLibrary')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
           <div className="flex items-center justify-between gap-2.5">
             <h2 className="text-[14px] font-bold">{t('dashboard:home.yourLibrary')}</h2>
@@ -626,13 +631,13 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
               </div>
             ))}
           </dl>
-          <div className="flex gap-1" aria-hidden>
+          <div className="flex h-6 gap-0.5 overflow-hidden rounded-md">
             {(['steam', 'gog', 'epic', 'ubisoft', 'custom'] as const).map((s) => {
               const n = owned.filter((g) => g.store === s).length;
               if (!n) return null;
               return (
-                <span key={s} title={`${storeLabel(s, t)}: ${n}`} style={{ flex: n }} className="grid h-5 place-items-center overflow-hidden rounded bg-surface-strong text-[11px] tabular-nums text-text-muted">
-                  {n}
+                <span key={s} title={`${storeLabel(s, t)}: ${n}`} style={{ flex: n }} className="flex min-w-0 items-center gap-1 overflow-hidden bg-surface-strong px-1.5 text-[11.5px] tabular-nums text-text-muted">
+                  <span className="grid size-[14px] flex-none place-items-center rounded-sm bg-surface text-[9px] font-bold" aria-hidden>{storeLabel(s, t).slice(0, 1)}</span>{n}
                 </span>
               );
             })}
@@ -665,7 +670,34 @@ function AtlasHome({ games, allGames, activity, dismissedHero, onDismissHero, on
             </ul>
           )}
         </section>
+        {hasSocial ? <section aria-label={t('dashboard:home.friendsOnline')} className="grid content-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
+          <div className="flex items-center justify-between gap-2.5">
+            <h2 className="text-[14px] font-bold">{t('dashboard:home.friendsOnline')}</h2>
+            <Button variant="link" onClick={onOpenFriends}>{t('dashboard:home.onlineCount', { count: social.flatMap((v) => v.friends).filter((f) => f.state === 'online').length })}</Button>
+          </div>
+          <ul className="grid gap-2">
+            {social.filter((v) => v.enabled).flatMap((v) => v.friends.filter((f) => f.state === 'online').map((f) => ({ ...f, plugin: v.plugin }))).slice(0, 4).map((f) => (
+              <li key={`${f.plugin}:${f.id}`} className="flex min-w-0 items-center gap-2.5">
+                {f.avatarUrl ? <img src={f.avatarUrl} alt="" className="size-8 rounded-full object-cover" /> : <span className="grid size-8 place-items-center rounded-full bg-surface-strong text-[12px] font-bold">{f.name.slice(0, 1)}</span>}
+                <span className="min-w-0"><span className="block truncate text-[13px] font-semibold">{f.name}</span><span className="block truncate text-[12px] text-text-faint">{f.game?.title ?? t('dashboard:home.online')}</span></span>
+              </li>
+            ))}
+          </ul>
+        </section> : null}
       </div>
     </div>
   );
+}
+
+function ContinueMeta({ game, sub }: { game: Game; sub: string }) {
+  const [progress, setProgress] = useState<{ unlocked: number; total: number } | null>(null);
+  useEffect(() => {
+    if (typeof LauncherApi.getGameAchievements !== 'function') return;
+    let alive = true;
+    Effect.runPromise(LauncherApi.getGameAchievements(game)).then((r) => {
+      if (alive && r) setProgress(r);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [game]);
+  return <>{sub}{progress ? ` · ${progress.unlocked}/${progress.total} achievements` : ''}</>;
 }

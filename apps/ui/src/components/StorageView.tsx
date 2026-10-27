@@ -1,7 +1,7 @@
 // i18n: converted
 import { useTranslation } from 'react-i18next';
 import React, { useMemo, useState } from 'react';
-import { FolderInput, FolderOpen, HardDriveDownload, Loader2, RefreshCw, ScanLine, Trash2 } from 'lucide-react';
+import { FolderInput, FolderOpen, HardDrive, HardDriveDownload, Loader2, RefreshCw, ScanLine, Trash2, TriangleAlert } from 'lucide-react';
 import type { DiskUsage, Game, RemoveOptions } from '../types';
 import { ATLAS_PAGE, Cover, EmptyState, MonoLabel, ViewHeader } from './ui';
 import { Button } from './ds/button';
@@ -442,11 +442,11 @@ function AtlasDriveCard({ drive: d, rows, data }: { drive: DiskUsage['drives'][n
     <section aria-label={d.mount} className="grid gap-2.5 rounded-2xl bg-surface p-4 ring-1 ring-hairline">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="inline-flex items-center gap-2 text-[14px] font-bold">
-          <HardDriveDownload className="h-4 w-4 text-text-muted" aria-hidden />
-          {d.mount}
+          <HardDrive className="h-[18px] w-[18px] text-text-faint" aria-hidden />
+          {d.mount === '/' ? t('storage:atlas.systemDrive') : d.mount.split('/').filter(Boolean).at(-1) || d.mount}
         </span>
         <span className="text-[12.5px] text-text-muted">
-          <strong className="font-bold text-text">{figure(d.free_bytes)}</strong> {t('storage:atlas.freeOf', { total: figure(d.total_bytes) })}
+          <strong className={d.free_bytes < 20e9 ? 'font-bold text-danger' : 'font-bold text-text'}>{figure(d.free_bytes)}</strong> {t('storage:atlas.freeOf', { total: figure(d.total_bytes) })}
         </span>
       </header>
       <div className="min-w-0 truncate text-[12px] text-text-faint select-text">{d.folders.join(' · ')}</div>
@@ -456,18 +456,20 @@ function AtlasDriveCard({ drive: d, rows, data }: { drive: DiskUsage['drives'][n
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={known ? Math.round((d.games_bytes / d.total_bytes) * 100) : undefined}
-        className={known ? 'flex h-2.5 gap-px overflow-hidden rounded-full bg-hairline' : 'h-2.5 overflow-hidden rounded-full bg-surface-strong animate-pulse'}
+        className={known ? 'flex h-3.5 gap-0.5 overflow-hidden rounded-[5px] bg-surface-strong' : 'h-3.5 overflow-hidden rounded-[5px] bg-surface-strong animate-pulse'}
       >
-        {known && total > 0 && shown.map((r, i) => (
+        {known && total > 0 && rows.map((r, i) => (
           <div
             key={r.game_id}
-            className="bg-accent transition-[width]"
-            style={{ width: `${Math.max(1, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, opacity: Math.max(0.35, 1 - i * 0.12) }}
+            className="shrink-0 bg-[color-mix(in_srgb,var(--color-accent)_75%,var(--color-surface-strong))] transition-[width]"
+            style={{ width: `${Math.max(0, ((r.size_bytes + r.prefix_bytes) / d.total_bytes) * 100)}%`, backgroundColor: `color-mix(in srgb, var(--color-accent) ${i % 2 ? 55 : 75}%, var(--color-surface-strong))` }}
             title={`${r.title} · ${figure(r.size_bytes + r.prefix_bytes)}`}
           />
         ))}
-        {known && <div className="min-w-1 flex-1 bg-hairline" />}
+        {known && d.other_bytes > 0 && <div className="shrink-0 bg-hairline-strong" style={{ width: `${(d.other_bytes / d.total_bytes) * 100}%` }} />}
+        {known && <div className="min-w-0 flex-1 bg-surface-strong" />}
       </div>
+      {d.free_bytes >= 0 && d.free_bytes < 20e9 && <p className="flex items-center gap-1.5 text-[12.5px] text-attention"><TriangleAlert className="size-[13px]" />{t('storage:atlas.almostFull')}</p>}
       {shown.length > 0 && (
         <ul className="divide-y divide-hairline">
           {shown.map((row) => (
@@ -487,7 +489,7 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
   const game = data.byId.get(row.game_id);
   return (
     <li className="group py-1.5">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3">
+      <div className="grid h-10 grid-cols-[56px_minmax(0,1fr)_200px_90px_auto] items-center gap-3">
         <button
           type="button"
           onClick={() => game && data.openFolder(game)}
@@ -495,14 +497,10 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
           aria-label={game ? t('storage:action.open', { title: game.title }) : row.title}
           disabled={!game}
         >
-          <Cover src={game ? heroImages(game) : []} title={row.title} className="h-5 w-11 rounded ring-1 ring-hairline" />
+          <Cover src={game ? heroImages(game) : []} title={row.title} className="h-[26px] w-14 rounded" />
         </button>
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold">{row.title}</div>
-          <div className="truncate text-[12px] text-text-muted">
-            {game?.last_played_at ? t('storage:atlas.played', { ago: lastPlayedAgo(game) ?? '' }) : t('storage:size.scanned')}
-          </div>
-        </div>
+        <div className="truncate text-[13px] font-semibold hover:underline">{row.title}</div>
+        <div className="truncate text-[12.5px] text-text-muted">{game?.last_played_at ? t('storage:atlas.played', { ago: lastPlayedAgo(game) ?? '' }) : t('storage:atlas.neverPlayed')}</div>
         <span className="text-[13px] tabular-nums text-text-muted">{figure(row.size_bytes + row.prefix_bytes)}</span>
         {game ? (
           <div className="flex items-center gap-1">
@@ -524,8 +522,8 @@ function AtlasGameRow({ row, data }: { row: DiskUsage['games'][number]; data: St
             {(game.store === 'custom' || game.is_installed) && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="font-semibold text-text-muted hover:text-text"
+                size="md"
+                className="font-medium text-[13.5px] text-text-muted hover:text-text"
                 aria-label={game.store === 'custom' ? t('storage:action.remove', { title: game.title }) : t('storage:action.uninstall', { title: game.title })}
                 onClick={() => {
                   data.setRemoveId(null);

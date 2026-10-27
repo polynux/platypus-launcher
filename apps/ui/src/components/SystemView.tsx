@@ -110,39 +110,40 @@ function AtlasRunners({ runners, games, onRefresh, scanning }: SystemViewProps &
             </Select>
           </section>
           <section aria-label={t('runners:atlas.installed')}>
-            <h2 className="mb-1.5 text-[13px] font-bold text-text-muted">{t('runners:atlas.installed')}</h2>
+            <h2 className="mb-2.5 text-[13px] font-bold text-text-muted">{t('runners:atlas.installed')}</h2>
             <ul className="divide-y divide-hairline">
               {runners.map((r) => {
                 const used = uses(r.id, r.name);
                 return (
-                  <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[13px] font-semibold text-text">{r.name}</span>
+                  <li key={r.id} className="grid min-h-14 grid-cols-[minmax(200px,1.3fr)_minmax(160px,1fr)_70px_130px] items-center gap-3.5 border-b border-hairline">
+                    <div className="min-w-0 flex flex-wrap items-center gap-2">
+                      <span className="basis-full text-[13px] font-bold text-text">{r.name}</span>
                         {r.is_default && (
                           <span className="rounded-md bg-surface-strong px-1.5 py-0.5 text-[11.5px] font-semibold text-text-muted">
                             {t('runners:atlas.defaultBadge')}
                           </span>
                         )}
-                      </div>
-                      <div className="mt-0.5 truncate text-[12px] text-text-faint select-text">{r.path}</div>
+                      <div className="basis-full truncate text-[12.5px] text-text-faint select-text">{r.path}</div>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1">
                       {used.length > 0 ? (
-                        <div className="mt-1.5 flex items-center gap-1.5">
-                          <span className="flex items-center" aria-hidden>
+                        <>
+                          <span className="flex items-center gap-1" aria-hidden>
                             {used.slice(0, 5).map((g) => (
-                              <Cover key={g.id} src={heroImages(g)} title="" className="h-4 w-8 rounded-[4px] ring-1 ring-hairline [&:not(:first-child)]:-ml-1" />
+                              <Cover key={g.id} src={heroImages(g)} title="" className="h-5 w-[42px] rounded" />
                             ))}
                           </span>
-                          <span className="text-[12px] tabular-nums text-text-muted">{t('runners:atlas.gamesCount', { count: used.length })}</span>
-                        </div>
+                          <span className="ml-1.5 text-[12.5px] text-text-faint">{t('runners:atlas.gamesCount', { count: used.length })}</span>
+                        </>
                       ) : (
-                        <div className="mt-1.5 text-[12px] text-text-faint">{t('runners:atlas.noGames')}</div>
+                        <span className="text-[12.5px] text-text-faint">{t('runners:atlas.noGames')}</span>
                       )}
                     </div>
+                    <span className="text-right tabular-nums text-text-faint">—</span>
                     {/* GetProtonVersions carries no size, and runners are
                         detected, not installed (no remove call): the column
                         reads unknown until the core reports it. */}
-                    {r.is_system && <span className="flex-none text-[12px] text-text-faint">{t('runners:badge.system')}</span>}
+                    {r.is_system && <span className="text-[12.5px] text-text-faint">{t('runners:atlas.fromSystem')}</span>}
                   </li>
                 );
               })}

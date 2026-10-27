@@ -255,7 +255,7 @@ describe('a22 storage', () => {
     mock.getDiskUsage.mockReturnValue(Effect.succeed(usage({ games: [sizeRow()] })));
     const onUninstall = vi.fn();
     render(<StorageView games={[mkGame('g', { title: 'Alpha' })]} onNotify={noop} onRemove={noop} onUninstall={onUninstall} />);
-    expect(await screen.findByText('/mnt/a')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: '/mnt/a' })).toBeInTheDocument();
     expect(screen.getAllByText('Alpha').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall Alpha' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Uninstall' }));

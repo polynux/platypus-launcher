@@ -15,6 +15,7 @@ const TYPE_KEY: Record<ActivityType, string> = {
   download: 'activity:type.download',
   tweak: 'activity:type.tweak',
   cloud: 'activity:type.cloud',
+  scan: 'activity:type.update',
 };
 
 export function ActivityFeed({ events, limit }: { events: ActivityEvent[]; limit?: number }) {

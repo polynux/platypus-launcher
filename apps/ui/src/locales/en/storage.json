@@ -30,6 +30,9 @@
     "rescan": "Rescan",
     "andMore": "and {{count}} more",
     "freeOf": "free of {{total}}",
-    "played": "Played {{ago}}"
+    "played": "Played {{ago}}",
+    "neverPlayed": "Never played",
+    "systemDrive": "System drive",
+    "almostFull": "Almost full. Installs on this drive will fail."
   }
 }
