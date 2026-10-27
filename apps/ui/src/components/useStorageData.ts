@@ -20,7 +20,7 @@ interface UseStorageDataProps {
 
 export interface StorageData extends ReturnType<typeof useStorageData> {}
 
-export function useStorageData({ games: library, jobs: liveJobs = [], onNotify, onRemove, onUninstall }: UseStorageDataProps) {
+export function useStorageData({ games: library, jobs: liveJobs, onNotify, onRemove, onUninstall }: UseStorageDataProps) {
   const [usage, setUsage] = useState<DiskUsage | null>(null);
   const [folders, setFolders] = useState<import('../types').GameFolder[] | null>(null);
   const [jobs, setJobs] = useState<import('../types').Job[]>([]);
@@ -47,10 +47,12 @@ export function useStorageData({ games: library, jobs: liveJobs = [], onNotify, 
   useEffect(() => {
     Effect.runPromise(LauncherApi.getDiskUsage()).then(apply).catch(() => {});
     Effect.runPromise(LauncherApi.getGameFolders()).then(setFolders).catch(() => {});
+    // Without the App's live job list, read it once.
+    if (!liveJobs) Effect.runPromise(LauncherApi.listJobs()).then(setJobs).catch(() => {});
     return onDiskUsage(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => setJobs(liveJobs), [liveJobs]);
+  useEffect(() => { if (liveJobs) setJobs(liveJobs); }, [liveJobs]);
   const rescan = () => {
     Effect.runPromise(LauncherApi.refreshDiskUsage()).then(apply).catch(() => {});
   };
