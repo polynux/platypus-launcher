@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"platypus/internal/themes"
 )
 
 // writeThemePlugin creates pluginsDir/id as a data plugin with the given
@@ -204,5 +206,45 @@ func TestThemeAssetPath(t *testing.T) {
 	}
 	if _, _, err := m.ThemeAssetPath(dir, "svg-as-png.png"); err == nil {
 		t.Fatal("svg content under a .png name succeeded")
+	}
+}
+
+// A broken data file breaks the plugin even when its message happens to hold
+// the "no data files" wording: only the sentinel means a theme-only plugin
+// (issue #155).
+func TestThemePluginWithBrokenDataIsInvalid(t *testing.T) {
+	e := newEnv(t)
+	writeThemePlugin(t, e.plugins, "broken-data", nil, map[string][]byte{
+		"theme.toml": []byte(themeTOML),
+		"fixes.json": []byte(`{"no data files found": true}`),
+	})
+	p := e.discover(t)["broken-data"]
+	if p.Status != StatusInvalid {
+		t.Fatalf("broken data reported status %q, want invalid", p.Status)
+	}
+}
+
+// A theme in a subfolder serves its assets: the stored path keeps the theme's
+// folder, so the URL and the served file resolve inside the plugin (issue
+// #155).
+func TestSubfolderThemeAssetsServe(t *testing.T) {
+	e := newEnv(t)
+	writeThemePlugin(t, e.plugins, "sub-theme", map[string]any{"theme": "theme/theme.toml"}, map[string][]byte{
+		"theme/theme.toml":    []byte(themeTOML + "\n[[wash]]\nat = \"10% 10%\"\nsize = \"100px 100px\"\ncolor = \"#000000\"\nfade = \"50%\"\nimage = \"assets/bg.png\"\n"),
+		"theme/assets/bg.png": themePNG,
+	})
+	p := e.discover(t)["sub-theme"]
+	if p.Theme == nil || len(p.Theme.Wash) != 1 {
+		t.Fatalf("theme = %+v, want the wash layer", p.Theme)
+	}
+	rel := p.Theme.Wash[0].Image
+	if rel != "theme/assets/bg.png" {
+		t.Fatalf("wash image = %q, want it relative to the plugin folder", rel)
+	}
+	if _, _, ok := e.m.ThemeFile("sub-theme", rel); !ok {
+		t.Fatalf("asset %q does not serve", rel)
+	}
+	if u := e.m.ThemeURL("sub-theme", rel); !strings.HasPrefix(u, themes.ThemeURLPrefix+"sub-theme/theme/assets/bg.png") {
+		t.Fatalf("URL = %q, want the subfolder path", u)
 	}
 }

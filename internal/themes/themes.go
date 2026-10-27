@@ -671,9 +671,11 @@ func LayoutForTheme(t Theme, view string) *types.ThemeLayout {
 }
 
 // Resolve returns the tokens to apply for the theme with the given id, "" for
-// the default. A theme that is missing, unusable, or doesn't declare the
-// tokens level gets the built-in values. Otherwise each token the theme sets
-// validly wins, and the rest keep the built-in value.
+// the default. A theme that is missing or unusable gets the built-in values.
+// Otherwise each level applies on its own: a theme without the tokens level
+// keeps the built-in values, one with it takes each token it set validly and
+// the built-in value for the rest, and one without the variants level keeps
+// the built-in ones.
 func Resolve(id string) types.ThemeTokens {
 	t, ok := Find(id)
 	return resolve(t, ok)
@@ -701,24 +703,28 @@ func resolve(t Theme, found bool) types.ThemeTokens {
 	for _, name := range allTokens {
 		out.Tokens[name] = def.Tokens[name]
 	}
-	if !found || t.Info.Status != StatusOK || !slices.Contains(t.Info.Supports, supportsTokens) {
+	if !found || t.Info.Status != StatusOK {
 		return out
 	}
+	// The id is the theme's, whatever levels it declares: each level is
+	// optional on its own (ADR §2), not the whole theme.
 	out.ID = t.Info.ID
-	for name, v := range t.Tokens {
-		out.Tokens[name] = v
-	}
-	if len(t.Schemes) > 0 {
-		out.Schemes = map[string]map[string]string{}
-		for name, over := range t.Schemes {
-			out.Schemes[name] = maps.Clone(over)
+	if slices.Contains(t.Info.Supports, supportsTokens) {
+		for name, v := range t.Tokens {
+			out.Tokens[name] = v
 		}
-	}
-	if t.Wash != nil {
-		out.Wash = t.Wash
-	}
-	if len(t.Fonts) > 0 {
-		out.Fonts = maps.Clone(t.Fonts)
+		if len(t.Schemes) > 0 {
+			out.Schemes = map[string]map[string]string{}
+			for name, over := range t.Schemes {
+				out.Schemes[name] = maps.Clone(over)
+			}
+		}
+		if t.Wash != nil {
+			out.Wash = t.Wash
+		}
+		if len(t.Fonts) > 0 {
+			out.Fonts = maps.Clone(t.Fonts)
+		}
 	}
 	if slices.Contains(t.Info.Supports, "variants") {
 		for key, value := range t.Variants {

@@ -402,8 +402,28 @@ func TestNewerSchemaFallsBackToDefault(t *testing.T) {
 
 func TestUnsupportedTokensLevelKeepsDefault(t *testing.T) {
 	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["layouts"]`, 1)
-	if got, _ := resolveSrc(t, src); got.ID != DefaultID || got.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
+	got, _ := resolveSrc(t, src)
+	if got.ID != "test" || got.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
 		t.Fatalf("tokens applied without the tokens level: %s %q", got.ID, got.Tokens["accent"])
+	}
+}
+
+// Each level applies on its own (ADR §2): a theme that only declares variants
+// keeps its id and its variants, and only its tokens fall back (issue #155).
+func TestVariantsOnlyThemeKeepsItsIdAndVariants(t *testing.T) {
+	src := strings.Replace(minimal, `supports = ["tokens"]`, `supports = ["variants"]`, 1) + `
+[variants]
+"settings.navigation" = "tabs"
+`
+	got, th := resolveSrc(t, src)
+	if got.ID != th.Info.ID {
+		t.Fatalf("resolve kept %q, want the theme id %q", got.ID, th.Info.ID)
+	}
+	if got.Variants["settings.navigation"] != "tabs" {
+		t.Fatalf("variants = %v, want the theme's tabs", got.Variants)
+	}
+	if got.Tokens["accent"] != Resolve("").Tokens["accent"] {
+		t.Errorf("accent = %q, want the built-in value without the tokens level", got.Tokens["accent"])
 	}
 }
 

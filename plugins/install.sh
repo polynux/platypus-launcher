@@ -61,15 +61,18 @@ if [ "$kind" = "data" ]; then
         mkdir -p "$dest/$(dirname "$theme_rel")"
         cp "$src/$theme_rel" "$dest/$theme_rel.new" && mv -f "$dest/$theme_rel.new" "$dest/$theme_rel"
       fi
+      # The theme file's layouts/, assets/ and fonts/ travel with it, next to
+      # it: a theme may live in a subfolder, and its own folders may nest.
+      theme_dir=$(dirname "$theme_rel")
+      if [ "$theme_dir" = "." ]; then theme_dir=; fi
       for sub in layouts assets fonts; do
-        if [ -d "$src/$sub" ]; then
-          mkdir -p "$dest/$sub"
-          for f in "$src/$sub"/*; do
-            [ -f "$f" ] || continue
-            base=$(basename "$f")
-            cp "$f" "$dest/$sub/$base.new" && mv -f "$dest/$sub/$base.new" "$dest/$sub/$base"
-          done
-        fi
+        dir=${theme_dir:+$theme_dir/}$sub
+        [ -d "$src/$dir" ] || continue
+        ( cd "$src/$dir" && find . -type f ) | while IFS= read -r f; do
+          f=${f#./}
+          mkdir -p "$dest/$dir/$(dirname "$f")"
+          cp "$src/$dir/$f" "$dest/$dir/$f.new" && mv -f "$dest/$dir/$f.new" "$dest/$dir/$f"
+        done
       done
       ;;
   esac

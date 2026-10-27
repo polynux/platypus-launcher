@@ -112,6 +112,18 @@ func TestPluginThemeAssetRefsRejected(t *testing.T) {
 			want:  "may not use",
 			check: func(th Theme) bool { return th.Wash == nil },
 		},
+		"fragment in path": {
+			files: fstest.MapFS{"assets/b#g.png": &fstest.MapFile{Data: png}},
+			extra: "\n[tokens]\naccent = \"#7dd3fc\"\n\n[[wash]]\nat = \"10% 10%\"\nsize = \"100px 100px\"\ncolor = \"#000000\"\nfade = \"50%\"\nimage = \"assets/b#g.png\"\n",
+			want:  "may not use",
+			check: func(th Theme) bool { return th.Wash == nil },
+		},
+		"query in path": {
+			files: fstest.MapFS{"assets/b?g.png": &fstest.MapFile{Data: png}},
+			extra: "\n[tokens]\naccent = \"#7dd3fc\"\n\n[[wash]]\nat = \"10% 10%\"\nsize = \"100px 100px\"\ncolor = \"#000000\"\nfade = \"50%\"\nimage = \"assets/b?g.png\"\n",
+			want:  "may not use",
+			check: func(th Theme) bool { return th.Wash == nil },
+		},
 		"oversize": {
 			files: fstest.MapFS{"assets/big.png": &fstest.MapFile{Data: big}},
 			extra: "\n[tokens]\naccent = \"#7dd3fc\"\n\n[[wash]]\nat = \"10% 10%\"\nsize = \"100px 100px\"\ncolor = \"#000000\"\nfade = \"50%\"\nimage = \"assets/big.png\"\n",
@@ -218,5 +230,26 @@ func TestLoadFSLayoutsWarnLikeBuiltins(t *testing.T) {
 	}
 	if _, ok := th.Layouts["dashboard"]; !ok {
 		t.Fatalf("layouts = %v, want dashboard", th.Layouts)
+	}
+}
+
+// A theme may live in a subfolder of its plugin ("theme": "theme/theme.toml").
+// Its asset paths then keep that folder, because the app and the art route
+// join them with the plugin root, not the theme folder (issue #155).
+func TestSubfolderThemeKeepsItsFolderInAssetPaths(t *testing.T) {
+	fsys := fstest.MapFS{
+		"theme/theme.toml":    &fstest.MapFile{Data: []byte("[theme]\nid = \"x\"\nname = \"X\"\nschema = 1\nsupports = [\"tokens\"]\n\n[tokens]\naccent = \"#7dd3fc\"\n\n[[wash]]\nat = \"10% 10%\"\nsize = \"100px 100px\"\ncolor = \"#000000\"\nfade = \"50%\"\nimage = \"assets/bg.png\"\n\n[fonts]\n\"X\" = \"fonts/x.woff2\"\n")},
+		"theme/assets/bg.png": &fstest.MapFile{Data: append([]byte("\x89PNG\r\n\x1a\n"), []byte("body")...)},
+		"theme/fonts/x.woff2": &fstest.MapFile{Data: append([]byte("wOF2"), make([]byte, 100)...)},
+	}
+	th := LoadFS(fsys, "theme/theme.toml", "p")
+	if th.Info.Status != StatusOK || len(th.Info.Warnings) != 0 {
+		t.Fatalf("status %q warnings %v, want ok and no warnings", th.Info.Status, th.Info.Warnings)
+	}
+	if got := th.Fonts["X"]; got != "theme/fonts/x.woff2" {
+		t.Errorf("font path = %q, want it relative to the plugin folder", got)
+	}
+	if len(th.Wash) != 1 || th.Wash[0].Image != "theme/assets/bg.png" {
+		t.Errorf("wash = %+v, want the image relative to the plugin folder", th.Wash)
 	}
 }
