@@ -674,6 +674,23 @@ export function AppContent() {
       .catch((err) => notify(coreErrMsg(err), 'err'));
   };
 
+  // The runner "auto" resolves to (issue #146): which runner every game left on
+  // Automatic runs. "" goes back to the automatic pick, whose runner only the
+  // core knows, so the list comes back from it.
+  const setDefaultRunner = (id: string) => {
+    Effect.runPromise(LauncherApi.setDefaultRunner(id))
+      .then(async () => {
+        if (!id) {
+          setRunners((await Effect.runPromise(LauncherApi.getProtonVersions())) ?? []);
+          notify(t('runners:defaultAutomatic'));
+          return;
+        }
+        setRunners((prev) => prev.map((r) => ({ ...r, is_default: r.id === id })));
+        notify(t('runners:defaultSaved', { runner: runners.find((r) => r.id === id)?.name ?? id }));
+      })
+      .catch((err) => notify(coreErrMsg(err), 'err'));
+  };
+
   // Adding is all-or-nothing: the modal stays open until the returned promise
   // settles. The game only joins the library once its advanced options are
   // saved too; a failed options save removes the new game again and the error
@@ -1080,7 +1097,15 @@ export function AppContent() {
       case 'fixes':
         return <FixesView games={games} jobs={jobs} runners={runners} onOpenGame={openGame} onJobAction={jobAction} onJob={(kind, game) => runJob(kind, game)} onAllowFolder={(game) => allowFolder(game, game.install_dir)} onSaveSettings={(game, runner) => saveSettings(game.id, { ...game.settings, runner_id: runner }).catch(() => {})} onOpenRunners={() => setView({ name: 'runners' })} />;
       case 'runners':
-        return <SystemView runners={runners} games={installedGames} onRefresh={() => loadData('rescan')} scanning={scanning} />;
+        return (
+          <SystemView
+            runners={runners}
+            games={installedGames}
+            onRefresh={() => loadData('rescan')}
+            scanning={scanning}
+            onDefaultRunner={setDefaultRunner}
+          />
+        );
       case 'plugins':
         return (
           <PluginsView

@@ -3,17 +3,23 @@
   "about": "A runner is the build that runs a Windows game on Linux. Each game picks one in its settings; native Linux games need none.",
   "rescan": "Rescan",
   "scanning": "Scanning",
+  "makeDefault": "Make default",
+  "useAutomatic": "Use the automatic pick",
+  "defaultSaved": "{{runner}} is the default for games set to Automatic",
+  "defaultAutomatic": "Games set to Automatic pick the best runner again",
   "emptyTitle": "no runners",
   "emptyBody": "No Proton or Wine builds found. Install Proton from Steam, or drop GE-Proton into ~/.steam/root/compatibilitytools.d.",
   "badge": {
     "custom": "custom",
     "system": "system",
-    "found": "found"
+    "found": "found",
+    "default": "default"
   },
   "atlas": {
     "sub": "Proton and Wine builds that run your Windows games.",
-    "defaultLabel": "Default for new games",
-    "defaultDesc": "Each game can still pick its own.",
+    "automatic": "Automatic (best installed)",
+    "defaultLabel": "Default for Automatic games",
+    "defaultDesc": "Games set to Automatic run it; each game can still pick its own.",
     "defaultBadge": "Default",
     "systemNote": "From your system",
     "fromSystem": "From your system",

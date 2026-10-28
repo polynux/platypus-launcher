@@ -239,7 +239,7 @@ func choices(id string, ids ...string) []any {
 
 // runnerSchema is the per-game runner choices. Every field is a GameSettings key
 // (no migration needed); the wine prefix is a core section, not offered here.
-func runnerSchema() map[string]any {
+func runnerSchema(defaultRunnerID string) map[string]any {
 	group := func(id string, fields ...any) map[string]any {
 		return map[string]any{"id": id, "label": text("group." + id), "fields": fields}
 	}
@@ -262,7 +262,7 @@ func runnerSchema() map[string]any {
 	}
 	return map[string]any{"groups": []any{
 		group("runner",
-			field("runner_id", "select", "auto", map[string]any{"options": runnerOptions()}),
+			field("runner_id", "select", "auto", map[string]any{"options": runnerOptions(defaultRunnerID)}),
 		),
 		group("wrappers",
 			field("use_gamemode", "bool", true, nil),
@@ -303,9 +303,10 @@ func withDescription(g map[string]any, desc string) map[string]any {
 }
 
 // runnerOptions are the runner choices: the automatic pick, then every runner
-// installed here.
-func runnerOptions() []any {
-	installed := runner.ScanProtonVersionsFor(os.Getenv("HOME"))
+// installed here. defaultRunnerID is the launcher's default (issue #146): the
+// automatic label names it.
+func runnerOptions(defaultRunnerID string) []any {
+	installed := runner.ScanProtonVersionsFor(os.Getenv("HOME"), defaultRunnerID)
 	out := []any{map[string]any{"id": "auto", "label": autoLabel(installed)}}
 	for _, r := range installed {
 		if strings.EqualFold(r.ID, "auto") {

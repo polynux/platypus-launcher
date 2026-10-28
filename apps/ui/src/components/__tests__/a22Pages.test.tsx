@@ -252,12 +252,15 @@ describe('a22 attention', () => {
 });
 
 describe('a22 runners', () => {
-  it('lists runners with the default badge and keeps rescan', () => {
+  it('lists runners with the default badge and keeps rescan', async () => {
     const onRefresh = vi.fn();
     const runners: ProtonVersion[] = [{ id: 'ge', name: 'GE-Proton10-4', path: '/runners/ge', is_system: false, is_custom: false, is_default: true }];
     render(<SystemView runners={runners} onRefresh={onRefresh} scanning={false} />);
     expect(screen.getByText('Runners')).toBeInTheDocument();
-    expect(screen.getAllByText('GE-Proton10-4')).toHaveLength(2);
+    // No pick is stored (the settings mock answers {}): the picker says the
+    // choice is automatic, and the row names the runner that renders.
+    expect(await screen.findByText('Automatic (best installed)')).toBeInTheDocument();
+    expect(screen.getAllByText('GE-Proton10-4')).toHaveLength(1);
     expect(screen.getByText('Default')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Rescan' }));
     expect(onRefresh).toHaveBeenCalled();

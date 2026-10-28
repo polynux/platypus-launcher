@@ -156,7 +156,7 @@ func TestRunnerChoicesAreNotCoreSettings(t *testing.T) {
 	// A key the schema offers that the core models is a core setting on purpose.
 	// Every other offered key is a runner choice, stored under its own name.
 	offered := 0
-	for _, g := range runnerSchema()["groups"].([]any) {
+	for _, g := range runnerSchema("")["groups"].([]any) {
 		for _, f := range g.(map[string]any)["fields"].([]any) {
 			offered++
 			_ = f.(map[string]any)["id"].(string)

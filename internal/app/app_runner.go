@@ -11,6 +11,7 @@ import (
 	"platypus/internal/apperr"
 	"platypus/internal/jsonrpc"
 	"platypus/internal/plugins"
+	"platypus/internal/runner"
 	"platypus/internal/savebackup"
 	"platypus/internal/types"
 )
@@ -75,7 +76,7 @@ func (a *App) wrapLaunch(game types.Game, command []string, env map[string]strin
 	defer cancel()
 	params := map[string]any{
 		"spec": map[string]any{"command": command, "env": env, "cwd": cwd, "needsWine": needsWine},
-		"game": game, "runnerId": game.Settings.RunnerID,
+		"game": game, "runnerId": game.Settings.RunnerID, "defaultRunnerId": a.defaultRunnerID(),
 		"options": gameOptions(game), "tweaks": a.GetTweaks(),
 		"prefixesFolder": a.effectivePrefixesFolder(), "preview": preview,
 	}
@@ -112,7 +113,8 @@ func (a *App) gamePrefix(game types.Game) (savebackup.Prefix, error) {
 			return savebackup.Prefix{}, err
 		}
 		if present {
-			params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID, "prefixesFolder": a.effectivePrefixesFolder()}
+			params := map[string]any{"game": game, "runnerId": game.Settings.RunnerID,
+				"defaultRunnerId": a.defaultRunnerID(), "prefixesFolder": a.effectivePrefixesFolder()}
 			if err := a.plugins.Call(ctx, "runner", "runner.prefix", params, &result); err != nil {
 				return savebackup.Prefix{}, apperr.Wrap("runner.wrapFailed", fmt.Errorf("runner plugin couldn't prepare %s: %w", game.Title, err), map[string]string{"title": game.Title})
 			}
@@ -157,6 +159,30 @@ func runnerFailure(err error, fallback string, params map[string]string) error {
 	return apperr.Wrap(fallback, err, params)
 }
 
+// defaultRunnerID is the runner "auto" resolves to (issue #146): the user's
+// pick, or "" for the automatic one. The runner plugin falls back to the auto
+// pick when that runner is no longer installed.
+func (a *App) defaultRunnerID() string {
+	if a.settings == nil {
+		return ""
+	}
+	return a.settings.DefaultRunnerID()
+}
+
+// SetDefaultRunner saves the runner "auto" resolves to (issue #146): the runner
+// new games without a runner_id use. "" (or "auto") goes back to the automatic
+// pick. A runner that is uninstalled later is kept, and the auto pick answers
+// for it meanwhile.
+func (a *App) SetDefaultRunner(id string) (types.LauncherSettings, error) {
+	if runner.IsAuto(id) {
+		id = ""
+	}
+	if err := a.settings.SetDefaultRunnerID(id); err != nil {
+		return a.launcherSettings(), err
+	}
+	return a.launcherSettings(), nil
+}
+
 // runnerList is the installed runners, or none without a runner plugin.
 func (a *App) runnerList() ([]plugins.RunnerInfo, error) {
 	present, err := a.runnerPlugin()
@@ -168,7 +194,8 @@ func (a *App) runnerList() ([]plugins.RunnerInfo, error) {
 	var result struct {
 		Runners []plugins.RunnerInfo `json:"runners"`
 	}
-	if err := a.plugins.Call(ctx, "runner", "runner.list", map[string]any{}, &result); err != nil {
+	params := map[string]any{"defaultRunnerId": a.defaultRunnerID()}
+	if err := a.plugins.Call(ctx, "runner", "runner.list", params, &result); err != nil {
 		return nil, err
 	}
 	return result.Runners, nil
@@ -192,7 +219,8 @@ func (a *App) GetRunnerOptions(game types.Game) (types.SettingsSchema, error) {
 	ctx, cancel := context.WithTimeout(a.ctxOrBackground(), launchTimeout)
 	defer cancel()
 	var raw json.RawMessage
-	if err := a.plugins.Call(ctx, "runner", "runner.options", map[string]any{}, &raw); err != nil {
+	params := map[string]any{"defaultRunnerId": a.defaultRunnerID()}
+	if err := a.plugins.Call(ctx, "runner", "runner.options", params, &raw); err != nil {
 		return types.SettingsSchema{}, err
 	}
 	schema, err := types.ParseSettingsSchema(raw)

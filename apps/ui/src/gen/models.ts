@@ -546,6 +546,7 @@ export namespace types {
     language: string;
     minimize_to_tray: boolean;
     theme: string;
+    default_runner_id: string;
     game_tone: string;
     color_scheme: string;
   }

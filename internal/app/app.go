@@ -1222,6 +1222,7 @@ func (a *App) launcherSettings() types.LauncherSettings {
 		Language:              a.settings.Language(),
 		MinimizeToTray:        a.settings.MinimizeToTray(),
 		Theme:                 a.settings.Theme(),
+		DefaultRunnerID:       a.settings.DefaultRunnerID(),
 		GameTone:              a.settings.GameTone(),
 		ColorScheme:           a.settings.ColorScheme(),
 	}

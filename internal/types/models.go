@@ -374,6 +374,9 @@ type LauncherSettings struct {
 	MinimizeToTray bool `json:"minimize_to_tray"`
 	// Theme is the picked theme's id (issue #93): "" is the built-in default.
 	Theme string `json:"theme"`
+	// DefaultRunnerID is the runner "auto" resolves to (issue #146): "" means
+	// the automatic pick, and so does one that is no longer installed.
+	DefaultRunnerID string `json:"default_runner_id"`
 	// GameTone is the game colour choice (issue #123, #134): "off", "accent"
 	// or "whole". "" means accent. The theme's color.game-tone axis decides
 	// how far it applies.

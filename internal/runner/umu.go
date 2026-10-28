@@ -82,17 +82,17 @@ func UmuEntry(umuPath string) types.ProtonVersion {
 }
 
 // UmuProton picks the Proton build umu runs: the auto pick (same rule as a
-// direct launch). It returns false when no Proton build is installed or the
-// auto pick is not a Proton build (plain Wine): the caller then uses
-// UmuLatest.
-func UmuProton(runners []types.ProtonVersion) (types.ProtonVersion, bool) {
+// direct launch, issue #146's default included). It returns false when no
+// Proton build is installed or the auto pick is not a Proton build (plain
+// Wine): the caller then uses UmuLatest.
+func UmuProton(runners []types.ProtonVersion, defaultID string) (types.ProtonVersion, bool) {
 	var rest []types.ProtonVersion
 	for _, r := range runners {
 		if !IsUmu(r) {
 			rest = append(rest, r)
 		}
 	}
-	p, ok := PickAuto(rest)
+	p, ok := PickAuto(rest, defaultID)
 	if !ok || !strings.HasSuffix(p.Path, "proton") {
 		return types.ProtonVersion{}, false
 	}
@@ -164,9 +164,11 @@ func EffectiveUmuPrefix(prefixPath string) string {
 
 // SelectUmu decides whether a runner setting runs through umu and which
 // Proton build umu runs: explicit "umu", or "auto" with umu installed (then
-// umu wraps the auto Proton pick). An explicit Proton/Wine choice always runs
-// directly. ok is false when umu is not installed.
-func SelectUmu(runnerID string, runners []types.ProtonVersion) (umu, proton types.ProtonVersion, ok bool) {
+// umu wraps the auto Proton pick, or the default one). An explicit
+// Proton/Wine choice always runs directly, and so does an automatic game whose
+// default runner is a Wine build umu can't run (issue #146). ok is false when
+// umu is not installed.
+func SelectUmu(runnerID string, runners []types.ProtonVersion, defaultID string) (umu, proton types.ProtonVersion, ok bool) {
 	var found *types.ProtonVersion
 	for i := range runners {
 		if IsUmu(runners[i]) {
@@ -180,7 +182,16 @@ func SelectUmu(runnerID string, runners []types.ProtonVersion) (umu, proton type
 	if runnerID != UmuRunnerID && !IsAuto(runnerID) {
 		return types.ProtonVersion{}, types.ProtonVersion{}, false
 	}
-	p, _ := UmuProton(runners)
+	if IsAuto(runnerID) {
+		// A default umu can't run — a Wine build — runs directly (issue #146):
+		// the picked runner must be the one that runs, not UMU-Latest.
+		for _, r := range runners {
+			if (r.ID == defaultID || r.Name == defaultID) && !IsUmu(r) && !strings.HasSuffix(r.Path, "proton") {
+				return types.ProtonVersion{}, types.ProtonVersion{}, false
+			}
+		}
+	}
+	p, _ := UmuProton(runners, defaultID)
 	return *found, p, true
 }
 

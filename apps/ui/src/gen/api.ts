@@ -159,6 +159,7 @@ export interface CoreApi {
   SetCustomArt(gameID: string, kind: string, path: string): Promise<types.Customization>;
   SetCustomGameYear(id: string, year: number): Promise<types.Game>;
   SetCustomTitle(gameID: string, title: string, sortTitle: string): Promise<types.Customization>;
+  SetDefaultRunner(id: string): Promise<types.LauncherSettings>;
   SetGameInfoOnline(on: boolean): Promise<types.LauncherSettings>;
   SetGameNotes(gameID: string, notes: string): Promise<types.GameStatusInfo>;
   SetGameSaveBackup(gameID: string, mode: string): Promise<void>;
@@ -346,6 +347,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'SetCustomArt',
   'SetCustomGameYear',
   'SetCustomTitle',
+  'SetDefaultRunner',
   'SetGameInfoOnline',
   'SetGameNotes',
   'SetGameSaveBackup',

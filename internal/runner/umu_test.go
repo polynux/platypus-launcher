@@ -180,7 +180,7 @@ func TestUmuProtonPathLatest(t *testing.T) {
 		t.Fatalf("wine runner -> %q, want UMU-Latest", got)
 	}
 	runners := []types.ProtonVersion{wine, UmuEntry("/usr/bin/umu-run")}
-	if p, ok := UmuProton(runners); ok {
+	if p, ok := UmuProton(runners, ""); ok {
 		t.Fatalf("UmuProton with wine only = %q, want none", p.ID)
 	}
 }
@@ -194,10 +194,10 @@ func TestUmuFallbackWhenMissing(t *testing.T) {
 		t.Fatal("FindUmuFor found umu with an empty PATH and home")
 	}
 	runners := []types.ProtonVersion{umuProton(home), {ID: "system:wine", Name: "System Wine", Path: "/usr/bin/wine", IsSystem: true}}
-	if _, _, ok := SelectUmu("auto", runners); ok {
+	if _, _, ok := SelectUmu("auto", runners, ""); ok {
 		t.Fatal("SelectUmu(auto) without umu must not select umu")
 	}
-	if _, _, ok := SelectUmu("umu", runners); ok {
+	if _, _, ok := SelectUmu("umu", runners, ""); ok {
 		t.Fatal("SelectUmu(umu) without umu must not select umu")
 	}
 	args, env, err := BuildCommandFor(umuGame(), umuProton(home), Target{Exe: "/games/g.exe"}, true, "", home)
@@ -223,30 +223,60 @@ func TestUmuSelection(t *testing.T) {
 	umu := UmuEntry("/usr/bin/umu-run")
 	runners := []types.ProtonVersion{proton, wine, umu}
 
-	u, p, ok := SelectUmu("umu", runners)
+	u, p, ok := SelectUmu("umu", runners, "")
 	if !ok || u.Path != umu.Path {
 		t.Fatalf("explicit umu = %q, %v", u.Path, ok)
 	}
 	if p.ID != proton.ID {
 		t.Fatalf("umu proton = %q, want the auto pick %q", p.ID, proton.ID)
 	}
-	if _, _, ok := SelectUmu("auto", runners); !ok {
+	if _, _, ok := SelectUmu("auto", runners, ""); !ok {
 		t.Fatal("auto with umu present must select umu")
 	}
-	if _, _, ok := SelectUmu("", runners); !ok {
+	if _, _, ok := SelectUmu("", runners, ""); !ok {
 		t.Fatal("empty runner with umu present must select umu")
 	}
-	if _, _, ok := SelectUmu(proton.ID, runners); ok {
+	if _, _, ok := SelectUmu(proton.ID, runners, ""); ok {
 		t.Fatal("explicit Proton must run directly, not via umu")
 	}
-	if _, _, ok := SelectUmu(wine.ID, runners); ok {
+	if _, _, ok := SelectUmu(wine.ID, runners, ""); ok {
 		t.Fatal("explicit Wine must run directly, not via umu")
 	}
-	if got, _ := PickAuto(runners); got.ID != proton.ID {
+	if got, _ := PickAuto(runners, ""); got.ID != proton.ID {
 		t.Fatalf("PickAuto = %q, want %q (never umu)", got.ID, proton.ID)
 	}
-	if got, ok := PickAuto([]types.ProtonVersion{umu}); ok {
+	if got, ok := PickAuto([]types.ProtonVersion{umu}, ""); ok {
 		t.Fatalf("PickAuto with only umu = %q, want none", got.ID)
+	}
+}
+
+// A default runner umu can't run — a Wine build — makes automatic games run
+// directly, so the runner the list marks is the one that runs (issue #146). A
+// Proton default keeps going through umu, which runs that very build.
+func TestUmuStepsAsideForAWineDefault(t *testing.T) {
+	proton := types.ProtonVersion{ID: "steam:Proton 9.0", Name: "Proton 9.0", Path: "/x/Proton 9.0/proton"}
+	wine := types.ProtonVersion{ID: "system:wine", Name: "System Wine", Path: "/usr/bin/wine", IsSystem: true}
+	umu := UmuEntry("/usr/bin/umu-run")
+	runners := []types.ProtonVersion{proton, wine, umu}
+
+	if _, _, ok := SelectUmu("auto", runners, wine.ID); ok {
+		t.Fatal("a Wine default must run directly, not through umu with UMU-Latest")
+	}
+	if _, _, ok := SelectUmu("", runners, wine.ID); ok {
+		t.Fatal("a game with no runner_id must not run through umu when the default is Wine")
+	}
+	// Without a default, auto still prefers umu (the rule is unchanged).
+	if _, _, ok := SelectUmu("auto", runners, ""); !ok {
+		t.Fatal("auto with umu installed and no default must still run through umu")
+	}
+	// umu runs the default Proton build, so the marked runner is the one that runs.
+	u, p, ok := SelectUmu("auto", runners, proton.ID)
+	if !ok || u.Path != umu.Path || p.ID != proton.ID {
+		t.Fatalf("Proton default = %q/%q ok=%v, want umu with Proton 9.0", u.Path, p.ID, ok)
+	}
+	// An uninstalled default falls back to the automatic pick: umu.
+	if _, _, ok := SelectUmu("auto", runners, "steam:Proton 4.11"); !ok {
+		t.Fatal("an uninstalled default must leave auto on umu")
 	}
 }
 
