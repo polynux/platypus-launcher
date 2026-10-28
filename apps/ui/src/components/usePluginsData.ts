@@ -37,6 +37,10 @@ export function usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify 
   const [reviewing, setReviewing] = useState<StorePlugin | null>(null);
   const [loggingIn, setLoggingIn] = useState<StorePlugin | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // The plugin waiting for an uninstall confirmation, and the zip waiting
+  // for a replace confirmation (issues #147, #161).
+  const [uninstalling, setUninstalling] = useState<StorePlugin | null>(null);
+  const [replacing, setReplacing] = useState<{ id: string; name: string; current: string; next: string; zipPath: string } | null>(null);
 
   const storeAuth = useCallback((id: string, s: PluginsAuthState) => {
     authCache.set(id, s);
@@ -95,5 +99,72 @@ export function usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify 
       .then((path) => path && act(p.id, 'folder', LauncherApi.setPluginInstallFolder(p.id, path), t('plugins:notify.installsInto', { name: p.name, path })))
       .catch((e) => onNotify(coreErrMsg(e), 'err'));
 
-  return { auth, reviewing, setReviewing, loggingIn, setLoggingIn, busy, storeAuth, refresh, act, logout, chooseFolder };
+  const forgetAuth = useCallback(
+    (id: string) => {
+      authCache.delete(id);
+      setAuth((a) => {
+        if (!(id in a)) return a;
+        const next = { ...a };
+        delete next[id];
+        return next;
+      });
+    },
+    []
+  );
+
+  // Installs one zip: confirms a replace, then refreshes and opens the
+  // approval sheet for the new plugin (a zip install is never auto-approved).
+  const installFile = useCallback(
+    (zipPath: string, confirm = false) => {
+      setBusy('zipinstall');
+      Effect.runPromise(LauncherApi.installPluginZip(zipPath, confirm))
+        .then((res) => {
+          if (res.needsConfirm) {
+            const p = plugins.find((x) => x.id === res.id);
+            setReplacing({ id: res.id, name: p?.name ?? res.id, current: res.currentVersion ?? '', next: res.newVersion ?? '', zipPath });
+            return;
+          }
+          setReplacing(null);
+          return Effect.runPromise(LauncherApi.listPlugins())
+            .then((list) => {
+              onPlugins(list);
+              const p = list.find((x) => x.id === res.id) ?? plugins.find((x) => x.id === res.id);
+              onNotify(t('plugins:notify.installed', { name: p?.name ?? res.id }));
+              // The approval sheet only opens for plugins waiting for a
+              // decision; anything else just toasts.
+              if (p && (p.status === 'unapproved' || p.status === 'changed')) setReviewing(p);
+              onLibraryChanged();
+            });
+        })
+        .catch((e) => onNotify(coreErrMsg(e), 'err'))
+        .finally(() => setBusy(null));
+    },
+    [onLibraryChanged, onNotify, onPlugins, plugins, t]
+  );
+
+  const install = useCallback(() => {
+    Effect.runPromise(LauncherApi.choosePluginZip())
+      .then((path) => path && installFile(path))
+      .catch((e) => onNotify(coreErrMsg(e), 'err'));
+  }, [installFile, onNotify]);
+
+  const confirmUninstall = useCallback(
+    (p: StorePlugin, removeGames: boolean) => {
+      setUninstalling(null);
+      setBusy(p.id + 'uninstall');
+      Effect.runPromise(LauncherApi.uninstallPlugin(p.id, removeGames))
+        .then(() => {
+          forgetAuth(p.id);
+          onNotify(t('plugins:notify.uninstalled', { name: p.name }));
+          return Effect.runPromise(LauncherApi.listPlugins())
+            .then(onPlugins)
+            .then(onLibraryChanged);
+        })
+        .catch((e) => onNotify(coreErrMsg(e), 'err'))
+        .finally(() => setBusy(null));
+    },
+    [forgetAuth, onLibraryChanged, onNotify, onPlugins, t]
+  );
+
+  return { auth, reviewing, setReviewing, loggingIn, setLoggingIn, busy, storeAuth, refresh, act, logout, chooseFolder, uninstalling, setUninstalling, replacing, setReplacing, install, installFile, confirmUninstall };
 }

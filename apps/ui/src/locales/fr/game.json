@@ -55,6 +55,7 @@
   "hero": {
     "notInstalled": "non installé",
     "updateAvailable": "mise à jour disponible",
+    "storeMissing": "boutique manquante",
     "pinned": "épinglé",
     "update": "Mettre à jour",
     "gameSettings": "Paramètres du jeu",

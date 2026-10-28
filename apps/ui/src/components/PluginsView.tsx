@@ -58,57 +58,31 @@ export { resetPluginsAuthCache } from './usePluginsData';
 export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibraryChanged, onNotify }: PluginsViewProps) {
   const { t } = useTranslation(['plugins', 'common']);
   const data = usePluginsData({ plugins, onPlugins, onLibraryChanged, onNotify });
-  const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act } = data;
+  const { reviewing, setReviewing, loggingIn, setLoggingIn, auth, busy, storeAuth, refresh, act, uninstalling, setUninstalling, replacing, setReplacing, install, installFile, confirmUninstall } = data;
   const atlas = useVariant('shell.navigation') === 'sourcebar';
-  // The built-in arrangement is the initial layout, so the first paint
-  // already shows today's plugins before the core answers over RPC.
-  const layout = useThemeLayout('plugins') ?? BUILTIN_LAYOUTS['plugins'];
-  if (atlas) {
-    return (
-      <>
-        <AtlasPlugins
-          plugins={plugins}
-          games={games}
-          warnings={warnings}
-          auth={auth}
-          busy={busy}
-          data={data}
-          onNotify={onNotify}
-        />
-        {reviewing && (
-          <ApproveModal
-            plugin={reviewing}
-            onClose={() => setReviewing(null)}
-            onApprove={() => {
-              const p = reviewing;
-              setReviewing(null);
-              act(p.id, 'approve', LauncherApi.approvePlugin(p.id), t('plugins:notify.approved', { name: p.name }));
-            }}
-          />
-        )}
-        {loggingIn && (
-          <AuthModal
-            plugin={loggingIn}
-            onClose={() => setLoggingIn(null)}
-            onDone={(s) => {
-              const p = loggingIn;
-              setLoggingIn(null);
-              storeAuth(p.id, s);
-              onNotify(s.user ? t('plugins:notify.loggedInAs', { name: p.name, user: s.user }) : t('plugins:notify.loggedIn', { name: p.name }));
-              onLibraryChanged();
-            }}
-          />
-        )}
-      </>
-    );
-  }
-  return (
-    <div className="p-7">
-      <ThemeLayout
-        layout={layout}
-        blocks={pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibraryChanged })}
-      />
-
+  // The lab's file drop installs plugin zips: the shell exposes the real
+  // path through the preload bridge (Electron removed File.path), and the
+  // core validates the archive itself.
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      if ([...e.dataTransfer.types].includes('Files')) e.preventDefault();
+    },
+    onDrop: (e: React.DragEvent) => {
+      if (![...e.dataTransfer.types].includes('Files')) return;
+      // Always prevent the default: without it the shell may navigate to the
+      // dropped file, even when it is not a plugin zip.
+      e.preventDefault();
+      const paths = [...e.dataTransfer.files].map((f) => window.platypus?.pathForFile?.(f) ?? '');
+      const zips = paths.filter((p) => p.toLowerCase().endsWith('.zip'));
+      if (zips.length === 0) {
+        onNotify(t('plugins:install.notAZip'), 'err');
+        return;
+      }
+      zips.forEach((p) => installFile(p));
+    },
+  };
+  const dialogs = (
+    <>
       {reviewing && (
         <ApproveModal
           plugin={reviewing}
@@ -133,6 +107,53 @@ export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibrar
           }}
         />
       )}
+      {uninstalling && (
+        <UninstallModal
+          plugin={uninstalling}
+          showGames={uninstalling.kind === 'store'}
+          onClose={() => setUninstalling(null)}
+          onConfirm={(removeGames) => confirmUninstall(uninstalling, removeGames)}
+        />
+      )}
+      {replacing && (
+        <ReplaceModal
+          name={replacing.name}
+          current={replacing.current}
+          next={replacing.next}
+          onClose={() => setReplacing(null)}
+          onConfirm={() => installFile(replacing.zipPath, true)}
+        />
+      )}
+    </>
+  );
+  // The built-in arrangement is the initial layout, so the first paint
+  // already shows today's plugins before the core answers over RPC.
+  const layout = useThemeLayout('plugins') ?? BUILTIN_LAYOUTS['plugins'];
+  if (atlas) {
+    return (
+      <div {...dropProps}>
+        <AtlasPlugins
+          plugins={plugins}
+          games={games}
+          warnings={warnings}
+          auth={auth}
+          busy={busy}
+          data={data}
+          onNotify={onNotify}
+          onAddStore={install}
+        />
+        {dialogs}
+      </div>
+    );
+  }
+  return (
+    <div className="p-7" {...dropProps}>
+      <ThemeLayout
+        layout={layout}
+        blocks={pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibraryChanged, onAddStore: install })}
+      />
+
+      {dialogs}
     </div>
   );
 }
@@ -142,7 +163,7 @@ export function PluginsView({ plugins, games = [], warnings, onPlugins, onLibrar
 // of its own. The store block renders each card with its own login row and
 // approve/enable actions, so a layout can't hide the required parts on their
 // own; the approve and login dialogs stay owned by the view.
-function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibraryChanged }: {
+function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibraryChanged, onAddStore }: {
   plugins: StorePlugin[];
   warnings: SourceWarning[];
   auth: Record<string, PluginsAuthState>;
@@ -150,9 +171,10 @@ function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibrar
   data: ReturnType<typeof usePluginsData>;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
   onLibraryChanged: () => void;
+  onAddStore: () => void;
 }): Record<string, React.ReactNode> {
   return {
-    header: <PluginsHeader onRescan={() => { void data.refresh(true).then(onLibraryChanged); }} onOpenFolder={() => {
+    header: <PluginsHeader onAddStore={onAddStore} onRescan={() => { void data.refresh(true).then(onLibraryChanged); }} onOpenFolder={() => {
       Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'));
     }} />,
     store: (
@@ -166,15 +188,16 @@ function pluginsBlocks({ plugins, warnings, auth, busy, data, onNotify, onLibrar
         onAct={data.act}
         onReview={(p) => data.setReviewing(p)}
         onLogin={(p) => data.setLoggingIn(p)}
+        onUninstall={(p) => data.setUninstalling(p)}
         onNotify={onNotify}
       />
     ),
-    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} />,
+    data: <PluginsData plugins={plugins.filter((p) => p.kind === 'data')} onUninstall={(p) => data.setUninstalling(p)} onReview={(p) => data.setReviewing(p)} busy={busy} />,
     builtin: <PluginsBuiltIn />,
   };
 }
 
-export function PluginsHeader({ onRescan, onOpenFolder }: { onRescan: () => void; onOpenFolder: () => void }) {
+export function PluginsHeader({ onAddStore, onRescan, onOpenFolder }: { onAddStore: () => void; onRescan: () => void; onOpenFolder: () => void }) {
   const { t } = useTranslation(['plugins', 'nav']);
   return (
     <ViewHeader
@@ -183,6 +206,9 @@ export function PluginsHeader({ onRescan, onOpenFolder }: { onRescan: () => void
         {t('plugins:header.subtitle')}
       </p>}
       actions={<div className="flex gap-2">
+        <Button variant="primary" onClick={onAddStore}>
+          {t('plugins:header.addStore')}
+        </Button>
         <Button variant="neutral" onClick={onOpenFolder}>
           <FolderOpen className="h-3.5 w-3.5" /> {t('plugins:header.pluginsFolder')}
         </Button>
@@ -194,7 +220,7 @@ export function PluginsHeader({ onRescan, onOpenFolder }: { onRescan: () => void
   );
 }
 
-export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onNotify }: {
+export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onUninstall, onNotify }: {
   plugins: StorePlugin[];
   warnings: SourceWarning[];
   auth: Record<string, PluginsAuthState>;
@@ -204,6 +230,7 @@ export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChoose
   onAct: (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => void;
   onReview: (p: StorePlugin) => void;
   onLogin: (p: StorePlugin) => void;
+  onUninstall: (p: StorePlugin) => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 }) {
   const { t } = useTranslation('plugins');
@@ -230,6 +257,7 @@ export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChoose
               onAct={onAct}
               onReview={() => onReview(p)}
               onLogin={() => onLogin(p)}
+              onUninstall={() => onUninstall(p)}
               onNotify={onNotify}
             />
           ))}
@@ -244,7 +272,7 @@ export function PluginsStore({ plugins, warnings, auth, busy, onLogout, onChoose
  *  login rows, approve/enable actions and dialogs. The lab's "Add a store"
  *  button has no backing (store plugins install through the plugins folder),
  *  so the header keeps Rescan and the Plugins folder entry. */
-function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify }: {
+function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify, onAddStore }: {
   plugins: StorePlugin[];
   games: Game[];
   warnings: SourceWarning[];
@@ -252,6 +280,7 @@ function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify }: 
   busy: string | null;
   data: ReturnType<typeof usePluginsData>;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
+  onAddStore: () => void;
 }) {
   const { t } = useTranslation(['plugins', 'nav']);
   const store = plugins.filter((p) => p.kind === 'store');
@@ -282,6 +311,9 @@ function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify }: 
           <p className="mt-[3px] text-[13px] text-text-muted">{t('plugins:header.atlasSubtitle')}</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="primary" onClick={onAddStore}>
+            {t('plugins:header.addStore')}
+          </Button>
           <Button variant="neutral" onClick={() => {
             Effect.runPromise(LauncherApi.openPluginsFolder()).catch((e) => onNotify(coreErrMsg(e), 'err'));
           }}>
@@ -335,17 +367,18 @@ function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify }: 
               onAct={data.act}
               onReview={() => data.setReviewing(current)}
               onLogin={() => data.setLoggingIn(current)}
+              onUninstall={() => data.setUninstalling(current)}
               onRescan={() => { void data.refresh(true); }}
               onNotify={onNotify}
             />
           ) : current ? (
-            <DataPluginCard plugin={current} />
+            <DataPluginCard plugin={current} onUninstall={() => data.setUninstalling(current)} onReview={() => data.setReviewing(current)} busy={busy} />
           ) : (
             <p className="text-[13px] text-text-muted">{t('plugins:empty.detail')}</p>
           )}
         </div>
       </div>
-      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} />}
+      {store.length > 0 && rest.length > 0 && <PluginsData plugins={rest} onUninstall={(p) => data.setUninstalling(p)} onReview={(p) => data.setReviewing(p)} busy={busy} />}
       <PluginsBuiltIn />
     </div>
   );
@@ -354,7 +387,7 @@ function AtlasPlugins({ plugins, games, warnings, auth, busy, data, onNotify }: 
 /** The selected store plugin's detail: the same identity, alert, approval,
  *  account, capabilities and folder rows as the card, without the card frame
  *  so the pane reads like the lab's detail column. */
-function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onRescan, onNotify }: {
+function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onUninstall, onRescan, onNotify }: {
   plugin: StorePlugin;
   gameCount: number;
   authState: PluginsAuthState | undefined;
@@ -365,6 +398,7 @@ function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, 
   onAct: (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => void;
   onReview: () => void;
   onLogin: () => void;
+  onUninstall: () => void;
   onRescan: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 }) {
@@ -487,6 +521,11 @@ function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, 
               <RotateCcw className="h-3.5 w-3.5" /> {t('common:retry')}
             </Button>
           )}
+          {!p.bundled && (
+            <Button variant="neutral" onClick={onUninstall} disabled={busy === p.id + 'uninstall'}>
+              {t('plugins:card.uninstall')}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -496,7 +535,7 @@ function AtlasPluginDetail({ plugin: p, gameCount, authState: a, warning, busy, 
  *  the login row and the approve/enable actions. The required parts (login
  *  row, approval actions) render here, inside the card, so a layout can't
  *  hide them on their own. */
-export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onNotify }: {
+export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogout, onChooseFolder, onAct, onReview, onLogin, onUninstall, onNotify }: {
   plugin: StorePlugin;
   authState: PluginsAuthState | undefined;
   warning: SourceWarning | undefined;
@@ -506,6 +545,7 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
   onAct: (id: string, what: string, program: Effect.Effect<unknown, Error>, done: string) => void;
   onReview: () => void;
   onLogin: () => void;
+  onUninstall: () => void;
   onNotify: (msg: string, kind?: 'ok' | 'err' | 'busy') => void;
 }) {
   const { t } = useTranslation('plugins');
@@ -636,12 +676,22 @@ export function StorePluginCard({ plugin: p, authState: a, warning, busy, onLogo
             <RotateCcw className="h-3.5 w-3.5" /> {t('common:retry')}
           </Button>
         )}
+        {!p.bundled && (
+          <Button
+            variant="neutral"
+            className="flex-1"
+            onClick={onUninstall}
+            disabled={busy === p.id + 'uninstall'}
+          >
+            {t('plugins:card.uninstall')}
+          </Button>
+        )}
       </div>
     </Panel>
   );
 }
 
-export function PluginsData({ plugins }: { plugins: StorePlugin[] }) {
+export function PluginsData({ plugins, onUninstall, onReview, busy }: { plugins: StorePlugin[]; onUninstall: (p: StorePlugin) => void; onReview: (p: StorePlugin) => void; busy: string | null }) {
   const { t } = useTranslation('plugins');
   if (plugins.length === 0) return null;
   // One root: the heading and the cards stay together, so a row counts the
@@ -651,14 +701,14 @@ export function PluginsData({ plugins }: { plugins: StorePlugin[] }) {
       <MonoLabel as="h2" className="mb-3 mt-8 normal-case tracking-normal">{t('plugins:section.data')}</MonoLabel>
       <div className="grid gap-4 xl:grid-cols-2">
         {plugins.map((p) => (
-          <DataPluginCard key={p.id} plugin={p} />
+          <DataPluginCard key={p.id} plugin={p} onUninstall={() => onUninstall(p)} onReview={() => onReview(p)} busy={busy} />
         ))}
       </div>
     </div>
   );
 }
 
-export function DataPluginCard({ plugin: p }: { plugin: StorePlugin }) {
+export function DataPluginCard({ plugin: p, onUninstall, onReview, busy }: { plugin: StorePlugin; onUninstall: () => void; onReview: () => void; busy: string | null }) {
   const { t } = useTranslation('plugins');
   const st = STATUS[p.status] ?? STATUS.invalid;
   return (
@@ -681,6 +731,27 @@ export function DataPluginCard({ plugin: p }: { plugin: StorePlugin }) {
         <p className="mt-auto text-[12px] text-text-body">
           {t('plugins:card.dataNote')}
         </p>
+      )}
+      {/* A pending data plugin waits for approval (issue #147): closing the
+          approval sheet must not strand it, so the card re-opens the review. */}
+      {(p.status === 'unapproved' || p.status === 'changed') && (
+        <div className="mt-auto flex gap-2 pt-1">
+          <Button variant="primary" className="flex-1" onClick={onReview}>
+            <ShieldCheck className="h-4 w-4" /> {p.status === 'changed' ? t('plugins:card.reapprove') : t('plugins:card.approve')}
+          </Button>
+        </div>
+      )}
+      {!p.bundled && (
+        <div className="mt-auto flex gap-2 pt-1">
+          <Button
+            variant="neutral"
+            className="flex-1"
+            onClick={onUninstall}
+            disabled={busy === p.id + 'uninstall'}
+          >
+            {t('plugins:card.uninstall')}
+          </Button>
+        </div>
       )}
     </Panel>
   );
@@ -714,6 +785,53 @@ function ManifestRow({ label, items, empty }: { label: string; items: string[]; 
       <span className="w-24 flex-none text-text-muted">{label}</span>
       <span className="min-w-0 flex-1 break-words text-text select-text">{items.length ? items.join(', ') : <span className="text-text-muted">{empty}</span>}</span>
     </div>
+  );
+}
+
+/** Confirms removing a plugin: lists what goes and what stays (issue #161).
+ *  Data/theme plugins have no games, so they hide the checkbox. */
+function UninstallModal({ plugin: p, showGames = true, onClose, onConfirm }: { plugin: StorePlugin; showGames?: boolean; onClose: () => void; onConfirm: (removeGames: boolean) => void }) {
+  const { t } = useTranslation(['plugins', 'common']);
+  const [removeGames, setRemoveGames] = useState(false);
+  return (
+    <Modal label={t('plugins:uninstall.title', { name: p.name })} onClose={onClose} size="md">
+      <div>
+        <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:uninstall.title', { name: p.name })}</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-text-body">{t('plugins:uninstall.detail')}</p>
+        {showGames && (
+          <label className="mt-4 flex items-center gap-2 text-[13px] text-text">
+            <input type="checkbox" checked={removeGames} onChange={(e) => setRemoveGames(e.target.checked)} className="h-4 w-4 accent-attention" />
+            {t('plugins:uninstall.removeGames')}
+          </label>
+        )}
+        <div className="mt-5 flex gap-2.5">
+          <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="primary" className="flex-1" onClick={() => onConfirm(removeGames)}>{t('plugins:uninstall.confirm')}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Confirms replacing the installed version with the zip's (issue #147): an
+ *  unreadable existing folder has no version to show. */
+function ReplaceModal({ name, current, next, onClose, onConfirm }: { name: string; current: string; next: string; onClose: () => void; onConfirm: () => void }) {
+  const { t } = useTranslation(['plugins', 'common']);
+  return (
+    <Modal label={t('plugins:install.replaceTitle', { name })} onClose={onClose} size="md">
+      <div>
+        <h2 className="text-[20px] font-extrabold tracking-tight">{t('plugins:install.replaceTitle', { name })}</h2>
+        <p className="mt-1 text-[12px] leading-relaxed text-text-body">
+          {current
+            ? t('plugins:install.replaceDetail', { current, new: next })
+            : t('plugins:install.replaceDetailUnknown', { name, new: next })}
+        </p>
+        <div className="mt-5 flex gap-2.5">
+          <Button variant="neutral" className="flex-1" onClick={onClose}>{t('common:cancel')}</Button>
+          <Button variant="primary" className="flex-1" onClick={onConfirm}>{t('plugins:install.confirmReplace')}</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

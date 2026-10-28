@@ -112,6 +112,9 @@ type Game struct {
 	// Native marks plugin games with a Linux build: they run without Proton,
 	// so the runner pick and Proton-only settings don't apply to them.
 	Native bool `json:"native,omitempty"`
+	// StoreMissing marks games whose store was uninstalled (issue #161): the
+	// files stay on disk and installed games stay launchable where possible.
+	StoreMissing bool `json:"store_missing,omitempty"`
 	// ClientLaunch says the store client must launch the game and owns its compatibility data.
 	ClientLaunch bool `json:"client_launch,omitempty"`
 	// Offline says whether the game launches without a network (protocol
@@ -270,6 +273,9 @@ type StorePlugin struct {
 	// GaveUp is true when the plugin crashed MaxCrashes times in a row: it
 	// fails fast until retried. The Plugins view offers a Retry action.
 	GaveUp bool `json:"gave_up,omitempty"`
+	// Bundled marks a first-party plugin (see plugins.BundledPluginIDs): it
+	// can't be uninstalled or replaced from a zip, only disabled.
+	Bundled bool `json:"bundled,omitempty"`
 	// Where its games install: the Games folder subfolder, or the user's override.
 	InstallFolder        string   `json:"install_folder"`
 	DefaultInstallFolder string   `json:"default_install_folder"`
@@ -303,6 +309,19 @@ type PluginCapability struct {
 type PluginRequirement struct {
 	Bin  string `json:"bin"`
 	Hint string `json:"hint"`
+}
+
+// PluginInstallResult is what InstallPluginZip answers (issues #147): the
+// installed plugin, or a replace question when the id is already installed.
+// NeedsConfirm means nothing was written: the UI asks ("replace vX with vY?")
+// and calls again with confirmReplace.
+type PluginInstallResult struct {
+	ID             string `json:"id"`
+	Version        string `json:"version"`
+	Replaced       bool   `json:"replaced,omitempty"`
+	NeedsConfirm   bool   `json:"needsConfirm,omitempty"`
+	CurrentVersion string `json:"currentVersion,omitempty"`
+	NewVersion     string `json:"newVersion,omitempty"`
 }
 
 // AuthStatus is a plugin's login state.

@@ -1727,6 +1727,7 @@ export function GameHeroHeading({ game, fix, storeLogo, storeName, needsConnecti
         {formatBytes(game.size_bytes) && <Badge className={cx(heroChipClass(chips), 'text-white/75')}>{formatBytes(game.size_bytes)}</Badge>}
         {!game.is_installed && <Badge className={cx(heroChipClass(chips), 'text-text-muted')}>{t('game:hero.notInstalled')}</Badge>}
         {game.update_available && <Badge variant="info" className="bg-sky-400/15 ring-1 ring-info/30">{t('game:hero.updateAvailable')}</Badge>}
+        {game.store_missing && <Badge className={cx(heroChipClass(chips), 'text-text-muted')}>{t('game:hero.storeMissing')}</Badge>}
         {game.pinned && <Badge variant="accent" className="bg-accent-strong/15 ring-1 ring-accent-strong/30">{t('game:hero.pinned')}</Badge>}
         {needsConnection && (
           <Badge className="bg-accent-strong/15 text-amber-100 ring-1 ring-accent-strong/30" data-testid="needs-connection">

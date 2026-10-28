@@ -64,6 +64,7 @@
   "sharedBy": "Partagé par {{name}}",
   "cardHours": "{{hours}} h",
   "cardUpdate": "mise à jour",
+  "cardStoreMissing": "boutique manquante",
   "cardNotInstalled": "non installé",
   "cardOwned": "possédé",
   "job": {

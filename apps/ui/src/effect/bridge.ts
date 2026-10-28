@@ -8,6 +8,8 @@ export interface PlatypusBridge {
   on(event: string, cb: (data: unknown) => void): () => void;
   /** Opens an http(s) address in the user's browser. The shell refuses anything else. */
   openExternal(url: string): void;
+  /** A dropped file's real path (Electron removed File.path). Absent outside the shell. */
+  pathForFile?: (file: File) => string;
   /** The shell session: OS languages and dev mode (issue #39). Absent outside the shell. */
   getSessionInfo?: () => Promise<SessionInfo>;
   /** Asks the shell for a desktop notification for a chat message; main

@@ -866,10 +866,10 @@ export function LibraryAllTitles({ rest, jobs, onOpenGame, onManage, mode, filte
   // details line and the two badge lines, so the built-in 2:3 cards stay
   // pixel-identical (the virtual grid forces this height).
   const rowHeight = (width: number) => width * ratio + CARD_FOOTER;
-  // The card meta matches the built-in cards: playtime, recency, store, year, update.
+  // The card meta matches the built-in cards: playtime, recency, store, year, update, store missing.
   const metaFor = (g: Game) => {
     const hours = hoursPlayed(g);
-    return [hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate')].filter(Boolean).join(' · ');
+    return [hours != null && t('library:cardHours', { hours: formatDecimal1(hours) }), recencyWord(t, g), displayStore(t, g.store), g.release_year ? String(g.release_year) : null, g.update_available && t('library:cardUpdate'), g.store_missing && t('library:cardStoreMissing')].filter(Boolean).join(' · ');
   };
   return (
     <section>

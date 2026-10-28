@@ -3,7 +3,8 @@
     "subtitle": "Store plugins bring in libraries from other stores and install games you own. Each one is a separate program; Platypus only runs the ones you approve.",
     "atlasSubtitle": "Each store comes in through a plugin. Plugins only do what you approve.",
     "pluginsFolder": "Plugins folder",
-    "rescan": "Rescan"
+    "rescan": "Rescan",
+    "addStore": "Add a store"
   },
   "section": {
     "store": "store plugins",
@@ -39,7 +40,8 @@
     "approve": "Review and approve",
     "reapprove": "Review and re-approve",
     "disable": "Disable",
-    "enable": "Enable"
+    "enable": "Enable",
+    "uninstall": "Uninstall"
   },
   "auth": {
     "checking": "checking login…",
@@ -71,6 +73,8 @@
     "disabled": "{{name}} disabled",
     "enabled": "{{name}} enabled",
     "willRetry": "{{name}} will start again on the next call",
+    "uninstalled": "{{name}} uninstalled",
+    "installed": "{{name}} installed — review and approve it",
     "loggedIn": "Logged in to {{name}}",
     "loggedInAs": "Logged in to {{name}} as {{user}}"
   },
@@ -119,6 +123,21 @@
     "sectionTitle": "settings",
     "noGameSettings": "{{plugin}} has no settings for {{title}}.",
     "saveFailed": "The plugin couldn't save that setting."
+  },
+  "uninstall": {
+    "title": "Uninstall {{name}}?",
+    "detail": "Removes the plugin and its saved data (approval, settings, login). Installed games stay on disk and in the library as 'store missing'.",
+    "removeGames": "Also remove its games from the library",
+    "confirm": "Uninstall",
+    "actionFailed": "Platypus couldn't uninstall {{name}}."
+  },
+  "install": {
+    "actionFailed": "Platypus couldn't install that plugin.",
+    "notAZip": "That file is not a plugin zip.",
+    "replaceTitle": "Replace {{name}}?",
+    "replaceDetail": "Version {{current}} is installed. Install {{new}} instead? The old folder is replaced, never merged.",
+    "replaceDetailUnknown": "A folder named {{name}} already exists, but its version can't be read. Install {{new}} instead? The old folder is replaced, never merged.",
+    "confirmReplace": "Replace"
   },
   "builtIn": {
     "protondb": "Compatibility ratings and community notes for Steam games."

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"platypus/internal/plugins"
 	"platypus/internal/stores"
 	"platypus/internal/types"
 )
@@ -94,5 +95,82 @@ func TestSteamFailureIsANormalWarning(t *testing.T) {
 	}
 	if len(lib.Warnings) != 1 || lib.Warnings[0].Source != types.SourceSteam || lib.Warnings[0].Stale {
 		t.Fatalf("warnings = %+v, want one non-stale Steam warning", lib.Warnings)
+	}
+}
+
+// An uninstalled store's installed games stay in the library as "store
+// missing" (issue #161): rows that were never installed can't launch without
+// the store, so they drop out.
+func TestMissingStoreGamesStayAsStoreMissing(t *testing.T) {
+	t.Parallel()
+	a := libraryApp(t)
+	a.library.snapDir = t.TempDir()
+	installed := types.Game{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", IsInstalled: true, Executable: "/g/tiny/tiny", InstallDir: "/g/tiny"}
+	owned := types.Game{ID: "p.echo.huge", Source: "echo", Title: "Huge"}
+	saveLibrarySnapshot(a.library.snapDir, "echo", []types.Game{installed, owned})
+	lib, err := a.GetLibrary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.Games) != 1 || lib.Games[0].ID != "p.echo.tiny" || !lib.Games[0].StoreMissing {
+		t.Fatalf("games = %+v, want the installed row flagged store missing", lib.Games)
+	}
+	if len(lib.Warnings) != 1 || lib.Warnings[0].Source != "echo" || !lib.Warnings[0].Stale {
+		t.Fatalf("warnings = %+v, want one stale warning for the missing store", lib.Warnings)
+	}
+}
+
+// An installed but unapproved store is not missing: its snapshot rows stay
+// out of the library instead of coming back flagged and launchable.
+func TestInstalledButUnapprovedStoreIsNotMissing(t *testing.T) {
+	t.Parallel()
+	a := libraryApp(t)
+	dir := filepath.Join(a.plugins.Dir(), "echo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"id":"echo","name":"Echo","version":"1.0.0","api":1,"store":"echo","exec":"run.sh"}`
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.plugins.Discover(); err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := a.plugins.Plugin("echo"); !ok || p.Status != plugins.StatusUnapproved {
+		t.Fatalf("plugin = %+v, want unapproved", p)
+	}
+	a.library.snapDir = t.TempDir()
+	installed := types.Game{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", IsInstalled: true, Executable: "/g/tiny"}
+	saveLibrarySnapshot(a.library.snapDir, "echo", []types.Game{installed})
+	lib, err := a.GetLibrary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib.Games) != 0 {
+		t.Fatalf("games = %+v, an installed store is not missing", lib.Games)
+	}
+	if len(lib.Warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none", lib.Warnings)
+	}
+}
+
+// A store that is still installed lists live: its snapshot never doubles as
+// "store missing" rows.
+func TestPresentStoreSnapshotIsNotStoreMissing(t *testing.T) {
+	t.Parallel()
+	src := offlineFakeSource{id: "echo", games: []types.Game{{ID: "p.echo.tiny", Source: "echo", Title: "Tiny", IsInstalled: true}}}
+	a := libraryApp(t, src)
+	a.library.snapDir = t.TempDir()
+	saveLibrarySnapshot(a.library.snapDir, "echo", src.games)
+	all := []stores.Store{src}
+	lib, err := a.assembleLibrary(all, [][]types.Game{src.games}, []error{nil}, []bool{true})
+	if err != nil || len(lib.Games) != 1 {
+		t.Fatalf("lib = %+v, %v", lib, err)
+	}
+	if lib.Games[0].StoreMissing {
+		t.Fatalf("games = %+v, a present store must not flag store missing", lib.Games)
 	}
 }

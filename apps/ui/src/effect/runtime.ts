@@ -293,6 +293,11 @@ export const LauncherApi = {
   // Clears a gave-up plugin's crash count so the next call restarts it (CORE-10).
   retryPlugin: (id: string) => call<void>('RetryPlugin', () => App.RetryPlugin(id)),
   openPluginsFolder: () => call<void>('OpenPluginsFolder', () => App.OpenPluginsFolder()),
+  uninstallPlugin: (id: string, removeGames: boolean) =>
+    call<void>('UninstallPlugin', () => App.UninstallPlugin(id, removeGames)),
+  choosePluginZip: () => call<string>('ChoosePluginZip', () => App.ChoosePluginZip()),
+  installPluginZip: (zipPath: string, confirmReplace: boolean) =>
+    call<gen.PluginInstallResult>('InstallPluginZip', () => App.InstallPluginZip(zipPath, confirmReplace)),
   setPluginInstallFolder: (id: string, path: string) => call<void>('SetPluginInstallFolder', () => App.SetPluginInstallFolder(id, path)),
   choosePluginInstallFolder: (id: string) => call<string>('ChoosePluginInstallFolder', () => App.ChoosePluginInstallFolder(id)),
   allowGameFolder: (pluginId: string, path: string) => call<void>('AllowGameFolder', () => App.AllowGameFolder(pluginId, path)),

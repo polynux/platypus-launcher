@@ -264,7 +264,8 @@ func (m *Manager) Discover() ([]Plugin, error) {
 }
 
 // inspect validates one plugin folder and works out its status. A data
-// plugin is ready when its JSON loads — there is nothing to approve.
+// plugin without an approval record is ready when its JSON loads; one with
+// a record (a zip install, issue #147) follows it like a store plugin.
 func (m *Manager) inspect(dir string) *Plugin {
 	p := &Plugin{Dir: dir}
 	man, err := LoadManifest(dir)
@@ -296,17 +297,34 @@ func (m *Manager) inspect(dir string) *Plugin {
 		} else {
 			p.Data = data
 		}
-		p.Status = StatusReady
+		if p.Hash, err = hashPlugin(dir); err != nil {
+			p.Status, p.Problem = StatusInvalid, err.Error()
+			return p
+		}
+		// The theme loads whatever the approval state: only the status
+		// decides whether it applies or picks (issue #147).
 		if man.Theme != "" {
 			th := themes.LoadFS(os.DirFS(dir), man.Theme, man.ID)
 			p.Theme = &th
-			// Version the asset URLs like the logos: a replaced file is a
-			// new address. A hashing failure only loses the version, not
-			// the theme.
-			if h, err := hashPlugin(dir); err == nil {
-				p.Hash = h
-			}
 		}
+		// A data plugin with an approval record follows it (issue #147): a
+		// zip install files an empty record first, so it waits for approval
+		// instead of applying its fixes, tweaks and theme at once. Without
+		// a record it is a hand-installed folder, active as before.
+		if trust, ok := m.trust.PluginState(man.ID); ok {
+			switch {
+			case trust.Hash == "":
+				p.Status, p.Problem = StatusUnapproved, "waiting for approval after a zip install"
+			case trust.Hash != p.Hash:
+				p.Status, p.Problem = StatusChanged, "the plugin changed since you approved it"
+			case !trust.Enabled:
+				p.Status = StatusDisabled
+			default:
+				p.Status = StatusReady
+			}
+			return p
+		}
+		p.Status = StatusReady
 		return p
 	}
 	if p.Hash, err = hashPlugin(dir); err != nil {
@@ -355,16 +373,15 @@ func (m *Manager) Plugins() []Plugin {
 
 // Approve pins the plugin's current executable hash and enables it. The UI
 // must have shown the manifest (what it runs, network hosts, paths, required
-// tools) before calling this.
+// tools) before calling this. Data plugins approve their folder hash instead:
+// a zip-installed data plugin waits for approval before its fixes, tweaks
+// and theme apply (issue #147).
 func (m *Manager) Approve(id string) error {
 	m.mu.Lock()
 	p, ok := m.plugins[id]
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("unknown plugin %q", id)
-	}
-	if p.Manifest.IsData() {
-		return fmt.Errorf("%s is a data plugin: nothing to approve", id)
 	}
 	// Hash again: what gets approved is what is on disk now.
 	p = m.inspect(p.Dir)
@@ -375,6 +392,9 @@ func (m *Manager) Approve(id string) error {
 		if p.Hash == "" { // incompatible with this Platypus: there is nothing it could run
 			return fmt.Errorf("plugin %s can't run on this Platypus: %s", id, p.Problem)
 		}
+	}
+	if p.Manifest.IsData() && p.Hash == "" {
+		return fmt.Errorf("plugin %s has nothing to approve", id)
 	}
 	state, _ := m.trust.PluginState(id) // keeps folder choices across re-approval
 	state.Hash, state.Enabled = p.Hash, true
@@ -745,6 +765,42 @@ func (m *Manager) GaveUp(id string) bool {
 	proc.mu.Lock()
 	defer proc.mu.Unlock()
 	return proc.crashes >= proc.t.maxCrashes
+}
+
+// Uninstall stops the plugin and removes its folder. It refuses anything
+// outside the plugins folder and never touches a missing manager dir. The
+// caller re-discovers afterwards; approval and settings are the caller's to
+// forget.
+func (m *Manager) Uninstall(id string) error {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return fmt.Errorf("refusing to uninstall %q: not a plugin id", id)
+	}
+	if m.dir == "" {
+		return fmt.Errorf("refusing to uninstall %q: no plugins folder", id)
+	}
+	target := filepath.Join(m.dir, id)
+	rel, err := filepath.Rel(m.dir, target)
+	if err != nil || rel != id || !filepath.IsLocal(rel) {
+		return fmt.Errorf("refusing to uninstall %q: outside the plugins folder", id)
+	}
+	m.mu.Lock()
+	proc := m.procs[id]
+	delete(m.procs, id)
+	// Forget the plugin before stopping it, so a concurrent refresh can't
+	// restart it from the folder being removed (it would recreate its
+	// private data after the caller deleted it).
+	delete(m.plugins, id)
+	m.mu.Unlock()
+	if proc != nil {
+		proc.stop()
+	}
+	if _, err := os.Lstat(target); err != nil {
+		return fmt.Errorf("unknown plugin %q", id)
+	}
+	if err := os.RemoveAll(target); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Shutdown stops every plugin (on app exit). The manager can't be used after.

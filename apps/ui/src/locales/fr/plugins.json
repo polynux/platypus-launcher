@@ -3,7 +3,8 @@
     "subtitle": "Les plugins de boutique importent les bibliothèques d'autres boutiques et installent les jeux que vous possédez. Chacun est un programme à part ; Platypus n'exécute que ceux que vous approuvez.",
     "atlasSubtitle": "Chaque boutique passe par un plugin. Les plugins ne font que ce que vous approuvez.",
     "pluginsFolder": "Dossier des plugins",
-    "rescan": "Réanalyser"
+    "rescan": "Réanalyser",
+    "addStore": "Ajouter une boutique"
   },
   "section": {
     "store": "plugins de boutique",
@@ -39,7 +40,8 @@
     "approve": "Examiner et approuver",
     "reapprove": "Examiner et réapprouver",
     "disable": "Désactiver",
-    "enable": "Activer"
+    "enable": "Activer",
+    "uninstall": "Désinstaller"
   },
   "auth": {
     "checking": "vérification de la connexion…",
@@ -71,6 +73,8 @@
     "disabled": "{{name}} désactivé",
     "enabled": "{{name}} activé",
     "willRetry": "{{name}} redémarrera au prochain appel",
+    "uninstalled": "{{name}} désinstallé",
+    "installed": "{{name}} installé — examinez-le et approuvez-le",
     "loggedIn": "Connexion à {{name}}",
     "loggedInAs": "Connecté à {{name}} en tant que {{user}}"
   },
@@ -119,6 +123,21 @@
     "sectionTitle": "réglages",
     "noGameSettings": "{{plugin}} n'a aucun réglage pour {{title}}.",
     "saveFailed": "Le plugin n'a pas pu enregistrer ce réglage."
+  },
+  "uninstall": {
+    "title": "Désinstaller {{name}} ?",
+    "detail": "Supprime le plugin et ses données enregistrées (approbation, réglages, connexion). Les jeux installés restent sur le disque et dans la bibliothèque, marqués « boutique manquante ».",
+    "removeGames": "Supprimer aussi ses jeux de la bibliothèque",
+    "confirm": "Désinstaller",
+    "actionFailed": "Platypus n'a pas pu désinstaller {{name}}."
+  },
+  "install": {
+    "actionFailed": "Platypus n'a pas pu installer ce plugin.",
+    "notAZip": "Ce fichier n'est pas un zip de plugin.",
+    "replaceTitle": "Remplacer {{name}} ?",
+    "replaceDetail": "La version {{current}} est installée. Installer {{new}} à la place ? L'ancien dossier est remplacé, jamais fusionné.",
+    "replaceDetailUnknown": "Un dossier nommé {{name}} existe déjà, mais sa version est illisible. Installer {{new}} à la place ? L'ancien dossier est remplacé, jamais fusionné.",
+    "confirmReplace": "Remplacer"
   },
   "builtIn": {
     "protondb": "Notes de compatibilité et avis de la communauté pour les jeux Steam."

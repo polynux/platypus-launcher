@@ -31,6 +31,7 @@ export interface CoreApi {
   CheckRemove(gameID: string, opts: types.RemoveOptions): Promise<types.RemoveCheck>;
   ChooseGameFolder(): Promise<string>;
   ChoosePluginInstallFolder(id: string): Promise<string>;
+  ChoosePluginZip(): Promise<string>;
   ClearFinishedJobs(): Promise<void>;
   CreateCollection(name: string, smart: types.SmartFilter): Promise<types.Collection[]>;
   CreateSaveBackup(game: types.Game): Promise<types.Job>;
@@ -81,6 +82,7 @@ export interface CoreApi {
   InstallGameVersion(game: types.Game, target: types.VersionTarget): Promise<types.Job>;
   InstallGameWithOptions(game: types.Game, options: Record<string, unknown>): Promise<types.Job>;
   InstallGameWithOptionsTo(game: types.Game, options: Record<string, unknown>, folder: string): Promise<types.Job>;
+  InstallPluginZip(zipPath: string, confirmReplace: boolean): Promise<types.PluginInstallResult>;
   InvalidateLibrary(source: string): Promise<void>;
   IsGameExecutable(gameID: string): Promise<boolean>;
   LaunchGame(game: types.Game): Promise<string>;
@@ -186,6 +188,7 @@ export interface CoreApi {
   StopGame(gameID: string): Promise<void>;
   UninstallGame(game: types.Game): Promise<types.Job>;
   UninstallGameWithoutBackup(game: types.Game): Promise<types.Job>;
+  UninstallPlugin(id: string, removeGames: boolean): Promise<void>;
   UnlockVersionChannel(game: types.Game, channel: string, password: string): Promise<boolean>;
   UnpinGameVersion(gameID: string): Promise<void>;
   UpdateCollection(id: string, name: string, smart: types.SmartFilter): Promise<types.Collection[]>;
@@ -222,6 +225,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'CheckRemove',
   'ChooseGameFolder',
   'ChoosePluginInstallFolder',
+  'ChoosePluginZip',
   'ClearFinishedJobs',
   'CreateCollection',
   'CreateSaveBackup',
@@ -272,6 +276,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'InstallGameVersion',
   'InstallGameWithOptions',
   'InstallGameWithOptionsTo',
+  'InstallPluginZip',
   'InvalidateLibrary',
   'IsGameExecutable',
   'LaunchGame',
@@ -377,6 +382,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'StopGame',
   'UninstallGame',
   'UninstallGameWithoutBackup',
+  'UninstallPlugin',
   'UnlockVersionChannel',
   'UnpinGameVersion',
   'UpdateCollection',
