@@ -351,7 +351,8 @@ func (a *App) RetryJob(id string) error {
 }
 
 // MoveJobToFront moves a queued or paused download to the top of the queue,
-// so it starts next. The running download keeps running.
+// so it starts next. The running download keeps running. Moving a running
+// or finished job is a no-op returning nil.
 func (a *App) MoveJobToFront(id string) error {
 	return a.jobs.MoveToFront(id)
 }

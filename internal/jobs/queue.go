@@ -640,6 +640,14 @@ func (q *Queue) MoveToFront(id string) error {
 			break
 		}
 	}
+	// Never ahead of the running job: it keeps running, and after a
+	// restart (Open requeues it in place) it must still start first, not
+	// the moved job. A paused waiter ahead of the run stays ahead.
+	for i, o := range q.jobs {
+		if o.State == StateRunning && i+1 > at {
+			at = i + 1
+		}
+	}
 	q.jobs = append(q.jobs, nil)
 	copy(q.jobs[at+1:], q.jobs[at:])
 	q.jobs[at] = j

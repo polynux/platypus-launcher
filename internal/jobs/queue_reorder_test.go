@@ -151,6 +151,55 @@ func TestMoveToFrontEmitsNewOrder(t *testing.T) {
 	}
 }
 
+// A paused waiter ahead of the running job stays ahead: the moved job goes
+// behind the run, so after a restart the half-done download still starts
+// first instead of the moved job.
+func TestMoveToFrontStaysBehindTheRunningJob(t *testing.T) {
+	b := &fakeBackend{}
+	q, path := newQueue(t, b)
+	paused, _ := q.Add(KindInstall, "echo", "g1", "g1", "One", filepath.Join(t.TempDir(), "x"))
+	waitState(t, q, paused.ID, StateRunning)
+	if err := q.Pause(context.Background(), paused.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitState(t, q, paused.ID, StatePaused)
+	running, _ := q.Add(KindInstall, "echo", "g2", "g2", "Two", filepath.Join(t.TempDir(), "y"))
+	waitState(t, q, running.ID, StateRunning)
+	moved, _ := q.Add(KindInstall, "echo", "g3", "g3", "Three", filepath.Join(t.TempDir(), "z"))
+	waitState(t, q, moved.ID, StateQueued)
+
+	if err := q.MoveToFront(moved.ID); err != nil {
+		t.Fatal(err)
+	}
+	ids := reorderIDs(q.List())
+	want := []string{paused.ID, running.ID, moved.ID}
+	if !equalReorderIDs(ids, want) {
+		t.Fatalf("order after move = %v, want %v", ids, want)
+	}
+
+	// After a restart the running job reloads as queued in its slot and
+	// must still start before the moved job.
+	q2, err := Open(path, &fakeBackend{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q2.freeSpace = q.freeSpace
+	ids = reorderIDs(q2.List())
+	if !equalReorderIDs(ids, want) {
+		t.Fatalf("reloaded order = %v, want %v", ids, want)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	t.Cleanup(func() { cancel(); <-done })
+	go func() { defer close(done); q2.Run(ctx) }()
+	waitState(t, q2, running.ID, StateRunning)
+	for _, j := range q2.List() {
+		if j.ID == moved.ID && j.State != StateQueued {
+			t.Fatalf("moved job started ahead of the resumed download: %+v", j)
+		}
+	}
+}
+
 // Running and finished jobs don't move; unknown ids are an error.
 func TestMoveToFrontLeavesOtherStates(t *testing.T) {
 	b := &fakeBackend{}
