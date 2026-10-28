@@ -38,6 +38,17 @@ export interface VariantValues {
   "game-hero.chips": "glass" | "solid";
   "game-hero.logo": "title" | "logo";
   "game.structure": "sections" | "tabs";
+  "dashboard.presentation": "blocks" | "home";
+  "fixes.presentation": "rows" | "cards";
+  "activity.presentation": "feed" | "days";
+  "runners.presentation": "rows" | "table";
+  "downloads.presentation": "groups" | "cards";
+  "storage.presentation": "blocks" | "cards";
+  "plugins.presentation": "cards" | "directory";
+  "friends.presentation": "modal" | "panel";
+  "store.presentation": "embedded" | "storefronts";
+  "settings-row.style": "section" | "srow";
+  "toast.style": "card" | "pill";
 }
 
 export type VariantAxis = keyof VariantValues;
@@ -80,4 +91,15 @@ export const VARIANT_DEFAULTS: VariantValues = {
   "game-hero.chips": "solid",
   "game-hero.logo": "title",
   "game.structure": "sections",
+  "dashboard.presentation": "blocks",
+  "fixes.presentation": "rows",
+  "activity.presentation": "feed",
+  "runners.presentation": "rows",
+  "downloads.presentation": "groups",
+  "storage.presentation": "blocks",
+  "plugins.presentation": "cards",
+  "friends.presentation": "modal",
+  "store.presentation": "embedded",
+  "settings-row.style": "section",
+  "toast.style": "card",
 };

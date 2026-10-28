@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipTrigger } from './ds/tooltip';
 import { byRecent, heroImages, hoursPlayed, storeLabel } from '../lib/games';
 import { collectionPredicate, missingNames } from '../lib/collections';
+import { filterLibrary, matchesExtraFilters } from '../lib/libraryFilter';
 import { formatCount } from '../lib/format';
 import { formatDecimal1, recencyOf, renderRecency } from '../lib/gameLocale';
 import { runnerShort } from '../lib/settings';
@@ -261,14 +262,10 @@ function displayStore(t: T, s: string): string {
 }
 
 /** The tier, status and lent-to-me filters as one predicate (issue #132):
- *  both library presentations filter through it, so the logic can't drift. */
-export function matchesExtraFilters(g: Game, tier: TierFilter, status: StatusFilter, lending: 'all' | 'with-me'): boolean {
-  return (
-    (tier === 'all' || tierFilterValue(g) === tier) &&
-    (status === 'all' || (status === 'none' ? !g.status : g.status === status)) &&
-    (lending === 'all' || g.shared_by != null)
-  );
-}
+ *  both library presentations filter through it, so the logic can't drift.
+ *  Moved to lib/libraryFilter (issue #157); re-exported here so existing
+ *  imports keep working. */
+export { matchesExtraFilters } from '../lib/libraryFilter';
 
 /** The compact recency word for a game ("today", "5d ago"), through the library catalog. */
 function recencyWord(t: T, g: Game): string | undefined {
@@ -333,15 +330,18 @@ export function LibraryView(p: LibraryProps) {
   const multi = p.storeSelection;
   const filtered = useMemo(
     () =>
-      p.games.filter(
-        (g) =>
-          (p.ownership === 'owned' || g.is_installed) &&
-          (multi !== undefined ? multi.length === 0 || multi.includes(g.store) : source === 'all' || g.store === source) &&
-          matchesExtraFilters(g, tier, statusFilter, lendingFilter) &&
-          (!inCollection || inCollection(g)) &&
-          g.title.toLowerCase().includes(q)
-      ),
-    [p.games, p.ownership, source, multi, lendingFilter, tier, statusFilter, inCollection, q]
+      filterLibrary(p.games, {
+        ownership: p.ownership,
+        source,
+        storeSelection: multi,
+        collection: p.collection,
+        collections: p.collections,
+        tier,
+        status: statusFilter,
+        lending,
+        query: q,
+      }),
+    [p.games, p.ownership, source, multi, lending, tier, statusFilter, p.collection, p.collections, q]
   );
   // A manual collection's games that left the library: listed, not shown as cards.
   const missing = useMemo(() => (activeCollection && !activeCollection.smart ? missingNames(activeCollection, p.games) : []), [activeCollection, p.games]);

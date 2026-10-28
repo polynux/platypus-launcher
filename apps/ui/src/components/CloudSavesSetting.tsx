@@ -17,7 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
  *  own page. Nothing renders when no store offers cloud saves. */
 export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
   const { t } = useTranslation('cloud');
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const atlas = useVariant('settings-row.style') === 'srow';
   const stores = plugins.filter((p) => p.status === 'ready' && offers(p, 'cloud-saves'));
   if (stores.length === 0) return null;
   return (
@@ -34,7 +34,7 @@ export function CloudSavesDefaults({ plugins }: { plugins: StorePlugin[] }) {
 
 function Row({ plugin }: { plugin: StorePlugin }) {
   const { t } = useTranslation('cloud');
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const atlas = useVariant('settings-row.style') === 'srow';
   const [mode, setMode] = useState<CloudMode>('ask');
   const [error, setError] = useState<string | null>(null);
 

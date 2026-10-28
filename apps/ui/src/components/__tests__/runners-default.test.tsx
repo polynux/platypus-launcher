@@ -9,7 +9,7 @@ import { SystemView } from '../SystemView';
 
 // shell.navigation decides the presentation; every other axis keeps its own.
 const variant = vi.hoisted(() => ({ nav: 'sourcebar' }));
-vi.mock('../../lib/theme', () => ({ useVariant: (axis: string) => (axis === 'shell.navigation' ? variant.nav : 'page') }));
+vi.mock('../../lib/theme', () => ({ useVariant: (axis: string) => { if (axis === 'runners.presentation') return variant.nav === 'sourcebar' ? 'table' : 'rows'; if (axis === 'shell.navigation') return variant.nav; return 'page'; } }));
 
 // The stored default: what the page reads to tell a pick from the automatic one.
 const core = vi.hoisted(() => ({ settings: { default_runner_id: '' } }));

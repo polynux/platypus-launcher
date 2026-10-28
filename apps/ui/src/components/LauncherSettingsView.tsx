@@ -18,7 +18,8 @@ import { coreErrMsg } from '../lib/coreError';
 import { DEFAULT_THEME_ID, loadTheme, useColorScheme, useThemeSchemes, useVariant, saveColorSchemeChoice, type ColorScheme } from '../lib/theme';
 import { useGameToneChoice, type GameToneChoice } from '../lib/gameTone';
 import { ToggleGroup, ToggleGroupItem } from './ds/toggle-group';
-import { ATLAS_PAGE, ViewHeader, cx } from './ui';
+import { ViewHeader, cx } from './ui';
+import { AtlasSettingsPage } from './AtlasLauncherSettings';
 import { AtlasSRow, AtlasSSwitch } from './AtlasSettings';
 
 /** A settings section: a hairline and air, not a card (no card inside the page). */
@@ -45,7 +46,7 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
   const { t } = useTranslation('settings');
   const navigation = useVariant('settings.navigation');
   const chrome = useVariant('section.chrome');
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const atlas = useVariant('settings-row.style') === 'srow';
   const sectionNames = ['language', 'theme', 'appearance', 'folders', 'prefixes', 'cleanup', 'ratings', 'artwork', 'gameInfo', 'chat', 'notices', 'tray', 'backups', 'cloud'];
   const [, setRenderTick] = useState(0);
   const setActiveSection = (index: number) => {
@@ -165,57 +166,6 @@ export function LauncherSettingsView({ onNotify, plugins }: LauncherSettingsView
 /** The /22 Settings page (issue #138, Atlas only): the left category nav and
  *  the right body reusing the same section components as the classic view.
  *  Appearance comes from #134 and stays untouched. */
-const ATLAS_CATS = ['general', 'appearance', 'folders', 'saves', 'data', 'social', 'stores'] as const;
-type AtlasCat = (typeof ATLAS_CATS)[number];
-const ATLAS_SECTIONS: Record<AtlasCat, number[]> = {
-  // Indexes into the sections array above: language, tray / theme, appearance
-  // / folders, prefixes, cleanup / backups, cloud / ratings (with protection),
-  // artwork, gameInfo / chat / store client notices.
-  general: [0, 11],
-  appearance: [1, 2],
-  folders: [3, 4, 5],
-  saves: [12, 13],
-  data: [6, 7, 8],
-  social: [9],
-  stores: [10],
-};
-
-function AtlasSettingsPage({ sections, loadError }: {
-  sections: React.ReactNode[];
-  loadError: string | null;
-}) {
-  const { t } = useTranslation('settings');
-  const [cat, setCat] = useState<AtlasCat>('general');
-  return (
-    <div className={ATLAS_PAGE}>
-      <header>
-        <h1 className="text-[24px] font-extrabold tracking-tight">{t('settings:title')}</h1>
-      </header>
-      {loadError && <ErrorNotice message={loadError} fallback={t('loadError')} />}
-      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav aria-label={t('sections.label')} className="grid gap-0.5">
-          {ATLAS_CATS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCat(c)}
-              aria-current={cat === c ? 'page' : undefined}
-              className={cat === c
-                ? 'rounded-lg bg-[color-mix(in_srgb,var(--color-accent)_15%,var(--color-surface))] px-2.5 py-[7px] text-left text-[13px] font-semibold text-text'
-                : 'rounded-lg px-2.5 py-[7px] text-left text-[13px] font-semibold text-text-muted transition hover:bg-surface hover:text-text'}
-            >
-              {t(`atlas.cats.${c}`)}
-            </button>
-          ))}
-        </nav>
-        <section aria-label={t(`atlas.cats.${cat}`)} className="min-w-0 px-[26px] pt-[18px]">
-          <h2 className="mb-1 text-[18px] font-extrabold tracking-tight">{t(`atlas.cats.${cat}`)}</h2>
-          <div>{ATLAS_SECTIONS[cat].map((i) => <React.Fragment key={i}>{sections[i]}</React.Fragment>)}</div>
-        </section>
-      </div>
-    </div>
-  );
-}
 
 /** The UI language (issue #39): System follows the desktop language, or an
  *  explicit language. Saving applies it live, without a restart. */
@@ -262,7 +212,7 @@ export function LanguageSetting({ onNotify }: { onNotify: (msg: string, kind?: '
   if (dev) options.push({ value: PSEUDO_LOCALE, label: `${PSEUDO_LOCALE} (pseudo)` });
   // Atlas renders the row as a lab .srow: 600 label + muted desc left, a
   // 210px Select right; the dev-only pseudo note sits inside the desc, sans.
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSRow
@@ -366,7 +316,7 @@ export function ThemeSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok'
   };
   // Atlas renders the row as a lab .srow: the Theme select right-aligned at
   // 210px, with no inner heading (the category nav owns it).
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSRow label={t('theme.heading')}>
@@ -471,7 +421,7 @@ export function AppearanceSetting({ onNotify }: { onNotify: (msg: string, kind?:
   // Atlas renders the lab's two .srows (issue #138): Theme is its own
   // section above; here Colour scheme and Game colour sit right-aligned and
   // sized to their content, with no inner heading or description sentence.
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section id="settings-section-appearance">
         {showScheme && (
@@ -614,7 +564,7 @@ export function RatingsSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       .finally(() => setBusy(false));
   };
   const credits = <>{t('ratings.creditCompat')} {t('protection.creditWiki')} {t('protection.creditAnticheat')}</>;
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSSwitch
@@ -686,7 +636,7 @@ export function ArtworkSetting({ onNotify }: { onNotify: (msg: string, kind?: 'o
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSSwitch
@@ -739,7 +689,7 @@ export function GameInfoSetting({ onNotify }: { onNotify: (msg: string, kind?: '
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSSwitch
@@ -792,7 +742,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSSwitch
@@ -822,7 +772,7 @@ export function ChatNotificationsSetting({ onNotify }: { onNotify: (msg: string,
 
 function SocialSettings({ plugins, onNotify }: { plugins: StorePlugin[]; onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
   const { t } = useTranslation('settings');
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const atlas = useVariant('settings-row.style') === 'srow';
   const [views, setViews] = useState<{ plugin: string; enabled: boolean }[]>([]);
   const stores = plugins.filter((p) => p.capabilities.includes('social') || p.declared.includes('social'));
   const refresh = () => Effect.runPromise(LauncherApi.socialViews()).then((v) => setViews(v ?? [])).catch(() => {});
@@ -857,7 +807,7 @@ export function TraySetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' 
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSSwitch
@@ -908,7 +858,7 @@ export function ClientNoticesSetting({ onNotify }: { onNotify: (msg: string, kin
       .catch((e) => onNotify(coreErrMsg(e), 'err'))
       .finally(() => setBusy(false));
   };
-  if (useVariant('shell.navigation') === 'sourcebar') {
+  if (useVariant('settings-row.style') === 'srow') {
     return (
       <section>
         <AtlasSSwitch
@@ -940,7 +890,7 @@ export function ClientNoticesSetting({ onNotify }: { onNotify: (msg: string, kin
  *  or deletes existing prefixes; empty resets it to the default. */
 export function PrefixesFolderSetting({ onNotify }: { onNotify: (msg: string, kind?: 'ok' | 'err') => void }) {
   const { t } = useTranslation('settings');
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const atlas = useVariant('settings-row.style') === 'srow';
   const [saved, setSaved] = useState<LauncherSettings | null>(null);
   const [folder, setFolder] = useState('');
   const [error, setError] = useState<string | null>(null);

@@ -28,7 +28,16 @@ import { applyTheme } from '../../lib/theme';
 afterEach(() => cleanup());
 
 const theme = (id: string, navigation: 'sidebar' | 'sourcebar'): ThemeTokens => ({
-  id, tokens: {}, wash: [], variants: { 'shell.navigation': navigation } as ThemeTokens['variants'],
+  id,
+  tokens: {},
+  wash: [],
+  variants: {
+    'shell.navigation': navigation,
+    // Page presentations follow the shell in this switch test (issue #156):
+    // Atlas pairs sourcebar with its page set, warm pairs sidebar with classic.
+    'dashboard.presentation': navigation === 'sourcebar' ? 'home' : 'blocks',
+    'fixes.presentation': navigation === 'sourcebar' ? 'cards' : 'rows',
+  } as ThemeTokens['variants'],
 });
 
 describe('App live theme switch', () => {

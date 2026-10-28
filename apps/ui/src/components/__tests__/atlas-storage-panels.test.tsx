@@ -12,7 +12,7 @@ vi.mock('../../effect/runtime', () => ({
 }));
 vi.mock('../../lib/theme', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../lib/theme')>(),
-  useVariant: (axis: string) => axis === 'shell.navigation' ? 'sourcebar' : 'page',
+  useVariant: (axis: string) => axis === 'shell.navigation' ? 'sourcebar' : (axis === 'dashboard.presentation' ? 'home' : axis === 'fixes.presentation' ? 'cards' : axis === 'activity.presentation' ? 'days' : axis === 'runners.presentation' ? 'table' : axis === 'downloads.presentation' ? 'cards' : axis === 'storage.presentation' ? 'cards' : axis === 'plugins.presentation' ? 'directory' : axis === 'friends.presentation' ? 'panel' : axis === 'store.presentation' ? 'storefronts' : axis === 'settings-row.style' ? 'srow' : axis === 'toast.style' ? 'pill' : 'page'),
 }));
 
 import { StorageView } from '../StorageView';

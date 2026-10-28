@@ -2,8 +2,8 @@ package themes
 
 import "platypus/internal/types"
 
-// Catalog v1.0 is the frontend contract for the Settings testbed.
-const CatalogVersion = "1.0"
+// Catalog v1.1 is the frontend contract for the Settings testbed.
+const CatalogVersion = "1.1"
 
 var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "settings", Since: "1.0", Axes: []types.ThemeCatalogAxis{
@@ -238,4 +238,50 @@ var Catalog = []types.ThemeCatalogEntry{
 	{Entry: "game.collections", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "game.installation", Since: "1.0", Kind: "block", Region: "side"},
 	{Entry: "game.copies", Since: "1.0", Kind: "block", Region: "side"},
+	// Page-presentation axes (issue #156): one axis per view root, so a theme
+	// picks one page presentation without the rest. Before these, every Atlas
+	// page was reached through shell.navigation = sourcebar (33 sites) and
+	// label.style = plain (toasts). Defaults are the classic presentations,
+	// so warm, cool and slate render exactly as before; Atlas names the /22
+	// values in its theme.toml. shell.navigation stays for the shell only.
+	{Entry: "dashboard", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"blocks", "home"}, Default: "blocks", Since: "1.1"},
+	}},
+	{Entry: "fixes", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"rows", "cards"}, Default: "rows", Since: "1.1"},
+	}},
+	{Entry: "activity", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"feed", "days"}, Default: "feed", Since: "1.1"},
+	}},
+	{Entry: "runners", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"rows", "table"}, Default: "rows", Since: "1.1"},
+	}},
+	{Entry: "downloads", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"groups", "cards"}, Default: "groups", Since: "1.1"},
+	}},
+	{Entry: "storage", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"blocks", "cards"}, Default: "blocks", Since: "1.1"},
+	}},
+	{Entry: "plugins", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"cards", "directory"}, Default: "cards", Since: "1.1"},
+	}},
+	// Friends (issue #156): modal is today's dialog, panel is the /22 side panel.
+	{Entry: "friends", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"modal", "panel"}, Default: "modal", Since: "1.1"},
+	}},
+	// Store (issue #156): embedded is today's single-plugin view, storefronts
+	// is the /22 page listing every storefront above it.
+	{Entry: "store", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "presentation", Values: []string{"embedded", "storefronts"}, Default: "embedded", Since: "1.1"},
+	}},
+	// Settings rows (issue #156): section is today's titled section, srow is
+	// the /22 settings row.
+	{Entry: "settings-row", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "style", Values: []string{"section", "srow"}, Default: "section", Since: "1.1"},
+	}},
+	// Toasts (issue #156): card is today's top-right card, pill is the /22
+	// bottom-center one-liner. Replaces the label.style = plain check.
+	{Entry: "toast", Since: "1.1", Axes: []types.ThemeCatalogAxis{
+		{Name: "style", Values: []string{"card", "pill"}, Default: "card", Since: "1.1"},
+	}},
 }

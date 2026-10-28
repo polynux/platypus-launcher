@@ -97,7 +97,7 @@ function SettingsEditor({ scopeKey, load, save, onNotify, framed, emptyText }: {
   // Saves of this scope, one after the other: each waits for the one before.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const { t } = useTranslation('plugins');
-  const atlas = useVariant('shell.navigation') === 'sourcebar';
+  const atlas = useVariant('settings-row.style') === 'srow';
 
   // Reads the view and the values the backend holds.
   const reload = (live: () => boolean) => Effect.runPromise(loadRef.current()).then(

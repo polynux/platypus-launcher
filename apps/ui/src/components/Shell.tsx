@@ -78,18 +78,20 @@ const SOURCES: { key: StoreType; label: string }[] = [
 type NavItem = { key: NavKey; label: string; count?: number; dot?: boolean };
 
 export function Shell(p: ShellProps) {
+  // The shell only (issue #156): sidebar, topbar or sourcebar chrome.
+  // Page presentations branch on their own axes, never here.
   const navigation = useVariant('shell.navigation');
   if (navigation === 'sourcebar') return <SourcebarChrome {...p} />;
   if (navigation === 'topbar') return <Topbar {...p} />;
   return <Sidebar {...p} />;
 }
 
-function Topbar(p: ShellProps) {
-  const { t } = useTranslation(['nav', 'common', 'collections']);
+/** Shared shell navigation (issue #156): one place for the active view,
+// the main/tools items and their counts, so the topbar and the More places
+// menu can't drift. The sidebar reads the same props through its own markup. */
+function useShellNav(p: ShellProps) {
+  const { t } = useTranslation(['nav', 'common', 'library', 'collections']);
   const active: NavKey | 'store' = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
-  const storeEntries = p.stores ?? [];
-  const [toolsOpen, setToolsOpen] = useState(false);
-
   const main: NavItem[] = [
     { key: 'dashboard', label: t('nav:dashboard') },
     { key: 'library', label: t('nav:library'), count: p.gameCount },
@@ -102,6 +104,13 @@ function Topbar(p: ShellProps) {
     { key: 'plugins', label: t('nav:plugins'), dot: p.authNeeded },
     { key: 'storage', label: t('nav:storage') },
   ];
+  return { t, active, main, tools };
+}
+
+function Topbar(p: ShellProps) {
+  const { t, active, main, tools } = useShellNav(p);
+  const storeEntries = p.stores ?? [];
+  const [toolsOpen, setToolsOpen] = useState(false);
   // A tool view marks the trigger, but the menu stays closed until opened:
   // unlike the sidebar's disclosure group, a floating menu never pops up on
   // page load or steals focus on navigation. Plugins stays one click away.
@@ -514,11 +523,10 @@ function FriendsButton({ p }: { p: ShellProps }) {
 
 // Atlas parity (issue #132): every place behind one menu — Activity, Runners,
 // Plugins (with the attention badge), Storage, Settings, then Redeem a code
-// and Add a game.
+// and Add a game. Shares the active view with the topbar (issue #156).
 function MorePlacesMenu({ p }: { p: ShellProps }) {
-  const { t } = useTranslation(['nav', 'library']);
+  const { t, active } = useShellNav(p);
   const [open, setOpen] = useState(false);
-  const active = p.view.name === 'game' ? (p.view.from === 'fixes' ? 'fixes' : p.view.from) : p.view.name;
   const pluginAttention = p.authNeeded;
   const managing = ['activity', 'runners', 'plugins', 'storage', 'settings'].includes(active ?? '');
   const warnCount = (p.stores ?? []).filter((s) => (s as { status?: string }).status !== 'ready').length;

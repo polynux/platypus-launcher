@@ -28,9 +28,14 @@ Atlas is built from these catalog axes (see `catalog.md` for every value):
 `color.game-tone = whole`, `label.style = plain`,
 `empty-state.chrome = plain`, `empty-state.icon = on`, and `compact` for
 `list-row.density`, `game-row.mode` and `view-header.size`. It also declares
-`[schemes.light]` and `[schemes.black]`. A theme that sets
-`shell.navigation = sourcebar` gets Atlas's page set today; explicit
-page-presentation axes are planned (issue #156).
+`[schemes.light]` and `[schemes.black]`, and the page-presentation axes
+(issue #156): `dashboard.presentation = home`, `fixes.presentation = cards`,
+`activity.presentation = days`, `runners.presentation = table`,
+`downloads.presentation = cards`, `storage.presentation = cards`,
+`plugins.presentation = directory`, `friends.presentation = panel`,
+`store.presentation = storefronts`, `settings-row.style = srow`,
+`toast.style = pill`. `shell.navigation` is the shell only: a theme picks
+each page presentation on its own axis, without the rest.
 
 ## Levels and `supports`
 

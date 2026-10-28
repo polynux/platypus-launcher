@@ -12,8 +12,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ds/select';
 import { cx } from './ui';
 import { heroImages, lastPlayedAgo } from '../lib/games';
-import { collectionPredicate, missingNames } from '../lib/collections';
-import { TierFilterControl, StatusFilterControl, matchesExtraFilters, sortGames, defaultDir, type Sort, type StatusFilter } from './LibraryView';
+import { missingNames } from '../lib/collections';
+import { filterLibrary } from '../lib/libraryFilter';
+import { TierFilterControl, StatusFilterControl, sortGames, defaultDir, type Sort, type StatusFilter } from './LibraryView';
 import { AtlasActiveChips, AtlasGameBadges } from './AtlasLibraryViews';
 import type { TierFilter } from '../lib/compat';
 import { useVariant } from '../lib/theme';
@@ -63,13 +64,17 @@ interface ListDetailProps {
   /** Controlled filter state from the /22 library bar (App owns it, #135).
    *  When set, the list filters through these values and hides its own
    *  filter popover (the shell carries it); otherwise it keeps its internal
-   *  state, like the classic header. */
+   *  state, like the classic header. Query (issue #157) is shared the same
+   *  way: the grid/table and the list read App's search, so a search typed
+   *  in one view is not lost in the other. */
   tierValue?: TierFilter;
   onTierChange?: (v: TierFilter) => void;
   statusValue?: StatusFilter;
   onStatusChange?: (v: StatusFilter) => void;
   lendingValue?: 'all' | 'with-me';
   onLendingChange?: (v: 'all' | 'with-me') => void;
+  queryValue?: string;
+  onQueryChange?: (q: string) => void;
 }
 
 /** Sub-line under the title: the relative "ago" ("6 h ago", "yesterday",
@@ -84,15 +89,16 @@ function subLine(t: (k: string) => string, g: Game): { text: string; absent: boo
 export function LibraryListDetail(p: ListDetailProps) {
   const atlas = useVariant('shell.navigation') === 'sourcebar';
   const { t } = useTranslation(['library', 'game', 'collections', 'nav']);
-  const [query, setQuery] = useState('');
-  const [nowSec] = useState(() => Math.floor(Date.now() / 1000));
+  const [queryInner, setQueryInner] = useState('');
+  const query = p.queryValue ?? queryInner;
+  const setQuery: (q: string) => void = p.onQueryChange ?? setQueryInner;
   const [sort, setSort] = useState<ListSort>('recent');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   // Atlas parity (issue #132): the classic tier/status/lending filters, reused
   // from LibraryView (no duplicated predicates). Under the /22 shell (#135)
   // App owns this state so the library bar and the list share it, and the
   // list hides its own popover (the shell carries it).
-  const controlled = p.tierValue !== undefined || p.statusValue !== undefined || p.lendingValue !== undefined;
+  const controlled = p.tierValue !== undefined || p.statusValue !== undefined || p.lendingValue !== undefined || p.queryValue !== undefined;
   const [tierInner, setTierInner] = useState<TierFilter>('all');
   const [statusInner, setStatusInner] = useState<StatusFilter>('all');
   const [lendingInner, setLendingInner] = useState<'all' | 'with-me'>('all');
@@ -133,24 +139,20 @@ export function LibraryListDetail(p: ListDetailProps) {
   useEffect(() => { setWarnDismissed(false); }, [p.warnings]);
   const jobsById = useMemo(() => new Map((p.jobs ?? []).map((j) => [j.game_id, j])), [p.jobs]);
 
-  const inCollection = useMemo(
-    () => collectionPredicate(p.collections ?? [], p.collection ?? '', nowSec),
-    [p.collections, p.collection, nowSec],
-  );
-
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const multi = p.storeSelection;
-    const list = p.games.filter(
-      (g) =>
-        (p.ownership === 'owned' || g.is_installed) &&
-        (multi !== undefined ? multi.length === 0 || multi.includes(g.store) : p.source === 'all' || g.store === p.source) &&
-        (!inCollection || inCollection(g)) &&
-        matchesExtraFilters(g, tier, statusFilter, lendingFilter) &&
-        (q === '' || g.title.toLowerCase().includes(q)),
-    );
+    const list = filterLibrary(p.games, {
+      ownership: p.ownership,
+      source: p.source,
+      storeSelection: p.storeSelection,
+      collection: p.collection,
+      collections: p.collections,
+      tier,
+      status: statusFilter,
+      lending,
+      query,
+    });
     return sortGames(list, toSort(sort, dir));
-  }, [p.games, p.ownership, p.source, p.storeSelection, inCollection, query, sort, dir, tier, statusFilter, lendingFilter]);
+  }, [p.games, p.ownership, p.source, p.storeSelection, p.collection, p.collections, query, sort, dir, tier, statusFilter, lending]);
 
   // The selection is kept across filter changes when possible.
   useEffect(() => {

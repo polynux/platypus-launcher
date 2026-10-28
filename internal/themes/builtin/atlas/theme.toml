@@ -8,7 +8,7 @@ wash = []
 id = "atlas"
 name = "Atlas"
 schema = 1
-catalog = "1.0"
+catalog = "1.1"
 supports = ["tokens", "variants"]
 
 [variants]
@@ -25,6 +25,17 @@ supports = ["tokens", "variants"]
 "label.style" = "plain"
 "empty-state.chrome" = "plain"
 "empty-state.icon" = "on"
+"dashboard.presentation" = "home"
+"fixes.presentation" = "cards"
+"activity.presentation" = "days"
+"runners.presentation" = "table"
+"downloads.presentation" = "cards"
+"storage.presentation" = "cards"
+"plugins.presentation" = "directory"
+"friends.presentation" = "panel"
+"store.presentation" = "storefronts"
+"settings-row.style" = "srow"
+"toast.style" = "pill"
 
 [tokens]
 ground = "#13161b"
