@@ -68,12 +68,12 @@ type App struct {
 	// "library-partial" event). Nil until the window exists.
 	libraryEmit func(types.Library)
 	// settingsLocks orders the settings saves and starts of each plugin.
-	settingsLocks settingsLocks
-	moves         coreMoves
-	removes       coreMoves   // core-run removals (issue #43), like moves
-	runnerInstalls coreMoves  // core-run runner installs (issue #142), like moves
-	custom        customStore // the user's titles and art (app_customize.go)
-	ledger        *ledger.Ledger
+	settingsLocks  settingsLocks
+	moves          coreMoves
+	removes        coreMoves   // core-run removals (issue #43), like moves
+	runnerInstalls coreMoves   // core-run runner installs (issue #142), like moves
+	custom         customStore // the user's titles and art (app_customize.go)
+	ledger         *ledger.Ledger
 	// artwork is the online art lookup for sideloaded games (issue #36).
 	// Nil means the live Steam endpoints; tests inject an httptest client.
 	artwork *onlineart.Client

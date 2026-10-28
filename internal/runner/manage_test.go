@@ -316,8 +316,9 @@ func TestUnpackTarGzNeverWritesThroughSymlinks(t *testing.T) {
 }
 
 // m9: the entry count is bounded, and the unpack honors cancellation.
+// Not parallel: it lowers the package-wide cap, and parallel tests only
+// start once the sequential ones are done.
 func TestUnpackTarGzEntryCap(t *testing.T) {
-	t.Parallel()
 	old := maxRunnerEntries
 	maxRunnerEntries = 3
 	defer func() { maxRunnerEntries = old }()
