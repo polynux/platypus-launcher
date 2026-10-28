@@ -32,7 +32,7 @@ func TestGeneratedUpToDate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
-	for name, want := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS(), "builtinLayouts.ts": themes.BuiltinLayoutsTS()} {
+	for name, want := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS(), "builtinLayouts.ts": themes.BuiltinLayoutsTS(), "defaultTheme.ts": themes.DefaultThemeTS()} {
 		got, err := os.ReadFile(filepath.Join(root, "apps", "ui", "src", "gen", name))
 		if err != nil {
 			t.Fatalf("%s: %v (run `go run ./cmd/gen-ts` from the repository root)", name, err)

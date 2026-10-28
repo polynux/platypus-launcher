@@ -16,6 +16,7 @@ vi.mock('../../effect/runtime', () => ({
 import { ThemeSetting } from '../LauncherSettingsView';
 
 const themes = [
+  { id: 'atlas', name: 'Atlas', schema: 1, supports: ['tokens', 'variants'], status: 'ok', warnings: [] },
   { id: 'warm', name: 'Warm', schema: 1, supports: ['tokens'], status: 'ok', warnings: [] },
   { id: 'cool', name: 'Cool dark', schema: 1, supports: ['tokens'], status: 'ok', warnings: ['unknown token "glow", ignored'] },
   { id: 'future', name: 'Future', schema: 2, supports: ['tokens'], status: 'newer', warnings: ['needs schema 2, this Platypus reads schema 1'] },
@@ -41,9 +42,9 @@ afterEach(() => {
 });
 
 describe('ThemeSetting', () => {
-  it('shows the picked theme and lists themes that cannot be picked, with the reason', async () => {
+  it('shows the default theme when none is picked, and lists themes that cannot be picked, with the reason', async () => {
     const { getByRole, findByRole } = render(<ThemeSetting onNotify={() => {}} />);
-    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Warm'));
+    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Atlas'));
     fireEvent.click(getByRole('combobox', { name: 'Theme' }));
     const future = await findByRole('option', { name: /Future/ });
     expect(future).toHaveAttribute('aria-disabled', 'true');
@@ -53,7 +54,7 @@ describe('ThemeSetting', () => {
 
   it('names the plugin a theme comes from', async () => {
     const { getByRole, findByRole } = render(<ThemeSetting onNotify={() => {}} />);
-    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Warm'));
+    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Atlas'));
     fireEvent.click(getByRole('combobox', { name: 'Theme' }));
     expect(await findByRole('option', { name: /Fixture.*fixture-theme/ })).not.toHaveAttribute('aria-disabled', 'true');
   });
@@ -68,7 +69,7 @@ describe('ThemeSetting', () => {
   it('applies a picked theme at once and says so', async () => {
     const onNotify = vi.fn();
     const { getByRole, findByRole } = render(<ThemeSetting onNotify={onNotify} />);
-    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Warm'));
+    await waitFor(() => expect(getByRole('combobox', { name: 'Theme' }).textContent).toContain('Atlas'));
     fireEvent.click(getByRole('combobox', { name: 'Theme' }));
     fireEvent.click(await findByRole('option', { name: 'Cool dark' }));
     await waitFor(() => expect(api.setTheme).toHaveBeenCalledWith('cool'));

@@ -182,6 +182,18 @@ describe('schemes x tints (issue #134: 3 schemes, 3 tints)', () => {
     expect(lum(blackGround)).toBeLessThanOrEqual(lum(darkGround));
   });
 
+  it('keeps a yellow accent readable in the light scheme (issue #130)', () => {
+    const yellow: Tone = [250, 240, 30];
+    const accentVars = toneVariables('accent', yellow, 'light');
+    expect(contrastRatio(rgb(accentVars['--color-on-accent']), rgb(accentVars['--color-accent']))).toBeGreaterThanOrEqual(4.5);
+    const wholeVars = toneVariables('whole', yellow, 'light');
+    // Whole-light keeps the scheme's white text on the accent.
+    expect(contrastRatio([255, 255, 255], rgb(wholeVars['--color-accent']))).toBeGreaterThanOrEqual(4.5);
+    // The focus ring (the accent) on the light surfaces.
+    expect(contrastRatio(rgb(accentVars['--color-focus']), [255, 255, 255])).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(rgb(wholeVars['--color-focus']), [255, 255, 255])).toBeGreaterThanOrEqual(3);
+  });
+
   it('keeps whole-mode text readable in every scheme', () => {
     for (const scheme of ['dark', 'light', 'black'] as const) {
       for (const sample of [[60, 120, 200], [250, 240, 246], [14, 10, 12]] as Tone[]) {

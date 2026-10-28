@@ -1,9 +1,10 @@
 // Command gen-ts regenerates the UI's typed core bridge from the Go
 // core: struct interfaces into apps/ui/src/gen/models.ts, the typed
 // method list into apps/ui/src/gen/api.ts, the theme catalog's variant
-// axes into apps/ui/src/gen/catalog.ts, and the built-in view layouts into
-// apps/ui/src/gen/builtinLayouts.ts. It also writes the catalog reference
-// into docs/themes/catalog.md.
+// axes into apps/ui/src/gen/catalog.ts, the built-in view layouts into
+// apps/ui/src/gen/builtinLayouts.ts, and the default theme's resolved
+// tokens into apps/ui/src/gen/defaultTheme.ts. It also writes the catalog
+// reference into docs/themes/catalog.md.
 //
 // Run it from the repository root: `go run ./cmd/gen-ts` (an optional first
 // argument overrides the root). The generated files are checked in;
@@ -35,7 +36,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "gen-ts:", err)
 		os.Exit(1)
 	}
-	for name, src := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS(), "builtinLayouts.ts": themes.BuiltinLayoutsTS()} {
+	for name, src := range map[string]string{"models.ts": models, "api.ts": api, "catalog.ts": themes.CatalogTS(), "builtinLayouts.ts": themes.BuiltinLayoutsTS(), "defaultTheme.ts": themes.DefaultThemeTS()} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, "gen-ts:", err)
 			os.Exit(1)
@@ -50,5 +51,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, "gen-ts:", err)
 		os.Exit(1)
 	}
-	fmt.Println("wrote apps/ui/src/gen/models.ts, api.ts, catalog.ts, builtinLayouts.ts and docs/themes/catalog.md")
+	fmt.Println("wrote apps/ui/src/gen/models.ts, api.ts, catalog.ts, builtinLayouts.ts, defaultTheme.ts and docs/themes/catalog.md")
 }

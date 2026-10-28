@@ -309,6 +309,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
         size="none"
         onClick={d.onPlay}
         disabled={launching || game.outside_folder}
+        data-play-anchor
         className="group inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-accent px-6 pl-5 text-[15px] font-extrabold text-on-accent hover:brightness-110 disabled:opacity-100"
       >
         {launching ? <Loader2 className="h-[15px] w-[15px] animate-spin" aria-hidden /> : <Play className="h-[15px] w-[15px] fill-current" aria-hidden />}
@@ -324,6 +325,7 @@ function StripPlay({ d }: { d: GameTabsData }) {
         variant="primary"
         size="none"
         onClick={() => d.job?.state === 'failed' ? d.onJobAction('retry', d.job.id) : d.onInstall()}
+        data-play-anchor
         className={cx('inline-flex h-[42px] items-center gap-2 rounded-[9px] px-6 pl-5 text-[15px] font-extrabold hover:brightness-110', d.job?.state === 'failed' ? 'bg-[color-mix(in_srgb,var(--color-danger)_70%,var(--color-surface-strong))] text-white' : 'bg-accent text-on-accent')}
       >
         {d.job?.state === 'failed' ? <RotateCcw className="h-[15px] w-[15px]" aria-hidden /> : <Download className="h-[15px] w-[15px]" aria-hidden />}

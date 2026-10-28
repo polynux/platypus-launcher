@@ -30,6 +30,9 @@ interface ModalProps {
    *  their own panel instead of the first control, so a mouse open shows no
    *  focus ring. */
   onOpenAutoFocus?: (e: Event) => void;
+  /** Where focus goes when the saved opener is gone (unmounted before close,
+   *  e.g. the drawer opened from Tune's All settings): called only then. */
+  returnFocus?: () => HTMLElement | null;
   /** Atlas drawer chrome (game-settings.tabs = accordion only): scrim, radius
    *  and inner scroll. Other sheets keep the shared look. */
   overlayClassName?: string;
@@ -44,7 +47,7 @@ interface ModalProps {
 
 /** Centered modal on ds/Dialog (Radix): Esc + click-outside close, focus trapped and restored on close (FE-11).
  *  Narrow by default (`sm`); a dialog that needs more passes a `size`. */
-export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps) {
+export function Modal({ label, onClose, size = 'sm', className, dismissable = true, presentation = 'dialog', sheetWidth, onOpenAutoFocus, returnFocus, overlayClassName, contentClassName, innerClassName, contentStyle, onEscapeKeyDown, children }: ModalProps) {
   const restoreFocus = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -61,9 +64,15 @@ export function Modal({ label, onClose, size = 'sm', className, dismissable = tr
         onInteractOutside={(e) => !dismissable && e.preventDefault()}
         onOpenAutoFocus={onOpenAutoFocus}
         onCloseAutoFocus={(e) => {
-          if (!restoreFocus.current?.isConnected) return;
+          if (restoreFocus.current?.isConnected) {
+            e.preventDefault();
+            restoreFocus.current.focus();
+            return;
+          }
+          const target = returnFocus?.();
+          if (!target?.isConnected) return;
           e.preventDefault();
-          restoreFocus.current.focus();
+          target.focus();
         }}
       >
         {children}

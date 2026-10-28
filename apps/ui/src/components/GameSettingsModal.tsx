@@ -103,6 +103,11 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
   // The drawer focuses its own panel on open (/21 `.drawer`): no focus ring
   // on mouse open, and keyboard users land inside the trapped sheet.
   const panelRef = useRef<HTMLDivElement>(null);
+  // Closing the drawer returns focus to the Tune button: the opener (All
+  // settings in the flyout, or the palette input) is unmounted by then, so
+  // the Modal's saved element is gone (issue #130).
+  // i18n:allow: CSS selectors, not user-facing text
+  const returnFocusToGame = () => document.querySelector<HTMLElement>('[data-tune-anchor]') ?? document.querySelector<HTMLElement>('[data-play-anchor]');
   const drawerAutoFocus = accordion && presentation === 'sheet'
     ? (e: Event) => { e.preventDefault(); panelRef.current?.focus({ preventScroll: true }); }
     : undefined;
@@ -210,7 +215,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     return (
       <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!shared.dirty}
         size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth}
-        onOpenAutoFocus={drawerAutoFocus}
+        onOpenAutoFocus={drawerAutoFocus} returnFocus={returnFocusToGame}
         overlayClassName="bg-[rgba(0,0,0,0.38)]"
         contentClassName="rounded-none rounded-l-none rounded-r-none ring-hairline"
         innerClassName="overflow-hidden p-0 [scrollbar-width:thin]">
@@ -301,7 +306,7 @@ export function GameSettingsModal(p: GameSettingsModalProps) {
     // the shared Modal is untouched, so no other dialog changes size. A
     // sheet spans the full viewport height, so the fixed height is for the
     // dialog presentation only.
-    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} onOpenAutoFocus={drawerAutoFocus} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
+    <Modal label={t('gameSettings:settingsModal.title', { title: game.title })} onClose={p.onClose} dismissable={!dirty} size={size} presentation={presentation === 'sheet' ? 'sheet' : 'dialog'} sheetWidth={sheetWidth} onOpenAutoFocus={drawerAutoFocus} returnFocus={returnFocusToGame} className={presentation === 'sheet' ? undefined : 'h-[min(43rem,calc(100dvh-6rem))]'}>
       {content}
     </Modal>
   );

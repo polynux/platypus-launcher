@@ -11,6 +11,7 @@ vi.mock('../effect/runtime', () => ({ LauncherApi: { getTheme: (id: string) => g
 
 import { applyAndRemember, applyCachedTheme, applyTheme, loadTheme, loadThemeFonts, loadThemeLayout, themeVariables, washImage } from './theme';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { DEFAULT_THEME } from '../gen/defaultTheme';
 
 const warm: ThemeTokens = {
   id: 'warm',
@@ -188,6 +189,15 @@ describe('applying a theme', () => {
     expect(root().getPropertyValue('--color-accent')).toBe('#7dd3fc');
     window.localStorage.setItem('platypus.theme', '{not json');
     expect(() => applyCachedTheme()).not.toThrow();
+  });
+
+  it('paints the default theme with nothing cached, so the first paint is Atlas (issue #130)', () => {
+    expect(DEFAULT_THEME.id).toBe('atlas');
+    applyCachedTheme();
+    expect(root().getPropertyValue('--color-ground')).toBe(DEFAULT_THEME.tokens.ground);
+    expect(root().getPropertyValue('--color-ground')).toBe('#13161b');
+    expect(root().getPropertyValue('--color-accent')).toBe(DEFAULT_THEME.tokens.accent);
+    expect(document.documentElement.dataset.labelStyle).toBe('plain');
   });
 
   it('loads the picked theme from the core and remembers it', async () => {

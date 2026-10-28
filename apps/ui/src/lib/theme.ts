@@ -9,9 +9,10 @@ import { LauncherApi } from '../effect/runtime';
 import type { ThemeLayout, ThemeTokens, WashLayer } from '../types';
 import { VARIANT_DEFAULTS, type VariantAxis, type VariantValues } from '../gen/catalog';
 import { BUILTIN_LAYOUTS } from '../gen/builtinLayouts';
+import { DEFAULT_THEME } from '../gen/defaultTheme';
 
 /** The theme the app ships with. Matches the core's default (themes.DefaultID). */
-export const DEFAULT_THEME_ID = 'warm';
+export const DEFAULT_THEME_ID = 'atlas';
 
 const CACHE_KEY = 'platypus.theme';
 let currentVariants: VariantValues = { ...VARIANT_DEFAULTS };
@@ -271,8 +272,9 @@ export function applyAndRemember(theme: ThemeTokens): void {
   }
 }
 
-/** Boot, before the first paint (main.tsx): the theme applied last time. With
- *  nothing cached, style.css's own values stand, and those are the warm theme. */
+/** Boot, before the first paint (main.tsx): the theme applied last time, or the
+ *  default theme when nothing is cached, so the first paint is Atlas and not
+ *  the stylesheet's own values. */
 export function applyCachedTheme(): void {
   try {
     const rawScheme = window.localStorage.getItem(SCHEME_CACHE_KEY);
@@ -283,6 +285,7 @@ export function applyCachedTheme(): void {
   try {
     const raw = window.localStorage.getItem(CACHE_KEY);
     if (raw) applyTheme(JSON.parse(raw) as ThemeTokens);
+    else applyTheme(DEFAULT_THEME);
   } catch {
     // A missing or broken entry leaves the defaults in place.
   }

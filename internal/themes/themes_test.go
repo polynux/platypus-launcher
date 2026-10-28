@@ -59,7 +59,7 @@ func TestBuiltinThemesLoad(t *testing.T) {
 
 // The default must set every token and the wash: Resolve fills gaps from it.
 func TestDefaultSetsEveryToken(t *testing.T) {
-	def, ok := Find(DefaultID)
+	def, ok := Find(BaseID)
 	if !ok {
 		t.Fatal("no default theme")
 	}
@@ -75,10 +75,10 @@ func TestDefaultSetsEveryToken(t *testing.T) {
 
 func TestResolveDefaultsAndPicked(t *testing.T) {
 	def := Resolve("")
-	if def.ID != DefaultID || def.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
+	if def.ID != BaseID || def.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
 		t.Fatalf("Resolve(\"\") = %s %q, want the warm default", def.ID, def.Tokens["accent"])
 	}
-	if got := Resolve("missing"); got.ID != DefaultID {
+	if got := Resolve("missing"); got.ID != BaseID {
 		t.Fatalf("Resolve(missing) = %s, want the default", got.ID)
 	}
 	cool := Resolve("cool")
@@ -227,7 +227,7 @@ func TestNewerMajorCatalogNeedsNewerPlatypus(t *testing.T) {
 	if th.Info.Status != StatusNewer || !warningsContain(th, "needs catalog 2.0") {
 		t.Fatalf("status %q warnings %v, want newer catalog status", th.Info.Status, th.Info.Warnings)
 	}
-	if got := resolve(th, true); got.ID != DefaultID {
+	if got := resolve(th, true); got.ID != BaseID {
 		t.Fatalf("newer catalog theme resolved as %q, want default", got.ID)
 	}
 }
@@ -395,7 +395,7 @@ func resolveSrc(t *testing.T, src string) (types.ThemeTokens, Theme) {
 
 func TestNewerSchemaFallsBackToDefault(t *testing.T) {
 	src := strings.Replace(minimal, "schema = 1", "schema = 2", 1)
-	if got, _ := resolveSrc(t, src); got.ID != DefaultID || got.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
+	if got, _ := resolveSrc(t, src); got.ID != BaseID || got.Tokens["accent"] != "oklch(82.8% 0.189 84.429)" {
 		t.Fatalf("a newer theme was applied: %s %q", got.ID, got.Tokens["accent"])
 	}
 }
