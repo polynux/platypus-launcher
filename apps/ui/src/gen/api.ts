@@ -19,6 +19,7 @@ export interface CoreApi {
   CancelJob(id: string): Promise<void>;
   ChatAlerts(): Promise<Record<string, boolean>>;
   ChatClose(pluginID: string, friendID: string): Promise<void>;
+  ChatConversations(): Promise<chat.View[]>;
   ChatOlder(pluginID: string, friendID: string): Promise<chat.View>;
   ChatOpen(pluginID: string, friendID: string): Promise<chat.View>;
   ChatResend(pluginID: string, friendID: string, clientID: string): Promise<void>;
@@ -207,6 +208,7 @@ export const coreMethods: (keyof CoreApi)[] = [
   'CancelJob',
   'ChatAlerts',
   'ChatClose',
+  'ChatConversations',
   'ChatOlder',
   'ChatOpen',
   'ChatResend',

@@ -18,6 +18,7 @@ export const APP_PAGE_METHODS: readonly string[] = [
   'CancelJob',
   'ChatAlerts',
   'ChatClose',
+  'ChatConversations',
   'ChatOlder',
   'ChatOpen',
   'ChatResend',

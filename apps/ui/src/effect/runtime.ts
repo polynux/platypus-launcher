@@ -573,6 +573,10 @@ export const LauncherApi = {
   // Conversations with friends (protocol 1.9, docs/plugins/protocol.md "Chat").
   chatOpen: (plugin: string, friendId: string) => call<ChatView>('ChatOpen', () => App.ChatOpen(plugin, friendId)),
   chatClose: (plugin: string, friendId: string) => call<void>('ChatClose', () => App.ChatClose(plugin, friendId)),
+  // Recent conversations with friends (issue #143): the live ones overlaid
+  // on the persisted previews, most recent first, so the Chats tab survives
+  // a reload. Seeded once at start; every change after that arrives as an event.
+  chatConversations: () => call<ChatView[]>('ChatConversations', async () => (await App.ChatConversations()) ?? []),
   chatOlder: (plugin: string, friendId: string) => call<ChatView>('ChatOlder', () => App.ChatOlder(plugin, friendId)),
   chatSend: (plugin: string, friendId: string, text: string) => call<void>('ChatSend', () => App.ChatSend(plugin, friendId, text)),
   chatResend: (plugin: string, friendId: string, clientId: string) =>

@@ -181,6 +181,16 @@ type App struct {
 	// capped feed (A2): game id to achievement id to unlock time.
 	achSeenPath string
 	achSeen     map[string]map[string]int64
+	// chatRecentMu guards the persisted recent conversations (issue #143):
+	// one preview row per friend, so the Chats tab lists read conversations
+	// after a restart. No path means memory only, like the activity feed.
+	// Writes are debounced off the plugin reader (C2): dirty rows flush in
+	// the background, on shutdown, and on logout/removal.
+	chatRecentMu    sync.Mutex
+	chatRecentPath  string
+	chatRecents     map[chatRecentKey]chatRecent
+	chatRecentDirty bool
+	chatRecentTimer *time.Timer
 	// cloudConflict marks games with an unanswered logged conflict (A7):
 	// a prompt re-fires on every launch until it is resolved or pushed.
 	cloudConflict map[string]bool
@@ -377,6 +387,9 @@ func (a *App) startup(ctx context.Context) {
 	a.openActivity(dataDir)
 	a.openAddedAt(dataDir)
 	a.openAchSeen(dataDir)
+	// The recent chat conversations live beside them (issue #143): the
+	// Chats tab lists them after a restart, before any message arrives.
+	a.openChatRecents(dataDir)
 
 	// Store plugins start on demand: when the library is listed, on login,
 	// or when an interrupted install resumes.
@@ -471,6 +484,8 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.social != nil {
 		a.social.StopAll()
 	}
+	// The debounced chat previews flush with the other data files.
+	a.flushChatRecents()
 	if a.plugins != nil {
 		a.plugins.Shutdown()
 	}

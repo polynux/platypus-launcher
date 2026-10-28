@@ -37,6 +37,7 @@ vi.mock('../../effect/runtime', () => ({
     listJobs: () => Effect.succeed([] as never),
     socialViews: () => Effect.succeed([] as never),
     chatUnread: () => Effect.succeed([] as never),
+    chatConversations: () => Effect.succeed([] as never),
     chatAlerts: () => Effect.succeed({} as never),
   },
   onJobs: () => () => {},

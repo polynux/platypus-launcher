@@ -285,6 +285,8 @@ func (a *App) PluginLogout(id string) (types.AuthStatus, error) {
 		a.invalidateLibrary(id)
 		// The plugin just said what the login state is: cache it fresh.
 		a.setAuthStatus(id, st)
+		// The account's chats end with it: its previews must not survive.
+		a.forgetChatPlugin(id)
 	}
 	return st, err
 }

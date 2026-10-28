@@ -303,6 +303,26 @@ func (m *Manager) Unread(pluginID string) []View {
 	return out
 }
 
+// Conversations lists the held conversations of a plugin, read or unread,
+// with their messages. An empty pluginID lists every plugin's. It backs the
+// core's recent-conversations listing, so the Chats tab survives a restart:
+// live views overlay the persisted recents, which cover what memory dropped.
+func (m *Manager) Conversations(pluginID string) []View {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []View
+	for k, c := range m.convs {
+		if pluginID != "" && k.plugin != pluginID {
+			continue
+		}
+		if v := c.viewLocked(); len(v.Messages) > 0 || v.Unread > 0 {
+			out = append(out, v)
+		}
+	}
+	slices.SortFunc(out, func(a, b View) int { return strings.Compare(a.FriendID, b.FriendID) })
+	return out
+}
+
 // UnreadCount is one row of the unread snapshot (MethodUnreadCounts): the
 // unread messages from a friend. It mirrors the chat.unread notification,
 // whose payload is one such row.

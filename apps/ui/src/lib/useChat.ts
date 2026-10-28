@@ -97,8 +97,18 @@ export function useChat(
       });
     });
     void Effect.runPromise(LauncherApi.chatUnread()).then(
-      (vs) => setConversations((list) => vs.reduce(upsertConversation, list)),
+      (vs) => setConversations((list) => (vs ?? []).reduce(upsertConversation, list)),
       () => {},
+      // The unread badges seed first; the recent conversations (issue #143:
+      // the persisted previews, read or unread) seed after, so a reload
+      // lists the Chats tab before any new message arrives. Chained, so the
+      // previews overlay the badge-only rows deterministically. Mocks may
+      // answer null for methods they don't list: seed empty then.
+    ).then(() =>
+      Effect.runPromise(LauncherApi.chatConversations()).then(
+        (vs) => setConversations((list) => (vs ?? []).reduce(upsertConversation, list)),
+        () => {},
+      ),
     );
     void Effect.runPromise(LauncherApi.chatAlerts()).then(setAlertsState, () => {});
     return () => {
